@@ -16,12 +16,20 @@ export function SupabaseAuthProvider({ children }) {
 
     let cancelled = false;
 
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      if (!cancelled) {
-        setSession(s);
-        setLoading(false);
-      }
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data: { session: s } }) => {
+        if (!cancelled) {
+          setSession(s);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSession(null);
+          setLoading(false);
+        }
+      });
 
     const {
       data: { subscription },
