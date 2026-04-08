@@ -3,10 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
-import { setLocalWorkspaceOnly } from "../lib/authPrefs";
 import { signInWithGoogleOAuth } from "../lib/authRedirect";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
+import { useApp } from "../context/AppContext";
 
 const ss = ms;
 
@@ -16,6 +16,7 @@ const ss = ms;
 export default function CloudAccount() {
   const navigate = useNavigate();
   const { supabase: client, user, loading, ready } = useSupabaseAuth();
+  const { trialStatus, orgId } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
@@ -43,7 +44,6 @@ export default function CloudAccount() {
       const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_in", entity: "auth", detail: email.trim() });
-      setLocalWorkspaceOnly(false);
       setPassword("");
     } catch (e) {
       setMsg(e.message || "Sign-in failed");
@@ -58,7 +58,6 @@ export default function CloudAccount() {
     try {
       const { error } = await signInWithGoogleOAuth(client, "/app");
       if (error) throw error;
-      setLocalWorkspaceOnly(false);
     } catch (e) {
       setMsg(e.message || "Google sign-in failed");
       setBusy(false);
@@ -72,7 +71,6 @@ export default function CloudAccount() {
       const { error } = await client.auth.signUp({ email: email.trim(), password });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_up", entity: "auth", detail: email.trim() });
-      setLocalWorkspaceOnly(false);
       setMsg("Check your email — confirmation may be required on your Supabase project.");
       setPassword("");
     } catch (e) {
@@ -87,7 +85,6 @@ export default function CloudAccount() {
     try {
       await client.auth.signOut();
       pushAudit({ action: "supabase_sign_out", entity: "auth", detail: "" });
-      setLocalWorkspaceOnly(false);
       navigate("/login", { replace: true });
     } finally {
       setBusy(false);
@@ -107,6 +104,12 @@ export default function CloudAccount() {
         <p style={{ fontSize: 13, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
           Signed in as <strong>{user.email}</strong>
         </p>
+        {trialStatus && (
+          <p style={{ fontSize: 12, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
+            Organisation: <strong>{orgId}</strong> · Trial{" "}
+            {trialStatus.isActive ? `active (${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left)` : "ended"}
+          </p>
+        )}
         <button type="button" style={ss.btn} onClick={signOut} disabled={busy}>
           Sign out
         </button>

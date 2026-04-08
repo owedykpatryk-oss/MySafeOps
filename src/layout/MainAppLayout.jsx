@@ -15,6 +15,9 @@ import {
 import { workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_ID } from "../navigation/workspaceViews";
 
 const LazyCloudAccount = lazy(() => import("../components/CloudAccount"));
+const LazyBillingLimits = lazy(() => import("../components/BillingLimits"));
+const LazyInviteUsers = lazy(() => import("../components/InviteUsers"));
+const LazyOrgMembers = lazy(() => import("../components/OrgMembers"));
 const LazyOrgSettings = lazy(() => import("../components/OrgSettings"));
 const LazyNotificationSettings = lazy(() => import("../offline/NotificationSettings"));
 
@@ -33,6 +36,9 @@ function SettingsView() {
       <RouteErrorBoundary>
         <Suspense fallback={<ViewFallback />}>
           <LazyCloudAccount />
+          <LazyBillingLimits />
+          <LazyInviteUsers />
+          <LazyOrgMembers />
           <LazyOrgSettings />
           <div style={{ marginTop: 24 }}>
             <LazyNotificationSettings />

@@ -15,6 +15,7 @@ const ss = {
   ul: { fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.6, paddingLeft: 20, margin: 0 },
   a: { color: "#0d9488" },
 };
+const SUPPORT_EMAIL = "mysafeops@gmail.com";
 
 const MODULE_GROUPS = [
   {
@@ -148,6 +149,18 @@ export default function HelpAbout() {
         <p style={ss.p}>
           Client read-only view: append <code style={{ fontSize: 12 }}>?portal=TOKEN</code> to the app URL. Subcontractor view:{" "}
           <code style={{ fontSize: 12 }}>?subcontractor=TOKEN</code>. Configure tokens in the respective modules.
+        </p>
+      </div>
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
+          Help & contact
+        </h2>
+        <p style={{ ...ss.p, marginBottom: 0 }}>
+          For support, onboarding, or sales questions email{" "}
+          <a href={`mailto:${SUPPORT_EMAIL}`} style={ss.a}>
+            {SUPPORT_EMAIL}
+          </a>
+          .
         </p>
       </div>
       <div className="app-surface-card" style={ss.card}>

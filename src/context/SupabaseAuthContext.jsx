@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import { supabase } from "../lib/supabase";
+import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
+import { ensureUserOrgContext } from "../utils/orgMembership";
 
 const Ctx = createContext(null);
 
@@ -22,19 +24,32 @@ export function SupabaseAuthProvider({ children }) {
         if (!cancelled) {
           setSession(s);
           setLoading(false);
+          trackAuthEvent("session_bootstrap_success", { hasSession: Boolean(s) });
+        }
+        if (s?.user) {
+          ensureUserOrgContext(supabase).catch((error) => {
+            trackAuthError("org_context_sync_failed", error, { source: "getSession" });
+          });
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
           setSession(null);
           setLoading(false);
+          trackAuthError("session_bootstrap_failed", error);
         }
       });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
+    } = supabase.auth.onAuthStateChange((event, s) => {
+      trackAuthEvent("auth_state_change", { event, hasSession: Boolean(s) });
       setSession(s);
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        ensureUserOrgContext(supabase).catch((error) => {
+          trackAuthError("org_context_sync_failed", error, { source: "onAuthStateChange", event });
+        });
+      }
     });
 
     return () => {

@@ -19,8 +19,10 @@ Open the URL Vite prints (usually `http://localhost:5173`). You should see the *
 | Route | Purpose |
 |-------|---------|
 | `/` | Landing / marketing |
-| `/login` | Sign in (Supabase if configured) or open local workspace |
-| `/app` | Main app (bottom navigation, modules) — protected when `VITE_SUPABASE_*` is set unless you choose “continue without cloud sign-in” |
+| `/login` | Sign in / sign up (when Supabase is configured) |
+| `/reset-password` | Set a new password from Supabase recovery link |
+| `/accept-invite` | Public landing for an org invite (then continue to sign-in) |
+| `/app` | Main app (bottom navigation, modules) — protected when `VITE_SUPABASE_*` is set |
 
 Public client/subcontractor links still use query strings: `?portal=TOKEN`, `?subcontractor=TOKEN`.
 
@@ -53,12 +55,72 @@ Anything prefixed with `VITE_` is **embedded in the browser bundle**. Do not put
 
 1. Create a project at [Supabase](https://supabase.com/dashboard).
 2. Enable **Email** (or other) auth under Authentication → Providers.
-3. Run the SQL migration on your project:
+3. For Google OAuth, configure Google provider in Supabase with a Google Cloud **Client ID** and **Client Secret**.
+   - Keep these server-side only (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`) — never `VITE_*`.
+4. Run SQL migrations on your project:
    - **Dashboard**: SQL Editor → paste and run [supabase/migrations/20260407120000_app_sync.sql](supabase/migrations/20260407120000_app_sync.sql), or  
    - **CLI**: `supabase db push` (if the project is linked).
-4. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`.
+   - Also apply [supabase/migrations/20260408193000_org_membership_trial.sql](supabase/migrations/20260408193000_org_membership_trial.sql) for org isolation + automatic 14-day trial.
+   - Also apply [supabase/migrations/20260408203000_org_invites.sql](supabase/migrations/20260408203000_org_invites.sql) and [supabase/migrations/20260408214500_invite_token_acceptance.sql](supabase/migrations/20260408214500_invite_token_acceptance.sql) for invite links and token-safe org joining.
+   - Apply [supabase/migrations/20260408220000_org_members_and_invite_preview.sql](supabase/migrations/20260408220000_org_members_and_invite_preview.sql) for member management RPCs and public invite preview (`/accept-invite`).
+5. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`.
+
+**Optional: automatic invite email (Edge Function)**  
+Deploy `send-org-invite` from [`supabase/functions/send-org-invite/`](supabase/functions/send-org-invite/) (`supabase functions deploy send-org-invite`). Set secrets: `RESEND_API_KEY`, `SITE_URL` (your production origin, no trailing slash), and optionally `INVITE_FROM_EMAIL` (e.g. `MySafeOps <notifications@yourdomain.com>`). Without `RESEND_API_KEY`, the function returns success with `skipped: true` and invites still work via the copied link.
 
 Cloud upload/restore is available from **Backup** after sign-in (see [src/utils/cloudSync.js](src/utils/cloudSync.js)).
+
+## Auth readiness checklist
+
+Use this before production go-live:
+
+- [ ] `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set for Production on the host.
+- [ ] Supabase Auth providers configured (Email + Google if used).
+- [ ] Supabase Redirect URLs include:
+  - [ ] `https://<your-domain>/login`
+  - [ ] `https://<your-domain>/accept-invite`
+  - [ ] `https://<your-domain>/reset-password`
+  - [ ] `https://<your-domain>/app`
+- [ ] Google OAuth credentials configured server-side:
+  - [ ] `GOOGLE_OAUTH_CLIENT_ID`
+  - [ ] `GOOGLE_OAUTH_CLIENT_SECRET`
+- [ ] Confirmation email and reset email templates tested end-to-end.
+- [ ] Login lockout UX verified (5 failed attempts => temporary lockout).
+- [ ] First login auto-creates user organisation and starts 14-day trial.
+- [ ] Each user is mapped to one organisation (`org_memberships`), and organisation data remains isolated.
+- [ ] Admin can invite teammates from Settings → Invite users.
+- [ ] Invite links use `/accept-invite?invite=...` (then sign-in) and are accepted only for the invited email.
+- [ ] Optional Sentry SDK enabled if you want auth breadcrumbs/telemetry.
+- [ ] Support contact is correct in UI (`mysafeops@gmail.com`).
+
+## Billing transparency & limits
+
+MySafeOps now exposes **Billing & limits** in Settings with:
+
+- current effective plan (Trial or Starter by default),
+- clear plan matrix (price + workers + projects + cloud backup limit),
+- live usage for the active organisation,
+- cloud backup limit enforcement during upload.
+
+Default effective plans:
+
+- **Trial**: £0 for 14 days (auto-created on first sign-in per organisation).
+- **Starter**: £19/month after trial unless upgraded.
+
+### Auth E2E tests (Playwright)
+
+```bash
+npm run test:e2e
+```
+
+Optional env vars for full auth coverage:
+
+- `E2E_BASE_URL` (if testing deployed app instead of local dev server)
+- `E2E_EXISTING_UNCONFIRMED_EMAIL`
+- `E2E_RESET_EMAIL`
+- `E2E_LOCKOUT_EMAIL`
+- `E2E_LOCKOUT_WRONG_PASSWORD`
+- `E2E_RUN_EXTERNAL_AUTH=1` (Google redirect test)
 
 ## Optional: R2 document uploads
 

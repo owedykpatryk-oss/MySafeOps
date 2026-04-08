@@ -10,13 +10,14 @@ import {
   getCloudBackupMeta,
   uploadBackupToSupabase,
 } from "../utils/cloudSync";
+import { formatBytes, getEffectivePlan } from "../lib/billingPlans";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 
 const ss = ms;
 
 export default function BackupExport() {
-  const { caps, orgId } = useApp();
+  const { caps, orgId, trialStatus } = useApp();
   const { supabase, user, ready } = useSupabaseAuth();
   const [msg, setMsg] = useState("");
   const [cloudBusy, setCloudBusy] = useState(false);
@@ -25,6 +26,7 @@ export default function BackupExport() {
   const fileRef = useRef(null);
 
   const cloudEnabled = isSupabaseConfigured() && supabase;
+  const plan = getEffectivePlan(trialStatus);
 
   useEffect(() => {
     if (!cloudEnabled || !user || !ready) {
@@ -120,6 +122,12 @@ export default function BackupExport() {
         return;
       }
       const bytes = new Blob([JSON.stringify(bundle)]).size;
+      if (bytes > plan.limits.cloudBytes) {
+        setMsg(
+          `Cloud backup limit exceeded for ${plan.name}. Current backup is about ${formatBytes(bytes)}; limit is ${formatBytes(plan.limits.cloudBytes)}.`
+        );
+        return;
+      }
       if (bytes > 4_000_000) {
         const mb = (bytes / 1_000_000).toFixed(1);
         if (!window.confirm(`Backup is about ${mb} MB. Cloud upload may be slow or fail. Continue?`)) {
@@ -185,6 +193,9 @@ export default function BackupExport() {
                   Last cloud backup: {new Date(cloudUpdated).toLocaleString()}
                 </p>
               )}
+              <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+                Plan: <strong>{plan.name}</strong> · Cloud limit: {formatBytes(plan.limits.cloudBytes)}
+              </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                 <button type="button" style={ss.btnP} disabled={cloudBusy} onClick={uploadCloud}>
                   Upload to cloud

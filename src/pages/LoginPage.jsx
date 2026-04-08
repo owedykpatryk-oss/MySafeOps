@@ -1,19 +1,24 @@
 import { useState, useEffect } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
-import { setLocalWorkspaceOnly } from "../lib/authPrefs";
 import { signInWithGoogleOAuth } from "../lib/authRedirect";
+import { clearAuthFailures, formatLockoutRemaining, getAuthLockoutState, recordAuthFailure } from "../lib/authLockout";
+import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
+import { setPendingInviteToken } from "../lib/inviteToken";
+import { ensureUserOrgContext } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 
 const ss = ms;
 const teal = "#0d9488";
 const navy = "#0f172a";
+const SUPPORT_EMAIL = "mysafeops@gmail.com";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { supabase: client, user, loading, ready } = useSupabaseAuth();
   const cloud = isSupabaseConfigured() && client;
 
@@ -21,12 +26,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [, setTick] = useState(0);
+  const inviteToken = searchParams.get("invite") || "";
+  const inviteEmail = (searchParams.get("email") || "").trim().toLowerCase();
+  const normalizedEmail = email.trim().toLowerCase();
+  const lockout = getAuthLockoutState(normalizedEmail, Date.now());
 
   useEffect(() => {
-    if (cloud && user) {
-      setLocalWorkspaceOnly(false);
-    }
-  }, [cloud, user]);
+    if (!inviteToken) return;
+    setPendingInviteToken(inviteToken, inviteEmail);
+    if (inviteEmail && !email) setEmail(inviteEmail);
+  }, [inviteToken, inviteEmail, email]);
+
+  useEffect(() => {
+    if (!lockout.isLocked) return undefined;
+    const id = window.setInterval(() => setTick((x) => x + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [lockout.isLocked]);
 
   if (cloud && ready && user) {
     return <Navigate to="/app" replace />;
@@ -34,17 +50,30 @@ export default function LoginPage() {
 
   const signIn = async () => {
     if (!client) return;
+    if (lockout.isLocked) {
+      setMsg(`Too many failed attempts. Try again in ${formatLockoutRemaining(lockout.remainingMs)}.`);
+      return;
+    }
     setMsg("");
     setBusy(true);
+    trackAuthEvent("sign_in_attempt", { email: normalizedEmail });
     try {
       const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_in", entity: "auth", detail: email.trim() });
-      setLocalWorkspaceOnly(false);
+      clearAuthFailures(normalizedEmail);
+      await ensureUserOrgContext(client);
+      trackAuthEvent("sign_in_success", { email: normalizedEmail });
       setPassword("");
       navigate("/app", { replace: true });
     } catch (e) {
-      setMsg(e.message || "Sign-in failed");
+      const state = recordAuthFailure(normalizedEmail, Date.now());
+      trackAuthError("sign_in_failed", e, { email: normalizedEmail, failures: state.failures });
+      if (state.isLocked) {
+        setMsg(`Too many failed attempts. Try again in ${formatLockoutRemaining(state.remainingMs)}.`);
+      } else {
+        setMsg(`${e.message || "Sign-in failed"} (${state.attemptsLeft} attempts left before temporary lockout).`);
+      }
     } finally {
       setBusy(false);
     }
@@ -54,11 +83,12 @@ export default function LoginPage() {
     if (!client) return;
     setMsg("");
     setBusy(true);
+    trackAuthEvent("google_sign_in_start");
     try {
       const { error } = await signInWithGoogleOAuth(client, "/login");
       if (error) throw error;
-      setLocalWorkspaceOnly(false);
     } catch (e) {
+      trackAuthError("google_sign_in_failed", e);
       setMsg(e.message || "Google sign-in failed");
       setBusy(false);
     }
@@ -68,22 +98,62 @@ export default function LoginPage() {
     if (!client) return;
     setMsg("");
     setBusy(true);
+    trackAuthEvent("sign_up_attempt", { email: normalizedEmail });
     try {
       const { error } = await client.auth.signUp({ email: email.trim(), password });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_up", entity: "auth", detail: email.trim() });
-      setMsg("Check your email — confirmation may be required on your Supabase project.");
+      trackAuthEvent("sign_up_success", { email: normalizedEmail });
+      setMsg("Account created. Check your inbox (and spam) to confirm your email before first sign-in.");
       setPassword("");
     } catch (e) {
+      trackAuthError("sign_up_failed", e, { email: normalizedEmail });
       setMsg(e.message || "Sign-up failed");
     } finally {
       setBusy(false);
     }
   };
 
-  const continueLocal = () => {
-    setLocalWorkspaceOnly(true);
-    navigate("/app", { replace: true });
+  const sendPasswordReset = async () => {
+    if (!client || !email.trim()) return;
+    setMsg("");
+    setBusy(true);
+    trackAuthEvent("password_reset_email_request", { email: normalizedEmail });
+    try {
+      const redirectTo = new URL("/reset-password", window.location.origin).href;
+      const { error } = await client.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+      if (error) throw error;
+      pushAudit({ action: "supabase_reset_password_requested", entity: "auth", detail: email.trim() });
+      setMsg("Password reset email sent. Open the link in that email to set a new password.");
+    } catch (e) {
+      trackAuthError("password_reset_email_failed", e, { email: normalizedEmail });
+      setMsg(e.message || "Could not send reset email");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resendConfirmationEmail = async () => {
+    if (!client || !email.trim()) return;
+    setMsg("");
+    setBusy(true);
+    trackAuthEvent("resend_confirmation_attempt", { email: normalizedEmail });
+    try {
+      const emailRedirectTo = new URL("/login", window.location.origin).href;
+      const { error } = await client.auth.resend({
+        type: "signup",
+        email: email.trim(),
+        options: { emailRedirectTo },
+      });
+      if (error) throw error;
+      trackAuthEvent("resend_confirmation_success", { email: normalizedEmail });
+      setMsg("Confirmation email re-sent. Check inbox and spam.");
+    } catch (e) {
+      trackAuthError("resend_confirmation_failed", e, { email: normalizedEmail });
+      setMsg(e.message || "Could not resend confirmation email");
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (cloud && (!ready || loading)) {
@@ -117,16 +187,34 @@ export default function LoginPage() {
               </p>
               <label style={ss.lbl}>Email</label>
               <input type="email" autoComplete="email" style={ss.inp} value={email} onChange={(e) => setEmail(e.target.value)} />
+              {inviteToken && (
+                <p style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+                  Invite detected{inviteEmail ? ` for ${inviteEmail}` : ""}. Sign in or create account with this email to join your organisation.
+                </p>
+              )}
               <label style={{ ...ss.lbl, marginTop: 10 }}>Password</label>
               <input type="password" autoComplete="current-password" style={ss.inp} value={password} onChange={(e) => setPassword(e.target.value)} />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
-                <button type="button" style={ss.btnP} disabled={busy || !email.trim() || !password} onClick={signIn}>
+                <button type="button" style={ss.btnP} disabled={busy || lockout.isLocked || !email.trim() || !password} onClick={signIn}>
                   Sign in
                 </button>
                 <button type="button" style={ss.btn} disabled={busy || !email.trim() || password.length < 6} onClick={signUp}>
                   Create account
                 </button>
               </div>
+              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <button type="button" style={ss.btn} disabled={busy || !email.trim()} onClick={sendPasswordReset}>
+                  Forgot password
+                </button>
+                <button type="button" style={ss.btn} disabled={busy || !email.trim()} onClick={resendConfirmationEmail}>
+                  Resend confirmation email
+                </button>
+              </div>
+              {lockout.isLocked && (
+                <p style={{ marginTop: 12, fontSize: 12, color: "#b91c1c" }}>
+                  Temporary lockout active: {formatLockoutRemaining(lockout.remainingMs)} remaining.
+                </p>
+              )}
               <div style={{ marginTop: 16 }}>
                 <button
                   type="button"
@@ -157,15 +245,21 @@ export default function LoginPage() {
                 <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "8px 0 0", lineHeight: 1.45 }}>
                   Enable Google under Supabase → Authentication → Providers, and add this site&apos;s URL + <code style={{ fontSize: 10 }}>/login</code> to Redirect URLs.
                 </p>
+                <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "6px 0 0", lineHeight: 1.45 }}>
+                  Password reset links should redirect to <code style={{ fontSize: 10 }}>/reset-password</code>.
+                </p>
               </div>
               {msg && <p style={{ marginTop: 14, fontSize: 13 }}>{msg}</p>}
+              <p style={{ marginTop: 12, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+                Need help? Contact support:{" "}
+                <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: teal, fontWeight: 500 }}>
+                  {SUPPORT_EMAIL}
+                </a>
+              </p>
               <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--color-border-tertiary,#e2e8f0)" }}>
-                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.5 }}>
-                  Prefer not to use cloud sign-in? You can still use the full app with local data only (no Supabase backup until you sign in later in Settings).
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0, lineHeight: 1.5 }}>
+                  Account required. Sign in or create an account to access workspace data and your organisation trial.
                 </p>
-                <button type="button" style={ss.btn} onClick={continueLocal}>
-                  Continue without cloud sign-in
-                </button>
               </div>
             </>
           ) : (

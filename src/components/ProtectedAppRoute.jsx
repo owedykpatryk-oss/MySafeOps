@@ -1,10 +1,9 @@
 import { Navigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
-import { isLocalWorkspaceOnly } from "../lib/authPrefs";
 
 /**
- * When Supabase env is set, /app requires a signed-in user OR explicit "continue without cloud" choice.
+ * When Supabase env is set, /app requires a signed-in user.
  * Without Supabase, the workspace is always available.
  */
 export default function ProtectedAppRoute({ children }) {
@@ -35,7 +34,7 @@ export default function ProtectedAppRoute({ children }) {
     );
   }
 
-  if (!user && !isLocalWorkspaceOnly()) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 

@@ -5,6 +5,8 @@ import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import ProtectedAppRoute from "./components/ProtectedAppRoute";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import AcceptInvitePage from "./pages/AcceptInvitePage";
 import MainAppLayout, { ViewFallback } from "./layout/MainAppLayout";
 
 const PublicClientPortalView = lazy(() =>
@@ -61,6 +63,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
         <Route
           path="/app"
           element={
