@@ -7,6 +7,18 @@ export async function registerServiceWorker() {
     console.warn("Service workers not supported in this browser.");
     return null;
   }
+  // In dev, stale SW caches can mask fresh .env changes.
+  // Keep dev always network-fresh and unregister existing SW registrations.
+  if (import.meta.env.DEV) {
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+      console.log("[MySafeOps SW] Dev mode: skipped registration and cleared existing registrations");
+    } catch (err) {
+      console.warn("[MySafeOps SW] Dev cleanup failed:", err);
+    }
+    return null;
+  }
   try {
     const reg = await navigator.serviceWorker.register("/service-worker.js", {
       scope: "/",
