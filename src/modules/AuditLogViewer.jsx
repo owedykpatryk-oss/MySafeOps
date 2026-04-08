@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
 import { readAudit, clearAudit } from "../utils/auditLog";
 import { useApp } from "../context/AppContext";
+import { ms } from "../utils/moduleStyles";
+import PageHero from "../components/PageHero";
 
-const ss = {
-  btn: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid var(--color-border-secondary,#ccc)", background: "var(--color-background-primary,#fff)", color: "var(--color-text-primary)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  card: { background: "var(--color-background-primary,#fff)", border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, padding: "1.25rem" },
-};
+const ss = ms;
 
 export default function AuditLogViewer() {
   const { caps } = useApp();
@@ -16,33 +15,32 @@ export default function AuditLogViewer() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-        <div>
-          <h2 style={{ fontWeight: 500, fontSize: 20, margin: 0 }}>Audit log</h2>
-          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "4px 0 0" }}>
-            Recent actions (max 500) — backups, AI generation, templates, role changes where instrumented
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" style={ss.btn} onClick={refresh}>
-            Refresh
-          </button>
-          {caps.backupImport && (
-            <button
-              type="button"
-              style={{ ...ss.btn, color: "#A32D2D", borderColor: "#F09595" }}
-              onClick={() => {
-                if (confirm("Clear audit log for this organisation?")) {
-                  clearAudit();
-                  refresh();
-                }
-              }}
-            >
-              Clear log
+      <PageHero
+        badgeText="LOG"
+        title="Audit log"
+        lead="Recent actions (max 500) — backups, AI generation, templates, role changes where instrumented."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" style={ss.btn} onClick={refresh}>
+              Refresh
             </button>
-          )}
-        </div>
-      </div>
+            {caps.backupImport && (
+              <button
+                type="button"
+                style={{ ...ss.btn, color: "#A32D2D", borderColor: "#F09595" }}
+                onClick={() => {
+                  if (confirm("Clear audit log for this organisation?")) {
+                    clearAudit();
+                    refresh();
+                  }
+                }}
+              >
+                Clear log
+              </button>
+            )}
+          </div>
+        }
+      />
       <div style={ss.card}>
         {rows.length === 0 ? (
           <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>No entries yet.</div>

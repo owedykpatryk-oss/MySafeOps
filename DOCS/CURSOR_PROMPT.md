@@ -2,19 +2,26 @@
 
 ## Project overview
 
-You are working on **MySafeOps** (mysafeops.com) — a UK construction site safety management platform built for **FESS Food Engineering Services**. The app is a single-page React application using localStorage for persistence and DM Sans font. No backend currently.
+You are working on **MySafeOps** (mysafeops.com) — a UK construction site safety management platform (initially shaped around **FESS Food Engineering Services** source material). The app is a **Vite + React** SPA: **localStorage** is the primary persistence (org-scoped keys). There is **no mandatory server** for core use.
+
+**Optional cloud (when configured):**
+
+- **Supabase** — email (etc.) auth and JSON backup table `public.app_sync` ([README.md](../README.md), [architecture-current.md](./architecture-current.md)).
+- **Cloudflare R2** — document uploads via a **Worker** (`cloudflare/workers/r2-upload`); browser uses `VITE_STORAGE_API_URL` + token, not R2 secret keys.
+- **Anthropic** — AI modules (`VITE_ANTHROPIC_*`); keys in `VITE_*` are exposed in the bundle — dev-only or proxy via backend for production.
 
 ---
 
 ## Tech stack
 
-- **React JSX** — single-file components, no TypeScript
-- **localStorage** — all persistence, org-scoped keys
-- **No external UI libraries** — inline styles only
-- **DM Sans** font (Google Fonts)
-- **Vite** or Create React App
-- **File System Access API** — for document library
-- **Web Push API + Service Worker** — for offline mode and notifications
+- **React 19 + JSX** — no TypeScript
+- **Vite** — dev server and production build (`npm run dev` / `npm run build`)
+- **localStorage** — primary persistence, org-scoped keys (`${key}_${orgId}`)
+- **@supabase/supabase-js** — optional auth + cloud backup
+- **lucide-react** — icons in the app shell
+- **Styling** — mostly inline styles; shared tokens in [src/utils/moduleStyles.js](../src/utils/moduleStyles.js) (`ms`); global mobile/base rules in [src/index.css](../src/index.css)
+- **File System Access API** — optional folder picker in Document library (Chromium)
+- **Service Worker** — [public/service-worker.js](../public/service-worker.js) (offline / notifications where implemented)
 
 ---
 
@@ -37,13 +44,19 @@ Logo: teal shield (#0d9488) with orange checkmark (#f97316).
 ```
 E:\MySafeOps\
 ├── src\
-│   ├── App.jsx                          ← main router + nav
+│   ├── App.jsx                          ← view state + bottom nav + More grid (no react-router)
 │   ├── main.jsx                         ← entry point, SW registration
 │   │
 │   ├── components\
 │   │   ├── OrgSettings.jsx              ← logo upload, brand colours, PDF defaults
 │   │   ├── AnalyticsDashboard.jsx       ← live metrics from all modules
-│   │   ├── ClientPortal.jsx             ← read-only client links
+│   │   ├── ClientPortal.jsx             ← read-only client links (+ public portal view)
+│   │   ├── CloudAccount.jsx             ← Supabase sign-in when configured
+│   │   ├── HelpAbout.jsx                ← in-app module index + disclaimer
+│   │
+│   ├── context\                         ← AppContext (roles/caps), SupabaseAuthContext
+│   ├── lib\                             ← supabase client helper
+│   ├── utils\                           ← auditLog, backupBundle, cloudSync, moduleStyles (ms)
 │   │
 │   ├── modules\
 │   │   ├── permits\
@@ -63,19 +76,32 @@ E:\MySafeOps\
 │   │   ├── Timesheet.jsx                ← weekly timesheets, payroll export
 │   │   ├── SnagRegister.jsx             ← snagging with photos, status tracking
 │   │   ├── COSHHRegister.jsx            ← substances, PPE, first aid, SDS
-│   │   ├── InspectionTracker.jsx        ← LOLER, PAT, PUWER, EICR, scaffold
+│   │   ├── InspectionTracker.jsx        ← inspections register
+│   │   ├── IncidentNearMiss.jsx         ← incidents & near miss
+│   │   ├── EmergencyContacts.jsx
 │   │   ├── RIDDORWizard.jsx             ← RIDDOR F2508 with deadline alerts
-│   │   └── DocumentLibrary.jsx          ← File System Access API folder reader
+│   │   ├── DocumentLibrary.jsx          ← local folder + optional R2 upload
+│   │   ├── BackupExport.jsx             ← JSON backup + optional Supabase sync
+│   │   ├── AuditLogViewer.jsx
+│   │   ├── AIRamsGenerator, ToolboxTalkAI, PhotoHazardAI
+│   │   ├── MonthlyReport, WasteRegister, DocumentTemplates
+│   │   ├── SubcontractorPortal.jsx
+│   │   ├── PPERegister, PlantEquipmentRegister, FireSafetyLog, TrainingMatrix, VisitorLog
+│   │   ├── ToolboxTalkRegister, FirstAidRegister, LoneWorkingLog, EnvironmentalLog, SafetyObservations
+│   │   ├── LadderInspection, MEWPLog, GateBook, AsbestosRegister, ConfinedSpaceLog
+│   │   ├── LOTORegister, ElectricalPATLog, LiftingPlanRegister, DSEARLog, HotWorkRegister
+│   │   ├── NoiseVibrationLog, ScaffoldRegister, ExcavationLog, TemporaryWorksRegister
+│   │   ├── WelfareCheckLog, WaterHygieneLog
+│   │   └── … (see src/modules/ and in-app Help)
 │   │
 │   └── offline\
-│       ├── service-worker.js            ← cache-first SW, background sync
-│       ├── offlineManager.js            ← SW registration, IndexedDB queue
+│       ├── offlineManager.js            ← SW registration hooks
 │       ├── OfflineStatusBanner.jsx      ← online/offline/update banner
 │       ├── pushNotifications.js         ← local + push notifications
 │       └── NotificationSettings.jsx     ← notification preferences panel
 │
 ├── public\
-│   └── service-worker.js               ← copy of service-worker.js here
+│   └── service-worker.js                ← service worker asset
 │
 └── DOCS\                                ← E:\MySafeOps\DOCS
     └── [all FESS documents — PDFs, DOCX, etc.]
@@ -120,6 +146,11 @@ All keys are org-scoped: `{key}_{orgId}`
 
 // Document library
 "mysafeops_doc_library"               // file tags, notes, project links
+
+// Typical register modules (examples — each module uses its own base key + org suffix)
+// e.g. ppe_register_{orgId}, plant_register_{orgId}, fire_safety_log_{orgId},
+// noise_vibration_log_{orgId}, scaffold_register_{orgId}, …
+// Inspect `load("…", [])` / `save("…", …)` in src/modules/*.jsx for exact keys.
 ```
 
 ---
@@ -169,19 +200,24 @@ Each hazard:
 
 ---
 
-## Design system (inline styles only)
+## Design system
+
+Most modules import shared mobile-friendly styles:
 
 ```js
-// Standard shared styles object used across all components
+import { ms } from "../utils/moduleStyles";
+const ss = ms; // or { ...ms, ta: { ...ms.inp, minHeight: 100 }, ... } for extras
+```
+
+Org settings and some components extend `ms` for `btnO`, `ta`, `sec`, etc. Global CSS variables and touch-target helpers live in [src/index.css](../src/index.css).
+
+Legacy reference (conceptually aligned with `ms`, not a second source of truth):
+
+```js
 const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnO: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
-  ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
-  sec:  { fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 },
+  btn:  { /* see moduleStyles.js */ },
+  btnP: { /* primary teal */ },
+  // …
 };
 ```
 
@@ -328,76 +364,51 @@ Categories covered: Electrical, Mechanical/Pipework, Welding/Hot Works, Work at 
 
 1. **Always org-scope storage keys**: `${key}_${getOrgId()}`
 2. **Never hardcode personal data** — worker names, client names etc. are user-entered
-3. **Single file per module** — no separate CSS or sub-component files unless asked
-4. **Inline styles only** — no CSS modules, no Tailwind, no styled-components
-5. **Mobile-first** — all layouts work on 375px wide screen
-6. **Print function** — every document module must have a `printXxx()` function
-7. **Export CSV** — every register (snags, COSHH, workers, timesheets) must export to CSV
-8. **Org settings in PDFs** — every print uses `getOrgSettings()` for logo and branding
-9. **No alerts for deletes** — use `confirm()` before destructive actions
-10. **No TypeScript** — plain JavaScript JSX only
-11. **DM Sans everywhere** — `fontFamily: "DM Sans, system-ui, sans-serif"`
+3. **Prefer one main file per feature module** — split only when it improves clarity
+4. **Styling** — inline styles + `ms` from `moduleStyles.js`; use `index.css` only for global/mobile primitives
+5. **Mobile-first** — layouts must work on narrow phones (see existing modules)
+6. **Print** — document-style modules should offer print/PDF-friendly output where it adds value (`getOrgSettings()` for branding)
+7. **CSV** — list/register modules should offer export where it matches user expectations
+8. **Destructive actions** — use `confirm()` (or equivalent) before delete
+9. **No TypeScript** — plain JavaScript JSX unless the repo moves to TS deliberately
+10. **DM Sans** — `fontFamily: "DM Sans, system-ui, sans-serif"` (loaded from Google Fonts in `index.html`)
 
 ---
 
-## Current modules status
+## Current modules (shipping in `src/`)
 
-### Complete and tested
-- OrgSettings (logo, brand, PDF defaults, custom fields)
-- PermitSystem (15 permit types, countdown timers, print)
-- RAMSTemplateBuilder (4-step wizard, 103 hazard library)
-- MethodStatement (5-tab builder, step editor, print)
-- CDMCompliance (CDM 2015, CPP, F10 tracker)
-- DailyBriefing (pre-work briefing, attendance, signatures, print)
-- QRInduction (QR codes, 3-step form, site register, GPS)
-- DigitalSignature (canvas, GPS, audit trail, SignaturePanel export)
-- Timesheet (weekly hours, overtime, approval, CSV export)
-- SnagRegister (photos, status, priority, export)
-- COSHHRegister (GHS, PPE, first aid, SDS, export)
-- InspectionTracker (LOLER, PAT, PUWER, EICR, 12 types)
-- RIDDORWizard (7 RIDDOR types, F2508, deadline alerts)
-- AnalyticsDashboard (live metrics, compliance score, charts)
-- ClientPortal (read-only token links for clients)
-- DocumentLibrary (File System Access API, tags, PDF preview)
-- OfflineStatusBanner + offlineManager + service-worker
-- pushNotifications + NotificationSettings
-- ramsHazardLibrary + ramsHazardLibraryExtended + ramsHazardLibraryPro
+Authoritative UX list: in-app **Help** ([src/components/HelpAbout.jsx](../src/components/HelpAbout.jsx)) mirrors the product modules. Navigation ids are defined in [src/App.jsx](../src/App.jsx) (`VIEW_COMPONENTS` + `MORE_TABS`).
 
-### Still to build
-- AI RAMS generator (Claude API — auto-generate RAMS from activity description)
-- AI toolbox talk generator (Claude API)
-- Photo hazard detection (Claude Vision API)
-- Monthly auto-report PDF (auto-generated monthly H&S summary)
-- Waste register module
-- Subcontractor management portal
-- Document templates (save/clone RAMS and MS)
-- Roles & permissions system (Operative / Supervisor / Admin)
-- Audit log (timestamped edit history)
-- Cloud backup (Supabase free tier or Google Drive export)
-- Bulk operations (multi-select approve/export)
-- RIDDOR print to F2508 format
+**Bottom nav:** Dashboard, Permits, RAMS, Workers, More.
+
+**More menu (and lazy-loaded views)** includes among others: Method statement, CDM, Daily briefing, QR induction, Signatures, Timesheets, Snags, COSHH, Inspections, Incidents, RIDDOR, Emergency, PPE, Plant, Fire safety, Hot work, Training, Visitors, Toolbox log, First aid, Lone working, Environmental, Observations, Ladders, MEWP, Gate book, Asbestos, Confined space, LOTO, Electrical, Lifting, DSEAR, Noise & vibration, Scaffold, Excavations, Temporary works, Welfare checks, Water hygiene, Analytics, Monthly report, Waste register, Templates, AI RAMS / AI toolbox / AI photo hazard, Client portal, Subcontractor, Documents, Backup, Audit log, Help, Settings.
+
+**Settings** bundles CloudAccount (Supabase), OrgSettings, NotificationSettings.
+
+### Gaps vs historical prototype (`DOCS/rams-pro.jsx`)
+
+See **[PRODUCT_SCOPE.md](./PRODUCT_SCOPE.md)** for features described in older docs but not implemented as in the monolith (e.g. global search, full D1 backend, Stripe billing).
+
+### Small code pointer
+
+`src/productBacklog.js` may reference further enhancements (e.g. richer multi-device sync).
 
 ---
 
 ## App.jsx navigation structure
 
-```jsx
-// Bottom mobile nav tabs (main)
-const NAV_TABS = [
-  { id:"dashboard",   label:"Dashboard",    icon:BarChart2 },
-  { id:"permits",     label:"Permits",      icon:FileCheck },
-  { id:"rams",        label:"RAMS",         icon:ClipboardList },
-  { id:"workers",     label:"Workers",      icon:Users },
-  { id:"more",        label:"More",         icon:Menu },  // opens secondary nav
-];
+Keep [src/App.jsx](../src/App.jsx) in sync when adding a module:
 
-// Secondary nav (More menu)
-const MORE_TABS = [
-  "method-statement", "cdm", "daily-briefing", "induction", "signatures",
-  "timesheets", "snags", "coshh", "inspections", "riddor",
-  "analytics", "client-portal", "documents", "settings",
-];
-```
+1. `lazy(() => import("…"))` for the component
+2. `VIEW_COMPONENTS` entry (`id` → component)
+3. `MORE_TABS` row (`id`, `label`) unless it is one of the four main tabs
+4. [src/viewPrefetch.js](../src/viewPrefetch.js) `LOADERS` for the same `id`
+5. [HelpAbout.jsx](../src/components/HelpAbout.jsx) `MODULE_GROUPS` if users should see it in the index
+
+**Bottom nav:** `dashboard`, `permits`, `rams`, `workers`, `more`.
+
+**More menu ids** (abbreviated — copy from `App.jsx` when in doubt):  
+`method-statement`, `cdm`, `daily-briefing`, `induction`, `signatures`, `timesheets`, `snags`, `coshh`, `inspections`, `incidents`, `riddor`, `emergency`, `ppe`, `plant`, `fire`, `hot-work`, `training`, `visitors`, `toolbox-reg`, `first-aid`, `lone-working`, `environmental`, `observations`, `ladders`, `mewp`, `gate`, `asbestos`, `confined-space`, `loto`, `electrical-pat`, `lifting`, `dsear`, `noise`, `scaffold`, `excavation`, `temp-works`, `welfare`, `water-hygiene`, `analytics`, `monthly-report`, `waste`, `templates`, `ai-rams`, `ai-toolbox`, `ai-photo`, `client-portal`, `subcontractor`, `documents`, `backup`, `audit`, `help`, `settings`.
 
 ---
 
@@ -458,17 +469,19 @@ All hazards, control measures, PPE and regs in the hazard library are extracted 
 
 ---
 
-## What to work on next (prioritised)
+## What to work on next (suggestions — verify against repo)
 
-1. **AI RAMS generator** — user types activity, Claude API generates full RAMS
-2. **Monthly auto-report** — one-click branded PDF: compliance score, incidents, permits, certs expiring
-3. **Waste register** — waste transfer notes, duty of care, Environment Agency
-4. **Document templates** — save/clone RAMS and MS documents
-5. **Roles & permissions** — Operative / Supervisor / Admin
-6. **Audit log** — every edit timestamped
-7. **Subcontractor portal** — sub submits RAMS/certs via link
-8. **Cloud backup** — export all data to JSON bundle
+Priorities evolve; check **Help**, **productBacklog.js**, and **[PRODUCT_SCOPE.md](./PRODUCT_SCOPE.md)**.
+
+1. **Real multi-device sync** — beyond JSON `app_sync` snapshot (if product requires live CRUD)
+2. **Production-safe AI** — proxy Anthropic from a backend; remove secrets from `VITE_*`
+3. **PWA polish** — manifest + icons in `public/` if you want installable app
+4. **Bulk operations** — multi-select approve/export across modules
+5. **Deeper RIDDOR / statutory outputs** — match official formats where required
+6. **Stripe / plans** — if moving from single-org local tool to SaaS ([FILE-INDEX.md](./FILE-INDEX.md) checklist is historical but lists intent)
 
 ---
 
 *MySafeOps — Building safety, not paperwork.*
+
+**Also read:** [README.md](../README.md), [architecture-current.md](./architecture-current.md).

@@ -1,16 +1,9 @@
 import { useMemo, useState } from "react";
 import { getOrgSettings } from "../components/OrgSettings";
 import { pushAudit } from "../utils/auditLog";
-
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => {
-  try {
-    return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb));
-  } catch {
-    return fb;
-  }
-};
+import { ms } from "../utils/moduleStyles";
+import { loadOrgScoped as load } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
 function printMonthlyReport(monthLabel) {
   const org = getOrgSettings();
@@ -81,11 +74,7 @@ function printMonthlyReport(monthLabel) {
   pushAudit({ action: "monthly_report_print", entity: "report", detail: monthLabel });
 }
 
-const ss = {
-  btnP: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid #085041", background: "#0d9488", color: "#E1F5EE", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  card: { background: "var(--color-background-primary,#fff)", border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, padding: "1.25rem" },
-  inp: { padding: "7px 10px", borderRadius: 6, border: "0.5px solid #ccc", fontSize: 13, fontFamily: "DM Sans,sans-serif" },
-};
+const ss = ms;
 
 export default function MonthlyReport() {
   const [ym, setYm] = useState(() => {
@@ -100,16 +89,19 @@ export default function MonthlyReport() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      <h2 style={{ fontWeight: 500, fontSize: 20, margin: "0 0 8px" }}>Monthly H&S report</h2>
-      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 20 }}>
-        Branded print summary: compliance estimate, project/worker counts, RAMS, permits, snags, incidents, certificate horizon.
-      </p>
+      <PageHero
+        badgeText="MO"
+        title="Monthly H&S report"
+        lead="Branded print summary: compliance estimate, project/worker counts, RAMS, permits, snags, incidents, certificate horizon."
+        right={
+          <button type="button" style={ss.btnP} onClick={() => printMonthlyReport(label)}>
+            Print / save as PDF
+          </button>
+        }
+      />
       <div style={{ ...ss.card, maxWidth: 420 }}>
         <label style={{ display: "block", fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Report period (label)</label>
         <input type="month" value={ym} onChange={(e) => setYm(e.target.value)} style={{ ...ss.inp, width: "100%", marginBottom: 14 }} />
-        <button type="button" style={ss.btnP} onClick={() => printMonthlyReport(label)}>
-          Print / save as PDF
-        </button>
       </div>
     </div>
   );

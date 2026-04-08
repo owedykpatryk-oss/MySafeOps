@@ -1,22 +1,26 @@
 import { useState, useEffect, useRef } from "react";
+import { ms } from "../../utils/moduleStyles";
+import PageHero from "../../components/PageHero";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `ptw_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}); };
 const fmtDateTime = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}); };
 const toLocalInput = (iso) => { if (!iso) return ""; const d = new Date(iso); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); };
 
+const permitPersonLabel = (w) => `${w.name || ""}${w.role ? ` — ${w.role}` : ""}`.trim();
+
+function matchWorkerPick(str, workers) {
+  if (!str?.trim()) return "";
+  const t = str.trim();
+  const m = workers.find((w) => permitPersonLabel(w) === t || (w.name || "").trim() === t);
+  return m ? m.id : "__custom__";
+}
+
 const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnO: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnR: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #A32D2D", background:"#FCEBEB", color:"#791F1F", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
+  ...ms,
+  btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
+  btnR: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #A32D2D", background:"#FCEBEB", color:"#791F1F", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
   ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
 };
 
@@ -414,9 +418,29 @@ function PermitForm({ permit, onSave, onClose }) {
   };
 
   const [form, setForm] = useState(permit ? {...permit, checklist: permit.checklist||initChecklist(permit.type||type)} : blank);
+  const [issuedToPick, setIssuedToPick] = useState(() => (permit ? matchWorkerPick(permit.issuedTo, workers) : ""));
+  const [issuedByPick, setIssuedByPick] = useState(() => {
+    if (permit) return matchWorkerPick(permit.issuedBy, workers);
+    return matchWorkerPick(org.defaultLeadEngineer || "", workers);
+  });
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const setExtra = (k,v) => setForm(f=>({...f,extraFields:{...f.extraFields,[k]:v}}));
   const setCheck = (i,v) => setForm(f=>({...f,checklist:{...f.checklist,[i]:v}}));
+
+  const onIssuedToSelect = (e) => {
+    const v = e.target.value;
+    if (v === "") { setIssuedToPick(""); set("issuedTo", ""); return; }
+    if (v === "__custom__") { setIssuedToPick("__custom__"); return; }
+    const w = workers.find((x) => x.id === v);
+    if (w) { setIssuedToPick(v); set("issuedTo", permitPersonLabel(w) || w.name); }
+  };
+  const onIssuedBySelect = (e) => {
+    const v = e.target.value;
+    if (v === "") { setIssuedByPick(""); set("issuedBy", ""); return; }
+    if (v === "__custom__") { setIssuedByPick("__custom__"); return; }
+    const w = workers.find((x) => x.id === v);
+    if (w) { setIssuedByPick(v); set("issuedBy", permitPersonLabel(w) || w.name); }
+  };
 
   const handleTypeChange = (newType) => {
     setType(newType);
@@ -460,7 +484,7 @@ function PermitForm({ permit, onSave, onClose }) {
         )}
 
         {/* core fields */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl}>Description of work</label>
             <textarea value={form.description||""} onChange={e=>set("description",e.target.value)} rows={2}
@@ -479,11 +503,45 @@ function PermitForm({ permit, onSave, onClose }) {
           </div>
           <div>
             <label style={ss.lbl}>Permit issued to</label>
-            <input value={form.issuedTo||""} onChange={e=>set("issuedTo",e.target.value)} placeholder="Name of person receiving permit" style={ss.inp} />
+            {workers.length > 0 ? (
+              <>
+                <select value={issuedToPick} onChange={onIssuedToSelect} style={{ ...ss.inp, marginBottom: issuedToPick === "__custom__" ? 8 : 0 }}>
+                  <option value="">— Select from my workers —</option>
+                  {workers.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {permitPersonLabel(w) || w.name}
+                    </option>
+                  ))}
+                  <option value="__custom__">Other (type name)</option>
+                </select>
+                {issuedToPick === "__custom__" && (
+                  <input value={form.issuedTo || ""} onChange={(e) => set("issuedTo", e.target.value)} placeholder="Name of person receiving permit" style={ss.inp} />
+                )}
+              </>
+            ) : (
+              <input value={form.issuedTo || ""} onChange={(e) => set("issuedTo", e.target.value)} placeholder="Name of person receiving permit" style={ss.inp} />
+            )}
           </div>
           <div>
             <label style={ss.lbl}>Issued by (authorised person)</label>
-            <input value={form.issuedBy||""} onChange={e=>set("issuedBy",e.target.value)} placeholder="Authorised person name" style={ss.inp} />
+            {workers.length > 0 ? (
+              <>
+                <select value={issuedByPick} onChange={onIssuedBySelect} style={{ ...ss.inp, marginBottom: issuedByPick === "__custom__" ? 8 : 0 }}>
+                  <option value="">— Select from my workers —</option>
+                  {workers.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {permitPersonLabel(w) || w.name}
+                    </option>
+                  ))}
+                  <option value="__custom__">Other (type name)</option>
+                </select>
+                {issuedByPick === "__custom__" && (
+                  <input value={form.issuedBy || ""} onChange={(e) => set("issuedBy", e.target.value)} placeholder="Authorised person name" style={ss.inp} />
+                )}
+              </>
+            ) : (
+              <input value={form.issuedBy || ""} onChange={(e) => set("issuedBy", e.target.value)} placeholder="Authorised person name" style={ss.inp} />
+            )}
           </div>
           <div>
             <label style={ss.lbl}>Start date / time</label>
@@ -501,7 +559,7 @@ function PermitForm({ permit, onSave, onClose }) {
             <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>
               {def.label} — specific information
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
               {def.extraFields.map(f=>(
                 <div key={f.key}>
                   <label style={ss.lbl}>{f.label}</label>
@@ -544,9 +602,9 @@ function PermitForm({ permit, onSave, onClose }) {
             placeholder="Any specific conditions, restrictions or additional requirements…" style={{ ...ss.ta, minHeight:50 }} />
         </div>
 
-        <div style={{ display:"flex", gap:8, justifyContent:"space-between" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"space-between" }}>
           <button onClick={onClose} style={ss.btn}>Cancel</button>
-          <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
             <button onClick={()=>onSave({...form,status:"draft"})} style={ss.btn}>Save as draft</button>
             <button onClick={()=>onSave({...form,status:"active"})} style={ss.btnO}>
               Issue permit
@@ -571,7 +629,7 @@ function PermitCard({ permit, onEdit, onClose, onReopen, onDelete, onPrint }) {
   const statusColor = permit.status==="closed"?"var(--color-text-secondary)":isExpired?"#791F1F":permit.status==="draft"?"#633806":"#27500A";
 
   return (
-    <div style={{ ...ss.card, marginBottom:8, borderLeft:`3px solid ${def.color}` }}>
+    <div className="app-surface-card" style={{ ...ss.card, marginBottom:8, borderLeft:`3px solid ${def.color}` }}>
       <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
         {/* icon */}
         <div style={{ width:36, height:36, borderRadius:8, background:def.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -600,7 +658,7 @@ function PermitCard({ permit, onEdit, onClose, onReopen, onDelete, onPrint }) {
             </div>
           )}
         </div>
-        <div style={{ display:"flex", gap:6, flexShrink:0, flexWrap:"wrap", justifyContent:"flex-end" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0, justifyContent:"flex-end" }}>
           <button onClick={()=>setExpanded(v=>!v)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>
             {expanded?"▲":"▼"}
           </button>
@@ -761,13 +819,12 @@ export default function PermitSystem() {
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {modal?.type==="form" && <PermitForm permit={modal.data} onSave={savePermit} onClose={()=>setModal(null)} />}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>Permits to work</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>15 permit types · live countdown timers · full checklist</p>
-        </div>
-        <button onClick={()=>setModal({type:"form"})} style={ss.btnO}>+ Issue permit</button>
-      </div>
+      <PageHero
+        badgeText="PTW"
+        title="Permits to work"
+        lead="Fifteen permit types, live countdown timers, and full pre-work checklists. Data stays in this browser unless you use cloud backup."
+        right={<button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnO}>+ Issue permit</button>}
+      />
 
       {/* stat cards */}
       {permits.length>0 && (
@@ -778,7 +835,20 @@ export default function PermitSystem() {
             { label:"Expired", value:stats.expired, bg:"#FCEBEB", color:"#791F1F", filter:"expired" },
             { label:"Closed", value:stats.closed, bg:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary)", filter:"closed" },
           ].map(c=>(
-            <div key={c.label} onClick={()=>setFilterStatus(c.filter)} style={{ background:c.bg, borderRadius:8, padding:"10px 12px", cursor:"pointer" }}>
+            <div
+              key={c.label}
+              role="button"
+              tabIndex={0}
+              className="app-permit-stat-tile"
+              onClick={()=>setFilterStatus(c.filter)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setFilterStatus(c.filter);
+                }
+              }}
+              style={{ background:c.bg, borderRadius:8, padding:"10px 12px", cursor:"pointer" }}
+            >
               <div style={{ fontSize:11, color:c.color, fontWeight:500, marginBottom:2 }}>{c.label}</div>
               <div style={{ fontSize:22, fontWeight:500, color:c.color }}>{c.value}</div>
             </div>
@@ -800,13 +870,13 @@ export default function PermitSystem() {
           <option value="closed">Closed</option>
           <option value="draft">Draft</option>
         </select>
-        {(search||filterType||filterStatus)&&<button onClick={()=>{setSearch("");setFilterType("");setFilterStatus("");}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
+        {(search||filterType||filterStatus)&&<button type="button" onClick={()=>{setSearch("");setFilterType("");setFilterStatus("");}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
       </div>
 
       {permits.length===0 ? (
         <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
           <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No permits issued yet.</p>
-          <button onClick={()=>setModal({type:"form"})} style={ss.btnO}>+ Issue first permit</button>
+          <button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnO}>+ Issue first permit</button>
         </div>
       ) : filtered.length===0 ? (
         <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, color:"var(--color-text-secondary)", fontSize:13 }}>

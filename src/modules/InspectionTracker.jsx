@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from "react";
+import { ms } from "../utils/moduleStyles";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `insp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}); };
@@ -24,14 +23,7 @@ const INSPECTION_TYPES = {
   other: { label:"Other equipment inspection", color:"#5F5E5A", bg:"#F1EFE8", freq:"As specified", regs:"" },
 };
 
-const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
-  ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", minHeight:50 },
-};
+const ss = { ...ms, ta: { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", minHeight:50 } };
 
 function InspectionForm({ item, onSave, onClose }) {
   const projects = load("mysafeops_projects",[]);
@@ -63,7 +55,7 @@ function InspectionForm({ item, onSave, onClose }) {
           <button onClick={onClose} style={{ ...ss.btn, padding:"4px 8px" }}>×</button>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl}>Inspection type</label>
             <select value={form.type} onChange={e=>set("type",e.target.value)} style={ss.inp}>
@@ -142,7 +134,7 @@ function InspectionForm({ item, onSave, onClose }) {
           </div>
         </div>
 
-        <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:16 }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end", marginTop:16 }}>
           <button onClick={onClose} style={ss.btn}>Cancel</button>
           <button disabled={!form.name.trim()} onClick={()=>onSave(form)} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
             {item?"Save changes":"Add record"}
@@ -202,13 +194,16 @@ export default function InspectionTracker() {
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {modal?.type==="form" && <InspectionForm item={modal.data} onSave={saveItem} onClose={()=>setModal(null)} />}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>Inspection register</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>LOLER · PAT · PUWER · PSSR · EICR · Scaffold · Ladder · Harness</p>
-        </div>
-        <button onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ Add inspection record</button>
-      </div>
+      <PageHero
+        badgeText="IN"
+        title="Inspection register"
+        lead="LOLER, PAT, PUWER, PSSR, EICR, scaffold, ladder, harness and more — due dates and outcomes in one place."
+        right={
+          <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>
+            + Add inspection record
+          </button>
+        }
+      />
 
       {items.length>0 && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:8, marginBottom:20 }}>
@@ -269,7 +264,7 @@ export default function InspectionTracker() {
                     <span>Last: {fmtDate(item.lastInspectionDate)}</span>
                   </div>
                 </div>
-                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0 }}>
                   <button onClick={()=>setModal({type:"form",data:item})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
                   <button onClick={()=>{ if(confirm("Delete?")) setItems(prev=>prev.filter(x=>x.id!==item.id)); }} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
                 </div>

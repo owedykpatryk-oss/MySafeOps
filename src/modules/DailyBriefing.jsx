@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from "react";
+import { ms } from "../utils/moduleStyles";
+import PageHero from "../components/PageHero";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `brief_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"long", year:"numeric" }); };
 const fmtTime = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" }); };
 const fmtDateTime = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }); };
+
+const workerConductLabel = (w) => `${w.name || ""}${w.role ? ` — ${w.role}` : ""}`.trim();
 
 const BRIEF_TOPICS = [
   "Weather conditions and site-specific hazards for today",
@@ -24,12 +25,8 @@ const BRIEF_TOPICS = [
 ];
 
 const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnO: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
+  ...ms,
+  btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
   ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
 };
 
@@ -95,12 +92,48 @@ function BriefingForm({ onSave, onClose }) {
     createdAt: new Date().toISOString(),
   });
 
+  const [conductPick, setConductPick] = useState("");
+  const [workerAddSelect, setWorkerAddSelect] = useState("");
+  const [guestName, setGuestName] = useState("");
+
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const toggleTopic = (t) => set("topics", form.topics.includes(t) ? form.topics.filter(x=>x!==t) : [...form.topics,t]);
   const toggleAttendee = (id) => set("attendees", form.attendees.map(a=>a.id===id?{...a,present:!a.present,sig:null}:a));
-  const addAttendee = () => {
-    const name = prompt("Attendee name:");
-    if (name?.trim()) set("attendees",[...form.attendees,{ id:genId(), name:name.trim(), role:"", present:true, sig:null, external:true }]);
+  const addWorkerFromSelect = (workerId) => {
+    if (!workerId) return;
+    const w = workers.find((x) => x.id === workerId);
+    if (!w || form.attendees.some((a) => a.id === w.id)) return;
+    set("attendees", [
+      ...form.attendees,
+      { id: w.id, name: w.name, role: w.role || "", present: true, sig: null, sigTime: null, external: false },
+    ]);
+    setWorkerAddSelect("");
+  };
+  const addGuestAttendee = () => {
+    const name = guestName.trim();
+    if (!name) return;
+    set("attendees", [
+      ...form.attendees,
+      { id: genId(), name, role: "", present: true, sig: null, sigTime: null, external: true },
+    ]);
+    setGuestName("");
+  };
+  const onConductSelect = (e) => {
+    const v = e.target.value;
+    if (v === "") {
+      setConductPick("");
+      set("conductedBy", "");
+      return;
+    }
+    if (v === "__custom__") {
+      setConductPick("__custom__");
+      return;
+    }
+    const w = workers.find((x) => x.id === v);
+    if (w) {
+      setConductPick(v);
+      set("conductedBy", workerConductLabel(w));
+    }
   };
   const setAttSig = (id, dataUrl) => set("attendees", form.attendees.map(a=>a.id===id?{...a,sig:dataUrl,sigTime:new Date().toISOString()}:a));
   const [signingId, setSigningId] = useState(null);
@@ -122,7 +155,7 @@ function BriefingForm({ onSave, onClose }) {
 
         {/* section: details */}
         <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>Briefing details</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:16 }}>
           <div>
             <label style={ss.lbl}>Date</label>
             <input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={ss.inp} />
@@ -144,7 +177,34 @@ function BriefingForm({ onSave, onClose }) {
           </div>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl}>Briefing conducted by *</label>
-            <input value={form.conductedBy} onChange={e=>set("conductedBy",e.target.value)} placeholder="Name and role of person conducting the briefing" style={ss.inp} />
+            {workers.length > 0 ? (
+              <>
+                <select value={conductPick} onChange={onConductSelect} style={{ ...ss.inp, marginBottom: conductPick === "__custom__" ? 8 : 0 }}>
+                  <option value="">— Select from my workers —</option>
+                  {workers.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {workerConductLabel(w) || w.name || w.id}
+                    </option>
+                  ))}
+                  <option value="__custom__">Other (type name and role)</option>
+                </select>
+                {conductPick === "__custom__" && (
+                  <input
+                    value={form.conductedBy}
+                    onChange={(e) => set("conductedBy", e.target.value)}
+                    placeholder="Name and role of person conducting the briefing"
+                    style={ss.inp}
+                  />
+                )}
+              </>
+            ) : (
+              <input
+                value={form.conductedBy}
+                onChange={(e) => set("conductedBy", e.target.value)}
+                placeholder="Name and role — add workers in Workers module to pick from a list"
+                style={ss.inp}
+              />
+            )}
           </div>
         </div>
 
@@ -231,7 +291,36 @@ function BriefingForm({ onSave, onClose }) {
               )}
             </div>
           ))}
-          <button onClick={addAttendee} style={{ ...ss.btn, fontSize:12 }}>+ Add attendee</button>
+          {workers.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
+              <select
+                value={workerAddSelect}
+                onChange={(e) => addWorkerFromSelect(e.target.value)}
+                style={{ ...ss.inp, flex: "1 1 220px", minWidth: 0 }}
+              >
+                <option value="">— Add participant from my workers —</option>
+                {workers
+                  .filter((w) => !form.attendees.some((a) => a.id === w.id))
+                  .map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {workerConductLabel(w) || w.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <input
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addGuestAttendee())}
+              placeholder="Guest or subcontractor name"
+              style={{ ...ss.inp, flex: "1 1 200px", minWidth: 0 }}
+            />
+            <button type="button" onClick={addGuestAttendee} disabled={!guestName.trim()} style={{ ...ss.btn, fontSize: 12, opacity: guestName.trim() ? 1 : 0.45 }}>
+              + Add guest
+            </button>
+          </div>
         </div>
 
         {/* notes */}
@@ -241,7 +330,7 @@ function BriefingForm({ onSave, onClose }) {
             placeholder="Any actions raised, issues noted, or follow-up required…" style={{ ...ss.ta, minHeight:50 }} />
         </div>
 
-        <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
           <button onClick={onClose} style={ss.btn}>Cancel</button>
           <button disabled={!valid} onClick={()=>onSave(form)} style={{ ...ss.btnO, opacity:valid?1:0.4 }}>
             Save briefing record
@@ -262,8 +351,8 @@ function BriefingCard({ brief, onDelete, onPrint }) {
 
   return (
     <div style={{ ...ss.card, marginBottom:8 }}>
-      <div style={{ display:"flex", gap:10, alignItems:"flex-start", cursor:"pointer" }} onClick={()=>setExpanded(v=>!v)}>
-        <div style={{ flex:1 }}>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:10, alignItems:"flex-start", cursor:"pointer" }} onClick={()=>setExpanded(v=>!v)}>
+        <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
             <span style={{ fontWeight:500, fontSize:14 }}>{brief.location}</span>
             {isToday && <span style={{ padding:"1px 8px", borderRadius:20, fontSize:11, fontWeight:500, background:"#EAF3DE", color:"#27500A" }}>Today</span>}
@@ -276,7 +365,7 @@ function BriefingCard({ brief, onDelete, onPrint }) {
             {brief.weatherConditions && <span>{brief.weatherConditions}{brief.temperature?` · ${brief.temperature}°C`:""}</span>}
           </div>
         </div>
-        <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0 }}>
           <button onClick={e=>{e.stopPropagation();onPrint(brief);}} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Print</button>
           <button onClick={e=>{e.stopPropagation();onDelete(brief.id);}} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
           <span style={{ fontSize:18, color:"var(--color-text-secondary)", paddingTop:2 }}>{expanded?"▲":"▼"}</span>
@@ -401,13 +490,12 @@ export default function DailyBriefing() {
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {showForm && <BriefingForm onSave={saveBriefing} onClose={()=>setShowForm(false)} />}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>Daily briefing record</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>Pre-work safety briefing with attendance signatures</p>
-        </div>
-        <button onClick={()=>setShowForm(true)} style={ss.btnO}>+ New briefing</button>
-      </div>
+      <PageHero
+        badgeText="BR"
+        title="Daily briefing record"
+        lead="Pre-work safety briefing with attendance and signatures."
+        right={<button type="button" onClick={() => setShowForm(true)} style={ss.btnO}>+ New briefing</button>}
+      />
 
       {briefings.length>0 && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:10, marginBottom:20 }}>

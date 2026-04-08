@@ -1,20 +1,15 @@
 import { useState, useEffect } from "react";
+import { ms } from "../utils/moduleStyles";
+import PageHero from "../components/PageHero";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 
 const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnO: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
+  ...ms,
+  btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
   ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
   sec:  { fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10, marginTop:20 },
 };
@@ -151,12 +146,12 @@ function StepEditor({ steps, setSteps }) {
         <div key={s.id} style={{ border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
           <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
             <div style={{ width:24, height:24, borderRadius:"50%", background:"#0d9488", color:"#E1F5EE", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:500, flexShrink:0 }}>{s.seq}</div>
-            <div style={{ flex:1, display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            <div style={{ flex:1, display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
               <div>
                 <label style={ss.lbl}>Step title</label>
                 <input value={s.title} onChange={e=>updateStep(s.id,"title",e.target.value)} style={ss.inp} placeholder="e.g. Isolate electrical supply" />
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
                 <div>
                   <label style={ss.lbl}>Responsible</label>
                   <input value={s.responsible||""} onChange={e=>updateStep(s.id,"responsible",e.target.value)} style={ss.inp} placeholder="e.g. Electrician" />
@@ -184,7 +179,7 @@ function StepEditor({ steps, setSteps }) {
       {/* add new step */}
       <div style={{ border:"0.5px dashed var(--color-border-secondary,#ccc)", borderRadius:8, padding:"10px 12px" }}>
         <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:8 }}>Add step manually</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8, marginBottom:8 }}>
           <div style={{ gridColumn:"1/-1" }}>
             <input value={newStep.title} onChange={e=>setNewStep(n=>({...n,title:e.target.value}))}
               onKeyDown={e=>e.key==="Enter"&&addStep()}
@@ -260,7 +255,7 @@ function MSForm({ ms, onSave, onClose }) {
         {/* INFO TAB */}
         {activeTab==="info" && (
           <div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
               <div style={{ gridColumn:"1/-1" }}>
                 <label style={ss.lbl}>Method statement title *</label>
                 <input value={form.title} onChange={e=>set("title",e.target.value)}
@@ -443,7 +438,7 @@ function MSForm({ ms, onSave, onClose }) {
                 {(form.steps||[]).length} work steps · {(form.plant||[]).length} plant items · {(form.ppeRequired||[]).length} PPE items
               </div>
             </div>
-            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
               <button onClick={()=>printMS(form,workers,projects)} style={ss.btn}>
                 <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="3" y="1" width="10" height="10" rx="1"/><path d="M1 8h14v6H1z"/><path d="M5 14v-3h6v3"/></svg>
                 Print / PDF
@@ -452,9 +447,9 @@ function MSForm({ ms, onSave, onClose }) {
           </div>
         )}
 
-        <div style={{ display:"flex", gap:8, justifyContent:"space-between", marginTop:20, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"space-between", marginTop:20, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
           <button onClick={onClose} style={ss.btn}>Cancel</button>
-          <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
             {activeTab!=="info" && <button onClick={()=>setActiveTab(tabs[tabs.findIndex(t=>t[0]===activeTab)-1][0])} style={ss.btn}>← Back</button>}
             {activeTab!=="preview" ? (
               <button onClick={()=>setActiveTab(tabs[tabs.findIndex(t=>t[0]===activeTab)+1][0])} style={ss.btnP}>Next →</button>
@@ -561,13 +556,12 @@ export default function MethodStatement() {
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {modal?.type==="form" && <MSForm ms={modal.data} onSave={saveDoc} onClose={()=>setModal(null)} />}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>Method statements</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>Step-by-step work sequence with plant, materials, PPE and signatures</p>
-        </div>
-        <button onClick={()=>setModal({type:"form"})} style={ss.btnO}>+ New method statement</button>
-      </div>
+      <PageHero
+        badgeText="MS"
+        title="Method statements"
+        lead="Step-by-step work sequence with plant, materials, PPE, emergency and waste notes, and operative signatures. Print-ready when you need it."
+        right={<button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnO}>+ New method statement</button>}
+      />
 
       <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{ ...ss.inp, flex:1, width:"auto", minWidth:140 }} />
@@ -617,7 +611,7 @@ export default function MethodStatement() {
                     </div>
                   )}
                 </div>
-                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0 }}>
                   <button onClick={()=>printMS(doc,workers,projects)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print</button>
                   <button onClick={()=>setModal({type:"form",data:doc})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
                   <button onClick={()=>deleteDoc(doc.id)} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>

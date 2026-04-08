@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { anthropicMessages, getAnthropicKey } from "../utils/anthropicClient";
 import { pushAudit } from "../utils/auditLog";
+import { ms } from "../utils/moduleStyles";
+import PageHero from "../components/PageHero";
 
-const ss = {
-  btnP: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid #085041", background: "#0d9488", color: "#E1F5EE", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  ta: { width: "100%", padding: "10px", borderRadius: 6, border: "0.5px solid #ccc", fontSize: 13, fontFamily: "DM Sans,sans-serif", minHeight: 100, boxSizing: "border-box" },
-  card: { background: "var(--color-background-primary,#fff)", border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, padding: "1.25rem" },
-};
+const ss = { ...ms, ta: { ...ms.inp, minHeight: 100, resize: "vertical" } };
 
 export default function ToolboxTalkAI() {
   const [topic, setTopic] = useState("");
@@ -37,10 +35,11 @@ export default function ToolboxTalkAI() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      <h2 style={{ fontSize: 20, margin: "0 0 8px" }}>AI toolbox talk</h2>
-      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 16 }}>
-        Same API key as RAMS AI. Output is guidance only — supervisor must adapt to site.
-      </p>
+      <PageHero
+        badgeText="TB"
+        title="AI toolbox talk"
+        lead="Same API key as RAMS AI. Output is guidance only — supervisor must adapt to site."
+      />
       <div style={ss.card}>
         <textarea style={ss.ta} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Working near forklift routes, manual handling of panels…" />
         <button type="button" style={{ ...ss.btnP, marginTop: 10 }} disabled={loading || !getAnthropicKey()} onClick={run}>

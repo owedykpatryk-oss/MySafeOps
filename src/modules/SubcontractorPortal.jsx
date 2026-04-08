@@ -1,24 +1,12 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
+import { ms } from "../utils/moduleStyles";
+import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => {
-  try {
-    return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb));
-  } catch {
-    return fb;
-  }
-};
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-const ss = {
-  btn: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid var(--color-border-secondary,#ccc)", background: "var(--color-background-primary,#fff)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  btnP: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid #085041", background: "#0d9488", color: "#E1F5EE", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  inp: { width: "100%", padding: "7px 10px", border: "0.5px solid #ccc", borderRadius: 6, fontSize: 13, fontFamily: "DM Sans,sans-serif", boxSizing: "border-box" },
-  card: { background: "var(--color-background-primary,#fff)", border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, padding: "1.25rem" },
-};
+const ss = ms;
 
 export function PublicSubcontractorView({ token }) {
   const portals = load("subcontractor_portals", []);
@@ -126,7 +114,7 @@ export default function SubcontractorPortal() {
   }, [subs]);
 
   useEffect(() => {
-    const subKey = sk("subcontractor_submissions");
+    const subKey = orgScopedKey("subcontractor_submissions");
     const onStorage = (e) => {
       if (e.key === subKey && e.newValue) {
         try {
@@ -155,22 +143,23 @@ export default function SubcontractorPortal() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Subcontractor portal</h2>
-          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "4px 0 0" }}>Share a link for subs to submit details — stored only on this browser</p>
-        </div>
-        {caps.subcontractorManage && (
-          <button type="button" style={ss.btnP} onClick={() => setShow(true)}>
-            + New link
-          </button>
-        )}
-      </div>
+      <PageHero
+        badgeText="SUB"
+        title="Subcontractor portal"
+        lead="Share a link for subs to submit details — stored only on this browser."
+        right={
+          caps.subcontractorManage ? (
+            <button type="button" style={ss.btnP} onClick={() => setShow(true)}>
+              + New link
+            </button>
+          ) : null
+        }
+      />
       {show && (
         <div style={{ ...ss.card, marginBottom: 16 }}>
           <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Instructions for subcontractor</label>
           <textarea style={{ ...ss.inp, minHeight: 72 }} value={instr} onChange={(e) => setInstr(e.target.value)} placeholder="Site rules, what to upload, deadline…" />
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             <button type="button" style={ss.btn} onClick={() => setShow(false)}>
               Cancel
             </button>

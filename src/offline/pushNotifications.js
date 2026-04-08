@@ -1,6 +1,8 @@
 // MySafeOps — Push Notifications Manager
 // No external libraries needed — uses Web Push API + Notification API
 
+import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+
 const VAPID_PUBLIC_KEY = "YOUR_VAPID_PUBLIC_KEY_HERE";
 // Generate VAPID keys: npx web-push generate-vapid-keys
 // Replace the string above with your actual public key
@@ -82,10 +84,8 @@ export function showLocalNotification(title, options = {}) {
 // Call this on app load and periodically (e.g. every hour)
 // to fire local notifications for upcoming expiries.
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const loadJSON = (k, fb) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const saveJSON = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
+const loadJSON = (k, fb) => loadOrgScoped(k, fb);
+const saveJSON = (k, v) => saveOrgScoped(k, v);
 
 const NOTIF_SEEN_KEY = "mysafeops_notif_seen";
 const THRESHOLDS_DAYS = [30, 14, 7, 1, 0]; // days before expiry to notify

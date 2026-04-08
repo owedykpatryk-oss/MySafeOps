@@ -1,0 +1,19 @@
+{
+  "name": "MySafeOps",
+  "short_name": "MySafeOps",
+  "description": "UK construction safety and compliance workspace",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0d9488",
+  "lang": "en-GB",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

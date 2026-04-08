@@ -1,22 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { ms } from "../utils/moduleStyles";
+import { loadOrgScoped as load, saveOrgScoped as save, getOrgId } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb = []) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const fmt = (iso) => { if (!iso) return "—"; const d = new Date(iso); return d.toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }); };
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 
-const ss = {
-  btn: { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnO: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #f97316", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp: { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl: { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
-};
+const ss = { ...ms, btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #f97316", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 } };
 
 // ─── QR generator (pure JS, no lib) ─────────────────────────────────────────
 // Lightweight QR via Google Charts API (no auth needed, public)
@@ -191,7 +183,7 @@ function InductionForm({ site, checklist, onComplete, onBack }) {
               ))}
             </div>
           )}
-          <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
             <button onClick={()=>setStep(0)} style={ss.btn}>← Back</button>
             <button disabled={!allChecked} onClick={()=>setStep(2)}
               style={{ ...ss.btnP, flex:1, justifyContent:"center", opacity:allChecked?1:0.4 }}>
@@ -326,7 +318,7 @@ function QRModal({ site, baseUrl, onClose }) {
           <QRCode value={url} size={200} />
         </div>
         <p style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:16, wordBreak:"break-all" }}>{url}</p>
-        <div style={{ display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center" }}>
           <button onClick={()=>navigator.clipboard?.writeText(url)} style={ss.btn}>Copy link</button>
           <button onClick={()=>window.print()} style={ss.btnP}>Print QR</button>
         </div>
@@ -472,17 +464,23 @@ export default function QRInduction() {
       {modal?.type==="qr" && <QRModal site={modal.site} baseUrl={baseUrl} onClose={()=>setModal(null)} />}
       {modal?.type==="form" && <InductionForm site={modal.site} checklist={modal.site.checklist||[]} onComplete={handleComplete} onBack={()=>setModal(null)} />}
 
-      {/* header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>QR site induction</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>Workers scan QR on arrival — sign in, checklist, GPS timestamp</p>
-        </div>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          <button onClick={()=>setModal({type:"manage"})} style={ss.btn}>Manage sites</button>
-          {entries.length>0 && <button onClick={exportCSV} style={ss.btn}>Export CSV</button>}
-        </div>
-      </div>
+      <PageHero
+        badgeText="QR"
+        title="QR site induction"
+        lead="Workers scan QR on arrival — sign in, checklist, GPS timestamp."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => setModal({ type: "manage" })} style={ss.btn}>
+              Manage sites
+            </button>
+            {entries.length > 0 && (
+              <button type="button" onClick={exportCSV} style={ss.btn}>
+                Export CSV
+              </button>
+            )}
+          </div>
+        }
+      />
 
       {/* tabs */}
       <div style={{ display:"flex", gap:4, marginBottom:20, borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)", paddingBottom:0 }}>

@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { anthropicMessages, getAnthropicKey } from "../utils/anthropicClient";
 import { pushAudit } from "../utils/auditLog";
+import { ms } from "../utils/moduleStyles";
+import PageHero from "../components/PageHero";
 
-const ss = {
-  btn: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid var(--color-border-secondary,#ccc)", background: "var(--color-background-primary,#fff)", color: "var(--color-text-primary)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  btnP: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid #085041", background: "#0d9488", color: "#E1F5EE", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  ta: { width: "100%", padding: "10px", borderRadius: 6, border: "0.5px solid #ccc", fontSize: 13, fontFamily: "DM Sans,sans-serif", minHeight: 120, boxSizing: "border-box" },
-  card: { background: "var(--color-background-primary,#fff)", border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, padding: "1.25rem" },
-};
+const ss = { ...ms, ta: { ...ms.inp, minHeight: 120, resize: "vertical" } };
 
 const SYSTEM = `You are a UK construction health & safety assistant for RAMS (Risk Assessment and Method Statement).
 Respond with a single JSON object only, no markdown, with this shape:
@@ -76,10 +73,16 @@ export default function AIRamsGenerator() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      <h2 style={{ fontSize: 20, margin: "0 0 8px" }}>AI RAMS generator</h2>
-      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 16 }}>
-        Uses Anthropic Claude (browser key — dev only). Set <code>VITE_ANTHROPIC_API_KEY</code> in <code>.env</code> and restart <code>npm run dev</code>.
-      </p>
+      <PageHero
+        badgeText="AI"
+        title="AI RAMS generator"
+        lead={
+          <>
+            Uses Anthropic Claude (browser key — dev only). Set <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_API_KEY</code> in <code style={{ fontSize: 12 }}>.env</code> and restart{" "}
+            <code style={{ fontSize: 12 }}>npm run dev</code>.
+          </>
+        }
+      />
       {!hasKey && (
         <div style={{ ...ss.card, background: "#FAEEDA", color: "#633806", marginBottom: 16 }}>No API key configured.</div>
       )}

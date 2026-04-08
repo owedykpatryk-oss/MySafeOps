@@ -1,0 +1,19 @@
+# Cloudflare Worker: R2 upload endpoint for MySafeOps
+#
+# 1. Create an R2 bucket in Cloudflare dashboard (e.g. mysafeops-files).
+# 2. Replace bucket_name below.
+# 3. wrangler secret put UPLOAD_TOKEN   # long random string; same value as VITE_STORAGE_UPLOAD_TOKEN in .env.local
+# 4. npm i -g wrangler && wrangler deploy
+# 5. Set VITE_STORAGE_API_URL to the deployed worker origin (https://...workers.dev)
+
+name = "mysafeops-r2-upload"
+main = "index.mjs"
+compatibility_date = "2024-09-23"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "mysafeops-files"
+
+# Optional: pin allowed browser origins (comma-separated). If empty, * is used.
+# [vars]
+# ALLOWED_ORIGINS = "https://your-app.vercel.app,http://localhost:5173"

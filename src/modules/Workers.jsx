@@ -1,31 +1,18 @@
 import { useState, useEffect } from "react";
+import { ms } from "../utils/moduleStyles";
+import { geocodeAddressNominatim } from "../utils/geocode";
+import PageHero from "../components/PageHero";
+import { getOrgId, orgScopedKey, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
-const ORG_KEY = "mysafeops_orgId";
 
-const getOrgId = () => localStorage.getItem(ORG_KEY) || "default";
-const scopedKey = (k) => `${k}_${getOrgId()}`;
-
-const load = (key) => {
-  try {
-    return JSON.parse(localStorage.getItem(scopedKey(key)) || "[]");
-  } catch {
-    return [];
-  }
-};
-const save = (key, data) => localStorage.setItem(scopedKey(key), JSON.stringify(data));
+const load = (key) => loadOrgScoped(key, []);
+const save = (key, data) => saveOrgScoped(key, data);
 
 const genId = () => `w_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-const ss = {
-  btn: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid var(--color-border-secondary,#ccc)", background: "var(--color-background-primary,#fff)", color: "var(--color-text-primary)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", display: "inline-flex", alignItems: "center", gap: 6 },
-  btnP: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid #085041", background: "#0d9488", color: "#E1F5EE", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", display: "inline-flex", alignItems: "center", gap: 6 },
-  btnO: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid #c2410c", background: "#f97316", color: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", display: "inline-flex", alignItems: "center", gap: 6 },
-  inp: { width: "100%", padding: "7px 10px", border: "0.5px solid var(--color-border-secondary,#ccc)", borderRadius: 6, fontSize: 13, background: "var(--color-background-primary,#fff)", color: "var(--color-text-primary)", fontFamily: "DM Sans,sans-serif", boxSizing: "border-box" },
-  lbl: { display: "block", fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 4 },
-  card: { background: "var(--color-background-primary,#fff)", border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, padding: "1.25rem" },
-};
+const ss = { ...ms, btnO: { padding: "10px 14px", borderRadius: 6, border: "0.5px solid #c2410c", background: "#f97316", color: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", minHeight: 44, lineHeight: 1.3 } };
 
 function toCsv(rows) {
   return rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -91,7 +78,7 @@ export default function Workers() {
   };
 
   return (
-    <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+    <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14, color: "var(--color-text-primary)" }}>
       {modal?.type === "worker" && (
         <WorkerForm
           item={modal.data}
@@ -107,25 +94,33 @@ export default function Workers() {
         />
       )}
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16, alignItems: "center" }}>
-        <h1 style={{ margin: 0, flex: "1 1 100%", fontSize: 20 }}>Workers & projects</h1>
-        <button type="button" style={ss.btnP} onClick={() => setModal({ type: "worker", data: null })}>
-          Add worker
-        </button>
-        <button type="button" style={ss.btnO} onClick={() => setModal({ type: "project", data: null })}>
-          Add project
-        </button>
-        <button type="button" style={ss.btn} onClick={exportWorkersCsv}>
-          Export workers CSV
-        </button>
-      </div>
+      <PageHero
+        badgeText="WP"
+        title="Workers & projects"
+        lead="People and sites used across RAMS, permits, daily briefings, site map, and registers."
+        right={
+          <>
+            <button type="button" style={ss.btnP} onClick={() => setModal({ type: "worker", data: null })}>
+              Add worker
+            </button>
+            <button type="button" style={ss.btnO} onClick={() => setModal({ type: "project", data: null })}>
+              Add project
+            </button>
+            <button type="button" style={ss.btn} onClick={exportWorkersCsv}>
+              Export CSV
+            </button>
+          </>
+        }
+      />
 
-      <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 20 }}>
-        Data keys: <code style={{ fontSize: 12 }}>{scopedKey(WORKERS_KEY)}</code>, <code style={{ fontSize: 12 }}>{scopedKey(PROJECTS_KEY)}</code>
+      <p style={{ color: "var(--color-text-secondary)", fontSize: 12, marginBottom: 20, marginTop: -8 }}>
+        Storage keys: <code style={{ fontSize: 11 }}>{orgScopedKey(WORKERS_KEY)}</code>, <code style={{ fontSize: 11 }}>{orgScopedKey(PROJECTS_KEY)}</code>
       </p>
 
-      <div style={{ ...ss.card, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Workers ({workers.length})</div>
+      <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
+        <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
+          Workers ({workers.length})
+        </div>
         {workers.length === 0 && <div style={{ color: "var(--color-text-secondary)" }}>No workers yet.</div>}
         {workers.map((w) => (
           <div
@@ -139,7 +134,7 @@ export default function Workers() {
               borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
             }}
           >
-            <div style={{ flex: "1 1 200px" }}>
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
               <strong>{w.name || "Unnamed"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{w.role || "—"} · {w.phone || w.email || ""}</div>
             </div>
@@ -153,8 +148,10 @@ export default function Workers() {
         ))}
       </div>
 
-      <div style={ss.card}>
-        <div style={{ fontWeight: 600, marginBottom: 12 }}>Projects ({projects.length})</div>
+      <div className="app-surface-card" style={ss.card}>
+        <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
+          Projects ({projects.length})
+        </div>
         {projects.length === 0 && <div style={{ color: "var(--color-text-secondary)" }}>No projects yet.</div>}
         {projects.map((p) => (
           <div
@@ -168,7 +165,7 @@ export default function Workers() {
               borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
             }}
           >
-            <div style={{ flex: "1 1 200px" }}>
+            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
               <strong>{p.name || "Unnamed"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{p.site || p.address || ""}</div>
             </div>
@@ -247,7 +244,7 @@ function WorkerForm({ item, onSave, onClose }) {
         <input type="date" style={ss.inp} value={form.certExpiry || ""} onChange={(e) => set("certExpiry", e.target.value)} />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Certificates / notes (free text)</label>
         <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.certs} onChange={(e) => set("certs", e.target.value)} />
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
@@ -260,17 +257,61 @@ function WorkerForm({ item, onSave, onClose }) {
   );
 }
 
+function projectFormShape(p) {
+  if (!p) {
+    return { id: genId(), name: "", site: "", address: "", lat: "", lng: "" };
+  }
+  return {
+    ...p,
+    lat: p.lat != null && p.lat !== "" ? String(p.lat) : "",
+    lng: p.lng != null && p.lng !== "" ? String(p.lng) : "",
+  };
+}
+
 function ProjectForm({ item, onSave, onClose }) {
-  const [form, setForm] = useState(
-    () =>
-      item || {
-        id: genId(),
-        name: "",
-        site: "",
-        address: "",
-      }
-  );
+  const [form, setForm] = useState(() => projectFormShape(item));
+  const [geoBusy, setGeoBusy] = useState(false);
+  const [geoMsg, setGeoMsg] = useState("");
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    setForm(projectFormShape(item));
+  }, [item?.id]);
+
+  const persist = () => {
+    const latRaw = String(form.lat ?? "").trim();
+    const lngRaw = String(form.lng ?? "").trim();
+    const lat = latRaw === "" ? undefined : Number(latRaw);
+    const lng = lngRaw === "" ? undefined : Number(lngRaw);
+    onSave({
+      ...form,
+      lat: lat !== undefined && !Number.isNaN(lat) ? lat : undefined,
+      lng: lng !== undefined && !Number.isNaN(lng) ? lng : undefined,
+    });
+  };
+
+  const geocode = async () => {
+    const q = (form.address || form.site || "").trim();
+    if (!q) {
+      setGeoMsg("Enter address or site first.");
+      return;
+    }
+    setGeoBusy(true);
+    setGeoMsg("");
+    try {
+      const c = await geocodeAddressNominatim(q);
+      if (!c) {
+        setGeoMsg("No coordinates found — try a fuller address.");
+        return;
+      }
+      setForm((f) => ({ ...f, lat: String(c.lat), lng: String(c.lng) }));
+    } catch (e) {
+      setGeoMsg(e?.message || "Geocoding failed.");
+    } finally {
+      setGeoBusy(false);
+    }
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
       <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
@@ -281,11 +322,30 @@ function ProjectForm({ item, onSave, onClose }) {
         <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)} />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Address</label>
         <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)} />
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+          <div>
+            <label style={ss.lbl}>Latitude (optional)</label>
+            <input style={ss.inp} inputMode="decimal" value={form.lat ?? ""} onChange={(e) => set("lat", e.target.value)} placeholder="e.g. 51.5" />
+          </div>
+          <div>
+            <label style={ss.lbl}>Longitude (optional)</label>
+            <input style={ss.inp} inputMode="decimal" value={form.lng ?? ""} onChange={(e) => set("lng", e.target.value)} placeholder="e.g. -0.12" />
+          </div>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <button type="button" style={ss.btn} disabled={geoBusy} onClick={geocode}>
+            {geoBusy ? "Looking up…" : "Fill lat/lng from address"}
+          </button>
+          {geoMsg && <span style={{ marginLeft: 10, fontSize: 12, color: "#b45309" }}>{geoMsg}</span>}
+        </div>
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 10, lineHeight: 1.45 }}>
+          Coordinates power the <strong>Site map</strong> module. You can paste OS grid converted to decimal degrees or use the button (OpenStreetMap Nominatim).
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave(form)}>
+          <button type="button" style={ss.btnP} onClick={persist}>
             Save
           </button>
         </div>

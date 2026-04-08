@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.14.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

@@ -1,19 +1,17 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.0.0";
+const SW_VERSION = "mysafeops-v1.1.0";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
-// Assets to pre-cache on install
+// Vite build: hashed assets live under /assets/; precache only shell + manifest + icons
 const PRECACHE_ASSETS = [
   "/",
   "/index.html",
   "/offline.html",
-  "/static/js/main.chunk.js",
-  "/static/js/bundle.js",
-  "/static/css/main.chunk.css",
-  "/manifest.json",
+  "/manifest.webmanifest",
+  "/vite.svg",
 ];
 
 // ─── Install: pre-cache shell assets ─────────────────────────────────────────
@@ -67,10 +65,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets (JS, CSS, fonts, images) — cache first
+  // Static assets (Vite /assets/, legacy /static/, fonts, images) — cache first
   if (
+    url.pathname.startsWith("/assets/") ||
     url.pathname.startsWith("/static/") ||
-    url.pathname.match(/\.(js|css|woff2?|ttf|eot|png|jpg|svg|ico)$/)
+    url.pathname.match(/\.(js|css|woff2?|ttf|eot|png|jpg|svg|ico|webmanifest)$/)
   ) {
     event.respondWith(
       caches.match(request).then(cached => {
@@ -150,8 +149,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body: data.body || "",
-    icon: data.icon || "/icons/icon-192.png",
-    badge: "/icons/badge-72.png",
+    icon: data.icon || "/vite.svg",
+    badge: data.badge || "/vite.svg",
     tag: data.tag || "mysafeops-notification",
     data: data.url ? { url: data.url } : {},
     actions: data.actions || [],

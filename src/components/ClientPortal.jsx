@@ -1,21 +1,18 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { ms } from "../utils/moduleStyles";
+import PageHero from "./PageHero";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `portal_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 const fmtDateTime = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }); };
 const daysUntil = (iso) => { if (!iso) return null; return Math.ceil((new Date(iso)-new Date())/(1000*60*60*24)); };
 
 const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
+  ...ms,
+  btn: { ...ms.btn, display:"inline-flex", alignItems:"center", gap:6 },
+  btnP: { ...ms.btnP, display:"inline-flex", alignItems:"center", gap:6 },
 };
 
 // ─── Client Portal VIEW (what the client sees) ────────────────────────────────
@@ -39,6 +36,7 @@ function PortalView({ token, portals }) {
   const filteredRAMS = portal.projectId ? rams.filter(r=>r.projectId===portal.projectId) : rams;
   const filteredPermits = portal.projectId ? permits.filter(p=>p.projectId===portal.projectId) : permits;
   const filteredSnags = portal.projectId ? snags.filter(s=>s.projectId===portal.projectId) : snags;
+  const filteredIncidents = portal.projectId ? incidents.filter((i) => i.projectId === portal.projectId) : incidents;
 
   const expiredCerts = filteredWorkers.flatMap(w=>(w.certifications||[]).filter(c=>c.expiryDate&&new Date(c.expiryDate)<now).map(c=>({...c,workerName:w.name})));
   const unsignedRAMS = filteredRAMS.filter(r=>!r.signed&&r.status!=="draft");
@@ -170,6 +168,28 @@ function PortalView({ token, portals }) {
           </div>
         )}
 
+        {portal.sections?.includes("incidents") && (
+          <div style={{ ...ss.card, marginBottom:16 }}>
+            <div style={{ fontWeight:500, fontSize:14, marginBottom:12 }}>Incidents & near misses — {filteredIncidents.length}</div>
+            {filteredIncidents.length===0 ? <div style={{ fontSize:13, color:"var(--color-text-secondary)" }}>No incident or near-miss records in scope.</div> :
+              [...filteredIncidents].sort((a,b)=>new Date(b.occurredAt||b.createdAt||0)-new Date(a.occurredAt||a.createdAt||0)).slice(0,80).map(i=>(
+                <div key={i.id} style={{ display:"flex", gap:10, alignItems:"flex-start", padding:"8px 0", borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)", fontSize:13 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:500 }}>{i.type==="near_miss"?"Near miss":"Incident"}{i.injuryInvolved?" · Injury noted":""}</div>
+                    <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>{fmtDate(i.occurredAt||i.createdAt)}{i.location?` · ${i.location}`:""}{i.projectName?` · ${i.projectName}`:""}</div>
+                    {i.description && <div style={{ fontSize:12, marginTop:4, color:"var(--color-text-primary)" }}>{String(i.description).slice(0,200)}{String(i.description).length>200?"…":""}</div>}
+                  </div>
+                  <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:500, flexShrink:0,
+                    background:i.status==="closed"?"#EAF3DE":i.severity==="critical"||i.severity==="high"?"#FCEBEB":"#FAEEDA",
+                    color:i.status==="closed"?"#27500A":i.severity==="critical"||i.severity==="high"?"#791F1F":"#633806" }}>
+                    {i.status||"open"}
+                  </span>
+                </div>
+              ))
+            }
+          </div>
+        )}
+
         <div style={{ textAlign:"center", fontSize:11, color:"var(--color-text-secondary)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
           Read-only client view · Generated by MySafeOps · {fmtDateTime(new Date().toISOString())}
         </div>
@@ -220,18 +240,23 @@ export default function ClientPortal() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>Client portal</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>Share read-only compliance view with your clients — no login needed</p>
-        </div>
-        {caps.clientPortalManage && <button onClick={()=>setShowCreate(true)} style={ss.btnP}>+ Create portal link</button>}
-      </div>
+      <PageHero
+        badgeText="CL"
+        title="Client portal"
+        lead="Share read-only compliance view with your clients — no login needed."
+        right={
+          caps.clientPortalManage ? (
+            <button type="button" onClick={() => setShowCreate(true)} style={ss.btnP}>
+              + Create portal link
+            </button>
+          ) : null
+        }
+      />
 
       {showCreate && (
         <div style={{ ...ss.card, marginBottom:20, border:"0.5px solid #9FE1CB" }}>
           <div style={{ fontWeight:500, fontSize:14, marginBottom:14 }}>New client portal</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(160px,100%),1fr))", gap:10, marginBottom:12 }}>
             <div>
               <label style={ss.lbl}>Client name *</label>
               <input value={newPortal.clientName} onChange={e=>setNewPortal(n=>({...n,clientName:e.target.value}))} placeholder="e.g. Two Sisters Food Group" style={ss.inp} />

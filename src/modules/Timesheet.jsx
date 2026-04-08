@@ -1,20 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
+import { ms } from "../utils/moduleStyles";
+import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "mysafeops_timesheets";
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
-const ORG_KEY = "mysafeops_orgId";
 
-const getOrgId = () => localStorage.getItem(ORG_KEY) || "default";
-const scopedKey = (k) => `${k}_${getOrgId()}`;
-
-const load = (key) => {
-  try { return JSON.parse(localStorage.getItem(scopedKey(key)) || "[]"); }
-  catch { return []; }
-};
-const save = (key, data) =>
-  localStorage.setItem(scopedKey(key), JSON.stringify(data));
+const load = (key) => loadOrgScoped(key, []);
+const save = (key, data) => saveOrgScoped(key, data);
 
 const genId = () => `ts_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
 
@@ -241,7 +236,7 @@ function EntryModal({ entry, workers, projects, onSave, onDelete, onClose }) {
           }}>×</button>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:12, marginBottom:12 }}>
           <div>
             <label style={labelStyle}>Worker</label>
             <select value={form.workerId} onChange={e=>set("workerId",e.target.value)} style={inputStyle}>
@@ -298,7 +293,7 @@ function EntryModal({ entry, workers, projects, onSave, onDelete, onClose }) {
           />
         </div>
 
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8 }}>
+        <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"space-between", alignItems:"center", gap:8 }}>
           <div>
             {entry && (
               <button onClick={()=>onDelete(entry.id)} style={{ ...btnStyle, color:"#A32D2D", borderColor:"#F09595" }}>
@@ -306,7 +301,7 @@ function EntryModal({ entry, workers, projects, onSave, onDelete, onClose }) {
               </button>
             )}
           </div>
-          <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
             <button onClick={onClose} style={btnStyle}>Cancel</button>
             <button
               onClick={()=>onSave(form)}
@@ -323,25 +318,10 @@ function EntryModal({ entry, workers, projects, onSave, onDelete, onClose }) {
   );
 }
 
-const labelStyle = {
-  display:"block", fontSize:12, fontWeight:500,
-  color:"var(--color-text-secondary)", marginBottom:4,
-};
-const inputStyle = {
-  width:"100%", padding:"7px 10px",
-  border:"0.5px solid var(--color-border-secondary,#ccc)",
-  borderRadius:6, fontSize:13,
-  background:"var(--color-background-primary,#fff)",
-  color:"var(--color-text-primary)",
-  fontFamily:"DM Sans, sans-serif",
-};
-const btnStyle = {
-  padding:"7px 14px", borderRadius:6,
-  border:"0.5px solid var(--color-border-secondary,#ccc)",
-  background:"var(--color-background-primary,#fff)",
-  color:"var(--color-text-primary)", fontSize:13,
-  cursor:"pointer", fontFamily:"DM Sans, sans-serif",
-};
+const ss = ms;
+const labelStyle = ss.lbl;
+const inputStyle = ss.inp;
+const btnStyle = ss.btn;
 
 // ─── Manage workers/projects panel ──────────────────────────────────────────
 function ManagePanel({ type, items, onSave, onClose }) {
@@ -408,7 +388,7 @@ function ManagePanel({ type, items, onSave, onClose }) {
           </button>
         </div>
 
-        <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+        <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"flex-end", gap:8 }}>
           <button onClick={onClose} style={btnStyle}>Cancel</button>
           <button onClick={()=>onSave(list)} style={{ ...btnStyle, background:"#0d9488", color:"#E1F5EE", borderColor:"#085041" }}>
             Save
@@ -522,29 +502,28 @@ export default function Timesheet() {
         />
       )}
 
-      {/* header */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8, marginBottom:20 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>Timesheet</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>
-            Track and approve worker hours per project
-          </p>
-        </div>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          <button onClick={()=>setModal({type:"workers"})} style={btnStyle}>
-            Manage workers
-          </button>
-          <button onClick={()=>setModal({type:"projects"})} style={btnStyle}>
-            Manage projects
-          </button>
-          <button
-            onClick={()=>setModal({type:"entry"})}
-            style={{ ...btnStyle, background:"#0d9488", color:"#E1F5EE", borderColor:"#085041" }}
-          >
-            + Log hours
-          </button>
-        </div>
-      </div>
+      <PageHero
+        badgeText="TS"
+        title="Timesheet"
+        lead="Track and approve worker hours per project (local storage)."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => setModal({ type: "workers" })} style={btnStyle}>
+              Manage workers
+            </button>
+            <button type="button" onClick={() => setModal({ type: "projects" })} style={btnStyle}>
+              Manage projects
+            </button>
+            <button
+              type="button"
+              onClick={() => setModal({ type: "entry" })}
+              style={{ ...btnStyle, background: "#0d9488", color: "#E1F5EE", borderColor: "#085041" }}
+            >
+              + Log hours
+            </button>
+          </div>
+        }
+      />
 
       {/* pending banner */}
       {pendingCount > 0 && (

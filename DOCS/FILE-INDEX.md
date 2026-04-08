@@ -1,5 +1,7 @@
 # MySafeOps — Complete File Package
 
+> **Historical / prototype package index.** This file described an early deliverable (monolithic `rams-pro.jsx`, landing assets, and a **planned** Cloudflare D1 + JWT stack). The **current application** lives in the repository root: Vite + React under `src/`, localStorage-first persistence, optional **Supabase** (`app_sync`) and **R2 upload Worker**. For accurate setup and architecture, start with **[README.md](../README.md)** and **[architecture-current.md](./architecture-current.md)**.
+
 ## 📋 Everything you have (18 files)
 
 ### 🚀 APP (for Cursor AI)

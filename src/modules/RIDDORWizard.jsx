@@ -1,23 +1,18 @@
 import { useState, useEffect } from "react";
 import { getOrgSettings } from "../components/OrgSettings";
+import { ms } from "../utils/moduleStyles";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `riddor_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}); };
 const addDays = (iso, days) => { const d=new Date(iso); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); };
 
 const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnR: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #A32D2D", background:"#FCEBEB", color:"#791F1F", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
-  ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
+  ...ms,
+  btnR: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #A32D2D", background:"#FCEBEB", color:"#791F1F", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
+  ta: { ...ms.inp, resize:"vertical", lineHeight:1.5 },
 };
 
 const RIDDOR_TYPES = {
@@ -206,7 +201,7 @@ function RIDDORForm({ report, onSave, onClose }) {
 
         {/* step 1 — incident details */}
         {step===1 && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div>
               <label style={ss.lbl}>Date of incident *</label>
               <input type="date" value={form.incidentDate} onChange={e=>set("incidentDate",e.target.value)} style={ss.inp} />
@@ -265,7 +260,7 @@ function RIDDORForm({ report, onSave, onClose }) {
 
         {/* step 2 — injured person */}
         {step===2 && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl}>Full name of injured person</label>
               <input value={form.injuredName||""} onChange={e=>set("injuredName",e.target.value)} style={ss.inp} />
@@ -294,7 +289,7 @@ function RIDDORForm({ report, onSave, onClose }) {
 
         {/* step 3 — employer */}
         {step===3 && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl}>Employer / organisation name</label>
               <input value={form.employerName||""} onChange={e=>set("employerName",e.target.value)} style={ss.inp} />
@@ -308,7 +303,7 @@ function RIDDORForm({ report, onSave, onClose }) {
 
         {/* step 4 — injury & treatment */}
         {step===4 && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl}>Treatment received</label>
               <select value={form.treatmentReceived||""} onChange={e=>set("treatmentReceived",e.target.value)} style={ss.inp}>
@@ -365,7 +360,7 @@ function RIDDORForm({ report, onSave, onClose }) {
               </label>
             </div>
             {form.reportedToHSE && (
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
                 <div>
                   <label style={ss.lbl}>HSE report reference number</label>
                   <input value={form.hseReportRef||""} onChange={e=>set("hseReportRef",e.target.value)} placeholder="Reference from HSE confirmation" style={ss.inp} />
@@ -412,9 +407,9 @@ function RIDDORForm({ report, onSave, onClose }) {
         )}
 
         {/* nav */}
-        <div style={{ display:"flex", gap:8, justifyContent:"space-between", marginTop:20, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
+        <div style={{ display:"flex", gap:8, justifyContent:"space-between", marginTop:20, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)", flexWrap:"wrap" }}>
           <button onClick={onClose} style={ss.btn}>Cancel</button>
-          <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             {step>0 && <button onClick={()=>setStep(s=>s-1)} style={ss.btn}>← Back</button>}
             {step<STEPS.length-1
               ? <button onClick={()=>setStep(s=>s+1)} style={ss.btnP}>Next →</button>
@@ -453,13 +448,16 @@ export default function RIDDORRegister() {
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {modal?.type==="form" && <RIDDORWizard report={modal.data} onSave={saveReport} onClose={()=>setModal(null)} />}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>RIDDOR register</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>Reporting of Injuries, Diseases and Dangerous Occurrences Regulations 2013</p>
-        </div>
-        <button onClick={()=>setModal({type:"form"})} style={ss.btnR}>+ New RIDDOR report</button>
-      </div>
+      <PageHero
+        badgeText="RID"
+        title="RIDDOR register"
+        lead="Reporting of Injuries, Diseases and Dangerous Occurrences Regulations 2013. Deadlines and HSE reporting links below."
+        right={
+          <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnR}>
+            + New RIDDOR report
+          </button>
+        }
+      />
 
       <div style={{ padding:"10px 14px", background:"#E6F1FB", border:"0.5px solid #B5D4F4", borderRadius:8, fontSize:12, color:"#0C447C", marginBottom:20, lineHeight:1.6 }}>
         RIDDOR requires employers to report work-related deaths, specified injuries and over-7-day injuries within 10–15 days. Report at <a href="https://www.hse.gov.uk/riddor/report.htm" target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>hse.gov.uk/riddor/report.htm</a>

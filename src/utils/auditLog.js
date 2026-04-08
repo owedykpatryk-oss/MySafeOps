@@ -1,7 +1,8 @@
+import { orgScopedKey } from "./orgStorage";
+
 const MAX = 500;
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const key = () => `mysafeops_audit_${getOrgId()}`;
+const auditStorageKey = () => orgScopedKey("mysafeops_audit");
 
 export function pushAudit(entry) {
   const row = {
@@ -11,19 +12,19 @@ export function pushAudit(entry) {
   };
   let list = [];
   try {
-    list = JSON.parse(localStorage.getItem(key()) || "[]");
+    list = JSON.parse(localStorage.getItem(auditStorageKey()) || "[]");
     if (!Array.isArray(list)) list = [];
   } catch {
     list = [];
   }
   list.unshift(row);
-  localStorage.setItem(key(), JSON.stringify(list.slice(0, MAX)));
+  localStorage.setItem(auditStorageKey(), JSON.stringify(list.slice(0, MAX)));
   return row;
 }
 
 export function readAudit() {
   try {
-    const list = JSON.parse(localStorage.getItem(key()) || "[]");
+    const list = JSON.parse(localStorage.getItem(auditStorageKey()) || "[]");
     return Array.isArray(list) ? list : [];
   } catch {
     return [];
@@ -31,5 +32,5 @@ export function readAudit() {
 }
 
 export function clearAudit() {
-  localStorage.removeItem(key());
+  localStorage.removeItem(auditStorageKey());
 }

@@ -1,20 +1,15 @@
 import { useState, useEffect } from "react";
+import { ms } from "../utils/moduleStyles";
+import PageHero from "../components/PageHero";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `cdm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 
 const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnO: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
+  ...ms,
+  btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
   ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
   sec:  { fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10, marginTop:20 },
 };
@@ -120,7 +115,7 @@ function CDMForm({ cdm, onSave, onClose }) {
 
         {/* PROJECT TAB */}
         {tab==="project" && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl}>Project title *</label>
               <input value={form.projectTitle||""} onChange={e=>set("projectTitle",e.target.value)} placeholder="e.g. Kettle replacement — 2SFG Scunthorpe" style={ss.inp} />
@@ -192,7 +187,7 @@ function CDMForm({ cdm, onSave, onClose }) {
             ].map(({ role, fields }) => (
               <div key={role} style={{ marginBottom:20 }}>
                 <div style={{ fontWeight:500, fontSize:13, marginBottom:10, padding:"6px 10px", background:"#E6F1FB", borderRadius:6, color:"#0C447C" }}>{role}</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
                   {fields.map(([k,l])=>(
                     <div key={k}>
                       <label style={ss.lbl}>{l}</label>
@@ -261,15 +256,15 @@ function CDMForm({ cdm, onSave, onClose }) {
                 <span>CPP sections: {completedSections}/{CPP_SECTIONS.length}</span>
               </div>
             </div>
-            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
               <button onClick={()=>printCDM(form)} style={ss.btn}>Print / PDF</button>
             </div>
           </div>
         )}
 
-        <div style={{ display:"flex", gap:8, justifyContent:"space-between", marginTop:20, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"space-between", marginTop:20, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
           <button onClick={onClose} style={ss.btn}>Cancel</button>
-          <div style={{ display:"flex", gap:8 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
             {tab!=="project"&&<button onClick={()=>setTab(tabs[tabs.findIndex(t=>t[0]===tab)-1][0])} style={ss.btn}>← Back</button>}
             {tab!=="preview"
               ?<button onClick={()=>setTab(tabs[tabs.findIndex(t=>t[0]===tab)+1][0])} style={ss.btnP}>Next →</button>
@@ -331,13 +326,12 @@ export default function CDMCompliance() {
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {modal?.type==="form" && <CDMForm cdm={modal.data} onSave={savePack} onClose={()=>setModal(null)} />}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>CDM 2015 compliance</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>Construction Phase Plan · Dutyholder checklist · F10 notification</p>
-        </div>
-        <button onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ New CDM pack</button>
-      </div>
+      <PageHero
+        badgeText="CDM"
+        title="CDM 2015 compliance"
+        lead="Construction Phase Plan, dutyholder checklist, and F10 notification tracking for UK CDM 2015."
+        right={<button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ New CDM pack</button>}
+      />
 
       <div style={{ padding:"10px 14px", background:"#E6F1FB", border:"0.5px solid #B5D4F4", borderRadius:8, fontSize:12, color:"#0C447C", marginBottom:20, lineHeight:1.6 }}>
         <strong>CDM 2015 applies to all construction projects.</strong> A Construction Phase Plan is required before any construction begins. Projects exceeding 30 working days (with 20+ simultaneous workers) or 500 person-days must be notified to HSE via F10.
@@ -369,7 +363,7 @@ export default function CDMCompliance() {
                     <span>CPP: {cppPct}%</span>
                   </div>
                 </div>
-                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0 }}>
                   <button onClick={()=>printCDM(pack)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print</button>
                   <button onClick={()=>setModal({type:"form",data:pack})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
                   <button onClick={()=>{ if(confirm("Delete?")) setPacks(p=>p.filter(x=>x.id!==pack.id)); }} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>

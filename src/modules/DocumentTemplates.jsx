@@ -1,24 +1,12 @@
 import { useState, useEffect } from "react";
 import { pushAudit } from "../utils/auditLog";
+import { ms } from "../utils/moduleStyles";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => {
-  try {
-    return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb));
-  } catch {
-    return fb;
-  }
-};
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-const ss = {
-  btn: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid var(--color-border-secondary,#ccc)", background: "var(--color-background-primary,#fff)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  btnP: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid #085041", background: "#0d9488", color: "#E1F5EE", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  inp: { width: "100%", padding: "7px 10px", border: "0.5px solid #ccc", borderRadius: 6, fontSize: 13, fontFamily: "DM Sans,sans-serif", boxSizing: "border-box" },
-  card: { background: "var(--color-background-primary,#fff)", border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, padding: "1.25rem" },
-};
+const ss = ms;
 
 export default function DocumentTemplates() {
   const [templates, setTemplates] = useState(() => load("document_templates", []));
@@ -26,7 +14,7 @@ export default function DocumentTemplates() {
   const [type, setType] = useState("rams");
   const [sourceId, setSourceId] = useState("");
   const rams = load("rams_builder_docs", []);
-  const ms = load("method_statements", []);
+  const methodStmts = load("method_statements", []);
 
   useEffect(() => {
     save("document_templates", templates);
@@ -44,7 +32,7 @@ export default function DocumentTemplates() {
       const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = doc;
       payload = rest;
     } else {
-      const doc = ms.find((d) => d.id === sourceId);
+      const doc = methodStmts.find((d) => d.id === sourceId);
       if (!doc) {
         alert("Select a method statement");
         return;
@@ -80,10 +68,11 @@ export default function DocumentTemplates() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      <h2 style={{ fontSize: 20, margin: "0 0 8px" }}>Document templates</h2>
-      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 20 }}>
-        Save a snapshot of an existing RAMS or method statement, then clone it as a new draft anytime.
-      </p>
+      <PageHero
+        badgeText="TPL"
+        title="Document templates"
+        lead="Save a snapshot of an existing RAMS or method statement, then clone it as a new draft anytime."
+      />
       <div style={{ ...ss.card, marginBottom: 20 }}>
         <div style={{ fontWeight: 600, marginBottom: 10 }}>Save from current library</div>
         <label style={{ display: "block", fontSize: 12, marginBottom: 4 }}>Template name</label>
@@ -96,7 +85,7 @@ export default function DocumentTemplates() {
         <label style={{ display: "block", fontSize: 12, margin: "10px 0 4px" }}>Source document</label>
         <select style={ss.inp} value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
           <option value="">— choose —</option>
-          {(type === "rams" ? rams : ms).map((d) => (
+          {(type === "rams" ? rams : methodStmts).map((d) => (
             <option key={d.id} value={d.id}>
               {d.title || d.id}
             </option>

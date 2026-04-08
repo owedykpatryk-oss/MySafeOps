@@ -10,6 +10,7 @@ import {
   startNotificationScheduler,
   showLocalNotification,
 } from "./pushNotifications";
+import PageHero from "../components/PageHero";
 
 const ss = {
   btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
@@ -95,11 +96,12 @@ export default function NotificationSettings() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", fontSize:14, color:"var(--color-text-primary)" }}>
+      <PageHero
+        badgeText="NTF"
+        title="Notifications"
+        lead="Reminders for expiring certifications, permits, RAMS reviews, and more (browser permission required)."
+      />
       <div style={{ ...ss.card, marginBottom:16 }}>
-        <div style={{ fontWeight:500, fontSize:15, marginBottom:4 }}>Notifications</div>
-        <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:16 }}>
-          Get reminders for expiring certifications, permits, RAMS reviews and more.
-        </div>
 
         {!status.supported && (
           <div style={{ padding:"10px 14px", background:"#FAEEDA", borderRadius:8, fontSize:13, color:"#633806" }}>

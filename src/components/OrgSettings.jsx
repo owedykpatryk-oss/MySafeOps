@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
+import { ms } from "../utils/moduleStyles";
+import PageHero from "./PageHero";
 
 const ORG_KEY = "mysafeops_org_settings";
 const loadOrg = () => { try { return JSON.parse(localStorage.getItem(ORG_KEY) || "{}"); } catch { return {}; } };
@@ -29,14 +31,13 @@ export const getOrgSettings = () => {
 };
 
 const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnO: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem", marginBottom:16 },
-  ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", minHeight:60 },
-  sec:  { fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 },
+  ...ms,
+  btn: { ...ms.btn, display:"inline-flex", alignItems:"center", gap:6 },
+  btnP: { ...ms.btnP, display:"inline-flex", alignItems:"center", gap:6 },
+  btnO: { ...ms.btnP, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", display:"inline-flex", alignItems:"center", gap:6 },
+  card: { ...ms.card, marginBottom:16 },
+  ta: { ...ms.inp, resize:"vertical", minHeight:60 },
+  sec: { fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 },
 };
 
 function Section({ title, children }) {
@@ -102,19 +103,21 @@ export default function OrgSettings() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>Organisation settings</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>Your logo and details appear on all printed documents</p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={!caps.orgSettings}
-          style={{ ...(saved ? { ...ss.btnP, background: "#27500A", borderColor: "#1D6B33" } : ss.btnP), opacity: caps.orgSettings ? 1 : 0.45 }}
-        >
-          {saved ? "Saved" : "Save settings"}
-        </button>
-      </div>
+      <PageHero
+        badgeText="ORG"
+        title="Organisation settings"
+        lead="Your logo and details appear on all printed documents and exports."
+        right={
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!caps.orgSettings}
+            style={{ ...(saved ? { ...ss.btnP, background: "#27500A", borderColor: "#1D6B33" } : ss.btnP), opacity: caps.orgSettings ? 1 : 0.45 }}
+          >
+            {saved ? "Saved" : "Save settings"}
+          </button>
+        }
+      />
 
       {/* tabs */}
       <div style={{ display:"flex", gap:2, marginBottom:20, flexWrap:"wrap" }}>
@@ -158,7 +161,7 @@ export default function OrgSettings() {
           </Section>
 
           <Section title="Brand colours">
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(160px,100%),1fr))", gap:12 }}>
               <Field label="Primary colour" hint="Used for headers, key elements">
                 <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                   <input type="color" value={form.primaryColor||"#0d9488"} onChange={e=>set("primaryColor",e.target.value)}
@@ -185,7 +188,7 @@ export default function OrgSettings() {
 
       {tab==="company" && (
         <Section title="Company information">
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(160px,100%),1fr))", gap:10 }}>
             <div style={{ gridColumn:"1/-1" }}>
               <Field label="Company / organisation name">
                 <input value={form.name||""} onChange={e=>set("name",e.target.value)} placeholder="e.g. FESS Food Engineering Services Ltd" style={ss.inp} />

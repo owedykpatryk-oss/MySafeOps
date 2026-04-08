@@ -1,11 +1,10 @@
 import { useState, useRef } from "react";
 import { getAnthropicKey, getAnthropicModel } from "../utils/anthropicClient";
 import { pushAudit } from "../utils/auditLog";
+import { ms } from "../utils/moduleStyles";
+import PageHero from "../components/PageHero";
 
-const ss = {
-  btnP: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid #085041", background: "#0d9488", color: "#E1F5EE", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif" },
-  card: { background: "var(--color-background-primary,#fff)", border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, padding: "1.25rem" },
-};
+const ss = ms;
 
 async function anthropicVision({ prompt, base64, mediaType }) {
   const apiKey = getAnthropicKey();
@@ -80,10 +79,11 @@ export default function PhotoHazardAI() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      <h2 style={{ fontSize: 20, margin: "0 0 8px" }}>Photo hazard check</h2>
-      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 16 }}>
-        Claude Vision — upload a site photo. Not a substitute for a formal risk assessment.
-      </p>
+      <PageHero
+        badgeText="PH"
+        title="Photo hazard check"
+        lead="Claude Vision — upload a site photo. Not a substitute for a formal risk assessment."
+      />
       <div style={ss.card}>
         <input ref={ref} type="file" accept="image/*" style={{ display: "none" }} onChange={onPick} />
         <button type="button" style={ss.btnP} disabled={loading || !getAnthropicKey()} onClick={() => ref.current?.click()}>

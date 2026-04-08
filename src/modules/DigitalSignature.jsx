@@ -1,12 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { ms } from "../utils/moduleStyles";
+import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const scopedKey = (k) => `${k}_${getOrgId()}`;
-const loadJSON = (k, fallback = []) => {
-  try { return JSON.parse(localStorage.getItem(scopedKey(k)) || JSON.stringify(fallback)); }
-  catch { return fallback; }
-};
-const saveJSON = (k, v) => localStorage.setItem(scopedKey(k), JSON.stringify(v));
+const loadJSON = (k, fallback = []) => loadOrgScoped(k, fallback);
+const saveJSON = (k, v) => saveOrgScoped(k, v);
 const genId = () => `sig_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 const fmtDateTime = (iso) => {
   if (!iso) return "—";
@@ -14,13 +12,7 @@ const fmtDateTime = (iso) => {
   return d.toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
 };
 
-const ss = {
-  btn: { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans, sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnPrimary: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans, sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  label: { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  input: { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans, sans-serif", boxSizing:"border-box" },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
-};
+const ss = { ...ms, btnPrimary: ms.btnP, label: ms.lbl, input: ms.inp };
 
 function SignatureCanvas({ onCapture, label = "Draw signature here" }) {
   const canvasRef = useRef(null);
@@ -216,7 +208,7 @@ export function SignaturePanel({ docId, docTitle, docType="RAMS", signers=[], on
           <div style={{ height:4, borderRadius:2, width:signers.length>0?`${(docSigs.length/signers.length)*100}%`:"0%", background:allSigned?"#1D9E75":"#0d9488", transition:"width .4s" }} />
         </div>
 
-        <div style={{ display:"flex", gap:4, marginBottom:16 }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:16 }}>
           {["sign","audit"].map(t=>(
             <button key={t} onClick={()=>setTab(t)} style={{ ...ss.btn, background:tab===t?"var(--color-background-secondary,#f7f7f5)":"transparent", borderColor:tab===t?"var(--color-border-primary,#aaa)":"transparent", fontWeight:tab===t?500:400 }}>
               {t==="sign"?"Signatures":"Audit trail"}
@@ -308,18 +300,21 @@ export default function SignatureManager() {
 
   return (
     <div style={{ fontFamily:"DM Sans, system-ui, sans-serif", padding:"1.25rem 0", fontSize:14 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>Digital signatures</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>Collect signatures with GPS + timestamp per document</p>
-        </div>
-        <button onClick={()=>setShowNew(true)} style={ss.btnPrimary}>+ New document</button>
-      </div>
+      <PageHero
+        badgeText="SIG"
+        title="Digital signatures"
+        lead="Collect signatures with GPS and timestamp per document."
+        right={
+          <button type="button" onClick={() => setShowNew(true)} style={ss.btnPrimary}>
+            + New document
+          </button>
+        }
+      />
 
       {showNew && (
         <div style={{ ...ss.card, marginBottom:20, border:"0.5px solid #9FE1CB" }}>
           <div style={{ fontWeight:500, fontSize:14, marginBottom:14 }}>New document for signing</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:10, marginBottom:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
             <div>
               <label style={ss.label}>Document title</label>
               <input value={newDoc.title} onChange={e=>setNewDoc(n=>({...n,title:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addDoc()} placeholder="e.g. RAMS — Kettle removal" style={ss.input} />
@@ -348,7 +343,7 @@ export default function SignatureManager() {
             </div>
           )}
           {workers.length===0 && <p style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:12 }}>Add workers first to assign them as signers.</p>}
-          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
             <button onClick={()=>setShowNew(false)} style={ss.btn}>Cancel</button>
             <button onClick={addDoc} disabled={!newDoc.title.trim()} style={{ ...ss.btnPrimary, opacity:newDoc.title.trim()?1:0.4 }}>Create & sign</button>
           </div>

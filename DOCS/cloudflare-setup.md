@@ -1,13 +1,22 @@
 # MySafeOps — Cloudflare Deployment Guide
 
-## Architecture
+## Current app vs optional future backend
+
+**Today, the repo’s React app** does **not** depend on Cloudflare D1 or a custom JWT API. Data lives in the browser (**localStorage**), with optional **Supabase** for sign-in and JSON backup (`app_sync`), and optional **R2 uploads** via the Worker under `cloudflare/workers/r2-upload`. See **[architecture-current.md](./architecture-current.md)** and **[README.md](../README.md)**.
+
+The sections below that reference **D1**, **`/api/*` Pages Functions**, and **JWT** describe a **possible future** full-backend architecture (aligned with [database-schema.sql](./database-schema.sql) and early product planning). You can deploy **only** the static SPA + R2 Worker without implementing D1.
+
+---
+
+## Reference architecture (optional / planned — not required for current SPA)
+
 ```
 mysafeops.com (Cloudflare Pages)
-    ├── Frontend: React SPA
-    ├── API: Cloudflare Workers  (/api/*)
-    ├── Database: Cloudflare D1  (SQLite)
-    ├── Storage: Cloudflare R2   (photos, files)
-    └── Auth: Workers + D1       (JWT tokens)
+    ├── Frontend: React SPA          ← matches npm run build → dist/
+    ├── API: Cloudflare Workers  (/api/*)   ← optional future
+    ├── Database: Cloudflare D1  (SQLite) ← optional future
+    ├── Storage: Cloudflare R2   (photos, files) ← optional; R2 upload Worker used by app when configured
+    └── Auth: Workers + D1       (JWT tokens) ← optional future (app uses Supabase Auth if enabled)
 ```
 
 ## Step 1: Create Cloudflare Pages project

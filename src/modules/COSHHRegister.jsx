@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
+import { ms } from "../utils/moduleStyles";
+import { safeHttpUrl } from "../utils/safeUrl";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => { try { return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb)); } catch { return fb; } };
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `coshh_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 
@@ -19,12 +19,8 @@ const RISK_LEVELS = {
 };
 
 const ss = {
-  btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  btnP: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #085041", background:"#0d9488", color:"#E1F5EE", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
-  inp:  { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box" },
-  lbl:  { display:"block", fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:4 },
-  card: { background:"var(--color-background-primary,#fff)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, padding:"1.25rem" },
-  ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", minHeight:60 },
+  ...ms,
+  ta: { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", minHeight:60 },
 };
 
 function PillSelector({ options, selected, onChange, max }) {
@@ -71,7 +67,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
 
         {/* identification */}
         <div style={{ fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>Substance identification</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl}>Substance / product name *</label>
             <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. WD-40 Multi-Use Lubricant" style={ss.inp} />
@@ -158,7 +154,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
 
         {/* SDS */}
         <div style={{ fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>Safety Data Sheet (SDS)</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl}>SDS link / reference</label>
             <input value={form.sdsUrl} onChange={e=>set("sdsUrl",e.target.value)} placeholder="URL or document reference" style={ss.inp} />
@@ -182,7 +178,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
           <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} style={ss.ta} placeholder="Any other relevant information…" />
         </div>
 
-        <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
           <button onClick={onClose} style={ss.btn}>Cancel</button>
           <button disabled={!form.name.trim()} onClick={()=>onSave(form)} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
             {item ? "Save changes" : "Add substance"}
@@ -232,7 +228,14 @@ function SubstanceCard({ item, onEdit, onDelete }) {
             {item.quantity && <span style={{ color:"var(--color-text-secondary)" }}>Qty: <strong>{item.quantity} {item.unit}</strong></span>}
             {item.storageLocation && <span style={{ color:"var(--color-text-secondary)" }}>Store: <strong>{item.storageLocation}</strong></span>}
             {item.assessedDate && <span style={{ color:"var(--color-text-secondary)" }}>Assessed: {fmtDate(item.assessedDate)}</span>}
-            {item.sdsUrl && <a href={item.sdsUrl} target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>View SDS →</a>}
+            {item.sdsUrl && (() => {
+              const sdsSafe = safeHttpUrl(item.sdsUrl);
+              return sdsSafe ? (
+                <a href={sdsSafe} target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>View SDS →</a>
+              ) : (
+                <span style={{ color:"var(--color-text-secondary)" }}>SDS URL invalid</span>
+              );
+            })()}
           </div>
 
           {/* PPE */}
@@ -299,16 +302,23 @@ export default function COSHHRegister() {
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {modal?.type==="form" && <SubstanceForm item={modal.data} projects={projects} onSave={saveItem} onClose={()=>setModal(null)} />}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:8 }}>
-        <div>
-          <h2 style={{ fontWeight:500, fontSize:20, margin:0 }}>COSHH register</h2>
-          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"2px 0 0" }}>Control of Substances Hazardous to Health — COSHH Regs 2002</p>
-        </div>
-        <div style={{ display:"flex", gap:8 }}>
-          {items.length>0 && <button onClick={exportCSV} style={ss.btn}>Export CSV</button>}
-          <button onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ Add substance</button>
-        </div>
-      </div>
+      <PageHero
+        badgeText="COS"
+        title="COSHH register"
+        lead="Control of Substances Hazardous to Health — COSHH Regs 2002. Data stays on this device."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {items.length > 0 && (
+              <button type="button" onClick={exportCSV} style={ss.btn}>
+                Export CSV
+              </button>
+            )}
+            <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>
+              + Add substance
+            </button>
+          </div>
+        }
+      />
 
       {items.length>0 && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:10, marginBottom:20 }}>

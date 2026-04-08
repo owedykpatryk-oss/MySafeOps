@@ -1,5 +1,7 @@
 # RAMS Pro — Cursor AI Setup Guide
 
+> **Historical guide.** Written for an early **single-file prototype** (`rams-pro.jsx`) and a dependency stack (react-router, Tailwind, jsPDF, IndexedDB, etc.) that **does not match** the current repo. The live app is under `src/` with its own modules and `package.json` dependencies. Use **[README.md](../README.md)**, **[architecture-current.md](./architecture-current.md)**, and **[CURSOR_PROMPT.md](./CURSOR_PROMPT.md)** for the current project.
+
 ## ✅ Co MASZ (pliki z Claude):
 
 ### 1. `rams-pro.jsx` (110KB) — Działający prototyp

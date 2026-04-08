@@ -1,25 +1,12 @@
 import { useState, useEffect } from "react";
+import { ms } from "../utils/moduleStyles";
+import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import PageHero from "../components/PageHero";
 
-const getOrgId = () => localStorage.getItem("mysafeops_orgId") || "default";
-const sk = (k) => `${k}_${getOrgId()}`;
-const load = (k, fb) => {
-  try {
-    return JSON.parse(localStorage.getItem(sk(k)) || JSON.stringify(fb));
-  } catch {
-    return fb;
-  }
-};
-const save = (k, v) => localStorage.setItem(sk(k), JSON.stringify(v));
 const genId = () => `waste_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
-const ss = {
-  btn: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid var(--color-border-secondary,#ccc)", background: "var(--color-background-primary,#fff)", color: "var(--color-text-primary)", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", display: "inline-flex", alignItems: "center", gap: 6 },
-  btnP: { padding: "7px 14px", borderRadius: 6, border: "0.5px solid #085041", background: "#0d9488", color: "#E1F5EE", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", display: "inline-flex", alignItems: "center", gap: 6 },
-  inp: { width: "100%", padding: "7px 10px", border: "0.5px solid var(--color-border-secondary,#ccc)", borderRadius: 6, fontSize: 13, fontFamily: "DM Sans,sans-serif", boxSizing: "border-box" },
-  lbl: { display: "block", fontSize: 12, fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: 4 },
-  card: { background: "var(--color-background-primary,#fff)", border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, padding: "1.25rem" },
-};
+const ss = ms;
 
 const WASTE_CODES = ["Non-hazardous", "Inert", "Hazardous — EWC code required", "Construction & demolition", "Packaging waste"];
 
@@ -73,7 +60,7 @@ function WasteForm({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
             <label style={ss.lbl}>Quantity</label>
             <input style={ss.inp} value={form.quantity} onChange={(e) => set("quantity", e.target.value)} />
@@ -99,7 +86,7 @@ function WasteForm({ item, projects, onSave, onClose }) {
           <input type="checkbox" checked={form.dutySigned} onChange={(e) => set("dutySigned", e.target.checked)} />
           Duty of care checklist completed (descriptions accurate, secure transport, valid carriers)
         </label>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
@@ -164,24 +151,23 @@ export default function WasteRegister() {
           onClose={() => setModal(null)}
         />
       )}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Waste register</h2>
-          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "4px 0 0" }}>
-            Waste transfer notes, duty of care, EWC codes — UK Environment Agency expectations (local record only)
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
-              Export CSV
+      <PageHero
+        badgeText="WS"
+        title="Waste register"
+        lead="Waste transfer notes, duty of care, EWC codes — UK Environment Agency expectations (local record only)."
+        right={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {items.length > 0 && (
+              <button type="button" style={ss.btn} onClick={exportCsv}>
+                Export CSV
+              </button>
+            )}
+            <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
+              + Add transfer
             </button>
-          )}
-          <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add transfer
-          </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
       {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No waste transfers recorded.</div>
       ) : (
@@ -189,11 +175,11 @@ export default function WasteRegister() {
           {items.map((w) => (
             <div key={w.id} style={ss.card}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <strong>{w.wtnRef || "No ref"}</strong> · {w.transferDate}
                   <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{w.description?.slice(0, 120) || "—"}</div>
                 </div>
-                <div style={{ display: "flex", gap: 6 }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: w })}>
                     Edit
                   </button>

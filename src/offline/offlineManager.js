@@ -12,7 +12,7 @@ export async function registerServiceWorker() {
       scope: "/",
       updateViaCache: "none",
     });
-    console.log("[MySafeOps SW] Registered:", reg.scope);
+    if (import.meta.env.DEV) console.log("[MySafeOps SW] Registered:", reg.scope);
 
     // Listen for updates
     reg.addEventListener("updatefound", () => {
@@ -35,7 +35,7 @@ export async function registerServiceWorker() {
 
     return reg;
   } catch (err) {
-    console.error("[MySafeOps SW] Registration failed:", err);
+    console.warn("[MySafeOps SW] Registration failed:", err);
     return null;
   }
 }
@@ -43,12 +43,12 @@ export async function registerServiceWorker() {
 // ─── Offline detection ────────────────────────────────────────────────────────
 export function initOnlineStatusWatcher(onOnline, onOffline) {
   const handleOnline = () => {
-    console.log("[MySafeOps] Back online — triggering sync");
+    if (import.meta.env.DEV) console.log("[MySafeOps] Back online — triggering sync");
     onOnline?.();
     triggerBackgroundSync();
   };
   const handleOffline = () => {
-    console.log("[MySafeOps] Gone offline");
+    if (import.meta.env.DEV) console.log("[MySafeOps] Gone offline");
     onOffline?.();
   };
   window.addEventListener("online", handleOnline);
@@ -66,10 +66,10 @@ export async function triggerBackgroundSync() {
   if (!reg) return;
   try {
     await reg.sync?.register("mysafeops-sync");
-    console.log("[MySafeOps] Background sync registered");
+    if (import.meta.env.DEV) console.log("[MySafeOps] Background sync registered");
   } catch {
     // Background Sync API not available (e.g. iOS Safari) — just proceed
-    console.warn("[MySafeOps] Background Sync not available, syncing inline");
+    if (import.meta.env.DEV) console.warn("[MySafeOps] Background Sync not available, syncing inline");
   }
 }
 
