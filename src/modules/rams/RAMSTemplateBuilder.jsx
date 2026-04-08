@@ -117,10 +117,46 @@ const RL = {
   low:    { bg:"#EAF3DE", color:"#27500A" },
 };
 
-async function fetchOpenMeteoSummary(lat, lng) {
+function openWeatherDescription(code = "", fallback = "") {
+  const c = String(code || "").slice(0, 2);
+  const MAP = {
+    "01": "Clear",
+    "02": "Few clouds",
+    "03": "Scattered clouds",
+    "04": "Overcast",
+    "09": "Shower rain",
+    "10": "Rain",
+    "11": "Thunderstorm",
+    "13": "Snow",
+    "50": "Mist",
+  };
+  return MAP[c] || fallback || "Weather";
+}
+
+async function fetchWeatherSummary(lat, lng) {
   const la = parseFloat(String(lat).trim(), 10);
   const lo = parseFloat(String(lng).trim(), 10);
   if (!Number.isFinite(la) || !Number.isFinite(lo)) throw new Error("Invalid coordinates");
+  const openWeatherKey = String(import.meta.env.VITE_OPENWEATHER_API_KEY || "").trim();
+  const when = new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+
+  // Prefer OpenWeather when key is provided; fallback to Open-Meteo for keyless usage.
+  if (openWeatherKey) {
+    const u = new URL("https://api.openweathermap.org/data/2.5/weather");
+    u.searchParams.set("lat", String(la));
+    u.searchParams.set("lon", String(lo));
+    u.searchParams.set("appid", openWeatherKey);
+    u.searchParams.set("units", "metric");
+    const r = await fetch(u.toString());
+    if (!r.ok) throw new Error("Weather request failed");
+    const j = await r.json();
+    const t = Number(j.main?.temp).toFixed(1);
+    const w = Number(j.wind?.speed || 0) * 2.23694; // m/s -> mph
+    const iconCode = j.weather?.[0]?.icon || "";
+    const desc = openWeatherDescription(iconCode, j.weather?.[0]?.description || "");
+    return `Site weather (${when}): ~${t}°C, ${desc}, wind ~${w.toFixed(1)} mph — OpenWeather snapshot for this location.`;
+  }
+
   const u = new URL("https://api.open-meteo.com/v1/forecast");
   u.searchParams.set("latitude", String(la));
   u.searchParams.set("longitude", String(lo));
@@ -134,7 +170,6 @@ async function fetchOpenMeteoSummary(lat, lng) {
   const code = j.current?.weather_code;
   const WMO = { 0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Drizzle", 61: "Rain", 80: "Rain showers", 95: "Thunderstorm" };
   const desc = WMO[code] ?? `Weather code ${code}`;
-  const when = new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   return `Site weather (${when}): ~${t}°C, ${desc}, wind ~${w} mph — Open-Meteo snapshot for this location.`;
 }
 
@@ -184,10 +219,10 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
     }));
   };
 
-  const runOpenMeteo = async () => {
+  const runWeatherLookup = async () => {
     setWeatherLoading(true);
     try {
-      const line = await fetchOpenMeteoSummary(form.siteLat, form.siteLng);
+      const line = await fetchWeatherSummary(form.siteLat, form.siteLng);
       set("siteWeatherNote", [form.siteWeatherNote, line].filter(Boolean).join("\n\n"));
     } catch (e) {
       console.warn(e);
@@ -340,8 +375,8 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
           >
             {geoLoading ? "Getting location…" : "Use my location (lat / lng)"}
           </button>
-          <button type="button" disabled={weatherLoading || !String(form.siteLat || "").trim() || !String(form.siteLng || "").trim()} onClick={runOpenMeteo} style={{ ...ss.btnP, fontSize:12, width:"100%", opacity: weatherLoading ? 0.7 : 1 }}>
-            {weatherLoading ? "Loading…" : "Fetch weather (Open-Meteo)"}
+          <button type="button" disabled={weatherLoading || !String(form.siteLat || "").trim() || !String(form.siteLng || "").trim()} onClick={runWeatherLookup} style={{ ...ss.btnP, fontSize:12, width:"100%", opacity: weatherLoading ? 0.7 : 1 }}>
+            {weatherLoading ? "Loading…" : "Fetch weather"}
           </button>
         </div>
       </div>

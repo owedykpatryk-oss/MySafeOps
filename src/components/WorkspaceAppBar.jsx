@@ -130,9 +130,9 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
               <span className="workspace-app-bar-btn-label">Search</span>
             </button>
           ) : null}
-          <Link to="/" className="app-bar-action" style={btn} aria-label="Marketing home">
+          <Link to="/app" className="app-bar-action" style={btn} aria-label="Go to dashboard">
             <Home size={16} aria-hidden />
-            <span className="workspace-app-bar-btn-label">Home</span>
+            <span className="workspace-app-bar-btn-label">Dashboard</span>
           </Link>
           <button type="button" className="app-bar-action" style={btn} onClick={onOpenHelp} aria-label="Open Help">
             <HelpCircle size={16} aria-hidden />

@@ -10,6 +10,7 @@ import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
 import { setPendingInviteToken } from "../lib/inviteToken";
 import { ensureUserOrgContext } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
+import InlineAlert from "../components/InlineAlert";
 
 const ss = ms;
 const teal = "#0d9488";
@@ -29,6 +30,9 @@ export default function LoginPage() {
   const [, setTick] = useState(0);
   const inviteToken = searchParams.get("invite") || "";
   const inviteEmail = (searchParams.get("email") || "").trim().toLowerCase();
+  const oauthError = searchParams.get("error_description") || searchParams.get("error") || "";
+  const nextPath = searchParams.get("next") || "/app";
+  const safeNextPath = nextPath.startsWith("/") ? nextPath : "/app";
   const normalizedEmail = email.trim().toLowerCase();
   const lockout = getAuthLockoutState(normalizedEmail, Date.now());
 
@@ -39,13 +43,19 @@ export default function LoginPage() {
   }, [inviteToken, inviteEmail, email]);
 
   useEffect(() => {
+    if (!oauthError) return;
+    const friendly = oauthError.replace(/\+/g, " ").replace(/OAuth/i, "Google sign-in");
+    setMsg(`Authentication issue: ${friendly}`);
+  }, [oauthError]);
+
+  useEffect(() => {
     if (!lockout.isLocked) return undefined;
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
     return () => window.clearInterval(id);
   }, [lockout.isLocked]);
 
   if (cloud && ready && user) {
-    return <Navigate to="/app" replace />;
+    return <Navigate to={safeNextPath} replace />;
   }
 
   const signIn = async () => {
@@ -65,7 +75,7 @@ export default function LoginPage() {
       await ensureUserOrgContext(client);
       trackAuthEvent("sign_in_success", { email: normalizedEmail });
       setPassword("");
-      navigate("/app", { replace: true });
+      navigate(safeNextPath, { replace: true });
     } catch (e) {
       const state = recordAuthFailure(normalizedEmail, Date.now());
       trackAuthError("sign_in_failed", e, { email: normalizedEmail, failures: state.failures });
@@ -85,7 +95,8 @@ export default function LoginPage() {
     setBusy(true);
     trackAuthEvent("google_sign_in_start");
     try {
-      const { error } = await signInWithGoogleOAuth(client, "/login");
+      const loginRedirectPath = `/login${safeNextPath !== "/app" ? `?next=${encodeURIComponent(safeNextPath)}` : ""}`;
+      const { error } = await signInWithGoogleOAuth(client, loginRedirectPath);
       if (error) throw error;
     } catch (e) {
       trackAuthError("google_sign_in_failed", e);
@@ -211,9 +222,7 @@ export default function LoginPage() {
                 </button>
               </div>
               {lockout.isLocked && (
-                <p style={{ marginTop: 12, fontSize: 12, color: "#b91c1c" }}>
-                  Temporary lockout active: {formatLockoutRemaining(lockout.remainingMs)} remaining.
-                </p>
+                <InlineAlert type="error" text={`Temporary lockout active: ${formatLockoutRemaining(lockout.remainingMs)} remaining.`} style={{ fontSize: 12 }} />
               )}
               <div style={{ marginTop: 16 }}>
                 <button
@@ -249,7 +258,18 @@ export default function LoginPage() {
                   Password reset links should redirect to <code style={{ fontSize: 10 }}>/reset-password</code>.
                 </p>
               </div>
-              {msg && <p style={{ marginTop: 14, fontSize: 13 }}>{msg}</p>}
+              <InlineAlert
+                type={
+                  msg.toLowerCase().includes("failed") ||
+                  msg.toLowerCase().includes("issue") ||
+                  msg.toLowerCase().includes("could not") ||
+                  msg.toLowerCase().includes("lockout")
+                    ? "error"
+                    : "info"
+                }
+                text={msg}
+                style={{ marginTop: 14 }}
+              />
               <p style={{ marginTop: 12, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
                 Need help? Contact support:{" "}
                 <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: teal, fontWeight: 500 }}>

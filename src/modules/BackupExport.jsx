@@ -11,13 +11,14 @@ import {
   uploadBackupToSupabase,
 } from "../utils/cloudSync";
 import { formatBytes, getEffectivePlan } from "../lib/billingPlans";
+import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 
 const ss = ms;
 
 export default function BackupExport() {
-  const { caps, orgId, trialStatus } = useApp();
+  const { caps, orgId, trialStatus, billing } = useApp();
   const { supabase, user, ready } = useSupabaseAuth();
   const [msg, setMsg] = useState("");
   const [cloudBusy, setCloudBusy] = useState(false);
@@ -26,7 +27,7 @@ export default function BackupExport() {
   const fileRef = useRef(null);
 
   const cloudEnabled = isSupabaseConfigured() && supabase;
-  const plan = getEffectivePlan(trialStatus);
+  const plan = getEffectivePlan(trialStatus, billing);
 
   useEffect(() => {
     if (!cloudEnabled || !user || !ready) {
@@ -34,9 +35,13 @@ export default function BackupExport() {
       return;
     }
     let cancelled = false;
-    getCloudBackupMeta(supabase, orgId).then((t) => {
-      if (!cancelled) setCloudUpdated(t);
-    });
+    (async () => {
+      const slug = await syncOrgSlugIfNeeded(supabase);
+      if (cancelled) return;
+      getCloudBackupMeta(supabase, slug).then((t) => {
+        if (!cancelled) setCloudUpdated(t);
+      });
+    })();
     return () => {
       cancelled = true;
     };
@@ -44,7 +49,10 @@ export default function BackupExport() {
 
   const refreshCloudMeta = () => {
     if (!cloudEnabled || !user) return;
-    getCloudBackupMeta(supabase, orgId).then(setCloudUpdated);
+    (async () => {
+      const slug = await syncOrgSlugIfNeeded(supabase);
+      getCloudBackupMeta(supabase, slug).then(setCloudUpdated);
+    })();
   };
 
   const download = () => {
@@ -134,8 +142,9 @@ export default function BackupExport() {
           return;
         }
       }
-      await uploadBackupToSupabase(supabase, orgId, { bundle });
-      pushAudit({ action: "backup_cloud_upload", entity: "all", detail: orgId });
+      const slug = await syncOrgSlugIfNeeded(supabase);
+      await uploadBackupToSupabase(supabase, slug, { bundle });
+      pushAudit({ action: "backup_cloud_upload", entity: "all", detail: slug });
       setMsg("Cloud backup updated.");
       refreshCloudMeta();
     } catch (e) {
@@ -150,7 +159,8 @@ export default function BackupExport() {
     setMsg("");
     setCloudBusy(true);
     try {
-      const r = await downloadBackupFromSupabase(supabase, orgId, { merge });
+      const slug = await syncOrgSlugIfNeeded(supabase);
+      const r = await downloadBackupFromSupabase(supabase, slug, { merge });
       if (!r.skipped) {
         pushAudit({
           action: merge ? "backup_cloud_merge" : "backup_cloud_restore",

@@ -467,6 +467,63 @@ select:focus-visible {
   transform: scale(0.96);
 }
 
+/* ── Toasts ── */
+.app-toast-stack {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: calc(12px + var(--safe-bottom, 0px));
+  z-index: 90;
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100vw - 24px));
+}
+
+.app-toast {
+  background: var(--color-background-primary, #fff);
+  border: 1px solid var(--color-border-tertiary, #e2e8f0);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  animation: app-surface-fade-in 0.22s ease-out;
+}
+
+.app-toast--success {
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+}
+
+.app-toast--error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.app-toast--warn {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.app-toast-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.app-toast-message {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.app-toast-close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  line-height: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-dashboard-metric:hover,
   .app-dashboard-card:hover,

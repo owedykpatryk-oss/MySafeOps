@@ -9,6 +9,27 @@ const fmtDateTime = (iso) => { if (!iso) return "—"; return new Date(iso).toLo
 const toLocalInput = (iso) => { if (!iso) return ""; const d = new Date(iso); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); };
 
 const permitPersonLabel = (w) => `${w.name || ""}${w.role ? ` — ${w.role}` : ""}`.trim();
+const PERMIT_PREFS_KEY = "permit_form_prefs";
+
+function pickProjectLocation(project) {
+  if (!project) return "";
+  return String(project.location || project.site || project.address || "").trim();
+}
+
+function clonePermitForPrefill(permit, fallbackType) {
+  if (!permit) return null;
+  return {
+    type: permit.type || fallbackType || "hot_work",
+    projectId: permit.projectId || "",
+    location: permit.location || "",
+    description: permit.description || "",
+    issuedTo: permit.issuedTo || "",
+    issuedBy: permit.issuedBy || "",
+    checklist: permit.checklist || {},
+    extraFields: permit.extraFields || {},
+    notes: permit.notes || "",
+  };
+}
 
 function matchWorkerPick(str, workers) {
   if (!str?.trim()) return "";
@@ -395,9 +416,10 @@ function Countdown({ expiresAt }) {
 }
 
 // ─── Permit form ─────────────────────────────────────────────────────────────
-function PermitForm({ permit, onSave, onClose }) {
+function PermitForm({ permit, onSave, onClose, recentPermit }) {
   const projects = load("mysafeops_projects",[]);
   const workers = load("mysafeops_workers",[]);
+  const permitPrefs = load(PERMIT_PREFS_KEY, {});
   const org = (() => { try { return JSON.parse(localStorage.getItem("mysafeops_org_settings")||"{}"); } catch { return {}; } })();
 
   const defaultType = permit?.type || "hot_work";
@@ -408,7 +430,7 @@ function PermitForm({ permit, onSave, onClose }) {
 
   const blank = {
     id:genId(), type, projectId:"", location:"",
-    description:"", issuedTo:"", issuedBy: org.defaultLeadEngineer||"",
+    description:"", issuedTo:"", issuedBy: org.defaultLeadEngineer || permitPrefs.issuedBy || "",
     startDateTime: new Date().toISOString(),
     endDateTime: new Date(Date.now()+8*3600000).toISOString(),
     checklist: initChecklist(type),
@@ -418,6 +440,7 @@ function PermitForm({ permit, onSave, onClose }) {
   };
 
   const [form, setForm] = useState(permit ? {...permit, checklist: permit.checklist||initChecklist(permit.type||type)} : blank);
+  const [prefillNote, setPrefillNote] = useState("");
   const [issuedToPick, setIssuedToPick] = useState(() => (permit ? matchWorkerPick(permit.issuedTo, workers) : ""));
   const [issuedByPick, setIssuedByPick] = useState(() => {
     if (permit) return matchWorkerPick(permit.issuedBy, workers);
@@ -426,6 +449,36 @@ function PermitForm({ permit, onSave, onClose }) {
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const setExtra = (k,v) => setForm(f=>({...f,extraFields:{...f.extraFields,[k]:v}}));
   const setCheck = (i,v) => setForm(f=>({...f,checklist:{...f.checklist,[i]:v}}));
+
+  const applyPrefill = (next, sourceLabel) => {
+    if (!next) return;
+    const nextType = next.type || type;
+    setType(nextType);
+    setForm((f) => ({
+      ...f,
+      ...next,
+      type: nextType,
+      checklist: { ...initChecklist(nextType), ...(next.checklist || {}) },
+      extraFields: { ...(f.extraFields || {}), ...(next.extraFields || {}) },
+    }));
+    setIssuedToPick(matchWorkerPick(next.issuedTo || "", workers));
+    setIssuedByPick(matchWorkerPick(next.issuedBy || "", workers));
+    setPrefillNote(sourceLabel);
+  };
+
+  const saveFormPrefs = (draft) => {
+    save(PERMIT_PREFS_KEY, {
+      issuedBy: String(draft.issuedBy || "").trim(),
+      projectId: String(draft.projectId || "").trim(),
+      location: String(draft.location || "").trim(),
+    });
+  };
+
+  const prefillFromRecent = () => {
+    const source = clonePermitForPrefill(recentPermit, type);
+    if (!source) return;
+    applyPrefill(source, "Prefilled from latest permit");
+  };
 
   const onIssuedToSelect = (e) => {
     const v = e.target.value;
@@ -445,6 +498,7 @@ function PermitForm({ permit, onSave, onClose }) {
   const handleTypeChange = (newType) => {
     setType(newType);
     setForm(f=>({...f, type:newType, checklist:initChecklist(newType)}));
+    setPrefillNote("");
   };
 
   const checkCount = Object.values(form.checklist).filter(Boolean).length;
@@ -483,6 +537,29 @@ function PermitForm({ permit, onSave, onClose }) {
           </div>
         )}
 
+        {!permit && (
+          <div style={{ marginBottom:12, display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
+            <button type="button" style={{ ...ss.btn, fontSize:12 }} onClick={prefillFromRecent} disabled={!recentPermit}>
+              Prefill from latest permit
+            </button>
+            <button
+              type="button"
+              style={{ ...ss.btn, fontSize:12 }}
+              onClick={() => applyPrefill(
+                {
+                  issuedBy: org.defaultLeadEngineer || "",
+                  projectId: permitPrefs.projectId || "",
+                  location: permitPrefs.location || "",
+                },
+                "Prefilled from org + last used"
+              )}
+            >
+              Apply smart defaults
+            </button>
+            {prefillNote ? <span style={{ ...ss.chip, fontSize:11 }}>{prefillNote}</span> : null}
+          </div>
+        )}
+
         {/* core fields */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
           <div style={{ gridColumn:"1/-1" }}>
@@ -496,7 +573,19 @@ function PermitForm({ permit, onSave, onClose }) {
           </div>
           <div>
             <label style={ss.lbl}>Project</label>
-            <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp}>
+            <select
+              value={form.projectId||""}
+              onChange={e=>{
+                const nextId = e.target.value;
+                set("projectId", nextId);
+                if (!String(form.location || "").trim()) {
+                  const project = projects.find((p) => p.id === nextId);
+                  const projectLocation = pickProjectLocation(project);
+                  if (projectLocation) set("location", projectLocation);
+                }
+              }}
+              style={ss.inp}
+            >
               <option value="">— Select project —</option>
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -605,10 +694,28 @@ function PermitForm({ permit, onSave, onClose }) {
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"space-between" }}>
           <button onClick={onClose} style={ss.btn}>Cancel</button>
           <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-            <button onClick={()=>onSave({...form,status:"draft"})} style={ss.btn}>Save as draft</button>
-            <button onClick={()=>onSave({...form,status:"active"})} style={ss.btnO}>
+            <button
+              onClick={() => {
+                const draft = { ...form, status:"draft" };
+                saveFormPrefs(draft);
+                onSave(draft);
+              }}
+              style={ss.btn}
+            >
+              Save as draft
+            </button>
+            <button onClick={()=>previewPermit(form)} style={ss.btn}>Preview</button>
+            <button
+              onClick={() => {
+                const active = { ...form, status:"active" };
+                saveFormPrefs(active);
+                onSave(active);
+              }}
+              style={ss.btnO}
+            >
               Issue permit
             </button>
+            <button onClick={()=>exportPermitPdf(form)} style={ss.btnO}>Export PDF</button>
           </div>
         </div>
       </div>
@@ -617,7 +724,7 @@ function PermitForm({ permit, onSave, onClose }) {
 }
 
 // ─── Permit card ──────────────────────────────────────────────────────────────
-function PermitCard({ permit, onEdit, onClose, onReopen, onDelete, onPrint }) {
+function PermitCard({ permit, onEdit, onClose, onReopen, onDelete, onPreview, onPrint }) {
   const def = PERMIT_TYPES[permit.type] || PERMIT_TYPES.general;
   const [expanded, setExpanded] = useState(false);
 
@@ -662,7 +769,8 @@ function PermitCard({ permit, onEdit, onClose, onReopen, onDelete, onPrint }) {
           <button onClick={()=>setExpanded(v=>!v)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>
             {expanded?"▲":"▼"}
           </button>
-          <button onClick={()=>onPrint(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>Print</button>
+          <button onClick={()=>onPreview(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>Preview</button>
+          <button onClick={()=>onPrint(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>Export PDF</button>
           <button onClick={()=>onEdit(permit)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Edit</button>
           {permit.status==="active" && (
             <button onClick={()=>onClose(permit.id)} style={{ ...ss.btnR, padding:"4px 10px", fontSize:12 }}>Close</button>
@@ -714,8 +822,8 @@ function PermitCard({ permit, onEdit, onClose, onReopen, onDelete, onPrint }) {
   );
 }
 
-// ─── Print permit ─────────────────────────────────────────────────────────────
-function printPermit(permit) {
+// ─── Preview / PDF document ───────────────────────────────────────────────────
+function renderPermitDocumentHtml(permit) {
   const def = PERMIT_TYPES[permit.type] || PERMIT_TYPES.general;
   const org = (() => { try { return JSON.parse(localStorage.getItem("mysafeops_org_settings")||"{}"); } catch { return {}; } })();
   const checkedCount = Object.values(permit.checklist||{}).filter(Boolean).length;
@@ -734,8 +842,7 @@ function printPermit(permit) {
       <td style="padding:4px 8px;border:1px solid #ddd;font-size:12px">${permit.extraFields[f.key]}</td>
     </tr>`).join("");
 
-  const win = window.open("","_blank");
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>PTW — ${def.label}</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>PTW — ${def.label}</title>
   <style>
     body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:0;padding:20px}
     .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid ${def.color};padding-bottom:10px;margin-bottom:14px}
@@ -774,8 +881,26 @@ function printPermit(permit) {
     <tr style="height:48px"><td style="padding:6px;border:1px solid #ddd">Permit closed by</td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td></tr>
   </table>
   <p style="font-size:10px;color:#999;margin-top:16px">${org.pdfFooter||"Generated by MySafeOps · mysafeops.com"} · ${fmtDateTime(permit.createdAt)}</p>
-  </body></html>`);
-  win.document.close(); win.print();
+  </body></html>`;
+}
+
+function openPermitDocument(permit, { autoPrint = false } = {}) {
+  const win = window.open("","_blank");
+  if (!win) return;
+  win.document.write(renderPermitDocumentHtml(permit));
+  win.document.close();
+  if (autoPrint) {
+    win.focus();
+    win.print();
+  }
+}
+
+function previewPermit(permit) {
+  openPermitDocument(permit, { autoPrint: false });
+}
+
+function exportPermitPdf(permit) {
+  openPermitDocument(permit, { autoPrint: true });
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -817,7 +942,14 @@ export default function PermitSystem() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      {modal?.type==="form" && <PermitForm permit={modal.data} onSave={savePermit} onClose={()=>setModal(null)} />}
+      {modal?.type==="form" && (
+        <PermitForm
+          permit={modal.data}
+          recentPermit={permits[0] || null}
+          onSave={savePermit}
+          onClose={()=>setModal(null)}
+        />
+      )}
 
       <PageHero
         badgeText="PTW"
@@ -887,7 +1019,9 @@ export default function PermitSystem() {
           <PermitCard key={p.id} permit={p}
             onEdit={p=>setModal({type:"form",data:p})}
             onClose={closePermit} onReopen={reopenPermit}
-            onDelete={deletePermit} onPrint={printPermit}
+            onDelete={deletePermit}
+            onPreview={previewPermit}
+            onPrint={exportPermitPdf}
           />
         ))
       )}

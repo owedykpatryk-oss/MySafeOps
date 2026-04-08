@@ -3,6 +3,9 @@ import { isR2StorageConfigured, uploadFileToR2Storage } from "../lib/r2Storage";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { safeHttpUrl } from "../utils/safeUrl";
+import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { isSupabaseConfigured } from "../lib/supabase";
+import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import { getOrgId, loadOrgScoped, saveOrgScoped, orgScopedKey } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
 
@@ -35,6 +38,7 @@ async function readDirRecursive(dirHandle, basePath = "") {
 }
 
 export default function DocumentLibrary() {
+  const { supabase } = useSupabaseAuth();
   const [supported] = useState(() => typeof window !== "undefined" && "showDirectoryPicker" in window);
   const [dirName, setDirName] = useState(() => loadMeta().dirName || "");
   const [files, setFiles] = useState([]);
@@ -90,11 +94,18 @@ export default function DocumentLibrary() {
     if (!fl?.length || !r2Enabled) return;
     setR2Msg("");
     setR2Busy(true);
-    const orgId = getOrgId();
+    let orgIdForPath = getOrgId();
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        orgIdForPath = await syncOrgSlugIfNeeded(supabase);
+      } catch {
+        /* keep getOrgId() */
+      }
+    }
     try {
       for (let i = 0; i < fl.length; i++) {
         const file = fl[i];
-        const result = await uploadFileToR2Storage(file, { orgId, subPath: "documents" });
+        const result = await uploadFileToR2Storage(file, { orgId: orgIdForPath, subPath: "documents" });
         const row = {
           id: `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}`,
           name: file.name,

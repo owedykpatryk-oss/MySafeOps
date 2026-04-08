@@ -6,6 +6,7 @@ import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
 import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
 import { ms } from "../utils/moduleStyles";
+import InlineAlert from "../components/InlineAlert";
 
 const ss = ms;
 const teal = "#0d9488";
@@ -100,7 +101,17 @@ export default function ResetPasswordPage() {
             </>
           )}
 
-          {msg && <p style={{ marginTop: 14, fontSize: 13 }}>{msg}</p>}
+          <InlineAlert
+            type={
+              msg.toLowerCase().includes("updated")
+                ? "success"
+                : msg.toLowerCase().includes("must") || msg.toLowerCase().includes("match") || msg.toLowerCase().includes("could not")
+                  ? "error"
+                  : "info"
+            }
+            text={msg}
+            style={{ marginTop: 14 }}
+          />
           <p style={{ marginTop: 12, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
             Need help? Contact support:{" "}
             <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: teal, fontWeight: 500 }}>

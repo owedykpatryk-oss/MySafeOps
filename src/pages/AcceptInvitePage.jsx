@@ -4,6 +4,7 @@ import { ShieldCheck } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { setPendingInviteToken } from "../lib/inviteToken";
 import { ms } from "../utils/moduleStyles";
+import InlineAlert from "../components/InlineAlert";
 
 const ss = ms;
 const teal = "#0d9488";
@@ -68,7 +69,7 @@ export default function AcceptInvitePage() {
         <div style={{ ...ss.card, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>You&apos;re invited</h1>
           {err ? (
-            <p style={{ margin: 0, fontSize: 14, color: "#b91c1c", lineHeight: 1.55 }}>{err}</p>
+            <InlineAlert type="error" text={err} style={{ marginTop: 0 }} />
           ) : preview ? (
             <>
               <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>

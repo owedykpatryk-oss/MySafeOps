@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
+import { useSearchParams } from "react-router-dom";
 import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
@@ -14,12 +15,7 @@ import {
 } from "../navigation/appModules";
 import { workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_ID } from "../navigation/workspaceViews";
 
-const LazyCloudAccount = lazy(() => import("../components/CloudAccount"));
-const LazyBillingLimits = lazy(() => import("../components/BillingLimits"));
-const LazyInviteUsers = lazy(() => import("../components/InviteUsers"));
-const LazyOrgMembers = lazy(() => import("../components/OrgMembers"));
-const LazyOrgSettings = lazy(() => import("../components/OrgSettings"));
-const LazyNotificationSettings = lazy(() => import("../offline/NotificationSettings"));
+const LazySettingsCenter = lazy(() => import("../components/SettingsCenter"));
 
 export function ViewFallback() {
   return (
@@ -30,23 +26,27 @@ export function ViewFallback() {
   );
 }
 
-function SettingsView() {
+function SettingsView({ initialTab, checkoutReturn }) {
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto" }}>
-      <RouteErrorBoundary>
-        <Suspense fallback={<ViewFallback />}>
-          <LazyCloudAccount />
-          <LazyBillingLimits />
-          <LazyInviteUsers />
-          <LazyOrgMembers />
-          <LazyOrgSettings />
-          <div style={{ marginTop: 24 }}>
-            <LazyNotificationSettings />
-          </div>
-        </Suspense>
-      </RouteErrorBoundary>
-    </div>
+    <RouteErrorBoundary>
+      <Suspense fallback={<ViewFallback />}>
+        <LazySettingsCenter initialTab={initialTab} checkoutReturn={checkoutReturn} />
+      </Suspense>
+    </RouteErrorBoundary>
   );
+}
+
+function readStripeReturnQuery() {
+  const qs = new URLSearchParams(window.location.search);
+  const settingsTab = qs.get("settingsTab");
+  const checkout = qs.get("checkout");
+  const openBilling =
+    settingsTab === "billing" || checkout === "success" || checkout === "canceled";
+  return {
+    openSettings: openBilling,
+    settingsInitialTab: openBilling ? "billing" : "cloud",
+    checkoutReturn: checkout,
+  };
 }
 
 const NAV_ICONS = {
@@ -68,20 +68,32 @@ const NAV_TABS = [
 ];
 
 export default function MainAppLayout() {
-  const [navTab, setNavTab] = useState("dashboard");
-  const [view, setView] = useState("dashboard");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [navTab, setNavTab] = useState(() => (readStripeReturnQuery().openSettings ? "more" : "dashboard"));
+  const [view, setView] = useState(() => (readStripeReturnQuery().openSettings ? "settings" : "dashboard"));
+  const [settingsInitialTab, setSettingsInitialTab] = useState(() => readStripeReturnQuery().settingsInitialTab);
+  const [billingCheckoutReturn, setBillingCheckoutReturn] = useState(() => readStripeReturnQuery().checkoutReturn);
   const [moreFilter, setMoreFilter] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
-    document.body.classList.add("mysafeops-app-bottom-nav");
-    return () => document.body.classList.remove("mysafeops-app-bottom-nav");
-  }, []);
+    const settingsTab = searchParams.get("settingsTab");
+    const checkout = searchParams.get("checkout");
+    if (settingsTab === "billing" || checkout === "success" || checkout === "canceled") {
+      setView("settings");
+      setNavTab("more");
+      setSettingsInitialTab("billing");
+      setBillingCheckoutReturn(checkout);
+      const next = new URLSearchParams(searchParams);
+      next.delete("settingsTab");
+      next.delete("checkout");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (!localStorage.getItem("mysafeops_orgId")) {
-      localStorage.setItem("mysafeops_orgId", "default");
-    }
+    document.body.classList.add("mysafeops-app-bottom-nav");
+    return () => document.body.classList.remove("mysafeops-app-bottom-nav");
   }, []);
 
   useEffect(() => {
@@ -150,7 +162,7 @@ export default function MainAppLayout() {
       <main id="main-content" tabIndex={-1} className="app-workspace-main">
         <div className="app-module-shell">
           {view === "settings" ? (
-            <SettingsView />
+            <SettingsView initialTab={settingsInitialTab} checkoutReturn={billingCheckoutReturn} />
           ) : (
             <RouteErrorBoundary>
               <Suspense fallback={<ViewFallback />}>

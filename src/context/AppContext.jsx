@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ORG_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
-import { getTrialStatus } from "../utils/orgMembership";
+import { getBillingEntitlements, getTrialStatus } from "../utils/orgMembership";
 
 const Ctx = createContext(null);
 
@@ -15,6 +15,7 @@ export function AppProvider({ children }) {
     return ROLES.includes(r) ? r : "admin";
   });
   const [trialStatus, setTrialStatus] = useState(() => getTrialStatus());
+  const [billing, setBilling] = useState(() => getBillingEntitlements());
 
   useEffect(() => {
     const r = localStorage.getItem(rk);
@@ -31,8 +32,21 @@ export function AppProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const id = window.setInterval(() => setTrialStatus(getTrialStatus()), 60_000);
+    const sync = () => {
+      setTrialStatus(getTrialStatus());
+      setBilling(getBillingEntitlements());
+    };
+    const id = window.setInterval(sync, 60_000);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const onOrgUpdated = () => {
+      setTrialStatus(getTrialStatus());
+      setBilling(getBillingEntitlements());
+    };
+    window.addEventListener("mysafeops-org-updated", onOrgUpdated);
+    return () => window.removeEventListener("mysafeops-org-updated", onOrgUpdated);
   }, []);
 
   useEffect(() => {
@@ -57,7 +71,10 @@ export function AppProvider({ children }) {
     [role]
   );
 
-  const value = useMemo(() => ({ role, setRole, caps, orgId, ROLES, trialStatus }), [role, setRole, caps, orgId, trialStatus]);
+  const value = useMemo(
+    () => ({ role, setRole, caps, orgId, ROLES, trialStatus, billing }),
+    [role, setRole, caps, orgId, trialStatus, billing]
+  );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -1,3 +1,5 @@
+import { getBillingEntitlements } from "../utils/orgMembership";
+
 export const BILLING_PLANS = {
   trial: {
     id: "trial",
@@ -49,12 +51,17 @@ export const BILLING_PLANS = {
   },
 };
 
-export function getEffectivePlanId(trialStatus) {
-  return trialStatus?.isActive ? "trial" : "starter";
+export function getEffectivePlanId(trialStatus, billing) {
+  const b = billing ?? getBillingEntitlements();
+  const paidActive =
+    (b.subscriptionStatus === "active" || b.subscriptionStatus === "trialing") && b.paidPlanId;
+  if (paidActive) return b.paidPlanId;
+  if (trialStatus?.isActive) return "trial";
+  return "starter";
 }
 
-export function getEffectivePlan(trialStatus) {
-  return BILLING_PLANS[getEffectivePlanId(trialStatus)];
+export function getEffectivePlan(trialStatus, billing) {
+  return BILLING_PLANS[getEffectivePlanId(trialStatus, billing)];
 }
 
 export function formatBytes(bytes) {

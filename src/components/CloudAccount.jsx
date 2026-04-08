@@ -6,6 +6,7 @@ import { pushAudit } from "../utils/auditLog";
 import { signInWithGoogleOAuth } from "../lib/authRedirect";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
+import InlineAlert from "./InlineAlert";
 import { useApp } from "../context/AppContext";
 
 const ss = ms;
@@ -171,7 +172,7 @@ export default function CloudAccount() {
           Continue with Google
         </button>
       </div>
-      {msg && <p style={{ marginTop: 12, fontSize: 13 }}>{msg}</p>}
+      <InlineAlert type={msg.toLowerCase().includes("failed") ? "error" : "info"} text={msg} />
     </div>
     </>
   );

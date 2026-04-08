@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { loadOrgScoped as load } from "../utils/orgStorage";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
@@ -16,6 +16,7 @@ const getWeekLabel = (date) => {
 };
 
 const INCIDENT_PERIOD_WEEKS = [4, 8, 12];
+const ONBOARDING_DISMISS_KEY = "mysafeops_onboarding_dismissed";
 
 const ss = {
   ...ms,
@@ -128,6 +129,7 @@ function ExpiryRow({ name, role, certType, expiryDate, urgent }) {
 
 export default function AnalyticsDashboard() {
   const [incidentWeeks, setIncidentWeeks] = useState(8);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   // pull all data from localStorage
   const workers = load("mysafeops_workers", []);
@@ -241,6 +243,30 @@ export default function AnalyticsDashboard() {
   }).length;
 
   const hotWorkActive = hotWork.filter((h) => h.status === "active").length;
+  const checklist = useMemo(
+    () => [
+      { label: "Add at least one project", done: projects.length > 0, next: "More → project tools" },
+      { label: "Add at least one worker", done: workers.length > 0, next: "Workers module" },
+      { label: "Create first RAMS or permit", done: rams.length > 0 || permits.length > 0, next: "RAMS or Permits module" },
+      { label: "Add at least one teammate profile", done: workers.length > 1, next: "Settings → Invites / Members" },
+    ],
+    [projects.length, workers.length, rams.length, permits.length]
+  );
+  const completedChecklist = checklist.filter((x) => x.done).length;
+  const checklistDone = completedChecklist === checklist.length;
+
+  useEffect(() => {
+    try {
+      setOnboardingDismissed(localStorage.getItem(ONBOARDING_DISMISS_KEY) === "1");
+    } catch {}
+  }, []);
+
+  const dismissChecklist = () => {
+    setOnboardingDismissed(true);
+    try {
+      localStorage.setItem(ONBOARDING_DISMISS_KEY, "1");
+    } catch {}
+  };
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
@@ -277,6 +303,63 @@ export default function AnalyticsDashboard() {
           ))}
         </div>
       </Section>
+
+      {!onboardingDismissed && (
+        <Section
+          title="Getting started checklist"
+          action={
+            checklistDone ? (
+              <button type="button" style={{ ...ms.btn, padding: "6px 10px", fontSize: 12 }} onClick={dismissChecklist}>
+                Dismiss
+              </button>
+            ) : (
+              <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                {completedChecklist}/{checklist.length} complete
+              </span>
+            )
+          }
+        >
+          <div className="app-panel-surface" style={{ padding: "12px 14px" }}>
+            <div style={{ display: "grid", gap: 8 }}>
+              {checklist.map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    padding: "8px 0",
+                    borderBottom: "1px solid var(--color-border-tertiary,#e2e8f0)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 999,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        background: item.done ? "#dcfce7" : "#e2e8f0",
+                        color: item.done ? "#166534" : "#334155",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {item.done ? "✓" : "•"}
+                    </span>
+                    <span style={{ fontSize: 13, color: "var(--color-text-primary)" }}>{item.label}</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{item.next}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Section>
+      )}
 
       {/* compliance + expiring */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(200px,100%),1fr))", gap:16, marginBottom:24 }}>
