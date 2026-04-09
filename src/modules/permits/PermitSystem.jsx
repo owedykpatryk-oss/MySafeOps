@@ -823,7 +823,8 @@ function PermitCard({ permit, onEdit, onClose, onReopen, onDelete, onPreview, on
 }
 
 // ─── Preview / PDF document ───────────────────────────────────────────────────
-function renderPermitDocumentHtml(permit) {
+/** Full HTML document for permit print/preview (also composed into RAMS site pack). */
+export function renderPermitDocumentHtml(permit) {
   const def = PERMIT_TYPES[permit.type] || PERMIT_TYPES.general;
   const org = (() => { try { return JSON.parse(localStorage.getItem("mysafeops_org_settings")||"{}"); } catch { return {}; } })();
   const checkedCount = Object.values(permit.checklist||{}).filter(Boolean).length;
@@ -844,14 +845,15 @@ function renderPermitDocumentHtml(permit) {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>PTW — ${def.label}</title>
   <style>
-    body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:0;padding:20px}
+    @page { size: A4; margin: 12mm; }
+    body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:0;padding:16px;box-sizing:border-box}
     .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid ${def.color};padding-bottom:10px;margin-bottom:14px}
     .ptw-type{background:${def.bg};color:${def.color};padding:6px 14px;border-radius:6px;font-weight:bold;font-size:14px}
     h2{font-size:12px;background:#f5f5f5;padding:4px 8px;margin:12px 0 6px;font-weight:bold}
     table{width:100%;border-collapse:collapse;margin-bottom:12px}
     th{background:#0f172a;color:#fff;padding:5px 8px;font-size:11px;text-align:left}
     .sig-box{height:50px;border:1px solid #ddd;border-radius:4px}
-    @media print{.header,.ptw-type{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    @media print{body{padding:0}.header,.ptw-type{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   </style></head><body>
   <div class="header">
     <div style="display:flex;align-items:center;gap:14px">
@@ -887,11 +889,19 @@ function renderPermitDocumentHtml(permit) {
 function openPermitDocument(permit, { autoPrint = false } = {}) {
   const win = window.open("","_blank");
   if (!win) return;
+  win.document.open();
   win.document.write(renderPermitDocumentHtml(permit));
   win.document.close();
   if (autoPrint) {
-    win.focus();
-    win.print();
+    const triggerPrint = () => {
+      win.focus();
+      setTimeout(() => win.print(), 180);
+    };
+    if (win.document.readyState === "complete") {
+      triggerPrint();
+    } else {
+      win.onload = triggerPrint;
+    }
   }
 }
 

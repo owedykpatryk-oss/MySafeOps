@@ -15,6 +15,7 @@ const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
 const PRESENCE_KEY = "mysafeops_site_presence";
 const BRIEFINGS_KEY = "daily_briefings";
+const MAP_BASE_LAYER_KEY = "mysafeops_site_map_base_layer";
 
 const DefaultIcon = L.icon({
   iconUrl,
@@ -90,12 +91,55 @@ export default function SitePresenceMap() {
 
   const projectById = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p])), [projects]);
 
+  const focusAllSites = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    const bounds = projects
+      .filter(hasCoords)
+      .map((p) => [Number(p.lat), Number(p.lng)]);
+    if (bounds.length === 0) {
+      setMsg("No project coordinates yet. Use Geocode address first.");
+      return;
+    }
+    if (bounds.length === 1) {
+      map.setView(bounds[0], 14);
+      return;
+    }
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+  };
+
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return;
     const map = L.map(mapElRef.current, { scrollWheelZoom: true }).setView([54.5, -2.5], 6);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
+      maxZoom: 19,
+    });
+    const satelliteLayer = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {
+        attribution:
+          "Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+        maxZoom: 19,
+      }
+    );
+    const preferredLayer = String(loadJson(MAP_BASE_LAYER_KEY, "street"));
+    if (preferredLayer === "satellite") satelliteLayer.addTo(map);
+    else streetLayer.addTo(map);
+    L.control
+      .layers(
+        {
+          "Street (OSM)": streetLayer,
+          Satellite: satelliteLayer,
+        },
+        {},
+        { position: "topright", collapsed: false }
+      )
+      .addTo(map);
+    map.on("baselayerchange", (e) => {
+      const next = String(e?.name || "").toLowerCase().includes("satellite") ? "satellite" : "street";
+      saveJson(MAP_BASE_LAYER_KEY, next);
+    });
     const layer = L.layerGroup().addTo(map);
     markersLayerRef.current = layer;
     mapRef.current = map;
@@ -230,8 +274,13 @@ export default function SitePresenceMap() {
         role="presentation"
         aria-label="Map of project sites"
       />
+      <div style={{ display: "flex", justifyContent: "flex-end", margin: "-12px 0 12px" }}>
+        <button type="button" style={{ ...ss.btn, fontSize: 12 }} onClick={focusAllSites}>
+          Fit all project pins
+        </button>
+      </div>
       <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "-12px 0 20px" }}>
-        Map data © OpenStreetMap contributors.
+        Map data © OpenStreetMap contributors and Esri imagery providers.
       </p>
 
       <div style={{ ...ss.card, marginBottom: 16 }}>

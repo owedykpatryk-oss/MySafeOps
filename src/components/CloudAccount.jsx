@@ -4,6 +4,7 @@ import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
 import { signInWithGoogleOAuth } from "../lib/authRedirect";
+import { isR2StorageConfigured } from "../lib/r2Storage";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
@@ -22,15 +23,44 @@ export default function CloudAccount() {
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const r2Enabled = isR2StorageConfigured();
 
   if (!isSupabaseConfigured() || !client) {
-    return null;
+    return (
+      <>
+        <PageHero
+          badgeText="☁"
+          title="Cloud account"
+          lead={
+            r2Enabled
+              ? "Supabase auth/backup is not configured here. Cloudflare R2 uploads are available in Documents."
+              : "Cloud services are not configured for this environment."
+          }
+        />
+        <div style={{ ...ss.card, marginBottom: 24, fontSize: 13, color: "var(--color-text-secondary)" }}>
+          {r2Enabled ? (
+            <>
+              Cloudflare R2 storage is active for document uploads. To enable account sign-in and JSON cloud backup,
+              configure Supabase credentials for this environment.
+            </>
+          ) : (
+            <>
+              Configure Supabase to enable sign-in and cloud backup. You can still use local data and local backup/export.
+            </>
+          )}
+        </div>
+      </>
+    );
   }
 
   if (!ready || loading) {
     return (
       <>
-        <PageHero badgeText="☁" title="Cloud account" lead="Connecting to Supabase…" />
+        <PageHero
+          badgeText="☁"
+          title="Cloud account"
+          lead={r2Enabled ? "Connecting to Supabase… (Cloudflare R2 uploads available in Documents)" : "Connecting to Supabase…"}
+        />
         <div style={{ ...ss.card, marginBottom: 24, fontSize: 13, color: "var(--color-text-secondary)" }}>
           Connecting to cloud account…
         </div>
@@ -98,10 +128,14 @@ export default function CloudAccount() {
         <PageHero
           badgeText="☁"
           title="Cloud account"
-          lead="Signed in to Supabase — use Backup for JSON upload when available."
+          lead={
+            r2Enabled
+              ? "Signed in to Supabase — use Backup for JSON cloud backup/restore. Cloudflare R2 uploads are available in Documents."
+              : "Signed in to Supabase — use Backup for JSON cloud backup/restore."
+          }
         />
         <div style={{ ...ss.card, marginBottom: 24 }}>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Supabase account</div>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Supabase account (auth & backup)</div>
         <p style={{ fontSize: 13, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
           Signed in as <strong>{user.email}</strong>
         </p>
@@ -124,13 +158,22 @@ export default function CloudAccount() {
       <PageHero
         badgeText="☁"
         title="Cloud account"
-        lead="Sign in to use cloud backup from the Backup screen. Enable Email and Google in Supabase Authentication."
+        lead={
+          r2Enabled
+            ? "Sign in to use Supabase cloud backup from the Backup screen. Cloudflare R2 uploads are available in Documents."
+            : "Sign in to use cloud backup from the Backup screen. Enable Email and Google in Supabase Authentication."
+        }
       />
     <div style={{ ...ss.card, marginBottom: 24 }}>
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>Supabase account</div>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Supabase account (auth & backup)</div>
       <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.5 }}>
         Sign in to use cloud backup (Backup screen → upload). Enable Email and Google under Authentication → Providers; add redirect URLs for <code style={{ fontSize: 11 }}>/login</code> and <code style={{ fontSize: 11 }}>/app</code>.
       </p>
+      {r2Enabled && (
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.5 }}>
+          Cloudflare R2 storage is configured for document uploads in Documents.
+        </p>
+      )}
       <label style={ss.lbl}>Email</label>
       <input type="email" autoComplete="email" style={ss.inp} value={email} onChange={(e) => setEmail(e.target.value)} />
       <label style={{ ...ss.lbl, marginTop: 10 }}>Password</label>

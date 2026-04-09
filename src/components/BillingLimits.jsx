@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { useToast } from "../context/ToastContext";
-import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { getSupabaseUrl, isSupabaseConfigured, supabase } from "../lib/supabase";
 import { BILLING_PLANS, formatBytes, getEffectivePlan } from "../lib/billingPlans";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
@@ -40,9 +40,11 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [stripeFnStatus, setStripeFnStatus] = useState("unknown"); // unknown | checking | ready | missing | network
 
   const isAdmin = role === "admin";
   const cloudOk = isSupabaseConfigured() && supabase;
+  const stripeActionsEnabled = cloudOk && isAdmin && stripeFnStatus === "ready";
 
   useEffect(() => {
     if (checkoutReturn !== "success" || !supabase) return;
@@ -69,6 +71,38 @@ export default function BillingLimits({ checkoutReturn = null }) {
       pushToast({ type: "info", message: "Checkout canceled. You can subscribe anytime from this page." });
     }
   }, [checkoutReturn, pushToast]);
+
+  useEffect(() => {
+    if (!cloudOk || !isAdmin) {
+      setStripeFnStatus("unknown");
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      setStripeFnStatus("checking");
+      try {
+        const base = String(getSupabaseUrl() || "").replace(/\/$/, "");
+        if (!base) throw new Error("Missing Supabase URL");
+        const res = await fetch(`${base}/functions/v1/stripe-checkout`, { method: "OPTIONS" });
+        if (cancelled) return;
+        if (res.status === 404) {
+          setStripeFnStatus("missing");
+          return;
+        }
+        if (res.ok || res.status === 405 || res.status === 401 || res.status === 403) {
+          setStripeFnStatus("ready");
+          return;
+        }
+        setStripeFnStatus("network");
+      } catch {
+        if (!cancelled) setStripeFnStatus("network");
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [cloudOk, isAdmin]);
 
   const usage = useMemo(() => {
     const workers = readArrayCount(`mysafeops_workers_${orgId}`);
@@ -98,6 +132,14 @@ export default function BillingLimits({ checkoutReturn = null }) {
       setActionError("Sign in with cloud account to manage subscriptions.");
       return;
     }
+    if (!stripeActionsEnabled) {
+      const msg = stripeFnStatus === "missing"
+        ? "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-checkout)."
+        : "Could not reach Stripe Edge Functions. Check connection and Supabase project configuration.";
+      setActionError(msg);
+      pushToast({ type: "error", message: msg });
+      return;
+    }
     setCheckoutLoading(planId);
     try {
       const { data, error } = await invokeStripeFunctionWithRecovery("stripe-checkout", { planId });
@@ -110,9 +152,12 @@ export default function BillingLimits({ checkoutReturn = null }) {
       throw new Error("No checkout URL returned");
     } catch (e) {
       const raw = e?.message || "Could not start checkout";
-      const msg = raw.toLowerCase().includes("no organisation membership")
+      const lower = String(raw).toLowerCase();
+      const msg = lower.includes("no organisation membership")
         ? `${NO_MEMBERSHIP_MSG}. Please sign out and sign in again.`
-        : raw;
+        : lower.includes("failed to send a request to the edge function")
+          ? "Could not reach Supabase Edge Function. Deploy stripe-checkout/stripe-portal on this project and verify network access."
+          : raw;
       setActionError(msg);
       pushToast({ type: "error", message: msg });
     } finally {
@@ -124,6 +169,14 @@ export default function BillingLimits({ checkoutReturn = null }) {
     setActionError(null);
     if (!supabase) {
       setActionError("Sign in with cloud account to manage subscriptions.");
+      return;
+    }
+    if (!stripeActionsEnabled) {
+      const msg = stripeFnStatus === "missing"
+        ? "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-portal)."
+        : "Could not reach Stripe Edge Functions. Check connection and Supabase project configuration.";
+      setActionError(msg);
+      pushToast({ type: "error", message: msg });
       return;
     }
     setPortalLoading(true);
@@ -138,9 +191,12 @@ export default function BillingLimits({ checkoutReturn = null }) {
       throw new Error("No portal URL returned");
     } catch (e) {
       const raw = e?.message || "Could not open billing portal";
-      const msg = raw.toLowerCase().includes("no organisation membership")
+      const lower = String(raw).toLowerCase();
+      const msg = lower.includes("no organisation membership")
         ? `${NO_MEMBERSHIP_MSG}. Please sign out and sign in again.`
-        : raw;
+        : lower.includes("failed to send a request to the edge function")
+          ? "Could not reach Supabase Edge Function. Deploy stripe-checkout/stripe-portal on this project and verify network access."
+          : raw;
       setActionError(msg);
       pushToast({ type: "error", message: msg });
     } finally {
@@ -174,6 +230,27 @@ export default function BillingLimits({ checkoutReturn = null }) {
           />
         </div>
       )}
+      {cloudOk && isAdmin && stripeFnStatus === "checking" && (
+        <div style={{ marginBottom: 12 }}>
+          <InlineAlert type="info" text="Checking Stripe Edge Function availability…" />
+        </div>
+      )}
+      {cloudOk && isAdmin && stripeFnStatus === "missing" && (
+        <div style={{ marginBottom: 12 }}>
+          <InlineAlert
+            type="warn"
+            text="Stripe billing functions are missing on this Supabase project. Deploy: stripe-checkout, stripe-portal, stripe-webhook."
+          />
+        </div>
+      )}
+      {cloudOk && isAdmin && stripeFnStatus === "network" && (
+        <div style={{ marginBottom: 12 }}>
+          <InlineAlert
+            type="warn"
+            text="Cannot reach Supabase Edge Functions from this browser/network right now."
+          />
+        </div>
+      )}
 
       <div style={{ ...ss.card, marginBottom: 16 }}>
         <div style={{ fontWeight: 600, marginBottom: 8 }}>Current plan</div>
@@ -200,12 +277,12 @@ export default function BillingLimits({ checkoutReturn = null }) {
                   <button
                     key={id}
                     type="button"
-                    disabled={Boolean(checkoutLoading) || loading}
+                    disabled={!stripeActionsEnabled || Boolean(checkoutLoading) || loading}
                     onClick={() => startCheckout(id)}
                     style={{
                       ...ss.btnP,
                       fontSize: 13,
-                      opacity: checkoutLoading && !loading ? 0.6 : 1,
+                      opacity: (!stripeActionsEnabled || (checkoutLoading && !loading)) ? 0.6 : 1,
                     }}
                   >
                     {loading ? "Redirecting…" : `${p.name} (${p.priceLabel}/mo)`}
@@ -215,9 +292,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
             </div>
             <button
               type="button"
-              disabled={portalLoading || Boolean(checkoutLoading)}
+              disabled={!stripeActionsEnabled || portalLoading || Boolean(checkoutLoading)}
               onClick={openPortal}
-              style={{ ...ss.btn, fontSize: 13, alignSelf: "flex-start" }}
+              style={{ ...ss.btn, fontSize: 13, alignSelf: "flex-start", opacity: stripeActionsEnabled ? 1 : 0.6 }}
             >
               {portalLoading ? "Opening…" : "Manage billing (portal)"}
             </button>

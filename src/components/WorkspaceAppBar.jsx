@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ShieldCheck, Home, HelpCircle, Settings, Search } from "lucide-react";
+import { ShieldCheck, Home, HelpCircle, Settings, Search, LogOut } from "lucide-react";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { getWorkspaceTitle } from "../navigation/appModules";
@@ -10,10 +11,21 @@ const teal = "#0d9488";
  * Sticky top bar: current module title, org hint, quick Help/Settings/Home, optional signed-in email.
  */
 export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHelp, onOpenSettings, onOpenSearch }) {
-  const { user } = useSupabaseAuth();
+  const { user, supabase } = useSupabaseAuth();
+  const [signingOut, setSigningOut] = useState(false);
   const cloud = isSupabaseConfigured();
   const title = getWorkspaceTitle(view, navTab);
   const orgId = typeof localStorage !== "undefined" ? localStorage.getItem("mysafeops_orgId") || "default" : "default";
+
+  const handleSignOut = async () => {
+    if (!supabase || signingOut) return;
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   const btn = {
     position: "relative",
@@ -142,6 +154,19 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
             <Settings size={16} aria-hidden />
             <span className="workspace-app-bar-btn-label">Settings</span>
           </button>
+          {cloud && user && (
+            <button
+              type="button"
+              className="app-bar-action"
+              style={{ ...btn, borderColor: "#fecaca", color: "#991b1b", opacity: signingOut ? 0.7 : 1 }}
+              onClick={handleSignOut}
+              aria-label="Sign out"
+              disabled={signingOut}
+            >
+              <LogOut size={16} aria-hidden />
+              <span className="workspace-app-bar-btn-label">{signingOut ? "Signing out…" : "Sign out"}</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

@@ -24,3 +24,7 @@ export const supabase = url && anon
 export function isSupabaseConfigured() {
   return Boolean(url && anon);
 }
+
+export function getSupabaseUrl() {
+  return url;
+}
