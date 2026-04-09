@@ -16,6 +16,7 @@ const ss = ms;
 const teal = "#0d9488";
 const navy = "#0f172a";
 const SUPPORT_EMAIL = "mysafeops@gmail.com";
+const MIN_PASSWORD_LENGTH = 6;
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -25,6 +26,8 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [, setTick] = useState(0);
@@ -60,6 +63,14 @@ export default function LoginPage() {
 
   const signIn = async () => {
     if (!client) return;
+    if (!email.trim()) {
+      setMsg("Enter your email address first.");
+      return;
+    }
+    if (!password) {
+      setMsg("Enter your password first.");
+      return;
+    }
     if (lockout.isLocked) {
       setMsg(`Too many failed attempts. Try again in ${formatLockoutRemaining(lockout.remainingMs)}.`);
       return;
@@ -96,8 +107,20 @@ export default function LoginPage() {
     trackAuthEvent("google_sign_in_start");
     try {
       const loginRedirectPath = `/login${safeNextPath !== "/app" ? `?next=${encodeURIComponent(safeNextPath)}` : ""}`;
-      const { error } = await signInWithGoogleOAuth(client, loginRedirectPath);
+      const before = window.location.href;
+      const { data, error } = await signInWithGoogleOAuth(client, loginRedirectPath);
       if (error) throw error;
+      // Fallback: if auto-redirect didn't kick in, force navigation.
+      if (data?.url && window.location.href === before) {
+        window.location.assign(data.url);
+      }
+      // Safety net: prevent permanently disabled auth buttons if redirect is blocked.
+      window.setTimeout(() => {
+        if (window.location.href === before) {
+          setBusy(false);
+          setMsg("Google sign-in did not open. Please allow pop-ups/redirects and try again.");
+        }
+      }, 2500);
     } catch (e) {
       trackAuthError("google_sign_in_failed", e);
       setMsg(e.message || "Google sign-in failed");
@@ -107,6 +130,14 @@ export default function LoginPage() {
 
   const signUp = async () => {
     if (!client) return;
+    if (!email.trim()) {
+      setMsg("Enter your email address first.");
+      return;
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
     setMsg("");
     setBusy(true);
     trackAuthEvent("sign_up_attempt", { email: normalizedEmail });
@@ -126,7 +157,11 @@ export default function LoginPage() {
   };
 
   const sendPasswordReset = async () => {
-    if (!client || !email.trim()) return;
+    if (!client) return;
+    if (!email.trim()) {
+      setMsg("Enter your email address first.");
+      return;
+    }
     setMsg("");
     setBusy(true);
     trackAuthEvent("password_reset_email_request", { email: normalizedEmail });
@@ -145,7 +180,11 @@ export default function LoginPage() {
   };
 
   const resendConfirmationEmail = async () => {
-    if (!client || !email.trim()) return;
+    if (!client) return;
+    if (!email.trim()) {
+      setMsg("Enter your email address first.");
+      return;
+    }
     setMsg("");
     setBusy(true);
     trackAuthEvent("resend_confirmation_attempt", { email: normalizedEmail });
@@ -204,20 +243,48 @@ export default function LoginPage() {
                 </p>
               )}
               <label style={{ ...ss.lbl, marginTop: 10 }}>Password</label>
-              <input type="password" autoComplete="current-password" style={ss.inp} value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                style={ss.inp}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyUp={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
+                onKeyDown={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
+              />
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: "var(--color-text-secondary)",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={showPassword}
+                  onChange={(e) => setShowPassword(e.target.checked)}
+                  aria-label="Show password"
+                />
+                Show password
+              </label>
+              {capsLockOn && <div style={{ marginTop: 6, fontSize: 12, color: "#b45309" }}>Caps Lock is on.</div>}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
-                <button type="button" style={ss.btnP} disabled={busy || lockout.isLocked || !email.trim() || !password} onClick={signIn}>
+                <button type="button" style={ss.btnP} disabled={busy || lockout.isLocked} onClick={signIn}>
                   Sign in
                 </button>
-                <button type="button" style={ss.btn} disabled={busy || !email.trim() || password.length < 6} onClick={signUp}>
+                <button type="button" style={ss.btn} disabled={busy} onClick={signUp}>
                   Create account
                 </button>
               </div>
               <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
-                <button type="button" style={ss.btn} disabled={busy || !email.trim()} onClick={sendPasswordReset}>
+                <button type="button" style={ss.btn} disabled={busy} onClick={sendPasswordReset}>
                   Forgot password
                 </button>
-                <button type="button" style={ss.btn} disabled={busy || !email.trim()} onClick={resendConfirmationEmail}>
+                <button type="button" style={ss.btn} disabled={busy} onClick={resendConfirmationEmail}>
                   Resend confirmation email
                 </button>
               </div>

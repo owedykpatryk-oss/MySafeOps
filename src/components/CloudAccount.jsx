@@ -11,6 +11,7 @@ import InlineAlert from "./InlineAlert";
 import { useApp } from "../context/AppContext";
 
 const ss = ms;
+const MIN_PASSWORD_LENGTH = 6;
 
 /**
  * Supabase email/password — enable Email provider in Dashboard → Authentication → Providers.
@@ -21,6 +22,8 @@ export default function CloudAccount() {
   const { trialStatus, orgId } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const r2Enabled = isR2StorageConfigured();
@@ -69,6 +72,14 @@ export default function CloudAccount() {
   }
 
   const signIn = async () => {
+    if (!email.trim()) {
+      setMsg("Enter your email address first.");
+      return;
+    }
+    if (!password) {
+      setMsg("Enter your password first.");
+      return;
+    }
     setMsg("");
     setBusy(true);
     try {
@@ -88,8 +99,18 @@ export default function CloudAccount() {
     setBusy(true);
     try {
       // OAuth must return to `/login` (add it to Supabase Redirect URLs). `/app` breaks PKCE if not allow-listed and can send users to the site URL (landing).
-      const { error } = await signInWithGoogleOAuth(client, "/login");
+      const before = window.location.href;
+      const { data, error } = await signInWithGoogleOAuth(client, "/login");
       if (error) throw error;
+      if (data?.url && window.location.href === before) {
+        window.location.assign(data.url);
+      }
+      window.setTimeout(() => {
+        if (window.location.href === before) {
+          setBusy(false);
+          setMsg("Google sign-in did not open. Please allow pop-ups/redirects and try again.");
+        }
+      }, 2500);
     } catch (e) {
       setMsg(e.message || "Google sign-in failed");
       setBusy(false);
@@ -97,6 +118,14 @@ export default function CloudAccount() {
   };
 
   const signUp = async () => {
+    if (!email.trim()) {
+      setMsg("Enter your email address first.");
+      return;
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
     setMsg("");
     setBusy(true);
     try {
@@ -168,7 +197,7 @@ export default function CloudAccount() {
     <div style={{ ...ss.card, marginBottom: 24 }}>
       <div style={{ fontWeight: 600, marginBottom: 8 }}>Supabase account (auth & backup)</div>
       <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.5 }}>
-        Sign in to use cloud backup (Backup screen → upload). Enable Email and Google under Authentication → Providers; add redirect URLs for <code style={{ fontSize: 11 }}>/login</code> and <code style={{ fontSize: 11 }}>/app</code>.
+        Sign in to use cloud backup (Backup screen → upload). Enable Email and Google under Authentication → Providers; add redirect URL for <code style={{ fontSize: 11 }}>/login</code>.
       </p>
       {r2Enabled && (
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.5 }}>
@@ -178,12 +207,40 @@ export default function CloudAccount() {
       <label style={ss.lbl}>Email</label>
       <input type="email" autoComplete="email" style={ss.inp} value={email} onChange={(e) => setEmail(e.target.value)} />
       <label style={{ ...ss.lbl, marginTop: 10 }}>Password</label>
-      <input type="password" autoComplete="current-password" style={ss.inp} value={password} onChange={(e) => setPassword(e.target.value)} />
+      <input
+        type={showPassword ? "text" : "password"}
+        autoComplete="current-password"
+        style={ss.inp}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        onKeyUp={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
+        onKeyDown={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
+      />
+      <label
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          marginTop: 8,
+          fontSize: 12,
+          color: "var(--color-text-secondary)",
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={showPassword}
+          onChange={(e) => setShowPassword(e.target.checked)}
+          aria-label="Show password"
+        />
+        Show password
+      </label>
+      {capsLockOn && <div style={{ marginTop: 6, fontSize: 12, color: "#b45309" }}>Caps Lock is on.</div>}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-        <button type="button" style={ss.btnP} disabled={busy || !email.trim() || !password} onClick={signIn}>
+        <button type="button" style={ss.btnP} disabled={busy} onClick={signIn}>
           Sign in
         </button>
-        <button type="button" style={ss.btn} disabled={busy || !email.trim() || password.length < 6} onClick={signUp}>
+        <button type="button" style={ss.btn} disabled={busy} onClick={signUp}>
           Create account
         </button>
       </div>
