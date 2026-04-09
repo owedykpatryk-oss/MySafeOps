@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bell, Building2, Code2, CreditCard, Shield, Users, UserPlus } from "lucide-react";
 
 import { ms } from "../utils/moduleStyles";
+import { WORKSPACE_SETTINGS_TABS } from "../config/workspaceSettingsTabs";
 import CloudAccount from "./CloudAccount";
 import BillingLimits from "./BillingLimits";
 import InviteUsers from "./InviteUsers";
@@ -12,18 +13,23 @@ import DeveloperTools from "./DeveloperTools";
 
 const ss = ms;
 
-const TABS = [
-  { id: "cloud", label: "Cloud account", icon: Shield },
-  { id: "billing", label: "Billing", icon: CreditCard },
-  { id: "invites", label: "Invites", icon: UserPlus },
-  { id: "members", label: "Members", icon: Users },
-  { id: "organisation", label: "Organisation", icon: Building2 },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "developer", label: "Developer", icon: Code2 },
-];
+const TAB_ICONS = {
+  cloud: Shield,
+  billing: CreditCard,
+  invites: UserPlus,
+  members: Users,
+  organisation: Building2,
+  notifications: Bell,
+  developer: Code2,
+};
+
+const TABS = WORKSPACE_SETTINGS_TABS.map((t) => ({ ...t, icon: TAB_ICONS[t.id] }));
 
 export default function SettingsCenter({ initialTab = "cloud", checkoutReturn = null }) {
   const [tab, setTab] = useState(initialTab);
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
   const quickActions = [
     { label: "Invite teammate", target: "invites", helper: "Create + send invite links" },
     { label: "Manage members", target: "members", helper: "Roles and access control" },

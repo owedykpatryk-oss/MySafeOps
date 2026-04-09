@@ -14,11 +14,58 @@ function normaliseQ(s) {
 /**
  * Build flat search hits for workspace command palette (modules + local data).
  * @param {string} rawQuery
+ * @param {{ pinnedModuleIds?: string[], recentModuleIds?: string[] }} [options] — when query is empty, show pinned then recent; when set, pinned then recent Open hits sort first.
  * @returns {WorkspaceSearchHit[]}
  */
-export function buildWorkspaceSearchHits(rawQuery) {
+export function buildWorkspaceSearchHits(rawQuery, options = {}) {
+  const pinnedModuleIds = Array.isArray(options.pinnedModuleIds) ? options.pinnedModuleIds.filter(Boolean) : [];
+  const recentModuleIds = Array.isArray(options.recentModuleIds) ? options.recentModuleIds.filter(Boolean) : [];
+  const pinSet = new Set(pinnedModuleIds);
+  const recentSet = new Set(recentModuleIds);
   const q = normaliseQ(rawQuery);
-  if (!q) return [];
+
+  /** @param {{ viewId: string }} h */
+  const pinRecentPriority = (h) => (pinSet.has(h.viewId) ? 0 : recentSet.has(h.viewId) ? 1 : 2);
+
+  if (!q) {
+    const byId = {};
+    for (const t of NAV_TAB_IDS) {
+      if (t.id === "more") continue;
+      byId[t.id] = t;
+    }
+    for (const t of MORE_TABS) {
+      byId[t.id] = t;
+    }
+    const seen = new Set();
+    /** @type {WorkspaceSearchHit[]} */
+    const out = [];
+    for (const id of pinnedModuleIds) {
+      const t = byId[id];
+      if (!t || seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        key: `pin-${id}`,
+        kind: "Pinned",
+        label: t.label,
+        subtitle: "Pinned shortcut",
+        viewId: id,
+      });
+    }
+    for (const id of recentModuleIds) {
+      if (seen.has(id) || pinSet.has(id)) continue;
+      const t = byId[id];
+      if (!t) continue;
+      seen.add(id);
+      out.push({
+        key: `recent-${id}`,
+        kind: "Recent",
+        label: t.label,
+        subtitle: "Recently opened",
+        viewId: id,
+      });
+    }
+    return out;
+  }
 
   /** @type {WorkspaceSearchHit[]} */
   const hits = [];
@@ -56,7 +103,12 @@ export function buildWorkspaceSearchHits(rawQuery) {
 
   const dataQueryMin = 2;
   if (q.length < dataQueryMin) {
-    hits.sort((a, b) => (a.label > b.label ? 1 : a.label < b.label ? -1 : 0));
+    hits.sort((a, b) => {
+      const pa = pinRecentPriority(a);
+      const pb = pinRecentPriority(b);
+      if (pa !== pb) return pa - pb;
+      return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+    });
     return hits;
   }
 
@@ -137,6 +189,9 @@ export function buildWorkspaceSearchHits(rawQuery) {
 
   const kindOrder = { Open: 0, Worker: 1, Project: 2, RAMS: 3, Permit: 4, Snag: 5 };
   hits.sort((a, b) => {
+    const pa = pinRecentPriority(a);
+    const pb = pinRecentPriority(b);
+    if (pa !== pb) return pa - pb;
     const ko = (kindOrder[a.kind] ?? 9) - (kindOrder[b.kind] ?? 9);
     if (ko !== 0) return ko;
     return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });

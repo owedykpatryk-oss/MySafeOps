@@ -1,20 +1,39 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
-import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu } from "lucide-react";
+import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
 import WorkspaceSearchPalette from "../components/WorkspaceSearchPalette";
 import RouteErrorBoundary from "../components/RouteErrorBoundary";
 import { prefetchView } from "../viewPrefetch";
-import { setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import {
+  setWorkspaceNavTarget,
+  OPEN_WORKSPACE_SETTINGS_EVENT,
+  OPEN_WORKSPACE_VIEW_EVENT,
+  WORKSPACE_SETTINGS_TAB_IDS,
+} from "../utils/workspaceNavContext";
 import {
   MORE_SECTIONS,
+  MORE_TABS,
   getMoreTabsForSection,
   filterModuleTabsByQuery,
   primaryBottomNavIdSet,
 } from "../navigation/appModules";
-import { workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_ID } from "../navigation/workspaceViews";
+import { getPinnedModuleIds, togglePinnedModule } from "../utils/pinnedModules";
+import { recordRecentModule } from "../utils/recentModules";
+import { workspaceViewLoaders, workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_ID } from "../navigation/workspaceViews";
+
+const LAST_VIEW_STORAGE_KEY = "mysafeops_last_workspace_view";
+const WORKSPACE_LAYOUT_VIEW_IDS = new Set([...Object.keys(workspaceViewLoaders), "settings"]);
+
+function isEditableSurfaceTarget(target) {
+  if (!target || typeof Element === "undefined" || !(target instanceof Element)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return Boolean(target.closest?.("input, textarea, select, [contenteditable='true']"));
+}
 
 const LazySettingsCenter = lazy(() => import("../components/SettingsCenter"));
 
@@ -23,6 +42,49 @@ export function ViewFallback() {
     <div className="app-view-fallback" style={{ fontFamily: "DM Sans, system-ui, sans-serif", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 14 }}>
       <div className="app-route-spinner" aria-hidden />
       Loading module…
+    </div>
+  );
+}
+
+function MoreModuleTile({ tab, active, pinnedIds, onOpen, onTogglePin }) {
+  const isPinned = pinnedIds.includes(tab.id);
+  return (
+    <div className="app-more-tile-wrap">
+      <button
+        type="button"
+        className="app-more-tile"
+        onClick={() => onOpen(tab.id)}
+        onMouseEnter={() => prefetchView(tab.id)}
+        onFocus={() => prefetchView(tab.id)}
+        style={{
+          padding: "12px 28px 12px 10px",
+          borderRadius: "var(--radius-sm, 10px)",
+          border: "1px solid var(--color-border-tertiary,#e2e8f0)",
+          background: active ? "var(--color-accent-muted,#ccfbf1)" : "var(--color-background-primary)",
+          fontSize: 12,
+          fontWeight: active ? 600 : 500,
+          fontFamily: "DM Sans, sans-serif",
+          cursor: "pointer",
+          textAlign: "center",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          minHeight: 44,
+          width: "100%",
+          color: active ? "var(--color-accent-hover,#0f766e)" : "var(--color-text-primary)",
+          boxShadow: active ? "var(--shadow-sm)" : "none",
+        }}
+      >
+        {tab.label}
+      </button>
+      <button
+        type="button"
+        className="app-more-tile-pin"
+        data-active={isPinned}
+        aria-label={isPinned ? "Remove from pinned shortcuts" : "Pin to shortcuts"}
+        onClick={() => onTogglePin(tab.id)}
+      >
+        <Pin size={15} strokeWidth={2} aria-hidden />
+      </button>
     </div>
   );
 }
@@ -37,17 +99,62 @@ function SettingsView({ initialTab, checkoutReturn }) {
   );
 }
 
-function readStripeReturnQuery() {
+function readInitialSettingsQuery() {
   const qs = new URLSearchParams(window.location.search);
   const settingsTab = qs.get("settingsTab");
   const checkout = qs.get("checkout");
   const openBilling =
     settingsTab === "billing" || checkout === "success" || checkout === "canceled";
+  if (openBilling) {
+    return {
+      openSettings: true,
+      settingsInitialTab: "billing",
+      checkoutReturn: checkout,
+    };
+  }
+  if (settingsTab && WORKSPACE_SETTINGS_TAB_IDS.has(settingsTab)) {
+    return {
+      openSettings: true,
+      settingsInitialTab: settingsTab,
+      checkoutReturn: null,
+    };
+  }
   return {
-    openSettings: openBilling,
-    settingsInitialTab: openBilling ? "billing" : "cloud",
-    checkoutReturn: checkout,
+    openSettings: false,
+    settingsInitialTab: "cloud",
+    checkoutReturn: null,
   };
+}
+
+function getInitialLayoutState() {
+  const settingsQ = readInitialSettingsQuery();
+  if (settingsQ.openSettings) {
+    return {
+      navTab: "more",
+      view: "settings",
+      settingsInitialTab: settingsQ.settingsInitialTab,
+      checkoutReturn: settingsQ.checkoutReturn,
+    };
+  }
+  const qs = new URLSearchParams(window.location.search);
+  const viewParam = qs.get("view");
+  if (viewParam === "settings") {
+    return { navTab: "more", view: "settings", settingsInitialTab: "cloud", checkoutReturn: null };
+  }
+  if (viewParam && WORKSPACE_LAYOUT_VIEW_IDS.has(viewParam) && viewParam !== "settings") {
+    const nav = primaryBottomNavIdSet.has(viewParam) ? viewParam : "more";
+    return { navTab: nav, view: viewParam, settingsInitialTab: "cloud", checkoutReturn: null };
+  }
+  try {
+    const last = sessionStorage.getItem(LAST_VIEW_STORAGE_KEY);
+    if (last && WORKSPACE_LAYOUT_VIEW_IDS.has(last) && last !== "settings") {
+      const nav = primaryBottomNavIdSet.has(last) ? last : "more";
+      return { navTab: nav, view: last, settingsInitialTab: "cloud", checkoutReturn: null };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { navTab: "dashboard", view: "dashboard", settingsInitialTab: "cloud", checkoutReturn: null };
 }
 
 const NAV_ICONS = {
@@ -70,12 +177,42 @@ const NAV_TABS = [
 
 export default function MainAppLayout() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [navTab, setNavTab] = useState(() => (readStripeReturnQuery().openSettings ? "more" : "dashboard"));
-  const [view, setView] = useState(() => (readStripeReturnQuery().openSettings ? "settings" : "dashboard"));
-  const [settingsInitialTab, setSettingsInitialTab] = useState(() => readStripeReturnQuery().settingsInitialTab);
-  const [billingCheckoutReturn, setBillingCheckoutReturn] = useState(() => readStripeReturnQuery().checkoutReturn);
+  const [layoutSeed] = useState(() => getInitialLayoutState());
+  const [navTab, setNavTab] = useState(layoutSeed.navTab);
+  const [view, setView] = useState(layoutSeed.view);
+  const [settingsInitialTab, setSettingsInitialTab] = useState(layoutSeed.settingsInitialTab);
+  const [billingCheckoutReturn, setBillingCheckoutReturn] = useState(layoutSeed.checkoutReturn);
   const [moreFilter, setMoreFilter] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [pinnedIds, setPinnedIds] = useState(() => getPinnedModuleIds());
+
+  const openHelpModule = useCallback(() => {
+    setNavTab("more");
+    setView("help");
+  }, []);
+
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (next.get("view") === view) return prev;
+        next.set("view", view);
+        return next;
+      },
+      { replace: true }
+    );
+    try {
+      if (view !== "settings") {
+        sessionStorage.setItem(LAST_VIEW_STORAGE_KEY, view);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [view, setSearchParams]);
+
+  useEffect(() => {
+    recordRecentModule(view);
+  }, [view]);
 
   useEffect(() => {
     const settingsTab = searchParams.get("settingsTab");
@@ -89,8 +226,47 @@ export default function MainAppLayout() {
       next.delete("settingsTab");
       next.delete("checkout");
       setSearchParams(next, { replace: true });
+      return;
+    }
+    if (settingsTab && WORKSPACE_SETTINGS_TAB_IDS.has(settingsTab)) {
+      setView("settings");
+      setNavTab("more");
+      setSettingsInitialTab(settingsTab);
+      setBillingCheckoutReturn(null);
+      const next = new URLSearchParams(searchParams);
+      next.delete("settingsTab");
+      setSearchParams(next, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const onOpenSettings = (e) => {
+      const raw = e.detail?.tab;
+      const tab = raw && WORKSPACE_SETTINGS_TAB_IDS.has(raw) ? raw : "organisation";
+      setSettingsInitialTab(tab);
+      setBillingCheckoutReturn(null);
+      setNavTab("more");
+      setView("settings");
+    };
+    window.addEventListener(OPEN_WORKSPACE_SETTINGS_EVENT, onOpenSettings);
+    return () => window.removeEventListener(OPEN_WORKSPACE_SETTINGS_EVENT, onOpenSettings);
+  }, []);
+
+  useEffect(() => {
+    const onOpenView = (e) => {
+      const viewId = e.detail?.viewId;
+      if (!viewId) return;
+      if (primaryBottomNavIdSet.has(viewId)) {
+        setNavTab(viewId);
+        setView(viewId);
+      } else {
+        setView(viewId);
+        setNavTab("more");
+      }
+    };
+    window.addEventListener(OPEN_WORKSPACE_VIEW_EVENT, onOpenView);
+    return () => window.removeEventListener(OPEN_WORKSPACE_VIEW_EVENT, onOpenView);
+  }, []);
 
   useEffect(() => {
     document.body.classList.add("mysafeops-app-bottom-nav");
@@ -99,6 +275,10 @@ export default function MainAppLayout() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
+    requestAnimationFrame(() => {
+      const main = document.getElementById("main-content");
+      if (main) main.focus({ preventScroll: true });
+    });
   }, [view]);
 
   useEffect(() => {
@@ -106,11 +286,22 @@ export default function MainAppLayout() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setSearchOpen((o) => !o);
+        return;
+      }
+      if (isEditableSurfaceTarget(e.target)) return;
+      if (e.key === "/" && !e.altKey) {
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+      if (e.key === "?") {
+        e.preventDefault();
+        openHelpModule();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [openHelpModule]);
 
   const navigateFromSearch = ({ viewId, permitId }) => {
     if (viewId === "permits" && permitId) {
@@ -137,9 +328,15 @@ export default function MainAppLayout() {
     setNavTab("more");
   };
 
+  const handleTogglePin = useCallback((moduleId) => {
+    setPinnedIds(togglePinnedModule(moduleId));
+  }, []);
+
   const MainComponent = workspaceViewComponents[view] || workspaceViewComponents[DEFAULT_WORKSPACE_VIEW_ID];
 
   const q = moreFilter.trim().toLowerCase();
+  const pinnedTabsOrdered = pinnedIds.map((id) => MORE_TABS.find((t) => t.id === id)).filter(Boolean);
+  const pinnedTabsFiltered = filterModuleTabsByQuery(pinnedTabsOrdered, moreFilter);
 
   return (
     <div style={{ position: "relative", minHeight: "100vh", fontFamily: "DM Sans, system-ui, sans-serif" }}>
@@ -154,7 +351,7 @@ export default function MainAppLayout() {
           setNavTab("dashboard");
           setView("dashboard");
         }}
-        onOpenHelp={() => selectMoreModule("help")}
+        onOpenHelp={openHelpModule}
         onOpenSettings={() => selectMoreModule("settings")}
         onOpenSearch={() => setSearchOpen(true)}
       />
@@ -181,8 +378,43 @@ export default function MainAppLayout() {
               More modules
             </div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.45 }}>
-              Grouped by area. Use the filter to find a module quickly.
+              Pin modules for quick access (pin icon). Below, modules are grouped by area — use the filter to find one quickly.
             </p>
+            {pinnedTabsFiltered.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <div
+                  className="app-section-label"
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--color-text-secondary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    marginBottom: 8,
+                  }}
+                >
+                  Pinned shortcuts
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(min(132px, 100%), 1fr))",
+                    gap: 8,
+                  }}
+                >
+                  {pinnedTabsFiltered.map((t) => (
+                    <MoreModuleTile
+                      key={`pin-${t.id}`}
+                      tab={t}
+                      active={view === t.id}
+                      pinnedIds={pinnedIds}
+                      onOpen={selectMoreModule}
+                      onTogglePin={handleTogglePin}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             <input
               type="search"
               value={moreFilter}
@@ -231,32 +463,14 @@ export default function MainAppLayout() {
                     }}
                   >
                     {tabs.map((t) => (
-                      <button
+                      <MoreModuleTile
                         key={t.id}
-                        type="button"
-                        className="app-more-tile"
-                        onClick={() => selectMoreModule(t.id)}
-                        onMouseEnter={() => prefetchView(t.id)}
-                        onFocus={() => prefetchView(t.id)}
-                        style={{
-                          padding: "12px 10px",
-                          borderRadius: "var(--radius-sm, 10px)",
-                          border: "1px solid var(--color-border-tertiary,#e2e8f0)",
-                          background: view === t.id ? "var(--color-accent-muted,#ccfbf1)" : "var(--color-background-primary)",
-                          fontSize: 12,
-                          fontWeight: view === t.id ? 600 : 500,
-                          fontFamily: "DM Sans, sans-serif",
-                          cursor: "pointer",
-                          textAlign: "center",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          minHeight: 44,
-                          color: view === t.id ? "var(--color-accent-hover,#0f766e)" : "var(--color-text-primary)",
-                          boxShadow: view === t.id ? "var(--shadow-sm)" : "none",
-                        }}
-                      >
-                        {t.label}
-                      </button>
+                        tab={t}
+                        active={view === t.id}
+                        pinnedIds={pinnedIds}
+                        onOpen={selectMoreModule}
+                        onTogglePin={handleTogglePin}
+                      />
                     ))}
                   </div>
                 </div>

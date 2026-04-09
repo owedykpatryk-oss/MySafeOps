@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildWorkspaceSearchHits } from "../utils/workspaceSearch";
+import { getPinnedModuleIds } from "../utils/pinnedModules";
+import { getRecentModuleIds } from "../utils/recentModules";
 
 /**
  * Modal command palette: jump to screens and surface matching records (local data).
@@ -9,7 +11,14 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate }) {
   const inputRef = useRef(null);
   const [active, setActive] = useState(0);
 
-  const hits = useMemo(() => buildWorkspaceSearchHits(query), [query]);
+  const hits = useMemo(
+    () =>
+      buildWorkspaceSearchHits(query, {
+        pinnedModuleIds: getPinnedModuleIds(),
+        recentModuleIds: getRecentModuleIds(),
+      }),
+    [query]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -92,7 +101,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search screens, workers, projects, RAMS…"
+            placeholder="Search… (empty list shows pinned + recent modules)"
             aria-label="Search workspace"
             autoComplete="off"
             style={{
@@ -138,8 +147,8 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate }) {
           {hits.length === 0 ? (
             <div style={{ padding: "2rem 1rem", textAlign: "center", fontSize: 13, color: "var(--color-text-secondary)" }}>
               {query.trim().length === 0
-                ? "Type to search. Two or more characters match workers, projects, RAMS, permits, snags."
-                : "No matches. Try another word or open a screen from the bar below."}
+                ? "Type to search. With two or more characters you can match workers, projects, RAMS, permits, and snags. Pin modules from More (pin icon) to list them here when search is empty."
+                : "No matches. Try another word or use the bottom navigation."}
             </div>
           ) : (
             hits.map((h, i) => {
@@ -172,7 +181,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate }) {
                         textTransform: "uppercase",
                         letterSpacing: "0.04em",
                         color: "var(--color-text-secondary)",
-                        minWidth: 52,
+                        minWidth: 58,
                       }}
                     >
                       {h.kind}

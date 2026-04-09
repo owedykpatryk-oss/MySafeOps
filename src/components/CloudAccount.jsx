@@ -87,7 +87,8 @@ export default function CloudAccount() {
     setMsg("");
     setBusy(true);
     try {
-      const { error } = await signInWithGoogleOAuth(client, "/app");
+      // OAuth must return to `/login` (add it to Supabase Redirect URLs). `/app` breaks PKCE if not allow-listed and can send users to the site URL (landing).
+      const { error } = await signInWithGoogleOAuth(client, "/login");
       if (error) throw error;
     } catch (e) {
       setMsg(e.message || "Google sign-in failed");

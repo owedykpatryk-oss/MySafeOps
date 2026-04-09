@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { loadOrgScoped as load } from "../utils/orgStorage";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
+import { getOrgSettings } from "./OrgSettings";
+import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
 
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short" }); };
 const daysUntil = (iso) => { if (!iso) return null; return Math.ceil((new Date(iso)-new Date())/(1000*60*60*24)); };
@@ -252,15 +254,97 @@ export default function AnalyticsDashboard() {
     return d !== null && d >= 0 && d <= 60;
   }).length;
 
+  const actionNeededItems = useMemo(() => {
+    const t = new Date();
+    const items = [];
+    const expiredPermits = permits.filter((p) => {
+      const endIso = permitEndIso(p);
+      return p.status === "active" && endIso && new Date(endIso) < t;
+    }).length;
+    if (expiredPermits > 0) {
+      items.push({
+        key: "permits-expired",
+        severity: "high",
+        text: `${expiredPermits} active permit(s) are past their end date — review or close them in Permits.`,
+        viewId: "permits",
+      });
+    }
+    const expiredCerts = workers.reduce(
+      (n, w) => n + (w.certifications || []).filter((c) => c.expiryDate && new Date(c.expiryDate) < t).length,
+      0
+    );
+    if (expiredCerts > 0) {
+      items.push({
+        key: "certs-expired",
+        severity: "high",
+        text: `${expiredCerts} worker certification(s) have expired — update competencies in Workers.`,
+        viewId: "workers",
+      });
+    }
+    const overdueSnags = snags.filter((s) => s.dueDate && s.status === "open" && new Date(s.dueDate) < t).length;
+    if (overdueSnags > 0) {
+      items.push({
+        key: "snags-overdue",
+        severity: "high",
+        text: `${overdueSnags} open snag(s) are past their due date — resolve or re-plan in Snags.`,
+        viewId: "snags",
+      });
+    }
+    const unsignedRams = rams.filter((r) => !r.signed && r.status !== "draft").length;
+    if (unsignedRams > 0) {
+      items.push({
+        key: "rams-unsigned",
+        severity: "med",
+        text: `${unsignedRams} issued RAMS document(s) are not signed — complete sign-off in RAMS.`,
+        viewId: "rams",
+      });
+    }
+    if (trainingExpiring60 > 0) {
+      items.push({
+        key: "training-window",
+        severity: "calm",
+        text: `${trainingExpiring60} training record(s) expire within 60 days — check the Training matrix.`,
+        viewId: "training",
+      });
+    }
+    return items;
+  }, [workers, permits, rams, snags, trainingExpiring60]);
+
   const hotWorkActive = hotWork.filter((h) => h.status === "active").length;
+  const org = getOrgSettings();
+  const orgProfileDone =
+    Boolean(org.logo) ||
+    String(org.name || "").trim() !== "My Organisation" ||
+    [org.address, org.phone, org.email].some((x) => String(x || "").trim().length > 0);
   const checklist = useMemo(
     () => [
-      { label: "Add at least one project", done: projects.length > 0, next: "More → project tools" },
-      { label: "Add at least one worker", done: workers.length > 0, next: "Workers module" },
-      { label: "Create first RAMS or permit", done: rams.length > 0 || permits.length > 0, next: "RAMS or Permits module" },
-      { label: "Add at least one teammate profile", done: workers.length > 1, next: "Settings → Invites / Members" },
+      {
+        label: "Add company logo and details",
+        done: orgProfileDone,
+        next: "Settings → Organisation",
+        cta: "organisation",
+      },
+      {
+        label: "Add at least one project",
+        done: projects.length > 0,
+        next: "Workers → Add project",
+        cta: "workers",
+      },
+      {
+        label: "Add at least one worker",
+        done: workers.length > 0,
+        next: "Workers → Add worker",
+        cta: "workers",
+      },
+      { label: "Create first RAMS or permit", done: rams.length > 0 || permits.length > 0, next: "RAMS or Permits tab" },
+      {
+        label: "Add at least one teammate profile",
+        done: workers.length > 1,
+        next: "Settings → Invites / Members",
+        cta: "invites",
+      },
     ],
-    [projects.length, workers.length, rams.length, permits.length]
+    [orgProfileDone, projects.length, workers.length, rams.length, permits.length]
   );
   const completedChecklist = checklist.filter((x) => x.done).length;
   const checklistDone = completedChecklist === checklist.length;
@@ -289,6 +373,52 @@ export default function AnalyticsDashboard() {
           </>
         }
       />
+
+      {actionNeededItems.length > 0 && (
+        <div
+          className={`app-dashboard-action-strip${actionNeededItems.every((i) => i.severity === "calm") ? " app-dashboard-action-strip--calm" : ""}`}
+          style={{ marginBottom: 24 }}
+        >
+          <div
+            className="app-section-label"
+            style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}
+          >
+            Action needed
+          </div>
+          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 12 }}>
+            {actionNeededItems.map((item) => (
+              <li
+                key={item.key}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span style={{ fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.5, flex: "1 1 200px" }}>{item.text}</span>
+                <button
+                  type="button"
+                  onClick={() => openWorkspaceView({ viewId: item.viewId })}
+                  style={{
+                    ...ms.btn,
+                    padding: "8px 14px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    flexShrink: 0,
+                    borderColor: "#0d9488",
+                    background: "var(--color-accent-muted,#ccfbf1)",
+                    color: "#0f766e",
+                  }}
+                >
+                  Open
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* top metrics */}
       <Section title="Overview">
@@ -363,7 +493,32 @@ export default function AnalyticsDashboard() {
                     </span>
                     <span style={{ fontSize: 13, color: "var(--color-text-primary)" }}>{item.label}</span>
                   </div>
-                  <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{item.next}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{item.next}</span>
+                    {item.cta && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (item.cta === "organisation") openWorkspaceSettings({ tab: "organisation" });
+                          else if (item.cta === "workers") openWorkspaceView({ viewId: "workers" });
+                          else if (item.cta === "invites") openWorkspaceSettings({ tab: "invites" });
+                        }}
+                        style={{
+                          padding: "4px 10px",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          borderRadius: 8,
+                          border: "1px solid #0d9488",
+                          background: "var(--color-accent-muted,#ccfbf1)",
+                          color: "#0f766e",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        Open
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -543,7 +698,8 @@ export default function AnalyticsDashboard() {
           borderLeft: "3px solid var(--color-accent-subtle)",
         }}
       >
-        All metrics are calculated live from your organisation&apos;s data. No data is shared between organisations.
+        All metrics are calculated live from your organisation&apos;s data. No data is shared between organisations. Dates and short dates follow your browser
+        locale — choose United Kingdom in system or browser settings for British (en-GB) formatting.
       </div>
     </div>
   );

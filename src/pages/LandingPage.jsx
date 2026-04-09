@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
+import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import "../styles/landing.css";
 import LandingTopSection from "../components/landing/LandingTopSection";
 import LandingContentSections from "../components/landing/LandingContentSections";
@@ -9,6 +11,7 @@ const SUPPORT_EMAIL = "mysafeops@gmail.com";
 
 export default function LandingPage() {
   const cloud = isSupabaseConfigured();
+  const { user, ready, loading } = useSupabaseAuth();
   const [navScrolled, setNavScrolled] = useState(false);
   const [featureForm, setFeatureForm] = useState({ email: "", name: "", desc: "" });
   const [ctaEmail, setCtaEmail] = useState("");
@@ -51,6 +54,29 @@ export default function LandingPage() {
     const q = ctaEmail.trim() ? `?email=${encodeURIComponent(ctaEmail.trim())}` : "";
     window.location.assign(`/login${q}`);
   };
+
+  if (cloud && (!ready || loading)) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "DM Sans, system-ui, sans-serif",
+          gap: 12,
+          background: "#f8fafc",
+        }}
+      >
+        <div className="app-route-spinner" aria-hidden />
+        <span style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>Loading…</span>
+      </div>
+    );
+  }
+
+  if (cloud && ready && user) {
+    return <Navigate to="/app?view=dashboard" replace />;
+  }
 
   return (
     <div className="landing-page">
