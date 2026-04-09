@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { useToast } from "../context/ToastContext";
-import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from "../lib/supabase";
+import { getSupabaseUrl, isSupabaseConfigured, supabase } from "../lib/supabase";
 import { BILLING_PLANS, formatBytes, getEffectivePlan } from "../lib/billingPlans";
+import { trackBillingError, trackBillingEvent } from "../lib/billingTelemetry";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "./InlineAlert";
@@ -12,6 +13,25 @@ const ss = ms;
 const SUPPORT_EMAIL = "mysafeops@gmail.com";
 const NO_MEMBERSHIP_MSG = "No organisation membership";
 const STRIPE_FN_KEYS = ["stripe-checkout", "stripe-portal", "stripe-webhook"];
+const EDGE_FN_TIMEOUT_MS = 10000;
+
+function withTimeout(promise, timeoutMs, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function isTransientInvokeFailure(msg) {
+  const lower = String(msg || "").toLowerCase();
+  return (
+    lower.includes("failed to send a request to the edge function") ||
+    lower.includes("network") ||
+    lower.includes("fetch") ||
+    lower.includes("timed out")
+  );
+}
 
 function readArrayCount(storageKey) {
   try {
@@ -34,6 +54,13 @@ function estimateOrgStorageBytes(orgId) {
   return total * 2;
 }
 
+function formatDateTime(value) {
+  if (!value) return "n/a";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "n/a";
+  return date.toLocaleString();
+}
+
 export default function BillingLimits({ checkoutReturn = null }) {
   const { orgId, trialStatus, billing, role } = useApp();
   const { pushToast } = useToast();
@@ -41,13 +68,19 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
-  /** unknown | checking | ready | missing | probe_failed — only `missing` blocks Subscribe (404 = function not deployed). */
+  /** unknown | checking | ready | missing | misconfigured | probe_failed */
   const [stripeFnStatus, setStripeFnStatus] = useState("unknown");
   const [stripeFnHealth, setStripeFnHealth] = useState({});
+  const [stripeFnDiagnostics, setStripeFnDiagnostics] = useState({});
+  const [lastHealthCheckAt, setLastHealthCheckAt] = useState(null);
+  const [lastActionRequestId, setLastActionRequestId] = useState(null);
 
   const isAdmin = role === "admin";
   const cloudOk = isSupabaseConfigured() && supabase;
-  const stripeActionsEnabled = cloudOk && isAdmin && stripeFnStatus !== "missing";
+  const portalReady = stripeFnHealth["stripe-portal"] === "ready";
+  const checkoutBlocked = stripeFnStatus === "missing" || stripeFnStatus === "misconfigured";
+  const stripeCheckoutEnabled = cloudOk && isAdmin && !checkoutBlocked;
+  const stripePortalEnabled = cloudOk && isAdmin && portalReady;
 
   useEffect(() => {
     if (checkoutReturn !== "success" || !supabase) return;
@@ -79,6 +112,8 @@ export default function BillingLimits({ checkoutReturn = null }) {
     if (!cloudOk || !isAdmin) {
       setStripeFnStatus("unknown");
       setStripeFnHealth({});
+      setStripeFnDiagnostics({});
+      setLastHealthCheckAt(null);
       return;
     }
     let cancelled = false;
@@ -88,35 +123,57 @@ export default function BillingLimits({ checkoutReturn = null }) {
       try {
         const base = String(getSupabaseUrl() || "").replace(/\/$/, "");
         if (!base) throw new Error("Missing Supabase URL");
-        const anon = String(getSupabaseAnonKey() || "").trim();
-        const headers = anon
-          ? {
-              apikey: anon,
-              Authorization: `Bearer ${anon}`,
-            }
-          : undefined;
         const results = await Promise.all(
           STRIPE_FN_KEYS.map(async (fn) => {
             try {
-              const res = await fetch(`${base}/functions/v1/${fn}`, { method: "OPTIONS", headers });
+              // Use a simple GET existence check to avoid browser/CORS false negatives from custom-header OPTIONS probes.
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), EDGE_FN_TIMEOUT_MS);
+              const res = await fetch(`${base}/functions/v1/${fn}`, { method: "GET", signal: controller.signal }).finally(
+                () => clearTimeout(timer)
+              );
               if (res.status === 404) return [fn, "missing"];
-              return [fn, "ready"];
+              if (res.status === 503) {
+                const body = await res.json().catch(() => null);
+                return [fn, "misconfigured", body];
+              }
+              const data = await res.json().catch(() => null);
+              if (data?.configured && typeof data.configured === "object") {
+                const configuredValues = Object.values(data.configured);
+                if (configuredValues.length && configuredValues.some((v) => !v)) {
+                  return [fn, "misconfigured", data];
+                }
+              }
+              if (data?.valid && typeof data.valid === "object") {
+                const validValues = Object.values(data.valid);
+                if (validValues.length && validValues.some((v) => !v)) {
+                  return [fn, "misconfigured", data];
+                }
+              }
+              return [fn, "ready", data];
             } catch {
               return [fn, "probe_failed"];
             }
           })
         );
         if (cancelled) return;
-        const health = Object.fromEntries(results);
+        const health = Object.fromEntries(results.map(([fn, status]) => [fn, status]));
+        const diagnostics = Object.fromEntries(results.map(([fn, _status, diag]) => [fn, diag || null]));
         setStripeFnHealth(health);
+        setStripeFnDiagnostics(diagnostics);
+        setLastHealthCheckAt(new Date().toISOString());
         const checkout = health["stripe-checkout"];
         if (checkout === "missing") setStripeFnStatus("missing");
+        else if (checkout === "misconfigured") setStripeFnStatus("misconfigured");
         else if (checkout === "ready") setStripeFnStatus("ready");
         else setStripeFnStatus("probe_failed");
+        trackBillingEvent("billing_health_checked", { checkoutStatus: checkout, health });
       } catch {
         if (!cancelled) {
           setStripeFnStatus("probe_failed");
           setStripeFnHealth(Object.fromEntries(STRIPE_FN_KEYS.map((k) => [k, "probe_failed"])));
+          setStripeFnDiagnostics({});
+          setLastHealthCheckAt(new Date().toISOString());
         }
       }
     };
@@ -139,13 +196,29 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const storagePct = Math.min(100, Math.round((usage.cloudBytesEstimate / limits.cloudBytes) * 100));
 
   const invokeStripeFunctionWithRecovery = async (fnName, body = {}) => {
-    const first = await supabase.functions.invoke(fnName, { body });
+    const invokeOnce = () =>
+      withTimeout(
+        supabase.functions.invoke(fnName, { body }),
+        EDGE_FN_TIMEOUT_MS,
+        `${fnName} request`
+      );
+
+    const first = await invokeOnce();
     const firstMsg = first?.error?.message || first?.data?.error || "";
+    if (isTransientInvokeFailure(firstMsg)) {
+      const second = await invokeOnce();
+      const secondMsg = second?.error?.message || second?.data?.error || "";
+      if (!String(secondMsg).toLowerCase().includes("no organisation membership")) {
+        return second;
+      }
+      await refreshOrgFromSupabase(supabase);
+      return invokeOnce();
+    }
     if (!String(firstMsg).toLowerCase().includes("no organisation membership")) {
       return first;
     }
     await refreshOrgFromSupabase(supabase);
-    return supabase.functions.invoke(fnName, { body });
+    return invokeOnce();
   };
 
   const startCheckout = async (planId) => {
@@ -161,12 +234,21 @@ export default function BillingLimits({ checkoutReturn = null }) {
       pushToast({ type: "error", message: msg });
       return;
     }
+    if (stripeFnStatus === "misconfigured") {
+      const msg =
+        "stripe-checkout is deployed but not configured. Add STRIPE_SECRET_KEY, STRIPE_PRICE_* and SITE_URL in Supabase Edge Function secrets.";
+      setActionError(msg);
+      pushToast({ type: "error", message: msg });
+      return;
+    }
     setCheckoutLoading(planId);
     try {
       const { data, error } = await invokeStripeFunctionWithRecovery("stripe-checkout", { planId });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      if (data?.requestId) setLastActionRequestId(String(data.requestId));
       if (data?.url) {
+        trackBillingEvent("stripe_checkout_redirect", { planId });
         window.location.href = data.url;
         return;
       }
@@ -176,11 +258,14 @@ export default function BillingLimits({ checkoutReturn = null }) {
       const lower = String(raw).toLowerCase();
       const msg = lower.includes("no organisation membership")
         ? `${NO_MEMBERSHIP_MSG}. Please sign out and sign in again.`
-        : lower.includes("failed to send a request to the edge function")
+        : (lower.includes("failed to send a request to the edge function") ||
+            lower.includes("timed out") ||
+            lower.includes("network"))
           ? "Could not reach Supabase Edge Function. Deploy stripe-checkout/stripe-portal on this project and verify network access."
           : raw;
       setActionError(msg);
       pushToast({ type: "error", message: msg });
+      trackBillingError("stripe_checkout_failed", e, { planId });
     } finally {
       setCheckoutLoading(null);
     }
@@ -192,9 +277,17 @@ export default function BillingLimits({ checkoutReturn = null }) {
       setActionError("Sign in with cloud account to manage subscriptions.");
       return;
     }
-    if (stripeFnStatus === "missing") {
+    const portalState = stripeFnHealth["stripe-portal"] || "unknown";
+    if (portalState === "missing") {
       const msg =
         "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-portal).";
+      setActionError(msg);
+      pushToast({ type: "error", message: msg });
+      return;
+    }
+    if (portalState === "misconfigured") {
+      const msg =
+        "stripe-portal is deployed but not configured. Add STRIPE_SECRET_KEY and SITE_URL in Supabase Edge Function secrets.";
       setActionError(msg);
       pushToast({ type: "error", message: msg });
       return;
@@ -204,7 +297,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
       const { data, error } = await invokeStripeFunctionWithRecovery("stripe-portal", {});
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      if (data?.requestId) setLastActionRequestId(String(data.requestId));
       if (data?.url) {
+        trackBillingEvent("stripe_portal_opened", {});
         window.location.href = data.url;
         return;
       }
@@ -214,11 +309,14 @@ export default function BillingLimits({ checkoutReturn = null }) {
       const lower = String(raw).toLowerCase();
       const msg = lower.includes("no organisation membership")
         ? `${NO_MEMBERSHIP_MSG}. Please sign out and sign in again.`
-        : lower.includes("failed to send a request to the edge function")
+        : (lower.includes("failed to send a request to the edge function") ||
+            lower.includes("timed out") ||
+            lower.includes("network"))
           ? "Could not reach Supabase Edge Function. Deploy stripe-checkout/stripe-portal on this project and verify network access."
           : raw;
       setActionError(msg);
       pushToast({ type: "error", message: msg });
+      trackBillingError("stripe_portal_failed", e, {});
     } finally {
       setPortalLoading(false);
     }
@@ -231,6 +329,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const healthChip = (status) => {
     if (status === "ready") return { label: "reachable", color: "#0f766e", bg: "#ccfbf1", border: "#99f6e4" };
     if (status === "missing") return { label: "missing", color: "#991b1b", bg: "#fee2e2", border: "#fecaca" };
+    if (status === "misconfigured") return { label: "not configured", color: "#9a3412", bg: "#ffedd5", border: "#fed7aa" };
     if (status === "checking") return { label: "checking", color: "#334155", bg: "#e2e8f0", border: "#cbd5e1" };
     return { label: "unknown", color: "#92400e", bg: "#fef3c7", border: "#fde68a" };
   };
@@ -270,14 +369,32 @@ export default function BillingLimits({ checkoutReturn = null }) {
           />
         </div>
       )}
+      {cloudOk && isAdmin && stripeFnStatus === "misconfigured" && (
+        <div style={{ marginBottom: 12 }}>
+          <InlineAlert
+            type="warn"
+            text="stripe-checkout is deployed but not configured. Set STRIPE_SECRET_KEY, STRIPE_PRICE_STARTER/TEAM/BUSINESS and SITE_URL in Supabase Edge Function secrets."
+          />
+        </div>
+      )}
       {cloudOk && isAdmin && stripeFnStatus === "probe_failed" && (
         <div style={{ marginBottom: 12 }}>
           <InlineAlert
             type="info"
-            text="Could not verify Edge Functions from this browser (OPTIONS probe). You can still try Subscribe — if it fails, deploy stripe-checkout / stripe-portal on your Supabase project or check ad-blockers and network."
+            text="Could not verify Edge Functions from this browser. You can still try Subscribe — if it fails, deploy stripe-checkout / stripe-portal on your Supabase project or check ad-blockers and network."
           />
         </div>
       )}
+      {cloudOk &&
+        isAdmin &&
+        Number(stripeFnDiagnostics["stripe-webhook"]?.pendingFailures || 0) > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <InlineAlert
+              type="warn"
+              text={`Stripe webhook has ${stripeFnDiagnostics["stripe-webhook"]?.pendingFailures} pending failure(s). Run npm run stripe:retry-webhooks and review function logs.`}
+            />
+          </div>
+        )}
 
       {cloudOk && isAdmin && (
         <div style={{ ...ss.card, marginBottom: 16 }}>
@@ -300,6 +417,16 @@ export default function BillingLimits({ checkoutReturn = null }) {
           <p style={{ margin: "10px 0 0", fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
             Missing functions must be deployed in Supabase: <code>stripe-checkout</code>, <code>stripe-portal</code>, <code>stripe-webhook</code>.
           </p>
+          <div style={{ marginTop: 8, fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+            <div>Last health check: {formatDateTime(lastHealthCheckAt)}</div>
+            <div>Last billing request id: {lastActionRequestId || "n/a"}</div>
+            <div>
+              Webhook last processed: {formatDateTime(stripeFnDiagnostics["stripe-webhook"]?.lastProcessedAt)}
+            </div>
+            <div>
+              Webhook pending failures: {stripeFnDiagnostics["stripe-webhook"]?.pendingFailures ?? "n/a"}
+            </div>
+          </div>
         </div>
       )}
 
@@ -328,12 +455,12 @@ export default function BillingLimits({ checkoutReturn = null }) {
                   <button
                     key={id}
                     type="button"
-                    disabled={!stripeActionsEnabled || Boolean(checkoutLoading) || loading}
+                    disabled={!stripeCheckoutEnabled || Boolean(checkoutLoading) || loading}
                     onClick={() => startCheckout(id)}
                     style={{
                       ...ss.btnP,
                       fontSize: 13,
-                      opacity: (!stripeActionsEnabled || (checkoutLoading && !loading)) ? 0.6 : 1,
+                      opacity: (!stripeCheckoutEnabled || (checkoutLoading && !loading)) ? 0.6 : 1,
                     }}
                   >
                     {loading ? "Redirecting…" : `${p.name} (${p.priceLabel}/mo)`}
@@ -343,9 +470,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
             </div>
             <button
               type="button"
-              disabled={!stripeActionsEnabled || portalLoading || Boolean(checkoutLoading)}
+              disabled={!stripePortalEnabled || portalLoading || Boolean(checkoutLoading)}
               onClick={openPortal}
-              style={{ ...ss.btn, fontSize: 13, alignSelf: "flex-start", opacity: stripeActionsEnabled ? 1 : 0.6 }}
+              style={{ ...ss.btn, fontSize: 13, alignSelf: "flex-start", opacity: stripePortalEnabled ? 1 : 0.6 }}
             >
               {portalLoading ? "Opening…" : "Manage billing (portal)"}
             </button>

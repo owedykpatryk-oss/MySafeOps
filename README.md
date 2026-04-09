@@ -79,7 +79,22 @@ Deploy `send-org-invite` from [`supabase/functions/send-org-invite/`](supabase/f
    - `SITE_URL` — public app origin with no trailing slash (e.g. `https://your-domain.com`; local dev: `http://localhost:5173`)  
 4. In Stripe → Developers → Webhooks, add endpoint: `https://<project-ref>.supabase.co/functions/v1/stripe-webhook` and select events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Paste the webhook signing secret into `STRIPE_WEBHOOK_SECRET`.  
 5. Enable the [Stripe Customer Portal](https://dashboard.stripe.com/settings/billing/portal) for your account so **Manage billing** works.  
+6. Run `npm run billing:doctor` to verify the three functions are deployed and configured from your current project URL (`VITE_SUPABASE_URL`).
+7. If webhook failures are pending, run `npm run stripe:retry-webhooks` to replay failed events from Stripe using `event_id`.
 Secrets stay on Supabase; nothing Stripe-sensitive is put in `VITE_*` env vars. After checkout, users return to `/app?checkout=success&settingsTab=billing` and the app refreshes entitlements from `ensure_my_org`.
+
+### Billing smoke CI (optional but recommended)
+
+- Workflow file: `.github/workflows/billing-smoke.yml`
+- To enable pipeline checks, set repository secrets:
+  - `E2E_SUPABASE_URL`
+  - `E2E_SUPABASE_ANON_KEY`
+  - `E2E_BASE_URL` (deployed app URL)
+  - `E2E_BILLING_EMAIL`
+  - `E2E_BILLING_PASSWORD`
+- The workflow runs:
+  - `npm run billing:doctor` (function deploy/config health gate),
+  - `npm run test:e2e:billing` (browser smoke path for Billing page).
 
 Cloud upload/restore is available from **Backup** after sign-in (see [src/utils/cloudSync.js](src/utils/cloudSync.js)).
 

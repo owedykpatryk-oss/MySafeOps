@@ -1,0 +1,42 @@
+name: Billing Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  billing-doctor:
+    if: ${{ secrets.E2E_SUPABASE_URL != '' && secrets.E2E_SUPABASE_ANON_KEY != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Run billing doctor
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
+        run: npm run billing:doctor
+
+  billing-e2e:
+    if: ${{ secrets.E2E_BASE_URL != '' && secrets.E2E_BILLING_EMAIL != '' && secrets.E2E_BILLING_PASSWORD != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run billing smoke e2e
+        env:
+          E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
+          E2E_BILLING_EMAIL: ${{ secrets.E2E_BILLING_EMAIL }}
+          E2E_BILLING_PASSWORD: ${{ secrets.E2E_BILLING_PASSWORD }}
+        run: npm run test:e2e:billing
