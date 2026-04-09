@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { useToast } from "../context/ToastContext";
-import { getSupabaseUrl, isSupabaseConfigured, supabase } from "../lib/supabase";
+import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from "../lib/supabase";
 import { BILLING_PLANS, formatBytes, getEffectivePlan } from "../lib/billingPlans";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
@@ -40,11 +40,12 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
-  const [stripeFnStatus, setStripeFnStatus] = useState("unknown"); // unknown | checking | ready | missing | network
+  /** unknown | checking | ready | missing | probe_failed — only `missing` blocks Subscribe (404 = function not deployed). */
+  const [stripeFnStatus, setStripeFnStatus] = useState("unknown");
 
   const isAdmin = role === "admin";
   const cloudOk = isSupabaseConfigured() && supabase;
-  const stripeActionsEnabled = cloudOk && isAdmin && stripeFnStatus === "ready";
+  const stripeActionsEnabled = cloudOk && isAdmin && stripeFnStatus !== "missing";
 
   useEffect(() => {
     if (checkoutReturn !== "success" || !supabase) return;
@@ -83,19 +84,25 @@ export default function BillingLimits({ checkoutReturn = null }) {
       try {
         const base = String(getSupabaseUrl() || "").replace(/\/$/, "");
         if (!base) throw new Error("Missing Supabase URL");
-        const res = await fetch(`${base}/functions/v1/stripe-checkout`, { method: "OPTIONS" });
+        const anon = String(getSupabaseAnonKey() || "").trim();
+        const res = await fetch(`${base}/functions/v1/stripe-checkout`, {
+          method: "OPTIONS",
+          headers: anon
+            ? {
+                apikey: anon,
+                Authorization: `Bearer ${anon}`,
+              }
+            : undefined,
+        });
         if (cancelled) return;
         if (res.status === 404) {
           setStripeFnStatus("missing");
           return;
         }
-        if (res.ok || res.status === 405 || res.status === 401 || res.status === 403) {
-          setStripeFnStatus("ready");
-          return;
-        }
-        setStripeFnStatus("network");
+        // Any other status means the gateway answered (function may exist, misconfigured, or CORS quirk).
+        setStripeFnStatus("ready");
       } catch {
-        if (!cancelled) setStripeFnStatus("network");
+        if (!cancelled) setStripeFnStatus("probe_failed");
       }
     };
     run();
@@ -132,10 +139,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
       setActionError("Sign in with cloud account to manage subscriptions.");
       return;
     }
-    if (!stripeActionsEnabled) {
-      const msg = stripeFnStatus === "missing"
-        ? "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-checkout)."
-        : "Could not reach Stripe Edge Functions. Check connection and Supabase project configuration.";
+    if (stripeFnStatus === "missing") {
+      const msg =
+        "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-checkout).";
       setActionError(msg);
       pushToast({ type: "error", message: msg });
       return;
@@ -171,10 +177,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
       setActionError("Sign in with cloud account to manage subscriptions.");
       return;
     }
-    if (!stripeActionsEnabled) {
-      const msg = stripeFnStatus === "missing"
-        ? "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-portal)."
-        : "Could not reach Stripe Edge Functions. Check connection and Supabase project configuration.";
+    if (stripeFnStatus === "missing") {
+      const msg =
+        "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-portal).";
       setActionError(msg);
       pushToast({ type: "error", message: msg });
       return;
@@ -243,11 +248,11 @@ export default function BillingLimits({ checkoutReturn = null }) {
           />
         </div>
       )}
-      {cloudOk && isAdmin && stripeFnStatus === "network" && (
+      {cloudOk && isAdmin && stripeFnStatus === "probe_failed" && (
         <div style={{ marginBottom: 12 }}>
           <InlineAlert
-            type="warn"
-            text="Cannot reach Supabase Edge Functions from this browser/network right now."
+            type="info"
+            text="Could not verify Edge Functions from this browser (OPTIONS probe). You can still try Subscribe — if it fails, deploy stripe-checkout / stripe-portal on your Supabase project or check ad-blockers and network."
           />
         </div>
       )}

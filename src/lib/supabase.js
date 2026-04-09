@@ -28,3 +28,8 @@ export function isSupabaseConfigured() {
 export function getSupabaseUrl() {
   return url;
 }
+
+/** Public anon key (same as in the browser client). Used for lightweight gateway probes only. */
+export function getSupabaseAnonKey() {
+  return anon;
+}
