@@ -19,6 +19,8 @@ import { ms } from "../../utils/moduleStyles";
 import { safeHttpUrl } from "../../utils/safeUrl";
 import PageHero from "../../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { trackEvent } from "../../utils/telemetry";
+import { isFeatureEnabled } from "../../utils/featureFlags";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
@@ -27,6 +29,10 @@ const RAMS_ORG_ACTIVITIES_KEY = "rams_org_activity_templates";
 const RAMS_HAZARD_PREFS_KEY = "rams_hazard_picker_prefs";
 const RAMS_HAZARD_PACKS_KEY = "rams_hazard_quick_packs";
 const ORG_ACTIVITY_CATEGORY = "Organisation RAMS";
+const HAZARD_PACK_STATUS = {
+  CURRENT: "current",
+  SUPERSEDED: "superseded",
+};
 
 const genId = () => `rams_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
@@ -207,6 +213,161 @@ function buildCategoryRiskTrend(rows) {
 function textHasAny(text, needles) {
   const t = String(text || "").toLowerCase();
   return (needles || []).some((n) => t.includes(String(n).toLowerCase()));
+}
+
+function normalizeLooseTokens(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function workerCompetencyLines(worker) {
+  if (!worker) return [];
+  const lines = [];
+  if (String(worker.certs || "").trim()) lines.push(...String(worker.certs).split(/\n|,|;/).map((x) => x.trim()).filter(Boolean));
+  (worker.certifications || []).forEach((c) => {
+    const label = String(c?.certType || "").trim();
+    if (label) lines.push(label);
+  });
+  return Array.from(new Set(lines));
+}
+
+function competencyMatch(requiredCert, workerLine) {
+  const required = normalizeLooseTokens(requiredCert);
+  const candidate = normalizeLooseTokens(workerLine);
+  if (!required || !candidate) return false;
+  return required.includes(candidate) || candidate.includes(required);
+}
+
+function buildCompetencyRequirementCheck(requiredCerts, selectedWorkers) {
+  const reqs = Array.from(
+    new Set((requiredCerts || []).map((x) => String(x || "").trim()).filter(Boolean))
+  );
+  if (reqs.length === 0) {
+    return {
+      required: [],
+      missing: [],
+      matched: [],
+      blocked: false,
+    };
+  }
+  const workers = Array.isArray(selectedWorkers) ? selectedWorkers : [];
+  const byRequirement = reqs.map((req) => {
+    const matchedWorkers = [];
+    const expiredWorkers = [];
+    workers.forEach((w) => {
+      const lines = workerCompetencyLines(w);
+      const matchedFromLines = lines.some((ln) => competencyMatch(req, ln));
+      const matchedCert = (w.certifications || []).find((c) => competencyMatch(req, c?.certType || ""));
+      if (matchedFromLines || matchedCert) {
+        const expiry = getCertificationExpiryState(matchedCert?.expiryDate);
+        if (matchedCert && expiry.state === "expired") {
+          expiredWorkers.push(w.name || w.id || "Operative");
+          return;
+        }
+        matchedWorkers.push(w.name || w.id || "Operative");
+      }
+    });
+    return {
+      requirement: req,
+      matchedWorkers: Array.from(new Set(matchedWorkers)),
+      expiredWorkers: Array.from(new Set(expiredWorkers)),
+    };
+  });
+  const missing = byRequirement.filter((x) => x.matchedWorkers.length === 0);
+  return {
+    required: reqs,
+    matched: byRequirement.filter((x) => x.matchedWorkers.length > 0),
+    missing,
+    blocked: missing.length > 0,
+  };
+}
+
+function buildToolboxBriefV2(rows, form) {
+  const list = Array.isArray(rows) ? rows : [];
+  const highRows = list.filter((r) => getRiskLevel(r.revisedRisk) === "high");
+  const sorted = [...list].sort((a, b) => riskScore(b.revisedRisk) - riskScore(a.revisedRisk));
+  const topRisks = sorted.slice(0, 6).map((r, idx) => ({
+    id: r.id || `tb_${idx}`,
+    activity: r.activity || "Activity",
+    hazard: r.hazard || "Hazard",
+    rf: riskScore(r.revisedRisk),
+    controls: (r.controlMeasures || []).filter(Boolean).slice(0, 2),
+  }));
+  const hazardText = sorted.map((r) => `${r.activity || ""} ${r.hazard || ""}`).join(" ").toLowerCase();
+  const mustBriefPoints = [
+    `Stop-work authority: ${form?.leadEngineer || "Set lead engineer in Document info"}.`,
+    "Confirm permits and interface controls before first task starts.",
+    "Confirm emergency route, muster arrangement, and escalation path.",
+  ];
+  if (textHasAny(hazardText, ["electrical", "live cable", "switchgear"])) {
+    mustBriefPoints.push("Electrical isolation and test-before-touch confirmation is mandatory.");
+  }
+  if (textHasAny(hazardText, ["excav", "buried", "utility", "dig"])) {
+    mustBriefPoints.push("Utility strike controls and permit-to-dig boundaries must be briefed.");
+  }
+  if (textHasAny(hazardText, ["height", "ladder", "roof", "mewp"])) {
+    mustBriefPoints.push("Work-at-height rescue readiness and anchor checks must be confirmed.");
+  }
+  if (textHasAny(hazardText, ["confined", "gas", "fume"])) {
+    mustBriefPoints.push("Atmosphere monitoring and rescue standby controls must be active.");
+  }
+  if (highRows.length > 0) {
+    mustBriefPoints.push(`Residual HIGH risk remains on ${highRows.length} row(s): escalate before start.`);
+  }
+  return {
+    topRisks,
+    mustBriefPoints: mustBriefPoints.slice(0, 8),
+    headline: `${list.length} risk row(s) · ${highRows.length} high residual · brief top ${Math.min(6, topRisks.length)} priority task(s).`,
+  };
+}
+
+function buildPackVersionDiff(previousTemplates, nextTemplates) {
+  const prev = Array.isArray(previousTemplates) ? previousTemplates : [];
+  const next = Array.isArray(nextTemplates) ? nextTemplates : [];
+  const keyFor = (tpl, idx) => String(tpl?.templateId || `idx_${idx}`);
+  const prevMap = new Map(prev.map((tpl, idx) => [keyFor(tpl, idx), tpl]));
+  const nextMap = new Map(next.map((tpl, idx) => [keyFor(tpl, idx), tpl]));
+  const added = [];
+  const removed = [];
+  const changed = [];
+  nextMap.forEach((tpl, key) => {
+    if (!prevMap.has(key)) {
+      added.push(tpl);
+      return;
+    }
+    const prevTpl = prevMap.get(key);
+    const beforeControls = (prevTpl?.controlMeasures || []).map((x) => String(x || "").trim()).filter(Boolean);
+    const afterControls = (tpl?.controlMeasures || []).map((x) => String(x || "").trim()).filter(Boolean);
+    const controlsAdded = afterControls.filter((x) => !beforeControls.includes(x));
+    const controlsRemoved = beforeControls.filter((x) => !afterControls.includes(x));
+    const risksChanged =
+      Number(prevTpl?.initialRisk?.RF || 0) !== Number(tpl?.initialRisk?.RF || 0) ||
+      Number(prevTpl?.revisedRisk?.RF || 0) !== Number(tpl?.revisedRisk?.RF || 0);
+    const textChanged =
+      String(prevTpl?.activity || "") !== String(tpl?.activity || "") ||
+      String(prevTpl?.hazard || "") !== String(tpl?.hazard || "");
+    if (controlsAdded.length || controlsRemoved.length || risksChanged || textChanged) {
+      changed.push({
+        key,
+        activity: tpl?.activity || prevTpl?.activity || "Activity",
+        controlsAdded,
+        controlsRemoved,
+        risksChanged,
+        textChanged,
+      });
+    }
+  });
+  prevMap.forEach((tpl, key) => {
+    if (!nextMap.has(key)) removed.push(tpl);
+  });
+  return {
+    addedCount: added.length,
+    removedCount: removed.length,
+    changedCount: changed.length,
+    changedRows: changed.slice(0, 8),
+  };
 }
 
 function buildDetailedControlMethodPack(rows) {
@@ -601,6 +762,10 @@ const RAMS_FORM_DEFAULTS = {
   surveyMethodStatement: "",
   surveyDeliverables: "",
   surveyAssumptions: "",
+  surveyRequiredPermits: [],
+  surveyRequiredCerts: [],
+  surveyEvidenceSet: [],
+  surveyHoldPoints: [],
   communicationPlan: "",
   handoverClientName: "",
   handoverReceiver: "",
@@ -630,36 +795,15 @@ const SURVEYING_PACKS = [
       "PAS128 QLB utility mapping survey to locate and record underground utility apparatus, reduce strike risk, and issue marked outputs for safe delivery.",
     method:
       "1. Pre-start briefing and permit checks before entering survey area.\n\n2. Confirm utility records, walkover hazards, and exclusion zones.\n\n3. Detect utilities using EML and GPR methods with competent operators.\n\n4. Mark detected services and maintain safe dig rules near marked lines.\n\n5. Record survey control and quality checks before issue.\n\n6. Communicate residual risk and handover notes to site management.",
-    hazardTokens: [
-      "utility",
-      "buried",
-      "open chamber",
-      "manhole",
-      "pedestrian",
-      "traffic",
-      "electrical",
-      "slips",
-      "trip",
-      "manual",
-    ],
+    hazardTokens: ["utility", "buried", "open chamber", "manhole", "pedestrian", "traffic", "electrical", "slips", "trip", "manual"],
   },
   {
     key: "topographical_survey",
     label: "Topographical land survey",
-    scope:
-      "Topographical survey to capture levels, boundaries, structures and site features with agreed survey control and QA checks.",
+    scope: "Topographical survey to capture levels, boundaries, structures and site features with agreed survey control and QA checks.",
     method:
       "1. Set control points and verify datum/benchmark before data capture.\n\n2. Establish safe working routes around plant movement and public interfaces.\n\n3. Capture topo features with calibrated survey equipment.\n\n4. Perform repeat checks and closure checks to validate accuracy.\n\n5. Securely store field data and produce checked outputs for issue.",
-    hazardTokens: [
-      "uneven ground",
-      "slips",
-      "trip",
-      "adverse weather",
-      "moving plant",
-      "lone working",
-      "work at height",
-      "manual handling",
-    ],
+    hazardTokens: ["uneven ground", "slips", "trip", "adverse weather", "moving plant", "lone working", "work at height", "manual handling"],
   },
   {
     key: "gpr_survey",
@@ -668,18 +812,156 @@ const SURVEYING_PACKS = [
       "GPR survey for utility and subsurface detection, with controlled site setup, verified calibration and clear communication of confidence/residual uncertainty.",
     method:
       "1. Complete pre-start checks, environmental checks and calibration of GPR equipment.\n\n2. Define scan grid and segregate work area from traffic/pedestrian routes.\n\n3. Conduct scan passes at agreed spacing and speed.\n\n4. Validate anomalies with additional passes and cross-check with records.\n\n5. Mark findings and issue interpretation notes including confidence limits.",
-    hazardTokens: [
-      "traffic",
-      "pedestrian",
-      "moving plant",
-      "electrical",
-      "buried services",
-      "slips",
-      "trip",
-      "adverse weather",
-    ],
+    hazardTokens: ["traffic", "pedestrian", "moving plant", "electrical", "buried services", "slips", "trip", "adverse weather"],
+  },
+  {
+    key: "cctv_drainage_survey",
+    label: "CCTV drainage survey",
+    scope: "Drainage CCTV survey with controlled access at chambers, traffic interface controls, and contamination prevention.",
+    method:
+      "1. Confirm permit interfaces and confined-space boundary before chamber opening.\n\n2. Inspect chamber condition and barriers before camera insertion.\n\n3. Run CCTV capture with tether and communication controls.\n\n4. Log defects, obstructions, and chainage in survey output.\n\n5. Reinstate chamber and complete close-out checks.",
+    hazardTokens: ["cctv", "manhole", "chamber", "confined", "traffic", "slips", "contamination"],
+  },
+  {
+    key: "jetting_hpwj",
+    label: "Jetting / HPWJ cleansing",
+    scope: "High-pressure water jetting with pressure controls, hose management, exclusion zones, and contamination controls.",
+    method:
+      "1. Verify competency, equipment checks, and pressure settings.\n\n2. Set exclusion and splash-control zone.\n\n3. Confirm chamber stability and safe nozzle insertion.\n\n4. Perform jetting in controlled passes with comms between operators.\n\n5. Complete pressure release, clean-up, and evidence notes.",
+    hazardTokens: ["jetting", "hpwj", "hose", "pressure", "chamber", "traffic", "contamination", "manhole"],
+  },
+  {
+    key: "manhole_entry_inspection",
+    label: "Manhole entry & inspection",
+    scope: "Confined-space manhole inspection with gas testing, rescue readiness, standby role, and entry controls.",
+    method:
+      "1. Confirm confined-space permit and rescue plan.\n\n2. Conduct atmospheric pre-test and setup continuous monitor.\n\n3. Brief entrant and standby with emergency comms.\n\n4. Execute controlled entry and inspection tasks.\n\n5. Close permit and capture findings + atmosphere logs.",
+    hazardTokens: ["manhole", "chamber", "confined", "gas", "rescue", "atmosphere", "entry"],
+  },
+  {
+    key: "trial_holes_slit_trenches",
+    label: "Trial holes / slit trenches",
+    scope: "Intrusive verification by trial holes and slit trenches with permit-to-dig and buried-service controls.",
+    method:
+      "1. Verify records, scan proof, and permit-to-dig authorization.\n\n2. Mark out tolerance zones and no-go lines.\n\n3. Hand-dig or vacuum-expose inside tolerance zones.\n\n4. Record exposed assets with photo evidence.\n\n5. Reinstate and close out with handover notes.",
+    hazardTokens: ["trial hole", "slit trench", "excavation", "dig", "utility", "buried", "permit-to-dig", "hand dig"],
+  },
+  {
+    key: "window_sampling_trial_pit",
+    label: "Window sampling / trial pit",
+    scope: "Ground investigation by window sampling/trial pits with stability, service avoidance, and sample integrity controls.",
+    method:
+      "1. Set sample locations and verify utility constraints.\n\n2. Establish exclusion/banksman controls for plant movement.\n\n3. Execute trial pit/window sample under supervised method.\n\n4. Label and log samples with timestamps.\n\n5. Backfill, reinstate, and issue sample chain notes.",
+    hazardTokens: ["window sampling", "trial pit", "ground", "excavation", "plant", "buried", "sample"],
+  },
+  {
+    key: "borehole_gi_drilling",
+    label: "Borehole logging / GI drilling",
+    scope: "Ground investigation drilling with plant controls, contamination pathways management, and borehole integrity checks.",
+    method:
+      "1. Verify drilling location, utility constraints, and permit interfaces.\n\n2. Set exclusion area and pre-use checks for rig.\n\n3. Conduct drilling with supervised spoil handling.\n\n4. Record strata/log data and sample references.\n\n5. Secure or backfill borehole and complete QA records.",
+    hazardTokens: ["borehole", "drilling", "ground investigation", "spoil", "plant", "contamination", "utility"],
+  },
+  {
+    key: "foundation_exposure_verification",
+    label: "Foundation exposure / footing verification",
+    scope: "Controlled excavation to expose foundations/footings and verify dimensions/condition against design assumptions.",
+    method:
+      "1. Confirm permit-to-dig and structural constraints.\n\n2. Establish excavation controls and support method.\n\n3. Expose footing/foundation in stages.\n\n4. Capture dimensions, photos, and verification notes.\n\n5. Protect/reinstate exposed area and close out.",
+    hazardTokens: ["foundation", "footing", "excavation", "dig", "structure", "buried", "support"],
+  },
+  {
+    key: "soakaway_infiltration_testing",
+    label: "Soakaway / infiltration testing",
+    scope: "Infiltration/percolation testing workflow with environmental controls, repeatability checks, and result traceability.",
+    method:
+      "1. Verify location and utility/service constraints.\n\n2. Prepare test pit and instrumentation.\n\n3. Execute soakaway cycle(s) and capture readings.\n\n4. Validate repeatability and note weather/ground caveats.\n\n5. Issue testing summary and close-out notes.",
+    hazardTokens: ["soakaway", "infiltration", "percolation", "test pit", "ground", "environmental", "utility"],
+  },
+  {
+    key: "vacuum_excavation_services",
+    label: "Vacuum excavation near live services",
+    scope: "Non-destructive vacuum excavation to expose services in uncertainty zones with strict permit and utility controls.",
+    method:
+      "1. Confirm permit-to-dig and uncertainty corridor boundaries.\n\n2. Brief team on suction/nozzle controls and exclusion zone.\n\n3. Expose services progressively with constant supervision.\n\n4. Verify and record asset identity with photos.\n\n5. Backfill/protect services and complete handover.",
+    hazardTokens: ["vacuum excavation", "utility", "live services", "dig", "buried", "permit-to-dig", "expose"],
+  },
+  {
+    key: "highway_live_corridor_survey",
+    label: "Live highway corridor survey",
+    scope: "Survey and set-out works in live carriageway/public realm with Chapter 8 controls, pedestrian segregation, and supervised interfaces.",
+    method:
+      "1. Review TM plan and lane/footway controls before mobilisation.\n\n2. Establish exclusion and pedestrian segregation zones.\n\n3. Execute survey runs with spotter/banksman support.\n\n4. Perform accuracy checks and live-interface close calls capture.\n\n5. Demobilise controls and handover residual risk notes.",
+    hazardTokens: ["traffic", "carriageway", "pedestrian", "banksman", "highway", "moving plant", "public"],
+  },
+  {
+    key: "utility_revalidation_pre_dig",
+    label: "Pre-dig utility revalidation",
+    scope: "Revalidation pack prior to intrusive works: records refresh, scan proof, tolerance zones, and dig permit interface checks.",
+    method:
+      "1. Recheck latest records and utility owner updates.\n\n2. Conduct EML/GPR re-scan and compare with prior outputs.\n\n3. Re-mark no-go and hand-dig tolerance zones.\n\n4. Verify permit-to-dig controls and supervision arrangements.\n\n5. Capture sign-off evidence and issue revalidation note.",
+    hazardTokens: ["utility", "permit-to-dig", "scan", "buried", "dig", "expose", "records"],
+  },
+  {
+    key: "drainage_repair_reinstatement_survey",
+    label: "Drainage repair & reinstatement survey",
+    scope: "Survey plus verification workflow for drainage repair/reinstatement including defect capture, reinstatement checks, and handover evidence.",
+    method:
+      "1. Confirm work extents and chamber access controls.\n\n2. Capture pre-repair condition evidence.\n\n3. Verify repair geometry and reinstatement quality.\n\n4. Perform post-repair CCTV/visual verification.\n\n5. Issue client handover pack with before/after references.",
+    hazardTokens: ["drainage", "cctv", "chamber", "manhole", "contamination", "slips", "public"],
+  },
+  {
+    key: "rail_public_infrastructure_survey",
+    label: "Rail / public infrastructure survey",
+    scope: "Survey works in rail/public infrastructure environments with strict access windows, competency controls, and interface management.",
+    method:
+      "1. Confirm access window/possession controls and authorisations.\n\n2. Verify team competencies and briefing requirements.\n\n3. Execute survey tasks within controlled safe zones.\n\n4. Capture hold-point verification at each stage gate.\n\n5. Close-out with interface notes and formal handback.",
+    hazardTokens: ["rail", "public infrastructure", "permit", "access window", "traffic", "interface", "lone working"],
   },
 ];
+
+const SURVEY_PACK_METADATA = {
+  utility_mapping_survey: {
+    permitDependencies: ["Excavation / permit-to-dig", "Temporary traffic management approval"],
+    requiredCerts: ["PAS128 operator competence", "CAT/Genny competence"],
+    mandatoryEvidence: ["Scan proof screenshot/photo", "Marked-up utility plan", "Permit interface sign-off"],
+    holdPoints: ["HP1 records review complete", "HP2 scan validation complete", "HP3 marked no-go zones approved"],
+  },
+  cctv_drainage_survey: {
+    permitDependencies: ["Confined space permit (if entry)", "Traffic management approval"],
+    requiredCerts: ["Confined space awareness", "Drainage CCTV operator competence"],
+    mandatoryEvidence: ["Chamber barrier photo", "CCTV run reference", "Defect log extract"],
+    holdPoints: ["HP1 chamber safety check", "HP2 CCTV run quality check", "HP3 reinstatement/handover complete"],
+  },
+  jetting_hpwj: {
+    permitDependencies: ["Confined space permit (as required)", "Task risk briefing record"],
+    requiredCerts: ["HPWJ operator competence", "Rescue standby competence (when required)"],
+    mandatoryEvidence: ["Pressure setting capture", "Exclusion zone photo", "Close-out contamination check"],
+    holdPoints: ["HP1 pre-start pressure check", "HP2 first pass verification", "HP3 pressure release + close-out check"],
+  },
+  manhole_entry_inspection: {
+    permitDependencies: ["Confined space permit", "Rescue plan confirmation"],
+    requiredCerts: ["Confined space entry", "Gas monitor competence", "Rescue standby competence"],
+    mandatoryEvidence: ["Gas test log", "Rescue setup photo", "Entry/exit record"],
+    holdPoints: ["HP1 gas test pass", "HP2 rescue readiness", "HP3 close-out atmosphere record"],
+  },
+  trial_holes_slit_trenches: {
+    permitDependencies: ["Excavation / permit-to-dig", "Service owner constraints check"],
+    requiredCerts: ["Permit-to-dig briefing completion", "Banksman/plant marshal awareness"],
+    mandatoryEvidence: ["Pre-start scan proof", "Exposed service photo", "Reinstatement note"],
+    holdPoints: ["HP1 permit validation", "HP2 first exposure verification", "HP3 close-out sign-off"],
+  },
+  default: {
+    permitDependencies: ["Check project permit interface before start"],
+    requiredCerts: ["Supervisor briefing completion"],
+    mandatoryEvidence: ["Task photos + notes", "Close-out handover note"],
+    holdPoints: ["HP1 pre-start authorisation", "HP2 execution verification", "HP3 close-out confirmation"],
+  },
+};
+
+function surveyPackMetaFor(packKey) {
+  return SURVEY_PACK_METADATA[packKey] || SURVEY_PACK_METADATA.default;
+}
 
 function openWeatherDescription(code = "", fallback = "") {
   const c = String(code || "").slice(0, 2);
@@ -760,10 +1042,144 @@ function RiskBadge({ rf }) {
 // ─── Step 1 — Document info ──────────────────────────────────────────────────
 function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const smartFields = isFeatureEnabled("rams_header_smart_fields");
+  const [draftSavedAtLabel, setDraftSavedAtLabel] = useState("");
+  const [autofillUndo, setAutofillUndo] = useState(null);
+  useEffect(() => {
+    const tick = () => {
+      try {
+        const raw = sessionStorage.getItem(RAMS_DRAFT_KEY);
+        if (!raw) {
+          setDraftSavedAtLabel("");
+          return;
+        }
+        const d = JSON.parse(raw);
+        if (d.savedAt) setDraftSavedAtLabel(new Date(d.savedAt).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+        else setDraftSavedAtLabel("");
+      } catch {
+        setDraftSavedAtLabel("");
+      }
+    };
+    tick();
+    const t = setInterval(tick, 4000);
+    return () => clearInterval(t);
+  }, []);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [surveyPackKey, setSurveyPackKey] = useState(form.surveyWorkType || "");
+  const selectedSurveyPack = useMemo(() => findSurveyPackByKey(surveyPackKey || form.surveyWorkType), [surveyPackKey, form.surveyWorkType]);
+  const selectedSurveyMeta = useMemo(() => surveyPackMetaFor(selectedSurveyPack?.key || ""), [selectedSurveyPack]);
+  const [showHeaderAdvanced, setShowHeaderAdvanced] = useState(false);
+  const [showSurveyAdvanced, setShowSurveyAdvanced] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const moreDetailsFilledCount = useMemo(() => {
+    const t = (v) => String(v ?? "").trim();
+    let n = 0;
+    if (t(form.revisionSummary)) n++;
+    if (t(form.surveyDeliverables)) n++;
+    if (t(form.surveyAssumptions)) n++;
+    if (t(form.communicationPlan)) n++;
+    if (t(form.handoverClientName)) n++;
+    if (t(form.handoverReceiver)) n++;
+    if (t(form.handoverDate)) n++;
+    if (t(form.handoverNotes)) n++;
+    if (t(form.siteLat) || t(form.siteLng)) n++;
+    if (t(form.siteWeatherNote)) n++;
+    if (t(form.siteMapUrl)) n++;
+    if (t(form.nearestHospital)) n++;
+    if (t(form.hospitalDirectionsUrl)) n++;
+    return n;
+  }, [
+    form.revisionSummary,
+    form.surveyDeliverables,
+    form.surveyAssumptions,
+    form.communicationPlan,
+    form.handoverClientName,
+    form.handoverReceiver,
+    form.handoverDate,
+    form.handoverNotes,
+    form.siteLat,
+    form.siteLng,
+    form.siteWeatherNote,
+    form.siteMapUrl,
+    form.nearestHospital,
+    form.hospitalDirectionsUrl,
+  ]);
+  const [titleSuggestions, setTitleSuggestions] = useState([]);
+  const allRamsDocs = load("rams_builder_docs", []);
+  const [recentHeaderValues, setRecentHeaderValues] = useState(() => {
+    const list = load("rams_header_recent_values", {
+      locations: [],
+      leads: [],
+      refs: [],
+    });
+    return {
+      locations: Array.isArray(list.locations) ? list.locations.slice(0, 3) : [],
+      leads: Array.isArray(list.leads) ? list.leads.slice(0, 3) : [],
+      refs: Array.isArray(list.refs) ? list.refs.slice(0, 3) : [],
+    };
+  });
   const valid = form.title?.trim() && form.location?.trim();
+  const completenessChecks = [
+    !!String(form.title || "").trim(),
+    !!String(form.location || "").trim(),
+    !!String(form.projectId || "").trim(),
+    !!String(form.leadEngineer || "").trim(),
+    !!String(form.jobRef || "").trim(),
+    !!String(form.documentNo || "").trim(),
+  ];
+  const completenessScore = Math.round((completenessChecks.filter(Boolean).length / completenessChecks.length) * 100);
+  const headerMissing = [
+    !String(form.title || "").trim() && "Job / document title",
+    !String(form.location || "").trim() && "Location / site",
+    !String(form.leadEngineer || "").trim() && "Lead engineer / supervisor",
+    !String(form.jobRef || "").trim() && "Job reference",
+    !String(form.documentNo || "").trim() && "Document number",
+  ].filter(Boolean);
+  const sameProjectRecent = allRamsDocs.filter((d) => d.projectId && d.projectId === form.projectId).slice(0, 5);
+  const probableDuplicate = allRamsDocs.find((d) => String(d.title || "").trim().toLowerCase() === String(form.title || "").trim().toLowerCase() && d.id !== form.id);
+
+  const presetTemplates = [
+    { key: "surveying", label: "Surveying", title: "PAS128 utility mapping survey", scope: "Utility detection and mapping operations with control zones and QA checks." },
+    { key: "hot_works", label: "Hot works", title: "Hot works maintenance operation", scope: "Controlled hot works with fire watch, permit interface and post-work checks." },
+    { key: "electrical", label: "Electrical", title: "Electrical isolation and maintenance task", scope: "Safe isolation, verification and controlled electrical maintenance activities." },
+  ];
+
+  const applyPreset = (presetKey) => {
+    const preset = presetTemplates.find((p) => p.key === presetKey);
+    if (!preset) return;
+    trackEvent("rams_header_preset_applied", { preset: presetKey });
+    setForm((f) => ({
+      ...f,
+      title: f.title || preset.title,
+      scope: f.scope || preset.scope,
+      communicationPlan: f.communicationPlan || "Brief all operatives, confirm stop-work authority and permit interfaces before start.",
+    }));
+  };
+
+  const suggestTitles = () => {
+    if (!isFeatureEnabled("rams_header_ai_suggest")) return;
+    const projectName = projects.find((p) => p.id === form.projectId)?.name || "Project";
+    const base = String(form.surveyWorkTypeLabel || form.surveyWorkType || "works").replace(/_/g, " ");
+    const suggestions = [
+      `${projectName} - ${base} RAMS`,
+      `${base} method statement (${projectName})`,
+      `${projectName} safe system of work (${today()})`,
+    ];
+    setTitleSuggestions(suggestions);
+    trackEvent("rams_header_ai_suggest_clicked", { projectId: form.projectId || "", workType: form.surveyWorkType || "" });
+  };
+
+  const saveRecentHeaderValue = (group, rawValue) => {
+    const value = String(rawValue || "").trim();
+    if (!value) return;
+    setRecentHeaderValues((prev) => {
+      const nextList = [value, ...(prev[group] || []).filter((x) => x !== value)].slice(0, 3);
+      const next = { ...prev, [group]: nextList };
+      save("rams_header_recent_values", next);
+      return next;
+    });
+  };
   const issueChecks = [
     { label: "Title and location", ok: !!(form.title?.trim() && form.location?.trim()) },
     { label: "Document number present", ok: !!String(form.documentNo || "").trim() },
@@ -827,90 +1243,252 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
   };
 
   return (
-    <div>
-      <div style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:20 }}>
-        Fill in the document header details. These appear on the cover page of the RAMS.
+    <div style={{ display:"flex", flexDirection:"column", minHeight:"min(72vh, 640px)" }}>
+      <div style={{ flex:1, minHeight:0 }}>
+      <div style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:20, lineHeight:1.5 }}>
+        Work through site, document control, team, hazard pack, then operatives. Use <strong>Further details</strong> for revision notes, client handover, assumptions, and optional site weather / emergency links.
+      </div>
+      {!smartFields && (
+        <div style={{ marginBottom:12, fontSize:12, color:"#633806", background:"#FAEEDA", border:"1px solid #f6d89f", borderRadius:8, padding:"8px 10px" }}>
+          Smart header assists are off. Enable <strong>rams_header_smart_fields</strong> under Settings → Developer if you want presets, chips, and readiness scoring.
+        </div>
+      )}
+      {smartFields && sameProjectRecent.length > 0 && (
+        <div style={{ marginBottom:10, fontSize:12, color:"#0C447C", background:"#E6F1FB", border:"1px solid #cfe3f8", borderRadius:8, padding:"8px 10px" }}>
+          Based on previous {sameProjectRecent.length} RAMS for this project.
+        </div>
+      )}
+      {smartFields && probableDuplicate && (
+        <div style={{ marginBottom:10, fontSize:12, color:"#791F1F", background:"#FCEBEB", border:"1px solid #f5c7c7", borderRadius:8, padding:"8px 10px" }}>
+          Similar RAMS already exists: "{probableDuplicate.title || "Untitled"}". Review before issuing.
+        </div>
+      )}
+
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+          {smartFields && (
+            <>
+              <span style={{ fontSize:11, padding:"2px 8px", borderRadius:20, background:"#E6F1FB", color:"#0C447C" }}>
+                Header completeness: {completenessScore}%
+              </span>
+              {headerMissing.length > 0 && (
+                <span style={{ fontSize:11, padding:"2px 8px", borderRadius:20, background:"#FAEEDA", color:"#633806" }}>
+                  Missing: {headerMissing.slice(0, 2).join(", ")}{headerMissing.length > 2 ? "..." : ""}
+                </span>
+              )}
+            </>
+          )}
+          <span style={{ fontSize:11, padding:"2px 8px", borderRadius:20, background:"#EAF3DE", color:"#27500A" }} title="Session draft timestamp from this browser">
+            {draftSavedAtLabel ? `Session draft: ${draftSavedAtLabel}` : "Session draft: not yet saved"}
+          </span>
+        </div>
+        <button type="button" onClick={() => setShowHeaderAdvanced((v) => !v)} style={{ ...ss.btn, fontSize:12, minHeight:34 }}>
+          {showHeaderAdvanced ? "Hide advanced" : "Show advanced"}
+        </button>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:12, marginBottom:12 }}>
-        <div style={{ gridColumn:"1/-1" }}>
-          <label style={ss.lbl}>Job / document title *</label>
-          <input value={form.title||""} onChange={e=>set("title",e.target.value)}
-            placeholder="e.g. Kettle removal and installation of new kettle" style={ss.inp} />
-        </div>
-        <div>
-          <label style={ss.lbl}>Location / site *</label>
-          <input value={form.location||""} onChange={e=>set("location",e.target.value)}
-            placeholder="e.g. Two Sisters Scunthorpe" style={ss.inp} />
-        </div>
-        <div>
-          <label style={ss.lbl}>Project</label>
-          <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp}>
-            <option value="">— Select project —</option>
-            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={ss.lbl}>Date</label>
-          <input type="date" value={form.date||today()} onChange={e=>set("date",e.target.value)} style={ss.inp} />
-        </div>
-        <div>
-          <label style={ss.lbl}>Lead engineer / supervisor</label>
-          <input value={form.leadEngineer||""} onChange={e=>set("leadEngineer",e.target.value)}
-            placeholder="e.g. D Anderson" style={ss.inp} />
-        </div>
-        <div>
-          <label style={ss.lbl}>Job reference</label>
-          <input value={form.jobRef||""} onChange={e=>set("jobRef",e.target.value)}
-            placeholder="e.g. FP1-DOLAV-001" style={ss.inp} />
-        </div>
-        <div>
-          <label style={ss.lbl}>Document no.</label>
-          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-            <input
-              value={form.documentNo||""}
-              onChange={e=>set("documentNo",e.target.value)}
-              placeholder={`e.g. ${generateRamsDocNo()}`}
-              style={{ ...ss.inp, flex: 1 }}
-            />
-            <button type="button" onClick={() => set("documentNo", generateRamsDocNo())} style={{ ...ss.btn, minHeight: 40, fontSize: 12 }}>
-              Auto
-            </button>
+      {smartFields && (
+      <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", marginBottom:10 }}>
+        <span style={{ fontSize:11, color:"var(--color-text-secondary)" }}>Quick presets:</span>
+        {presetTemplates.map((preset) => (
+          <button key={preset.key} type="button" onClick={() => applyPreset(preset.key)} style={{ ...ss.btn, fontSize:11, minHeight:30, padding:"4px 10px" }}>
+            {preset.label}
+          </button>
+        ))}
+      </div>
+      )}
+
+      <section className="app-rams-header-section" aria-labelledby="rams-h-site">
+        <h3 id="rams-h-site" className="app-rams-header-section-title">Project &amp; site</h3>
+        <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"0 0 10px", lineHeight:1.45 }}>
+          Start with the project (optional autofill), then location and RAMS date. Title is the document name on the cover.
+        </p>
+        <div className="app-rams-header-section-grid">
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={ss.lbl}>Project</label>
+            <select value={form.projectId||""} onChange={e=>{
+              const nextId = e.target.value;
+              const project = projects.find((p) => p.id === nextId);
+              trackEvent("rams_header_project_selected", { projectId: nextId || "" });
+              if (smartFields) {
+                setAutofillUndo({
+                  title: form.title,
+                  location: form.location,
+                  leadEngineer: form.leadEngineer,
+                  jobRef: form.jobRef,
+                });
+              }
+              setForm((f) => ({
+                ...f,
+                projectId: nextId,
+                location: f.location || project?.location || project?.site || f.location,
+                leadEngineer: f.leadEngineer || project?.leadEngineer || project?.owner || f.leadEngineer,
+                jobRef: f.jobRef || project?.code || project?.projectCode || f.jobRef,
+                title: f.title || (project ? `${project.name} - RAMS` : f.title),
+              }));
+            }} style={ss.inp}>
+              <option value="">— Select project —</option>
+              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {smartFields && autofillUndo && (
+              <button
+                type="button"
+                onClick={() => {
+                  setForm((f) => ({
+                    ...f,
+                    ...autofillUndo,
+                  }));
+                  setAutofillUndo(null);
+                  trackEvent("rams_header_undo_autofill", {});
+                }}
+                style={{ ...ss.btn, fontSize:11, marginTop:6, minHeight:30 }}
+              >
+                Undo project autofill
+              </button>
+            )}
+          </div>
+          <div>
+            <label style={ss.lbl}>Location / site *</label>
+            <input value={form.location||""} onChange={e=>set("location",e.target.value)}
+              onBlur={(e) => saveRecentHeaderValue("locations", e.target.value)}
+              placeholder="e.g. Two Sisters Scunthorpe" style={ss.inp} />
+            {smartFields && recentHeaderValues.locations.length > 0 && (
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6 }}>
+                {recentHeaderValues.locations.map((v) => (
+                  <button key={v} type="button" onClick={() => { set("location", v); trackEvent("rams_header_recent_chip_clicked", { field: "location" }); }} style={{ ...ss.btn, fontSize:11, minHeight:28, padding:"2px 8px" }}>{v}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <label style={ss.lbl}>RAMS date</label>
+            <input type="date" value={form.date||today()} onChange={e=>set("date",e.target.value)} style={ss.inp} />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={ss.lbl}>Job / document title *</label>
+            <div style={{ display:"flex", gap:6 }}>
+              <input value={form.title||""} onChange={e=>set("title",e.target.value)}
+                placeholder="e.g. Kettle removal and installation of new kettle" style={{ ...ss.inp, flex:1 }} />
+              {smartFields && (
+                <button type="button" onClick={suggestTitles} style={{ ...ss.btn, minHeight:40, fontSize:12 }}>Suggest</button>
+              )}
+            </div>
+            {smartFields && titleSuggestions.length > 0 && (
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6 }}>
+                {titleSuggestions.map((s) => (
+                  <button key={s} type="button" onClick={() => set("title", s)} style={{ ...ss.btn, fontSize:11, minHeight:30, padding:"3px 10px" }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-        <div>
-          <label style={ss.lbl}>Issue date</label>
-          <input type="date" value={form.issueDate||""} onChange={e=>set("issueDate",e.target.value)} style={ss.inp} />
+      </section>
+
+      <section className="app-rams-header-section" aria-labelledby="rams-h-doc">
+        <h3 id="rams-h-doc" className="app-rams-header-section-title">Document control</h3>
+        <div className="app-rams-header-section-grid">
+          <div>
+            <label style={ss.lbl}>Document no.</label>
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <input
+                value={form.documentNo||""}
+                onChange={e=>set("documentNo",e.target.value)}
+                placeholder={`e.g. ${generateRamsDocNo()}`}
+                style={{ ...ss.inp, flex: 1 }}
+              />
+              <button type="button" onClick={() => set("documentNo", generateRamsDocNo())} style={{ ...ss.btn, minHeight: 40, fontSize: 12 }}>
+                Auto
+              </button>
+            </div>
+          </div>
+          <div>
+            <label style={ss.lbl}>Revision</label>
+            <input value={form.revision||"1A"} onChange={e=>set("revision",e.target.value)} placeholder="1A" style={ss.inp} />
+          </div>
+          <div>
+            <label style={ss.lbl}>Issue date</label>
+            <input type="date" value={form.issueDate||""} onChange={e=>set("issueDate",e.target.value)} style={ss.inp} />
+          </div>
+          <div>
+            <label style={ss.lbl}>Document status</label>
+            <select value={form.documentStatus||"draft"} onChange={e=>set("documentStatus",e.target.value)} style={ss.inp}>
+              {RAMS_STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={ss.lbl}>Review due date</label>
+            <input type="date" value={form.reviewDate||""} onChange={e=>set("reviewDate",e.target.value)} style={ss.inp} />
+          </div>
+          <div>
+            <label style={ss.lbl}>Approved by</label>
+            <input value={form.approvedBy||""} onChange={e=>set("approvedBy",e.target.value)}
+              placeholder="e.g. Operations manager" style={ss.inp} />
+          </div>
+          <div>
+            <label style={ss.lbl}>Approval date</label>
+            <input type="date" value={form.approvalDate||""} onChange={e=>set("approvalDate",e.target.value)} style={ss.inp} />
+          </div>
         </div>
-        <div>
-          <label style={ss.lbl}>Document status</label>
-          <select value={form.documentStatus||"draft"} onChange={e=>set("documentStatus",e.target.value)} style={ss.inp}>
-            {RAMS_STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s.replace(/_/g, " ")}
-              </option>
-            ))}
-          </select>
+      </section>
+
+      <section className="app-rams-header-section" aria-labelledby="rams-h-team">
+        <h3 id="rams-h-team" className="app-rams-header-section-title">Team &amp; job reference</h3>
+        <div className="app-rams-header-section-grid">
+          <div>
+            <label style={ss.lbl}>Lead engineer / supervisor</label>
+            <input value={form.leadEngineer||""} onChange={e=>set("leadEngineer",e.target.value)}
+              onBlur={(e) => saveRecentHeaderValue("leads", e.target.value)}
+              placeholder="e.g. D Anderson" style={ss.inp} />
+            {smartFields && recentHeaderValues.leads.length > 0 && (
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6 }}>
+                {recentHeaderValues.leads.map((v) => (
+                  <button key={v} type="button" onClick={() => { set("leadEngineer", v); trackEvent("rams_header_recent_chip_clicked", { field: "leadEngineer" }); }} style={{ ...ss.btn, fontSize:11, minHeight:28, padding:"2px 8px" }}>{v}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <label style={ss.lbl}>Job reference</label>
+            <input value={form.jobRef||""} onChange={e=>set("jobRef",e.target.value)}
+              onBlur={(e) => saveRecentHeaderValue("refs", e.target.value)}
+              placeholder="e.g. FP1-DOLAV-001" style={ss.inp} />
+            {!String(form.jobRef || "").trim() && (
+              <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>
+                Suggested format: PRJ-{new Date().getFullYear()}-###
+              </div>
+            )}
+            {smartFields && recentHeaderValues.refs.length > 0 && (
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6 }}>
+                {recentHeaderValues.refs.map((v) => (
+                  <button key={v} type="button" onClick={() => { set("jobRef", v); trackEvent("rams_header_recent_chip_clicked", { field: "jobRef" }); }} style={{ ...ss.btn, fontSize:11, minHeight:28, padding:"2px 8px" }}>{v}</button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <div>
-          <label style={ss.lbl}>Review due date</label>
-          <input type="date" value={form.reviewDate||""} onChange={e=>set("reviewDate",e.target.value)} style={ss.inp} />
+      </section>
+
+      {smartFields && (
+      <div style={{ marginBottom:12, ...ss.card, padding:10, border:"0.5px solid #e2e8f0" }}>
+        <div style={{ fontSize:11, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6 }}>
+          Cover preview
         </div>
-        <div>
-          <label style={ss.lbl}>Revision</label>
-          <input value={form.revision||"1A"} onChange={e=>set("revision",e.target.value)} placeholder="1A" style={{ ...ss.inp, width:"auto" }} />
-        </div>
-        <div>
-          <label style={ss.lbl}>Approved by</label>
-          <input value={form.approvedBy||""} onChange={e=>set("approvedBy",e.target.value)}
-            placeholder="e.g. Operations manager" style={ss.inp} />
-        </div>
-        <div>
-          <label style={ss.lbl}>Approval date</label>
-          <input type="date" value={form.approvalDate||""} onChange={e=>set("approvalDate",e.target.value)} style={ss.inp} />
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
+          <div><span style={{ color:"var(--color-text-secondary)" }}>Title:</span> {form.title || "—"}</div>
+          <div><span style={{ color:"var(--color-text-secondary)" }}>Project:</span> {projects.find((p) => p.id === form.projectId)?.name || "—"}</div>
+          <div><span style={{ color:"var(--color-text-secondary)" }}>Location:</span> {form.location || "—"}</div>
+          <div><span style={{ color:"var(--color-text-secondary)" }}>Lead:</span> {form.leadEngineer || "—"}</div>
         </div>
       </div>
+      )}
 
+      {smartFields && (
       <div style={{ ...ss.card, marginBottom:20, padding:12, border:"0.5px solid #d9e2ec" }}>
         <div style={{ fontSize:11, fontWeight:700, color:"#0f172a", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.05em" }}>
           Issue readiness checks
@@ -936,7 +1514,10 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
           ))}
         </div>
       </div>
+      )}
 
+      {showHeaderAdvanced && (
+        <>
       <div style={{ ...ss.card, marginBottom:20, padding:12, border:"0.5px solid #dbeafe", background:"#f8fbff" }}>
         <div style={{ fontSize:11, fontWeight:700, color:"#0f172a", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.05em" }}>
           Strict quality mode
@@ -981,13 +1562,13 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
         <textarea value={form.scope||""} onChange={e=>set("scope",e.target.value)}
           placeholder="Describe the work to be carried out…" style={ss.ta} rows={3} />
       </div>
+      </>
+      )}
 
-      <div style={{ marginBottom:20, ...ss.card, padding:12 }}>
-        <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.05em" }}>
-          Surveying RAMS accelerator
-        </div>
-        <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:10 }}>
-          Pulls in surveying method statement wording inspired by processing-tracker plus recommended hazard rows.
+      <section className="app-rams-header-section" style={{ background: "var(--color-background-primary,#fff)" }} aria-labelledby="rams-h-pack">
+        <h3 id="rams-h-pack" className="app-rams-header-section-title">Hazard pack (surveying)</h3>
+        <div style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"0 0 10px", lineHeight:1.45 }}>
+          Optional: apply a surveying pack before Step 2. RAMS hazards stay the source of truth for risk rows.
         </div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
           <select value={surveyPackKey} onChange={(e) => setSurveyPackKey(e.target.value)} style={{ ...ss.inp, minWidth: 260 }}>
@@ -1009,8 +1590,127 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
               Active: {form.surveyWorkTypeLabel || SURVEYING_PACKS.find((p) => p.key === form.surveyWorkType)?.label || form.surveyWorkType}
             </span>
           )}
+          <button type="button" onClick={() => setShowSurveyAdvanced((v) => !v)} style={{ ...ss.btn, minHeight: 40, fontSize:12 }}>
+            {showSurveyAdvanced ? "Hide recommendations" : "Show recommendations"}
+          </button>
         </div>
-      </div>
+        {selectedSurveyPack && (
+          <div style={{ marginTop:10, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:10, background:"var(--color-background-secondary,#f7f7f5)" }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"var(--color-text-secondary)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.04em" }}>
+              Pack readiness requirements
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:10 }}>
+              <div>
+                <div style={{ fontSize:11, fontWeight:600, marginBottom:4 }}>Permit dependencies</div>
+                <ul style={{ margin:0, paddingLeft:16, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>
+                  {(selectedSurveyMeta.permitDependencies || []).map((x) => <li key={`pd_${x}`}>{x}</li>)}
+                </ul>
+              </div>
+              <div>
+                <div style={{ fontSize:11, fontWeight:600, marginBottom:4 }}>Required competencies</div>
+                <ul style={{ margin:0, paddingLeft:16, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>
+                  {(selectedSurveyMeta.requiredCerts || []).map((x) => <li key={`rc_${x}`}>{x}</li>)}
+                </ul>
+              </div>
+              <div>
+                <div style={{ fontSize:11, fontWeight:600, marginBottom:4 }}>Mandatory evidence</div>
+                <ul style={{ margin:0, paddingLeft:16, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>
+                  {(selectedSurveyMeta.mandatoryEvidence || []).map((x) => <li key={`ev_${x}`}>{x}</li>)}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+        {showSurveyAdvanced && (
+          <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginTop:10 }}>
+            RAMS remains the primary hazard source. This panel only applies surveying pack wording and suggested rows.
+          </div>
+        )}
+        {String(form.location || "").toLowerCase().includes("zone") && (
+          <div style={{ marginTop:8, fontSize:11, color:"#633806", background:"#FAEEDA", padding:"6px 8px", borderRadius:6 }}>
+            Hint: This location looks zone-based. Verify hazard pack selection and permit interfaces before Step 2.
+          </div>
+        )}
+      </section>
+
+      <section className="app-rams-header-section" aria-labelledby="rams-h-ops">
+        <h3 id="rams-h-ops" className="app-rams-header-section-title">Operatives on this RAMS</h3>
+        <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"0 0 10px", lineHeight:1.45 }}>
+          Select workers for this document. You can include certificates in print when the option below is enabled.
+        </p>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          {workers.map(w=>{
+            const sel = (form.operativeIds||[]).includes(w.id);
+            return (
+              <button key={w.id} type="button" onClick={()=>set("operativeIds", sel ? (form.operativeIds||[]).filter(id=>id!==w.id) : [...(form.operativeIds||[]),w.id])}
+                style={{ padding:"4px 12px", borderRadius:20, fontSize:12, cursor:"pointer", fontFamily:"DM Sans,sans-serif",
+                  background:sel?"#0d9488":"var(--color-background-secondary,#f7f7f5)",
+                  color:sel?"#E1F5EE":"var(--color-text-primary)",
+                  border:sel?"0.5px solid #085041":"0.5px solid var(--color-border-secondary,#ccc)" }}>
+                {w.name}
+              </button>
+            );
+          })}
+          {workers.length===0 && <span style={{ fontSize:12, color:"var(--color-text-secondary)" }}>No workers added yet — add workers in the Workers module.</span>}
+        </div>
+        {workers.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, operativeIds: workers.map((w) => w.id) }))}
+              style={{ ...ss.btn, fontSize: 12, padding: "6px 12px", minHeight: 36 }}
+            >
+              Select all operatives
+            </button>
+            <button
+              type="button"
+              onClick={() => setForm((f) => ({ ...f, operativeIds: [] }))}
+              style={{ ...ss.btn, fontSize: 12, padding: "6px 12px", minHeight: 36 }}
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
+        {(form.operativeIds || []).length > 0 && (
+          <label style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer", fontSize:13, marginTop:12, maxWidth:640, lineHeight:1.45 }}>
+            <input
+              type="checkbox"
+              checked={normalizePrintSections(form.printSections)[RAMS_SECTION_IDS.OPERATIVE_CERTS] === true}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  printSections: { ...f.printSections, operative_certs: e.target.checked },
+                }))
+              }
+              style={{ accentColor:"#0d9488", width:15, height:15, marginTop:2, flexShrink:0 }}
+            />
+            <span>
+              Include <strong>certificates &amp; competencies</strong> for selected operatives (from Workers: dated certs and free-text notes). Optional — appears in preview/print when enabled.
+            </span>
+          </label>
+        )}
+      </section>
+
+      <div className="app-rams-more-details-wrap">
+        <button
+          type="button"
+          className="app-rams-more-details-toggle"
+          onClick={() => setShowMoreDetails((v) => !v)}
+          aria-expanded={showMoreDetails}
+        >
+          <span style={{ fontWeight:600 }}>{showMoreDetails ? "Hide further details" : "Further details"}</span>
+          <span className="app-rams-more-details-badge">{moreDetailsFilledCount ? `${moreDetailsFilledCount} filled` : "Optional"}</span>
+        </button>
+        {showMoreDetails && (
+        <div className="app-rams-more-details-inner">
+        <div style={{ marginBottom:14, padding:"8px 10px", borderRadius:8, background:"var(--color-background-secondary,#f7f7f5)", border:"1px solid var(--color-border-tertiary,#e5e5e5)" }}>
+          <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:6 }}>Quick dates</div>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            <button type="button" onClick={() => set("date", today())} style={{ ...ss.btn, fontSize:11, minHeight:28 }}>RAMS date: today</button>
+            <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 7); set("reviewDate", d.toISOString().slice(0,10)); }} style={{ ...ss.btn, fontSize:11, minHeight:28 }}>Review +7 days</button>
+            <button type="button" onClick={() => { const d = new Date(); const eom = new Date(d.getFullYear(), d.getMonth() + 1, 0); set("reviewDate", eom.toISOString().slice(0,10)); }} style={{ ...ss.btn, fontSize:11, minHeight:28 }}>Review end of month</button>
+          </div>
+        </div>
 
       <div style={{ marginBottom:20 }}>
         <label style={ss.lbl}>Revision note / change summary</label>
@@ -1087,61 +1787,6 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
         </div>
       </div>
 
-      <div style={{ marginBottom:20 }}>
-        <label style={ss.lbl}>Operatives / workers on this RAMS</label>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-          {workers.map(w=>{
-            const sel = (form.operativeIds||[]).includes(w.id);
-            return (
-              <button key={w.id} type="button" onClick={()=>set("operativeIds", sel ? (form.operativeIds||[]).filter(id=>id!==w.id) : [...(form.operativeIds||[]),w.id])}
-                style={{ padding:"4px 12px", borderRadius:20, fontSize:12, cursor:"pointer", fontFamily:"DM Sans,sans-serif",
-                  background:sel?"#0d9488":"var(--color-background-secondary,#f7f7f5)",
-                  color:sel?"#E1F5EE":"var(--color-text-primary)",
-                  border:sel?"0.5px solid #085041":"0.5px solid var(--color-border-secondary,#ccc)" }}>
-                {w.name}
-              </button>
-            );
-          })}
-          {workers.length===0 && <span style={{ fontSize:12, color:"var(--color-text-secondary)" }}>No workers added yet — add workers in the Workers module.</span>}
-        </div>
-        {workers.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-            <button
-              type="button"
-              onClick={() => setForm((f) => ({ ...f, operativeIds: workers.map((w) => w.id) }))}
-              style={{ ...ss.btn, fontSize: 12, padding: "6px 12px", minHeight: 36 }}
-            >
-              Select all operatives
-            </button>
-            <button
-              type="button"
-              onClick={() => setForm((f) => ({ ...f, operativeIds: [] }))}
-              style={{ ...ss.btn, fontSize: 12, padding: "6px 12px", minHeight: 36 }}
-            >
-              Clear selection
-            </button>
-          </div>
-        )}
-        {(form.operativeIds || []).length > 0 && (
-          <label style={{ display:"flex", alignItems:"flex-start", gap:10, cursor:"pointer", fontSize:13, marginTop:12, maxWidth:640, lineHeight:1.45 }}>
-            <input
-              type="checkbox"
-              checked={normalizePrintSections(form.printSections)[RAMS_SECTION_IDS.OPERATIVE_CERTS] === true}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  printSections: { ...f.printSections, operative_certs: e.target.checked },
-                }))
-              }
-              style={{ accentColor:"#0d9488", width:15, height:15, marginTop:2, flexShrink:0 }}
-            />
-            <span>
-              Include <strong>certificates &amp; competencies</strong> for selected operatives (from Workers: dated certs and free-text notes). Optional — appears in preview/print when enabled.
-            </span>
-          </label>
-        )}
-      </div>
-
       <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", margin:"20px 0 10px" }}>
         Site weather, map &amp; emergency (optional)
       </div>
@@ -1200,8 +1845,36 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
         </div>
       </div>
 
-      <div style={{ display:"flex", justifyContent:"flex-end" }}>
-        <button type="button" disabled={!valid} onClick={onNext} style={{ ...ss.btnP, opacity:valid?1:0.4 }}>
+        </div>
+        )}
+      </div>
+
+      </div>
+      <div style={{
+        position: "sticky",
+        bottom: 0,
+        marginTop: 16,
+        paddingTop: 12,
+        paddingBottom: 4,
+        background: "var(--color-background-primary,#fff)",
+        borderTop: "1px solid var(--color-border-tertiary,#e5e5e5)",
+        display: "flex",
+        justifyContent: "flex-end",
+        gap: 8,
+        zIndex: 2,
+      }}>
+        <button
+          type="button"
+          onClick={() => {
+            if (!valid) {
+              trackEvent("rams_header_next_blocked_validation", { missing: headerMissing });
+              return;
+            }
+            if (smartFields) trackEvent("rams_header_quality_score_changed", { score: completenessScore });
+            onNext();
+          }}
+          style={{ ...ss.btnP, opacity:valid?1:0.4 }}
+        >
           Next — select hazards →
         </button>
       </div>
@@ -1229,6 +1902,7 @@ function HazardPicker({
   onRenameHazardPack,
   onDeleteHazardPack,
   onTogglePinHazardPack,
+  onSetHazardPackStatus,
   onCreateHazardPackVersion,
   onRollbackHazardPackVersion,
   onExportHazardPacks,
@@ -1260,6 +1934,9 @@ function HazardPicker({
   const quickPacks = useMemo(() => {
     const list = Array.isArray(hazardPacks) ? [...hazardPacks] : [];
     return list.sort((a, b) => {
+      const sa = String(a?.status || HAZARD_PACK_STATUS.CURRENT);
+      const sb = String(b?.status || HAZARD_PACK_STATUS.CURRENT);
+      if (sa !== sb) return sa === HAZARD_PACK_STATUS.CURRENT ? -1 : 1;
       const pa = a?.isPinned ? 1 : 0;
       const pb = b?.isPinned ? 1 : 0;
       if (pb !== pa) return pb - pa;
@@ -1449,6 +2126,7 @@ function HazardPicker({
       templates,
       version: 1,
       versionHistory: [],
+      status: HAZARD_PACK_STATUS.CURRENT,
       projectId: projectId || "",
       surveyWorkType: surveyWorkType || "",
       keywords: buildPackKeywords(templates),
@@ -1513,6 +2191,45 @@ function HazardPicker({
     }
     if (!window.confirm(`Rollback "${p.name}" to previous version?`)) return;
     onRollbackHazardPackVersion?.(selectedPackId);
+  };
+
+  const compareSelectedPackVersionDiff = () => {
+    if (!selectedPackId) return;
+    const p = quickPacks.find((x) => x.id === selectedPackId);
+    if (!p) return;
+    const snap = Array.isArray(p.versionHistory) ? p.versionHistory[0] : null;
+    if (!snap?.diff) {
+      window.alert("No previous version diff available. Create at least one new version first.");
+      return;
+    }
+    const lines = [
+      `${p.name} — version diff`,
+      `v${Math.max(1, Number(snap.version || 1))} -> v${Math.max(1, Number(p.version || 1))}`,
+      `Added: ${Number(snap.diff.addedCount || 0)} | Changed: ${Number(snap.diff.changedCount || 0)} | Removed: ${Number(snap.diff.removedCount || 0)}`,
+      "",
+    ];
+    const addedRows = Array.isArray(snap.diff.addedRows) ? snap.diff.addedRows.slice(0, 6) : [];
+    const changedRows = Array.isArray(snap.diff.changedRows) ? snap.diff.changedRows.slice(0, 6) : [];
+    const removedRows = Array.isArray(snap.diff.removedRows) ? snap.diff.removedRows.slice(0, 6) : [];
+    if (addedRows.length > 0) {
+      lines.push("Added activities:");
+      addedRows.forEach((r) => lines.push(`+ ${r.activity || "Activity"} (${r.category || "General"})`));
+      lines.push("");
+    }
+    if (changedRows.length > 0) {
+      lines.push("Changed activities:");
+      changedRows.forEach((r) => {
+        lines.push(
+          `~ ${r.activity || "Activity"}${r.risksChanged ? " [risk changed]" : ""}${(r.controlsAdded?.length || 0) > 0 ? ` [+${r.controlsAdded.length} controls]` : ""}${(r.controlsRemoved?.length || 0) > 0 ? ` [-${r.controlsRemoved.length} controls]` : ""}`
+        );
+      });
+      lines.push("");
+    }
+    if (removedRows.length > 0) {
+      lines.push("Removed activities:");
+      removedRows.forEach((r) => lines.push(`- ${r.activity || "Activity"} (${r.category || "General"})`));
+    }
+    window.alert(lines.join("\n"));
   };
 
   const importPacksFromFile = (e) => {
@@ -1589,7 +2306,7 @@ function HazardPicker({
             <option value="">— Select saved quick pack —</option>
             {quickPacks.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.isPinned ? "★ " : ""}{p.name} · v{Math.max(1, Number(p.version || 1))} ({(p.templates || []).length})
+                {p.isPinned ? "★ " : ""}{p.name} · v{Math.max(1, Number(p.version || 1))} ({(p.templates || []).length}) · {String(p.status || HAZARD_PACK_STATUS.CURRENT)}
               </option>
             ))}
           </select>
@@ -1610,8 +2327,29 @@ function HazardPicker({
           <button type="button" disabled={!selectedPackId} onClick={togglePinSelectedPack} style={{ ...ss.btn, fontSize:12, opacity:selectedPackId?1:0.6 }}>
             {quickPacks.find((p) => p.id === selectedPackId)?.isPinned ? "Unpin" : "Pin"}
           </button>
+          <button
+            type="button"
+            disabled={!selectedPackId}
+            onClick={() => {
+              const p = quickPacks.find((x) => x.id === selectedPackId);
+              if (!p) return;
+              const nextStatus =
+                String(p.status || HAZARD_PACK_STATUS.CURRENT) === HAZARD_PACK_STATUS.SUPERSEDED
+                  ? HAZARD_PACK_STATUS.CURRENT
+                  : HAZARD_PACK_STATUS.SUPERSEDED;
+              onSetHazardPackStatus?.(selectedPackId, nextStatus);
+            }}
+            style={{ ...ss.btn, fontSize:12, opacity:selectedPackId?1:0.6 }}
+          >
+            {String(quickPacks.find((p) => p.id === selectedPackId)?.status || HAZARD_PACK_STATUS.CURRENT) === HAZARD_PACK_STATUS.SUPERSEDED
+              ? "Mark current"
+              : "Mark superseded"}
+          </button>
           <button type="button" disabled={!selectedPackId} onClick={createNewVersionForSelectedPack} style={{ ...ss.btn, fontSize:12, opacity:selectedPackId?1:0.6 }}>
             Save new version
+          </button>
+          <button type="button" disabled={!selectedPackId} onClick={compareSelectedPackVersionDiff} style={{ ...ss.btn, fontSize:12, opacity:selectedPackId?1:0.6 }}>
+            Compare diff
           </button>
           <button type="button" disabled={!selectedPackId} onClick={rollbackSelectedPack} style={{ ...ss.btn, fontSize:12, opacity:selectedPackId?1:0.6 }}>
             Rollback
@@ -1632,11 +2370,48 @@ function HazardPicker({
           if (!p) return null;
           const historyCount = Array.isArray(p.versionHistory) ? p.versionHistory.length : 0;
           const lastChange = p.updatedAt || p.createdAt;
+          const latestSnapshot = Array.isArray(p.versionHistory) ? p.versionHistory[0] : null;
+          const status = String(p.status || HAZARD_PACK_STATUS.CURRENT);
           return (
-            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-tertiary,#64748b)" }}>
-              Version <strong style={{ color:"var(--color-text-primary)" }}>v{Math.max(1, Number(p.version || 1))}</strong>
-              {historyCount > 0 ? ` · ${historyCount} rollback point${historyCount !== 1 ? "s" : ""}` : " · no rollback points yet"}
-              {lastChange ? ` · updated ${fmtDateTime(lastChange)}` : ""}
+            <div style={{ marginTop:8 }}>
+              <div style={{ fontSize:11, color:"var(--color-text-tertiary,#64748b)" }}>
+                Version <strong style={{ color:"var(--color-text-primary)" }}>v{Math.max(1, Number(p.version || 1))}</strong>
+                {historyCount > 0 ? ` · ${historyCount} rollback point${historyCount !== 1 ? "s" : ""}` : " · no rollback points yet"}
+                {lastChange ? ` · updated ${fmtDateTime(lastChange)}` : ""}
+                <span
+                  style={{
+                    marginLeft: 8,
+                    padding: "1px 8px",
+                    borderRadius: 999,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    background: status === HAZARD_PACK_STATUS.SUPERSEDED ? "#FCEBEB" : "#EAF3DE",
+                    color: status === HAZARD_PACK_STATUS.SUPERSEDED ? "#7F1D1D" : "#27500A",
+                  }}
+                >
+                  {status}
+                </span>
+              </div>
+              {latestSnapshot?.diff && (
+                <div style={{ marginTop:6, fontSize:11, color:"#334155", lineHeight:1.4 }}>
+                  Diff v{Math.max(1, Number(latestSnapshot.version || 1))} → v{Math.max(1, Number(p.version || 1))}:{" "}
+                  +{Number(latestSnapshot.diff.addedCount || 0)} added ·
+                  {" "}{Number(latestSnapshot.diff.changedCount || 0)} changed ·
+                  {" "}{Number(latestSnapshot.diff.removedCount || 0)} removed
+                </div>
+              )}
+              {latestSnapshot?.diff?.changedRows?.length > 0 && (
+                <div style={{ marginTop:4, fontSize:11, color:"#475569" }}>
+                  {(latestSnapshot.diff.changedRows || []).slice(0, 3).map((row) => (
+                    <div key={`chg_${row.key}`}>
+                      • {row.activity}
+                      {row.controlsAdded?.length ? ` · +${row.controlsAdded.length} control(s)` : ""}
+                      {row.controlsRemoved?.length ? ` · -${row.controlsRemoved.length} control(s)` : ""}
+                      {row.risksChanged ? " · risk updated" : ""}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })()}
@@ -2181,6 +2956,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
 // ─── Step 4 — Preview & save ─────────────────────────────────────────────────
 function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSave, onBack }) {
   const [fpCopied, setFpCopied] = useState(false);
+  const [briefCopied, setBriefCopied] = useState(false);
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
   const projectMap = Object.fromEntries(projects.map(p=>[p.id,p.name]));
   const operatives = (form.operativeIds||[]).map(id=>workerMap[id]).filter(Boolean);
@@ -2313,6 +3089,7 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
       text: `${r.activity || "Activity"} — ${r.hazard || "Hazard"} · controls: ${(r.controlMeasures || []).slice(0, 2).join("; ") || "review controls before start"}`,
       rf: riskScore(r.revisedRisk),
     }));
+  const toolboxBriefV2 = buildToolboxBriefV2(rows, form);
   const categoryTrend = buildCategoryRiskTrend(rows);
   const detailedControlPack = buildDetailedControlMethodPack(rows);
   const controlAssurance = buildControlAssuranceSummary(detailedControlPack);
@@ -2336,6 +3113,7 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
     )
     .filter((x) => x.state === "expired" || x.state === "due")
     .sort((a, b) => (a.days ?? 9999) - (b.days ?? 9999));
+  const competencyRequirementCheck = buildCompetencyRequirementCheck(form.surveyRequiredCerts, selectedWorkers);
   const avgReduction =
     rows.length > 0
       ? Math.round(
@@ -2354,6 +3132,26 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
   };
   const statusKey = String(form.documentStatus || "draft");
   const statusTone = statusStyles[statusKey] || statusStyles.draft;
+  const issueBlockedByCompetency = statusKey === "issued" && competencyRequirementCheck.blocked;
+  const toolboxBriefText = [
+    "AUTO-TOOLBOX BRIEF V2",
+    `Doc: ${form.documentNo || "—"} | Rev: ${form.revision || "—"} | Status: ${String(form.documentStatus || "draft").replace(/_/g, " ")}`,
+    `Location: ${form.location || "—"} | Lead: ${form.leadEngineer || "—"} | Date: ${fmtDate(form.issueDate || form.date)}`,
+    "",
+    "Must-brief points:",
+    ...toolboxBriefV2.mustBriefPoints.map((p, i) => `${i + 1}. ${p}`),
+    "",
+    "Dynamic risk priorities:",
+    ...(toolboxBriefV2.topRisks.length
+      ? toolboxBriefV2.topRisks.map((r, i) => `${i + 1}. RF ${r.rf} — ${r.activity} (${r.hazard})${r.controls.length ? ` | controls: ${r.controls.join("; ")}` : ""}`)
+      : ["1. No risk rows selected yet."]),
+  ].join("\n");
+  const copyToolboxBrief = () => {
+    navigator.clipboard?.writeText(toolboxBriefText).then(() => {
+      setBriefCopied(true);
+      setTimeout(() => setBriefCopied(false), 1800);
+    }).catch(() => {});
+  };
   const liveChangeSummary = editingDoc ? buildChangeSummary(editingDoc, form, rows) : "";
   const signatureEvents = Array.isArray(form.signatureEvents)
     ? [...form.signatureEvents]
@@ -2474,8 +3272,41 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
       </div>
 
       <div style={{ ...ss.card, marginBottom: 14, padding: 12 }}>
-        <div style={{ fontSize:11, fontWeight:700, color:"#0f172a", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.05em" }}>
-          Daily briefing points (toolbox talk)
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:8 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#0f172a", textTransform:"uppercase", letterSpacing:"0.05em" }}>
+            Auto-toolbox brief v2 (1-page)
+          </div>
+          <button type="button" onClick={copyToolboxBrief} style={{ ...ss.btn, fontSize:11, minHeight:30, padding:"4px 10px" }}>
+            {briefCopied ? "Brief copied" : "Copy brief text"}
+          </button>
+        </div>
+        <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:8 }}>
+          {toolboxBriefV2.headline}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:10, marginBottom:10 }}>
+          <div style={{ border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px", background:"#fff" }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#0f172a", marginBottom:6 }}>Must-brief points</div>
+            <ul style={{ margin:0, paddingLeft:16, display:"flex", flexDirection:"column", gap:4 }}>
+              {toolboxBriefV2.mustBriefPoints.map((point) => (
+                <li key={point} style={{ fontSize:12, color:"var(--color-text-secondary)" }}>{point}</li>
+              ))}
+            </ul>
+          </div>
+          <div style={{ border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px", background:"#fff" }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#0f172a", marginBottom:6 }}>Dynamic risk priorities</div>
+            {toolboxBriefV2.topRisks.length === 0 ? (
+              <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>No risk rows yet.</div>
+            ) : (
+              <ol style={{ margin:0, paddingLeft:18, display:"flex", flexDirection:"column", gap:5 }}>
+                {toolboxBriefV2.topRisks.map((item) => (
+                  <li key={item.id} style={{ fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.4 }}>
+                    <strong style={{ color:"var(--color-text-primary)" }}>RF {item.rf}</strong> — {item.activity} ({item.hazard})
+                    {item.controls.length ? ` · controls: ${item.controls.join("; ")}` : ""}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
         </div>
         {briefingPoints.length === 0 ? (
           <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>No risk rows yet — add hazards to generate briefing points.</div>
@@ -2612,6 +3443,46 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {competencyRequirementCheck.required.length > 0 && (
+        <div
+          style={{
+            ...ss.card,
+            marginBottom: 14,
+            padding: 12,
+            border: competencyRequirementCheck.blocked ? "0.5px solid #fecaca" : "0.5px solid #bbf7d0",
+            background: competencyRequirementCheck.blocked ? "#fff7f7" : "#f0fdf4",
+          }}
+        >
+          <div style={{ fontSize:11, fontWeight:700, color:competencyRequirementCheck.blocked ? "#7F1D1D" : "#14532d", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.05em" }}>
+            Competency hard-stop check
+          </div>
+          <div style={{ fontSize:12, color:competencyRequirementCheck.blocked ? "#7F1D1D" : "#166534", marginBottom:6 }}>
+            Required competencies configured: {competencyRequirementCheck.required.length}
+            {competencyRequirementCheck.blocked
+              ? ` · missing ${competencyRequirementCheck.missing.length} requirement(s) for selected team`
+              : " · all requirements covered by selected team"}
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+            {competencyRequirementCheck.required.map((req) => {
+              const hit = competencyRequirementCheck.matched.find((m) => m.requirement === req);
+              const miss = competencyRequirementCheck.missing.find((m) => m.requirement === req);
+              const ok = !!hit && !miss;
+              const expiredOnly = Array.isArray(miss?.expiredWorkers) ? miss.expiredWorkers : [];
+              const names = ok
+                ? hit.matchedWorkers.join(", ")
+                : expiredOnly.length > 0
+                ? `Only expired: ${expiredOnly.join(", ")}`
+                : "Missing in selected operatives";
+              return (
+                <div key={req} style={{ fontSize:12, color: ok ? "#14532d" : "#7F1D1D" }}>
+                  {ok ? "✓" : "!"} <strong>{req}</strong> — {names}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -3250,11 +4121,16 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="3" y="1" width="10" height="10" rx="1"/><path d="M1 8h14v6H1z"/><path d="M5 14v-3h6v3"/><circle cx="12" cy="11" r=".5" fill="currentColor"/></svg>
             Print / PDF
           </button>
-          <button type="button" onClick={onSave} style={ss.btnO}>
-            Save RAMS
+          <button type="button" onClick={onSave} disabled={issueBlockedByCompetency} style={{ ...ss.btnO, opacity: issueBlockedByCompetency ? 0.55 : 1 }}>
+            {issueBlockedByCompetency ? "Save blocked (competency)" : "Save RAMS"}
           </button>
         </div>
       </div>
+      {issueBlockedByCompetency && (
+        <div style={{ marginTop:8, fontSize:12, color:"#7F1D1D" }}>
+          Status is <strong>issued</strong> and required competencies are missing for selected operatives. Assign competent workers or change status before saving.
+        </div>
+      )}
     </div>
   );
 }
@@ -3442,9 +4318,9 @@ function SavedList({
                   type="button"
                   onClick={() => onPrintProjectPack(doc)}
                   style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}
-                  title="RAMS plus every permit linked to the same project (A4); new tab — Print → Save as PDF"
+                  title="One-click Site Pack: RAMS + project permits + audit summary + key contacts (A4)"
                 >
-                  A4 pack
+                  Site Pack
                 </button>
                 <button type="button" onClick={()=>onDuplicate(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Duplicate</button>
                 <button type="button" onClick={()=>onToggleFavorite(doc.id)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Pin/unpin document as favorite">
@@ -3486,6 +4362,10 @@ function formShapeForCompare(f) {
     surveyMethodStatement: f.surveyMethodStatement,
     surveyDeliverables: f.surveyDeliverables,
     surveyAssumptions: f.surveyAssumptions,
+    surveyRequiredPermits: [...(f.surveyRequiredPermits || [])],
+    surveyRequiredCerts: [...(f.surveyRequiredCerts || [])],
+    surveyEvidenceSet: [...(f.surveyEvidenceSet || [])],
+    surveyHoldPoints: [...(f.surveyHoldPoints || [])],
     communicationPlan: f.communicationPlan,
     handoverClientName: f.handoverClientName,
     handoverReceiver: f.handoverReceiver,
@@ -3769,6 +4649,7 @@ export default function RAMSTemplateBuilder() {
                 ...pack,
                 version: Math.max(1, Number(pack.version || p.version || 1)),
                 versionHistory: Array.isArray(pack.versionHistory) ? pack.versionHistory : (p.versionHistory || []),
+                status: String(pack.status || p.status || HAZARD_PACK_STATUS.CURRENT),
                 updatedAt: new Date().toISOString(),
               }
             : p
@@ -3779,6 +4660,7 @@ export default function RAMSTemplateBuilder() {
           ...pack,
           version: Math.max(1, Number(pack.version || 1)),
           versionHistory: Array.isArray(pack.versionHistory) ? pack.versionHistory : [],
+          status: String(pack.status || HAZARD_PACK_STATUS.CURRENT),
           updatedAt: new Date().toISOString(),
         },
         ...prev,
@@ -3813,6 +4695,23 @@ export default function RAMSTemplateBuilder() {
     );
   };
 
+  const setHazardPackStatus = (id, status) => {
+    if (!id) return;
+    const nextStatus = String(status || HAZARD_PACK_STATUS.CURRENT);
+    if (![HAZARD_PACK_STATUS.CURRENT, HAZARD_PACK_STATUS.SUPERSEDED].includes(nextStatus)) return;
+    setHazardPacks((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              status: nextStatus,
+              updatedAt: new Date().toISOString(),
+            }
+          : p
+      )
+    );
+  };
+
   const createHazardPackVersion = (id, templates, note, meta) => {
     if (!id || !Array.isArray(templates) || templates.length === 0) return;
     setHazardPacks((prev) =>
@@ -3821,12 +4720,14 @@ export default function RAMSTemplateBuilder() {
         const now = new Date().toISOString();
         const prevVersion = Math.max(1, Number(p.version || 1));
         const nextVersion = prevVersion + 1;
+        const diff = buildPackVersionDiff(p.templates, templates);
         const historyEntry = {
           version: prevVersion,
           templates: Array.isArray(p.templates) ? p.templates : [],
           at: now,
           note: String(note || "").trim() || "Version snapshot",
           templateCount: Array.isArray(p.templates) ? p.templates.length : 0,
+          diff,
         };
         return {
           ...p,
@@ -3836,6 +4737,7 @@ export default function RAMSTemplateBuilder() {
           projectId: meta?.projectId || p.projectId || "",
           surveyWorkType: meta?.surveyWorkType || p.surveyWorkType || "",
           keywords: Array.isArray(meta?.keywords) && meta.keywords.length ? meta.keywords : (p.keywords || []),
+          status: HAZARD_PACK_STATUS.CURRENT,
           updatedAt: now,
         };
       })
@@ -3857,6 +4759,7 @@ export default function RAMSTemplateBuilder() {
           templates: Array.isArray(snap.templates) ? snap.templates : p.templates,
           version: Math.max(1, Number(snap.version || 1)),
           versionHistory: rest,
+          status: HAZARD_PACK_STATUS.CURRENT,
           updatedAt: new Date().toISOString(),
         };
       })
@@ -3891,6 +4794,7 @@ export default function RAMSTemplateBuilder() {
         isPinned: !!p?.isPinned,
         version: Math.max(1, Number(p?.version || 1)),
         versionHistory: Array.isArray(p?.versionHistory) ? p.versionHistory : [],
+        status: String(p?.status || HAZARD_PACK_STATUS.CURRENT),
         projectId: String(p?.projectId || ""),
         surveyWorkType: String(p?.surveyWorkType || ""),
         keywords: Array.isArray(p?.keywords) ? p.keywords.filter(Boolean).map((x) => String(x).toLowerCase()).slice(0, 20) : [],
@@ -3911,6 +4815,9 @@ export default function RAMSTemplateBuilder() {
 
   const applyHazardPack = (pack) => {
     if (!pack || !Array.isArray(pack.templates) || pack.templates.length === 0) return;
+    if (String(pack.status || HAZARD_PACK_STATUS.CURRENT) === HAZARD_PACK_STATUS.SUPERSEDED) {
+      if (!window.confirm(`"${pack.name}" is marked superseded. Apply anyway?`)) return;
+    }
     const existing = new Set(selectedHazards.map((s) => s.id));
     const toAdd = pack.templates.filter((t) => t && t.templateId && !existing.has(t.templateId));
     if (toAdd.length === 0) {
@@ -4027,6 +4934,7 @@ export default function RAMSTemplateBuilder() {
   const applySurveyPack = (packKey) => {
     const pack = findSurveyPackByKey(packKey);
     if (!pack) return;
+    const meta = surveyPackMetaFor(pack.key);
     setForm((prev) => {
       const scoped = String(prev.scope || "").trim();
       const addLine = `Surveying addendum: ${pack.scope}`;
@@ -4048,10 +4956,14 @@ export default function RAMSTemplateBuilder() {
           "Utility records available before start, access to survey extents confirmed, and site induction completed by all operatives.",
         communicationPlan:
           prev.communicationPlan ||
-          "Daily briefing before start; stop-work escalation via supervisor; permit coordination with site manager; end-of-day handover to client rep.",
+          `Daily briefing before start; stop-work escalation via supervisor; permit coordination with site manager; end-of-day handover to client rep.\n\nPermit dependencies:\n- ${(meta.permitDependencies || []).join("\n- ")}`,
         handoverNotes:
           prev.handoverNotes ||
           "Handover includes briefing outcomes, residual risk alerts, and confirmation that controls remain in place for issue status.",
+        surveyRequiredPermits: meta.permitDependencies || [],
+        surveyRequiredCerts: meta.requiredCerts || [],
+        surveyEvidenceSet: meta.mandatoryEvidence || [],
+        surveyHoldPoints: meta.holdPoints || [],
         scope: mergedScope,
       };
     });
@@ -4068,8 +4980,10 @@ export default function RAMSTemplateBuilder() {
         ]);
       }
       window.alert(`Applied "${pack.label}". Added ${toAdd.length} recommended hazard row(s).`);
+      trackEvent("rams_survey_pack_applied", { pack: pack.key, hazardsAdded: toAdd.length });
       return;
     }
+    trackEvent("rams_survey_pack_applied", { pack: pack.key, hazardsAdded: 0 });
     window.alert(`Applied "${pack.label}". No matching hazard rows were found automatically; you can add hazards manually in Step 2.`);
   };
 
@@ -4102,6 +5016,21 @@ export default function RAMSTemplateBuilder() {
     const qaChecksOnSave = buildQaChecklist(form, editedRows, (form.operativeIds || []).length);
     const qaPassOnSave = qaChecksOnSave.filter((x) => x.ok).length;
     const qaPctOnSave = qaChecksOnSave.length ? Math.round((qaPassOnSave / qaChecksOnSave.length) * 100) : 0;
+    const selectedWorkersOnSave = (form.operativeIds || []).map((id) => workers.find((w) => w.id === id)).filter(Boolean);
+    const competencyCheckOnSave = buildCompetencyRequirementCheck(form.surveyRequiredCerts, selectedWorkersOnSave);
+    if (resolvedStatus === "issued" && competencyCheckOnSave.blocked) {
+      const missingList = competencyCheckOnSave.missing
+        .map((m) => {
+          const expired = Array.isArray(m.expiredWorkers) ? m.expiredWorkers : [];
+          if (expired.length === 0) return `- ${m.requirement}`;
+          return `- ${m.requirement} (only expired in team: ${expired.join(", ")})`;
+        })
+        .join("\n");
+      window.alert(
+        `Cannot save as ISSUED: required competencies are missing in selected team.\n\n${missingList}\n\nAssign competent operatives or lower document status.`
+      );
+      return;
+    }
     if (form.strictMode && ["approved", "issued"].includes(resolvedStatus) && qaPassOnSave !== qaChecksOnSave.length) {
       window.alert(
         `Strict mode blocks ${resolvedStatus.toUpperCase()}: ${qaPassOnSave}/${qaChecksOnSave.length} checks passed. Complete all strict checks or lower status.`
@@ -4201,6 +5130,56 @@ export default function RAMSTemplateBuilder() {
     openRamsPrintWindow(doc, doc.rows || [], workers, projects);
   };
 
+  const buildSitePackMeta = (doc, permitsForProject) => {
+    let org = {};
+    try {
+      org = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+    } catch {
+      org = {};
+    }
+    const contactMap = new Map();
+    const pushContact = (name, role, channel = "") => {
+      const trimmed = String(name || "").trim();
+      if (!trimmed) return;
+      const key = `${trimmed.toLowerCase()}|${String(role || "").toLowerCase()}|${String(channel || "").toLowerCase()}`;
+      if (!contactMap.has(key)) {
+        contactMap.set(key, { name: trimmed, role: role || "", channel: channel || "" });
+      }
+    };
+    pushContact(doc.leadEngineer, "Lead engineer");
+    pushContact(org.emergencyContact, "Emergency contact");
+    permitsForProject.forEach((p) => {
+      pushContact(p.issuedBy, "Permit issuer");
+      pushContact(p.issuedTo, "Permit holder");
+    });
+
+    const allAudit = permitsForProject.flatMap((p) =>
+      (Array.isArray(p.auditLog) ? p.auditLog : []).map((entry) => ({
+        at: entry.at || p.updatedAt || p.createdAt || "",
+        action: entry.action || "updated",
+        permitId: p.id,
+      }))
+    );
+    const auditSummary = {
+      total: allAudit.length,
+      created: allAudit.filter((x) => x.action === "created").length,
+      updated: allAudit.filter((x) => x.action === "updated").length,
+      statusChanged: allAudit.filter((x) => x.action === "status_changed").length,
+      deleted: allAudit.filter((x) => x.action === "deleted").length,
+    };
+    const recentAudit = [...allAudit]
+      .sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime())
+      .slice(0, 12);
+    const projectName = projects.find((p) => p.id === doc.projectId)?.name || "";
+    return {
+      generatedAt: new Date().toISOString(),
+      projectName,
+      contacts: Array.from(contactMap.values()),
+      auditSummary,
+      recentAudit,
+    };
+  };
+
   const printProjectPackForDoc = (doc) => {
     const allPermits = load("permits_v2", []);
     if (!doc.projectId) {
@@ -4216,7 +5195,13 @@ export default function RAMSTemplateBuilder() {
       );
       return;
     }
-    openRamsDocumentWindow(doc, doc.rows || [], workers, projects, { print: false, permits: forProject });
+    const sitePackMeta = buildSitePackMeta(doc, forProject);
+    trackEvent("rams_site_pack_opened", { permitCount: forProject.length });
+    openRamsDocumentWindow(doc, doc.rows || [], workers, projects, {
+      print: false,
+      permits: forProject,
+      sitePackMeta,
+    });
   };
 
   const duplicateDoc = (doc) => {
@@ -4522,6 +5507,7 @@ export default function RAMSTemplateBuilder() {
             onRenameHazardPack={renameHazardPack}
             onDeleteHazardPack={deleteHazardPack}
             onTogglePinHazardPack={togglePinHazardPack}
+            onSetHazardPackStatus={setHazardPackStatus}
             onCreateHazardPackVersion={createHazardPackVersion}
             onRollbackHazardPackVersion={rollbackHazardPackVersion}
             onExportHazardPacks={exportHazardPacks}

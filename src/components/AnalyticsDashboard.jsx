@@ -5,6 +5,7 @@ import PageHero from "./PageHero";
 
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short" }); };
 const daysUntil = (iso) => { if (!iso) return null; return Math.ceil((new Date(iso)-new Date())/(1000*60*60*24)); };
+const permitEndIso = (permit) => permit?.endDateTime || permit?.expiryDate || "";
 
 /** ISO date (YYYY-MM-DD) of the Monday-start week for `date`. */
 const getWeekLabel = (date) => {
@@ -163,7 +164,10 @@ export default function AnalyticsDashboard() {
     if (overdueSnags.length) { score -= Math.min(15, overdueSnags.length*3); issues.push(`${overdueSnags.length} overdue snag${overdueSnags.length>1?"s":""}`); }
 
     // expired permits
-    const expiredPermits = permits.filter(p => p.expiryDate && new Date(p.expiryDate)<now && p.status==="active");
+    const expiredPermits = permits.filter((p) => {
+      const endIso = permitEndIso(p);
+      return p.status === "active" && endIso && new Date(endIso) < now;
+    });
     if (expiredPermits.length) { score -= Math.min(20, expiredPermits.length*5); issues.push(`${expiredPermits.length} expired permit${expiredPermits.length>1?"s":""}`); }
 
     return { score: Math.max(0, score), issues };
@@ -219,9 +223,15 @@ export default function AnalyticsDashboard() {
 
   // permit status
   const permitStats = {
-    active: permits.filter(p=>p.status==="active").length,
-    expired: permits.filter(p=>p.status==="expired"||(p.expiryDate&&new Date(p.expiryDate)<now)).length,
-    pending: permits.filter(p=>p.status==="pending").length,
+    active: permits.filter((p) => {
+      const endIso = permitEndIso(p);
+      return p.status === "active" && endIso && new Date(endIso) >= now;
+    }).length,
+    expired: permits.filter((p) => {
+      const endIso = permitEndIso(p);
+      return p.status === "active" && endIso && new Date(endIso) < now;
+    }).length,
+    draft: permits.filter((p) => p.status === "draft").length,
   };
 
   // inductions per site
@@ -496,11 +506,11 @@ export default function AnalyticsDashboard() {
           <div style={{ display:"flex", alignItems:"center", gap:16 }}>
             <DonutChart segments={[
               { value:permitStats.active, color:"#1D9E75" },
-              { value:permitStats.pending, color:"#EF9F27" },
+              { value:permitStats.draft, color:"#EF9F27" },
               { value:permitStats.expired, color:"#E24B4A" },
             ]} size={80} />
             <div>
-              {[["Active",permitStats.active,"#1D9E75"],["Pending",permitStats.pending,"#EF9F27"],["Expired",permitStats.expired,"#E24B4A"]].map(([l,v,c])=>(
+              {[["Active",permitStats.active,"#1D9E75"],["Draft",permitStats.draft,"#EF9F27"],["Expired",permitStats.expired,"#E24B4A"]].map(([l,v,c])=>(
                 <div key={l} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, fontSize:12 }}>
                   <div style={{ width:8, height:8, borderRadius:"50%", background:c, flexShrink:0 }} />
                   <span style={{ color:"var(--color-text-secondary)" }}>{l}</span>

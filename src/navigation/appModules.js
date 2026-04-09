@@ -78,6 +78,9 @@ export const MORE_TABS = [
   { id: "ai-toolbox", label: "AI toolbox" },
   { id: "ai-photo", label: "AI photo hazard" },
   { id: "client-portal", label: "Client portal" },
+  { id: "client-acquisition", label: "Client acquisition" },
+  { id: "sales-enablement", label: "Sales enablement" },
+  { id: "enterprise-readiness", label: "Enterprise readiness" },
   { id: "subcontractor", label: "Subcontractor" },
   { id: "documents", label: "Documents" },
   { id: "backup", label: "Backup" },
@@ -114,6 +117,8 @@ export const MORE_SECTIONS = [
       "snags",
       "documents",
       "client-portal",
+      "client-acquisition",
+      "sales-enablement",
       "subcontractor",
     ],
   },
@@ -160,7 +165,7 @@ export const MORE_SECTIONS = [
   },
   {
     title: "Data & app",
-    ids: ["backup", "audit", "help", "settings"],
+    ids: ["enterprise-readiness", "backup", "audit", "help", "settings"],
   },
 ];
 

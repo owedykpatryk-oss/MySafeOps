@@ -10,6 +10,20 @@ import InlineAlert from "./InlineAlert";
 const ss = ms;
 const NO_MEMBERSHIP_MSG = "No organisation membership";
 
+function getEmailDeliveryInfo(row) {
+  const status = String(row?.email_delivery_status || "pending");
+  if (status === "sent") {
+    return { label: "email sent", color: "#0f766e", bg: "#ccfbf1", border: "#99f6e4" };
+  }
+  if (status === "skipped") {
+    return { label: "email skipped", color: "#92400e", bg: "#fef3c7", border: "#fde68a" };
+  }
+  if (status === "failed") {
+    return { label: "email failed", color: "#991b1b", bg: "#fee2e2", border: "#fecaca" };
+  }
+  return { label: "email pending", color: "#334155", bg: "#e2e8f0", border: "#cbd5e1" };
+}
+
 function makeToken() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID().replace(/-/g, "");
@@ -32,7 +46,10 @@ export default function InviteUsers() {
   const [lastInviteEmail, setLastInviteEmail] = useState("");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [deliveryFilter, setDeliveryFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [lastLoadedAt, setLastLoadedAt] = useState("");
 
   const canManage = Boolean(caps?.orgSettings);
 
@@ -96,29 +113,77 @@ export default function InviteUsers() {
       return;
     }
     setOrgRow(org);
-    const { data, error } = await supabase
-      .from("org_invites")
-      .select("id,email,role,status,expires_at,created_at,invite_token")
-      .eq("org_id", org.id)
-      .order("created_at", { ascending: false });
+    const nextQuery = () =>
+      supabase
+        .from("org_invites")
+        .select("id,email,role,status,expires_at,created_at,invite_token,email_delivery_status,email_delivery_error,email_delivery_attempted_at,email_delivery_sent_at")
+        .eq("org_id", org.id)
+        .order("created_at", { ascending: false });
+    const fallbackQuery = () =>
+      supabase
+        .from("org_invites")
+        .select("id,email,role,status,expires_at,created_at,invite_token")
+        .eq("org_id", org.id)
+        .order("created_at", { ascending: false });
+
+    let { data, error } = await nextQuery();
+    if (error && String(error.message || "").toLowerCase().includes("email_delivery_status")) {
+      const fallback = await fallbackQuery();
+      data = fallback.data;
+      error = fallback.error;
+    }
     if (error) {
       setStatus({ type: "error", text: error.message || "Could not load invites." });
       setLoading(false);
       return;
     }
     setItems(data || []);
+    setLastLoadedAt(new Date().toISOString());
     setLoading(false);
   };
 
   useEffect(() => {
     load().catch(() => {});
-  }, [supabase, user, orgId]);
+  }, [supabase, user, orgId, refreshNonce]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      setRefreshNonce((n) => n + 1);
+    }, 20000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const pendingCount = useMemo(() => items.filter((x) => x.status === "pending").length, [items]);
+  const deliveryCounts = useMemo(() => {
+    const base = { pending: 0, sent: 0, skipped: 0, failed: 0 };
+    items.forEach((x) => {
+      const k = String(x.email_delivery_status || "pending");
+      if (Object.prototype.hasOwnProperty.call(base, k)) base[k] += 1;
+      else base.pending += 1;
+    });
+    return base;
+  }, [items]);
+  const failedDeliveryIds = useMemo(
+    () =>
+      items
+        .filter((x) => x.status === "pending" && String(x.email_delivery_status || "pending") === "failed")
+        .map((x) => x.id),
+    [items]
+  );
+  const skippedDeliveryIds = useMemo(
+    () =>
+      items
+        .filter((x) => x.status === "pending" && String(x.email_delivery_status || "pending") === "skipped")
+        .map((x) => x.id),
+    [items]
+  );
   const visibleItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = items.filter((x) => {
       if (statusFilter !== "all" && x.status !== statusFilter) return false;
+      const delivery = String(x.email_delivery_status || "pending");
+      if (deliveryFilter !== "all" && delivery !== deliveryFilter) return false;
       if (!q) return true;
       return x.email?.toLowerCase().includes(q) || x.role?.toLowerCase().includes(q) || x.status?.toLowerCase().includes(q);
     });
@@ -128,7 +193,15 @@ export default function InviteUsers() {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
     return filtered;
-  }, [items, query, statusFilter, sortBy]);
+  }, [items, query, statusFilter, deliveryFilter, sortBy]);
+
+  const sendInviteEmail = async (inviteId) => {
+    const { data, error } = await supabase.functions.invoke("send-org-invite", {
+      body: { inviteId },
+    });
+    if (error) throw error;
+    return data;
+  };
 
   const invite = async () => {
     if (!supabase || !orgRow || !canManage) return;
@@ -164,7 +237,7 @@ export default function InviteUsers() {
       setStatus({ type: "success", text: "Invite created. Share the link below or send it by email." });
       pushToast({ type: "success", title: "Invite created", message: `Invite ready for ${clean}` });
       if (inserted?.id) {
-        const { error: fnErr } = await supabase.functions.invoke("send-org-invite", {
+        const { data: fnData, error: fnErr } = await supabase.functions.invoke("send-org-invite", {
           body: { inviteId: inserted.id },
         });
         if (fnErr) {
@@ -173,6 +246,15 @@ export default function InviteUsers() {
             text: `Invite created. Automatic email was not sent (${fnErr.message || "function unavailable"}); share the link manually.`,
           });
           pushToast({ type: "warn", title: "Email not sent", message: "Share invite link manually." });
+        } else if (fnData?.skipped || fnData?.ok === false) {
+          setStatus({
+            type: "warn",
+            text: `Invite created. Automatic email skipped (${fnData?.message || "email provider not configured"}); share the link manually.`,
+          });
+          pushToast({ type: "warn", title: "Email skipped", message: "Share invite link manually." });
+        } else {
+          setStatus({ type: "success", text: "Invite created and email sent." });
+          pushToast({ type: "success", title: "Email sent", message: `Invite email sent to ${clean}` });
         }
       }
       await load();
@@ -206,18 +288,67 @@ export default function InviteUsers() {
     setBusy(true);
     setStatus({ type: "", text: "" });
     try {
-      const { error } = await supabase.functions.invoke("send-org-invite", {
-        body: { inviteId: id },
-      });
-      if (error) throw error;
-      setStatus({ type: "success", text: "Invite email sent." });
-      pushToast({ type: "success", title: "Email sent", message: "Invite email dispatched." });
+      const data = await sendInviteEmail(id);
+      if (data?.skipped || data?.ok === false) {
+        setStatus({
+          type: "warn",
+          text: `Invite email skipped (${data?.message || "email provider not configured"}). Share invite link manually.`,
+        });
+        pushToast({ type: "warn", title: "Email skipped", message: "Share invite link manually." });
+      } else {
+        setStatus({ type: "success", text: "Invite email sent." });
+        pushToast({ type: "success", title: "Email sent", message: "Invite email dispatched." });
+      }
     } catch (e) {
       setStatus({ type: "warn", text: e.message || "Could not send email via function. Share invite link manually." });
       pushToast({ type: "warn", title: "Email not sent", message: e.message || "Share invite link manually." });
     } finally {
       setBusy(false);
     }
+  };
+
+  const retryFailedInviteEmails = async () => {
+    if (!supabase || !canManage || failedDeliveryIds.length === 0) return;
+    await retryInviteEmails(failedDeliveryIds, "failed");
+  };
+
+  const retrySkippedInviteEmails = async () => {
+    if (!supabase || !canManage || skippedDeliveryIds.length === 0) return;
+    await retryInviteEmails(skippedDeliveryIds, "skipped");
+  };
+
+  const retryInviteEmails = async (inviteIds, modeLabel) => {
+    if (!Array.isArray(inviteIds) || inviteIds.length === 0) return;
+    setBusy(true);
+    setStatus({ type: "", text: "" });
+    let sent = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const id of inviteIds) {
+      try {
+        const data = await sendInviteEmail(id);
+        if (data?.skipped || data?.ok === false) skipped += 1;
+        else sent += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    const parts = [];
+    if (sent) parts.push(`sent: ${sent}`);
+    if (skipped) parts.push(`skipped: ${skipped}`);
+    if (failed) parts.push(`failed: ${failed}`);
+    const summary = parts.length ? parts.join(" · ") : "No changes";
+    setStatus({
+      type: failed > 0 ? "warn" : "success",
+      text: `Batch retry (${modeLabel}) finished (${summary}).`,
+    });
+    pushToast({
+      type: failed > 0 ? "warn" : "success",
+      title: "Invite email retry",
+      message: summary,
+    });
+    await load();
+    setBusy(false);
   };
 
   const copyInviteLink = async (token, inviteEmailAddress) => {
@@ -249,6 +380,12 @@ export default function InviteUsers() {
             <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--color-text-secondary)" }}>
               Pending invites: <strong>{pendingCount}</strong>
             </p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+              <span style={{ ...ss.chip, background: "#e2e8f0", borderColor: "#cbd5e1", color: "#334155" }}>pending {deliveryCounts.pending}</span>
+              <span style={{ ...ss.chip, background: "#ccfbf1", borderColor: "#99f6e4", color: "#0f766e" }}>sent {deliveryCounts.sent}</span>
+              <span style={{ ...ss.chip, background: "#fef3c7", borderColor: "#fde68a", color: "#92400e" }}>skipped {deliveryCounts.skipped}</span>
+              <span style={{ ...ss.chip, background: "#fee2e2", borderColor: "#fecaca", color: "#991b1b" }}>failed {deliveryCounts.failed}</span>
+            </div>
             <label style={ss.lbl}>Email</label>
             <input type="email" style={ss.inp} value={email} onChange={(e) => setEmail(e.target.value)} />
             <label style={{ ...ss.lbl, marginTop: 10 }}>Role</label>
@@ -292,19 +429,51 @@ export default function InviteUsers() {
             <option value="revoked">Revoked</option>
             <option value="expired">Expired</option>
           </select>
+          <select style={ss.inp} value={deliveryFilter} onChange={(e) => setDeliveryFilter(e.target.value)}>
+            <option value="all">All email delivery</option>
+            <option value="pending">Email pending</option>
+            <option value="sent">Email sent</option>
+            <option value="skipped">Email skipped</option>
+            <option value="failed">Email failed</option>
+          </select>
           <select style={ss.inp} value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
             <option value="newest">Newest first</option>
             <option value="expires">Expiry (soonest)</option>
             <option value="email">Email (A-Z)</option>
           </select>
         </div>
+        <div style={{ marginBottom: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button type="button" style={ss.btn} disabled={busy || loading} onClick={() => setRefreshNonce((n) => n + 1)}>
+            Refresh list
+          </button>
+          {lastLoadedAt && (
+            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Last synced: {new Date(lastLoadedAt).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+        {canManage && (failedDeliveryIds.length > 0 || skippedDeliveryIds.length > 0) && (
+          <div style={{ marginBottom: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button type="button" style={ss.btn} disabled={busy || failedDeliveryIds.length === 0} onClick={retryFailedInviteEmails}>
+              Retry failed emails ({failedDeliveryIds.length})
+            </button>
+            <button type="button" style={ss.btn} disabled={busy || skippedDeliveryIds.length === 0} onClick={retrySkippedInviteEmails}>
+              Retry skipped emails ({skippedDeliveryIds.length})
+            </button>
+            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Retries pending invites with selected delivery state.
+            </span>
+          </div>
+        )}
         {loading ? (
           <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>Loading invites…</p>
         ) : visibleItems.length === 0 ? (
           <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>No invites yet.</p>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
-            {visibleItems.map((row) => (
+            {visibleItems.map((row) => {
+              const deliveryInfo = getEmailDeliveryInfo(row);
+              return (
               <div key={row.id} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{row.email}</div>
                 <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
@@ -322,7 +491,31 @@ export default function InviteUsers() {
                   >
                     {row.status}
                   </span>
+                  <span
+                    style={{
+                      ...ss.chip,
+                      color: deliveryInfo.color,
+                      background: deliveryInfo.bg,
+                      borderColor: deliveryInfo.border,
+                    }}
+                  >
+                    {deliveryInfo.label}
+                  </span>
                 </div>
+                {(row.email_delivery_attempted_at || row.email_delivery_sent_at) && (
+                  <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 6 }}>
+                    {row.email_delivery_sent_at
+                      ? `Sent: ${new Date(row.email_delivery_sent_at).toLocaleString()}`
+                      : row.email_delivery_attempted_at
+                        ? `Last attempt: ${new Date(row.email_delivery_attempted_at).toLocaleString()}`
+                        : ""}
+                  </div>
+                )}
+                {row.email_delivery_error && (
+                  <div style={{ fontSize: 11, color: "#9a3412", marginTop: 4, lineHeight: 1.45 }}>
+                    Delivery detail: {String(row.email_delivery_error)}
+                  </div>
+                )}
                 {canManage && row.status === "pending" && (
                   <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <button type="button" style={ss.btn} disabled={busy} onClick={() => copyInviteLink(row.invite_token, row.email)}>
@@ -337,7 +530,7 @@ export default function InviteUsers() {
                   </div>
                 )}
               </div>
-            ))}
+            );})}
           </div>
         )}
       </div>

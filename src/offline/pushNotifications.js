@@ -89,6 +89,7 @@ const saveJSON = (k, v) => saveOrgScoped(k, v);
 
 const NOTIF_SEEN_KEY = "mysafeops_notif_seen";
 const THRESHOLDS_DAYS = [30, 14, 7, 1, 0]; // days before expiry to notify
+const permitEndIso = (permit) => permit?.endDateTime || permit?.expiryDate || "";
 
 function daysUntil(iso) {
   if (!iso) return null;
@@ -116,7 +117,7 @@ export function checkExpiryNotifications() {
   if (Notification.permission !== "granted") return;
 
   const workers = loadJSON("mysafeops_workers", []);
-  const permits = loadJSON("mysafeops_permits", []);
+  const permits = loadJSON("permits_v2", []);
   const equipment = loadJSON("mysafeops_equipment", []);
   const ramsDocs = loadJSON("rams_builder_docs", []);
 
@@ -149,21 +150,36 @@ export function checkExpiryNotifications() {
     });
   });
 
-  // ── Permits ──
-  permits.forEach(p => {
-    if (p.status === "expired" || p.status === "cancelled") return;
-    const days = daysUntil(p.expiryDate);
+  // ── Permits (active only — same-day uses hours for clearer copy) ──
+  permits.forEach((p) => {
+    if (p.status !== "active") return;
+    const endIso = permitEndIso(p);
+    if (!endIso) return;
+    const endMs = new Date(endIso).getTime();
+    if (!Number.isFinite(endMs)) return;
+    const days = daysUntil(endIso);
     if (days === null) return;
 
-    THRESHOLDS_DAYS.forEach(threshold => {
+    THRESHOLDS_DAYS.forEach((threshold) => {
       if (days <= threshold && days >= (threshold === 0 ? -1 : threshold - 1)) {
         const id = `permit_${p.id}_${threshold}`;
         if (wasRecentlySeen(id)) return;
 
-        showLocalNotification(days <= 0 ? "Permit expired" : "Permit expiry reminder", {
-          body: days <= 0
-            ? `${p.type || "Permit"} at ${p.location || "site"} expired ${Math.abs(days)} day(s) ago.`
-            : `${p.type || "Permit"} at ${p.location || "site"} expires in ${days} day(s).`,
+        const msLeft = endMs - Date.now();
+        const label = p.type ? String(p.type).replace(/_/g, " ") : "Permit";
+        let body;
+        if (msLeft <= 0) {
+          const hoursPast = Math.max(1, Math.ceil(-msLeft / (1000 * 60 * 60)));
+          body = `${label} at ${p.location || "site"} expired about ${hoursPast} hour(s) ago.`;
+        } else if (days <= 0) {
+          const hoursLeft = Math.max(1, Math.ceil(msLeft / (1000 * 60 * 60)));
+          body = `${label} at ${p.location || "site"} expires in about ${hoursLeft} hour(s).`;
+        } else {
+          body = `${label} at ${p.location || "site"} expires in ${days} day(s).`;
+        }
+
+        showLocalNotification(msLeft <= 0 ? "Permit expired" : "Permit expiry reminder", {
+          body,
           tag: id,
           requireInteraction: days <= 1,
           data: { url: "/?tab=permits" },

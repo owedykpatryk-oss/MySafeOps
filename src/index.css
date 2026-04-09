@@ -644,10 +644,89 @@ select:focus-visible {
 .app-rams-step-body {
   padding: 1.35rem 1.2rem 1.5rem;
   margin-bottom: 1.25rem;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 56rem;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(226, 232, 240, 0.95);
   box-shadow: var(--shadow-card);
   background: var(--color-background-primary);
+}
+
+.app-rams-header-section {
+  margin-bottom: 1.15rem;
+  padding: 0.9rem 1rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-tertiary, #e2e8f0);
+  background: var(--color-background-secondary, #f8fafc);
+}
+
+.app-rams-header-section-title {
+  margin: 0 0 0.65rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--color-border-tertiary, #e2e8f0);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, #64748b);
+}
+
+.app-rams-header-section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: 0.75rem;
+}
+
+.app-rams-more-details-wrap {
+  margin-bottom: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border-tertiary, #cbd5e1);
+  background: var(--color-background-secondary, #f8fafc);
+  overflow: hidden;
+}
+
+.app-rams-more-details-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.app-rams-more-details-toggle:hover {
+  background: rgba(13, 148, 136, 0.06);
+}
+
+.app-rams-more-details-toggle:focus-visible {
+  outline: 2px solid var(--color-accent, #0d9488);
+  outline-offset: -2px;
+}
+
+.app-rams-more-details-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-background-primary, #fff);
+  border: 1px solid var(--color-border-tertiary, #e2e8f0);
+  color: var(--color-text-secondary, #64748b);
+  flex-shrink: 0;
+}
+
+.app-rams-more-details-inner {
+  padding: 0 12px 14px;
+  border-top: 1px solid var(--color-border-tertiary, #e2e8f0);
+  background: var(--color-background-primary, #fff);
 }
 
 .app-rams-hazard-row {

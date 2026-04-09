@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, Building2, CreditCard, Shield, Users, UserPlus } from "lucide-react";
+import { Bell, Building2, Code2, CreditCard, Shield, Users, UserPlus } from "lucide-react";
 
 import { ms } from "../utils/moduleStyles";
 import CloudAccount from "./CloudAccount";
@@ -8,6 +8,7 @@ import InviteUsers from "./InviteUsers";
 import OrgMembers from "./OrgMembers";
 import OrgSettings from "./OrgSettings";
 import NotificationSettings from "../offline/NotificationSettings";
+import DeveloperTools from "./DeveloperTools";
 
 const ss = ms;
 
@@ -18,6 +19,7 @@ const TABS = [
   { id: "members", label: "Members", icon: Users },
   { id: "organisation", label: "Organisation", icon: Building2 },
   { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "developer", label: "Developer", icon: Code2 },
 ];
 
 export default function SettingsCenter({ initialTab = "cloud", checkoutReturn = null }) {
@@ -96,6 +98,7 @@ export default function SettingsCenter({ initialTab = "cloud", checkoutReturn = 
           <NotificationSettings />
         </div>
       )}
+      {tab === "developer" && <DeveloperTools />}
     </div>
   );
 }

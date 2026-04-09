@@ -3,7 +3,7 @@
  */
 import { getRiskLevel } from "./ramsAllHazards";
 import { normalizePrintSections, RAMS_SECTION_IDS, documentContentHash } from "./ramsSectionConfig";
-import { renderPermitDocumentHtml } from "../permits/PermitSystem.jsx";
+import { renderPermitDocumentHtml } from "../permits/permitDocumentHtml";
 
 const RL = {
   high: { bg: "#FCEBEB", color: "#791F1F" },
@@ -327,6 +327,47 @@ function buildControlAssuranceSummary(detailedPack) {
   };
 }
 
+function buildAutoToolboxBriefV2(rows, form) {
+  const list = Array.isArray(rows) ? rows : [];
+  const top = [...list]
+    .sort((a, b) => riskScore(b.revisedRisk) - riskScore(a.revisedRisk))
+    .slice(0, 6)
+    .map((r, idx) => ({
+      id: r.id || `tb_${idx}`,
+      activity: r.activity || "Activity",
+      hazard: r.hazard || "Hazard",
+      rf: riskScore(r.revisedRisk),
+      controls: (r.controlMeasures || []).filter(Boolean).slice(0, 2),
+    }));
+  const highResidual = list.filter((r) => getRiskLevel(r.revisedRisk) === "high").length;
+  const textBlob = list.map((r) => `${r.activity || ""} ${r.hazard || ""}`).join(" ").toLowerCase();
+  const mustBrief = [
+    `Stop-work authority: ${form?.leadEngineer || "Set lead engineer in RAMS header"}.`,
+    "Permit dependencies and interface controls confirmed pre-start.",
+    "Emergency route and escalation path confirmed with all operatives.",
+  ];
+  if (textHasAny(textBlob, ["electrical", "live cable", "switchgear"])) {
+    mustBrief.push("Electrical isolation and test-before-touch sequence must be confirmed.");
+  }
+  if (textHasAny(textBlob, ["excav", "dig", "utility", "buried"])) {
+    mustBrief.push("Utility strike controls and permit-to-dig boundaries must be briefed.");
+  }
+  if (textHasAny(textBlob, ["height", "ladder", "roof", "mewp"])) {
+    mustBrief.push("Work-at-height rescue and anchor checks must be briefed.");
+  }
+  if (textHasAny(textBlob, ["confined", "gas", "fume"])) {
+    mustBrief.push("Atmosphere monitor and rescue standby controls must be live.");
+  }
+  if (highResidual > 0) {
+    mustBrief.push(`Residual HIGH risk on ${highResidual} row(s): escalate before task start.`);
+  }
+  return {
+    headline: `${list.length} risk row(s) · ${highResidual} high residual · top ${Math.min(top.length, 6)} priorities`,
+    mustBrief: mustBrief.slice(0, 8),
+    top,
+  };
+}
+
 /** Human-readable competency line from Workers record (certs text + structured certifications). */
 export function formatOperativeCertsLine(w) {
   if (!w) return "";
@@ -349,6 +390,25 @@ function escHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function loadOrgPrintSettings() {
+  let org = {};
+  try {
+    org = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+  } catch {
+    org = {};
+  }
+  return {
+    org,
+    orgName: String(org.name || "MySafeOps"),
+    primaryColor: String(org.primaryColor || "#0d9488"),
+    accentColor: String(org.accentColor || "#f97316"),
+    watermarkText: String(org.pdfWatermarkText || "").trim(),
+    complianceLine:
+      String(org.pdfComplianceLine || "").trim() ||
+      "Controlled document. Ensure latest approved revision is in use.",
+  };
 }
 
 function buildRamsShareUrl(form) {
@@ -409,11 +469,16 @@ export function computeRamsFingerprint(form, rows) {
 function ramsDocumentCss() {
   return `
     @page { size: A4; margin: 12mm; }
-    body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:0;padding:16px 16px 36px;box-sizing:border-box;position:relative}
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;font-size:12px;line-height:1.45;color:#000;margin:0;padding:16px 16px 36px;position:relative}
+    p,li,span,td,th{overflow-wrap:anywhere;word-break:break-word}
+    img,svg{max-width:100%;height:auto}
+    a{word-break:break-all}
     h1{font-size:16px;font-weight:bold;text-align:center;background:#f97316;color:#fff;padding:10px;margin:0 0 16px}
     .header-table{width:100%;border-collapse:collapse;margin-bottom:16px}
     .header-table td{padding:4px 8px;font-size:11px;border:0.5px solid #ccc}
     .header-table .lbl{color:#666;font-weight:bold}
+    table{table-layout:fixed}
     table.ra{width:100%;border-collapse:collapse;margin-bottom:20px}
     table.ra th{background:#0f172a;color:#fff;padding:8px;font-size:11px;text-align:left;border:1px solid #0f172a}
     .rams-watermark{
@@ -452,7 +517,10 @@ function ramsDocumentCss() {
       padding:6px 8px;
       background:#fff;
       font-size:11px;
+      break-inside:avoid-page;
+      page-break-inside:avoid;
     }
+    .pack-site-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
     .page-footer{
       position:fixed;
       left:0;
@@ -470,11 +538,14 @@ function ramsDocumentCss() {
     .page-footer .page-num::after{
       content:"Page " counter(page);
     }
+    h1,h2,h3{break-after:avoid-page;page-break-after:avoid}
+    .header-table,.cover-page,.pack-site-summary{break-inside:avoid-page;page-break-inside:avoid}
     @media print{
-      body{padding:0}
+      body{padding:0 0 14mm 0}
       .cover-page{min-height:248mm;page-break-after:always}
       .pack-rams{page-break-after:always}
       .pack-permit-wrap{page-break-before:always}
+      .pack-site-summary-grid{grid-template-columns:1fr}
       h1,h2,.header,.ptw-type{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     }
   `;
@@ -494,6 +565,62 @@ function splitPermitDocumentHtml(fullHtml) {
     style: styleM ? styleM[1].trim() : "",
     body: bodyM ? bodyM[1].trim() : "",
   };
+}
+
+function buildSitePackSummaryHtml(sitePackMeta, permits = [], projectName = "") {
+  if (!sitePackMeta) return "";
+  const auditSummary = sitePackMeta.auditSummary || {};
+  const contacts = Array.isArray(sitePackMeta.contacts) ? sitePackMeta.contacts : [];
+  const recentAudit = Array.isArray(sitePackMeta.recentAudit) ? sitePackMeta.recentAudit : [];
+  const permitCount = Array.isArray(permits) ? permits.length : 0;
+  const generatedAt = sitePackMeta.generatedAt ? fmtDate(sitePackMeta.generatedAt) : fmtDate(new Date().toISOString());
+  const projectLabel = sitePackMeta.projectName || projectName || "Project";
+  const contactRows =
+    contacts.length === 0
+      ? `<div style="font-size:11px;color:#64748b">No contacts were attached to this pack.</div>`
+      : contacts
+          .slice(0, 16)
+          .map(
+            (c) =>
+              `<div style="font-size:11px;padding:4px 0;border-top:1px solid #e5e7eb"><strong>${escHtml(c.name || "Contact")}</strong>${c.role ? ` · ${escHtml(c.role)}` : ""}${c.channel ? ` · ${escHtml(c.channel)}` : ""}</div>`
+          )
+          .join("");
+  const auditRows =
+    recentAudit.length === 0
+      ? `<div style="font-size:11px;color:#64748b">No recent audit entries included.</div>`
+      : recentAudit
+          .slice(0, 12)
+          .map(
+            (row) =>
+              `<div style="font-size:11px;padding:4px 0;border-top:1px solid #e5e7eb">${escHtml(fmtDateTime(row.at))} · ${escHtml(row.action || "updated")}${row.permitId ? ` · ${escHtml(row.permitId)}` : ""}</div>`
+          )
+          .join("");
+  return `
+  <div class="pack-site-summary" style="page-break-before:always;border:1px solid #dbe2ea;border-radius:12px;padding:14px 14px 12px;background:#fff;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#475569;font-weight:700;margin-bottom:4px">Site Pack Summary</div>
+        <div style="font-size:20px;font-weight:800;color:#0f172a">${escHtml(projectLabel)}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:3px">Generated ${escHtml(generatedAt)} · ${permitCount} permits included</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11px;background:#E6F1FB;color:#0C447C;padding:3px 8px;border-radius:999px">Created ${Number(auditSummary.created || 0)}</span>
+        <span style="font-size:11px;background:#FAEEDA;color:#633806;padding:3px 8px;border-radius:999px">Updated ${Number(auditSummary.updated || 0)}</span>
+        <span style="font-size:11px;background:#EAF3DE;color:#27500A;padding:3px 8px;border-radius:999px">Status ${Number(auditSummary.statusChanged || 0)}</span>
+        <span style="font-size:11px;background:#FCEBEB;color:#791F1F;padding:3px 8px;border-radius:999px">Deleted ${Number(auditSummary.deleted || 0)}</span>
+      </div>
+    </div>
+    <div class="pack-site-summary-grid">
+      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:8px">
+        <div style="font-size:11px;font-weight:700;margin-bottom:4px">Key contacts</div>
+        ${contactRows}
+      </div>
+      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:8px">
+        <div style="font-size:11px;font-weight:700;margin-bottom:4px">Recent permit audit</div>
+        ${auditRows}
+      </div>
+    </div>
+  </div>`;
 }
 
 /** RAMS body only (no html/head wrapper). */
@@ -537,6 +664,7 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
       rf: riskScore(r.revisedRisk),
       text: `${r.activity || "Activity"} — ${r.hazard || "Hazard"} · controls: ${(r.controlMeasures || []).slice(0, 2).join("; ") || "review controls before start"}`,
     }));
+  const toolboxBriefV2 = buildAutoToolboxBriefV2(rowList, form);
   const handoverChecks = [
     { label: "RAMS document shared with client/receiver", ok: !!(form.handoverClientName && form.handoverReceiver) },
     { label: "Issue date and status communicated", ok: !!(form.issueDate && (form.documentStatus || form.status)) },
@@ -796,7 +924,23 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
 
   const briefingPointsBlock =
     briefingPoints.length > 0
-      ? `<h2 style="font-size:13px;margin:18px 0 8px">Daily briefing points (toolbox talk)</h2>
+      ? `<h2 style="font-size:13px;margin:18px 0 8px">Auto-toolbox brief v2 (1-page)</h2>
+  <p style="font-size:11px;color:#334155;margin:0 0 8px">${escHtml(toolboxBriefV2.headline)}</p>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px">
+    <tbody>
+      <tr>
+        <td style="padding:6px;border:1px solid #e5e5e5;font-size:10px;color:#64748b;width:26%">Must-brief points</td>
+        <td style="padding:6px;border:1px solid #e5e5e5;font-size:10px">${toolboxBriefV2.mustBrief.map((x) => `• ${escHtml(x)}`).join("<br/>")}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px;border:1px solid #e5e5e5;font-size:10px;color:#64748b">Top dynamic risk priorities</td>
+        <td style="padding:6px;border:1px solid #e5e5e5;font-size:10px">${toolboxBriefV2.top
+          .map((x) => `• RF ${x.rf} — ${escHtml(x.activity)} (${escHtml(x.hazard)})${x.controls.length ? ` · controls: ${escHtml(x.controls.join("; "))}` : ""}`)
+          .join("<br/>")}</td>
+      </tr>
+    </tbody>
+  </table>
+  <h3 style="font-size:12px;margin:12px 0 6px;color:#0f172a">Daily briefing points (ordered by residual risk)</h3>
   <ol style="margin:0 0 12px;padding-left:18px;font-size:11px;line-height:1.5">
     ${briefingPoints.map((p) => `<li><strong>RF ${p.rf}</strong> — ${escHtml(p.text)}</li>`).join("")}
   </ol>`
@@ -1074,17 +1218,42 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
   ${(form.surveyAssumptions || "").trim() ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>Key assumptions</strong></p><p style="font-size:12px;line-height:1.5;white-space:pre-wrap;margin:0 0 8px">${escHtml(form.surveyAssumptions)}</p>` : ""}
   ${(form.communicationPlan || "").trim() ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>Communication & permit controls</strong></p><p style="font-size:12px;line-height:1.5;white-space:pre-wrap;margin:0 0 12px">${escHtml(form.communicationPlan)}</p>` : ""}`
       : "";
+  const packReadinessBlock =
+    (Array.isArray(form.surveyRequiredPermits) && form.surveyRequiredPermits.length > 0) ||
+    (Array.isArray(form.surveyRequiredCerts) && form.surveyRequiredCerts.length > 0) ||
+    (Array.isArray(form.surveyEvidenceSet) && form.surveyEvidenceSet.length > 0) ||
+    (Array.isArray(form.surveyHoldPoints) && form.surveyHoldPoints.length > 0)
+      ? `<h2 style="font-size:13px;margin:18px 0 8px">Survey pack readiness checklist</h2>
+  ${Array.isArray(form.surveyRequiredPermits) && form.surveyRequiredPermits.length > 0
+    ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>Permit dependencies</strong></p><ul style="margin:0 0 8px 18px;font-size:12px;line-height:1.5">${form.surveyRequiredPermits.map((x) => `<li>${escHtml(x)}</li>`).join("")}</ul>`
+    : ""}
+  ${Array.isArray(form.surveyRequiredCerts) && form.surveyRequiredCerts.length > 0
+    ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>Required competencies</strong></p><ul style="margin:0 0 8px 18px;font-size:12px;line-height:1.5">${form.surveyRequiredCerts.map((x) => `<li>${escHtml(x)}</li>`).join("")}</ul>`
+    : ""}
+  ${Array.isArray(form.surveyEvidenceSet) && form.surveyEvidenceSet.length > 0
+    ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>Mandatory evidence set</strong></p><ul style="margin:0 0 8px 18px;font-size:12px;line-height:1.5">${form.surveyEvidenceSet.map((x) => `<li>${escHtml(x)}</li>`).join("")}</ul>`
+    : ""}
+  ${Array.isArray(form.surveyHoldPoints) && form.surveyHoldPoints.length > 0
+    ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>Hold points</strong></p><ul style="margin:0 0 12px 18px;font-size:12px;line-height:1.5">${form.surveyHoldPoints.map((x) => `<li>${escHtml(x)}</li>`).join("")}</ul>`
+    : ""}`
+      : "";
 
   const docStatus = String(form.documentStatus || form.status || "draft");
   const statusLabel = docStatus.replace(/_/g, " ").toUpperCase();
+  const orgTheme = loadOrgPrintSettings();
+  const orgName = orgTheme.orgName;
+  const logoDataUrl = String(orgTheme.org?.logo || "");
+  const badgeColor = orgTheme.primaryColor;
+  const badgeBg = `${orgTheme.primaryColor}1A`;
   const watermark =
-    docStatus === "issued"
+    orgTheme.watermarkText ||
+    (docStatus === "issued"
       ? "ISSUED"
       : docStatus === "approved"
       ? "APPROVED"
       : docStatus === "internal_review"
       ? "IN REVIEW"
-      : "DRAFT";
+      : "DRAFT");
 
   const integrityBlock =
     pf[RAMS_SECTION_IDS.INTEGRITY] && contentFingerprint
@@ -1104,12 +1273,19 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
   const coverPage = `<div class="cover-page">
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
       <div>
-        <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#475569;font-weight:700;margin-bottom:6px">MySafeOps</div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          ${
+            logoDataUrl
+              ? `<img src="${escHtml(logoDataUrl)}" alt="Org logo" style="height:32px;max-width:120px;object-fit:contain"/>`
+              : ""
+          }
+          <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#475569;font-weight:700;margin-bottom:6px">${escHtml(orgName)}</div>
+        </div>
         <div style="font-size:24px;line-height:1.15;font-weight:800;color:#0f172a;margin-bottom:4px">${escHtml(form.title || "Risk Assessment & Method Statement")}</div>
         <div style="font-size:12px;color:#334155;max-width:520px">${escHtml(form.scope || "Detailed RAMS pack generated for field execution and compliance review.")}</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
-        <div style="padding:6px 10px;border-radius:999px;background:#E6F1FB;color:#0C447C;font-size:11px;font-weight:700">${escHtml(statusLabel)}</div>
+        <div style="padding:6px 10px;border-radius:999px;background:${escHtml(badgeBg)};color:${escHtml(badgeColor)};font-size:11px;font-weight:700">${escHtml(statusLabel)}</div>
         ${form.strictMode ? `<div style="padding:6px 10px;border-radius:999px;background:#ede9fe;color:#4c1d95;font-size:11px;font-weight:700">STRICT MODE</div>` : ""}
         <div style="display:flex;gap:8px">
           <div style="border:1px solid #dbe2ea;border-radius:8px;padding:6px;background:#fff;text-align:center">
@@ -1138,7 +1314,7 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
       <span style="font-size:11px;background:#E6F1FB;color:#0C447C;padding:2px 8px;border-radius:999px">QA ${qaPass}/${qaChecks.length} · ${qaPct}%</span>
       <span style="font-size:11px;background:#ecfeff;color:#0f766e;padding:2px 8px;border-radius:999px">Readiness ${readinessScore}/100</span>
     </div>
-    <div style="margin-top:16px;font-size:11px;color:#64748b">Prepared by MySafeOps • Operational RAMS dossier • A4 issue pack</div>
+    <div style="margin-top:16px;font-size:11px;color:#64748b">Prepared by ${escHtml(orgName)} • Operational RAMS dossier • A4 issue pack</div>
     ${liveShareUrl ? `<div style="margin-top:6px;font-size:10px;color:#0C447C;word-break:break-all">Live URL: ${escHtml(liveShareUrl)}</div>` : ""}
   </div>`;
 
@@ -1162,6 +1338,7 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
   ${form.scope ? `<p style="font-size:12px;margin-bottom:16px">${escHtml(form.scope)}</p>` : ""}
   ${surveyingMethodBlock}
   ${deliveryControlsBlock}
+  ${packReadinessBlock}
   ${readinessBlock}
   ${qaChecklistBlock}
   ${briefingPointsBlock}
@@ -1183,6 +1360,7 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
   ${signatureEvidenceBlock}
   <h2 style="font-size:13px;margin:18px 0 8px">10. Document integrity</h2>
   <p style="font-size:10px;color:#888;margin-top:20px">Generated by MySafeOps · REVISION ${escHtml(form.revision || "1A")} · Review due: ${escHtml(fmtDate(form.reviewDate) || "—")} · Layout: A4</p>
+  <p style="font-size:10px;color:#64748b;margin:0 0 8px">${escHtml(orgTheme.complianceLine)}</p>
   ${integrityBlock}
   </div>
   `;
@@ -1190,12 +1368,13 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
 
 export function generatePrintHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll) {
   const inner = buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll);
-  const footer = `${form.documentNo || "RAMS"} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · Scan cover QR for live copy`;
+  const orgTheme = loadOrgPrintSettings();
+  const footer = `${form.documentNo || "RAMS"} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
   return wrapRamsPrintDocument(form.title || "RAMS", inner, "", footer);
 }
 
 /** Single HTML document: RAMS plus permit pages (same project). Uses permit module styling. */
-export function generateRamsProjectPackHTML(form, rows, workers, projects, permits) {
+export function generateRamsProjectPackHTML(form, rows, workers, projects, permits, sitePackMeta = null) {
   const workerMap = Object.fromEntries(workers.map((w) => [w.id, w.name]));
   const operatives = (form.operativeIds || []).map((id) => workerMap[id]).filter(Boolean);
   const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
@@ -1210,9 +1389,11 @@ export function generateRamsProjectPackHTML(form, rows, workers, projects, permi
     if (!permitExtraCss && style) permitExtraCss = `\n${style}\n`;
     if (body) permitBlocks.push(`<div class="pack-permit-wrap">${body}</div>`);
   }
-  const combinedBody = `<div class="pack-rams">${ramsInner}</div>${permitBlocks.join("")}`;
+  const siteSummary = buildSitePackSummaryHtml(sitePackMeta, permits, form.projectId ? projectMap[form.projectId] : "");
+  const combinedBody = `<div class="pack-rams">${ramsInner}</div>${siteSummary}${permitBlocks.join("")}`;
   const pageTitle = `${form.title || "RAMS"} · RAMS + permits (A4)`;
-  const footer = `${form.documentNo || "RAMS"} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · Scan cover QR for live copy`;
+  const orgTheme = loadOrgPrintSettings();
+  const footer = `${form.documentNo || "RAMS"} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
   return wrapRamsPrintDocument(pageTitle, combinedBody, permitExtraCss, footer);
 }
 
@@ -1231,7 +1412,7 @@ export function openRamsDocumentWindow(form, rows, workers, projects, options = 
   const fp = computeRamsFingerprint(form, rows);
   const html =
     Array.isArray(permits) && permits.length > 0
-      ? generateRamsProjectPackHTML(form, rows, workers, projects, permits)
+      ? generateRamsProjectPackHTML(form, rows, workers, projects, permits, options.sitePackMeta || null)
       : generatePrintHTML(form, rows || [], operatives, projectMap, pf, fp, workers);
   const win = window.open("", "_blank");
   if (!win) {

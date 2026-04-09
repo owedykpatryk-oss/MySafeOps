@@ -37,8 +37,8 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate }) {
 
   if (!open) return null;
 
-  const go = (viewId) => {
-    onNavigate(viewId);
+  const go = (h) => {
+    onNavigate({ viewId: h.viewId, permitId: h.permitId });
     onClose();
   };
 
@@ -51,7 +51,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate }) {
       setActive((i) => Math.max(0, i - 1));
     } else if (e.key === "Enter" && hits[active]) {
       e.preventDefault();
-      go(hits[active].viewId);
+      go(hits[active]);
     }
   };
 
@@ -148,7 +148,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate }) {
                 <button
                   key={h.key}
                   type="button"
-                  onClick={() => go(h.viewId)}
+                  onClick={() => go(h)}
                   onMouseEnter={() => setActive(i)}
                   style={{
                     width: "100%",

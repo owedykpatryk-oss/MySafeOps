@@ -1,5 +1,6 @@
 import { loadOrgScoped as load } from "./orgStorage";
 import { MORE_TABS, NAV_TAB_IDS } from "../navigation/appModules";
+import { PERMIT_TYPES } from "../modules/permits/permitTypes";
 
 function normaliseQ(s) {
   return String(s || "")
@@ -8,7 +9,7 @@ function normaliseQ(s) {
     .replace(/\s+/g, " ");
 }
 
-/** @typedef {{ key: string, kind: string, label: string, subtitle?: string, viewId: string }} WorkspaceSearchHit */
+/** @typedef {{ key: string, kind: string, label: string, subtitle?: string, viewId: string, permitId?: string }} WorkspaceSearchHit */
 
 /**
  * Build flat search hits for workspace command palette (modules + local data).
@@ -103,7 +104,11 @@ export function buildWorkspaceSearchHits(rawQuery) {
 
   const permits = load("permits_v2", []);
   permits.forEach((p) => {
-    const blob = [p.location, p.description, p.issuedTo, p.type].filter(Boolean).join(" ").toLowerCase();
+    const typeLabel = (PERMIT_TYPES[p.type] || PERMIT_TYPES.general)?.label || "";
+    const blob = [p.location, p.description, p.issuedTo, p.issuedBy, p.type, typeLabel, p.linkedRamsId, p.status, p.id]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
     if (blob.includes(q)) {
       hits.push({
         key: `ptw-${p.id}`,
@@ -111,6 +116,7 @@ export function buildWorkspaceSearchHits(rawQuery) {
         label: p.description?.slice(0, 72) || p.type || "Permit",
         subtitle: [p.location, p.issuedTo].filter(Boolean).join(" · ") || "Permits",
         viewId: "permits",
+        permitId: p.id,
       });
     }
   });

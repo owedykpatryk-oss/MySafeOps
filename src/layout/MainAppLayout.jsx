@@ -7,6 +7,7 @@ import WorkspaceAppBar from "../components/WorkspaceAppBar";
 import WorkspaceSearchPalette from "../components/WorkspaceSearchPalette";
 import RouteErrorBoundary from "../components/RouteErrorBoundary";
 import { prefetchView } from "../viewPrefetch";
+import { setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import {
   MORE_SECTIONS,
   getMoreTabsForSection,
@@ -111,7 +112,10 @@ export default function MainAppLayout() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const navigateFromSearch = (viewId) => {
+  const navigateFromSearch = ({ viewId, permitId }) => {
+    if (viewId === "permits" && permitId) {
+      setWorkspaceNavTarget({ viewId: "permits", permitId });
+    }
     if (primaryBottomNavIdSet.has(viewId)) {
       setNavTab(viewId);
       setView(viewId);

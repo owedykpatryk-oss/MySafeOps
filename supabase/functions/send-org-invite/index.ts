@@ -87,13 +87,31 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (inv.status !== "pending") {
+      return new Response(JSON.stringify({ error: `Invite is ${inv.status}; only pending invites can be emailed` }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: org } = await supabase.from("organizations").select("name").eq("id", inv.org_id).maybeSingle();
 
     const resendKey = Deno.env.get("RESEND_API_KEY");
     const fromEmail = Deno.env.get("INVITE_FROM_EMAIL") ?? "MySafeOps <onboarding@resend.dev>";
     const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "") || "http://localhost:5173";
 
+    await updateDeliveryStatus(supabase, inv.id, {
+      email_delivery_status: "pending",
+      email_delivery_error: null,
+      email_delivery_attempted_at: new Date().toISOString(),
+    });
+
     if (!resendKey) {
+      await updateDeliveryStatus(supabase, inv.id, {
+        email_delivery_status: "skipped",
+        email_delivery_error: "RESEND_API_KEY not set",
+        email_delivery_attempted_at: new Date().toISOString(),
+      });
       return new Response(JSON.stringify({ ok: false, skipped: true, message: "RESEND_API_KEY not set" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -126,13 +144,25 @@ Deno.serve(async (req) => {
 
     if (!res.ok) {
       const detail = await res.text();
+      await updateDeliveryStatus(supabase, inv.id, {
+        email_delivery_status: "failed",
+        email_delivery_error: String(detail || "Resend failed").slice(0, 2000),
+        email_delivery_attempted_at: new Date().toISOString(),
+      });
       return new Response(JSON.stringify({ error: "Resend failed", detail }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    await updateDeliveryStatus(supabase, inv.id, {
+      email_delivery_status: "sent",
+      email_delivery_error: null,
+      email_delivery_attempted_at: new Date().toISOString(),
+      email_delivery_sent_at: new Date().toISOString(),
+    });
+
+    return new Response(JSON.stringify({ ok: true, sent: true }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -150,4 +180,16 @@ function escapeHtml(s: string) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+async function updateDeliveryStatus(
+  supabase: ReturnType<typeof createClient>,
+  inviteId: string,
+  patch: Record<string, string | null>,
+) {
+  const { error } = await supabase.from("org_invites").update(patch).eq("id", inviteId);
+  if (error) {
+    // Backward compatibility: deployments can run function before DB migration is applied.
+    console.warn("invite delivery status update skipped", error.message);
+  }
 }

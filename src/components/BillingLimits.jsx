@@ -11,6 +11,7 @@ import PageHero from "./PageHero";
 const ss = ms;
 const SUPPORT_EMAIL = "mysafeops@gmail.com";
 const NO_MEMBERSHIP_MSG = "No organisation membership";
+const STRIPE_FN_KEYS = ["stripe-checkout", "stripe-portal", "stripe-webhook"];
 
 function readArrayCount(storageKey) {
   try {
@@ -42,6 +43,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const [actionError, setActionError] = useState(null);
   /** unknown | checking | ready | missing | probe_failed — only `missing` blocks Subscribe (404 = function not deployed). */
   const [stripeFnStatus, setStripeFnStatus] = useState("unknown");
+  const [stripeFnHealth, setStripeFnHealth] = useState({});
 
   const isAdmin = role === "admin";
   const cloudOk = isSupabaseConfigured() && supabase;
@@ -76,33 +78,46 @@ export default function BillingLimits({ checkoutReturn = null }) {
   useEffect(() => {
     if (!cloudOk || !isAdmin) {
       setStripeFnStatus("unknown");
+      setStripeFnHealth({});
       return;
     }
     let cancelled = false;
     const run = async () => {
       setStripeFnStatus("checking");
+      setStripeFnHealth(Object.fromEntries(STRIPE_FN_KEYS.map((k) => [k, "checking"])));
       try {
         const base = String(getSupabaseUrl() || "").replace(/\/$/, "");
         if (!base) throw new Error("Missing Supabase URL");
         const anon = String(getSupabaseAnonKey() || "").trim();
-        const res = await fetch(`${base}/functions/v1/stripe-checkout`, {
-          method: "OPTIONS",
-          headers: anon
-            ? {
-                apikey: anon,
-                Authorization: `Bearer ${anon}`,
-              }
-            : undefined,
-        });
+        const headers = anon
+          ? {
+              apikey: anon,
+              Authorization: `Bearer ${anon}`,
+            }
+          : undefined;
+        const results = await Promise.all(
+          STRIPE_FN_KEYS.map(async (fn) => {
+            try {
+              const res = await fetch(`${base}/functions/v1/${fn}`, { method: "OPTIONS", headers });
+              if (res.status === 404) return [fn, "missing"];
+              return [fn, "ready"];
+            } catch {
+              return [fn, "probe_failed"];
+            }
+          })
+        );
         if (cancelled) return;
-        if (res.status === 404) {
-          setStripeFnStatus("missing");
-          return;
-        }
-        // Any other status means the gateway answered (function may exist, misconfigured, or CORS quirk).
-        setStripeFnStatus("ready");
+        const health = Object.fromEntries(results);
+        setStripeFnHealth(health);
+        const checkout = health["stripe-checkout"];
+        if (checkout === "missing") setStripeFnStatus("missing");
+        else if (checkout === "ready") setStripeFnStatus("ready");
+        else setStripeFnStatus("probe_failed");
       } catch {
-        if (!cancelled) setStripeFnStatus("probe_failed");
+        if (!cancelled) {
+          setStripeFnStatus("probe_failed");
+          setStripeFnHealth(Object.fromEntries(STRIPE_FN_KEYS.map((k) => [k, "probe_failed"])));
+        }
       }
     };
     run();
@@ -213,6 +228,13 @@ export default function BillingLimits({ checkoutReturn = null }) {
     (billing?.subscriptionStatus === "active" || billing?.subscriptionStatus === "trialing") &&
     billing?.paidPlanId;
 
+  const healthChip = (status) => {
+    if (status === "ready") return { label: "reachable", color: "#0f766e", bg: "#ccfbf1", border: "#99f6e4" };
+    if (status === "missing") return { label: "missing", color: "#991b1b", bg: "#fee2e2", border: "#fecaca" };
+    if (status === "checking") return { label: "checking", color: "#334155", bg: "#e2e8f0", border: "#cbd5e1" };
+    return { label: "unknown", color: "#92400e", bg: "#fef3c7", border: "#fde68a" };
+  };
+
   return (
     <>
       <PageHero
@@ -254,6 +276,30 @@ export default function BillingLimits({ checkoutReturn = null }) {
             type="info"
             text="Could not verify Edge Functions from this browser (OPTIONS probe). You can still try Subscribe — if it fails, deploy stripe-checkout / stripe-portal on your Supabase project or check ad-blockers and network."
           />
+        </div>
+      )}
+
+      {cloudOk && isAdmin && (
+        <div style={{ ...ss.card, marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Billing health</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {STRIPE_FN_KEYS.map((fn) => {
+              const state = stripeFnHealth[fn] || "unknown";
+              const chip = healthChip(state);
+              return (
+                <div
+                  key={fn}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", padding: "8px 0", borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)" }}
+                >
+                  <div style={{ fontSize: 13, color: "var(--color-text-primary)" }}>{fn}</div>
+                  <span style={{ ...ss.chip, color: chip.color, background: chip.bg, borderColor: chip.border }}>{chip.label}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p style={{ margin: "10px 0 0", fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+            Missing functions must be deployed in Supabase: <code>stripe-checkout</code>, <code>stripe-portal</code>, <code>stripe-webhook</code>.
+          </p>
         </div>
       )}
 
