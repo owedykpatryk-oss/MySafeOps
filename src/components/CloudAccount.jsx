@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
@@ -9,9 +9,31 @@ import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
 import { useApp } from "../context/AppContext";
+import { getPasswordStrengthMeta } from "../utils/passwordStrength";
+import { getInboxUrl } from "../utils/emailInbox";
 
 const ss = ms;
 const MIN_PASSWORD_LENGTH = 6;
+const RESEND_COOLDOWN_SECONDS = 45;
+const LAST_AUTH_EMAIL_KEY = "mysafeops_last_auth_email";
+
+function mapAuthErrorMessage(error, fallback = "Authentication request failed") {
+  const raw = String(error?.message || "").trim();
+  const m = raw.toLowerCase();
+  if (!raw) return fallback;
+  if (m.includes("user already registered") || m.includes("already registered") || m.includes("already exists")) {
+    return "An account with this email already exists. Try Sign in.";
+  }
+  if (m.includes("invalid login credentials")) return "Invalid email or password.";
+  if (m.includes("invalid email")) return "Email address format is invalid.";
+  if (m.includes("email not confirmed") || m.includes("email_not_confirmed")) {
+    return "Email not confirmed yet. Open the confirmation link from your inbox.";
+  }
+  if (m.includes("rate limit") || m.includes("too many requests")) {
+    return "Too many attempts right now. Please wait a moment and try again.";
+  }
+  return raw || fallback;
+}
 
 /**
  * Supabase email/password — enable Email provider in Dashboard → Authentication → Providers.
@@ -24,9 +46,39 @@ export default function CloudAccount() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const r2Enabled = isR2StorageConfigured();
+  const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
+
+  const rememberAuthEmail = (value) => {
+    const v = String(value || "").trim().toLowerCase();
+    if (!v) return;
+    try {
+      localStorage.setItem(LAST_AUTH_EMAIL_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const id = window.setInterval(() => {
+      setResendCooldown((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [resendCooldown]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LAST_AUTH_EMAIL_KEY);
+      if (saved && !email) setEmail(saved);
+    } catch {
+      /* ignore */
+    }
+  }, [email]);
 
   if (!isSupabaseConfigured() || !client) {
     return (
@@ -86,9 +138,13 @@ export default function CloudAccount() {
       const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_in", entity: "auth", detail: email.trim() });
+      rememberAuthEmail(email.trim());
       setPassword("");
     } catch (e) {
-      setMsg(e.message || "Sign-in failed");
+      const maybeEmail = email.trim().toLowerCase();
+      const unconfirmed = String(e?.message || "").toLowerCase().includes("email not confirmed");
+      if (unconfirmed && maybeEmail) setPendingConfirmationEmail(maybeEmail);
+      setMsg(mapAuthErrorMessage(e, "Sign-in failed"));
     } finally {
       setBusy(false);
     }
@@ -129,13 +185,58 @@ export default function CloudAccount() {
     setMsg("");
     setBusy(true);
     try {
-      const { error } = await client.auth.signUp({ email: email.trim(), password });
+      const emailRedirectTo = new URL("/login", window.location.origin).href;
+      const { data, error } = await client.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { emailRedirectTo },
+      });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_up", entity: "auth", detail: email.trim() });
-      setMsg("Check your email — confirmation may be required on your Supabase project.");
+      if (data?.session) {
+        setMsg("Account created and signed in.");
+        rememberAuthEmail(email.trim());
+        setPassword("");
+        return;
+      }
+      setPendingConfirmationEmail(email.trim().toLowerCase());
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      rememberAuthEmail(email.trim());
+      setMsg("Account created. Confirmation email sent — check inbox and spam, open the link, then sign in.");
       setPassword("");
     } catch (e) {
-      setMsg(e.message || "Sign-up failed");
+      setMsg(mapAuthErrorMessage(e, "Sign-up failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resendConfirmationEmail = async () => {
+    const targetEmail = (pendingConfirmationEmail || email.trim()).toLowerCase();
+    if (!targetEmail) {
+      setMsg("Enter your email address first.");
+      return;
+    }
+    if (resendCooldown > 0) {
+      setMsg(`Please wait ${resendCooldown}s before sending another confirmation email.`);
+      return;
+    }
+    setMsg("");
+    setBusy(true);
+    try {
+      const emailRedirectTo = new URL("/login", window.location.origin).href;
+      const { error } = await client.auth.resend({
+        type: "signup",
+        email: targetEmail,
+        options: { emailRedirectTo },
+      });
+      if (error) throw error;
+      setPendingConfirmationEmail(targetEmail);
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      rememberAuthEmail(targetEmail);
+      setMsg("Confirmation email re-sent. Check inbox and spam.");
+    } catch (e) {
+      setMsg(mapAuthErrorMessage(e, "Could not resend confirmation email"));
     } finally {
       setBusy(false);
     }
@@ -236,6 +337,32 @@ export default function CloudAccount() {
         Show password
       </label>
       {capsLockOn && <div style={{ marginTop: 6, fontSize: 12, color: "#b45309" }}>Caps Lock is on.</div>}
+      {password.length > 0 && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid var(--color-border-tertiary,#e2e8f0)",
+            background: "var(--color-background-secondary,#f8fafc)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Password strength</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: passwordStrength.color }}>{passwordStrength.label}</span>
+          </div>
+          <div style={{ height: 6, borderRadius: 999, background: "#e2e8f0", overflow: "hidden", marginBottom: 8 }}>
+            <div style={{ width: `${passwordStrength.percent}%`, height: "100%", background: passwordStrength.color, transition: "width .2s ease" }} />
+          </div>
+          <div style={{ display: "grid", gap: 4 }}>
+            {passwordStrength.checks.map((c) => (
+              <div key={c.id} style={{ fontSize: 11, color: c.ok ? "#166534" : "var(--color-text-secondary)" }}>
+                {c.ok ? "✓" : "○"} {c.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
         <button type="button" style={ss.btnP} disabled={busy} onClick={signIn}>
           Sign in
@@ -244,6 +371,27 @@ export default function CloudAccount() {
           Create account
         </button>
       </div>
+      {pendingConfirmationEmail && (
+        <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, border: "1px solid #bfdbfe", background: "#eff6ff" }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#1e3a8a", marginBottom: 6 }}>Check your email</div>
+          <div style={{ fontSize: 12, color: "#1e40af", lineHeight: 1.5 }}>
+            We sent a confirmation link to <strong>{pendingConfirmationEmail}</strong>. Open the link, then sign in.
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+            <a
+              href={getInboxUrl(pendingConfirmationEmail)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...ss.btn, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+            >
+              Open inbox
+            </a>
+            <button type="button" style={ss.btn} onClick={resendConfirmationEmail} disabled={busy || resendCooldown > 0}>
+              {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend confirmation email"}
+            </button>
+          </div>
+        </div>
+      )}
       <div style={{ marginTop: 14 }}>
         <button
           type="button"

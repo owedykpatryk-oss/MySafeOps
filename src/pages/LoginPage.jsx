@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { ShieldCheck } from "lucide-react";
+import { LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
@@ -11,15 +11,45 @@ import { setPendingInviteToken } from "../lib/inviteToken";
 import { ensureUserOrgContext } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
+import { getPasswordStrengthMeta } from "../utils/passwordStrength";
+import { getInboxUrl } from "../utils/emailInbox";
 
 const ss = ms;
 const teal = "#0d9488";
 const navy = "#0f172a";
 const SUPPORT_EMAIL = "mysafeops@gmail.com";
 const MIN_PASSWORD_LENGTH = 6;
+const RESEND_COOLDOWN_SECONDS = 45;
+const LAST_AUTH_EMAIL_KEY = "mysafeops_last_auth_email";
+
+function mapAuthErrorMessage(error, fallback = "Authentication request failed") {
+  const raw = String(error?.message || "").trim();
+  const m = raw.toLowerCase();
+  if (!raw) return fallback;
+  if (m.includes("user already registered") || m.includes("already registered") || m.includes("already exists")) {
+    return "An account with this email already exists. Try Sign in or Forgot password.";
+  }
+  if (m.includes("invalid login credentials")) {
+    return "Invalid email or password.";
+  }
+  if (m.includes("invalid email")) {
+    return "Email address format is invalid.";
+  }
+  if (m.includes("email not confirmed") || m.includes("email_not_confirmed")) {
+    return "Email not confirmed yet. Use 'Resend confirmation email', then open the link from your inbox.";
+  }
+  if (m.includes("rate limit") || m.includes("too many requests")) {
+    return "Too many attempts right now. Please wait a moment and try again.";
+  }
+  if (m.includes("password")) {
+    return raw;
+  }
+  return raw || fallback;
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const emailInputRef = useRef(null);
   const [searchParams] = useSearchParams();
   const { supabase: client, user, loading, ready } = useSupabaseAuth();
   const cloud = isSupabaseConfigured() && client;
@@ -28,6 +58,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [, setTick] = useState(0);
@@ -38,11 +70,32 @@ export default function LoginPage() {
   const safeNextPath = nextPath.startsWith("/") ? nextPath : "/app";
   const normalizedEmail = email.trim().toLowerCase();
   const lockout = getAuthLockoutState(normalizedEmail, Date.now());
+  const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
+
+  const rememberAuthEmail = (value) => {
+    const v = String(value || "").trim().toLowerCase();
+    if (!v) return;
+    try {
+      localStorage.setItem(LAST_AUTH_EMAIL_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LAST_AUTH_EMAIL_KEY);
+      if (saved && !email) setEmail(saved);
+    } catch {
+      /* ignore */
+    }
+  }, [email]);
 
   useEffect(() => {
     if (!inviteToken) return;
     setPendingInviteToken(inviteToken, inviteEmail);
     if (inviteEmail && !email) setEmail(inviteEmail);
+    if (inviteEmail) rememberAuthEmail(inviteEmail);
   }, [inviteToken, inviteEmail, email]);
 
   useEffect(() => {
@@ -56,6 +109,14 @@ export default function LoginPage() {
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
     return () => window.clearInterval(id);
   }, [lockout.isLocked]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const id = window.setInterval(() => {
+      setResendCooldown((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [resendCooldown]);
 
   if (cloud && ready && user) {
     return <Navigate to={safeNextPath} replace />;
@@ -85,9 +146,20 @@ export default function LoginPage() {
       clearAuthFailures(normalizedEmail);
       await ensureUserOrgContext(client);
       trackAuthEvent("sign_in_success", { email: normalizedEmail });
+      rememberAuthEmail(email.trim());
       setPassword("");
       navigate(safeNextPath, { replace: true });
     } catch (e) {
+      const rawMessage = String(e?.message || "");
+      const unconfirmed =
+        rawMessage.toLowerCase().includes("email not confirmed") ||
+        rawMessage.toLowerCase().includes("email_not_confirmed");
+      if (unconfirmed) {
+        trackAuthEvent("sign_in_unconfirmed", { email: normalizedEmail });
+        setPendingConfirmationEmail(normalizedEmail);
+        setMsg("Email not confirmed yet. Use 'Resend confirmation email', then open the link from your inbox and sign in again.");
+        return;
+      }
       const state = recordAuthFailure(normalizedEmail, Date.now());
       trackAuthError("sign_in_failed", e, { email: normalizedEmail, failures: state.failures });
       if (state.isLocked) {
@@ -142,15 +214,31 @@ export default function LoginPage() {
     setBusy(true);
     trackAuthEvent("sign_up_attempt", { email: normalizedEmail });
     try {
-      const { error } = await client.auth.signUp({ email: email.trim(), password });
+      const emailRedirectTo = new URL("/login", window.location.origin).href;
+      const { data, error } = await client.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { emailRedirectTo },
+      });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_up", entity: "auth", detail: email.trim() });
       trackAuthEvent("sign_up_success", { email: normalizedEmail });
-      setMsg("Account created. Check your inbox (and spam) to confirm your email before first sign-in.");
+      // If email confirmation is disabled in Supabase, a session may be returned immediately.
+      if (data?.session) {
+        setMsg("Account created and signed in.");
+        rememberAuthEmail(email.trim());
+        setPassword("");
+        navigate(safeNextPath, { replace: true });
+        return;
+      }
+      setPendingConfirmationEmail(normalizedEmail);
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      rememberAuthEmail(normalizedEmail);
+      setMsg("Account created. Confirmation email sent — check inbox and spam, open the link, then sign in.");
       setPassword("");
     } catch (e) {
       trackAuthError("sign_up_failed", e, { email: normalizedEmail });
-      setMsg(e.message || "Sign-up failed");
+      setMsg(mapAuthErrorMessage(e, "Sign-up failed"));
     } finally {
       setBusy(false);
     }
@@ -173,7 +261,7 @@ export default function LoginPage() {
       setMsg("Password reset email sent. Open the link in that email to set a new password.");
     } catch (e) {
       trackAuthError("password_reset_email_failed", e, { email: normalizedEmail });
-      setMsg(e.message || "Could not send reset email");
+      setMsg(mapAuthErrorMessage(e, "Could not send reset email"));
     } finally {
       setBusy(false);
     }
@@ -181,26 +269,34 @@ export default function LoginPage() {
 
   const resendConfirmationEmail = async () => {
     if (!client) return;
-    if (!email.trim()) {
+    const targetEmail = (pendingConfirmationEmail || email.trim()).toLowerCase();
+    if (!targetEmail) {
       setMsg("Enter your email address first.");
+      return;
+    }
+    if (resendCooldown > 0) {
+      setMsg(`Please wait ${resendCooldown}s before sending another confirmation email.`);
       return;
     }
     setMsg("");
     setBusy(true);
-    trackAuthEvent("resend_confirmation_attempt", { email: normalizedEmail });
+    trackAuthEvent("resend_confirmation_attempt", { email: targetEmail });
     try {
       const emailRedirectTo = new URL("/login", window.location.origin).href;
       const { error } = await client.auth.resend({
         type: "signup",
-        email: email.trim(),
+        email: targetEmail,
         options: { emailRedirectTo },
       });
       if (error) throw error;
-      trackAuthEvent("resend_confirmation_success", { email: normalizedEmail });
+      trackAuthEvent("resend_confirmation_success", { email: targetEmail });
+      setPendingConfirmationEmail(targetEmail);
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      rememberAuthEmail(targetEmail);
       setMsg("Confirmation email re-sent. Check inbox and spam.");
     } catch (e) {
-      trackAuthError("resend_confirmation_failed", e, { email: normalizedEmail });
-      setMsg(e.message || "Could not resend confirmation email");
+      trackAuthError("resend_confirmation_failed", e, { email: targetEmail });
+      setMsg(mapAuthErrorMessage(e, "Could not resend confirmation email"));
     } finally {
       setBusy(false);
     }
@@ -216,7 +312,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "DM Sans, system-ui, sans-serif", padding: "1.5rem 1rem 2rem" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        fontFamily: "DM Sans, system-ui, sans-serif",
+        padding: "1.5rem 1rem 2rem",
+        background:
+          "radial-gradient(130% 70% at 50% -8%, rgba(20,184,166,0.16), transparent 55%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%)",
+      }}
+    >
       <div style={{ maxWidth: 420, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <Link to="/" style={{ textDecoration: "none", color: navy, display: "inline-flex", alignItems: "center", gap: 10 }}>
@@ -227,7 +331,32 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        <div style={{ ...ss.card, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <div
+          style={{
+            ...ss.card,
+            border: "1px solid rgba(203,213,225,0.8)",
+            boxShadow: "0 12px 34px rgba(15,23,42,0.09)",
+            backdropFilter: "blur(3px)",
+          }}
+        >
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "5px 9px",
+              borderRadius: 999,
+              background: "rgba(13,148,136,0.08)",
+              border: "1px solid rgba(13,148,136,0.24)",
+              color: "#0f766e",
+              fontSize: 11,
+              fontWeight: 600,
+              marginBottom: 10,
+            }}
+          >
+            <Sparkles size={13} aria-hidden />
+            Secure workspace access
+          </div>
           <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>Workspace access</h1>
           {cloud ? (
             <>
@@ -236,22 +365,71 @@ export default function LoginPage() {
                 backup.
               </p>
               <label style={ss.lbl}>Email</label>
-              <input type="email" autoComplete="email" style={ss.inp} value={email} onChange={(e) => setEmail(e.target.value)} />
+              <div
+                style={{
+                  ...ss.inp,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  boxShadow: "var(--shadow-sm)",
+                }}
+              >
+                <Mail size={15} color="#64748b" aria-hidden />
+                <input
+                  ref={emailInputRef}
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  style={{
+                    border: "none",
+                    outline: "none",
+                    width: "100%",
+                    fontSize: 14,
+                    background: "transparent",
+                    color: "var(--color-text-primary)",
+                    fontFamily: "inherit",
+                  }}
+                />
+              </div>
               {inviteToken && (
                 <p style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
                   Invite detected{inviteEmail ? ` for ${inviteEmail}` : ""}. Sign in or create account with this email to join your organisation.
                 </p>
               )}
               <label style={{ ...ss.lbl, marginTop: 10 }}>Password</label>
-              <input
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                style={ss.inp}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyUp={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
-                onKeyDown={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
-              />
+              <div
+                style={{
+                  ...ss.inp,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "10px 12px",
+                  boxShadow: "var(--shadow-sm)",
+                }}
+              >
+                <LockKeyhole size={15} color="#64748b" aria-hidden />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyUp={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
+                  onKeyDown={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
+                  placeholder="Your password"
+                  style={{
+                    border: "none",
+                    outline: "none",
+                    width: "100%",
+                    fontSize: 14,
+                    background: "transparent",
+                    color: "var(--color-text-primary)",
+                    fontFamily: "inherit",
+                  }}
+                />
+              </div>
               <label
                 style={{
                   display: "inline-flex",
@@ -272,21 +450,86 @@ export default function LoginPage() {
                 Show password
               </label>
               {capsLockOn && <div style={{ marginTop: 6, fontSize: 12, color: "#b45309" }}>Caps Lock is on.</div>}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
-                <button type="button" style={ss.btnP} disabled={busy || lockout.isLocked} onClick={signIn}>
+              {password.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid var(--color-border-tertiary,#e2e8f0)",
+                    background: "var(--color-background-secondary,#f8fafc)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Password strength</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: passwordStrength.color }}>{passwordStrength.label}</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 999, background: "#e2e8f0", overflow: "hidden", marginBottom: 8 }}>
+                    <div style={{ width: `${passwordStrength.percent}%`, height: "100%", background: passwordStrength.color, transition: "width .2s ease" }} />
+                  </div>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    {passwordStrength.checks.map((c) => (
+                      <div key={c.id} style={{ fontSize: 11, color: c.ok ? "#166534" : "var(--color-text-secondary)" }}>
+                        {c.ok ? "✓" : "○"} {c.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 14 }}>
+                <button type="button" style={{ ...ss.btnP, width: "100%" }} disabled={busy || lockout.isLocked} onClick={signIn}>
                   Sign in
                 </button>
-                <button type="button" style={ss.btn} disabled={busy} onClick={signUp}>
+                <button type="button" style={{ ...ss.btn, width: "100%" }} disabled={busy} onClick={signUp}>
                   Create account
                 </button>
               </div>
+              {pendingConfirmationEmail && (
+                <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, border: "1px solid #bfdbfe", background: "#eff6ff" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#1e3a8a", marginBottom: 6 }}>Check your email</div>
+                  <div style={{ fontSize: 12, color: "#1e40af", lineHeight: 1.5 }}>
+                    We sent a confirmation link to <strong>{pendingConfirmationEmail}</strong>. Open the link, then return here to sign in.
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                    <a
+                      href={getInboxUrl(pendingConfirmationEmail)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ ...ss.btn, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+                    >
+                      Open inbox
+                    </a>
+                    <button type="button" style={ss.btn} onClick={resendConfirmationEmail} disabled={busy || resendCooldown > 0}>
+                      {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend confirmation email"}
+                    </button>
+                    <button
+                      type="button"
+                      style={ss.btn}
+                      onClick={() => {
+                        setPendingConfirmationEmail("");
+                        setResendCooldown(0);
+                        setMsg("");
+                        emailInputRef.current?.focus();
+                      }}
+                      disabled={busy}
+                    >
+                      Change email
+                    </button>
+                  </div>
+                </div>
+              )}
               <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <button type="button" style={ss.btn} disabled={busy} onClick={sendPasswordReset}>
                   Forgot password
                 </button>
                 <button type="button" style={ss.btn} disabled={busy} onClick={resendConfirmationEmail}>
-                  Resend confirmation email
+                  {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend confirmation email"}
                 </button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, marginBottom: 2 }}>
+                <div style={{ height: 1, flex: 1, background: "var(--color-border-tertiary)" }} />
+                <span style={{ fontSize: 11, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>or</span>
+                <div style={{ height: 1, flex: 1, background: "var(--color-border-tertiary)" }} />
               </div>
               {lockout.isLocked && (
                 <InlineAlert type="error" text={`Temporary lockout active: ${formatLockoutRemaining(lockout.remainingMs)} remaining.`} style={{ fontSize: 12 }} />
