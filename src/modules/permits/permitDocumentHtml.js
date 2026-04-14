@@ -114,6 +114,15 @@ export function renderPermitDocumentHtml(permit) {
   ]
     .filter(Boolean)
     .join("");
+  const legalRefs = Array.isArray(permit.complianceProfile?.legalReferences)
+    ? permit.complianceProfile.legalReferences.filter(Boolean)
+    : [];
+  const legalRefsHtml = legalRefs.length
+    ? `<h2>Legal references (UK)</h2>
+  <ul style="margin:0 0 10px 18px;padding:0;font-size:11px;line-height:1.5">
+    ${legalRefs.map((ref) => `<li>${escapeHtml(ref)}</li>`).join("")}
+  </ul>`
+    : "";
 
   const logoAttr = org.logo ? escapeAttr(org.logo) : "";
   const orgName = escapeHtml(org.name || "MySafeOps");
@@ -121,9 +130,10 @@ export function renderPermitDocumentHtml(permit) {
   const versionTag = escapeHtml(deriveVersionTag(versionPrefix, permit));
   const themeTypeColor = theme === "executive" ? primaryColor : def.color;
   const themeTypeBg = theme === "executive" ? `${primaryColor}1A` : def.bg;
-  const watermarkLabel = escapeHtml(
-    watermarkText || (String(permit.status || "").toLowerCase() === "active" ? "ACTIVE" : "DRAFT")
-  );
+  const statusLc = String(permit.status || "").toLowerCase();
+  const watermarkFallback =
+    statusLc === "active" ? "ACTIVE" : statusLc === "closed" ? "CLOSED" : "DRAFT";
+  const watermarkLabel = escapeHtml(watermarkText || watermarkFallback);
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>PTW — ${escapeHtml(def.label)}</title>
   <style>
@@ -180,6 +190,7 @@ export function renderPermitDocumentHtml(permit) {
   <h2>Pre-work checklist (${checkedCount}/${checklistItems.length || 0} confirmed)</h2>
   <table><tbody>${checklistHTML}</tbody></table>
   ${permit.notes ? `<h2>Conditions / restrictions</h2><p style="font-size:12px;line-height:1.6;padding:6px 8px;background:#fff8e6;border:0.5px solid #e5c060">${escapeHtml(permit.notes)}</p>` : ""}
+  ${legalRefsHtml}
   <h2>Signatures</h2>
   <table>
     <tr><th>Role</th><th>Name</th><th>Signature</th><th>Date/Time</th></tr>
@@ -187,6 +198,16 @@ export function renderPermitDocumentHtml(permit) {
     <tr style="height:48px"><td style="padding:6px;border:1px solid #ddd">Received by (Permit holder)</td><td style="padding:6px;border:1px solid #ddd">${escapeHtml(permit.issuedTo || "")}</td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td></tr>
     <tr style="height:48px"><td style="padding:6px;border:1px solid #ddd">Permit closed by</td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td></tr>
   </table>
+  ${
+    statusLc === "closed" && permit.closedAt
+      ? `<h2>Permit closure</h2><p style="font-size:12px;line-height:1.6;padding:8px 10px;background:#f8fafc;border:0.5px solid #e2e8f0;margin:0 0 10px">Closed: ${escapeHtml(fmtDateTime(permit.closedAt))}</p>`
+      : ""
+  }
+  ${
+    permit.lessonsLearned
+      ? `<h2>Lessons learned</h2><p style="font-size:12px;line-height:1.6;padding:8px 10px;background:#e8f4fc;border:0.5px solid #cfe3f8;color:#0b4f7c;margin:0 0 10px">${escapeHtml(permit.lessonsLearned)}</p>`
+      : ""
+  }
   <p style="font-size:10px;color:#999;margin-top:16px">${pdfFooter} · ${escapeHtml(fmtDateTime(permit.createdAt))}</p>
   <p class="compliance">${escapeHtml(complianceLine)}</p>
   </div>

@@ -6,8 +6,12 @@ import {
   requestNotificationPermission,
   subscribeToPush,
   unsubscribeFromPush,
+  getCloudPushHealth,
   getNotificationStatus,
   startNotificationScheduler,
+  stopNotificationScheduler,
+  runNotificationCheckNow,
+  sendCloudPermitPush,
   showLocalNotification,
 } from "./pushNotifications";
 import PageHero from "../components/PageHero";
@@ -37,6 +41,9 @@ function Toggle({ value, onChange }) {
 
 export default function NotificationSettings() {
   const [status, setStatus] = useState(null);
+  const [health, setHealth] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [repairLoading, setRepairLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [prefs, setPrefs] = useState(() => {
     try { return JSON.parse(localStorage.getItem("mysafeops_notif_prefs") || "{}"); }
@@ -53,12 +60,33 @@ export default function NotificationSettings() {
     getNotificationStatus().then(setStatus);
   }, []);
 
+  const refreshHealth = async () => {
+    setHealthLoading(true);
+    try {
+      const snapshot = await getCloudPushHealth();
+      setHealth(snapshot);
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!status) return;
+    void refreshHealth();
+  }, [status?.permission, status?.subscribed, status?.swReady, status?.vapidConfigured]);
+
+  useEffect(() => {
+    if (!status || status.permission !== "granted" || prefs.master === false) return undefined;
+    const stop = startNotificationScheduler();
+    return () => stop?.();
+  }, [status, prefs.master]);
+
   const handleEnable = async () => {
     setLoading(true);
     const perm = await requestNotificationPermission();
     if (perm === "granted") {
       await subscribeToPush().catch(() => {});
-      startNotificationScheduler();
+      if (prefs.master !== false) startNotificationScheduler();
     }
     const s = await getNotificationStatus();
     setStatus(s);
@@ -67,6 +95,7 @@ export default function NotificationSettings() {
 
   const handleDisable = async () => {
     setLoading(true);
+    stopNotificationScheduler();
     await unsubscribeFromPush();
     const s = await getNotificationStatus();
     setStatus(s);
@@ -80,14 +109,51 @@ export default function NotificationSettings() {
     });
   };
 
+  const testCloudPush = async () => {
+    const result = await sendCloudPermitPush({
+      title: "MySafeOps cloud push test",
+      body: "Background web push channel is working.",
+      tag: `cloud_test_${Date.now()}`,
+      url: "/?tab=permits",
+      permit: { id: "TEST", type: "general", status: "active", location: "Workspace" },
+    });
+    if (result?.ok && !result?.skipped) {
+      window.alert(`Cloud push sent (${result?.sent ?? 0} endpoint(s)).`);
+      return;
+    }
+    window.alert(result?.reason === "supabase_not_configured" ? "Supabase not configured for cloud push." : (result?.error || "Cloud push test skipped/failed."));
+  };
+
+  const repairSubscription = async () => {
+    setRepairLoading(true);
+    try {
+      const perm = await requestNotificationPermission();
+      if (perm !== "granted") {
+        window.alert("Notification permission is required before subscription repair.");
+        return;
+      }
+      await unsubscribeFromPush().catch(() => {});
+      const sub = await subscribeToPush().catch(() => null);
+      const s = await getNotificationStatus();
+      setStatus(s);
+      await refreshHealth();
+      window.alert(sub || s?.subscribed ? "Push subscription repaired and synced." : "Repair completed, but subscription is still missing.");
+    } finally {
+      setRepairLoading(false);
+    }
+  };
+
   if (!status) return null;
 
   const enabled = status.permission === "granted";
   const denied = status.permission === "denied";
 
   const NOTIFICATION_TYPES = [
+    { key: "master",         label: "Enable all reminder checks",       sub: "Master switch for scheduled notification scans" },
     { key: "cert_expiry",    label: "Certificate expiry reminders",    sub: "30, 14, 7 and 1 day before expiry" },
     { key: "permit_expiry",  label: "Permit expiry reminders",         sub: "14, 7 and 1 day before expiry" },
+    { key: "permit_briefing",label: "Permit briefing pending alerts",   sub: "Active high-risk permits with missing briefing confirmation" },
+    { key: "permit_rams_link",label: "Permit missing RAMS alerts",      sub: "Active permits without linked RAMS document" },
     { key: "rams_review",    label: "RAMS review due reminders",       sub: "14 days before review date" },
     { key: "equip_inspect",  label: "Equipment inspection reminders",  sub: "14 and 7 days before due date" },
     { key: "timesheet",      label: "Timesheet approval reminders",    sub: "When timesheets are awaiting approval" },
@@ -115,6 +181,12 @@ export default function NotificationSettings() {
           </div>
         )}
 
+        {status.supported && !status.vapidConfigured && (
+          <div style={{ padding:"10px 14px", background:"#FFFBEB", borderRadius:8, fontSize:13, color:"#854d0e", marginBottom:12 }}>
+            Background cloud push is not fully configured yet (missing `VITE_VAPID_PUBLIC_KEY` in frontend env). Local reminders still work while the app is open.
+          </div>
+        )}
+
         {status.supported && !denied && (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 14px", background:enabled?"#EAF3DE":"var(--color-background-secondary,#f7f7f5)", borderRadius:8, marginBottom:enabled?16:0 }}>
             <div>
@@ -127,6 +199,8 @@ export default function NotificationSettings() {
             </div>
             <div style={{ display:"flex", gap:8 }}>
               {enabled && <button onClick={testNotif} style={{ ...ss.btn, fontSize:12 }}>Test</button>}
+              {enabled && <button onClick={() => void testCloudPush()} style={{ ...ss.btn, fontSize:12 }}>Test cloud push</button>}
+              {enabled && <button onClick={runNotificationCheckNow} style={{ ...ss.btn, fontSize:12 }}>Run check now</button>}
               {enabled
                 ? <button onClick={handleDisable} disabled={loading} style={{ ...ss.btn, fontSize:12 }}>{loading?"…":"Disable"}</button>
                 : <button onClick={handleEnable} disabled={loading} style={{ ...ss.btnP, fontSize:12 }}>{loading?"Enabling…":"Enable notifications"}</button>
@@ -137,6 +211,32 @@ export default function NotificationSettings() {
 
         {enabled && (
           <div>
+            <div style={{ marginBottom:12, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"10px 12px", background:"var(--color-background-secondary,#f7f7f5)" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:8 }}>
+                <div style={{ fontSize:12, fontWeight:600 }}>Push health diagnostics</div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  <button onClick={() => void refreshHealth()} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                    {healthLoading ? "Checking..." : "Refresh health"}
+                  </button>
+                  <button onClick={() => void repairSubscription()} disabled={repairLoading} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                    {repairLoading ? "Repairing..." : "Repair subscription"}
+                  </button>
+                </div>
+              </div>
+              <div style={{ display:"grid", gap:6, fontSize:12 }}>
+                <div>Browser support: <strong>{health?.supported ? "OK" : "No"}</strong></div>
+                <div>Permission: <strong>{health?.permission || status.permission}</strong></div>
+                <div>Service worker: <strong>{health?.swReady ? "Ready" : "Not ready"}</strong></div>
+                <div>Frontend VAPID key: <strong>{health?.vapidConfigured ? "Configured" : "Missing"}</strong></div>
+                <div>Device subscription: <strong>{health?.subscribed ? "Active" : "Missing"}</strong></div>
+                <div>
+                  Cloud function:{" "}
+                  <strong>{health?.cloud?.ok ? "Reachable" : "Issue"}</strong>
+                  {health?.cloud?.subscriptions != null ? ` · endpoints: ${health.cloud.subscriptions}` : ""}
+                  {health?.cloud?.reason ? ` · ${health.cloud.reason}` : ""}
+                </div>
+              </div>
+            </div>
             <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>
               Notification types
             </div>

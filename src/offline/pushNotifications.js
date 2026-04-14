@@ -2,10 +2,65 @@
 // No external libraries needed — uses Web Push API + Notification API
 
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import { supabase } from "../lib/supabase";
 
-const VAPID_PUBLIC_KEY = "YOUR_VAPID_PUBLIC_KEY_HERE";
-// Generate VAPID keys: npx web-push generate-vapid-keys
-// Replace the string above with your actual public key
+const VAPID_PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "").trim();
+const NOTIF_PREFS_KEY = "mysafeops_notif_prefs";
+const DEFAULT_SCHEDULER_INTERVAL_MS = 30 * 60 * 1000;
+const BRIEFING_PENDING_MINUTES = 20;
+const PERMIT_TYPES_REQUIRING_BRIEFING = new Set([
+  "hot_works",
+  "confined_space",
+  "loto",
+  "excavation",
+  "lifting_ops",
+  "temporary_works",
+  "electrical_isolation",
+]);
+
+function loadNotificationPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(NOTIF_PREFS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function isNotificationTypeEnabled(typeKey) {
+  const prefs = loadNotificationPrefs();
+  return prefs?.[typeKey] !== false;
+}
+
+function hasVapidPublicKey() {
+  return Boolean(VAPID_PUBLIC_KEY && VAPID_PUBLIC_KEY.length > 24);
+}
+
+function getOrgSlug() {
+  const v = String(localStorage.getItem("mysafeops_orgId") || "default").trim().toLowerCase();
+  return v || "default";
+}
+
+async function syncSubscriptionToCloud(subscription) {
+  if (!supabase || !subscription) return;
+  try {
+    await supabase.functions.invoke("push-subscription", {
+      body: { action: "upsert", orgSlug: getOrgSlug(), subscription },
+    });
+  } catch (err) {
+    console.warn("[MySafeOps Push] Cloud subscription sync failed:", err);
+  }
+}
+
+async function removeSubscriptionFromCloud(endpoint) {
+  if (!supabase || !endpoint) return;
+  try {
+    await supabase.functions.invoke("push-subscription", {
+      body: { action: "remove", orgSlug: getOrgSlug(), endpoint },
+    });
+  } catch (err) {
+    console.warn("[MySafeOps Push] Cloud unsubscription failed:", err);
+  }
+}
 
 // ─── Permission & subscription ───────────────────────────────────────────────
 export async function requestNotificationPermission() {
@@ -19,18 +74,24 @@ export async function requestNotificationPermission() {
 export async function subscribeToPush() {
   const reg = await navigator.serviceWorker?.ready;
   if (!reg) return null;
+  if (!("PushManager" in window)) return null;
 
   try {
     const existing = await reg.pushManager.getSubscription();
-    if (existing) return existing;
+    if (existing) {
+      await syncSubscriptionToCloud(existing.toJSON?.() || existing);
+      return existing;
+    }
+    if (!hasVapidPublicKey()) {
+      // Local reminders still work without server-side push subscription.
+      return null;
+    }
 
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
     });
-
-    // In production: send sub to your backend
-    // await fetch("/api/push/subscribe", { method:"POST", body:JSON.stringify(sub), headers:{"Content-Type":"application/json"} });
+    await syncSubscriptionToCloud(sub.toJSON?.() || sub);
 
     return sub;
   } catch (err) {
@@ -43,10 +104,69 @@ export async function unsubscribeFromPush() {
   const reg = await navigator.serviceWorker?.ready;
   const sub = await reg?.pushManager.getSubscription();
   if (sub) {
+    const endpoint = sub.endpoint || "";
+    await removeSubscriptionFromCloud(endpoint);
     await sub.unsubscribe();
     return true;
   }
   return false;
+}
+
+export async function sendCloudPermitPush(payload = {}) {
+  if (!supabase) return { ok: false, skipped: true, reason: "supabase_not_configured" };
+  try {
+    const body = {
+      orgSlug: getOrgSlug(),
+      ...payload,
+    };
+    const { data, error } = await supabase.functions.invoke("send-permit-web-push", { body });
+    if (error) throw error;
+    if (data?.error) throw new Error(String(data.error));
+    return data || { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+export async function getCloudPushHealth() {
+  const status = await getNotificationStatus();
+  const health = {
+    supported: Boolean(status?.supported),
+    permission: status?.permission || "unsupported",
+    swReady: Boolean(status?.swReady),
+    vapidConfigured: Boolean(status?.vapidConfigured),
+    subscribed: Boolean(status?.subscribed),
+    cloud: { ok: false, reason: "unknown" },
+  };
+  if (!supabase) {
+    health.cloud = { ok: false, reason: "supabase_not_configured" };
+    return health;
+  }
+  try {
+    const dry = await sendCloudPermitPush({
+      dryRun: true,
+      title: "Push health check",
+      body: "dry-run",
+      tag: `push_health_${Date.now()}`,
+      url: "/?tab=settings",
+      permit: { id: "HEALTH", type: "general", status: "active", location: "Workspace" },
+    });
+    if (dry?.ok) {
+      health.cloud = {
+        ok: true,
+        reason: "ready",
+        subscriptions: Number(dry?.subscriptions || 0),
+      };
+    } else {
+      health.cloud = {
+        ok: false,
+        reason: String(dry?.reason || dry?.error || "cloud_dry_run_failed"),
+      };
+    }
+  } catch (err) {
+    health.cloud = { ok: false, reason: String(err?.message || err) };
+  }
+  return health;
 }
 
 function urlBase64ToUint8Array(base64String) {
@@ -122,7 +242,7 @@ export function checkExpiryNotifications() {
   const ramsDocs = loadJSON("rams_builder_docs", []);
 
   // ── Worker certifications ──
-  workers.forEach(w => {
+  if (isNotificationTypeEnabled("cert_expiry")) workers.forEach(w => {
     (w.certifications || []).forEach(cert => {
       const days = daysUntil(cert.expiryDate);
       if (days === null) return;
@@ -151,7 +271,7 @@ export function checkExpiryNotifications() {
   });
 
   // ── Permits (active only — same-day uses hours for clearer copy) ──
-  permits.forEach((p) => {
+  if (isNotificationTypeEnabled("permit_expiry")) permits.forEach((p) => {
     if (p.status !== "active") return;
     const endIso = permitEndIso(p);
     if (!endIso) return;
@@ -189,8 +309,49 @@ export function checkExpiryNotifications() {
     });
   });
 
+  // ── Active permit briefing reminders ──
+  if (isNotificationTypeEnabled("permit_briefing")) permits.forEach((p) => {
+    const status = String(p?.status || "").toLowerCase();
+    const permitType = String(p?.type || "").toLowerCase();
+    if (status !== "active" || !PERMIT_TYPES_REQUIRING_BRIEFING.has(permitType)) return;
+    if (p?.briefingConfirmedAt) return;
+    if (!p?.startDateTime) return;
+    const startedMs = new Date(p.startDateTime).getTime();
+    if (!Number.isFinite(startedMs)) return;
+    const ageMs = Date.now() - startedMs;
+    if (ageMs < BRIEFING_PENDING_MINUTES * 60 * 1000) return;
+
+    const minutesLate = Math.floor(ageMs / (60 * 1000));
+    const id = `permit_briefing_${p.id}_${Math.floor(minutesLate / 60)}`;
+    if (wasRecentlySeen(id)) return;
+
+    showLocalNotification("Permit briefing pending", {
+      body: `${(p.type || "Permit").replace(/_/g, " ")} at ${p.location || "site"} has no briefing confirmation (${minutesLate}m since start).`,
+      tag: id,
+      requireInteraction: minutesLate >= 60,
+      data: { url: "/?tab=permits" },
+    });
+    markSeen(id);
+  });
+
+  // ── Active permit missing RAMS link ──
+  if (isNotificationTypeEnabled("permit_rams_link")) permits.forEach((p) => {
+    const status = String(p?.status || "").toLowerCase();
+    if (status !== "active") return;
+    if (String(p?.linkedRamsId || "").trim()) return;
+    const id = `permit_rams_missing_${p.id}`;
+    if (wasRecentlySeen(id)) return;
+
+    showLocalNotification("Active permit missing RAMS", {
+      body: `${(p.type || "Permit").replace(/_/g, " ")} at ${p.location || "site"} has no linked RAMS document.`,
+      tag: id,
+      data: { url: "/?tab=permits" },
+    });
+    markSeen(id);
+  });
+
   // ── Equipment inspections ──
-  equipment.forEach(item => {
+  if (isNotificationTypeEnabled("equip_inspect")) equipment.forEach(item => {
     const days = daysUntil(item.nextInspection);
     if (days === null) return;
 
@@ -210,7 +371,7 @@ export function checkExpiryNotifications() {
   });
 
   // ── RAMS review ──
-  ramsDocs.forEach(doc => {
+  if (isNotificationTypeEnabled("rams_review")) ramsDocs.forEach(doc => {
     const days = daysUntil(doc.reviewDate);
     if (days === null) return;
 
@@ -242,15 +403,28 @@ export function stopNotificationScheduler() {
   if (checkInterval) { clearInterval(checkInterval); checkInterval = null; }
 }
 
+export function runNotificationCheckNow() {
+  checkExpiryNotifications();
+}
+
+export function initNotificationRuntime() {
+  if (!("Notification" in window)) return () => {};
+  if (Notification.permission !== "granted") return () => {};
+  if (isNotificationTypeEnabled("master") === false) return () => {};
+  return startNotificationScheduler(DEFAULT_SCHEDULER_INTERVAL_MS);
+}
+
 // ─── Settings UI data ─────────────────────────────────────────────────────────
 export async function getNotificationStatus() {
-  const permission = Notification.permission;
+  const supported = "Notification" in window;
+  const permission = supported ? Notification.permission : "unsupported";
   const reg = await navigator.serviceWorker?.ready;
   const sub = await reg?.pushManager?.getSubscription();
   return {
-    supported: "Notification" in window,
+    supported,
     permission,
     subscribed: !!sub,
     swReady: !!reg,
+    vapidConfigured: hasVapidPublicKey(),
   };
 }

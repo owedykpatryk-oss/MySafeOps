@@ -41,7 +41,9 @@ function InspectionForm({ item, onSave, onClose }) {
   const def = INSPECTION_TYPES[form.type]||INSPECTION_TYPES.other;
 
   const handlePhoto = (e) => {
-    const file = e.target.files[0]; if (!file) return;
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
     const r = new FileReader();
     r.onload = ev => set("photo",ev.target.result);
     r.readAsDataURL(file);

@@ -75,6 +75,7 @@ export default function OrgSettings() {
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
+    e.target.value = "";
     if (!file) return;
     if (file.size > 500000) { alert("Logo must be under 500KB"); return; }
     const reader = new FileReader();

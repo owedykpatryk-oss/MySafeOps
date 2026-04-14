@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
-import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin } from "lucide-react";
+import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Trash2 } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
@@ -23,6 +23,8 @@ import {
 import { getPinnedModuleIds, togglePinnedModule } from "../utils/pinnedModules";
 import { recordRecentModule } from "../utils/recentModules";
 import { workspaceViewLoaders, workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_ID } from "../navigation/workspaceViews";
+import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { isSuperAdminEmail } from "../utils/superAdmin";
 
 const LAST_VIEW_STORAGE_KEY = "mysafeops_last_workspace_view";
 const WORKSPACE_LAYOUT_VIEW_IDS = new Set([...Object.keys(workspaceViewLoaders), "settings"]);
@@ -163,6 +165,7 @@ const NAV_ICONS = {
   rams: ClipboardList,
   workers: Users,
   "site-map": MapPin,
+  bin: Trash2,
   more: Menu,
 };
 
@@ -172,10 +175,13 @@ const NAV_TABS = [
   { id: "rams", label: "RAMS", icon: NAV_ICONS.rams },
   { id: "workers", label: "Workers", icon: NAV_ICONS.workers },
   { id: "site-map", label: "Site map", icon: NAV_ICONS["site-map"] },
+  { id: "bin", label: "Bin", icon: NAV_ICONS.bin },
   { id: "more", label: "More", icon: NAV_ICONS.more },
 ];
 
 export default function MainAppLayout() {
+  const { user } = useSupabaseAuth();
+  const isSuperadmin = isSuperAdminEmail(user?.email);
   const [searchParams, setSearchParams] = useSearchParams();
   const [layoutSeed] = useState(() => getInitialLayoutState());
   const [navTab, setNavTab] = useState(layoutSeed.navTab);
@@ -185,6 +191,10 @@ export default function MainAppLayout() {
   const [moreFilter, setMoreFilter] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => getPinnedModuleIds());
+  const allowedModuleIds = useMemo(
+    () => new Set((isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin")).map((t) => t.id)),
+    [isSuperadmin]
+  );
 
   const openHelpModule = useCallback(() => {
     setNavTab("more");
@@ -213,6 +223,13 @@ export default function MainAppLayout() {
   useEffect(() => {
     recordRecentModule(view);
   }, [view]);
+
+  useEffect(() => {
+    if (view !== "superadmin") return;
+    if (isSuperadmin) return;
+    setView("dashboard");
+    setNavTab("dashboard");
+  }, [view, isSuperadmin]);
 
   useEffect(() => {
     const settingsTab = searchParams.get("settingsTab");
@@ -256,6 +273,7 @@ export default function MainAppLayout() {
     const onOpenView = (e) => {
       const viewId = e.detail?.viewId;
       if (!viewId) return;
+      if (!primaryBottomNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
       if (primaryBottomNavIdSet.has(viewId)) {
         setNavTab(viewId);
         setView(viewId);
@@ -266,7 +284,7 @@ export default function MainAppLayout() {
     };
     window.addEventListener(OPEN_WORKSPACE_VIEW_EVENT, onOpenView);
     return () => window.removeEventListener(OPEN_WORKSPACE_VIEW_EVENT, onOpenView);
-  }, []);
+  }, [allowedModuleIds]);
 
   useEffect(() => {
     document.body.classList.add("mysafeops-app-bottom-nav");
@@ -304,6 +322,7 @@ export default function MainAppLayout() {
   }, [openHelpModule]);
 
   const navigateFromSearch = ({ viewId, permitId }) => {
+    if (!primaryBottomNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
     if (viewId === "permits" && permitId) {
       setWorkspaceNavTarget({ viewId: "permits", permitId });
     }
@@ -324,6 +343,7 @@ export default function MainAppLayout() {
   };
 
   const selectMoreModule = (id) => {
+    if (!allowedModuleIds.has(id)) return;
     setView(id);
     setNavTab("more");
   };
@@ -334,8 +354,20 @@ export default function MainAppLayout() {
 
   const MainComponent = workspaceViewComponents[view] || workspaceViewComponents[DEFAULT_WORKSPACE_VIEW_ID];
 
+  const visibleMoreTabs = useMemo(
+    () => (isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin")),
+    [isSuperadmin]
+  );
+  const visibleMoreSections = useMemo(
+    () =>
+      MORE_SECTIONS.map((section) => ({
+        ...section,
+        ids: section.ids.filter((id) => id !== "superadmin" || isSuperadmin),
+      })),
+    [isSuperadmin]
+  );
   const q = moreFilter.trim().toLowerCase();
-  const pinnedTabsOrdered = pinnedIds.map((id) => MORE_TABS.find((t) => t.id === id)).filter(Boolean);
+  const pinnedTabsOrdered = pinnedIds.map((id) => visibleMoreTabs.find((t) => t.id === id)).filter(Boolean);
   const pinnedTabsFiltered = filterModuleTabsByQuery(pinnedTabsOrdered, moreFilter);
 
   return (
@@ -359,6 +391,7 @@ export default function MainAppLayout() {
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
         onNavigate={navigateFromSearch}
+        allowSuperadmin={isSuperadmin}
       />
       <main id="main-content" tabIndex={-1} className="app-workspace-main">
         <div className="app-module-shell">
@@ -437,7 +470,7 @@ export default function MainAppLayout() {
                 boxShadow: "var(--shadow-sm)",
               }}
             />
-            {MORE_SECTIONS.map((section) => {
+            {visibleMoreSections.map((section) => {
               const tabs = filterModuleTabsByQuery(getMoreTabsForSection(section), q);
               if (tabs.length === 0) return null;
               return (
@@ -476,7 +509,7 @@ export default function MainAppLayout() {
                 </div>
               );
             })}
-            {MORE_SECTIONS.every((section) => filterModuleTabsByQuery(getMoreTabsForSection(section), q).length === 0) && (
+            {visibleMoreSections.every((section) => filterModuleTabsByQuery(getMoreTabsForSection(section), q).length === 0) && (
               <div style={{ fontSize: 13, color: "var(--color-text-secondary)", padding: "8px 0" }}>
                 No modules match your filter.
               </div>
@@ -525,7 +558,7 @@ export default function MainAppLayout() {
                 color: active ? "#0d9488" : "#64748b",
                 fontSize: 10,
                 fontFamily: "DM Sans, sans-serif",
-                maxWidth: 88,
+                maxWidth: 78,
                 fontWeight: active ? 600 : 500,
               }}
             >

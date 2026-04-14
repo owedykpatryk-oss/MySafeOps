@@ -1403,37 +1403,77 @@ export function generateRamsProjectPackHTML(form, rows, workers, projects, permi
  * @param options.permits Optional permits list (e.g. same projectId as RAMS) to append after RAMS.
  */
 export function openRamsDocumentWindow(form, rows, workers, projects, options = {}) {
-  const doPrint = options.print === true;
-  const permits = options.permits;
-  const workerMap = Object.fromEntries(workers.map((w) => [w.id, w.name]));
-  const operatives = (form.operativeIds || []).map((id) => workerMap[id]).filter(Boolean);
-  const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
-  const pf = normalizePrintSections(form.printSections);
-  const fp = computeRamsFingerprint(form, rows);
-  const html =
-    Array.isArray(permits) && permits.length > 0
-      ? generateRamsProjectPackHTML(form, rows, workers, projects, permits, options.sitePackMeta || null)
-      : generatePrintHTML(form, rows || [], operatives, projectMap, pf, fp, workers);
-  const win = window.open("", "_blank");
-  if (!win) {
-    window.alert(
-      "Could not open a new window — your browser may be blocking pop-ups. Allow pop-ups for this site, then use Preview or Print again."
-    );
-    return;
-  }
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  if (doPrint) {
-    const triggerPrint = () => {
-      win.focus();
-      setTimeout(() => win.print(), 180);
-    };
-    if (win.document.readyState === "complete") {
-      triggerPrint();
-    } else {
-      win.onload = triggerPrint;
+  try {
+    const doPrint = options.print === true;
+    const permits = options.permits;
+    const safeForm = form && typeof form === "object" ? form : {};
+    const safeRows = Array.isArray(rows) ? rows : [];
+    const safeWorkers = Array.isArray(workers) ? workers : [];
+    const safeProjects = Array.isArray(projects) ? projects : [];
+    const workerMap = Object.fromEntries(safeWorkers.map((w) => [w.id, w.name]));
+    const operatives = (Array.isArray(safeForm.operativeIds) ? safeForm.operativeIds : []).map((id) => workerMap[id]).filter(Boolean);
+    const projectMap = Object.fromEntries(safeProjects.map((p) => [p.id, p.name]));
+    const pf = normalizePrintSections(safeForm.printSections);
+    const fp = computeRamsFingerprint(safeForm, safeRows);
+    const html =
+      Array.isArray(permits) && permits.length > 0
+        ? generateRamsProjectPackHTML(safeForm, safeRows, safeWorkers, safeProjects, permits, options.sitePackMeta || null)
+        : generatePrintHTML(safeForm, safeRows, operatives, projectMap, pf, fp, safeWorkers);
+    const win = window.open("", "_blank");
+    if (!win) {
+      window.alert(
+        "Could not open a new window — your browser may be blocking pop-ups. Allow pop-ups for this site, then use Preview or Print again."
+      );
+      return;
     }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    if (doPrint) {
+      let didPrint = false;
+      const triggerPrint = () => {
+        if (didPrint) return;
+        didPrint = true;
+        win.focus();
+        setTimeout(() => win.print(), 120);
+      };
+      const waitForImagesThenPrint = () => {
+        const images = Array.from(win.document.images || []);
+        const pending = images.filter((img) => !img.complete);
+        if (pending.length === 0) {
+          triggerPrint();
+          return;
+        }
+        let settled = false;
+        const settle = () => {
+          if (settled) return;
+          settled = true;
+          triggerPrint();
+        };
+        const timeoutId = setTimeout(settle, 2600);
+        pending.forEach((img) => {
+          const onDone = () => {
+            img.removeEventListener("load", onDone);
+            img.removeEventListener("error", onDone);
+            if (pending.every((x) => x.complete)) {
+              clearTimeout(timeoutId);
+              settle();
+            }
+          };
+          img.addEventListener("load", onDone);
+          img.addEventListener("error", onDone);
+        });
+      };
+      if (win.document.readyState === "complete") {
+        waitForImagesThenPrint();
+      } else {
+        win.addEventListener("load", waitForImagesThenPrint, { once: true });
+        setTimeout(waitForImagesThenPrint, 900);
+      }
+    }
+  } catch (err) {
+    window.alert("Preview could not be opened. Check RAMS data and try again.");
+    console.error("RAMS preview failed", err);
   }
 }
 

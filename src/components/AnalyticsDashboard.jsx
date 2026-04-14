@@ -312,6 +312,7 @@ export default function AnalyticsDashboard() {
 
   const hotWorkActive = hotWork.filter((h) => h.status === "active").length;
   const org = getOrgSettings();
+  const orgName = String(org.name || "My Organisation").trim() || "My Organisation";
   const orgProfileDone =
     Boolean(org.logo) ||
     String(org.name || "").trim() !== "My Organisation" ||
@@ -371,6 +372,55 @@ export default function AnalyticsDashboard() {
           <>
             Live metrics from this browser. Use <strong>Permits</strong>, <strong>RAMS</strong>, <strong>Workers</strong>, or <strong>More</strong> below for every module.
           </>
+        }
+        right={
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: "1px solid var(--color-border-tertiary,#e2e8f0)",
+              background: "var(--color-background-primary,#fff)",
+              minWidth: 200,
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 8,
+                border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+                background: "var(--color-background-secondary,#f7f7f5)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+                flexShrink: 0,
+              }}
+            >
+              {org.logo ? (
+                <img src={org.logo} alt={`${orgName} logo`} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              ) : (
+                <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 600 }}>
+                  LOGO
+                </span>
+              )}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>
+                {orgName}
+              </div>
+              <button
+                type="button"
+                onClick={() => openWorkspaceSettings({ tab: "organisation" })}
+                style={{ ...ms.btn, fontSize: 11, padding: "3px 8px", marginTop: 4 }}
+              >
+                {org.logo ? "Update branding" : "Add logo"}
+              </button>
+            </div>
+          </div>
         }
       />
 

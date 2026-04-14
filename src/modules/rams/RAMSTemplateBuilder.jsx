@@ -21,6 +21,7 @@ import PageHero from "../../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
+import { pushRecycleBinItem } from "../../utils/recycleBin";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
@@ -4142,6 +4143,7 @@ function SavedList({
   projects,
   onNew,
   onEdit,
+  onRename,
   onDelete,
   onPreview,
   onPrint,
@@ -4323,11 +4325,14 @@ function SavedList({
                   Site Pack
                 </button>
                 <button type="button" onClick={()=>onDuplicate(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Duplicate</button>
+                <button type="button" onClick={()=>onRename(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Quick rename document title">
+                  Rename
+                </button>
                 <button type="button" onClick={()=>onToggleFavorite(doc.id)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Pin/unpin document as favorite">
                   {doc.isFavorite ? "★ Unfavorite" : "☆ Favorite"}
                 </button>
                 <button type="button" onClick={()=>onExportJson(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>JSON</button>
-                <button type="button" onClick={()=>onExportCompliance(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Export compliance/audit snapshot JSON">
+                <button type="button" onClick={()=>onExportCompliance(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Export compliance/audit snapshot CSV">
                   Compliance
                 </button>
                 <button type="button" onClick={()=>onCopyShareLink(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Read-only link, this browser only">Share</button>
@@ -5120,7 +5125,23 @@ export default function RAMSTemplateBuilder() {
     setView("list");
   };
 
-  const deleteDoc = (id) => { if(confirm("Delete this RAMS?")) setRamsDocs(prev=>prev.filter(d=>d.id!==id)); };
+  const deleteDoc = (id) => {
+    if (!confirm("Delete this RAMS?")) return;
+    setRamsDocs((prev) => {
+      const victim = prev.find((d) => d.id === id);
+      if (victim) {
+        pushRecycleBinItem({
+          moduleId: "rams",
+          moduleLabel: "RAMS",
+          itemType: "rams_document",
+          itemLabel: victim.title || victim.documentNo || victim.id,
+          sourceKey: "rams_builder_docs",
+          payload: victim,
+        });
+      }
+      return prev.filter((d) => d.id !== id);
+    });
+  };
 
   const previewSavedDoc = (doc) => {
     openRamsDocumentWindow(doc, doc.rows || [], workers, projects, { print: false });
@@ -5226,6 +5247,28 @@ export default function RAMSTemplateBuilder() {
     setRamsDocs((prev) => [newDoc, ...prev]);
   };
 
+  const renameDoc = (doc) => {
+    const current = String(doc?.title || "").trim();
+    const next = prompt("Rename RAMS document title:", current || "RAMS");
+    if (next == null) return;
+    const clean = String(next).trim();
+    if (!clean) {
+      alert("Title cannot be empty.");
+      return;
+    }
+    setRamsDocs((prev) =>
+      prev.map((d) =>
+        d.id === doc.id
+          ? {
+              ...d,
+              title: clean,
+              updatedAt: new Date().toISOString(),
+            }
+          : d
+      )
+    );
+  };
+
   const exportDocJson = (doc) => {
     const safe = (doc.title || "rams").replace(/[^\w\-\s]/g, "").replace(/\s+/g, "_").slice(0, 48);
     const wm = Object.fromEntries(workers.map((w) => [w.id, w.name || ""]));
@@ -5252,38 +5295,58 @@ export default function RAMSTemplateBuilder() {
     const qaChecks = buildQaChecklist(doc, rows, opCount);
     const readiness = computeRamsReadiness(rows, opCount);
     const byCategory = buildCategoryRiskTrend(rows);
-    const payload = {
-      documentNo: doc.documentNo || doc.id,
-      title: doc.title,
-      status: doc.documentStatus || doc.status || "draft",
-      issueDate: doc.issueDate || null,
-      revision: doc.revision || null,
-      reviewDate: doc.reviewDate || null,
-      fingerprint: doc.contentHash || computeRamsFingerprint(doc, rows),
-      generatedAt: new Date().toISOString(),
-      totals: {
-        riskRows: rows.length,
-        highResidual: rows.filter((r) => getRiskLevel(r.revisedRisk) === "high").length,
-        mediumResidual: rows.filter((r) => getRiskLevel(r.revisedRisk) === "medium").length,
-        lowResidual: rows.filter((r) => getRiskLevel(r.revisedRisk) === "low").length,
-        operatives: opCount,
-      },
-      readiness,
-      qaChecklist: qaChecks,
-      categoryTrend: byCategory,
-      signatureEvents: Array.isArray(doc.signatureEvents) ? doc.signatureEvents : [],
-      handover: {
-        client: doc.handoverClientName || null,
-        receiver: doc.handoverReceiver || null,
-        date: doc.handoverDate || null,
-        notes: doc.handoverNotes || null,
-      },
+    const totals = {
+      riskRows: rows.length,
+      highResidual: rows.filter((r) => getRiskLevel(r.revisedRisk) === "high").length,
+      mediumResidual: rows.filter((r) => getRiskLevel(r.revisedRisk) === "medium").length,
+      lowResidual: rows.filter((r) => getRiskLevel(r.revisedRisk) === "low").length,
+      operatives: opCount,
     };
+    const csvEsc = (value) => `"${String(value == null ? "" : value).replace(/"/g, '""')}"`;
+    const csvRows = [];
+    csvRows.push(["section","key","value"]);
+    csvRows.push(["document","documentNo", doc.documentNo || doc.id || ""]);
+    csvRows.push(["document","title", doc.title || ""]);
+    csvRows.push(["document","status", doc.documentStatus || doc.status || "draft"]);
+    csvRows.push(["document","issueDate", doc.issueDate || ""]);
+    csvRows.push(["document","revision", doc.revision || ""]);
+    csvRows.push(["document","reviewDate", doc.reviewDate || ""]);
+    csvRows.push(["document","fingerprint", doc.contentHash || computeRamsFingerprint(doc, rows)]);
+    csvRows.push(["document","generatedAt", new Date().toISOString()]);
+    csvRows.push(["totals","riskRows", totals.riskRows]);
+    csvRows.push(["totals","highResidual", totals.highResidual]);
+    csvRows.push(["totals","mediumResidual", totals.mediumResidual]);
+    csvRows.push(["totals","lowResidual", totals.lowResidual]);
+    csvRows.push(["totals","operatives", totals.operatives]);
+    csvRows.push(["readiness","score", readiness.score]);
+    csvRows.push(["readiness","grade", readiness.grade]);
+    csvRows.push(["readiness","summary", readiness.summary || ""]);
+    qaChecks.forEach((check, idx) => {
+      csvRows.push(["qaChecklist", `check_${idx + 1}`, `${check.ok ? "PASS" : "CHECK"} - ${check.label}`]);
+    });
+    byCategory.forEach((cat) => {
+      csvRows.push(["categoryTrend", `${cat.category} rows`, cat.count]);
+      csvRows.push(["categoryTrend", `${cat.category} initialAvg`, cat.initialAvg]);
+      csvRows.push(["categoryTrend", `${cat.category} residualAvg`, cat.residualAvg]);
+      csvRows.push(["categoryTrend", `${cat.category} reductionPct`, cat.reduction]);
+    });
+    (Array.isArray(doc.signatureEvents) ? doc.signatureEvents : []).forEach((sig, idx) => {
+      csvRows.push([
+        "signatureEvents",
+        `event_${idx + 1}`,
+        `${sig?.action || "action"} | ${sig?.actor || "actor"} | ${sig?.role || "role"} | ${sig?.at || ""}`,
+      ]);
+    });
+    csvRows.push(["handover","client", doc.handoverClientName || ""]);
+    csvRows.push(["handover","receiver", doc.handoverReceiver || ""]);
+    csvRows.push(["handover","date", doc.handoverDate || ""]);
+    csvRows.push(["handover","notes", doc.handoverNotes || ""]);
     const safe = (doc.title || "rams_compliance").replace(/[^\w\-\s]/g, "").replace(/\s+/g, "_").slice(0, 48);
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const csv = csvRows.map((row) => row.map(csvEsc).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${safe}_${(doc.id || "").slice(-8)}_compliance.json`;
+    a.download = `${safe}_${(doc.id || "").slice(-8)}_compliance.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -5360,6 +5423,7 @@ export default function RAMSTemplateBuilder() {
           projects={projects}
           onNew={startNew}
           onEdit={startEdit}
+          onRename={renameDoc}
           onDelete={deleteDoc}
           onPreview={previewSavedDoc}
           onPrint={printSavedDoc}

@@ -1,0 +1,494 @@
+MYSAFEOPS - SZCZEGOLOWY OPIS APLIKACJI (WERSJA DO MATERIALOW PROMOCYJNYCH)
+
+Data przygotowania: 2026-04-10
+Plik roboczy: mozesz dowolnie skracac, przerabiac i kopiowac do oferty/strony www/ulotki.
+
+========================================================================
+1) CZYM JEST MYSAFEOPS
+========================================================================
+
+MySafeOps to rozbudowana aplikacja webowa (SaaS/workspace) dla firm budowlanych,
+wykonawcow i podwykonawcow. System wspiera codzienne prowadzenie BHP, zgodnosci,
+dokumentacji oraz operacji na budowie - od planowania prac po audyt i raportowanie.
+
+To nie jest pojedynczy formularz ani "jedna tabela BHP". To pelny ekosystem:
+- zarzadzanie ludzmi i projektami,
+- permit to work i RAMS,
+- dzienniki i rejestry HSE,
+- AI do przyspieszenia tworzenia tresci,
+- backup i audyt,
+- portal klienta i portal podwykonawcy,
+- opcjonalna chmura, logowanie i billing.
+
+========================================================================
+2) JAKI PROBLEM ROZWIAZUJE
+========================================================================
+
+Najczestsze problemy na budowie:
+- rozproszone dane (Excel, papier, WhatsApp, maile),
+- brak jednego zrodla prawdy dla permitow, instrukcji i rejestrow,
+- trudny audyt "kto, co, kiedy zatwierdzil",
+- opoznienia przez reczne przepisywanie dokumentow,
+- brak standardu miedzy projektami i zespolami.
+
+MySafeOps centralizuje to w jednym workspace:
+- jedna aplikacja i jeden przeplyw pracy,
+- standaryzacja procesow,
+- szybkie wyszukiwanie i szybkie wejscie do modulu,
+- spojnosc dokumentacji i latwiejsza kontrola.
+
+========================================================================
+3) DLA KOGO JEST SYSTEM
+========================================================================
+
+- generalni wykonawcy,
+- podwykonawcy i firmy specjalistyczne,
+- managerowie projektu,
+- kierownicy budowy i brygadzisci,
+- osoby odpowiedzialne za BHP i compliance,
+- biura operacyjne i administracja projektu.
+
+========================================================================
+4) CO UZYTKOWNIK MOZE ZROBIC W PRAKTYCE (END-TO-END)
+========================================================================
+
+Przykladowy przebieg:
+1. Tworzy organizacje i uzupelnia profil firmy (logo, dane, stopki PDF).
+2. Dodaje projekty (lokalizacje, adres, wspolrzedne).
+3. Dodaje pracownikow i przypisuje role/uprawnienia.
+4. Tworzy RAMS i permit to work dla konkretnego zadania.
+5. Prowadzi briefing, podpisy, timesheet, rejestry i kontrole.
+6. Zbiera zdarzenia, near miss, inspekcje i obserwacje.
+7. Korzysta z AI do szkicow tresci i analizy zagrozen ze zdjec.
+8. Eksportuje/archiwizuje dane, robi backup, ma log audytowy.
+9. Udostepnia wybrane widoki klientowi lub podwykonawcy.
+10. Zarzadza zespolem i subskrypcja z poziomu ustawien.
+
+========================================================================
+5) NAWIGACJA I UKLAD APLIKACJI
+========================================================================
+
+Glowne zakladki dolne (core):
+- Dashboard
+- Permits
+- RAMS
+- Workers
+- Site map
+- More (katalog wszystkich pozostalych modulow)
+
+Funkcje ergonomii:
+- wyszukiwarka modulow i danych,
+- przypinanie ulubionych modulow,
+- lista ostatnio otwieranych ekranow,
+- deep-linki do konkretnych widokow (?view=...),
+- szybkie przejscie do zakladki ustawien (?settingsTab=...).
+
+========================================================================
+6) DOKLADNY OPIS MODULOW (KAZDY MODUL)
+========================================================================
+
+Ponizej kompletna lista modulow widocznych w workspace i menu "More".
+
+--- CORE / GLOWNE ---
+
+1) Dashboard
+- centralny pulpit operacyjny,
+- szybki podglad stanu pracy i wskaznikow,
+- punkt startowy do wejscia w pozostale moduly.
+
+2) Permits
+- obsluga permit to work (zezwolenia na prace),
+- standaryzacja procedur, checklist i kryteriow zgodnosci,
+- lepsza kontrola ryzyka przy pracach krytycznych.
+
+3) RAMS
+- tworzenie i edycja Risk Assessment & Method Statement,
+- budowa pakietow dokumentacji dla zadan/robot,
+- laczenie prac, zagrozen, srodkow kontroli i wykonawcow.
+
+4) Workers
+- baza pracownikow i zespolow,
+- dane osobowe kontaktowe i operacyjne,
+- laczenie pracownikow z modulami (briefingi, RAMS, szkolenia itd.).
+
+5) Site map
+- mapa lokalizacji projektow i obecnosci na obiekcie,
+- podglad "kto gdzie pracuje",
+- wsparcie geolokalizacji projektow.
+
+--- SITE OPERATIONS / OPERACJE NA BUDOWIE ---
+
+6) Method statement
+- przygotowanie metody wykonania prac,
+- opis przebiegu robot krok po kroku,
+- uzgodnienie i komunikacja standardu wykonania.
+
+7) CDM compliance
+- wsparcie zgodnosci CDM (Construction Design and Management),
+- porzadkowanie obowiazkow i zapisow formalnych,
+- lepsza gotowosc na kontrole i audyt.
+
+8) Daily briefing
+- dzienne odprawy i komunikaty dla zespolu,
+- potwierdzanie obecnosci i przekazu informacji,
+- utrzymanie codziennej dyscypliny operacyjnej.
+
+9) QR induction
+- onboarding/induction przez QR,
+- szybsze wpuszczanie nowych osob na projekt,
+- cyfrowy slady potwierdzen.
+
+10) Signatures
+- podpisy cyfrowe pod dokumentami/protokolami,
+- skraca obieg papieru i przyspiesza zatwierdzenia,
+- wieksza czytelnosc historii akceptacji.
+
+11) Timesheets
+- ewidencja czasu pracy,
+- rozliczalnosc roboczogodzin i obecnosci,
+- lepsza kontrola kosztow i produktywnosci.
+
+12) Snags
+- lista usterek i punktow do poprawy,
+- przypisanie odpowiedzialnosci i statusow,
+- domykanie tematow odbiorowych i jakosciowych.
+
+13) Documents
+- biblioteka dokumentow projektowych i operacyjnych,
+- uporzadkowane przechowywanie plikow,
+- centralny dostep dla zespolu.
+
+14) Client portal
+- wybrany widok dla klienta,
+- kontrolowane udostepnianie informacji,
+- transparentnosc postepu i dokumentacji.
+
+15) Client acquisition
+- materialy i procesy wspierajace pozyskiwanie klientow,
+- porzadkowanie argumentow wartosci biznesowej,
+- wsparcie dzialan handlowych.
+
+16) Sales enablement
+- wsparcie procesu sprzedazowego i prezentacji oferty,
+- standaryzacja komunikatow i materialow,
+- krotsza droga od zapytania do decyzji klienta.
+
+17) Subcontractor
+- portal/modul podwykonawcy,
+- wspolpraca miedzy firmami w jednym przeplywie,
+- latwiejsza wymiana informacji i wymagan.
+
+--- HSE / HEALTH, SAFETY & ENVIRONMENT ---
+
+18) COSHH
+- rejestr substancji niebezpiecznych,
+- kontrola skladnikow i srodkow ostroznosci,
+- utrzymanie porzadku w chemii na budowie.
+
+19) Inspections
+- harmonogram i zapisy inspekcji,
+- checklisty i wyniki kontroli,
+- szybka identyfikacja odchylen od standardu.
+
+20) Incidents
+- rejestr incydentow i near miss,
+- dokumentowanie przyczyn i dzialan naprawczych,
+- baza do poprawy kultury bezpieczenstwa.
+
+21) RIDDOR
+- wsparcie przygotowania danych pod raporty RIDDOR,
+- uporzadkowanie informacji o zdarzeniach raportowalnych,
+- lepsza zgodnosc formalna.
+
+22) Emergency
+- lista kontaktow i procedur awaryjnych,
+- szybki dostep do informacji krytycznych,
+- poprawa reakcji w sytuacjach naglych.
+
+23) PPE
+- rejestr srodkow ochrony indywidualnej,
+- wydania, status i kontrola wyposazenia,
+- wsparcie obowiazkow pracodawcy.
+
+24) Plant
+- rejestr maszyn i sprzetu,
+- nadzor stanu technicznego i gotowosci,
+- porzadek w zasobach operacyjnych.
+
+25) Fire safety
+- dziennik bezpieczenstwa pozarowego,
+- kontrole i zapisy dzialan prewencyjnych,
+- wsparcie zgodnosci ppoz.
+
+26) Hot work
+- rejestr prac goracych,
+- kontrola warunkow i zabezpieczen,
+- minimalizacja ryzyka pozarowego.
+
+27) Training
+- macierz szkolen i kompetencji,
+- monitorowanie uprawnien i terminow,
+- lepsze planowanie doszkolen.
+
+28) Visitors
+- ewidencja gosci i wejsc na obiekt,
+- kontrola ruchu osob trzecich,
+- bezpieczniejszy dostep do terenu.
+
+29) Toolbox log
+- rejestr toolbox talks,
+- potwierdzanie przekazu instrukcji BHP,
+- historia tematow i czestotliwosci.
+
+30) First aid
+- rejestr pierwszej pomocy i zdarzen,
+- porzadek w interwencjach medycznych,
+- wsparcie wnioskow i prewencji.
+
+31) Lone working
+- ewidencja i nadzor pracy w pojedynke,
+- dodatkowa kontrola ryzyka organizacyjnego,
+- poprawa bezpieczenstwa osob pracujacych solo.
+
+32) Environmental
+- dziennik srodowiskowy,
+- monitorowanie aspektow i zdarzen srodowiskowych,
+- wsparcie celow ESG/compliance.
+
+33) Observations
+- obserwacje bezpieczenstwa i zachowan,
+- szybkie wychwytywanie sygnalow ryzyka,
+- kultura ciaglego doskonalenia.
+
+34) Ladders
+- kontrole drabin i osprzetu dostepowego,
+- ewidencja stanu i badan okresowych,
+- ograniczanie ryzyka upadkow.
+
+35) MEWP
+- rejestr operacji i kontroli podnosnikow,
+- dokumentowanie bezpiecznego uzycia,
+- zgodnosc przy pracach na wysokosci.
+
+36) Gate book
+- ksiega wejsc/wyjsc i ruchu,
+- porzadek logistyczny i bezpieczenstwo terenu,
+- latwiejsza identyfikacja kto byl na budowie.
+
+37) Asbestos
+- rejestr zagrozen azbestowych,
+- wsparcie procedur ochronnych i informacyjnych,
+- redukcja ryzyka ekspozycji.
+
+38) Confined space
+- rejestr prac w przestrzeniach zamknietych,
+- kontrola warunkow i zezwoleń,
+- podniesienie bezpieczenstwa prac wysokiego ryzyka.
+
+39) LOTO
+- Lockout/Tagout - blokady i oznaczenia energii,
+- kontrola izolacji przed rozpoczeciem prac,
+- ograniczanie ryzyka uruchomienia instalacji.
+
+40) Electrical
+- rejestr elektryczny/PAT,
+- ewidencja kontroli urzadzen i bezpieczenstwa,
+- wsparcie zgodnosci elektrycznej.
+
+41) Lifting
+- planowanie i rejestr operacji dzwigowych/podnoszenia,
+- dokumentowanie warunkow bezpiecznego podnoszenia,
+- kontrola ryzyka przy operacjach ciezkich.
+
+42) DSEAR
+- rejestr zagrozen atmosfer wybuchowych/latwopalnych,
+- dokumentowanie oceny i srodkow kontroli,
+- wsparcie wymagan DSEAR.
+
+43) Noise & vibration
+- monitoring halasu i drgan (w tym HAV),
+- ewidencja narażeń i dzialan ograniczajacych,
+- lepsza ochrona zdrowia pracownikow.
+
+44) Scaffold
+- kontrole rusztowan i status bezpieczenstwa,
+- historia przegladow i uwag,
+- poprawa bezpieczenstwa prac na wysokosci.
+
+45) Excavations
+- rejestr wykopow / permit to dig,
+- kontrola warunkow prac ziemnych,
+- mniejsze ryzyko kolizji i zdarzen.
+
+46) Temporary works
+- rejestr robot tymczasowych,
+- nadzor etapow i zatwierdzen,
+- porzadek formalny w elementach przejsciowych.
+
+47) Welfare checks
+- kontrole zaplecza socjalnego i warunkow bytowych,
+- potwierdzanie standardu opieki nad zaloga,
+- wsparcie dobrostanu i zgodnosci.
+
+48) Water hygiene
+- higiena instalacji wodnych (Legionella-style),
+- kontrole punktow i dzialan prewencyjnych,
+- minimalizacja ryzyka sanitarnego.
+
+49) Waste register
+- rejestr odpadow i przeplywow materialowych,
+- wsparcie zgodnosci srodowiskowej,
+- lepsza kontrola gospodarki odpadami.
+
+--- INSIGHTS & AI ---
+
+50) Analytics
+- analityka i zagregowane wskazniki,
+- monitorowanie trendow i obszarow ryzyka,
+- wsparcie decyzji zarzadczej.
+
+51) Monthly report
+- raport miesieczny z danych operacyjnych,
+- szybkie przygotowanie podsumowan dla kierownictwa/klienta,
+- standaryzacja raportowania okresowego.
+
+52) Templates
+- szablony dokumentow i formularzy,
+- przyspieszenie pracy przez powtarzalne wzorce,
+- mniejsza liczba bledow i niespojnosci.
+
+53) AI RAMS
+- AI wspierajace przygotowanie tresci RAMS,
+- przyspiesza szkicowanie i ustrukturyzowanie dokumentow,
+- finalna odpowiedzialnosc merytoryczna pozostaje po stronie uzytkownika.
+
+54) AI toolbox
+- AI wsparcie dla tematow toolbox talk,
+- szybsze przygotowanie tresci odpraw,
+- mozliwosc dopasowania pod rodzaj robot.
+
+55) AI photo hazard
+- AI analiza zagrozen na podstawie zdjec,
+- pomoc w identyfikacji potencjalnych ryzyk,
+- wsparcie inspekcji i szkolen wizualnych.
+
+--- DATA & APP ---
+
+56) Enterprise readiness
+- obszar gotowosci organizacyjnej i skalowania,
+- wsparcie standardow pracy dla wiekszych zespolow,
+- przygotowanie do wymagan klientow korporacyjnych.
+
+57) Backup
+- eksport/import danych (JSON),
+- opcjonalna synchronizacja i restore z chmury,
+- zabezpieczenie ciaglosci danych.
+
+58) Audit log
+- historia aktywnosci i slady zmian,
+- latwiejsza weryfikacja "kto-co-kiedy",
+- mocne wsparcie przy audycie i dochodzeniu przyczyn.
+
+59) Help
+- przewodnik po aplikacji i module index,
+- szybkie instrukcje wdrozenia i nawigacji,
+- wsparcie onboardingu nowych uzytkownikow.
+
+60) Settings
+- centrum konfiguracji organizacji,
+- role, dostepy, zaproszenia, preferencje,
+- ustawienia integracji (Supabase/backup, billing, itp.).
+
+========================================================================
+7) KLUCZOWE OPCJE SYSTEMOWE I BIZNESOWE
+========================================================================
+
+1. Zarzadzanie organizacja i brandingiem
+- dane firmy, logo, kolory, stopki PDF, ustawienia dokumentow.
+
+2. Projekty i lokalizacje
+- wiele projektow/site, geolokalizacja, mapa i powiazanie z modulami.
+
+3. Praca zespolowa
+- zaproszenia czlonkow, czlonkostwo organizacji, role i uprawnienia.
+
+4. Logowanie i dostep
+- opcjonalny auth przez Supabase, scenariusze logowania i resetu hasla.
+
+5. Publiczne linki i portale
+- dedykowane widoki np. klient/podwykonawca przez tokeny query.
+
+6. Backup i dane
+- lokalne przechowywanie + opcjonalna chmura + restore.
+
+7. Rozliczenia i subskrypcje
+- plany (trial/starter/team/business) i integracja Stripe.
+
+8. AI jako akcelerator
+- wsparcie tworzenia tresci i identyfikacji zagrozen.
+
+========================================================================
+8) INTEGRACJE I TECHNIKA (WERSJA CZYTELNA DLA OFERTY)
+========================================================================
+
+Frontend i UX:
+- React + Vite (szybkie dzialanie SPA),
+- lazy loading widokow,
+- mobilny model nawigacji + wyszukiwarka.
+
+Backend i dane:
+- Supabase (opcjonalnie): auth, baza, funkcje serwerowe.
+
+Platnosci:
+- Stripe (checkout, portal klienta, webhooki subskrypcji).
+
+Pliki:
+- opcjonalny upload dokumentow przez Cloudflare R2 Worker.
+
+Testy:
+- testy jednostkowe (Vitest),
+- testy E2E (Playwright).
+
+========================================================================
+9) KORZYSCI DLA FIRMY (KAT SPRZEDAZOWY)
+========================================================================
+
+- Jeden system zamiast wielu rozproszonych narzedzi.
+- Szybsza dokumentacja i mniej pracy recznej.
+- Lepsza gotowosc audytowa i zgodnosc formalna.
+- Czytelny podzial odpowiedzialnosci i historii decyzji.
+- Wiecej kontroli nad ryzykiem operacyjnym na budowie.
+- Latwiejsze skalowanie procesow miedzy projektami.
+- Mocniejszy wizerunek firmy wobec klienta i partnerow.
+
+========================================================================
+10) PRZYKLADOWE HASLA PROMOCYJNE (DO DALSZEJ EDYCJI)
+========================================================================
+
+- "MySafeOps: wszystkie procesy BHP i operacyjne budowy w jednym miejscu."
+- "Od RAMS i permitow po audyt i raport - jeden przeplyw pracy."
+- "Mniej papieru, mniej chaosu, wiecej kontroli."
+- "Cyfrowa zgodnosc i bezpieczenstwo budowy bez kompromisow."
+- "Przyspiesz dokumentacje i decyzje dzieki modurom AI."
+
+========================================================================
+11) WAZNA UWAGA PRAWNA/OPERACYJNA
+========================================================================
+
+Aplikacja wspiera dokumentowanie i organizacje pracy.
+Nie zastepuje porady prawnej, oceny kompetentnej osoby ani formalnych
+obowiazkow zgloszeniowych do wlasciwych organow.
+
+========================================================================
+12) SZYBKI SKROT (KROTKA WERSJA "CO ROBI APLIKACJA")
+========================================================================
+
+MySafeOps to cyfrowy workspace dla budownictwa, ktory laczy:
+- zarzadzanie ludzmi i projektami,
+- permit to work + RAMS,
+- komplet rejestrow HSE,
+- AI do przyspieszenia tworzenia tresci,
+- backup, audyt i gotowosc na kontrole,
+- wspolprace z klientem i podwykonawca.
+
+KONIEC PLIKU

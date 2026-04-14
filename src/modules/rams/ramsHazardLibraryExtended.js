@@ -18,6 +18,12 @@ export const EXTENDED_CATEGORIES = [
   "Solar PV & EV Charging",
   "Rail & Trackside",
   "Warehousing & Logistics",
+  "Traffic Management (TMP)",
+  "Temporary Works Advanced",
+  "Facade & Glazing",
+  "Contaminated Land & Remediation",
+  "Marine & Water Proximity",
+  "Battery & Energy Storage",
 ];
 
 const EXTENDED_LIBRARY = [
@@ -903,6 +909,281 @@ const EXTENDED_LIBRARY = [
     revisedRisk: { L: 2, S: 6, RF: 12 },
     ppeRequired: ["Hi-vis (Class 2 minimum)", "Safety footwear", "Hard hat in loading bay areas"],
     regs: ["HASAWA 1974", "Workplace (Health Safety & Welfare) Regs 1992", "HSG136 (Workplace Transport)", "PUWER 1998"],
+  },
+
+  // ── TRAFFIC MANAGEMENT (TMP) ───────────────────────────────────────────────
+
+  {
+    id: "tmp_001",
+    category: "Traffic Management (TMP)",
+    activity: "Temporary traffic management on public highway (lane closures, contraflow)",
+    hazard: "Vehicle incursion into work area; worker struck by traffic; public confusion at transitions",
+    initialRisk: { L: 6, S: 6, RF: 36 },
+    controlMeasures: [
+      "Chapter 8-compliant signing, lighting and guarding to design approved by competent TMP designer",
+      "TTRO / permit in place before works start; advance warning signs erected in correct sequence",
+      "Safety zones and working space clearly defined; no work outside agreed limits",
+      "Brief all operatives on emergency vehicle access and diversion routes",
+      "Mobile plant movements coordinated; banksman where reversing near live traffic",
+      "Night working: enhanced lighting and retroreflective signing checked before each shift",
+    ],
+    revisedRisk: { L: 2, S: 6, RF: 12 },
+    ppeRequired: ["Hi-vis (Class 3 for highway)", "Safety footwear", "Hard hat", "Gloves"],
+    regs: ["Safety at Street Works (NRSWA)", "Traffic Signs Regs & TSRGD", "CDM 2015", "HASAWA 1974"],
+  },
+
+  {
+    id: "tmp_002",
+    category: "Traffic Management (TMP)",
+    activity: "Road crossing and cable pull under traffic management",
+    hazard: "Operatives exposed to live lanes; trip on cables; communication failure with lookout",
+    initialRisk: { L: 5, S: 6, RF: 30 },
+    controlMeasures: [
+      "Stop/go or portable signals used where agreed in TMP; no ad-hoc crossings",
+      "Minimum number of crossings; timed to low-flow windows where possible",
+      "Lookout / banksman in radio contact with team; emergency stop procedure rehearsed",
+      "Cables laid in channels or protected ramps; no trailing leads across carriageway",
+      "All persons briefed on safe refuge points and muster",
+    ],
+    revisedRisk: { L: 2, S: 4, RF: 8 },
+    ppeRequired: ["Hi-vis Class 3", "Safety footwear", "Hard hat"],
+    regs: ["HASAWA 1974", "HSG150 (Construction Information)", "NRSWA Code of Practice"],
+  },
+
+  {
+    id: "tmp_003",
+    category: "Traffic Management (TMP)",
+    activity: "Mobile lane closure with impact protection vehicle (IPV)",
+    hazard: "Rear-end shunt into IPV or workforce; equipment strike; driver fatigue",
+    initialRisk: { L: 5, S: 6, RF: 30 },
+    controlMeasures: [
+      "IPV positioned per design; chevron markings and lighting operational",
+      "Driver rotation and fatigue management; pre-drive vehicle checks",
+      "Buffer vehicle spacing maintained; no standing between IPV and live lane except brief tasks",
+      "Recovery plan for breakdown of IPV; spare vehicle identified",
+    ],
+    revisedRisk: { L: 2, S: 6, RF: 12 },
+    ppeRequired: ["Hi-vis", "Safety footwear"],
+    regs: ["Traffic Signs Regs", "Construction (Head Protection) Regs 1989", "PUWER 1998"],
+  },
+
+  {
+    id: "dem_004",
+    category: "Demolition & Strip-out",
+    activity: "Structural demolition and progressive collapse control",
+    hazard: "Unplanned collapse; falling debris; dust and vibration affecting neighbours",
+    initialRisk: { L: 5, S: 6, RF: 30 },
+    controlMeasures: [
+      "Demolition sequence defined by structural engineer; method statement reviewed before start",
+      "Exclusion zones and hard barriers; no personnel inside drop zone",
+      "Water suppression for dust; noise and vibration monitoring where required",
+      "Utilities isolated and verified dead before breaking structure",
+    ],
+    revisedRisk: { L: 2, S: 4, RF: 8 },
+    ppeRequired: ["Hard hat", "Hi-vis", "Safety footwear", "RPE (dust)", "Safety glasses"],
+    regs: ["CDM 2015", "HSG150", "Control of Noise at Work Regs 2005", "COSHH 2002"],
+  },
+
+  {
+    id: "pv_004",
+    category: "Solar PV & EV Charging",
+    activity: "Roof-mounted PV string commissioning and inverter energisation",
+    hazard: "DC shock / arc flash during string testing; falls from roof edge; tools left on glass",
+    initialRisk: { L: 4, S: 6, RF: 24 },
+    controlMeasures: [
+      "DC isolators lockable; strings energised only when all terminations inspected",
+      "No metal tools on live connectors; insulated tools only",
+      "Edge protection and harness rescue plan for roof work",
+      "Inverter AC energisation only after DC tests signed off by competent electrician",
+    ],
+    revisedRisk: { L: 2, S: 4, RF: 8 },
+    ppeRequired: ["Harness where edge protection incomplete", "Insulated gloves (DC work)", "Safety glasses", "Hi-vis"],
+    regs: ["Electricity at Work Regs 1989", "BS 7671", "Work at Height Regs 2005"],
+  },
+
+  // ── TEMPORARY WORKS ADVANCED ────────────────────────────────────────────────
+
+  {
+    id: "twx_001",
+    category: "Temporary Works Advanced",
+    activity: "Falsework and formwork erection",
+    hazard: "Collapse from incorrect sequencing or overloading; worker falls; struck by dropped components",
+    initialRisk: { L: 5, S: 6, RF: 30 },
+    controlMeasures: [
+      "Design and checks completed by competent TWD with TWC approval before erection",
+      "Erection sequence briefed at start of each shift; no deviation without engineering sign-off",
+      "Load limits posted on all decks and monitored during pours and material storage",
+      "Independent inspection and hold-point sign-off before concrete pour",
+      "Edge protection and access controls maintained at all times",
+    ],
+    revisedRisk: { L: 2, S: 6, RF: 12 },
+    ppeRequired: ["Hard hat", "Safety footwear", "Hi-vis", "Gloves", "Harness (where required)"],
+    regs: ["CDM 2015", "BS 5975 (Temporary Works)", "Work at Height Regs 2005"],
+  },
+  {
+    id: "twx_002",
+    category: "Temporary Works Advanced",
+    activity: "Propping and needle support to existing structure",
+    hazard: "Uncontrolled structural movement; collapse during load transfer; crushing injuries",
+    initialRisk: { L: 5, S: 6, RF: 30 },
+    controlMeasures: [
+      "Pre-works condition survey and load path assessment by structural engineer",
+      "Install props to approved drawing with verified bearing conditions",
+      "Load transfer sequence controlled by appointed competent supervisor",
+      "Movement monitoring (tell-tales/laser) in place during transfer operations",
+      "Exclusion zones and no-go beneath loaded members enforced",
+    ],
+    revisedRisk: { L: 2, S: 6, RF: 12 },
+    ppeRequired: ["Hard hat", "Safety footwear", "Hi-vis", "Gloves"],
+    regs: ["CDM 2015", "BS 5975", "HASAWA 1974"],
+  },
+
+  // ── FACADE & GLAZING ────────────────────────────────────────────────────────
+
+  {
+    id: "fcd_001",
+    category: "Facade & Glazing",
+    activity: "Curtain wall panel installation with vacuum lifter",
+    hazard: "Panel drop from loss of suction; wind destabilisation; crush injuries at interface",
+    initialRisk: { L: 5, S: 6, RF: 30 },
+    controlMeasures: [
+      "Vacuum lifter pre-use checks with alarm and battery backup verified",
+      "Wind speed limits set and monitored; cease lifts above manufacturer threshold",
+      "Tag lines and banksman used to control panel movement into final position",
+      "Exclusion zone below and around drop path maintained",
+      "Lift plan includes emergency recovery for partial panel release",
+    ],
+    revisedRisk: { L: 2, S: 6, RF: 12 },
+    ppeRequired: ["Hard hat", "Safety footwear", "Hi-vis", "Cut-resistant gloves", "Safety glasses"],
+    regs: ["LOLER 1998", "BS 7121", "Work at Height Regs 2005"],
+  },
+  {
+    id: "fcd_002",
+    category: "Facade & Glazing",
+    activity: "Glass replacement over public interface",
+    hazard: "Falling objects to public realm; glass breakage and laceration; uncontrolled access",
+    initialRisk: { L: 5, S: 6, RF: 30 },
+    controlMeasures: [
+      "Public exclusion and hard segregation installed before any removal starts",
+      "Catch decks/netting or equivalent secondary retention in place",
+      "Fragmentation and removal method agreed before first cut",
+      "Spotters at all public approach routes during active works",
+      "Emergency breakage response kit and clean-up process briefed",
+    ],
+    revisedRisk: { L: 2, S: 6, RF: 12 },
+    ppeRequired: ["Cut-resistant gloves", "Safety glasses/face shield", "Safety footwear", "Hi-vis"],
+    regs: ["Work at Height Regs 2005", "Management of H&S at Work Regs 1999"],
+  },
+
+  // ── CONTAMINATED LAND & REMEDIATION ────────────────────────────────────────
+
+  {
+    id: "clr_001",
+    category: "Contaminated Land & Remediation",
+    activity: "Excavation in contaminated soils",
+    hazard: "Dermal and inhalation exposure to hydrocarbons/heavy metals; cross-site contamination",
+    initialRisk: { L: 5, S: 5, RF: 25 },
+    controlMeasures: [
+      "Contaminated land risk assessment and zoning completed before excavation",
+      "Dedicated clean/dirty routes and wheel wash implemented",
+      "Dust suppression and RPE controls used during soil disturbance",
+      "Decontamination, hygiene and welfare controls enforced at zone exits",
+      "Waste classification and disposal records retained for all loads",
+    ],
+    revisedRisk: { L: 2, S: 5, RF: 10 },
+    ppeRequired: ["Chemical-resistant gloves", "Coveralls", "Safety footwear", "RPE (FFP3 where required)"],
+    regs: ["COSHH 2002", "Environmental Protection Act 1990", "CL:AIRE guidance"],
+  },
+  {
+    id: "clr_002",
+    category: "Contaminated Land & Remediation",
+    activity: "Ground gas monitoring and entry controls",
+    hazard: "Asphyxiation/explosion from methane and CO2 accumulation in excavations/voids",
+    initialRisk: { L: 4, S: 6, RF: 24 },
+    controlMeasures: [
+      "Gas monitoring plan with action thresholds and escalation triggers in place",
+      "Continuous monitoring for CH4, CO2, O2 and LEL at workface and low points",
+      "Forced ventilation and stop-work trigger when thresholds exceeded",
+      "Permit controls for enclosed/partially enclosed spaces",
+      "Emergency evacuation and rescue arrangements tested",
+    ],
+    revisedRisk: { L: 2, S: 6, RF: 12 },
+    ppeRequired: ["Gas detector", "Safety footwear", "Hi-vis", "RPE as assessed"],
+    regs: ["Confined Spaces Regs 1997", "DSEAR 2002", "COSHH 2002"],
+  },
+
+  // ── MARINE & WATER PROXIMITY ────────────────────────────────────────────────
+
+  {
+    id: "mar_001",
+    category: "Marine & Water Proximity",
+    activity: "Work on quay edge / near open water",
+    hazard: "Drowning from slips/trips at edge; rescue delay; cold-water shock",
+    initialRisk: { L: 4, S: 6, RF: 24 },
+    controlMeasures: [
+      "Edge controls, anti-slip routes and exclusion zones installed before start",
+      "Lifejackets and throw lines mandatory within defined red zone",
+      "Dedicated rescue kit and trained responders available at all times",
+      "Buddy system and welfare checks enforced during near-water tasks",
+      "Weather and tide windows reviewed in daily briefing",
+    ],
+    revisedRisk: { L: 2, S: 6, RF: 12 },
+    ppeRequired: ["Automatic lifejacket", "Safety footwear", "Hi-vis", "Helmet (as task requires)"],
+    regs: ["HASAWA 1974", "Work at Height Regs 2005", "Port marine safety guidance"],
+  },
+  {
+    id: "mar_002",
+    category: "Marine & Water Proximity",
+    activity: "Temporary pontoon / floating platform operations",
+    hazard: "Instability, slips, overboard events and trapped fingers during mooring movements",
+    initialRisk: { L: 4, S: 5, RF: 20 },
+    controlMeasures: [
+      "Platform certification, load checks and mooring integrity confirmed before use",
+      "Access gangway angle and handrails maintained within safe limits",
+      "No overloading of platform with plant/materials beyond marked limits",
+      "Deck housekeeping and anti-slip controls maintained throughout shift",
+      "Mooring adjustments controlled by trained personnel only",
+    ],
+    revisedRisk: { L: 2, S: 5, RF: 10 },
+    ppeRequired: ["Lifejacket", "Gloves", "Safety footwear", "Hi-vis"],
+    regs: ["HASAWA 1974", "PUWER 1998", "Local marine authority requirements"],
+  },
+
+  // ── BATTERY & ENERGY STORAGE ────────────────────────────────────────────────
+
+  {
+    id: "bes_001",
+    category: "Battery & Energy Storage",
+    activity: "Lithium battery cabinet install and energisation",
+    hazard: "Thermal runaway initiation, arc flash, toxic off-gassing during fault conditions",
+    initialRisk: { L: 4, S: 6, RF: 24 },
+    controlMeasures: [
+      "Install by manufacturer-certified technicians to approved layout and clearances",
+      "Commissioning checklist includes BMS alarms, isolation, and ventilation interlocks",
+      "Fire strategy includes lithium-specific response and no-water zones where specified",
+      "Segregate energized and non-energized work zones with permit controls",
+      "Emergency isolation and escalation procedure posted and rehearsed",
+    ],
+    revisedRisk: { L: 2, S: 6, RF: 12 },
+    ppeRequired: ["Insulated gloves", "Arc-rated face shield", "Safety footwear", "Safety glasses"],
+    regs: ["Electricity at Work Regs 1989", "DSEAR 2002", "BS EN IEC 62933 guidance"],
+  },
+  {
+    id: "bes_002",
+    category: "Battery & Energy Storage",
+    activity: "Battery storage, transport and temporary laydown",
+    hazard: "Cell damage, short-circuit, fire escalation from poor segregation or impact",
+    initialRisk: { L: 4, S: 5, RF: 20 },
+    controlMeasures: [
+      "Store batteries in designated zones with temperature monitoring and impact protection",
+      "Terminals protected and packaged to prevent short-circuit during handling",
+      "No mixed damaged and healthy packs in same laydown area",
+      "Damaged/defective battery quarantine process with clear labeling",
+      "Transport and lifting methods follow manufacturer instructions and load limits",
+    ],
+    revisedRisk: { L: 2, S: 5, RF: 10 },
+    ppeRequired: ["Gloves", "Safety footwear", "Hi-vis", "Safety glasses"],
+    regs: ["ADR (where applicable)", "PUWER 1998", "Manufacturer safety data and handling guidance"],
   },
 
 ];

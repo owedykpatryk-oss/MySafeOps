@@ -30,6 +30,8 @@ describe("evaluatePermitCompliance", () => {
         location: "Yard",
         issuedBy: "Issuer",
         issuedTo: "Holder",
+        authorisedByRole: "Site manager",
+        briefingConfirmedAt: "2026-04-09T07:30:00.000Z",
         startDateTime: "2026-04-09T08:00:00.000Z",
         endDateTime: "2026-04-09T16:00:00.000Z",
         extraFields: {},

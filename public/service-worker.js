@@ -168,9 +168,10 @@ self.addEventListener("notificationclick", (event) => {
   const url = event.notification.data?.url || "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window" }).then(clients => {
-      const existingClient = clients.find(c => c.url === url && "focus" in c);
+      const targetUrl = new URL(url, self.location.origin).toString();
+      const existingClient = clients.find((c) => c.url === targetUrl && "focus" in c);
       if (existingClient) return existingClient.focus();
-      return self.clients.openWindow(url);
+      return self.clients.openWindow(targetUrl);
     })
   );
 });

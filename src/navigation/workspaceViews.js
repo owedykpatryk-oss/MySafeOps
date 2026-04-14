@@ -9,6 +9,7 @@ export const workspaceViewLoaders = {
   permits: () => import("../modules/permits/PermitSystem"),
   rams: () => import("../modules/rams/RAMSTemplateBuilder"),
   workers: () => import("../modules/Workers"),
+  bin: () => import("../modules/RecycleBin"),
   "site-map": () => import("../modules/SitePresenceMap"),
   "method-statement": () => import("../modules/MethodStatement"),
   cdm: () => import("../modules/CDMCompliance"),
@@ -20,6 +21,8 @@ export const workspaceViewLoaders = {
   coshh: () => import("../modules/COSHHRegister"),
   inspections: () => import("../modules/InspectionTracker"),
   incidents: () => import("../modules/IncidentNearMiss"),
+  "incident-actions": () => import("../modules/IncidentActionTracker"),
+  "incident-map": () => import("../modules/IncidentHotspotMap"),
   riddor: () => import("../modules/RIDDORWizard"),
   emergency: () => import("../modules/EmergencyContacts"),
   ppe: () => import("../modules/PPERegister"),
@@ -63,6 +66,7 @@ export const workspaceViewLoaders = {
   documents: () => import("../modules/DocumentLibrary"),
   backup: () => import("../modules/BackupExport"),
   audit: () => import("../modules/AuditLogViewer"),
+  superadmin: () => import("../modules/SuperAdminPanel"),
   help: () => import("../components/HelpAbout"),
 };
 

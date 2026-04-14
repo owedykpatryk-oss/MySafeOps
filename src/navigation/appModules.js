@@ -8,6 +8,7 @@ export const NAV_TAB_IDS = [
   { id: "rams", label: "RAMS" },
   { id: "workers", label: "Workers" },
   { id: "site-map", label: "Site map" },
+  { id: "bin", label: "Bin" },
   { id: "more", label: "More" },
 ];
 
@@ -42,6 +43,8 @@ export const MORE_TABS = [
   { id: "coshh", label: "COSHH" },
   { id: "inspections", label: "Inspections" },
   { id: "incidents", label: "Incidents" },
+  { id: "incident-actions", label: "Incident actions" },
+  { id: "incident-map", label: "Incident map" },
   { id: "riddor", label: "RIDDOR" },
   { id: "emergency", label: "Emergency" },
   { id: "ppe", label: "PPE" },
@@ -85,6 +88,7 @@ export const MORE_TABS = [
   { id: "documents", label: "Documents" },
   { id: "backup", label: "Backup" },
   { id: "audit", label: "Audit log" },
+  { id: "superadmin", label: "Superadmin" },
   { id: "help", label: "Help" },
   { id: "settings", label: "Settings" },
 ];
@@ -128,6 +132,8 @@ export const MORE_SECTIONS = [
       "coshh",
       "inspections",
       "incidents",
+      "incident-actions",
+      "incident-map",
       "riddor",
       "emergency",
       "ppe",
@@ -165,7 +171,7 @@ export const MORE_SECTIONS = [
   },
   {
     title: "Data & app",
-    ids: ["enterprise-readiness", "backup", "audit", "help", "settings"],
+    ids: ["enterprise-readiness", "backup", "audit", "superadmin", "help", "settings"],
   },
 ];
 

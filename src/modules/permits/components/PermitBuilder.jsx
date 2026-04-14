@@ -9,6 +9,8 @@ export default function PermitBuilder({ title, onClose, step = 1, children, prev
   const titleId = useId();
   const panelRef = useRef(null);
   const lastFocusRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     lastFocusRef.current = document.activeElement;
@@ -24,7 +26,7 @@ export default function PermitBuilder({ title, onClose, step = 1, children, prev
     const onKey = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -52,7 +54,10 @@ export default function PermitBuilder({ title, onClose, step = 1, children, prev
         /* ignore */
       }
     };
-  }, [onClose]);
+    // Mount only: parent passes a new `onClose` each render; re-running this effect would
+    // repeatedly focus the first control and steal focus from text fields (e.g. description).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, []);
 
   return (
     <div style={{ minHeight: 700, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", overflowY: "auto" }}>

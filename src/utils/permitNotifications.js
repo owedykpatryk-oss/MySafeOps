@@ -93,3 +93,29 @@ export async function sendPermitNotificationEmail(payload) {
   if (data?.error) throw new Error(String(data.error));
   return data || { ok: true };
 }
+
+/**
+ * Send Web Push permit notification via Supabase Edge Function.
+ * Uses subscriptions registered for current user/org.
+ * @param {{ permit: object, title?: string, body?: string, orgSlug?: string, url?: string, tag?: string }} payload
+ */
+export async function sendPermitNotificationWebPush(payload) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const body = {
+    orgSlug: String(payload?.orgSlug || localStorage.getItem("mysafeops_orgId") || "default").trim().toLowerCase(),
+    title: String(payload?.title || "Permit update"),
+    body: String(payload?.body || ""),
+    url: String(payload?.url || "/?tab=permits"),
+    tag: String(payload?.tag || `permit_${payload?.permit?.id || "update"}`),
+    permit: {
+      id: payload?.permit?.id,
+      type: payload?.permit?.type,
+      location: payload?.permit?.location,
+      status: payload?.permit?.status,
+    },
+  };
+  const { data, error } = await supabase.functions.invoke("send-permit-web-push", { body });
+  if (error) throw error;
+  if (data?.error) throw new Error(String(data.error));
+  return data || { ok: true };
+}

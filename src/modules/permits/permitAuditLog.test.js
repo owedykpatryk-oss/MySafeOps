@@ -29,6 +29,14 @@ describe("describePermitAuditEvent", () => {
     expect(describePermitAuditEvent({ status: "a" }, { status: "b" }).action).toBe("status_changed");
     expect(describePermitAuditEvent({ status: "x" }, { status: "x" }).action).toBe("updated");
   });
+
+  it("supports explicit custom audit action", () => {
+    const row = describePermitAuditEvent(
+      { status: "approved" },
+      { status: "approved", _auditAction: "conflict_warn_override" }
+    );
+    expect(row.action).toBe("conflict_warn_override");
+  });
 });
 
 describe("permitAuditDetailSnapshot", () => {
@@ -41,5 +49,17 @@ describe("permitAuditDetailSnapshot", () => {
     });
     expect(s.location?.length).toBe(240);
     expect(s.descriptionPreview?.length).toBe(120);
+  });
+
+  it("adds conflict override details when action provided", () => {
+    const s = permitAuditDetailSnapshot({
+      _auditAction: "conflict_warn_override",
+      status: "approved",
+      conflictWarnOverride: {
+        reason: "Controlled by area segregation and appointed banksman.",
+        approvedBy: "Area Authority",
+      },
+    });
+    expect(s.conflictWarnOverride?.approvedBy).toBe("Area Authority");
   });
 });

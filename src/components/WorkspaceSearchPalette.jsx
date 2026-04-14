@@ -6,19 +6,19 @@ import { getRecentModuleIds } from "../utils/recentModules";
 /**
  * Modal command palette: jump to screens and surface matching records (local data).
  */
-export default function WorkspaceSearchPalette({ open, onClose, onNavigate }) {
+export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allowSuperadmin = false }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
   const [active, setActive] = useState(0);
 
-  const hits = useMemo(
-    () =>
-      buildWorkspaceSearchHits(query, {
-        pinnedModuleIds: getPinnedModuleIds(),
-        recentModuleIds: getRecentModuleIds(),
-      }),
-    [query]
-  );
+  const hits = useMemo(() => {
+    const rows = buildWorkspaceSearchHits(query, {
+      pinnedModuleIds: getPinnedModuleIds(),
+      recentModuleIds: getRecentModuleIds(),
+    });
+    if (allowSuperadmin) return rows;
+    return rows.filter((h) => h.viewId !== "superadmin");
+  }, [query, allowSuperadmin]);
 
   useEffect(() => {
     if (!open) return;

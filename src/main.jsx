@@ -6,8 +6,10 @@ import { AppProvider } from "./context/AppContext";
 import { SupabaseAuthProvider } from "./context/SupabaseAuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { initOfflineMode } from "./offline/offlineManager";
+import { initNotificationRuntime } from "./offline/pushNotifications";
 
 initOfflineMode().catch(() => {});
+initNotificationRuntime();
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

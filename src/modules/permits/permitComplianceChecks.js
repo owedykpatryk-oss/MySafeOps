@@ -33,8 +33,11 @@ function regulatoryMatrixForType(type) {
   return shared;
 }
 
-export function evaluatePermitCompliance(permit, checklistItems = []) {
-  const profile = getComplianceProfile(permit?.type);
+export function evaluatePermitCompliance(permit, checklistItems = [], options = {}) {
+  const profile =
+    options?.profileOverride && typeof options.profileOverride === "object"
+      ? options.profileOverride
+      : getComplianceProfile(permit?.type);
   const checklistState = permit?.checklist || {};
   const checklistIds = new Set(checklistItems.map((item) => item.id));
 

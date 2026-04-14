@@ -3,6 +3,14 @@ import { ms } from "../utils/moduleStyles";
 import { geocodeAddressNominatim } from "../utils/geocode";
 import PageHero from "../components/PageHero";
 import { getOrgId, orgScopedKey, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import {
+  CERT_LIBRARY,
+  certLabel,
+  addMonthsIso,
+  normalizeWorkerCertifications,
+  getWorkerCertAlerts,
+} from "../utils/certifications";
+import { pushRecycleBinItem } from "../utils/recycleBin";
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -18,6 +26,12 @@ function toCsv(rows) {
   return rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
 }
 
+function certSummaryText(worker) {
+  const certs = normalizeWorkerCertifications(worker);
+  if (certs.length === 0) return "";
+  return certs.map((c) => `${c.certType}${c.expiryDate ? ` (${c.expiryDate})` : ""}`).join("; ");
+}
+
 export default function Workers() {
   const [workers, setWorkers] = useState(() => load(WORKERS_KEY));
   const [projects, setProjects] = useState(() => load(PROJECTS_KEY));
@@ -31,8 +45,8 @@ export default function Workers() {
   }, [projects]);
 
   const exportWorkersCsv = () => {
-    const header = ["Name", "Role", "Phone", "Email", "Certs / notes"];
-    const rows = workers.map((w) => [w.name || "", w.role || "", w.phone || "", w.email || "", w.certs || ""]);
+    const header = ["Name", "Role", "Phone", "Email", "Certs / notes", "Structured certifications"];
+    const rows = workers.map((w) => [w.name || "", w.role || "", w.phone || "", w.email || "", w.certs || "", certSummaryText(w)]);
     const blob = new Blob([toCsv([header, ...rows])], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -56,7 +70,20 @@ export default function Workers() {
 
   const removeWorker = (id) => {
     if (!confirm("Remove this worker?")) return;
-    setWorkers((prev) => prev.filter((w) => w.id !== id));
+    setWorkers((prev) => {
+      const victim = prev.find((w) => w.id === id);
+      if (victim) {
+        pushRecycleBinItem({
+          moduleId: "workers",
+          moduleLabel: "Workers",
+          itemType: "worker",
+          itemLabel: victim.name || victim.id,
+          sourceKey: WORKERS_KEY,
+          payload: victim,
+        });
+      }
+      return prev.filter((w) => w.id !== id);
+    });
   };
 
   const saveProject = (form) => {
@@ -74,8 +101,26 @@ export default function Workers() {
 
   const removeProject = (id) => {
     if (!confirm("Remove this project?")) return;
-    setProjects((prev) => prev.filter((p) => p.id !== id));
+    setProjects((prev) => {
+      const victim = prev.find((p) => p.id === id);
+      if (victim) {
+        pushRecycleBinItem({
+          moduleId: "workers",
+          moduleLabel: "Workers",
+          itemType: "project",
+          itemLabel: victim.name || victim.id,
+          sourceKey: PROJECTS_KEY,
+          payload: victim,
+        });
+      }
+      return prev.filter((p) => p.id !== id);
+    });
   };
+
+  const certAlerts = workers
+    .flatMap((w) => getWorkerCertAlerts(w).map((a) => ({ ...a, worker: w })))
+    .sort((a, b) => a.days - b.days);
+  const criticalAlerts = certAlerts.filter((a) => a.severity === "expired" || a.severity === "critical");
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14, color: "var(--color-text-primary)" }}>
@@ -118,6 +163,30 @@ export default function Workers() {
       </p>
 
       <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 600 }}>Certification alerts</div>
+          <span style={ss.chip}>{certAlerts.length} alert(s)</span>
+        </div>
+        {certAlerts.length === 0 ? (
+          <div style={{ marginTop: 8, color: "var(--color-text-secondary)", fontSize: 13 }}>No expiring certifications right now.</div>
+        ) : (
+          <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+            {certAlerts.slice(0, 8).map((a) => (
+              <div key={`${a.worker.id}_${a.cert.certCode}_${a.cert.expiryDate}`} style={{ fontSize: 12, padding: "6px 8px", borderRadius: 8, background: a.severity === "expired" ? "#FCEBEB" : a.severity === "critical" ? "#FCEBEB" : "#FAEEDA", color: a.severity === "warning" ? "#633806" : "#791F1F" }}>
+                <strong>{a.worker.name || "Unnamed worker"}</strong> · {a.cert.certType} ·{" "}
+                {a.days < 0 ? `expired ${Math.abs(a.days)} day(s) ago` : `expires in ${a.days} day(s)`}
+              </div>
+            ))}
+            {criticalAlerts.length > 0 ? (
+              <div style={{ fontSize: 11, color: "#791F1F" }}>
+                Critical: {criticalAlerts.length} certificate(s) require immediate action.
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
           Workers ({workers.length})
         </div>
@@ -137,6 +206,14 @@ export default function Workers() {
             <div style={{ flex: "1 1 200px", minWidth: 0 }}>
               <strong>{w.name || "Unnamed"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{w.role || "—"} · {w.phone || w.email || ""}</div>
+              {normalizeWorkerCertifications(w).length > 0 ? (
+                <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                  {normalizeWorkerCertifications(w)
+                    .slice(0, 3)
+                    .map((c) => `${c.certType}${c.expiryDate ? ` (${c.expiryDate})` : ""}`)
+                    .join(" · ")}
+                </div>
+              ) : null}
             </div>
             <button type="button" style={ss.btn} onClick={() => setModal({ type: "worker", data: w })}>
               Edit
@@ -183,6 +260,25 @@ export default function Workers() {
 }
 
 function workerFormShape(w) {
+  const baseMatrix = Object.fromEntries(
+    CERT_LIBRARY.map((c) => [
+      c.code,
+      { enabled: false, expiryDate: "", certNumber: "", provider: "" },
+    ])
+  );
+  if (w) {
+    normalizeWorkerCertifications(w).forEach((c) => {
+      const key = String(c.certCode || "").toLowerCase();
+      if (baseMatrix[key]) {
+        baseMatrix[key] = {
+          enabled: true,
+          expiryDate: c.expiryDate || "",
+          certNumber: c.certNumber || "",
+          provider: c.provider || "",
+        };
+      }
+    });
+  }
   if (!w) {
     return {
       id: genId(),
@@ -194,6 +290,7 @@ function workerFormShape(w) {
       certType: "",
       certExpiry: "",
       certifications: [],
+      certMatrix: baseMatrix,
       projectIds: [],
     };
   }
@@ -202,16 +299,44 @@ function workerFormShape(w) {
     ...w,
     certType: c0?.certType || "",
     certExpiry: c0?.expiryDate || "",
+    certMatrix: baseMatrix,
   };
 }
 
 function WorkerForm({ item, onSave, onClose }) {
   const [form, setForm] = useState(() => workerFormShape(item));
+  const [certFilter, setCertFilter] = useState("");
   useEffect(() => {
     setForm(workerFormShape(item));
   }, [item?.id]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const setCert = (code, key, value) =>
+    setForm((f) => ({
+      ...f,
+      certMatrix: {
+        ...(f.certMatrix || {}),
+        [code]: { ...(f.certMatrix?.[code] || {}), [key]: value },
+      },
+    }));
+
+  const toggleCert = (code, enabled) => {
+    setForm((f) => {
+      const prev = f.certMatrix?.[code] || {};
+      const lib = CERT_LIBRARY.find((x) => x.code === code);
+      return {
+        ...f,
+        certMatrix: {
+          ...(f.certMatrix || {}),
+          [code]: {
+            ...prev,
+            enabled,
+            expiryDate: enabled ? prev.expiryDate || addMonthsIso(new Date().toISOString(), lib?.defaultValidityMonths || 24) : prev.expiryDate || "",
+          },
+        },
+      };
+    });
+  };
 
   const persist = () => {
     const certs = [];
@@ -220,11 +345,28 @@ function WorkerForm({ item, onSave, onClose }) {
     }
     const rest = (form.certifications || []).filter((c) => c?.certType && c?.expiryDate);
     const merged = [...rest, ...certs];
-    const unique = merged.filter(
-      (c, i, a) => a.findIndex((x) => x.certType === c.certType && x.expiryDate === c.expiryDate) === i
+    const matrixRows = Object.entries(form.certMatrix || {})
+      .filter(([, v]) => v?.enabled)
+      .map(([code, v]) => ({
+        certCode: code,
+        certType: certLabel(code),
+        expiryDate: String(v.expiryDate || "").slice(0, 10),
+        certNumber: String(v.certNumber || ""),
+        provider: String(v.provider || ""),
+      }));
+    const mergedAll = [...merged, ...matrixRows];
+    const uniqueAll = mergedAll.filter(
+      (c, i, a) =>
+        a.findIndex(
+          (x) =>
+            String(x.certCode || x.certType).toLowerCase() === String(c.certCode || c.certType).toLowerCase() &&
+            String(x.expiryDate || "") === String(c.expiryDate || "")
+        ) === i
     );
-    onSave({ ...form, certifications: unique });
+    onSave({ ...form, certifications: uniqueAll });
   };
+
+  const visibleCatalog = CERT_LIBRARY.filter((c) => c.label.toLowerCase().includes(certFilter.trim().toLowerCase()));
 
   return (
     <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
@@ -242,6 +384,55 @@ function WorkerForm({ item, onSave, onClose }) {
         <input style={ss.inp} value={form.certType || ""} onChange={(e) => set("certType", e.target.value)} placeholder="e.g. CSCS, IPAF" />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Certificate expiry</label>
         <input type="date" style={ss.inp} value={form.certExpiry || ""} onChange={(e) => set("certExpiry", e.target.value)} />
+        <div style={{ marginTop: 12, border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, padding: "10px 10px 8px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            <strong style={{ fontSize: 13 }}>Ready-made certifications</strong>
+            <input
+              value={certFilter}
+              onChange={(e) => setCertFilter(e.target.value)}
+              placeholder="Filter certs..."
+              style={{ ...ss.inp, width: "auto", minWidth: 160, fontSize: 12, padding: "6px 8px" }}
+            />
+          </div>
+          <div style={{ maxHeight: 260, overflow: "auto", display: "grid", gap: 8 }}>
+            {visibleCatalog.map((c) => {
+              const row = form.certMatrix?.[c.code] || {};
+              return (
+                <div key={c.code} style={{ border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, padding: "8px 8px 6px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 500 }}>
+                    <input type="checkbox" checked={row.enabled === true} onChange={(e) => toggleCert(c.code, e.target.checked)} />
+                    {c.label}
+                    <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginLeft: "auto" }}>
+                      default {c.defaultValidityMonths}m
+                    </span>
+                  </label>
+                  {row.enabled ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 6, marginTop: 6 }}>
+                      <input
+                        type="date"
+                        style={{ ...ss.inp, margin: 0, padding: "6px 8px", fontSize: 12 }}
+                        value={row.expiryDate || ""}
+                        onChange={(e) => setCert(c.code, "expiryDate", e.target.value)}
+                      />
+                      <input
+                        style={{ ...ss.inp, margin: 0, padding: "6px 8px", fontSize: 12 }}
+                        value={row.certNumber || ""}
+                        onChange={(e) => setCert(c.code, "certNumber", e.target.value)}
+                        placeholder="Certificate no."
+                      />
+                      <input
+                        style={{ ...ss.inp, margin: 0, padding: "6px 8px", fontSize: 12 }}
+                        value={row.provider || ""}
+                        onChange={(e) => setCert(c.code, "provider", e.target.value)}
+                        placeholder="Provider"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
         <label style={{ ...ss.lbl, marginTop: 10 }}>Certificates / notes (free text)</label>
         <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.certs} onChange={(e) => set("certs", e.target.value)} />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>

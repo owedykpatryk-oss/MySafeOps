@@ -4,6 +4,14 @@ import PageHero from "../../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { getTemplateForType, saveOrgTemplate } from "./permitTemplateCatalog";
 import { evaluatePermitCompliance } from "./permitComplianceChecks";
+import { buildPermitEvidencePack, buildEvidencePackCsv } from "./permitEvidencePack";
+import {
+  loadPermitComplianceProfiles,
+  savePermitComplianceProfiles,
+  resolvePermitComplianceProfile,
+  checklistIdsForType,
+  evidenceKeysForType,
+} from "./permitComplianceProfiles";
 import { buildPermitWarRoomStats, derivePermitStatus, permitEndIso, permitsHeatmap } from "./permitRules";
 import { nextLegalReviewDate } from "./permitLegalGovernance";
 import { runPermitQualityGates } from "./permitQualityGates";
@@ -15,6 +23,7 @@ import PermitTimelineView from "./components/PermitTimeline";
 import PermitLiveWall from "./components/PermitLiveWall";
 import { createDefaultChecklistItems, normalizeChecklistItems, normalizeChecklistState } from "./permitChecklistUtils";
 import { findSimopsConflicts, buildSimopsConflictMap } from "./permitSimops";
+import { evaluatePermitTypeConflicts, PERMIT_CONFLICT_MATRIX, normalizeConflictPair } from "./permitConflictMatrix";
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { getOrgId } from "../../utils/orgStorage";
 import { mirrorPermitsToSupabase } from "../../utils/permitSupabaseMirror";
@@ -32,7 +41,7 @@ import PermitEvidenceImage from "./components/PermitEvidenceImage";
 import { getTypeComplianceMeta } from "./ukComplianceMatrix";
 import { PERMIT_TYPES, checklistStringsForType } from "./permitTypes";
 import { renderPermitDocumentHtml } from "./permitDocumentHtml";
-import { buildPermitEmailRecipients, parseManualEmails, sendPermitNotificationEmail } from "../../utils/permitNotifications";
+import { buildPermitEmailRecipients, parseManualEmails, sendPermitNotificationEmail, sendPermitNotificationWebPush } from "../../utils/permitNotifications";
 import {
   listPermitIncidents,
   savePermitIncidents,
@@ -48,8 +57,36 @@ import {
 } from "./permitPlanOverlayRegistry";
 import { buildPermitSlaQueue, buildPermitDigest } from "./permitAutomationSla";
 import { buildPermitRiskInsights } from "./permitRiskIntelligence";
+import {
+  getDynamicFieldSpec,
+  normalizeAdvancedPermit,
+  evaluateDynamicRequirements,
+  evaluatePermitRules,
+  computePermitRiskScore,
+  summarizePermitQuality,
+  getRequiredSignatureRoles,
+  signPermitRole,
+  buildRevalidationSnapshot,
+  diffRevalidationSnapshot,
+  buildTemplateRollbackSnapshot,
+  buildIssueSnapshot,
+  diffPermitVsIssueSnapshot,
+  evaluatePermitActionGate,
+  buildPermitNextActorHint,
+} from "./permitAdvancedEngine";
+import { evaluatePermitHandoverRequirement, latestCompletedHandover, normalizeShiftHours } from "./permitHandover";
+import { evaluatePermitDependencies, mergeDependencyRules, normalizeDependencyRules } from "./permitDependencyRules";
+import { useApp } from "../../context/AppContext";
+import {
+  suggestPermitDescriptionText,
+  queueIntegrationEvent,
+  buildIntegrationAdaptersStatus,
+} from "./permitIntegrationAdapters";
+import { evaluateWorkerPermitEligibility } from "../../utils/certifications";
+import { pushRecycleBinItem } from "../../utils/recycleBin";
 
 const genId = () => `ptw_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+const genAckToken = () => `ack_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
 
 function getOrgLocale() {
   try {
@@ -70,6 +107,307 @@ const fmtDateTime = (iso) => {
   return new Date(iso).toLocaleString(getOrgLocale(), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 const toLocalInput = (iso) => { if (!iso) return ""; const d = new Date(iso); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); };
+
+function formatHoursDelta(ms) {
+  const absMs = Math.abs(Number(ms || 0));
+  const totalMinutes = Math.round(absMs / 60000);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h <= 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
+
+function buildPermitSlaBadge(permit, derived) {
+  const status = derived === "pending_review" ? (permit.status || "pending_review") : derived;
+  const now = Date.now();
+  const baseTs = new Date(permit.updatedAt || permit.createdAt || now).getTime();
+  if (Number.isNaN(baseTs)) return null;
+  if (status === "pending_review" || status === "ready_for_review") {
+    const targetMs = 4 * 60 * 60 * 1000;
+    const dueTs = baseTs + targetMs;
+    const delta = dueTs - now;
+    if (delta <= 0) {
+      return {
+        label: `Review SLA overdue ${formatHoursDelta(delta)}`,
+        bg: "#FCEBEB",
+        color: "#791F1F",
+      };
+    }
+    if (delta <= 60 * 60 * 1000) {
+      return {
+        label: `Review SLA due in ${formatHoursDelta(delta)}`,
+        bg: "#FAEEDA",
+        color: "#633806",
+      };
+    }
+    return {
+      label: `Review SLA ${formatHoursDelta(delta)} left`,
+      bg: "#E6F1FB",
+      color: "#0C447C",
+    };
+  }
+  if (status === "approved") {
+    const targetMs = 2 * 60 * 60 * 1000;
+    const dueTs = baseTs + targetMs;
+    const delta = dueTs - now;
+    if (delta <= 0) {
+      return {
+        label: `Activation overdue ${formatHoursDelta(delta)}`,
+        bg: "#FCEBEB",
+        color: "#791F1F",
+      };
+    }
+    if (delta <= 30 * 60 * 1000) {
+      return {
+        label: `Activate in ${formatHoursDelta(delta)}`,
+        bg: "#FAEEDA",
+        color: "#633806",
+      };
+    }
+    return {
+      label: `Activation SLA ${formatHoursDelta(delta)} left`,
+      bg: "#E6F1FB",
+      color: "#0C447C",
+    };
+  }
+  return null;
+}
+
+function collectSlaSignalsForPermit(permit, nowTs) {
+  const status = String(permit?.status || "");
+  const queueType =
+    status === "pending_review" || status === "ready_for_review"
+      ? "review"
+      : status === "approved"
+      ? "activation"
+      : "";
+  if (!queueType) return [];
+  const cfg =
+    queueType === "review"
+      ? { targetMs: 4 * 60 * 60 * 1000, remindBeforeMin: [60, 30, 15], escalateOverdueMin: [0, 30] }
+      : { targetMs: 2 * 60 * 60 * 1000, remindBeforeMin: [30, 10], escalateOverdueMin: [0, 30] };
+  const baseTs = new Date(permit.updatedAt || permit.createdAt || nowTs).getTime();
+  if (Number.isNaN(baseTs)) return [];
+  const dueTs = baseTs + cfg.targetMs;
+  const msLeft = dueTs - nowTs;
+  const minsLeft = Math.floor(msLeft / 60000);
+  const minsOverdue = Math.floor((nowTs - dueTs) / 60000);
+  const kindLabel = queueType === "review" ? "review" : "activation";
+  const signals = [];
+  cfg.remindBeforeMin.forEach((threshold) => {
+    if (minsLeft <= threshold && minsLeft >= threshold - 1) {
+      signals.push({
+        key: `reminder_${queueType}_${threshold}`,
+        note: `Auto reminder: ${kindLabel} SLA due in ~${threshold} min.`,
+        status: "queued",
+      });
+    }
+  });
+  cfg.escalateOverdueMin.forEach((threshold) => {
+    if (minsOverdue >= threshold && minsOverdue <= threshold + 1) {
+      signals.push({
+        key: `escalation_${queueType}_${threshold}`,
+        note:
+          threshold === 0
+            ? `Auto escalation: ${kindLabel} SLA overdue.`
+            : `Auto escalation: ${kindLabel} SLA overdue by ${threshold}+ min.`,
+        status: "escalated",
+      });
+    }
+  });
+  return signals;
+}
+
+function getPermitStatusMeta(derived) {
+  if (derived === "closed") return { label: "Closed", bg: "var(--color-background-secondary,#f7f7f5)", color: "var(--color-text-secondary)", icon: "●" };
+  if (derived === "expired") return { label: "Expired", bg: "#FCEBEB", color: "#791F1F", icon: "!" };
+  if (derived === "draft") return { label: "Draft", bg: "#FAEEDA", color: "#633806", icon: "•" };
+  if (derived === "pending_review") return { label: "In review", bg: "#FAEEDA", color: "#633806", icon: "◔" };
+  if (derived === "suspended") return { label: "Suspended", bg: "#FCEBEB", color: "#791F1F", icon: "⏸" };
+  if (derived === "approved") return { label: "Approved", bg: "#E6F1FB", color: "#0C447C", icon: "✓" };
+  return { label: "Active", bg: "#EAF3DE", color: "#27500A", icon: "▶" };
+}
+
+function permitWorkflowRail(derived) {
+  const steps = ["draft", "pending_review", "approved", "active", "closed"];
+  const normalized = derived === "expired" ? "active" : derived;
+  const idx = steps.indexOf(normalized);
+  return steps.map((step, i) => ({
+    step,
+    done: idx >= i,
+    current: idx === i,
+  }));
+}
+
+function permitStepLabel(step) {
+  if (step === "pending_review") return "Review";
+  return step[0].toUpperCase() + step.slice(1);
+}
+
+function quickCountBadgeStyle(tone = "neutral") {
+  if (tone === "critical") return { background: "var(--permit-critical-bg)", color: "var(--permit-critical-fg)", border: "1px solid var(--permit-critical-border)" };
+  if (tone === "warn") return { background: "var(--permit-warn-bg)", color: "var(--permit-warn-fg)", border: "1px solid var(--permit-warn-border)" };
+  if (tone === "ok") return { background: "var(--permit-ok-bg)", color: "var(--permit-ok-fg)", border: "1px solid var(--permit-ok-border)" };
+  return { background: "var(--permit-chip-neutral-bg)", color: "var(--permit-chip-neutral-fg)", border: "1px solid var(--permit-chip-neutral-border)" };
+}
+
+function permitDecisionTone(tone = "info") {
+  if (tone === "critical") return { bg: "var(--permit-critical-bg)", border: "var(--permit-critical-border)", color: "var(--permit-critical-fg)" };
+  if (tone === "warn") return { bg: "var(--permit-warn-bg)", border: "var(--permit-warn-border)", color: "var(--permit-warn-fg)" };
+  if (tone === "ok") return { bg: "var(--permit-ok-bg)", border: "var(--permit-ok-border)", color: "var(--permit-ok-fg)" };
+  return { bg: "var(--permit-info-bg)", border: "var(--permit-info-border)", color: "var(--permit-info-fg)" };
+}
+
+function resolvePermitThemeVars(themeMode = "auto", prefersDark = false) {
+  const dark = themeMode === "dark" || (themeMode === "auto" && prefersDark);
+  if (dark) {
+    return {
+      "--permit-surface-bg": "#0b1220",
+      "--permit-panel-bg": "#121b2e",
+      "--permit-panel-border": "#263245",
+      "--permit-text": "#e5e7eb",
+      "--permit-text-muted": "#aeb8c7",
+      "--permit-chip-neutral-bg": "#1f2937",
+      "--permit-chip-neutral-fg": "#cbd5e1",
+      "--permit-chip-neutral-border": "#334155",
+      "--permit-info-bg": "#172554",
+      "--permit-info-fg": "#bfdbfe",
+      "--permit-info-border": "#1d4ed8",
+      "--permit-warn-bg": "#3f2b08",
+      "--permit-warn-fg": "#fcd34d",
+      "--permit-warn-border": "#92400e",
+      "--permit-critical-bg": "#3b1111",
+      "--permit-critical-fg": "#fecaca",
+      "--permit-critical-border": "#7f1d1d",
+      "--permit-ok-bg": "#052e1a",
+      "--permit-ok-fg": "#86efac",
+      "--permit-ok-border": "#166534",
+    };
+  }
+  return {
+    "--permit-surface-bg": "transparent",
+    "--permit-panel-bg": "#ffffff",
+    "--permit-panel-border": "#e5e7eb",
+    "--permit-text": "var(--color-text-primary)",
+    "--permit-text-muted": "var(--color-text-secondary)",
+    "--permit-chip-neutral-bg": "var(--color-background-secondary,#f7f7f5)",
+    "--permit-chip-neutral-fg": "var(--color-text-secondary)",
+    "--permit-chip-neutral-border": "var(--color-border-tertiary,#e5e5e5)",
+    "--permit-info-bg": "#eff6ff",
+    "--permit-info-fg": "#1e3a8a",
+    "--permit-info-border": "#bfdbfe",
+    "--permit-warn-bg": "#fffbea",
+    "--permit-warn-fg": "#854d0e",
+    "--permit-warn-border": "#fde68a",
+    "--permit-critical-bg": "#fef2f2",
+    "--permit-critical-fg": "#991b1b",
+    "--permit-critical-border": "#fecaca",
+    "--permit-ok-bg": "#ecfdf5",
+    "--permit-ok-fg": "#166534",
+    "--permit-ok-border": "#bbf7d0",
+  };
+}
+
+function mergePermitTypeOverrides(baseTypes, overrides) {
+  const base = baseTypes && typeof baseTypes === "object" ? baseTypes : {};
+  const src = overrides && typeof overrides === "object" ? overrides : {};
+  const out = {};
+  Object.entries(base).forEach(([type, def]) => {
+    const ov = src[type] && typeof src[type] === "object" ? src[type] : {};
+    out[type] = {
+      ...def,
+      label: String(ov.label || def.label || ""),
+      color: String(ov.color || def.color || ""),
+      bg: String(ov.bg || def.bg || ""),
+      description: String(ov.description || def.description || ""),
+    };
+  });
+  return out;
+}
+
+function normalizeWorkflowPolicyOverrides(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  Object.entries(raw).forEach(([from, targets]) => {
+    const fromKey = String(from || "").trim().toLowerCase();
+    if (!fromKey || !Array.isArray(targets)) return;
+    const allowed = Array.from(
+      new Set(
+        targets
+          .map((x) => String(x || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+    out[fromKey] = allowed;
+  });
+  return out;
+}
+
+function mergeWorkflowPolicy(overrides) {
+  const base = DEFAULT_PERMIT_WORKFLOW_POLICY;
+  const ov = normalizeWorkflowPolicyOverrides(overrides);
+  const out = {};
+  Object.keys(base).forEach((state) => {
+    out[state] = Array.isArray(ov[state]) ? ov[state] : base[state];
+  });
+  return out;
+}
+
+function permitCurrentWorkflowState(permit) {
+  return String(permit?.workflow?.state || permit?.status || "draft").toLowerCase();
+}
+
+function canPermitWorkflowTransition(permit, targetState, policy) {
+  const from = permitCurrentWorkflowState(permit);
+  const to = String(targetState || "").trim().toLowerCase();
+  const allowed = Array.isArray(policy?.[from]) ? policy[from] : [];
+  return allowed.includes(to);
+}
+
+function transitionPermitWorkflowWithPolicy(permit, targetState, note = "") {
+  const from = permitCurrentWorkflowState(permit);
+  const to = String(targetState || "").trim().toLowerCase();
+  const event = { from, to, at: new Date().toISOString(), note: String(note || "").trim() };
+  return {
+    ...permit,
+    status: to,
+    workflow: {
+      state: to,
+      history: [event, ...(permit?.workflow?.history || [])].slice(0, 120),
+    },
+  };
+}
+
+function normalizeWorkflowRolePolicyOverrides(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  Object.entries(raw).forEach(([targetState, roles]) => {
+    const key = String(targetState || "").trim().toLowerCase();
+    if (!key || !Array.isArray(roles)) return;
+    const allowedRoles = Array.from(
+      new Set(
+        roles
+          .map((r) => String(r || "").trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+    if (allowedRoles.length > 0) out[key] = allowedRoles;
+  });
+  return out;
+}
+
+function mergeWorkflowRolePolicy(overrides) {
+  const ov = normalizeWorkflowRolePolicyOverrides(overrides);
+  return { ...DEFAULT_WORKFLOW_ROLE_POLICY, ...ov };
+}
+
+function isWorkflowRoleAllowed(targetState, role, rolePolicy) {
+  const target = String(targetState || "").trim().toLowerCase();
+  const actorRole = String(role || "").trim().toLowerCase();
+  const allowed = Array.isArray(rolePolicy?.[target]) ? rolePolicy[target] : [];
+  if (allowed.length === 0) return true;
+  return allowed.includes(actorRole);
+}
 
 const permitPersonLabel = (w) => `${w.name || ""}${w.role ? ` — ${w.role}` : ""}`.trim();
 const PERMIT_PREFS_KEY = "permit_form_prefs";
@@ -115,13 +453,54 @@ const ss = {
 };
 
 const AUDIT_PAGE_SIZE = 20;
-const AUDIT_ACTION_OPTIONS = ["created", "updated", "status_changed", "deleted"];
+const AUDIT_ACTION_OPTIONS = [
+  "created",
+  "updated",
+  "status_changed",
+  "deleted",
+  "conflict_warn_override",
+  "handover_submitted",
+  "handover_ack_outgoing",
+  "handover_ack_incoming",
+];
 const PERMIT_SAVED_VIEWS_KEY = "permit_saved_views_v1";
+const PERMIT_CONFLICT_MATRIX_OVERRIDES_KEY = "permit_conflict_matrix_overrides_v1";
+const PERMIT_TYPE_OVERRIDES_KEY = "permit_type_overrides_v1";
+const PERMIT_SHIFT_BOUNDARY_HOURS_KEY = "permit_shift_boundary_hours_v1";
+const PERMIT_THEME_MODE_KEY = "permit_theme_mode_v1";
+const PERMIT_THEME_MODES = ["auto", "light", "dark"];
+const PERMIT_WORKFLOW_OVERRIDES_KEY = "permit_workflow_overrides_v1";
+const PERMIT_WORKFLOW_ROLE_OVERRIDES_KEY = "permit_workflow_role_overrides_v1";
+const PERMIT_DEPENDENCY_RULE_OVERRIDES_KEY = "permit_dependency_rule_overrides_v1";
+const DEFAULT_PERMIT_WORKFLOW_POLICY = {
+  draft: ["ready_for_review", "issued", "closed"],
+  ready_for_review: ["approved", "draft", "closed"],
+  approved: ["issued", "suspended", "closed"],
+  issued: ["suspended", "closed"],
+  suspended: ["issued", "closed"],
+  closed: ["issued"],
+};
+const DEFAULT_WORKFLOW_ROLE_POLICY = {
+  approved: ["admin", "supervisor"],
+  issued: ["admin", "supervisor"],
+  suspended: ["admin", "supervisor"],
+  closed: ["admin", "supervisor"],
+  draft: ["admin", "supervisor"],
+};
+const WORKFLOW_STATES = Object.keys(DEFAULT_PERMIT_WORKFLOW_POLICY);
+const WORKFLOW_ROLES = ["admin", "supervisor", "operative"];
+const PLAN_UPLOAD_ACCEPT = "image/png,image/jpeg,image/webp,application/pdf";
+const PLAN_UPLOAD_MIME = new Set(["image/png", "image/jpeg", "image/webp", "application/pdf"]);
+const PLAN_UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
 
 function auditActionLabel(row) {
   if (!row) return "Updated";
   if (row.action === "created") return "Created permit";
   if (row.action === "deleted") return "Deleted permit";
+  if (row.action === "conflict_warn_override") return "Recorded permit conflict override";
+  if (row.action === "handover_submitted") return "Recorded shift handover";
+  if (row.action === "handover_ack_outgoing") return "Outgoing supervisor acknowledged handover";
+  if (row.action === "handover_ack_incoming") return "Incoming supervisor acknowledged handover";
   if (row.action === "status_changed") return `Status: ${row.from_status || "—"} -> ${row.to_status || "—"}`;
   return "Updated permit";
 }
@@ -176,7 +555,17 @@ function Countdown({ expiresAt }) {
 }
 
 // ─── Permit form ─────────────────────────────────────────────────────────────
-function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) {
+function PermitForm({
+  permit,
+  onSave,
+  onClose,
+  recentPermit,
+  allPermits = [],
+  conflictMatrix = PERMIT_CONFLICT_MATRIX,
+  permitTypes = PERMIT_TYPES,
+  handoverShiftHours = [6, 18],
+  dependencyRules = {},
+}) {
   const projects = load("mysafeops_projects",[]);
   const workers = load("mysafeops_workers",[]);
   const ramsDocs = load("rams_builder_docs", []);
@@ -186,10 +575,10 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
 
   const defaultType = permit?.type || "hot_work";
   const [type, setType] = useState(defaultType);
-  const def = PERMIT_TYPES[type] || PERMIT_TYPES.general;
+  const def = permitTypes[type] || permitTypes.general;
   const typeMeta = getTypeComplianceMeta(type);
   const initChecklist = (items) => Object.fromEntries((items || []).map((item) => [item.id, false]));
-  const template = getTemplateForType(defaultType, PERMIT_TYPES);
+  const template = getTemplateForType(defaultType, permitTypes);
   const initialChecklistItems = permit
     ? normalizeChecklistItems(defaultType, permit, checklistStringsForType(defaultType))
     : normalizeChecklistItems(defaultType, { checklistItems: template.checklistItems }, checklistStringsForType(defaultType));
@@ -202,7 +591,7 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
     endDateTime: new Date(Date.now()+8*3600000).toISOString(),
     checklistItems: initialChecklistItems,
     checklist: initChecklist(initialChecklistItems),
-    extraFields:{}, status:"active",
+    extraFields:{ dynamic:{} }, status:"draft",
     templateVersion: 1,
     matrixVersion: "uk-v2",
     templateId: template.templateId || `permit.${defaultType}.default`,
@@ -214,13 +603,20 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
     evidenceNotes: "",
     evidencePhotoUrl: "",
     evidencePhotoStoragePath: "",
+    workflow: { state: "draft", history: [] },
+    signatures: [],
+    templateHistory: [],
+    revalidationLog: [],
+    integrationQueue: [],
+    tags: [],
+    conflictWarnOverride: null,
   };
 
   const [form, setForm] = useState(() => {
     if (!permit) return blank;
     const permitType = permit.type || type;
     const checklistItems = normalizeChecklistItems(permitType, permit, checklistStringsForType(permitType));
-    return {
+    return normalizeAdvancedPermit({
       ...permit,
       type: permitType,
       checklistItems,
@@ -234,11 +630,13 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
       evidenceNotes: permit.evidenceNotes || "",
       evidencePhotoUrl: permit.evidencePhotoUrl || "",
       evidencePhotoStoragePath: permit.evidencePhotoStoragePath || "",
-    };
+    }, permitType);
   });
   const [evidenceUploadBusy, setEvidenceUploadBusy] = useState(false);
   const [prefillNote, setPrefillNote] = useState("");
   const [templateEditMode, setTemplateEditMode] = useState(false);
+  const [complianceProfiles, setComplianceProfiles] = useState(() => loadPermitComplianceProfiles());
+  const [complianceEditMode, setComplianceEditMode] = useState(false);
   const [issuedToPick, setIssuedToPick] = useState(() => (permit ? matchWorkerPick(permit.issuedTo, workers) : ""));
   const [issuedByPick, setIssuedByPick] = useState(() => {
     if (permit) return matchWorkerPick(permit.issuedBy, workers);
@@ -270,13 +668,55 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
     window.addEventListener("beforeunload", fn);
     return () => window.removeEventListener("beforeunload", fn);
   }, [dirty]);
+  useEffect(() => {
+    savePermitComplianceProfiles(complianceProfiles);
+  }, [complianceProfiles]);
   const tryClose = () => {
     if (dirty && !window.confirm("Discard unsaved permit changes?")) return;
     onClose();
   };
-  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const set = (k,v) => setForm((f)=>normalizeAdvancedPermit({ ...f, [k]: v }, type));
   const setExtra = (k,v) => setForm(f=>({...f,extraFields:{...f.extraFields,[k]:v}}));
   const setCheck = (id,v) => setForm(f=>({...f,checklist:{...f.checklist,[id]:v}}));
+  const setDynamic = (k, v) =>
+    setForm((f) =>
+      normalizeAdvancedPermit(
+        {
+          ...f,
+          extraFields: { ...(f.extraFields || {}), dynamic: { ...(f.extraFields?.dynamic || {}), [k]: v } },
+        },
+        type
+      )
+    );
+
+  useEffect(() => {
+    setForm((f) => normalizeAdvancedPermit(f, type));
+  }, [type]);
+
+  const signRole = (role) => {
+    const who = window.prompt(`Sign as ${role}:`, form.issuedBy || form.issuedTo || "") || "";
+    if (!who.trim()) return;
+    const note = window.prompt("Optional signature note:", "") || "";
+    setForm((f) => normalizeAdvancedPermit(signPermitRole(f, role, who, note), type));
+  };
+
+  const rollbackTemplateVersion = () => {
+    const history = Array.isArray(form.templateHistory) ? form.templateHistory : [];
+    if (history.length === 0) return;
+    const latest = history[0];
+    setForm((f) =>
+      normalizeAdvancedPermit(
+        {
+          ...f,
+          checklistItems: latest.checklistItems || f.checklistItems,
+          checklist: normalizeChecklistState(f.checklist, latest.checklistItems || f.checklistItems),
+          templateVersion: latest.templateVersion || f.templateVersion,
+          templateHistory: history.slice(1),
+        },
+        type
+      )
+    );
+  };
 
   const addFieldCaptureEntry = async () => {
     const kind = window.prompt(
@@ -346,15 +786,49 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
     }));
   };
 
+  const moveChecklistItem = (id, dir) => {
+    setForm((f) => {
+      const list = [...(f.checklistItems || [])];
+      const idx = list.findIndex((x) => x.id === id);
+      if (idx < 0) return f;
+      const nextIdx = dir === "up" ? idx - 1 : idx + 1;
+      if (nextIdx < 0 || nextIdx >= list.length) return f;
+      const tmp = list[idx];
+      list[idx] = list[nextIdx];
+      list[nextIdx] = tmp;
+      return { ...f, checklistItems: list };
+    });
+  };
+
+  const importChecklistFromText = () => {
+    const txt = window.prompt("Paste checklist lines (one item per line):", "") || "";
+    const rows = txt.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).slice(0, 40);
+    if (rows.length === 0) return;
+    setForm((f) => {
+      const current = Array.isArray(f.checklistItems) ? f.checklistItems : [];
+      const merged = [
+        ...current,
+        ...rows.map((line) => ({ id: `custom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`, text: line, required: false })),
+      ];
+      const nextChecks = { ...(f.checklist || {}) };
+      merged.forEach((item) => {
+        if (!(item.id in nextChecks)) nextChecks[item.id] = false;
+      });
+      return { ...f, checklistItems: merged, checklist: nextChecks };
+    });
+  };
+
   const saveCurrentAsOrgTemplate = () => {
     const nextTemplate = saveOrgTemplate(type, {
       checklistItems: trimmedChecklistItems,
-    }, PERMIT_TYPES);
+    }, permitTypes);
+    const snapshot = buildTemplateRollbackSnapshot(form);
     setForm((f) => ({
       ...f,
       templateId: nextTemplate.templateId,
       templateVersion: nextTemplate.templateVersion,
       matrixVersion: nextTemplate.matrixVersion || "uk-v1",
+      templateHistory: [snapshot, ...(f.templateHistory || [])].slice(0, 20),
     }));
     setPrefillNote(`Saved org template v${nextTemplate.templateVersion}`);
     trackEvent("permit_template_saved", { type, templateVersion: nextTemplate.templateVersion });
@@ -366,12 +840,16 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
     setType(nextType);
     const nextItems = normalizeChecklistItems(nextType, next, checklistStringsForType(nextType));
     setForm((f) => ({
-      ...f,
-      ...next,
+      ...normalizeAdvancedPermit(f, nextType),
+      ...normalizeAdvancedPermit(next, nextType),
       type: nextType,
       checklistItems: nextItems,
       checklist: normalizeChecklistState(next.checklist, nextItems),
-      extraFields: { ...(f.extraFields || {}), ...(next.extraFields || {}) },
+      extraFields: {
+        ...(f.extraFields || {}),
+        ...(next.extraFields || {}),
+        dynamic: { ...(f.extraFields?.dynamic || {}), ...(next.extraFields?.dynamic || {}) },
+      },
       templateVersion: next.templateVersion || f.templateVersion || 1,
       matrixVersion: next.matrixVersion || f.matrixVersion || "uk-v1",
     }));
@@ -408,12 +886,28 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
     const w = workers.find((x) => x.id === v);
     if (w) { setIssuedByPick(v); set("issuedBy", permitPersonLabel(w) || w.name); }
   };
+  const selectedIssuedWorker = useMemo(() => workers.find((w) => w.id === issuedToPick) || null, [workers, issuedToPick]);
+  const issuedWorkerEligibility = useMemo(
+    () => (selectedIssuedWorker ? evaluateWorkerPermitEligibility(selectedIssuedWorker, type) : null),
+    [selectedIssuedWorker, type]
+  );
 
   const handleTypeChange = (newType) => {
     setType(newType);
-    const nextTemplate = getTemplateForType(newType, PERMIT_TYPES);
+    const nextTemplate = getTemplateForType(newType, permitTypes);
     const items = normalizeChecklistItems(newType, { checklistItems: nextTemplate.checklistItems }, checklistStringsForType(newType));
-    setForm(f=>({...f, type:newType, checklistItems:items, checklist:initChecklist(items)}));
+    setForm((f) =>
+      normalizeAdvancedPermit(
+        {
+          ...f,
+          type:newType,
+          checklistItems:items,
+          checklist:initChecklist(items),
+          signatures: [],
+        },
+        newType
+      )
+    );
     setPrefillNote("");
     trackEvent("permit_template_selected", { permitType: newType });
   };
@@ -426,9 +920,39 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
     .map((item) => ({ ...item, text: String(item.text || "").trim() }))
     .filter((item) => item.text);
   const quality = runPermitQualityGates(form);
-  const compliance = evaluatePermitCompliance({ ...form, type, endDateTime: form.endDateTime }, trimmedChecklistItems);
+  const complianceProfile = useMemo(
+    () => resolvePermitComplianceProfile(type, complianceProfiles, form.complianceProfile || null),
+    [type, complianceProfiles, form.complianceProfile]
+  );
+  const compliance = evaluatePermitCompliance(
+    { ...form, type, endDateTime: form.endDateTime },
+    trimmedChecklistItems,
+    { profileOverride: complianceProfile }
+  );
   const legalReady = compliance.legalReady;
-  const canIssue = Boolean(quality.ok && trimmedChecklistItems.length > 0 && legalReady);
+  const dynamicSpec = getDynamicFieldSpec(type);
+  const dynamicReq = evaluateDynamicRequirements(form, type);
+  const advancedRules = evaluatePermitRules({ ...form, checklistItems: trimmedChecklistItems }, type);
+  const workerEligibilityBlockers = issuedWorkerEligibility
+    ? [...issuedWorkerEligibility.missing, ...issuedWorkerEligibility.expired.map((x) => x.label)]
+    : [];
+  const missingSignatureRoles = getRequiredSignatureRoles(type).filter((role) => {
+    const signed = (form.signatures || []).find((s) => s.role === role);
+    return !signed?.signedAt;
+  });
+  const baseCanIssue = Boolean(quality.ok && trimmedChecklistItems.length > 0 && legalReady);
+  const qualitySummary = summarizePermitQuality({
+    canIssueBase: baseCanIssue,
+    dynamicMissing: dynamicReq.missingRequired,
+    ruleHardStops: [
+      ...advancedRules.hardStops,
+      ...workerEligibilityBlockers.map((x) => `Worker certification missing/expired: ${x}`),
+    ],
+    qualityFailed: quality.failed || [],
+    signatureMissing: missingSignatureRoles,
+  });
+  const canIssue = qualitySummary.canIssue;
+  const reviewGate = evaluatePermitActionGate(form, "approve", {});
   const permitCopilotHints = useMemo(() => {
     const hints = [];
     if (!form.location) hints.push("Add a precise work location before approval.");
@@ -438,24 +962,36 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
       hints.push("Regulatory hard-stop: complete critical compliance evidence before activation.");
     }
     if (!form.linkedRamsId) hints.push("Link RAMS document to strengthen permit context.");
+    if (dynamicReq.missingRequired.length > 0) hints.push(`Complete dynamic fields: ${dynamicReq.missingRequired.join(", ")}`);
+    if (missingSignatureRoles.length > 0) hints.push(`Collect signatures: ${missingSignatureRoles.join(", ")}`);
     return hints.slice(0, 5);
-  }, [form, compliance.missingCriticalRegulatory]);
+  }, [form, compliance.missingCriticalRegulatory, dynamicReq.missingRequired, missingSignatureRoles]);
 
   const buildPermitPayload = (status) => {
     const safeItems = trimmedChecklistItems.length ? trimmedChecklistItems : createDefaultChecklistItems(type, checklistStringsForType(type));
     const safeChecklist = normalizeChecklistState(form.checklist, safeItems);
+    const normalizedStatus = status === "pending_review" ? "ready_for_review" : status;
     return {
-      ...form,
+      ...normalizeAdvancedPermit(form, type),
       type,
-      status,
+      status: normalizedStatus,
       checklistItems: safeItems,
       checklist: safeChecklist,
       templateVersion: form.templateVersion || 1,
       matrixVersion: form.matrixVersion || "uk-v2",
+      complianceProfile,
       templateId: form.templateId || `permit.${type}.default`,
       legalContentOwner: form.legalContentOwner || "HSE / Legal Reviewer",
       complianceReviewedAt: form.complianceReviewedAt || null,
       endDateTime: form.endDateTime || form.expiryDate || "",
+      workflow: {
+        state: normalizedStatus,
+        history: [
+          { from: form.workflow?.state || form.status || "draft", to: normalizedStatus, at: new Date().toISOString(), note: "form_save" },
+          ...(form.workflow?.history || []),
+        ].slice(0, 120),
+      },
+      integrationQueue: Array.isArray(form.integrationQueue) ? form.integrationQueue : [],
     };
   };
 
@@ -475,10 +1011,131 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
       ),
     [allPermits, form.id, form.startDateTime, form.endDateTime, form.expiryDate, form.location, type]
   );
+  const conflictEvaluation = useMemo(
+    () => evaluatePermitTypeConflicts({ id: form.id, type }, simopsHits, { permitTypes, matrix: conflictMatrix }),
+    [form.id, simopsHits, type, conflictMatrix, permitTypes]
+  );
+  const dependencyEvaluation = useMemo(
+    () => evaluatePermitDependencies({ id: form.id, type }, allPermits, dependencyRules, { now: new Date() }),
+    [form.id, type, allPermits, dependencyRules]
+  );
+  const riskScore = computePermitRiskScore(form, { simopsHits, compliance });
+  const handoverRequirementForActivate = useMemo(
+    () =>
+      evaluatePermitHandoverRequirement(
+        {
+          ...form,
+          status: "active",
+          endDateTime: form.endDateTime || form.expiryDate || "",
+        },
+        new Date(),
+        { derivedStatus: "active", shiftHours: handoverShiftHours }
+      ),
+    [form, handoverShiftHours]
+  );
+  const activateGate = evaluatePermitActionGate(form, "activate", {
+    complianceResult: compliance,
+    conflictResult: conflictEvaluation,
+    warnConflictOverride: form.conflictWarnOverride,
+    handoverRequirement: handoverRequirementForActivate,
+    dependencyResult: dependencyEvaluation,
+  });
+  const nextActorHint = buildPermitNextActorHint(form, compliance, {
+    conflictResult: conflictEvaluation,
+    warnConflictOverride: form.conflictWarnOverride,
+    handoverRequirement: handoverRequirementForActivate,
+    dependencyResult: dependencyEvaluation,
+  });
+  const complianceChecklistPool = useMemo(() => checklistIdsForType(type), [type]);
+  const complianceEvidencePool = useMemo(() => evidenceKeysForType(type), [type]);
+  const toggleComplianceChecklist = (id) => {
+    setComplianceProfiles((prev) => {
+      const current = resolvePermitComplianceProfile(type, prev, null);
+      const setIds = new Set(current.legalRequiredChecklistIds || []);
+      if (setIds.has(id)) setIds.delete(id);
+      else setIds.add(id);
+      return {
+        ...prev,
+        [type]: {
+          ...current,
+          legalRequiredChecklistIds: Array.from(setIds),
+        },
+      };
+    });
+  };
+  const toggleComplianceEvidence = (key) => {
+    setComplianceProfiles((prev) => {
+      const current = resolvePermitComplianceProfile(type, prev, null);
+      const setIds = new Set(current.requiredEvidenceFields || []);
+      if (setIds.has(key)) setIds.delete(key);
+      else setIds.add(key);
+      return {
+        ...prev,
+        [type]: {
+          ...current,
+          requiredEvidenceFields: Array.from(setIds),
+        },
+      };
+    });
+  };
+  const updateComplianceRefs = (rawText) => {
+    const refs = String(rawText || "")
+      .split(/\r?\n/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+    setComplianceProfiles((prev) => {
+      const current = resolvePermitComplianceProfile(type, prev, null);
+      return {
+        ...prev,
+        [type]: {
+          ...current,
+          legalReferences: refs,
+        },
+      };
+    });
+  };
+  const resetComplianceProfileToDefault = () => {
+    if (!window.confirm("Reset compliance profile for this permit type to UK baseline?")) return;
+    setComplianceProfiles((prev) => {
+      const next = { ...prev };
+      delete next[type];
+      return next;
+    });
+  };
+  const evidencePack = useMemo(
+    () => buildPermitEvidencePack({ ...form, type }, compliance, trimmedChecklistItems),
+    [form, type, compliance, trimmedChecklistItems]
+  );
+  const exportEvidencePackJson = () => {
+    const payload = buildPermitEvidencePack(buildPermitPayload(form.status || "draft"), compliance, trimmedChecklistItems);
+    const safe = String(form.description || def.label || "permit_evidence_pack")
+      .replace(/[^\w\-\s]/g, "")
+      .replace(/\s+/g, "_")
+      .slice(0, 48);
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${safe}_${String(form.id || "").slice(-8)}_evidence_pack.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const exportEvidencePackCsv = () => {
+    const csv = buildEvidencePackCsv(buildPermitPayload(form.status || "draft"), compliance, trimmedChecklistItems);
+    const safe = String(form.description || def.label || "permit_evidence_pack")
+      .replace(/[^\w\-\s]/g, "")
+      .replace(/\s+/g, "_")
+      .slice(0, 48);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${safe}_${String(form.id || "").slice(-8)}_evidence_pack.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const step1Valid = !!(String(form.description || "").trim() && String(form.location || "").trim());
-  const step2Valid = trimmedChecklistItems.length > 0;
-  const step3Valid = quality.ok;
+  const step2Valid = trimmedChecklistItems.length > 0 && dynamicReq.missingRequired.length === 0;
+  const step3Valid = quality.ok && missingSignatureRoles.length === 0;
   const stepNextEnabled =
     wizardStep === 1 ? step1Valid : wizardStep === 2 ? step2Valid : wizardStep === 3 ? step3Valid : true;
 
@@ -497,7 +1154,7 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
           <div style={{ marginBottom:16 }}>
             <label style={ss.lbl}>Permit type</label>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:6 }}>
-              {Object.entries(PERMIT_TYPES).map(([k,v])=>(
+              {Object.entries(permitTypes).map(([k,v])=>(
                 <button key={k} type="button" onClick={()=>handleTypeChange(k)} style={{
                   padding:"8px 10px", borderRadius:8, fontSize:12, cursor:"pointer", fontFamily:"DM Sans,sans-serif",
                   textAlign:"left", lineHeight:1.3, display:"flex", alignItems:"center", gap:8,
@@ -539,6 +1196,27 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
           </div>
         )}
 
+        <div style={{ marginBottom:12, border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px", background:"var(--color-background-secondary,#f7f7f5)" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
+            <div style={{ fontSize:12, fontWeight:700 }}>Permit quality panel</div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ ...ss.chip, fontSize:11 }}>Progress {qualitySummary.progress}%</span>
+              <span style={{ ...ss.chip, fontSize:11, background:riskScore.level === "high" ? "#FCEBEB" : riskScore.level === "medium" ? "#FAEEDA" : "#EAF3DE", color:riskScore.level === "high" ? "#791F1F" : riskScore.level === "medium" ? "#633806" : "#27500A" }}>
+                Risk {riskScore.score}
+              </span>
+            </div>
+          </div>
+          {qualitySummary.blockers.length > 0 ? (
+            <ul style={{ margin:"6px 0 0", paddingLeft:18, fontSize:12, color:"#791F1F" }}>
+              {qualitySummary.blockers.slice(0, 4).map((b) => (
+                <li key={b}>{b}</li>
+              ))}
+            </ul>
+          ) : (
+            <div style={{ marginTop:6, fontSize:12, color:"#27500A" }}>Issue-ready. All advanced gates passed.</div>
+          )}
+        </div>
+
         {/* Step 1 — scope */}
         {wizardStep === 1 && (
         <>
@@ -552,6 +1230,15 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
             <label style={ss.lbl}>Description of work</label>
             <textarea value={form.description||""} onChange={e=>set("description",e.target.value)} rows={2}
               placeholder="Describe the specific work to be carried out under this permit…" style={{ ...ss.ta, minHeight:50 }} />
+            <div style={{ marginTop:6 }}>
+              <button
+                type="button"
+                style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}
+                onClick={() => set("description", suggestPermitDescriptionText({ ...form, type }))}
+              >
+                Smart suggest description
+              </button>
+            </div>
           </div>
           <div>
             <label style={ss.lbl}>Location</label>
@@ -597,6 +1284,40 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
                 ))}
             </select>
           </div>
+          {dynamicSpec.length > 0 && (
+            <div style={{ gridColumn:"1/-1", marginTop:4 }}>
+              <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6 }}>
+                Dynamic fields ({def.label})
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
+                {dynamicSpec.map((f) => {
+                  const visible = !f.when || String(form.extraFields?.dynamic?.[f.when.key] || "") === String(f.when.equals);
+                  if (!visible) return null;
+                  const v = form.extraFields?.dynamic?.[f.key];
+                  return (
+                    <div key={f.key}>
+                      <label style={ss.lbl}>{f.label}{f.required ? " *" : ""}</label>
+                      {f.type === "checkbox" ? (
+                        <label style={{ display:"inline-flex", alignItems:"center", gap:8, fontSize:13 }}>
+                          <input type="checkbox" checked={v === true} onChange={(e) => setDynamic(f.key, e.target.checked)} />
+                          Confirm
+                        </label>
+                      ) : f.type === "select" ? (
+                        <select value={v || ""} onChange={(e) => setDynamic(f.key, e.target.value)} style={ss.inp}>
+                          <option value="">— Select —</option>
+                          {(f.options || []).map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input type={f.type || "text"} value={v || ""} onChange={(e) => setDynamic(f.key, e.target.value)} style={ss.inp} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
         </>
         )}
@@ -626,6 +1347,29 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
               <input value={form.issuedTo || ""} onChange={(e) => set("issuedTo", e.target.value)} placeholder="Name of person receiving permit" style={ss.inp} />
             )}
           </div>
+          {issuedWorkerEligibility && (
+            <div style={{ gridColumn: "1/-1", fontSize:12, padding:"8px 10px", borderRadius:8, border:"1px solid #e5e7eb", background: issuedWorkerEligibility.eligible ? "#EAF3DE" : "#FCEBEB", color: issuedWorkerEligibility.eligible ? "#27500A" : "#791F1F" }}>
+              <strong>Worker permit eligibility:</strong>{" "}
+              {issuedWorkerEligibility.eligible
+                ? "Eligible for this permit type."
+                : "Missing or expired mandatory certifications."}
+              {!issuedWorkerEligibility.eligible && (
+                <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
+                  {issuedWorkerEligibility.missing.map((m) => (
+                    <li key={`m_${m}`}>Missing: {m}</li>
+                  ))}
+                  {issuedWorkerEligibility.expired.map((e) => (
+                    <li key={`e_${e.label}`}>Expired: {e.label}</li>
+                  ))}
+                </ul>
+              )}
+              {issuedWorkerEligibility.expiringSoon.length > 0 && (
+                <div style={{ marginTop:6, color:"#633806" }}>
+                  Expiring soon: {issuedWorkerEligibility.expiringSoon.map((x) => `${x.label} (${x.days}d)`).join(", ")}
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label style={ss.lbl}>Issued by (authorised person)</label>
             {workers.length > 0 ? (
@@ -717,6 +1461,32 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
               <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>No field entries recorded yet.</div>
             )}
           </div>
+          <div style={{ gridColumn: "1/-1" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
+              <label style={ss.lbl}>Signature chain</label>
+              <span style={{ ...ss.chip, fontSize:11 }}>
+                {(form.signatures || []).filter((s) => s.signedAt).length}/{getRequiredSignatureRoles(type).length} signed
+              </span>
+            </div>
+            <div style={{ display:"grid", gap:6 }}>
+              {getRequiredSignatureRoles(type).map((role) => {
+                const row = (form.signatures || []).find((s) => s.role === role) || { role, signedBy:"", signedAt:"" };
+                return (
+                  <div key={role} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"6px 8px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
+                    <div style={{ fontSize:12 }}>
+                      <strong>{role.replace(/_/g, " ")}</strong>
+                      <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+                        {row.signedAt ? `${row.signedBy || "signed"} · ${fmtDateTime(row.signedAt)}` : "Not signed"}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => signRole(role)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                      {row.signedAt ? "Re-sign" : "Sign"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           {(form.evidencePhotoUrl || form.evidencePhotoStoragePath) && (
             <div style={{ gridColumn: "1/-1" }}>
               <PermitEvidenceImage storagePath={form.evidencePhotoStoragePath} srcUrl={form.evidencePhotoUrl} />
@@ -728,7 +1498,7 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
             <strong>SIMOPS / overlap:</strong> {simopsHits.length} other permit(s) share this location with an overlapping validity window.
             <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
               {simopsHits.slice(0,6).map((p) => (
-                <li key={p.id}>{(PERMIT_TYPES[p.type]||PERMIT_TYPES.general).label} · {fmtDateTime(p.startDateTime)} → {fmtDateTime(permitEndIso(p))}</li>
+                <li key={p.id}>{(permitTypes[p.type]||permitTypes.general).label} · {fmtDateTime(p.startDateTime)} → {fmtDateTime(permitEndIso(p))}</li>
               ))}
             </ul>
           </div>
@@ -779,6 +1549,9 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
             <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary)" }}>
               Template v{form.templateVersion || 1}
             </span>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary)" }}>
+              Matrix {complianceProfile.matrixVersion || "uk-v2"}
+            </span>
             <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background: legalReady ? "#EAF3DE" : "#FCEBEB", color: legalReady ? "#27500A" : "#791F1F" }}>
               {legalReady ? "LegalReady" : "Legal checks missing"}
             </span>
@@ -798,7 +1571,73 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
                 Save as org template
               </button>
             )}
+            {flags && templateEditMode && (
+              <button type="button" onClick={rollbackTemplateVersion} style={{ ...ss.btn, fontSize:11, padding:"2px 8px" }} disabled={(form.templateHistory || []).length === 0}>
+                Rollback template
+              </button>
+            )}
+            <button type="button" onClick={() => setComplianceEditMode((v) => !v)} style={{ ...ss.btn, fontSize:11, padding:"2px 8px" }}>
+              {complianceEditMode ? "Hide UK compliance profile" : "Edit UK compliance profile"}
+            </button>
           </div>
+          {complianceEditMode && (
+            <div style={{ marginBottom:10, border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px", background:"#f8fbff" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", marginBottom:8 }}>
+                <div style={{ fontSize:12, fontWeight:600 }}>Compliance profile for {def.label}</div>
+                <button type="button" onClick={resetComplianceProfileToDefault} style={{ ...ss.btn, fontSize:11, padding:"2px 8px" }}>
+                  Reset to UK baseline
+                </button>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(220px,100%),1fr))", gap:10 }}>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", marginBottom:6 }}>Mandatory checklist IDs</div>
+                  <div style={{ display:"grid", gap:4 }}>
+                    {complianceChecklistPool.map((id) => (
+                      <label key={id} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12 }}>
+                        <input
+                          type="checkbox"
+                          checked={(complianceProfile.legalRequiredChecklistIds || []).includes(id)}
+                          onChange={() => toggleComplianceChecklist(id)}
+                          style={{ accentColor:"#0d9488" }}
+                        />
+                        {id}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", marginBottom:6 }}>Mandatory evidence fields</div>
+                  <div style={{ display:"grid", gap:4 }}>
+                    {complianceEvidencePool.length === 0 ? (
+                      <span style={{ fontSize:12, color:"var(--color-text-secondary)" }}>No extra evidence fields for this permit type.</span>
+                    ) : (
+                      complianceEvidencePool.map((key) => (
+                        <label key={key} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12 }}>
+                          <input
+                            type="checkbox"
+                            checked={(complianceProfile.requiredEvidenceFields || []).includes(key)}
+                            onChange={() => toggleComplianceEvidence(key)}
+                            style={{ accentColor:"#0d9488" }}
+                          />
+                          {key}
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop:8 }}>
+                <label style={ss.lbl}>Custom legal references (one per line)</label>
+                <textarea
+                  rows={3}
+                  value={(complianceProfile.legalReferences || []).join("\n")}
+                  onChange={(e) => updateComplianceRefs(e.target.value)}
+                  placeholder={"e.g.\nWAHR Reg 6 planning\nLOLER Reg 8 organisation\nPUWER Reg 4 suitability"}
+                  style={{ ...ss.ta, minHeight:70 }}
+                />
+              </div>
+            </div>
+          )}
           <div style={{ height:3, background:"var(--color-border-tertiary,#e5e5e5)", borderRadius:2, marginBottom:12 }}>
             <div style={{ height:3, borderRadius:2, background:allChecked?"#1D9E75":"#0d9488", transition:"width .3s",
               width:`${totalChecks>0?(checkCount/totalChecks)*100:0}%` }} />
@@ -809,12 +1648,16 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
                 style={{ marginTop:2, accentColor:"#0d9488", width:15, height:15, flexShrink:0 }} />
               <div style={{ display:"flex", alignItems:"center", gap:8, width:"100%" }}>
                 {templateEditMode ? (
-                  <input
-                    value={item.text}
-                    onChange={(e) => updateChecklistItemText(item.id, e.target.value)}
-                    placeholder="Checklist item"
-                    style={{ ...ss.inp, margin:0 }}
-                  />
+                  <div style={{ display:"flex", gap:6, width:"100%", alignItems:"center" }}>
+                    <input
+                      value={item.text}
+                      onChange={(e) => updateChecklistItemText(item.id, e.target.value)}
+                      placeholder="Checklist item"
+                      style={{ ...ss.inp, margin:0 }}
+                    />
+                    <button type="button" onClick={() => moveChecklistItem(item.id, "up")} style={{ ...ss.btn, fontSize:11, padding:"2px 6px" }}>↑</button>
+                    <button type="button" onClick={() => moveChecklistItem(item.id, "down")} style={{ ...ss.btn, fontSize:11, padding:"2px 6px" }}>↓</button>
+                  </div>
                 ) : (
                   <span style={{ fontSize:13, lineHeight:1.5 }}>{item.text}</span>
                 )}
@@ -830,6 +1673,9 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
             <div style={{ marginTop:10 }}>
               <button type="button" onClick={addChecklistItem} style={{ ...ss.btn, fontSize:12 }}>
                 + Add custom checklist item
+              </button>
+              <button type="button" onClick={importChecklistFromText} style={{ ...ss.btn, fontSize:12, marginLeft:8 }}>
+                Import lines
               </button>
             </div>
           )}
@@ -852,12 +1698,111 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
           <ul style={{ margin:0, paddingLeft:18 }}>
             <li>Legal readiness: {legalReady ? "OK" : "Action required"}</li>
             <li>Data completeness: {Math.round(compliance.dataComplete * 100)}%</li>
+            <li>Workflow state: {form.workflow?.state || form.status || "draft"}</li>
+            {complianceProfile.legalReferences?.length ? (
+              <li>Legal refs: {complianceProfile.legalReferences.slice(0, 3).join(" · ")}</li>
+            ) : null}
             {simopsHits.length > 0 ? <li style={{ color:"#791F1F" }}>SIMOPS: {simopsHits.length} overlapping permit(s) at this location</li> : null}
           </ul>
           {typeMeta.hseUrl ? (
             <a href={typeMeta.hseUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#0C447C", marginTop:8, display:"inline-block" }}>Open HSE guidance</a>
           ) : null}
         </div>
+        <div style={{ marginBottom:12, fontSize:12, background:"#f8fbff", border:"1px solid #dbeafe", borderRadius:8, padding:"8px 10px" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:6 }}>
+            <div style={{ fontWeight:700, color:"#0C447C" }}>UK evidence pack validator</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button type="button" onClick={exportEvidencePackJson} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                Export JSON
+              </button>
+              <button type="button" onClick={exportEvidencePackCsv} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                Export CSV
+              </button>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:evidencePack.summary.checklistOk ? "#EAF3DE" : "#FCEBEB", color:evidencePack.summary.checklistOk ? "#27500A" : "#791F1F" }}>
+              Checklist {evidencePack.summary.checklistOk ? "OK" : "Missing"}
+            </span>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:evidencePack.summary.evidenceOk ? "#EAF3DE" : "#FCEBEB", color:evidencePack.summary.evidenceOk ? "#27500A" : "#791F1F" }}>
+              Evidence {evidencePack.summary.evidenceOk ? "OK" : "Missing"}
+            </span>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:evidencePack.summary.regulatoryOk ? "#EAF3DE" : "#FCEBEB", color:evidencePack.summary.regulatoryOk ? "#27500A" : "#791F1F" }}>
+              Regulatory {evidencePack.summary.regulatoryOk ? "OK" : "Missing"}
+            </span>
+          </div>
+          {!evidencePack.summary.overallPass && (
+            <ul style={{ margin:"8px 0 0", paddingLeft:18 }}>
+              {evidencePack.checks.evidence.filter((x) => !x.ok).slice(0, 5).map((x) => (
+                <li key={x.key}>Evidence missing: {x.key}</li>
+              ))}
+              {evidencePack.checks.checklist.filter((x) => !x.ok).slice(0, 5).map((x) => (
+                <li key={x.id}>Checklist missing: {x.id}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div style={{ marginBottom:12, fontSize:12, background:"#f8fafc", border:"1px solid #dbe5f1", borderRadius:8, padding:"8px 10px" }}>
+          <div style={{ fontWeight:700, color:"#0C447C", marginBottom:6 }}>Role workflow gates</div>
+          <div style={{ display:"grid", gap:4 }}>
+            <div>
+              Review gate:{" "}
+              <strong style={{ color: reviewGate.allowed ? "#27500A" : "#791F1F" }}>
+                {reviewGate.allowed ? "ready for approval" : "blocked"}
+              </strong>
+              {!reviewGate.allowed ? ` — ${reviewGate.message}` : ""}
+            </div>
+            <div>
+              Activation gate:{" "}
+              <strong style={{ color: activateGate.allowed ? "#27500A" : "#791F1F" }}>
+                {activateGate.allowed ? "ready for activation" : "blocked"}
+              </strong>
+              {!activateGate.allowed ? ` — ${activateGate.message}` : ""}
+            </div>
+            {conflictEvaluation.outcome !== "allow" ? (
+              <div style={{ color: conflictEvaluation.outcome === "block" ? "#791F1F" : "#633806" }}>
+                Permit conflict matrix:{" "}
+                <strong>{conflictEvaluation.outcome === "block" ? "blocked overlap" : "warn override required"}</strong>
+              </div>
+            ) : null}
+            {nextActorHint ? <div style={{ color:"#334155" }}><strong>{nextActorHint}</strong></div> : null}
+          </div>
+        </div>
+        {conflictEvaluation.outcome === "warn" ? (
+          <div style={{ marginBottom:12, fontSize:12, background:"#FFFBEB", border:"1px solid #fcd34d", borderRadius:8, padding:"8px 10px" }}>
+            <div style={{ fontWeight:700, color:"#854d0e", marginBottom:6 }}>Conflict override required for activation</div>
+            <div style={{ display:"grid", gap:8 }}>
+              <input
+                style={ss.in}
+                placeholder="Override reason (required)"
+                value={form.conflictWarnOverride?.reason || ""}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    conflictWarnOverride: {
+                      ...(f.conflictWarnOverride || {}),
+                      reason: e.target.value,
+                    },
+                  }))
+                }
+              />
+              <input
+                style={ss.in}
+                placeholder="Approver name/role (required)"
+                value={form.conflictWarnOverride?.approvedBy || ""}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    conflictWarnOverride: {
+                      ...(f.conflictWarnOverride || {}),
+                      approvedBy: e.target.value,
+                    },
+                  }))
+                }
+              />
+            </div>
+          </div>
+        ) : null}
         {isFeatureEnabled("smart_copilot_v1") && permitCopilotHints.length > 0 ? (
           <div style={{ marginBottom:12, fontSize:12, color:"#0C447C", background:"#E6F1FB", border:"1px solid #cfe3f8", borderRadius:8, padding:"8px 10px" }}>
             <div style={{ fontWeight:700, marginBottom:6 }}>Permit Copilot suggestions</div>
@@ -885,6 +1830,27 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
                 ))}
               </ul>
             )}
+            {advancedRules.hardStops.length > 0 && (
+              <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
+                {advancedRules.hardStops.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            )}
+            {dynamicReq.missingRequired.length > 0 && (
+              <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
+                {dynamicReq.missingRequired.map((field) => (
+                  <li key={field}>Dynamic required: {field}</li>
+                ))}
+              </ul>
+            )}
+            {missingSignatureRoles.length > 0 && (
+              <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
+                {missingSignatureRoles.map((role) => (
+                  <li key={role}>Missing signature: {role.replace(/_/g, " ")}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"space-between" }}>
@@ -907,7 +1873,13 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
               type="button"
               onClick={() => {
                 if (!canIssue) return;
-                const pr = buildPermitPayload("pending_review");
+                const pr = {
+                  ...buildPermitPayload("ready_for_review"),
+                  integrationQueue: [
+                    queueIntegrationEvent(form, "webhook", { event: "permit_ready_for_review" }),
+                    ...(form.integrationQueue || []),
+                  ],
+                };
                 saveFormPrefs(pr);
                 trackEvent("permit_submitted_review", { permitType: type });
                 onSave(pr);
@@ -920,10 +1892,31 @@ function PermitForm({ permit, onSave, onClose, recentPermit, allPermits = [] }) 
             <button
               type="button"
               onClick={() => {
+                if (!activateGate.allowed) {
+                  window.alert(activateGate.message || "Cannot issue this permit.");
+                  return;
+                }
                 const active = buildPermitPayload("active");
-                saveFormPrefs(active);
+                const withOverride =
+                  conflictEvaluation.outcome === "warn"
+                    ? {
+                        ...active,
+                        conflictWarnOverride: {
+                          ...(active.conflictWarnOverride || {}),
+                          approvedAt: new Date().toISOString(),
+                        },
+                      }
+                    : active;
+                saveFormPrefs(withOverride);
                 trackEvent("permit_issued", { permitType: type, legalReady });
-                onSave(active);
+                onSave({
+                  ...withOverride,
+                  integrationQueue: [
+                    queueIntegrationEvent(form, "calendar", { event: "permit_expiry_reminder" }),
+                    queueIntegrationEvent(form, "webhook", { event: "permit_issued" }),
+                    ...(form.integrationQueue || []),
+                  ],
+                });
               }}
               style={{ ...ss.btnO, opacity: canIssue ? 1 : 0.6, cursor: canIssue ? "pointer" : "not-allowed" }}
               disabled={!canIssue}
@@ -951,8 +1944,13 @@ function PermitCard({
   onPrint,
   onApprove,
   onActivate,
+  onSuspend,
+  onResume,
+  onExtendRevalidate,
   onNotify,
+  onShareAckLink,
   onAcknowledge,
+  onConfirmBriefing,
   simopsConflicts = [],
   highlight,
   compact = false,
@@ -962,39 +1960,104 @@ function PermitCard({
   onToggleSelect,
   incidents = [],
   onReportIncident,
+  conflictMatrix = PERMIT_CONFLICT_MATRIX,
+  ultraCompact = false,
+  permitTypes = PERMIT_TYPES,
+  handoverState = null,
+  activationHandoverRequirement = null,
+  activationDependencyResult = null,
+  onOpenHandover,
+  cardDensity = "comfort",
+  onOpenMobileQuickActions,
 }) {
-  const def = PERMIT_TYPES[permit.type] || PERMIT_TYPES.general;
+  const def = permitTypes[permit.type] || permitTypes.general;
   const [expanded, setExpanded] = useState(false);
   const [cloudAuditRows, setCloudAuditRows] = useState([]);
   const [cloudAuditLoading, setCloudAuditLoading] = useState(false);
   const [cloudAuditError, setCloudAuditError] = useState("");
   const checklistItems = normalizeChecklistItems(permit.type || "general", permit, checklistStringsForType(permit.type || "general"));
   const checklistState = normalizeChecklistState(permit.checklist, checklistItems);
+  const cardCompliance = useMemo(
+    () =>
+      evaluatePermitCompliance(permit, checklistItems, {
+        profileOverride: permit?.complianceProfile || null,
+      }),
+    [permit, checklistItems]
+  );
+  const conflictEvaluation = useMemo(
+    () => evaluatePermitTypeConflicts(permit, simopsConflicts, { permitTypes, matrix: conflictMatrix }),
+    [permit, simopsConflicts, conflictMatrix, permitTypes]
+  );
+  const approveGate = evaluatePermitActionGate(permit, "approve", {});
+  const activateGate = evaluatePermitActionGate(permit, "activate", {
+    complianceResult: cardCompliance,
+    conflictResult: conflictEvaluation,
+    warnConflictOverride: permit.conflictWarnOverride,
+    handoverRequirement: activationHandoverRequirement,
+    dependencyResult: activationDependencyResult,
+  });
+  const nextActorHint = buildPermitNextActorHint(permit, cardCompliance, {
+    conflictResult: conflictEvaluation,
+    warnConflictOverride: permit.conflictWarnOverride,
+    handoverRequirement: activationHandoverRequirement,
+    dependencyResult: activationDependencyResult,
+  });
   const checkedCount = checklistItems.filter((item) => checklistState[item.id]).length;
   const totalChecks = checklistItems.length;
   const endIso = permitEndIso(permit);
   const derived = derivePermitStatus(permit);
-  const statusLabel =
-    derived === "closed" ? "Closed" :
-    derived === "expired" ? "Expired" :
-    derived === "draft" ? "Draft" :
-    derived === "pending_review" ? "In review" :
-    derived === "approved" ? "Approved" :
-    "Active";
-  const statusBg =
-    derived === "closed" ? "var(--color-background-secondary,#f7f7f5)" :
-    derived === "expired" ? "#FCEBEB" :
-    derived === "draft" ? "#FAEEDA" :
-    derived === "pending_review" ? "#FAEEDA" :
-    derived === "approved" ? "#E6F1FB" :
-    "#EAF3DE";
-  const statusColor =
-    derived === "closed" ? "var(--color-text-secondary)" :
-    derived === "expired" ? "#791F1F" :
-    derived === "draft" ? "#633806" :
-    derived === "pending_review" ? "#633806" :
-    derived === "approved" ? "#0C447C" :
-    "#27500A";
+  const statusMeta = getPermitStatusMeta(derived);
+  const workflowRail = permitWorkflowRail(derived);
+  const permitRisk = computePermitRiskScore(permit, { simopsHits: simopsConflicts });
+  const slaBadge = buildPermitSlaBadge(permit, derived);
+  const issueDrift = diffPermitVsIssueSnapshot(permit);
+  const latestHandover = latestCompletedHandover(permit?.handoverLog || []);
+  const density = ["comfort", "compact", "ops"].includes(cardDensity) ? cardDensity : "comfort";
+  const activeDurationMs = permit.startDateTime ? Date.now() - new Date(permit.startDateTime).getTime() : 0;
+  const briefingPending = derived === "active" && !permit.briefingConfirmedAt && activeDurationMs > 20 * 60 * 1000;
+  const ramsMissing = derived === "active" && !String(permit.linkedRamsId || "").trim();
+  const headerFontSize = density === "ops" ? 13 : 14;
+  const metaFontSize = density === "ops" ? 11 : 12;
+  const showDescription = density !== "ops";
+  const showWorkflowRail = density !== "ops";
+  const compactActionBtnStyle = compact
+    ? {
+        width: "100%",
+        textAlign: "center",
+        minHeight: 38,
+        padding: "6px 8px",
+        lineHeight: 1.2,
+        whiteSpace: "normal",
+        overflowWrap: "anywhere",
+      }
+    : {};
+  const decisionBanner = (() => {
+    if (derived === "pending_review" && !approveGate.allowed) {
+      return { tone: "warn", title: "Review blocked", text: approveGate.message || "Issuer signature required before approval.", cta: "Collect signature" };
+    }
+    if ((derived === "approved" || derived === "closed") && !activateGate.allowed) {
+      return { tone: "critical", title: "Cannot activate now", text: activateGate.message || "Activation blocked.", cta: "Resolve blockers" };
+    }
+    if (derived === "active" && slaBadge?.label?.toLowerCase().includes("overdue")) {
+      return { tone: "critical", title: "Attention needed", text: "Permit is running beyond target window. Review closure/revalidation now.", cta: "Review permit" };
+    }
+    if (derived === "active" && handoverState?.required && handoverState?.missing) {
+      return { tone: "warn", title: "Handover required", text: "Shift handover is missing. Capture outgoing/incoming acknowledgement now.", cta: "Record handover" };
+    }
+    if (briefingPending) {
+      return { tone: "warn", title: "Briefing confirmation missing", text: "Permit is active but site briefing has not been confirmed yet.", cta: "Confirm briefing" };
+    }
+    if (ramsMissing) {
+      return { tone: "info", title: "RAMS link recommended", text: "Active permit has no linked RAMS document for field traceability.", cta: "Open permit" };
+    }
+    if ((derived === "approved" || derived === "closed") && activateGate.allowed) {
+      return { tone: "ok", title: "Ready to activate", text: "All required checks are complete and activation can proceed now.", cta: "Activate" };
+    }
+    if (nextActorHint) {
+      return { tone: "info", title: "Next best action", text: nextActorHint, cta: "Open permit" };
+    }
+    return { tone: "ok", title: "Healthy state", text: "No immediate blockers detected for this permit.", cta: "Continue monitoring" };
+  })();
 
   return (
     <div
@@ -1002,16 +2065,16 @@ function PermitCard({
       className="app-surface-card"
       style={{
         ...ss.card,
-        marginBottom:8,
+        marginBottom:10,
         borderLeft:`3px solid ${def.color}`,
-        boxShadow: highlight ? "0 0 0 2px #0d9488, 0 1px 2px rgba(0,0,0,0.06)" : undefined,
-        transition: "box-shadow 0.2s ease",
+        boxShadow: highlight ? "0 0 0 2px #0d9488, 0 4px 12px rgba(0,0,0,0.08)" : "0 1px 2px rgba(0,0,0,0.05)",
+        transition: "box-shadow 0.2s ease, transform 0.2s ease",
       }}
     >
       <div
         style={{
           display:"grid",
-          gridTemplateColumns: compact ? (selectable ? "24px 1fr" : "1fr") : (selectable ? "24px 36px minmax(0,1fr) auto" : "36px minmax(0,1fr) auto"),
+          gridTemplateColumns: compact ? (selectable ? "24px minmax(0,1fr)" : "minmax(0,1fr)") : (selectable ? "24px 36px minmax(0,1fr) auto" : "36px minmax(0,1fr) auto"),
           gap:12,
           alignItems:"flex-start",
         }}
@@ -1035,60 +2098,199 @@ function PermitCard({
         </div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-            <span style={{ fontWeight:500, fontSize:14 }}>{def.label}</span>
-            <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:500, background:statusBg, color:statusColor }}>
-              {statusLabel}
+            <span style={{ fontWeight:600, fontSize:headerFontSize, overflowWrap:"anywhere" }}>{def.label}</span>
+            <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:statusMeta.bg, color:statusMeta.color, display:"inline-flex", alignItems:"center", gap:6 }}>
+              <span aria-hidden>{statusMeta.icon}</span>
+              {statusMeta.label}
             </span>
             {simopsConflicts.length > 0 && (
               <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:"#FCEBEB", color:"#791F1F" }} title="Overlapping permits at this location">
                 SIMOPS ×{simopsConflicts.length}
               </span>
             )}
+            {conflictEvaluation.outcome !== "allow" && (
+              <span
+                style={{
+                  padding:"2px 8px",
+                  borderRadius:20,
+                  fontSize:11,
+                  fontWeight:600,
+                  background: conflictEvaluation.outcome === "block" ? "#FCEBEB" : "#FFFBEB",
+                  color: conflictEvaluation.outcome === "block" ? "#791F1F" : "#854d0e",
+                }}
+              >
+                {conflictEvaluation.outcome === "block" ? "Conflict: blocked" : "Conflict: warn"}
+              </span>
+            )}
+            <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background: permitRisk.level === "high" ? "#FCEBEB" : permitRisk.level === "medium" ? "#FAEEDA" : "#EAF3DE", color: permitRisk.level === "high" ? "#791F1F" : permitRisk.level === "medium" ? "#633806" : "#27500A" }}>
+              Risk {permitRisk.score}
+            </span>
+            {slaBadge && (
+              <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:slaBadge.bg, color:slaBadge.color }}>
+                {slaBadge.label}
+              </span>
+            )}
             {derived === "active" && endIso && (
               <Countdown expiresAt={endIso} />
             )}
+            {derived === "active" && handoverState?.required && handoverState?.missing ? (
+              <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:"#FFFBEB", color:"#854d0e", border:"1px solid #fde68a" }}>
+                Handover due
+              </span>
+            ) : null}
+            {briefingPending ? (
+              <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:"#FFFBEB", color:"#854d0e", border:"1px solid #fde68a" }}>
+                Briefing pending
+              </span>
+            ) : null}
+            {ramsMissing ? (
+              <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:"var(--permit-info-bg)", color:"var(--permit-info-fg)", border:"1px solid var(--permit-info-border)" }}>
+                RAMS missing
+              </span>
+            ) : null}
           </div>
-          <div style={{ fontSize:12, color:"var(--color-text-secondary)", display:"flex", gap:12, flexWrap:"wrap" }}>
-            {permit.location && <span>{permit.location}</span>}
-            {permit.issuedTo && <span>To: {permit.issuedTo}</span>}
-            <span>Valid: {fmtDateTime(permit.startDateTime)} → {fmtDateTime(endIso)}</span>
+          <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap", marginBottom:6, minHeight: showWorkflowRail ? undefined : 0 }}>
+            {showWorkflowRail ? workflowRail.map((node, idx) => (
+              <div key={`${permit.id}-${node.step}`} style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <span
+                  title={permitStepLabel(node.step)}
+                  style={{
+                    width:10,
+                    height:10,
+                    borderRadius:"50%",
+                    background: node.current ? "#0d9488" : node.done ? "#6b7280" : "#d1d5db",
+                    boxShadow: node.current ? "0 0 0 3px rgba(13,148,136,0.18)" : "none",
+                  }}
+                />
+                {idx < workflowRail.length - 1 ? (
+                  <span style={{ width:18, height:2, background: node.done ? "#94a3b8" : "#e5e7eb", display:"inline-block" }} />
+                ) : null}
+              </div>
+            )) : null}
           </div>
-          {permit.description && (
-            <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginTop:4, fontStyle:"italic" }}>
+          <div style={{ fontSize:metaFontSize, color:"var(--color-text-secondary)", display:"flex", gap:12, flexWrap:"wrap", overflowWrap:"anywhere" }}>
+            {permit.location && <span style={{ overflowWrap:"anywhere" }}>{permit.location}</span>}
+            {permit.issuedTo && <span style={{ overflowWrap:"anywhere" }}>To: {permit.issuedTo}</span>}
+            <span style={{ overflowWrap:"anywhere" }}>Valid: {fmtDateTime(permit.startDateTime)} → {fmtDateTime(endIso)}</span>
+          </div>
+          {showDescription && permit.description && (
+            <div style={{ fontSize:metaFontSize, color:"var(--color-text-secondary)", marginTop:4, fontStyle:"italic", overflowWrap:"anywhere" }}>
               {permit.description.slice(0,100)}{permit.description.length>100?"…":""}
             </div>
           )}
+          {issueDrift.drift && issueDrift.hasSnapshot && (
+            <div style={{ marginTop:8, fontSize:11, padding:"6px 8px", borderRadius:6, background:"#FFF7ED", border:"1px solid #fed7aa", color:"#9a3412", lineHeight:1.4 }}>
+              <strong>Changed since activation:</strong> {issueDrift.changedFields.join(", ")}
+            </div>
+          )}
+          {decisionBanner ? (
+            <div
+              style={{
+                marginTop:8,
+                fontSize:11,
+                padding:"7px 9px",
+                borderRadius:8,
+                background: permitDecisionTone(decisionBanner.tone).bg,
+                border: `1px solid ${permitDecisionTone(decisionBanner.tone).border}`,
+                color: permitDecisionTone(decisionBanner.tone).color,
+                lineHeight:1.4,
+                overflowWrap:"anywhere",
+                display:"flex",
+                justifyContent:"space-between",
+                gap:8,
+                alignItems:"center",
+                flexWrap:"wrap",
+                transition:"all 160ms ease",
+              }}
+            >
+              <div style={{ minWidth:0 }}>
+                <strong>{decisionBanner.title}:</strong> {decisionBanner.text}
+              </div>
+              {(decisionBanner.tone === "warn" || decisionBanner.tone === "critical" || decisionBanner.tone === "ok") ? (
+                <button
+                  type="button"
+                  style={{ ...ss.btn, fontSize:11, padding:"3px 8px", minHeight:30 }}
+                  onClick={() => {
+                    if (decisionBanner.tone === "warn" && handoverState?.required && handoverState?.missing) return onOpenHandover?.(permit);
+                    if (decisionBanner.tone === "warn" && briefingPending) return onConfirmBriefing?.(permit.id);
+                    if (decisionBanner.tone === "ok" && (derived === "approved" || derived === "closed")) return onActivate?.(permit.id);
+                    if (decisionBanner.tone === "critical" || decisionBanner.tone === "warn") return onEdit?.(permit);
+                    return onPreview?.(permit);
+                  }}
+                >
+                  {decisionBanner.cta}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0, justifyContent: compact ? "flex-start" : "flex-end" }}>
-          <button onClick={()=>setExpanded(v=>!v)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>
-            {expanded?"▲":"▼"}
-          </button>
-          <button onClick={()=>onPreview(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>Preview</button>
-          <button onClick={()=>onPrint(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>Export PDF</button>
-          {onNotify ? <button onClick={()=>onNotify(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>Notify team</button> : null}
-          {onAcknowledge ? <button onClick={()=>onAcknowledge(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>Acknowledge</button> : null}
-          {onReportIncident ? (
-            <button onClick={() => onReportIncident(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>
-              Report incident{incidents.length ? ` (${incidents.length})` : ""}
+        <div
+          style={{
+            display: compact ? "grid" : "flex",
+            gridTemplateColumns: compact ? "repeat(2,minmax(0,1fr))" : undefined,
+            flexWrap: compact ? undefined : "wrap",
+            gap:6,
+            flexShrink:0,
+            justifyContent: compact ? "flex-start" : "flex-end",
+            gridColumn: compact ? "1 / -1" : "auto",
+            width: compact ? "100%" : "auto",
+          }}
+        >
+          {compact ? (
+            <button type="button" onClick={() => onOpenMobileQuickActions?.(permit)} style={{ ...ss.btnO, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
+              Quick actions
             </button>
           ) : null}
-          <button onClick={()=>onEdit(permit)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Edit</button>
-          {permit.status==="pending_review" && (
+          <button onClick={()=>setExpanded(v=>!v)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
+            {expanded?"▲":"▼"}
+          </button>
+          <button onClick={()=>onPreview(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{ultraCompact ? "View" : "Preview"}</button>
+          <button onClick={()=>onPrint(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{ultraCompact ? "PDF" : "Export PDF"}</button>
+          {onNotify ? <button onClick={()=>onNotify(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{ultraCompact ? "Notify" : "Notify team"}</button> : null}
+          {onShareAckLink ? <button onClick={()=>onShareAckLink(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{ultraCompact ? "Read/Sign" : "Read/Sign link"}</button> : null}
+          {onAcknowledge ? <button onClick={()=>onAcknowledge(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{ultraCompact ? "Ack" : "Acknowledge"}</button> : null}
+          {onReportIncident ? (
+            <button onClick={() => onReportIncident(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
+              {ultraCompact ? "Incident" : "Report incident"}{incidents.length ? ` (${incidents.length})` : ""}
+            </button>
+          ) : null}
+          <button onClick={()=>onEdit(permit)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>Edit</button>
+          {(permit.status==="pending_review" || permit.status==="ready_for_review") && (
             <>
-              <button type="button" onClick={()=>onApprove?.(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12 }}>Approve</button>
-              <button type="button" onClick={()=>onActivate?.(permit.id)} style={{ ...ss.btnO, padding:"4px 8px", fontSize:12 }}>Approve & activate</button>
+              <button type="button" onClick={()=>onApprove?.(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>Approve</button>
+              <button type="button" onClick={()=>onActivate?.(permit.id)} style={{ ...ss.btnO, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{ultraCompact ? "Approve+Go" : "Approve & activate"}</button>
             </>
           )}
           {permit.status==="approved" && (
-            <button type="button" onClick={()=>onActivate?.(permit.id)} style={{ ...ss.btnO, padding:"4px 8px", fontSize:12 }}>Activate</button>
+            <button type="button" onClick={()=>onActivate?.(permit.id)} style={{ ...ss.btnO, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>Activate</button>
           )}
           {derived === "active" && (
-            <button onClick={()=>onClose(permit.id)} style={{ ...ss.btnR, padding:"4px 10px", fontSize:12 }}>Close</button>
+            <button type="button" onClick={() => onOpenHandover?.(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
+              {ultraCompact ? "Handover" : "Shift handover"}
+            </button>
+          )}
+          {briefingPending && onConfirmBriefing ? (
+            <button type="button" onClick={() => onConfirmBriefing(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
+              {ultraCompact ? "Briefing ✓" : "Confirm briefing"}
+            </button>
+          ) : null}
+          {derived === "active" && (
+            <button type="button" onClick={() => onSuspend?.(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
+              Suspend
+            </button>
+          )}
+          {permit.status === "suspended" && (
+            <button type="button" onClick={() => onResume?.(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
+              Resume
+            </button>
+          )}
+          {derived === "active" && (
+            <button onClick={()=>onClose(permit.id)} style={{ ...ss.btnR, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>Close</button>
           )}
           {(derived==="closed"||derived==="expired") && (
-            <button onClick={()=>onReopen(permit.id)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Reopen</button>
+            <button onClick={()=>onReopen(permit.id)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>Reopen</button>
           )}
-          <button onClick={()=>onDelete(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
+          <button onClick={()=>onDelete(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595", ...compactActionBtnStyle }}>×</button>
         </div>
       </div>
 
@@ -1099,7 +2301,7 @@ function PermitCard({
               <strong>SIMOPS / overlap at this location:</strong>
               <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
                 {simopsConflicts.slice(0, 8).map((p) => (
-                  <li key={p.id}>{(PERMIT_TYPES[p.type] || PERMIT_TYPES.general).label} · {fmtDateTime(p.startDateTime)} → {fmtDateTime(permitEndIso(p))}</li>
+                  <li key={p.id}>{(permitTypes[p.type] || permitTypes.general).label} · {fmtDateTime(p.startDateTime)} → {fmtDateTime(permitEndIso(p))}</li>
                 ))}
               </ul>
             </div>
@@ -1136,6 +2338,26 @@ function PermitCard({
               Conditions: {permit.notes}
             </div>
           )}
+          {latestHandover ? (
+            <div style={{ marginTop:10, padding:"8px 10px", borderRadius:6, background:"#EEF7FF", border:"1px solid #bfdbfe", color:"#1e3a8a", fontSize:12 }}>
+              <strong>Latest handover:</strong> {fmtDateTime(latestHandover.submittedAt)} · {latestHandover.outgoingSupervisor || "Outgoing"} → {latestHandover.incomingSupervisor || "Incoming"}
+            </div>
+          ) : null}
+
+          {derived === "closed" && permit.lessonsLearned && (
+            <div style={{ marginTop:10, padding:"8px 10px", background:"#E8F4FC", borderRadius:6, fontSize:12, color:"#0C447C", border:"1px solid #cfe3f8" }}>
+              <strong>Lessons learned:</strong> {permit.lessonsLearned}
+            </div>
+          )}
+
+          <div style={{ marginTop:10, display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={() => onExtendRevalidate?.(permit.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+              Extend + revalidate
+            </button>
+            <span style={{ ...ss.chip, fontSize:11 }}>
+              Revalidations: {Array.isArray(permit.revalidationLog) ? permit.revalidationLog.length : 0}
+            </span>
+          </div>
 
           {(permit.evidencePhotoUrl || permit.evidencePhotoStoragePath) && (
             <PermitEvidenceImage storagePath={permit.evidencePhotoStoragePath} srcUrl={permit.evidencePhotoUrl} />
@@ -1154,6 +2376,14 @@ function PermitCard({
                         ? "Created"
                         : e.action === "updated"
                           ? "Updated"
+                          : e.action === "conflict_warn_override"
+                            ? `Conflict override (${e.approvedBy || "approver"})`
+                          : e.action === "handover_submitted"
+                            ? `Handover submitted (${e.outgoingSupervisor || "outgoing"} -> ${e.incomingSupervisor || "incoming"})`
+                          : e.action === "handover_ack_outgoing"
+                            ? `Outgoing acknowledged (${e.by || "outgoing supervisor"})`
+                          : e.action === "handover_ack_incoming"
+                            ? `Incoming acknowledged (${e.by || "incoming supervisor"})`
                           : e.action}
                   </li>
                 ))}
@@ -1284,14 +2514,29 @@ function exportPermitPdf(permit) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PermitSystem() {
+  const { role: appRole = "admin" } = useApp();
   const [permits, setPermits] = useState(()=>load("permits_v2",[]));
   const [modal, setModal] = useState(null);
   const [filterType, setFilterType] = useState("");
   const [filterStatus, setFilterStatus] = useState("active");
+  const [filterHandoverDue, setFilterHandoverDue] = useState(false);
+  const [filterBlockedNow, setFilterBlockedNow] = useState(false);
+  const [filterBriefingPending, setFilterBriefingPending] = useState(false);
+  const [filterRamsMissing, setFilterRamsMissing] = useState(false);
   const [search, setSearch] = useState("");
+  const [permitThemeMode, setPermitThemeMode] = useState(() => {
+    const raw = String(load(PERMIT_THEME_MODE_KEY, "auto") || "auto");
+    return PERMIT_THEME_MODES.includes(raw) ? raw : "auto";
+  });
+  const [prefersDarkTheme, setPrefersDarkTheme] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: dark)").matches : false
+  );
   const [savedViews, setSavedViews] = useState(() => load(PERMIT_SAVED_VIEWS_KEY, []));
   const [selectedPermitIds, setSelectedPermitIds] = useState({});
   const [viewMode, setViewMode] = useState("list");
+  const [cardDensity, setCardDensity] = useState("comfort");
+  const [listSkeleton, setListSkeleton] = useState(false);
+  const [mobileQuickActionsPermitId, setMobileQuickActionsPermitId] = useState("");
   const [wallNow, setWallNow] = useState(() => new Date());
   const [wallFullscreen, setWallFullscreen] = useState(false);
   const [highlightPermitId, setHighlightPermitId] = useState(null);
@@ -1315,6 +2560,67 @@ export default function PermitSystem() {
   const [projectPlans, setProjectPlans] = useState(() => listProjectPlans());
   const [planProjectId, setPlanProjectId] = useState("");
   const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [ackTokenParam, setAckTokenParam] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("permitAck") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [ackActorName, setAckActorName] = useState("");
+  const [ackActorNote, setAckActorNote] = useState("");
+  const [closePermitDialog, setClosePermitDialog] = useState(null);
+  const [conflictOverrideDialog, setConflictOverrideDialog] = useState(null);
+  const [handoverDialog, setHandoverDialog] = useState(null);
+  const conflictOverrideResolverRef = useRef(null);
+  const [conflictMatrixOverrides, setConflictMatrixOverrides] = useState(() => {
+    const raw = load(PERMIT_CONFLICT_MATRIX_OVERRIDES_KEY, {});
+    return raw && typeof raw === "object" ? raw : {};
+  });
+  const [permitTypeOverrides, setPermitTypeOverrides] = useState(() => {
+    const raw = load(PERMIT_TYPE_OVERRIDES_KEY, {});
+    return raw && typeof raw === "object" ? raw : {};
+  });
+  const [workflowPolicyOverrides, setWorkflowPolicyOverrides] = useState(() =>
+    normalizeWorkflowPolicyOverrides(load(PERMIT_WORKFLOW_OVERRIDES_KEY, {}))
+  );
+  const [workflowRolePolicyOverrides, setWorkflowRolePolicyOverrides] = useState(() =>
+    normalizeWorkflowRolePolicyOverrides(load(PERMIT_WORKFLOW_ROLE_OVERRIDES_KEY, {}))
+  );
+  const [dependencyRuleOverrides, setDependencyRuleOverrides] = useState(() =>
+    normalizeDependencyRules(load(PERMIT_DEPENDENCY_RULE_OVERRIDES_KEY, {}))
+  );
+  const [workflowEditorOpen, setWorkflowEditorOpen] = useState(false);
+  const [workflowEditorText, setWorkflowEditorText] = useState(() =>
+    JSON.stringify(normalizeWorkflowPolicyOverrides(load(PERMIT_WORKFLOW_OVERRIDES_KEY, {})), null, 2)
+  );
+  const [workflowEditorError, setWorkflowEditorError] = useState("");
+  const [workflowRoleEditorOpen, setWorkflowRoleEditorOpen] = useState(false);
+  const [workflowRoleEditorText, setWorkflowRoleEditorText] = useState(() =>
+    JSON.stringify(normalizeWorkflowRolePolicyOverrides(load(PERMIT_WORKFLOW_ROLE_OVERRIDES_KEY, {})), null, 2)
+  );
+  const [workflowRoleEditorError, setWorkflowRoleEditorError] = useState("");
+  const [dependencyEditorOpen, setDependencyEditorOpen] = useState(false);
+  const [dependencyEditorText, setDependencyEditorText] = useState(() =>
+    JSON.stringify(normalizeDependencyRules(load(PERMIT_DEPENDENCY_RULE_OVERRIDES_KEY, {})), null, 2)
+  );
+  const [dependencyEditorError, setDependencyEditorError] = useState("");
+  const [dependencyEditorType, setDependencyEditorType] = useState("confined_space");
+  const [shiftBoundaryHours, setShiftBoundaryHours] = useState(() =>
+    normalizeShiftHours(load(PERMIT_SHIFT_BOUNDARY_HOURS_KEY, [6, 18]))
+  );
+  const [shiftBoundaryHoursDraft, setShiftBoundaryHoursDraft] = useState(() =>
+    normalizeShiftHours(load(PERMIT_SHIFT_BOUNDARY_HOURS_KEY, [6, 18])).join(", ")
+  );
+  const [shiftBoundaryHoursError, setShiftBoundaryHoursError] = useState("");
+  const [permitTypeEditorOpen, setPermitTypeEditorOpen] = useState(false);
+  const [permitTypeEditorType, setPermitTypeEditorType] = useState("hot_work");
+  const [permitTypeEditorDraft, setPermitTypeEditorDraft] = useState({ label: "", color: "", bg: "", description: "" });
+  const [conflictMatrixEditorOpen, setConflictMatrixEditorOpen] = useState(false);
+  const [conflictMatrixEditorText, setConflictMatrixEditorText] = useState(() =>
+    JSON.stringify(load(PERMIT_CONFLICT_MATRIX_OVERRIDES_KEY, {}), null, 2)
+  );
+  const [conflictMatrixEditorError, setConflictMatrixEditorError] = useState("");
   const advancedViewsEnabled = isFeatureEnabled("permits_board_timeline");
   const liveWallEnabled = isFeatureEnabled("permits_live_wall_v1");
   const permitNotifyEnabled = isFeatureEnabled("permits_notifications_v1");
@@ -1322,12 +2628,68 @@ export default function PermitSystem() {
   const mirrorTimerRef = useRef(null);
   const workers = load("mysafeops_workers", []);
   const ramsDocs = load("rams_builder_docs", []);
+  const ackPortalPermit = useMemo(
+    () => (ackTokenParam ? permits.find((p) => String(p.ackToken || "") === String(ackTokenParam)) || null : null),
+    [ackTokenParam, permits]
+  );
 
   const isNarrow = viewportWidth < 820;
   const isTablet = viewportWidth < 1024;
+  const isUltraNarrow = viewportWidth < 380;
+  const effectiveConflictMatrix = useMemo(
+    () => ({ ...PERMIT_CONFLICT_MATRIX, ...conflictMatrixOverrides }),
+    [conflictMatrixOverrides]
+  );
+  const effectivePermitTypes = useMemo(
+    () => mergePermitTypeOverrides(PERMIT_TYPES, permitTypeOverrides),
+    [permitTypeOverrides]
+  );
+  const effectiveWorkflowPolicy = useMemo(
+    () => mergeWorkflowPolicy(workflowPolicyOverrides),
+    [workflowPolicyOverrides]
+  );
+  const effectiveWorkflowRolePolicy = useMemo(
+    () => mergeWorkflowRolePolicy(workflowRolePolicyOverrides),
+    [workflowRolePolicyOverrides]
+  );
+  const effectiveDependencyRules = useMemo(
+    () => mergeDependencyRules(dependencyRuleOverrides),
+    [dependencyRuleOverrides]
+  );
+  const permitThemeVars = useMemo(
+    () => resolvePermitThemeVars(permitThemeMode, prefersDarkTheme),
+    [permitThemeMode, prefersDarkTheme]
+  );
 
   useEffect(()=>{ save("permits_v2",permits); },[permits]);
   useEffect(()=>{ save(PERMIT_SAVED_VIEWS_KEY, savedViews); },[savedViews]);
+  useEffect(() => { save(PERMIT_CONFLICT_MATRIX_OVERRIDES_KEY, conflictMatrixOverrides); }, [conflictMatrixOverrides]);
+  useEffect(() => { save(PERMIT_TYPE_OVERRIDES_KEY, permitTypeOverrides); }, [permitTypeOverrides]);
+  useEffect(() => { save(PERMIT_WORKFLOW_OVERRIDES_KEY, workflowPolicyOverrides); }, [workflowPolicyOverrides]);
+  useEffect(() => { save(PERMIT_WORKFLOW_ROLE_OVERRIDES_KEY, workflowRolePolicyOverrides); }, [workflowRolePolicyOverrides]);
+  useEffect(() => { save(PERMIT_DEPENDENCY_RULE_OVERRIDES_KEY, dependencyRuleOverrides); }, [dependencyRuleOverrides]);
+  useEffect(() => { save(PERMIT_SHIFT_BOUNDARY_HOURS_KEY, shiftBoundaryHours); }, [shiftBoundaryHours]);
+  useEffect(() => { save(PERMIT_THEME_MODE_KEY, permitThemeMode); }, [permitThemeMode]);
+  useEffect(() => {
+    setShiftBoundaryHoursDraft(shiftBoundaryHours.join(", "));
+  }, [shiftBoundaryHours]);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (event) => setPrefersDarkTheme(Boolean(event.matches));
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  useEffect(() => {
+    const base = PERMIT_TYPES[permitTypeEditorType] || PERMIT_TYPES.general;
+    const ov = permitTypeOverrides[permitTypeEditorType] || {};
+    setPermitTypeEditorDraft({
+      label: ov.label || base.label || "",
+      color: ov.color || base.color || "",
+      bg: ov.bg || base.bg || "",
+      description: ov.description || base.description || "",
+    });
+  }, [permitTypeEditorType, permitTypeOverrides]);
   useEffect(() => { savePermitIncidents(incidents); }, [incidents]);
   useEffect(() => { saveProjectPlans(projectPlans); }, [projectPlans]);
 
@@ -1338,6 +2700,8 @@ export default function PermitSystem() {
     if (t?.viewId === "permits" && t.permitId) {
       setHighlightPermitId(t.permitId);
       setFilterStatus("");
+      setFilterHandoverDue(false);
+      setFilterBlockedNow(false);
       setSearch("");
       const id = t.permitId;
       requestAnimationFrame(() => {
@@ -1359,10 +2723,76 @@ export default function PermitSystem() {
     };
   }, [permits]);
 
+  useEffect(
+    () => () => {
+      if (typeof conflictOverrideResolverRef.current === "function") {
+        conflictOverrideResolverRef.current(null);
+      }
+      conflictOverrideResolverRef.current = null;
+    },
+    []
+  );
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        if (conflictOverrideDialog) {
+          e.preventDefault();
+          closeConflictOverrideDialog(null);
+          return;
+        }
+        if (handoverDialog) {
+          e.preventDefault();
+          setHandoverDialog(null);
+          return;
+        }
+        if (closePermitDialog) {
+          e.preventDefault();
+          setClosePermitDialog(null);
+        }
+      }
+      if (e.key === "Enter" && handoverDialog) {
+        const targetTag = String(e.target?.tagName || "").toLowerCase();
+        if (targetTag !== "textarea") {
+          e.preventDefault();
+          submitHandoverDialog();
+        }
+      }
+      if (e.key === "Enter" && conflictOverrideDialog) {
+        const targetTag = String(e.target?.tagName || "").toLowerCase();
+        if (targetTag !== "textarea") {
+          e.preventDefault();
+          submitConflictOverrideDialog();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [conflictOverrideDialog, closePermitDialog, handoverDialog]);
+
   useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth);
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    setListSkeleton(true);
+    const t = setTimeout(() => setListSkeleton(false), 140);
+    return () => clearTimeout(t);
+  }, [search, filterType, filterStatus, filterHandoverDue, filterBlockedNow, filterBriefingPending, filterRamsMissing, viewMode]);
+
+  useEffect(() => {
+    const syncTokenFromUrl = () => {
+      try {
+        setAckTokenParam(new URLSearchParams(window.location.search).get("permitAck") || "");
+      } catch {
+        setAckTokenParam("");
+      }
+    };
+    syncTokenFromUrl();
+    window.addEventListener("popstate", syncTokenFromUrl);
+    return () => window.removeEventListener("popstate", syncTokenFromUrl);
   }, []);
 
   useEffect(() => {
@@ -1439,55 +2869,374 @@ export default function PermitSystem() {
     return () => clearInterval(t);
   }, [auditOpen, auditAutoRefresh, loadAuditRows]);
 
+  useEffect(() => {
+    const processSlaQueue = () => {
+      const nowTs = Date.now();
+      setPermits((prev) => {
+        let hasAnyChange = false;
+        const next = prev.map((permit) => {
+          const signals = collectSlaSignalsForPermit(permit, nowTs);
+          if (signals.length === 0) return permit;
+          const fired = { ...(permit.slaSignalsFired || {}) };
+          const toApply = signals.filter((s) => !fired[s.key]);
+          if (toApply.length === 0) return permit;
+          hasAnyChange = true;
+          const at = new Date(nowTs).toISOString();
+          const notificationLog = [...(permit.notificationLog || [])];
+          toApply.forEach((sig) => {
+            fired[sig.key] = at;
+            notificationLog.push({
+              at,
+              channel: "system",
+              status: sig.status,
+              recipientCount: 0,
+              note: sig.note,
+            });
+          });
+          const withSla = {
+            ...permit,
+            notificationLog,
+            slaSignalsFired: fired,
+          };
+          const withLog = { ...withSla, auditLog: appendPermitAuditEntry(permit, withSla) };
+          void logPermitAuditToSupabase(permit, withLog, getOrgId());
+          return withLog;
+        });
+        return hasAnyChange ? next : prev;
+      });
+    };
+    processSlaQueue();
+    const t = setInterval(processSlaQueue, 60000);
+    return () => clearInterval(t);
+  }, []);
+
   const simopsMap = useMemo(() => buildSimopsConflictMap(permits), [permits]);
+  const simopsRadarRows = useMemo(() => {
+    return permits
+      .map((p) => {
+        const conflicts = simopsMap.get(p.id) || [];
+        if (conflicts.length === 0) return null;
+        const overlapTypes = Array.from(new Set(conflicts.map((c) => (effectivePermitTypes[c.type] || effectivePermitTypes.general).label)));
+        const severity = conflicts.length >= 3 ? "high" : conflicts.length === 2 ? "medium" : "low";
+        return {
+          id: p.id,
+          location: p.location || "Unknown location",
+          permitLabel: (effectivePermitTypes[p.type] || effectivePermitTypes.general).label,
+          overlapCount: conflicts.length,
+          overlapTypes: overlapTypes.slice(0, 3),
+          severity,
+          windowLabel: `${fmtDateTime(p.startDateTime)} -> ${fmtDateTime(permitEndIso(p))}`,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.overlapCount - a.overlapCount)
+      .slice(0, 10);
+  }, [permits, simopsMap]);
+  const permitScorecard = useMemo(() => {
+    const reviewTargetMs = 4 * 60 * 60 * 1000;
+    const activationTargetMs = 2 * 60 * 60 * 1000;
+    const withApprovedAt = permits.filter((p) => p.approvedAt);
+    const reviewedOnTime = withApprovedAt.filter((p) => {
+      const start = new Date(p.createdAt || p.updatedAt || 0).getTime();
+      const approved = new Date(p.approvedAt || 0).getTime();
+      if (Number.isNaN(start) || Number.isNaN(approved)) return false;
+      return approved - start <= reviewTargetMs;
+    }).length;
+    const withActivationWindow = permits.filter((p) => p.approvedAt && p.status === "active");
+    const activatedOnTime = withActivationWindow.filter((p) => {
+      const approved = new Date(p.approvedAt || 0).getTime();
+      const activated = new Date(p.updatedAt || p.approvedAt || 0).getTime();
+      if (Number.isNaN(approved) || Number.isNaN(activated)) return false;
+      return activated - approved <= activationTargetMs;
+    }).length;
+    const nowTs = Date.now();
+    const overdueQueue = permits.filter((p) => {
+      const status = String(p.status || "");
+      const baseTs = new Date(p.updatedAt || p.createdAt || nowTs).getTime();
+      if (Number.isNaN(baseTs)) return false;
+      if (status === "pending_review" || status === "ready_for_review") return nowTs > baseTs + reviewTargetMs;
+      if (status === "approved") return nowTs > baseTs + activationTargetMs;
+      return false;
+    }).length;
+    const reviewDurationsHours = withApprovedAt
+      .map((p) => {
+        const start = new Date(p.createdAt || p.updatedAt || 0).getTime();
+        const approved = new Date(p.approvedAt || 0).getTime();
+        if (Number.isNaN(start) || Number.isNaN(approved) || approved < start) return null;
+        return (approved - start) / 3600000;
+      })
+      .filter((n) => Number.isFinite(n));
+    const avgReviewHours = reviewDurationsHours.length
+      ? Math.round((reviewDurationsHours.reduce((a, b) => a + b, 0) / reviewDurationsHours.length) * 10) / 10
+      : null;
+    return {
+      reviewedOnTime,
+      reviewedTotal: withApprovedAt.length,
+      activatedOnTime,
+      activatedTotal: withActivationWindow.length,
+      overdueQueue,
+      avgReviewHours,
+    };
+  }, [permits]);
 
   const savePermit = (p) => {
     setPermits((prev) => {
       const existing = prev.find((x) => x.id === p.id);
-      const auditLog = appendPermitAuditEntry(existing, p);
-      const next = { ...p, auditLog };
+      const normalized = normalizeAdvancedPermit(p, p.type || existing?.type || "hot_work");
+      const auditLog = appendPermitAuditEntry(existing, normalized);
+      const next = { ...normalized, auditLog };
       void logPermitAuditToSupabase(existing, next, getOrgId());
       return existing ? prev.map((x) => (x.id === p.id ? next : x)) : [next, ...prev];
     });
     setModal(null);
   };
 
-  const closePermit = (id) =>
+  const closePermit = (id, lessonsLearned) => {
+    const target = permits.find((x) => x.id === id);
+    if (!target) return;
+    if (!ensureWorkflowRoleAllowed("closed", "close permit")) return;
+    if (!ensureWorkflowTransitionAllowed(target, "closed", "close permit")) return;
     setPermits((prev) =>
       prev.map((p) => {
         if (p.id !== id) return p;
-        const next = { ...p, status: "closed", closedAt: new Date().toISOString() };
+        const ll = typeof lessonsLearned === "string" ? lessonsLearned.trim() : "";
+        let next = { ...p, status: "closed", closedAt: new Date().toISOString() };
+        if (ll) next = { ...next, lessonsLearned: ll };
+        next = transitionPermitWorkflowWithPolicy(next, "closed", "manual_close");
         const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
         void logPermitAuditToSupabase(p, withLog, getOrgId());
         return withLog;
       })
     );
-  const reopenPermit = (id) =>
+  };
+  const requestClosePermit = (id) => setClosePermitDialog({ id, lessons: "" });
+  const reopenPermit = (id) => {
+    const target = permits.find((x) => x.id === id);
+    if (!target) return;
+    if (!ensureWorkflowRoleAllowed("issued", "reopen permit")) return;
+    if (!ensureWorkflowTransitionAllowed(target, "issued", "reopen permit")) return;
     setPermits((prev) =>
       prev.map((p) => {
         if (p.id !== id) return p;
-        const next = { ...p, status: "active", closedAt: undefined };
+        let next = { ...p, status: "active", closedAt: undefined };
+        next = transitionPermitWorkflowWithPolicy(next, "issued", "reopen");
         const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
         void logPermitAuditToSupabase(p, withLog, getOrgId());
         return withLog;
       })
     );
+  };
+  const now = new Date();
+  const complianceForPermitGate = useCallback((p) => {
+    const items = normalizeChecklistItems(p.type || "general", p, checklistStringsForType(p.type || "general"));
+    return evaluatePermitCompliance(p, items);
+  }, []);
+  const conflictResultForPermitGate = useCallback((p, allPermits) => {
+    const overlaps = findSimopsConflicts(
+      {
+        ...p,
+        status: "active",
+        endDateTime: p.endDateTime || p.expiryDate || "",
+      },
+      allPermits,
+      { ignoreId: p.id }
+    );
+    return evaluatePermitTypeConflicts(p, overlaps, { permitTypes: effectivePermitTypes, matrix: effectiveConflictMatrix });
+  }, [effectiveConflictMatrix, effectivePermitTypes]);
+  const handoverStateForPermit = useCallback((p, nowRef = now) => {
+    const derived = derivePermitStatus(p, nowRef);
+    return evaluatePermitHandoverRequirement(p, nowRef, {
+      derivedStatus: derived,
+      shiftHours: shiftBoundaryHours,
+    });
+  }, [now, shiftBoundaryHours]);
+  const handoverRequirementForActivation = useCallback((p, nowRef = now) => {
+    return evaluatePermitHandoverRequirement(
+      {
+        ...p,
+        status: "active",
+        endDateTime: p.endDateTime || p.expiryDate || "",
+      },
+      nowRef,
+      { derivedStatus: "active", shiftHours: shiftBoundaryHours }
+    );
+  }, [now, shiftBoundaryHours]);
+  const activationGateForPermit = useCallback((p, allPermits, warnConflictOverride = p?.conflictWarnOverride || null, nowRef = now) => {
+    const dependencyResult = evaluatePermitDependencies(p, allPermits, effectiveDependencyRules, { now: nowRef });
+    return evaluatePermitActionGate(p, "activate", {
+      complianceResult: complianceForPermitGate(p),
+      conflictResult: conflictResultForPermitGate(p, allPermits),
+      warnConflictOverride,
+      handoverRequirement: handoverRequirementForActivation(p, nowRef),
+      dependencyResult,
+    });
+  }, [now, complianceForPermitGate, conflictResultForPermitGate, handoverRequirementForActivation, effectiveDependencyRules]);
+  const blockedNowForPermit = useCallback((p, allPermits, nowRef = now) => {
+    const status = derivePermitStatus(p, nowRef);
+    if (status === "pending_review" || status === "ready_for_review") {
+      return !evaluatePermitActionGate(p, "approve", {}).allowed;
+    }
+    if (status === "approved" || status === "closed") {
+      return !activationGateForPermit(p, allPermits, p?.conflictWarnOverride || null, nowRef).allowed;
+    }
+    return false;
+  }, [now, activationGateForPermit]);
+  const ensureWorkflowTransitionAllowed = useCallback((permit, targetState, actionLabel = "action") => {
+    if (canPermitWorkflowTransition(permit, targetState, effectiveWorkflowPolicy)) return true;
+    const from = permitCurrentWorkflowState(permit);
+    window.alert(`Workflow policy blocks ${actionLabel}: ${from} -> ${targetState}. Update workflow policy overrides to allow this transition.`);
+    return false;
+  }, [effectiveWorkflowPolicy]);
+  const ensureWorkflowRoleAllowed = useCallback((targetState, actionLabel = "action") => {
+    if (isWorkflowRoleAllowed(targetState, appRole, effectiveWorkflowRolePolicy)) return true;
+    const allowed = Array.isArray(effectiveWorkflowRolePolicy?.[String(targetState || "").toLowerCase()])
+      ? effectiveWorkflowRolePolicy[String(targetState || "").toLowerCase()].join(", ")
+      : "n/a";
+    window.alert(`Role policy blocks ${actionLabel} for role "${appRole}". Allowed roles for ${targetState}: ${allowed}.`);
+    return false;
+  }, [appRole, effectiveWorkflowRolePolicy]);
+  const requestWarnConflictOverride = useCallback((permit, conflicts = []) => {
+    const base = permit?.conflictWarnOverride || {};
+    return new Promise((resolve) => {
+      conflictOverrideResolverRef.current = resolve;
+      setConflictOverrideDialog({
+        permitId: permit?.id || "",
+        permitType: permit?.type || "general",
+        permitLocation: permit?.location || "",
+        reason: String(base.reason || ""),
+        approvedBy: String(base.approvedBy || ""),
+        conflicts: Array.isArray(conflicts) ? conflicts : [],
+        error: "",
+      });
+    });
+  }, []);
+
   const approvePermit = (id) =>
+    setPermits((prev) => {
+      const p = prev.find((x) => x.id === id);
+      if (!p) return prev;
+      if (!ensureWorkflowRoleAllowed("approved", "approve permit")) return prev;
+      if (!canPermitWorkflowTransition(p, "approved", effectiveWorkflowPolicy)) {
+        window.alert(`Workflow policy blocks approve: ${permitCurrentWorkflowState(p)} -> approved.`);
+        return prev;
+      }
+      const gate = evaluatePermitActionGate(p, "approve", {});
+      if (!gate.allowed) {
+        window.alert(gate.message || "Cannot approve this permit.");
+        return prev;
+      }
+      return prev.map((row) => {
+        if (row.id !== id) return row;
+        let next = { ...row, status: "approved", approvedAt: new Date().toISOString() };
+        next = transitionPermitWorkflowWithPolicy(next, "approved", "manual_approve");
+        const withLog = { ...next, auditLog: appendPermitAuditEntry(row, next) };
+        void logPermitAuditToSupabase(row, withLog, getOrgId());
+        return withLog;
+      });
+    });
+  const activatePermit = async (id) => {
+    const p = permits.find((x) => x.id === id);
+    if (!p) return;
+    if (!ensureWorkflowRoleAllowed("issued", "activate permit")) return;
+    if (!ensureWorkflowTransitionAllowed(p, "issued", "activate permit")) return;
+    const conflictResult = conflictResultForPermitGate(p, permits);
+    let warnConflictOverride = p.conflictWarnOverride || null;
+    let gate = activationGateForPermit(p, permits, warnConflictOverride, new Date());
+    if (!gate.allowed && gate.code === "permit_conflict_warn") {
+      warnConflictOverride = await requestWarnConflictOverride(p, gate.conflicts || []);
+      if (!warnConflictOverride) return;
+      gate = evaluatePermitActionGate(p, "activate", {
+        complianceResult: complianceForPermitGate(p),
+        conflictResult,
+        warnConflictOverride,
+        handoverRequirement: handoverRequirementForActivation(p, new Date()),
+      });
+    }
+    if (!gate.allowed) {
+      window.alert(gate.message || "Cannot activate this permit.");
+      return;
+    }
+    setPermits((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        let next = { ...row, status: "active", closedAt: undefined, conflictWarnOverride: warnConflictOverride || null };
+        if (!row.issueSnapshot) next = { ...next, issueSnapshot: buildIssueSnapshot(row) };
+        next = transitionPermitWorkflowWithPolicy(next, "issued", "activate");
+        const baseWithLog = { ...next, auditLog: appendPermitAuditEntry(row, next) };
+        const withLog = warnConflictOverride
+          ? {
+              ...baseWithLog,
+              auditLog: [
+                ...(baseWithLog.auditLog || []),
+                {
+                  at: new Date().toISOString(),
+                  action: "conflict_warn_override",
+                  reason: warnConflictOverride.reason,
+                  approvedBy: warnConflictOverride.approvedBy,
+                },
+              ].slice(-40),
+            }
+          : baseWithLog;
+        void logPermitAuditToSupabase(row, withLog, getOrgId());
+        if (warnConflictOverride) {
+          const overrideAuditRow = {
+            ...withLog,
+            status: row.status,
+            _auditAction: "conflict_warn_override",
+          };
+          void logPermitAuditToSupabase(row, overrideAuditRow, getOrgId());
+        }
+        return withLog;
+      })
+    );
+  };
+  const suspendPermit = (id) => {
+    const target = permits.find((x) => x.id === id);
+    if (!target) return;
+    if (!ensureWorkflowRoleAllowed("suspended", "suspend permit")) return;
+    if (!ensureWorkflowTransitionAllowed(target, "suspended", "suspend permit")) return;
     setPermits((prev) =>
       prev.map((p) => {
         if (p.id !== id) return p;
-        const next = { ...p, status: "approved", approvedAt: new Date().toISOString() };
+        let next = { ...p, status: "suspended" };
+        next = transitionPermitWorkflowWithPolicy(next, "suspended", "manual_suspend");
         const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
         void logPermitAuditToSupabase(p, withLog, getOrgId());
         return withLog;
       })
     );
-  const activatePermit = (id) =>
+  };
+  const resumePermit = (id) => {
+    const target = permits.find((x) => x.id === id);
+    if (!target) return;
+    if (!ensureWorkflowRoleAllowed("issued", "resume permit")) return;
+    if (!ensureWorkflowTransitionAllowed(target, "issued", "resume permit")) return;
     setPermits((prev) =>
       prev.map((p) => {
         if (p.id !== id) return p;
-        const next = { ...p, status: "active", closedAt: undefined };
+        let next = { ...p, status: "active" };
+        next = transitionPermitWorkflowWithPolicy(next, "issued", "resume_after_suspend");
         const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+        void logPermitAuditToSupabase(p, withLog, getOrgId());
+        return withLog;
+      })
+    );
+  };
+  const extendAndRevalidatePermit = (id) =>
+    setPermits((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const nextEnd = window.prompt("New end date/time (ISO):", p.endDateTime || "");
+        if (!nextEnd) return p;
+        const baseline = buildRevalidationSnapshot(p);
+        const next = { ...p, endDateTime: nextEnd, status: "active", revalidatedAt: new Date().toISOString() };
+        const nextSnap = buildRevalidationSnapshot(next);
+        const delta = diffRevalidationSnapshot(baseline, nextSnap);
+        const withDelta = {
+          ...next,
+          revalidationLog: [{ at: new Date().toISOString(), delta, baseline, next: nextSnap }, ...(p.revalidationLog || [])].slice(0, 80),
+        };
+        const withLog = { ...withDelta, auditLog: appendPermitAuditEntry(p, withDelta) };
         void logPermitAuditToSupabase(p, withLog, getOrgId());
         return withLog;
       })
@@ -1496,12 +3245,21 @@ export default function PermitSystem() {
     if (!confirm("Delete this permit?")) return;
     setPermits((prev) => {
       const victim = prev.find((p) => p.id === id);
-      if (victim) void logPermitDeletedToSupabase(victim, getOrgId());
+      if (victim) {
+        pushRecycleBinItem({
+          moduleId: "permits",
+          moduleLabel: "Permits",
+          itemType: "permit",
+          itemLabel: victim.description || victim.location || victim.id,
+          sourceKey: "permits_v2",
+          payload: victim,
+        });
+        void logPermitDeletedToSupabase(victim, getOrgId());
+      }
       return prev.filter((p) => p.id !== id);
     });
   };
 
-  const now = new Date();
   const filtered = permits.filter(p=>{
     const endIso = permitEndIso(p);
     const endDate = endIso ? new Date(endIso) : null;
@@ -1510,22 +3268,74 @@ export default function PermitSystem() {
     if (filterStatus==="expired" && !(p.status==="active" && endDate && endDate < now)) return false;
     if (filterStatus==="closed" && p.status!=="closed") return false;
     if (filterStatus==="draft" && p.status!=="draft") return false;
-    if (filterStatus==="pending_review" && p.status!=="pending_review") return false;
+    if (filterStatus==="pending_review" && p.status!=="pending_review" && p.status!=="ready_for_review") return false;
     if (filterStatus==="approved" && p.status!=="approved") return false;
+    if (filterStatus==="suspended" && p.status!=="suspended") return false;
+    if (filterHandoverDue) {
+      const hs = handoverStateForPermit(p, now);
+      if (!(hs.required && hs.missing)) return false;
+    }
+    if (filterBlockedNow && !blockedNowForPermit(p, permits, now)) return false;
+    if (filterBriefingPending) {
+      const status = derivePermitStatus(p, now);
+      if (status !== "active" || !p.startDateTime || p.briefingConfirmedAt) return false;
+      const ageMs = now.getTime() - new Date(p.startDateTime).getTime();
+      if (!(ageMs > 20 * 60 * 1000)) return false;
+    }
+    if (filterRamsMissing) {
+      const status = derivePermitStatus(p, now);
+      if (status !== "active" || String(p.linkedRamsId || "").trim()) return false;
+    }
     if (search) {
       const q = search.toLowerCase();
-      const typeLabel = (PERMIT_TYPES[p.type] || PERMIT_TYPES.general)?.label?.toLowerCase() || "";
+      const typeLabel = (effectivePermitTypes[p.type] || effectivePermitTypes.general)?.label?.toLowerCase() || "";
       const hay = [p.location, p.description, p.issuedTo, p.issuedBy, p.type, typeLabel, p.id].filter(Boolean).join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   });
+  const mobileQuickPermit = permits.find((p) => p.id === mobileQuickActionsPermitId) || null;
+  useEffect(() => {
+    if (!mobileQuickActionsPermitId) return;
+    if (!mobileQuickPermit) setMobileQuickActionsPermitId("");
+  }, [mobileQuickActionsPermitId, mobileQuickPermit]);
 
   const stats = buildPermitWarRoomStats(permits, now);
   const selectedPermits = permits.filter((p) => selectedPermitIds[p.id]);
   const hasSelectedPermits = selectedPermits.length > 0;
+  const selectedActivationSummary = useMemo(() => {
+    let activatable = 0;
+    let blocked = 0;
+    let warn = 0;
+    selectedPermits.forEach((p) => {
+      if (!["approved", "closed"].includes(String(p.status || ""))) return;
+      const gate = activationGateForPermit(p, permits, p.conflictWarnOverride, now);
+      if (gate.allowed) activatable += 1;
+      else if (gate.code === "permit_conflict_warn") warn += 1;
+      else blocked += 1;
+    });
+    return { activatable, blocked, warn };
+  }, [selectedPermits, permits, now, activationGateForPermit]);
   const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selectedPermitIds[p.id]);
-  const heatmapRows = permitsHeatmap(permits, PERMIT_TYPES);
+  const commandCounts = useMemo(() => {
+    const active = permits.filter((p) => derivePermitStatus(p, now) === "active").length;
+    const review = permits.filter((p) => derivePermitStatus(p, now) === "pending_review").length;
+    const approved = permits.filter((p) => derivePermitStatus(p, now) === "approved").length;
+    const expired = permits.filter((p) => derivePermitStatus(p, now) === "expired").length;
+    const handoverDue = permits.filter((p) => {
+      const hs = handoverStateForPermit(p, now);
+      return hs.required && hs.missing;
+    }).length;
+    const blockedNow = permits.filter((p) => blockedNowForPermit(p, permits, now)).length;
+    const briefingPending = permits.filter((p) => {
+      const status = derivePermitStatus(p, now);
+      if (status !== "active" || !p.startDateTime || p.briefingConfirmedAt) return false;
+      return now.getTime() - new Date(p.startDateTime).getTime() > 20 * 60 * 1000;
+    }).length;
+    const ramsMissing = permits.filter((p) => derivePermitStatus(p, now) === "active" && !String(p.linkedRamsId || "").trim()).length;
+    return { active, review, approved, expired, handoverDue, blockedNow, briefingPending, ramsMissing };
+  }, [permits, now, handoverStateForPermit, blockedNowForPermit]);
+  const heatmapRows = permitsHeatmap(permits, effectivePermitTypes);
   const effectiveViewMode =
     viewMode === "wall"
       ? (liveWallEnabled ? "wall" : "list")
@@ -1550,13 +3360,22 @@ export default function PermitSystem() {
       const status = derivePermitStatus(p, now);
       const endIso = permitEndIso(p);
       const msToEnd = endIso ? new Date(endIso).getTime() - now.getTime() : null;
+      if ((status === "pending_review" || status === "ready_for_review" || status === "approved" || status === "closed") && blockedNowForPermit(p, permits, now)) {
+        push({
+          kind: "gate_blocked",
+          severity: "warning",
+          permitId: p.id,
+          title: "Permit blocked by gate checks",
+          detail: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label} · ${p.location || "Unknown location"}`,
+        });
+      }
       if (status === "expired") {
         push({
           kind: "expired",
           severity: "critical",
           permitId: p.id,
           title: "Expired permit requires closure/reissue",
-          detail: `${(PERMIT_TYPES[p.type] || PERMIT_TYPES.general).label} · ${p.location || "Unknown location"}`,
+          detail: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label} · ${p.location || "Unknown location"}`,
         });
       } else if (status === "active" && msToEnd != null && msToEnd < 90 * 60 * 1000) {
         push({
@@ -1564,7 +3383,7 @@ export default function PermitSystem() {
           severity: msToEnd < 30 * 60 * 1000 ? "critical" : "warning",
           permitId: p.id,
           title: "Active permit expiring soon",
-          detail: `${(PERMIT_TYPES[p.type] || PERMIT_TYPES.general).label} · ${p.location || "Unknown location"}`,
+          detail: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label} · ${p.location || "Unknown location"}`,
         });
       } else if (status === "pending_review") {
         push({
@@ -1572,7 +3391,7 @@ export default function PermitSystem() {
           severity: "warning",
           permitId: p.id,
           title: "Permit awaiting review/approval",
-          detail: `${(PERMIT_TYPES[p.type] || PERMIT_TYPES.general).label} · ${p.location || "Unknown location"}`,
+          detail: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label} · ${p.location || "Unknown location"}`,
         });
       }
       const lastDelivery = Array.isArray(p.notificationLog) ? p.notificationLog[p.notificationLog.length - 1] : null;
@@ -1592,20 +3411,48 @@ export default function PermitSystem() {
             severity: "info",
             permitId: p.id,
             title: "Missing issuer/holder details",
-            detail: `${(PERMIT_TYPES[p.type] || PERMIT_TYPES.general).label} · complete people fields`,
+            detail: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label} · complete people fields`,
           });
         }
       }
       if (status === "active") {
         const hasAck = Array.isArray(p.acknowledgements) && p.acknowledgements.length > 0;
         const ageMs = p.startDateTime ? now.getTime() - new Date(p.startDateTime).getTime() : 0;
+        const handoverState = handoverStateForPermit(p, now);
         if (!hasAck && ageMs > 30 * 60 * 1000) {
           push({
             kind: "ack_missing",
             severity: "warning",
             permitId: p.id,
             title: "Active permit without acknowledgement",
-            detail: `${(PERMIT_TYPES[p.type] || PERMIT_TYPES.general).label} · ${p.location || "Unknown location"}`,
+            detail: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label} · ${p.location || "Unknown location"}`,
+          });
+        }
+        if (handoverState.required && handoverState.missing) {
+          push({
+            kind: "handover_missing",
+            severity: "warning",
+            permitId: p.id,
+            title: "Shift handover required",
+            detail: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label} · ${p.location || "Unknown location"}`,
+          });
+        }
+        if (!p.briefingConfirmedAt && ageMs > 20 * 60 * 1000) {
+          push({
+            kind: "briefing_missing",
+            severity: "warning",
+            permitId: p.id,
+            title: "Site briefing confirmation missing",
+            detail: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label} · confirm briefing`,
+          });
+        }
+        if (!String(p.linkedRamsId || "").trim()) {
+          push({
+            kind: "rams_missing",
+            severity: "info",
+            permitId: p.id,
+            title: "Active permit without linked RAMS",
+            detail: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label} · link RAMS document`,
           });
         }
       }
@@ -1614,7 +3461,7 @@ export default function PermitSystem() {
     return list
       .sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3))
       .slice(0, 14);
-  }, [permits, now]);
+  }, [permits, now, effectivePermitTypes, handoverStateForPermit, blockedNowForPermit]);
   const incidentsByPermit = useMemo(() => {
     const map = new Map();
     incidents.forEach((i) => {
@@ -1626,6 +3473,7 @@ export default function PermitSystem() {
   }, [incidents]);
   const slaQueue = useMemo(() => buildPermitSlaQueue(permits, incidents, now), [permits, incidents, now]);
   const riskInsights = useMemo(() => buildPermitRiskInsights(permits, incidents, now), [permits, incidents, now]);
+  const integrationAdapters = useMemo(() => buildIntegrationAdaptersStatus(), []);
   const openIncidents = useMemo(() => incidents.filter((i) => i.status !== "closed"), [incidents]);
   const deliverySummary = useMemo(() => {
     const rows = permits.flatMap((p) => p.notificationLog || []);
@@ -1709,6 +3557,8 @@ export default function PermitSystem() {
     if (!permitId) return;
     setFilterStatus("");
     setFilterType("");
+    setFilterHandoverDue(false);
+    setFilterBlockedNow(false);
     setSearch("");
     setViewMode("list");
     setHighlightPermitId(permitId);
@@ -1723,6 +3573,320 @@ export default function PermitSystem() {
   };
   const jumpToPermitFromAudit = (permitId) => {
     focusPermit(permitId, { openEditor: false });
+  };
+
+  const openConflictMatrixEditor = () => {
+    setConflictMatrixEditorText(JSON.stringify(conflictMatrixOverrides, null, 2));
+    setConflictMatrixEditorError("");
+    setConflictMatrixEditorOpen(true);
+  };
+  const applyConflictMatrixOverridesFromEditor = () => {
+    try {
+      const parsed = JSON.parse(conflictMatrixEditorText || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setConflictMatrixEditorError("Overrides must be a JSON object keyed by pair, e.g. hot_work+confined_space.");
+        return;
+      }
+      const next = {};
+      for (const [rawKey, rawRule] of Object.entries(parsed)) {
+        if (!rawRule || typeof rawRule !== "object") continue;
+        const parts = String(rawKey || "")
+          .split("+")
+          .map((x) => x.trim().toLowerCase())
+          .filter(Boolean);
+        if (parts.length !== 2) continue;
+        const pairKey = normalizeConflictPair(parts[0], parts[1]);
+        const outcome = String(rawRule.outcome || "allow").toLowerCase();
+        if (!["allow", "warn", "block"].includes(outcome)) continue;
+        next[pairKey] = {
+          outcome,
+          reason: String(rawRule.reason || "").slice(0, 240),
+        };
+      }
+      setConflictMatrixOverrides(next);
+      setConflictMatrixEditorError("");
+      setConflictMatrixEditorOpen(false);
+    } catch {
+      setConflictMatrixEditorError("Invalid JSON. Fix syntax and try again.");
+    }
+  };
+  const resetConflictMatrixOverrides = () => {
+    if (!window.confirm("Reset permit conflict matrix overrides for this org?")) return;
+    setConflictMatrixOverrides({});
+    setConflictMatrixEditorText("{}");
+    setConflictMatrixEditorError("");
+  };
+  const savePermitTypeOverride = () => {
+    const type = permitTypeEditorType;
+    if (!type || !PERMIT_TYPES[type]) return;
+    const base = PERMIT_TYPES[type];
+    const nextOverride = {
+      label: String(permitTypeEditorDraft.label || "").trim(),
+      color: String(permitTypeEditorDraft.color || "").trim(),
+      bg: String(permitTypeEditorDraft.bg || "").trim(),
+      description: String(permitTypeEditorDraft.description || "").trim(),
+    };
+    const cleaned = {};
+    if (nextOverride.label && nextOverride.label !== base.label) cleaned.label = nextOverride.label;
+    if (nextOverride.color && nextOverride.color !== base.color) cleaned.color = nextOverride.color;
+    if (nextOverride.bg && nextOverride.bg !== base.bg) cleaned.bg = nextOverride.bg;
+    if (nextOverride.description && nextOverride.description !== base.description) cleaned.description = nextOverride.description;
+    setPermitTypeOverrides((prev) => {
+      const next = { ...prev };
+      if (Object.keys(cleaned).length) next[type] = cleaned;
+      else delete next[type];
+      return next;
+    });
+  };
+  const resetPermitTypeOverride = () => {
+    const type = permitTypeEditorType;
+    setPermitTypeOverrides((prev) => {
+      if (!prev[type]) return prev;
+      const next = { ...prev };
+      delete next[type];
+      return next;
+    });
+  };
+  const resetAllPermitTypeOverrides = () => {
+    if (!window.confirm("Reset all permit type visual overrides for this org?")) return;
+    setPermitTypeOverrides({});
+  };
+  const applyShiftBoundaryHours = () => {
+    const parsed = normalizeShiftHours(
+      String(shiftBoundaryHoursDraft || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean)
+    );
+    if (!parsed.length) {
+      setShiftBoundaryHoursError("Provide at least one hour between 0 and 23.");
+      return;
+    }
+    setShiftBoundaryHours(parsed);
+    setShiftBoundaryHoursError("");
+  };
+  const resetShiftBoundaryHours = () => {
+    setShiftBoundaryHours([6, 18]);
+    setShiftBoundaryHoursDraft("6, 18");
+    setShiftBoundaryHoursError("");
+  };
+  const openWorkflowPolicyEditor = () => {
+    setWorkflowEditorText(JSON.stringify(workflowPolicyOverrides, null, 2));
+    setWorkflowEditorError("");
+    setWorkflowEditorOpen(true);
+  };
+  const applyWorkflowPolicyOverrides = () => {
+    try {
+      const parsed = JSON.parse(workflowEditorText || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setWorkflowEditorError("Workflow overrides must be a JSON object keyed by state.");
+        return;
+      }
+      setWorkflowPolicyOverrides(normalizeWorkflowPolicyOverrides(parsed));
+      setWorkflowEditorError("");
+      setWorkflowEditorOpen(false);
+    } catch {
+      setWorkflowEditorError("Invalid JSON. Fix syntax and try again.");
+    }
+  };
+  const resetWorkflowPolicyOverrides = () => {
+    if (!window.confirm("Reset workflow policy overrides for this org?")) return;
+    setWorkflowPolicyOverrides({});
+    setWorkflowEditorText("{}");
+    setWorkflowEditorError("");
+  };
+  const toggleWorkflowTransitionRule = (fromState, toState) => {
+    const from = String(fromState || "").toLowerCase();
+    const to = String(toState || "").toLowerCase();
+    if (!from || !to) return;
+    setWorkflowPolicyOverrides((prev) => {
+      const policy = mergeWorkflowPolicy(prev);
+      const current = new Set(Array.isArray(policy[from]) ? policy[from] : []);
+      if (current.has(to)) current.delete(to);
+      else current.add(to);
+      return { ...policy, [from]: Array.from(current) };
+    });
+  };
+  const openWorkflowRolePolicyEditor = () => {
+    setWorkflowRoleEditorText(JSON.stringify(workflowRolePolicyOverrides, null, 2));
+    setWorkflowRoleEditorError("");
+    setWorkflowRoleEditorOpen(true);
+  };
+  const applyWorkflowRolePolicyOverrides = () => {
+    try {
+      const parsed = JSON.parse(workflowRoleEditorText || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setWorkflowRoleEditorError("Role policy overrides must be a JSON object keyed by target state.");
+        return;
+      }
+      setWorkflowRolePolicyOverrides(normalizeWorkflowRolePolicyOverrides(parsed));
+      setWorkflowRoleEditorError("");
+      setWorkflowRoleEditorOpen(false);
+    } catch {
+      setWorkflowRoleEditorError("Invalid JSON. Fix syntax and try again.");
+    }
+  };
+  const resetWorkflowRolePolicyOverrides = () => {
+    if (!window.confirm("Reset workflow role policy overrides for this org?")) return;
+    setWorkflowRolePolicyOverrides({});
+    setWorkflowRoleEditorText("{}");
+    setWorkflowRoleEditorError("");
+  };
+  const toggleWorkflowRolePermission = (targetState, roleName) => {
+    const target = String(targetState || "").toLowerCase();
+    const role = String(roleName || "").toLowerCase();
+    if (!target || !role) return;
+    setWorkflowRolePolicyOverrides((prev) => {
+      const policy = mergeWorkflowRolePolicy(prev);
+      const current = new Set(Array.isArray(policy[target]) ? policy[target] : []);
+      if (current.has(role)) current.delete(role);
+      else current.add(role);
+      return { ...policy, [target]: Array.from(current) };
+    });
+  };
+  const openDependencyRuleEditor = () => {
+    setDependencyEditorText(JSON.stringify(dependencyRuleOverrides, null, 2));
+    setDependencyEditorError("");
+    setDependencyEditorOpen(true);
+  };
+  const applyDependencyRuleOverrides = () => {
+    try {
+      const parsed = JSON.parse(dependencyEditorText || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setDependencyEditorError("Dependency rules must be a JSON object keyed by permit type.");
+        return;
+      }
+      setDependencyRuleOverrides(normalizeDependencyRules(parsed));
+      setDependencyEditorError("");
+      setDependencyEditorOpen(false);
+    } catch {
+      setDependencyEditorError("Invalid JSON. Fix syntax and try again.");
+    }
+  };
+  const resetDependencyRuleOverrides = () => {
+    if (!window.confirm("Reset permit dependency rule overrides for this org?")) return;
+    setDependencyRuleOverrides({});
+    setDependencyEditorText("{}");
+    setDependencyEditorError("");
+  };
+  const addDependencyRuleRow = () => {
+    setDependencyRuleOverrides((prev) => {
+      const next = { ...normalizeDependencyRules(prev) };
+      const key = dependencyEditorType || "confined_space";
+      const rows = Array.isArray(next[key]) ? [...next[key]] : [];
+      rows.push({ requiresActiveType: "loto", reason: "" });
+      next[key] = rows;
+      return next;
+    });
+  };
+  const updateDependencyRuleRow = (typeKey, idx, patch) => {
+    const key = String(typeKey || "").toLowerCase();
+    if (!key) return;
+    setDependencyRuleOverrides((prev) => {
+      const next = { ...normalizeDependencyRules(prev) };
+      const rows = Array.isArray(next[key]) ? [...next[key]] : [];
+      if (!rows[idx]) return next;
+      rows[idx] = { ...rows[idx], ...patch };
+      next[key] = rows
+        .map((r) => ({
+          requiresActiveType: String(r.requiresActiveType || "").toLowerCase(),
+          reason: String(r.reason || ""),
+        }))
+        .filter((r) => r.requiresActiveType);
+      return next;
+    });
+  };
+  const removeDependencyRuleRow = (typeKey, idx) => {
+    const key = String(typeKey || "").toLowerCase();
+    if (!key) return;
+    setDependencyRuleOverrides((prev) => {
+      const next = { ...normalizeDependencyRules(prev) };
+      const rows = Array.isArray(next[key]) ? [...next[key]] : [];
+      rows.splice(idx, 1);
+      if (rows.length === 0) delete next[key];
+      else next[key] = rows;
+      return next;
+    });
+  };
+  const openHandoverDialog = (permit) => {
+    const p = permit || {};
+    setHandoverDialog({
+      permitId: p.id || "",
+      whatChanged: "",
+      remainingHighRisk: "",
+      criticalControlsConfirmed: false,
+      outgoingSupervisor: "",
+      incomingSupervisor: "",
+      error: "",
+    });
+  };
+  const submitHandoverDialog = () => {
+    if (!handoverDialog?.permitId) return;
+    const whatChanged = String(handoverDialog.whatChanged || "").trim();
+    const remainingHighRisk = String(handoverDialog.remainingHighRisk || "").trim();
+    const outgoingSupervisor = String(handoverDialog.outgoingSupervisor || "").trim();
+    const incomingSupervisor = String(handoverDialog.incomingSupervisor || "").trim();
+    if (!whatChanged || !remainingHighRisk || !outgoingSupervisor || !incomingSupervisor || handoverDialog.criticalControlsConfirmed !== true) {
+      setHandoverDialog((d) => (d ? { ...d, error: "Complete all handover prompts, supervisors, and controls confirmation." } : d));
+      return;
+    }
+    const nowIso = new Date().toISOString();
+    const entry = {
+      id: `handover_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+      submittedAt: nowIso,
+      shiftBoundaryAt: nowIso,
+      whatChanged,
+      remainingHighRisk,
+      criticalControlsConfirmed: true,
+      outgoingSupervisor,
+      incomingSupervisor,
+      outgoingAcknowledgedAt: nowIso,
+      incomingAcknowledgedAt: nowIso,
+    };
+    setPermits((prev) =>
+      prev.map((p) => {
+        if (p.id !== handoverDialog.permitId) return p;
+        const baseNext = {
+          ...p,
+          handoverLog: [...(Array.isArray(p.handoverLog) ? p.handoverLog : []), entry].slice(-30),
+          updatedAt: nowIso,
+          handoverUpdatedAt: nowIso,
+        };
+        const submitRow = { ...baseNext, _auditAction: "handover_submitted", handoverEntry: entry };
+        const submitLog = appendPermitAuditEntry(p, submitRow);
+        const outgoingRow = { ...baseNext, auditLog: submitLog, _auditAction: "handover_ack_outgoing", handoverEntry: entry };
+        const outgoingLog = appendPermitAuditEntry({ ...p, auditLog: submitLog }, outgoingRow);
+        const incomingRow = { ...baseNext, auditLog: outgoingLog, _auditAction: "handover_ack_incoming", handoverEntry: entry };
+        const incomingLog = appendPermitAuditEntry({ ...p, auditLog: outgoingLog }, incomingRow);
+        const withLog = { ...baseNext, auditLog: incomingLog };
+        void logPermitAuditToSupabase(p, submitRow, getOrgId());
+        void logPermitAuditToSupabase(p, outgoingRow, getOrgId());
+        void logPermitAuditToSupabase(p, incomingRow, getOrgId());
+        return withLog;
+      })
+    );
+    setHandoverDialog(null);
+    trackEvent("permit_shift_handover", { permitId: handoverDialog.permitId });
+  };
+  const closeConflictOverrideDialog = (result) => {
+    const resolve = conflictOverrideResolverRef.current;
+    conflictOverrideResolverRef.current = null;
+    setConflictOverrideDialog(null);
+    if (typeof resolve === "function") resolve(result);
+  };
+  const submitConflictOverrideDialog = () => {
+    if (!conflictOverrideDialog) return;
+    const reason = String(conflictOverrideDialog.reason || "").trim();
+    const approvedBy = String(conflictOverrideDialog.approvedBy || "").trim();
+    if (!reason || !approvedBy) {
+      setConflictOverrideDialog((d) => (d ? { ...d, error: "Provide both override reason and approver." } : d));
+      return;
+    }
+    closeConflictOverrideDialog({
+      reason,
+      approvedBy,
+      approvedAt: new Date().toISOString(),
+    });
   };
 
   const togglePermitSelection = (permitId) => {
@@ -1752,18 +3916,21 @@ export default function PermitSystem() {
     setSelectedPermitIds(next);
   };
 
-  const upsertBulkStatus = (fromStatuses, nextStatus, nextPatch = {}) => {
+  const upsertBulkStatus = (fromStatuses, nextStatus, nextPatch = {}, workflowTargetState = "", workflowNote = "bulk_status") => {
     const fromSet = new Set(fromStatuses);
     let changed = 0;
     setPermits((prev) =>
       prev.map((p) => {
         if (!selectedPermitIds[p.id]) return p;
         if (!fromSet.has(String(p.status || ""))) return p;
-        const next = {
+        let next = {
           ...p,
           status: nextStatus,
           ...nextPatch,
         };
+        if (workflowTargetState) {
+          next = transitionPermitWorkflowWithPolicy(next, workflowTargetState, workflowNote);
+        }
         const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
         void logPermitAuditToSupabase(p, withLog, getOrgId());
         changed += 1;
@@ -1776,18 +3943,144 @@ export default function PermitSystem() {
   };
 
   const bulkApproveSelected = () => {
-    const changed = upsertBulkStatus(["pending_review"], "approved", { approvedAt: new Date().toISOString() });
+    if (!ensureWorkflowRoleAllowed("approved", "bulk approve")) return;
+    const ids = Object.keys(selectedPermitIds);
+    const targets = permits.filter((p) => ids.includes(p.id) && ["pending_review", "ready_for_review"].includes(String(p.status || "")));
+    for (const p of targets) {
+      if (!canPermitWorkflowTransition(p, "approved", effectiveWorkflowPolicy)) {
+        window.alert(`Workflow policy blocks approve for ${p.id}: ${permitCurrentWorkflowState(p)} -> approved.`);
+        return;
+      }
+      const g = evaluatePermitActionGate(p, "approve", {});
+      if (!g.allowed) {
+        window.alert(g.message || "Cannot approve.");
+        return;
+      }
+    }
+    const changed = upsertBulkStatus(["pending_review", "ready_for_review"], "approved", { approvedAt: new Date().toISOString() }, "approved", "bulk_approve");
     if (changed === 0) window.alert("No selected permits are in review.");
   };
 
-  const bulkActivateSelected = () => {
-    const changed = upsertBulkStatus(["approved", "closed"], "active", { closedAt: undefined });
-    if (changed === 0) window.alert("No selected permits can be activated.");
+  const bulkActivateSelected = async () => {
+    if (!ensureWorkflowRoleAllowed("issued", "bulk activate")) return;
+    const ids = Object.keys(selectedPermitIds);
+    const targets = permits.filter((p) => ids.includes(p.id) && ["approved", "closed"].includes(String(p.status || "")));
+    if (targets.length === 0) {
+      window.alert("No selected permits can be activated.");
+      return;
+    }
+    const warnOverridesById = {};
+    for (const p of targets) {
+      if (!canPermitWorkflowTransition(p, "issued", effectiveWorkflowPolicy)) {
+        window.alert(`Workflow policy blocks activation for ${p.id}: ${permitCurrentWorkflowState(p)} -> issued.`);
+        return;
+      }
+      const conflictResult = conflictResultForPermitGate(p, permits);
+      let warnConflictOverride = p.conflictWarnOverride || null;
+      let g = activationGateForPermit(p, permits, warnConflictOverride, new Date());
+      if (!g.allowed && g.code === "permit_conflict_warn") {
+        warnConflictOverride = await requestWarnConflictOverride(p, g.conflicts || []);
+        if (!warnConflictOverride) return;
+        g = evaluatePermitActionGate(p, "activate", {
+          complianceResult: complianceForPermitGate(p),
+          conflictResult,
+          warnConflictOverride,
+          handoverRequirement: handoverRequirementForActivation(p, new Date()),
+        });
+      }
+      if (!g.allowed) {
+        window.alert(g.message || "Cannot activate.");
+        return;
+      }
+      if (warnConflictOverride) warnOverridesById[p.id] = warnConflictOverride;
+    }
+    setPermits((prev) =>
+      prev.map((p) => {
+        if (!selectedPermitIds[p.id]) return p;
+        if (!["approved", "closed"].includes(String(p.status || ""))) return p;
+        let next = {
+          ...p,
+          status: "active",
+          closedAt: undefined,
+          conflictWarnOverride: warnOverridesById[p.id] || p.conflictWarnOverride || null,
+        };
+        if (!p.issueSnapshot) next = { ...next, issueSnapshot: buildIssueSnapshot(p) };
+        next = transitionPermitWorkflowWithPolicy(next, "issued", "activate");
+        const baseWithLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+        const withLog = warnOverridesById[p.id]
+          ? {
+              ...baseWithLog,
+              auditLog: [
+                ...(baseWithLog.auditLog || []),
+                {
+                  at: new Date().toISOString(),
+                  action: "conflict_warn_override",
+                  reason: warnOverridesById[p.id].reason,
+                  approvedBy: warnOverridesById[p.id].approvedBy,
+                },
+              ].slice(-40),
+            }
+          : baseWithLog;
+        void logPermitAuditToSupabase(p, withLog, getOrgId());
+        if (warnOverridesById[p.id]) {
+          const overrideAuditRow = { ...withLog, status: p.status, _auditAction: "conflict_warn_override" };
+          void logPermitAuditToSupabase(p, overrideAuditRow, getOrgId());
+        }
+        return withLog;
+      })
+    );
+    clearPermitSelection();
+    trackEvent("permit_bulk_status", { nextStatus: "active", changed: targets.length });
   };
 
   const bulkCloseSelected = () => {
-    const changed = upsertBulkStatus(["active"], "closed", { closedAt: new Date().toISOString() });
+    if (!ensureWorkflowRoleAllowed("closed", "bulk close")) return;
+    const ids = Object.keys(selectedPermitIds);
+    const targets = permits.filter((p) => ids.includes(p.id) && ["active"].includes(String(p.status || "")));
+    for (const p of targets) {
+      if (!canPermitWorkflowTransition(p, "closed", effectiveWorkflowPolicy)) {
+        window.alert(`Workflow policy blocks close for ${p.id}: ${permitCurrentWorkflowState(p)} -> closed.`);
+        return;
+      }
+    }
+    const changed = upsertBulkStatus(["active"], "closed", { closedAt: new Date().toISOString() }, "closed", "bulk_close");
     if (changed === 0) window.alert("No selected permits are active.");
+  };
+
+  const bulkSetIssuerSelected = () => {
+    if (!hasSelectedPermits) return;
+    const issuer = window.prompt("Set issued-by for selected permits:", "") || "";
+    const clean = issuer.trim();
+    if (!clean) return;
+    setPermits((prev) =>
+      prev.map((p) => {
+        if (!selectedPermitIds[p.id]) return p;
+        const next = { ...p, issuedBy: clean };
+        const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+        void logPermitAuditToSupabase(p, withLog, getOrgId());
+        return withLog;
+      })
+    );
+    clearPermitSelection();
+  };
+
+  const bulkTagSelected = () => {
+    if (!hasSelectedPermits) return;
+    const tag = window.prompt("Add tag to selected permits:", "") || "";
+    const clean = tag.trim();
+    if (!clean) return;
+    setPermits((prev) =>
+      prev.map((p) => {
+        if (!selectedPermitIds[p.id]) return p;
+        const tags = Array.isArray(p.tags) ? p.tags : [];
+        if (tags.includes(clean)) return p;
+        const next = { ...p, tags: [clean, ...tags].slice(0, 20) };
+        const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+        void logPermitAuditToSupabase(p, withLog, getOrgId());
+        return withLog;
+      })
+    );
+    clearPermitSelection();
   };
 
   const bulkDeleteSelected = () => {
@@ -1796,7 +4089,16 @@ export default function PermitSystem() {
     const selectedIds = new Set(Object.keys(selectedPermitIds));
     setPermits((prev) => {
       prev.forEach((p) => {
-        if (selectedIds.has(p.id)) void logPermitDeletedToSupabase(p, getOrgId());
+        if (!selectedIds.has(p.id)) return;
+        pushRecycleBinItem({
+          moduleId: "permits",
+          moduleLabel: "Permits",
+          itemType: "permit",
+          itemLabel: p.description || p.location || p.id,
+          sourceKey: "permits_v2",
+          payload: p,
+        });
+        void logPermitDeletedToSupabase(p, getOrgId());
       });
       return prev.filter((p) => !selectedIds.has(p.id));
     });
@@ -1813,7 +4115,7 @@ export default function PermitSystem() {
       lines.push(
         [
           esc(p.id),
-          esc((PERMIT_TYPES[p.type] || PERMIT_TYPES.general).label),
+          esc((effectivePermitTypes[p.type] || effectivePermitTypes.general).label),
           esc(derivePermitStatus(p, now)),
           esc(p.location),
           esc(p.issuedTo),
@@ -1835,6 +4137,57 @@ export default function PermitSystem() {
     trackEvent("permit_bulk_export_csv", { count: selectedPermits.length });
   };
 
+  const bulkExportSitePackV2 = () => {
+    if (!hasSelectedPermits) return;
+    let org = {};
+    try {
+      org = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+    } catch {
+      org = {};
+    }
+    const workersByName = new Map(workers.map((w) => [String(w.name || "").trim().toLowerCase(), w]));
+    const selectedWithContext = selectedPermits.map((permit) => {
+      const linkedRams =
+        permit.linkedRamsId && Array.isArray(ramsDocs) ? ramsDocs.find((d) => d.id === permit.linkedRamsId) || null : null;
+      const issuedWorker = workersByName.get(String(permit.issuedTo || "").trim().toLowerCase()) || null;
+      return {
+        permit,
+        linkedRams,
+        workerSnapshot: issuedWorker
+          ? {
+              id: issuedWorker.id,
+              name: issuedWorker.name,
+              role: issuedWorker.role,
+              certifications: issuedWorker.certifications || [],
+            }
+          : null,
+      };
+    });
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      org: {
+        name: org?.name || "MySafeOps",
+        emergencyContact: org?.emergencyContact || "",
+      },
+      summary: {
+        permits: selectedWithContext.length,
+        withLinkedRams: selectedWithContext.filter((x) => x.linkedRams).length,
+        withWorkerSnapshot: selectedWithContext.filter((x) => x.workerSnapshot).length,
+      },
+      items: selectedWithContext,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `permit-site-pack-v2-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    trackEvent("permit_site_pack_v2_export", { count: selectedWithContext.length });
+  };
+
   const saveCurrentView = () => {
     const suggested = `View ${savedViews.length + 1}`;
     const name = window.prompt("Saved view name:", suggested);
@@ -1847,6 +4200,12 @@ export default function PermitSystem() {
       name: clean.slice(0, 64),
       filterType,
       filterStatus,
+      filterHandoverDue,
+      filterBlockedNow,
+      filterBriefingPending,
+      filterRamsMissing,
+      cardDensity,
+      permitThemeMode,
       search,
       viewMode: availableViewModes.includes(viewMode) ? viewMode : "list",
     };
@@ -1858,6 +4217,12 @@ export default function PermitSystem() {
     if (!view) return;
     setFilterType(view.filterType || "");
     setFilterStatus(view.filterStatus || "");
+    setFilterHandoverDue(Boolean(view.filterHandoverDue));
+    setFilterBlockedNow(Boolean(view.filterBlockedNow));
+    setFilterBriefingPending(Boolean(view.filterBriefingPending));
+    setFilterRamsMissing(Boolean(view.filterRamsMissing));
+    setCardDensity(["comfort", "compact", "ops"].includes(view.cardDensity) ? view.cardDensity : "comfort");
+    setPermitThemeMode(PERMIT_THEME_MODES.includes(view.permitThemeMode) ? view.permitThemeMode : "auto");
     setSearch(view.search || "");
     setViewMode(availableViewModes.includes(view.viewMode) ? view.viewMode : "list");
     trackEvent("permit_saved_view_applied", { name: view.name || "view" });
@@ -1989,12 +4354,20 @@ export default function PermitSystem() {
         message,
         ramsDoc: linkedRams || null,
       });
+      const pushRes = await sendPermitNotificationWebPush({
+        permit,
+        orgSlug: getOrgId(),
+        title: `${org?.name || "MySafeOps"} · Permit update`,
+        body: `${(permit.type || "permit").replace(/_/g, " ")} at ${permit.location || "site"} status: ${permit.status || "updated"}.`,
+        url: "/?tab=permits",
+        tag: `permit_notify_${permit.id}`,
+      }).catch(() => null);
       const entry = {
         at: new Date().toISOString(),
         channel,
         status: "sent",
         recipientCount: Number(res?.recipientCount || recipients.length),
-        note: linkedRams ? "includes RAMS reference" : "",
+        note: `${linkedRams ? "includes RAMS reference" : ""}${pushRes?.ok ? `${linkedRams ? " · " : ""}web push ${Number(pushRes?.sent || 0)} endpoint(s)` : ""}`.trim(),
       };
       setPermits((prev) =>
         prev.map((p) => (p.id === permit.id ? { ...p, notificationLog: [...(p.notificationLog || []), entry] } : p))
@@ -2030,6 +4403,29 @@ export default function PermitSystem() {
         ? "Notification function is not deployed yet (send-permit-notification)."
         : msg);
     }
+  };
+
+  const sharePermitAckLink = (permit) => {
+    if (!permit) return;
+    let token = String(permit.ackToken || "");
+    setPermits((prev) =>
+      prev.map((p) => {
+        if (p.id !== permit.id) return p;
+        if (!token) token = genAckToken();
+        const next = token && !p.ackToken ? { ...p, ackToken: token, updatedAt: new Date().toISOString() } : p;
+        if (next === p) return p;
+        const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+        void logPermitAuditToSupabase(p, withLog, getOrgId());
+        return withLog;
+      })
+    );
+    const targetToken = token || permit.ackToken;
+    if (!targetToken) return;
+    const url = `${window.location.origin}${window.location.pathname}?view=permits&permitAck=${encodeURIComponent(targetToken)}`;
+    navigator.clipboard?.writeText(url).then(
+      () => window.alert("Read/Sign link copied."),
+      () => window.alert(url)
+    );
   };
 
   const acknowledgePermit = async (permit) => {
@@ -2073,6 +4469,53 @@ export default function PermitSystem() {
       })
     );
     trackEvent("permit_acknowledged", { permitId: permit.id });
+  };
+
+  const acknowledgeFromPortalLink = () => {
+    if (!ackPortalPermit) return;
+    const by = String(ackActorName || "").trim();
+    if (!by) {
+      window.alert("Enter your name/email before signing.");
+      return;
+    }
+    const at = new Date().toISOString();
+    setPermits((prev) =>
+      prev.map((p) => {
+        if (p.id !== ackPortalPermit.id) return p;
+        const next = {
+          ...p,
+          acknowledgements: [
+            ...(p.acknowledgements || []),
+            { at, by, note: String(ackActorNote || "").trim() || "Read/Sign link confirmation" },
+          ],
+          notificationLog: [
+            ...(p.notificationLog || []),
+            { at, channel: "portal", status: "acknowledged", recipientCount: 1, note: `Read/Sign confirmation by ${by}` },
+          ],
+        };
+        const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+        void logPermitAuditToSupabase(p, withLog, getOrgId());
+        return withLog;
+      })
+    );
+    window.alert("Acknowledgement saved.");
+    setAckActorName("");
+    setAckActorNote("");
+  };
+
+  const confirmPermitBriefing = (permitId) => {
+    if (!permitId) return;
+    const at = new Date().toISOString();
+    setPermits((prev) =>
+      prev.map((p) => {
+        if (p.id !== permitId) return p;
+        const next = { ...p, briefingConfirmedAt: at, updatedAt: at };
+        const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+        void logPermitAuditToSupabase(p, withLog, getOrgId());
+        return withLog;
+      })
+    );
+    trackEvent("permit_briefing_confirmed", { permitId });
   };
 
   const reportPermitIncident = async (permit) => {
@@ -2144,6 +4587,15 @@ export default function PermitSystem() {
 
   const uploadProjectPlan = (projectId, file) =>
     new Promise((resolve, reject) => {
+      const normalizedType = String(file?.type || "").toLowerCase();
+      if (!PLAN_UPLOAD_MIME.has(normalizedType)) {
+        reject(new Error("Only PNG, JPG, WEBP or PDF plans are supported."));
+        return;
+      }
+      if (Number(file?.size || 0) > PLAN_UPLOAD_MAX_BYTES) {
+        reject(new Error("Plan file is too large. Use files up to 2 MB."));
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => {
         const rec = buildPlanOverlayRecord({
@@ -2245,16 +4697,336 @@ export default function PermitSystem() {
   };
 
   return (
-    <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+    <div
+      style={{
+        ...permitThemeVars,
+        fontFamily:"DM Sans,system-ui,sans-serif",
+        padding:"1.25rem 0",
+        fontSize:14,
+        color:"var(--permit-text)",
+        overflowX:"hidden",
+        background:"var(--permit-surface-bg)",
+        transition:"background-color 180ms ease, color 180ms ease",
+      }}
+    >
       {modal?.type==="form" && (
         <PermitForm
           permit={modal.data}
           recentPermit={permits[0] || null}
           allPermits={permits}
+          conflictMatrix={effectiveConflictMatrix}
+          permitTypes={effectivePermitTypes}
+          handoverShiftHours={shiftBoundaryHours}
+          dependencyRules={effectiveDependencyRules}
           onSave={savePermit}
           onClose={()=>setModal(null)}
         />
       )}
+
+      {conflictOverrideDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 70,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeConflictOverrideDialog(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="permit-conflict-override-title"
+            style={{
+              width: "100%",
+              maxWidth: 520,
+              maxHeight: "88vh",
+              overflowY: "auto",
+              background: "var(--color-background-primary,#fff)",
+              borderRadius: 10,
+              border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+              boxShadow: "var(--shadow-sm)",
+              padding: 16,
+            }}
+          >
+            <div id="permit-conflict-override-title" style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
+              Permit conflict override required
+            </div>
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 10 }}>
+              {conflictOverrideDialog.permitType ? (effectivePermitTypes[conflictOverrideDialog.permitType] || effectivePermitTypes.general).label : "Permit"}
+              {conflictOverrideDialog.permitLocation ? ` · ${conflictOverrideDialog.permitLocation}` : ""}
+            </div>
+            {Array.isArray(conflictOverrideDialog.conflicts) && conflictOverrideDialog.conflicts.length > 0 ? (
+              <div style={{ marginBottom: 10, fontSize: 12, color: "#854d0e", background: "#FFFBEB", border: "1px solid #fcd34d", borderRadius: 8, padding: "8px 10px" }}>
+                Conflicting permit(s):{" "}
+                {conflictOverrideDialog.conflicts
+                  .map((c) => c?.permitId)
+                  .filter(Boolean)
+                  .slice(0, 6)
+                  .join(", ")}
+              </div>
+            ) : null}
+            <label style={{ ...ss.lbl, marginBottom: 4 }}>Override reason</label>
+            <textarea
+              style={{ ...ss.inp, minHeight: 84, resize: "vertical", width: "100%", boxSizing: "border-box" }}
+              value={conflictOverrideDialog.reason}
+              onChange={(e) =>
+                setConflictOverrideDialog((d) => (d ? { ...d, reason: e.target.value, error: "" } : d))
+              }
+              placeholder="Explain how this overlap will be controlled."
+            />
+            <label style={{ ...ss.lbl, marginBottom: 4, marginTop: 8 }}>Approver (name/role)</label>
+            <input
+              style={ss.inp}
+              value={conflictOverrideDialog.approvedBy}
+              onChange={(e) =>
+                setConflictOverrideDialog((d) => (d ? { ...d, approvedBy: e.target.value, error: "" } : d))
+              }
+              placeholder="e.g. Area Authority"
+            />
+            {conflictOverrideDialog.error ? (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#A32D2D" }}>{conflictOverrideDialog.error}</div>
+            ) : null}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <button type="button" style={ss.btn} onClick={() => closeConflictOverrideDialog(null)}>
+                Cancel
+              </button>
+              <button type="button" style={ss.btnO} onClick={submitConflictOverrideDialog}>
+                Confirm override
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {closePermitDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 60,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setClosePermitDialog(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="close-permit-title"
+            style={{
+              width: "100%",
+              maxWidth: 440,
+              maxHeight: "88vh",
+              overflowY: "auto",
+              background: "var(--color-background-primary,#fff)",
+              borderRadius: 10,
+              border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+              boxShadow: "var(--shadow-sm)",
+              padding: 16,
+            }}
+          >
+            <div id="close-permit-title" style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>
+              Close permit
+            </div>
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 10 }}>
+              {(() => {
+                const p = permits.find((x) => x.id === closePermitDialog.id);
+                if (!p) return null;
+                return (
+                  <>
+                    {(effectivePermitTypes[p.type] || effectivePermitTypes.general).label}
+                    {p.location ? ` · ${p.location}` : ""}
+                  </>
+                );
+              })()}
+            </div>
+            <label style={{ ...ss.lbl, marginBottom: 4 }}>Lessons learned (optional)</label>
+            <textarea
+              style={{ ...ss.inp, minHeight: 88, resize: "vertical", width: "100%", boxSizing: "border-box" }}
+              value={closePermitDialog.lessons}
+              onChange={(e) => setClosePermitDialog((d) => (d ? { ...d, lessons: e.target.value } : d))}
+              placeholder="e.g. isolate earlier, extend fire watch, improve briefing…"
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <button type="button" style={ss.btn} onClick={() => setClosePermitDialog(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                style={ss.btnR}
+                onClick={() => {
+                  const id = closePermitDialog.id;
+                  const lessons = closePermitDialog.lessons;
+                  setClosePermitDialog(null);
+                  closePermit(id, lessons);
+                }}
+              >
+                Close permit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {handoverDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 62,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setHandoverDialog(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="shift-handover-title"
+            style={{
+              width: "100%",
+              maxWidth: 620,
+              maxHeight: "88vh",
+              overflowY: "auto",
+              background: "var(--color-background-primary,#fff)",
+              borderRadius: 10,
+              border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+              boxShadow: "var(--shadow-sm)",
+              padding: 16,
+            }}
+          >
+            <div id="shift-handover-title" style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
+              Shift handover continuity
+            </div>
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 10 }}>
+              Capture what changed, remaining high-risk work, and dual supervisor acknowledgements.
+            </div>
+            <label style={{ ...ss.lbl, marginBottom: 4 }}>What changed since previous shift?</label>
+            <textarea
+              style={{ ...ss.inp, minHeight: 70, resize: "vertical", width: "100%", boxSizing: "border-box" }}
+              value={handoverDialog.whatChanged}
+              onChange={(e) => setHandoverDialog((d) => (d ? { ...d, whatChanged: e.target.value, error: "" } : d))}
+            />
+            <label style={{ ...ss.lbl, marginBottom: 4, marginTop: 8 }}>What remains high-risk?</label>
+            <textarea
+              style={{ ...ss.inp, minHeight: 70, resize: "vertical", width: "100%", boxSizing: "border-box" }}
+              value={handoverDialog.remainingHighRisk}
+              onChange={(e) => setHandoverDialog((d) => (d ? { ...d, remainingHighRisk: e.target.value, error: "" } : d))}
+            />
+            <div style={{ marginTop: 8 }}>
+              <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={handoverDialog.criticalControlsConfirmed === true}
+                  onChange={(e) => setHandoverDialog((d) => (d ? { ...d, criticalControlsConfirmed: e.target.checked, error: "" } : d))}
+                />
+                Critical controls confirmed as in place
+              </label>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap: 8, marginTop: 10 }}>
+              <div>
+                <label style={{ ...ss.lbl, marginBottom: 4 }}>Outgoing supervisor</label>
+                <input
+                  style={ss.inp}
+                  value={handoverDialog.outgoingSupervisor}
+                  onChange={(e) => setHandoverDialog((d) => (d ? { ...d, outgoingSupervisor: e.target.value, error: "" } : d))}
+                  placeholder="Name / role"
+                />
+              </div>
+              <div>
+                <label style={{ ...ss.lbl, marginBottom: 4 }}>Incoming supervisor</label>
+                <input
+                  style={ss.inp}
+                  value={handoverDialog.incomingSupervisor}
+                  onChange={(e) => setHandoverDialog((d) => (d ? { ...d, incomingSupervisor: e.target.value, error: "" } : d))}
+                  placeholder="Name / role"
+                />
+              </div>
+            </div>
+            {handoverDialog.error ? (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#A32D2D" }}>{handoverDialog.error}</div>
+            ) : null}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <button type="button" style={ss.btn} onClick={() => setHandoverDialog(null)}>
+                Cancel
+              </button>
+              <button type="button" style={ss.btnO} onClick={submitHandoverDialog}>
+                Record handover
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isNarrow && mobileQuickPermit ? (
+        <div
+          style={{
+            position:"fixed",
+            left:0,
+            right:0,
+            bottom:0,
+            zIndex:65,
+            background:"rgba(255,255,255,0.98)",
+            borderTop:"1px solid var(--color-border-tertiary,#e5e5e5)",
+            boxShadow:"0 -8px 24px rgba(15,23,42,0.16)",
+            padding:"10px 10px calc(10px + env(safe-area-inset-bottom))",
+          }}
+        >
+          <div style={{ display:"flex", justifyContent:"space-between", gap:8, alignItems:"center", marginBottom:8 }}>
+            <div style={{ fontSize:12, fontWeight:700, minWidth:0, overflowWrap:"anywhere" }}>
+              Quick actions · {mobileQuickPermit.id}
+            </div>
+            <button type="button" style={{ ...ss.btn, fontSize:11, padding:"2px 8px" }} onClick={() => setMobileQuickActionsPermitId("")}>
+              Close
+            </button>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns: isUltraNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
+            <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:38 }} onClick={() => previewPermit(mobileQuickPermit)}>
+              Preview
+            </button>
+            <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:38 }} onClick={() => setModal({ type: "form", data: mobileQuickPermit })}>
+              Edit
+            </button>
+            <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:38 }} onClick={() => openHandoverDialog(mobileQuickPermit)}>
+              Shift handover
+            </button>
+            {derivePermitStatus(mobileQuickPermit, now) === "active" && !mobileQuickPermit.briefingConfirmedAt && mobileQuickPermit.startDateTime && (now.getTime() - new Date(mobileQuickPermit.startDateTime).getTime() > 20 * 60 * 1000) ? (
+              <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:38 }} onClick={() => confirmPermitBriefing(mobileQuickPermit.id)}>
+                Confirm briefing
+              </button>
+            ) : null}
+            {(mobileQuickPermit.status === "approved" || mobileQuickPermit.status === "closed" || mobileQuickPermit.status === "pending_review" || mobileQuickPermit.status === "ready_for_review") ? (
+              <button type="button" style={{ ...ss.btnO, fontSize:12, minHeight:38 }} onClick={() => void activatePermit(mobileQuickPermit.id)}>
+                Activate
+              </button>
+            ) : (
+              <button type="button" style={{ ...ss.btnR, fontSize:12, minHeight:38 }} onClick={() => requestClosePermit(mobileQuickPermit.id)}>
+                Close permit
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <PageHero
         badgeText="PTW"
@@ -2263,12 +5035,68 @@ export default function PermitSystem() {
         right={<button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnO}>+ Issue permit</button>}
       />
 
+      {ackTokenParam ? (
+        <div className="app-panel-surface" style={{ padding: 12, borderRadius: 10, marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#0C447C" }}>Contractor Read/Sign portal</div>
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                {ackPortalPermit ? "Confirm you have read this permit before work starts." : "Permit not found for this link."}
+              </div>
+            </div>
+            <button
+              type="button"
+              style={{ ...ss.btn, fontSize: 11, padding: "3px 8px" }}
+              onClick={() => {
+                const next = new URLSearchParams(window.location.search);
+                next.delete("permitAck");
+                window.history.replaceState({}, "", `${window.location.pathname}?${next.toString()}`);
+                setAckTokenParam("");
+              }}
+            >
+              Close portal
+            </button>
+          </div>
+          {ackPortalPermit ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontSize: 12 }}>
+                <strong>{(effectivePermitTypes[ackPortalPermit.type] || effectivePermitTypes.general).label}</strong> · {ackPortalPermit.location || "No location"} ·{" "}
+                {fmtDateTime(ackPortalPermit.startDateTime)} → {fmtDateTime(permitEndIso(ackPortalPermit))}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                {ackPortalPermit.description || "No description"}
+              </div>
+              <label style={{ ...ss.lbl, marginBottom: 0 }}>Name / email</label>
+              <input
+                style={ss.inp}
+                value={ackActorName}
+                onChange={(e) => setAckActorName(e.target.value)}
+                placeholder="e.g. subcontractor@company.com"
+              />
+              <label style={{ ...ss.lbl, marginBottom: 0 }}>Note (optional)</label>
+              <input
+                style={ss.inp}
+                value={ackActorNote}
+                onChange={(e) => setAckActorNote(e.target.value)}
+                placeholder="Optional note"
+              />
+              <div>
+                <button type="button" style={ss.btnO} onClick={acknowledgeFromPortalLink}>
+                  Confirm read & sign
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* stat cards */}
       {permits.length>0 && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8, marginBottom:20 }}>
           {[
             { label:"In review", value:stats.pendingReview, bg:"#FAEEDA", color:"#633806", filter:"pending_review" },
             { label:"Approved", value:stats.approved, bg:"#E6F1FB", color:"#0C447C", filter:"approved" },
+            { label:"Suspended", value:permits.filter((p) => p.status === "suspended").length, bg:"#FCEBEB", color:"#791F1F", filter:"suspended" },
             { label:"Active", value:stats.active, bg:"#EAF3DE", color:"#27500A", filter:"active" },
             { label:"Expiring soon", value:stats.expiringSoon, bg:"#FAEEDA", color:"#633806", filter:"active" },
             { label:"Expired", value:stats.expired, bg:"#FCEBEB", color:"#791F1F", filter:"expired" },
@@ -2295,8 +5123,91 @@ export default function PermitSystem() {
         </div>
       )}
 
+      {simopsRadarRows.length > 0 && (
+        <div className="app-panel-surface" style={{ padding: 10, borderRadius: 10, marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>SIMOPS live radar</div>
+            <span style={{ ...ss.chip, fontSize: 11 }}>{simopsRadarRows.length} active conflict zone(s)</span>
+          </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {simopsRadarRows.map((row) => (
+              <div
+                key={row.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: isNarrow ? "1fr" : "minmax(0,1fr) auto",
+                  gap: 8,
+                  alignItems: "center",
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+                  background:
+                    row.severity === "high"
+                      ? "#fff6f6"
+                      : row.severity === "medium"
+                      ? "#fffaf0"
+                      : "var(--color-background-primary,#fff)",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>
+                    {row.location} · {row.permitLabel}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
+                    {row.windowLabel}
+                  </div>
+                  <div style={{ fontSize: 11, color: row.severity === "high" ? "#791F1F" : row.severity === "medium" ? "#633806" : "var(--color-text-secondary)" }}>
+                    Conflicts: {row.overlapCount} · {row.overlapTypes.join(", ")}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  style={{ ...ss.btn, fontSize: 11, padding: "3px 8px" }}
+                  onClick={() => {
+                    setHighlightPermitId(row.id);
+                    setFilterStatus("");
+                    requestAnimationFrame(() => {
+                      document.getElementById(`permit-row-${row.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    });
+                  }}
+                >
+                  Open permit
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {permits.length > 0 && (
-        <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div className="app-panel-surface" style={{ padding: 12, borderRadius: 10, marginBottom: 14, background: "var(--permit-panel-bg)", border: "1px solid var(--permit-panel-border)" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700 }}>Permit command metrics</div>
+            <span style={{ ...ss.chip, fontSize:11 }}>Live snapshot</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 8 }}>
+            <div style={{ border: "1px solid var(--permit-panel-border)", borderRadius: 8, padding: "8px 10px", background:"var(--permit-panel-bg)" }}>
+              <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>On-time review</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{permitScorecard.reviewedOnTime}/{permitScorecard.reviewedTotal}</div>
+            </div>
+            <div style={{ border: "1px solid var(--permit-panel-border)", borderRadius: 8, padding: "8px 10px", background:"var(--permit-panel-bg)" }}>
+              <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>On-time activation</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{permitScorecard.activatedOnTime}/{permitScorecard.activatedTotal}</div>
+            </div>
+            <div style={{ border: "1px solid var(--permit-panel-border)", borderRadius: 8, padding: "8px 10px", background:"var(--permit-panel-bg)" }}>
+              <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Overdue queue now</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: permitScorecard.overdueQueue > 0 ? "#791F1F" : "inherit" }}>{permitScorecard.overdueQueue}</div>
+            </div>
+            <div style={{ border: "1px solid var(--permit-panel-border)", borderRadius: 8, padding: "8px 10px", background:"var(--permit-panel-bg)" }}>
+              <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Avg review time</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{permitScorecard.avgReviewHours == null ? "—" : `${permitScorecard.avgReviewHours}h`}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {permits.length > 0 && (
+        <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16, border:"1px solid var(--permit-panel-border)", background:"var(--permit-panel-bg)" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap", marginBottom:8 }}>
             <div style={{ fontSize:12, fontWeight:700 }}>Ops Inbox / Action Center</div>
             <span style={{ ...ss.chip, fontSize:11 }}>{opsActionItems.length} item(s)</span>
@@ -2308,10 +5219,10 @@ export default function PermitSystem() {
               {opsActionItems.map((item) => {
                 const tone =
                   item.severity === "critical"
-                    ? { border:"#A32D2D", bg:"#FCEBEB", color:"#791F1F" }
+                    ? permitDecisionTone("critical")
                     : item.severity === "warning"
-                      ? { border:"#b45309", bg:"#FAEEDA", color:"#633806" }
-                      : { border:"#0C447C", bg:"#E6F1FB", color:"#0C447C" };
+                      ? permitDecisionTone("warn")
+                      : permitDecisionTone("info");
                 const targetPermit = permits.find((p) => p.id === item.permitId);
                 return (
                   <div key={`${item.kind}:${item.permitId}`} style={{ border:`1px solid ${tone.border}`, background:tone.bg, borderRadius:8, padding:8 }}>
@@ -2336,6 +5247,11 @@ export default function PermitSystem() {
                         {item.kind === "ack_missing" && targetPermit ? (
                           <button type="button" onClick={() => void acknowledgePermit(targetPermit)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
                             Add ack
+                          </button>
+                        ) : null}
+                        {item.kind === "briefing_missing" && targetPermit ? (
+                          <button type="button" onClick={() => confirmPermitBriefing(targetPermit.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                            Confirm briefing
                           </button>
                         ) : null}
                       </div>
@@ -2398,11 +5314,17 @@ export default function PermitSystem() {
           </select>
           <input
             type="file"
-            accept="image/png,image/jpeg,image/webp,application/pdf"
+            accept={PLAN_UPLOAD_ACCEPT}
+            disabled={!planProjectId}
+            title={planProjectId ? "Upload plan file" : "Select a project first"}
             onChange={async (e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
-              if (!f || !planProjectId) return;
+              if (!f) return;
+              if (!planProjectId) {
+                window.alert("Select a project first, then upload a plan.");
+                return;
+              }
               try {
                 await uploadProjectPlan(planProjectId, f);
               } catch (err) {
@@ -2562,12 +5484,28 @@ export default function PermitSystem() {
         </div>
       </div>
 
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:12, background:"var(--permit-panel-bg)", border:"1px solid var(--permit-panel-border)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
+          <div style={{ fontSize:12, fontWeight:700 }}>Permit appearance theme</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+            <select value={permitThemeMode} onChange={(e) => setPermitThemeMode(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto", minWidth: 140 }}>
+              <option value="auto">Theme: Auto</option>
+              <option value="light">Theme: Light</option>
+              <option value="dark">Theme: Dark</option>
+            </select>
+            <span style={{ fontSize:11, color:"var(--permit-text-muted)" }}>
+              {permitThemeMode === "auto" ? `Using ${prefersDarkTheme ? "dark" : "light"} by system` : `Using ${permitThemeMode}`}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* filters */}
       <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search location, worker, issuer, type…" style={{ ...ss.inp, flex:1, width: isNarrow ? "100%" : "auto", minWidth: isNarrow ? "100%" : 140 }} />
         <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto" }}>
           <option value="">All permit types</option>
-          {Object.entries(PERMIT_TYPES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+          {Object.entries(effectivePermitTypes).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
         </select>
         <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto" }}>
           <option value="">All statuses</option>
@@ -2577,8 +5515,90 @@ export default function PermitSystem() {
           <option value="draft">Draft</option>
           <option value="pending_review">In review</option>
           <option value="approved">Approved</option>
+          <option value="suspended">Suspended</option>
         </select>
-        {(search||filterType||filterStatus)&&<button type="button" onClick={()=>{setSearch("");setFilterType("");setFilterStatus("");}} style={{ ...ss.btn, fontSize:12, width: isNarrow ? "100%" : "auto" }}>Clear</button>}
+        <select value={cardDensity} onChange={(e) => setCardDensity(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto" }}>
+          <option value="comfort">Density: Comfort</option>
+          <option value="compact">Density: Compact</option>
+          <option value="ops">Density: Ops</option>
+        </select>
+        <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, padding:"8px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, background:"var(--permit-panel-bg)", minHeight:38 }}>
+          <input type="checkbox" checked={filterHandoverDue} onChange={(e) => setFilterHandoverDue(e.target.checked)} />
+          Handover due only
+        </label>
+        <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, padding:"8px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, background:"var(--permit-panel-bg)", minHeight:38 }}>
+          <input type="checkbox" checked={filterBlockedNow} onChange={(e) => setFilterBlockedNow(e.target.checked)} />
+          Blocked now only
+        </label>
+        <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, padding:"8px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, background:"var(--permit-panel-bg)", minHeight:38 }}>
+          <input type="checkbox" checked={filterBriefingPending} onChange={(e) => setFilterBriefingPending(e.target.checked)} />
+          Briefing pending only
+        </label>
+        <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, padding:"8px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, background:"var(--permit-panel-bg)", minHeight:38 }}>
+          <input type="checkbox" checked={filterRamsMissing} onChange={(e) => setFilterRamsMissing(e.target.checked)} />
+          Missing RAMS only
+        </label>
+        {(search||filterType||filterStatus||filterHandoverDue||filterBlockedNow||filterBriefingPending||filterRamsMissing)&&<button type="button" onClick={()=>{setSearch("");setFilterType("");setFilterStatus("");setFilterHandoverDue(false);setFilterBlockedNow(false);setFilterBriefingPending(false);setFilterRamsMissing(false);}} style={{ ...ss.btn, fontSize:12, width: isNarrow ? "100%" : "auto" }}>Clear</button>}
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16, border:"1px solid var(--permit-panel-border)", background:"var(--permit-panel-bg)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+          <div style={{ fontSize:12, fontWeight:700 }}>Command strip</div>
+          <button
+            type="button"
+            onClick={() => { setSearch(""); setFilterType(""); setFilterStatus(""); setFilterHandoverDue(false); setFilterBlockedNow(false); setFilterBriefingPending(false); setFilterRamsMissing(false); }}
+            style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}
+          >
+            Reset quick filters
+          </button>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <button type="button" onClick={() => setFilterStatus("active")} style={{ ...ss.btn, ...quickCountBadgeStyle("ok"), fontSize:12 }}>
+            Active: {commandCounts.active}
+          </button>
+          <button type="button" onClick={() => setFilterStatus("pending_review")} style={{ ...ss.btn, ...quickCountBadgeStyle("warn"), fontSize:12 }}>
+            In review: {commandCounts.review}
+          </button>
+          <button type="button" onClick={() => setFilterStatus("approved")} style={{ ...ss.btn, ...quickCountBadgeStyle("neutral"), fontSize:12 }}>
+            Approved: {commandCounts.approved}
+          </button>
+          <button type="button" onClick={() => setFilterStatus("expired")} style={{ ...ss.btn, ...quickCountBadgeStyle("critical"), fontSize:12 }}>
+            Expired: {commandCounts.expired}
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterHandoverDue((v) => !v)}
+            style={{ ...ss.btn, ...quickCountBadgeStyle("warn"), fontSize:12, padding:"4px 10px", borderRadius:20, borderStyle:"dashed", opacity: filterHandoverDue ? 1 : 0.82 }}
+          >
+            Handover due: {commandCounts.handoverDue}
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterBlockedNow((v) => !v)}
+            style={{ ...ss.btn, ...quickCountBadgeStyle("critical"), fontSize:12, padding:"4px 10px", borderRadius:20, borderStyle:"dashed", opacity: filterBlockedNow ? 1 : 0.82 }}
+          >
+            Blocked now: {commandCounts.blockedNow}
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterBriefingPending((v) => !v)}
+            style={{ ...ss.btn, ...quickCountBadgeStyle("warn"), fontSize:12, padding:"4px 10px", borderRadius:20, borderStyle:"dashed", opacity: filterBriefingPending ? 1 : 0.82 }}
+          >
+            Briefing pending: {commandCounts.briefingPending}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFilterStatus("active");
+              setFilterType("");
+              setSearch("");
+              setFilterRamsMissing((v) => !v);
+            }}
+            style={{ ...ss.btn, ...quickCountBadgeStyle("neutral"), fontSize:12, padding:"4px 10px", borderRadius:20, borderStyle:"dashed", opacity: filterRamsMissing ? 1 : 0.9 }}
+          >
+            Active without RAMS: {commandCounts.ramsMissing}
+          </button>
+        </div>
       </div>
 
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16, alignItems:"center" }}>
@@ -2589,8 +5609,8 @@ export default function PermitSystem() {
           <span style={{ fontSize:12, color:"var(--color-text-secondary)" }}>No saved views yet.</span>
         ) : (
           savedViews.map((v) => (
-            <div key={v.id} style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
-              <button type="button" onClick={() => applySavedView(v)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+            <div key={v.id} style={{ display:"inline-flex", alignItems:"center", gap:4, maxWidth: isNarrow ? "100%" : 280 }}>
+              <button type="button" onClick={() => applySavedView(v)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px", overflowWrap:"anywhere" }}>
                 {v.name}
               </button>
               <button type="button" onClick={() => deleteSavedView(v.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 6px", color:"#A32D2D", borderColor:"#F09595" }} aria-label={`Delete view ${v.name}`}>
@@ -2602,8 +5622,391 @@ export default function PermitSystem() {
       </div>
 
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", justifyContent:"space-between" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Permit conflict matrix (org overrides)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Baseline rules + your org overrides. Active overrides: {Object.keys(conflictMatrixOverrides || {}).length}.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={openConflictMatrixEditor} style={{ ...ss.btn, fontSize:12 }}>
+              Edit overrides (JSON)
+            </button>
+            <button type="button" onClick={resetConflictMatrixOverrides} style={{ ...ss.btn, fontSize:12 }}>
+              Reset overrides
+            </button>
+          </div>
+        </div>
+        {conflictMatrixEditorOpen ? (
+          <div style={{ marginTop:10 }}>
+            <label style={{ ...ss.lbl, marginBottom:4 }}>Overrides JSON (key: typeA+typeB)</label>
+            <textarea
+              style={{ ...ss.ta, minHeight:140 }}
+              value={conflictMatrixEditorText}
+              onChange={(e) => {
+                setConflictMatrixEditorText(e.target.value);
+                setConflictMatrixEditorError("");
+              }}
+              spellCheck={false}
+            />
+            {conflictMatrixEditorError ? (
+              <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{conflictMatrixEditorError}</div>
+            ) : null}
+            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+              <button type="button" onClick={() => setConflictMatrixEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>
+                Cancel
+              </button>
+              <button type="button" onClick={applyConflictMatrixOverridesFromEditor} style={{ ...ss.btnO, fontSize:12 }}>
+                Apply overrides
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Permit type appearance (org overrides)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Override label, colors, and description per permit type. Active overrides: {Object.keys(permitTypeOverrides || {}).length}.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={() => setPermitTypeEditorOpen((v) => !v)} style={{ ...ss.btn, fontSize:12 }}>
+              {permitTypeEditorOpen ? "Hide editor" : "Edit overrides"}
+            </button>
+            <button type="button" onClick={resetAllPermitTypeOverrides} style={{ ...ss.btn, fontSize:12 }}>
+              Reset all
+            </button>
+          </div>
+        </div>
+        {permitTypeEditorOpen ? (
+          <div style={{ marginTop:10, display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
+            <div style={{ display:"grid", gap:8, alignContent:"start" }}>
+              <label style={ss.lbl}>Permit type</label>
+              <select value={permitTypeEditorType} onChange={(e) => setPermitTypeEditorType(e.target.value)} style={ss.inp}>
+                {Object.entries(effectivePermitTypes).map(([k,v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+              <label style={ss.lbl}>Display label</label>
+              <input value={permitTypeEditorDraft.label} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, label: e.target.value }))} style={ss.inp} />
+              <label style={ss.lbl}>Description</label>
+              <textarea value={permitTypeEditorDraft.description} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, description: e.target.value }))} style={{ ...ss.ta, minHeight:70 }} />
+              <div style={{ display:"grid", gridTemplateColumns: isUltraNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
+                <div>
+                  <label style={ss.lbl}>Text color</label>
+                  <input value={permitTypeEditorDraft.color} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, color: e.target.value }))} placeholder="#9A3412" style={ss.inp} />
+                </div>
+                <div>
+                  <label style={ss.lbl}>Background color</label>
+                  <input value={permitTypeEditorDraft.bg} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, bg: e.target.value }))} placeholder="#FFEDD5" style={ss.inp} />
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <button type="button" onClick={savePermitTypeOverride} style={{ ...ss.btnO, fontSize:12 }}>Save override</button>
+                <button type="button" onClick={resetPermitTypeOverride} style={{ ...ss.btn, fontSize:12 }}>Reset type</button>
+              </div>
+            </div>
+            <div className="app-panel-surface" style={{ padding:10, borderRadius:10, border:"1px solid #e5e7eb" }}>
+              <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:6 }}>Preview</div>
+              <div style={{ display:"inline-flex", alignItems:"center", padding:"4px 10px", borderRadius:999, fontSize:12, fontWeight:700, color: permitTypeEditorDraft.color || "#9A3412", background: permitTypeEditorDraft.bg || "#FFEDD5" }}>
+                {permitTypeEditorDraft.label || "Permit label"}
+              </div>
+              <div style={{ marginTop:8, fontSize:12, color:"var(--color-text-secondary)", whiteSpace:"pre-wrap" }}>
+                {permitTypeEditorDraft.description || "No description set."}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Shift handover settings (org)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Shift boundaries used to flag active permits with missing handover acknowledgements.
+            </div>
+          </div>
+          <span style={{ ...ss.chip, fontSize:11 }}>
+            Current: {shiftBoundaryHours.map((h) => `${String(h).padStart(2, "0")}:00`).join(", ")}
+          </span>
+        </div>
+        <div style={{ marginTop:10, display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,1fr) auto", gap:8, alignItems:"end" }}>
+          <div>
+            <label style={{ ...ss.lbl, marginBottom:4 }}>Boundary hours (0-23, comma separated)</label>
+            <input
+              value={shiftBoundaryHoursDraft}
+              onChange={(e) => {
+                setShiftBoundaryHoursDraft(e.target.value);
+                setShiftBoundaryHoursError("");
+              }}
+              placeholder="e.g. 6, 18"
+              style={ss.inp}
+            />
+            {shiftBoundaryHoursError ? (
+              <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{shiftBoundaryHoursError}</div>
+            ) : null}
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={applyShiftBoundaryHours} style={{ ...ss.btnO, fontSize:12 }}>
+              Apply
+            </button>
+            <button type="button" onClick={resetShiftBoundaryHours} style={{ ...ss.btn, fontSize:12 }}>
+              Reset default
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Workflow policy designer (org overrides)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Control which status transitions are allowed. Overrides: {Object.keys(workflowPolicyOverrides || {}).length}.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={openWorkflowPolicyEditor} style={{ ...ss.btn, fontSize:12 }}>
+              {workflowEditorOpen ? "Hide JSON editor" : "Advanced JSON"}
+            </button>
+            <button type="button" onClick={resetWorkflowPolicyOverrides} style={{ ...ss.btn, fontSize:12 }}>
+              Reset overrides
+            </button>
+          </div>
+        </div>
+        <div style={{ marginTop:10, display:"grid", gap:8 }}>
+          {WORKFLOW_STATES.map((from) => (
+            <div key={`wf-${from}`} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px" }}>
+              <div style={{ fontSize:11, fontWeight:700, marginBottom:6 }}>
+                {from} -&gt; allowed next states
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {WORKFLOW_STATES.map((to) => {
+                  const enabled = (effectiveWorkflowPolicy[from] || []).includes(to);
+                  return (
+                    <button
+                      key={`wf-${from}-${to}`}
+                      type="button"
+                      onClick={() => toggleWorkflowTransitionRule(from, to)}
+                      style={{
+                        ...ss.btn,
+                        fontSize:11,
+                        padding:"3px 8px",
+                        borderColor: enabled ? "var(--color-accent,#0d9488)" : undefined,
+                        background: enabled ? "var(--color-accent-muted,#ccfbf1)" : undefined,
+                        color: enabled ? "#0f766e" : undefined,
+                      }}
+                    >
+                      {to}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        {workflowEditorOpen ? (
+          <div style={{ marginTop:10 }}>
+            <label style={{ ...ss.lbl, marginBottom:4 }}>Workflow overrides JSON (state -&gt; allowed next states[])</label>
+            <textarea
+              style={{ ...ss.ta, minHeight:160 }}
+              value={workflowEditorText}
+              onChange={(e) => {
+                setWorkflowEditorText(e.target.value);
+                setWorkflowEditorError("");
+              }}
+              spellCheck={false}
+            />
+            {workflowEditorError ? (
+              <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{workflowEditorError}</div>
+            ) : null}
+            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
+              Example: {`{"approved":["issued","closed"],"suspended":["issued","closed"]}`}
+            </div>
+            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+              <button type="button" onClick={() => setWorkflowEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>
+                Cancel
+              </button>
+              <button type="button" onClick={applyWorkflowPolicyOverrides} style={{ ...ss.btnO, fontSize:12 }}>
+                Apply overrides
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Workflow role policy (org overrides)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Control which roles can execute each target transition. Current role: <strong>{appRole}</strong>.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={openWorkflowRolePolicyEditor} style={{ ...ss.btn, fontSize:12 }}>
+              {workflowRoleEditorOpen ? "Hide JSON editor" : "Advanced JSON"}
+            </button>
+            <button type="button" onClick={resetWorkflowRolePolicyOverrides} style={{ ...ss.btn, fontSize:12 }}>
+              Reset overrides
+            </button>
+          </div>
+        </div>
+        <div style={{ marginTop:10, display:"grid", gap:8 }}>
+          {WORKFLOW_STATES.map((target) => (
+            <div key={`role-${target}`} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px" }}>
+              <div style={{ fontSize:11, fontWeight:700, marginBottom:6 }}>{target} - allowed roles</div>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                {WORKFLOW_ROLES.map((roleName) => {
+                  const enabled = (effectiveWorkflowRolePolicy[target] || []).includes(roleName);
+                  return (
+                    <label key={`role-${target}-${roleName}`} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12 }}>
+                      <input
+                        type="checkbox"
+                        checked={enabled}
+                        onChange={() => toggleWorkflowRolePermission(target, roleName)}
+                      />
+                      {roleName}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        {workflowRoleEditorOpen ? (
+          <div style={{ marginTop:10 }}>
+            <label style={{ ...ss.lbl, marginBottom:4 }}>Role policy JSON (target state -&gt; allowed roles[])</label>
+            <textarea
+              style={{ ...ss.ta, minHeight:130 }}
+              value={workflowRoleEditorText}
+              onChange={(e) => {
+                setWorkflowRoleEditorText(e.target.value);
+                setWorkflowRoleEditorError("");
+              }}
+              spellCheck={false}
+            />
+            {workflowRoleEditorError ? <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{workflowRoleEditorError}</div> : null}
+            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
+              Example: {`{"approved":["admin","supervisor"],"issued":["admin","supervisor"],"closed":["admin"]}`}
+            </div>
+            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+              <button type="button" onClick={() => setWorkflowRoleEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>Cancel</button>
+              <button type="button" onClick={applyWorkflowRolePolicyOverrides} style={{ ...ss.btnO, fontSize:12 }}>Apply overrides</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Permit dependency rules (org overrides)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Require active dependency permits before activation for selected permit types.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={openDependencyRuleEditor} style={{ ...ss.btn, fontSize:12 }}>
+              {dependencyEditorOpen ? "Hide JSON editor" : "Advanced JSON"}
+            </button>
+            <button type="button" onClick={resetDependencyRuleOverrides} style={{ ...ss.btn, fontSize:12 }}>
+              Reset overrides
+            </button>
+          </div>
+        </div>
+        <div style={{ marginTop:10, display:"grid", gap:8 }}>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+            <label style={ss.lbl}>Permit type</label>
+            <select value={dependencyEditorType} onChange={(e) => setDependencyEditorType(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto", minWidth:180 }}>
+              {Object.entries(effectivePermitTypes).map(([k, v]) => (
+                <option key={`dep-type-${k}`} value={k}>{v.label}</option>
+              ))}
+            </select>
+            <button type="button" onClick={addDependencyRuleRow} style={{ ...ss.btn, fontSize:12 }}>
+              + Add dependency
+            </button>
+          </div>
+          {(dependencyRuleOverrides[dependencyEditorType] || []).length === 0 ? (
+            <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>No dependency rules for this permit type.</div>
+          ) : (
+            (dependencyRuleOverrides[dependencyEditorType] || []).map((row, idx) => (
+              <div key={`dep-row-${dependencyEditorType}-${idx}`} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px", display:"grid", gap:8 }}>
+                <div style={{ display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,220px) minmax(0,1fr) auto", gap:8, alignItems:"end" }}>
+                  <div>
+                    <label style={ss.lbl}>Requires active type</label>
+                    <select
+                      value={row.requiresActiveType || ""}
+                      onChange={(e) => updateDependencyRuleRow(dependencyEditorType, idx, { requiresActiveType: e.target.value })}
+                      style={ss.inp}
+                    >
+                      {Object.entries(effectivePermitTypes)
+                        .filter(([k]) => k !== dependencyEditorType)
+                        .map(([k, v]) => <option key={`dep-req-${dependencyEditorType}-${k}`} value={k}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>Reason (shown on gate block)</label>
+                    <input
+                      value={row.reason || ""}
+                      onChange={(e) => updateDependencyRuleRow(dependencyEditorType, idx, { reason: e.target.value })}
+                      style={ss.inp}
+                      placeholder="Explain why dependency is required"
+                    />
+                  </div>
+                  <button type="button" onClick={() => removeDependencyRuleRow(dependencyEditorType, idx)} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        {dependencyEditorOpen ? (
+          <div style={{ marginTop:10 }}>
+            <label style={{ ...ss.lbl, marginBottom:4 }}>Dependency rules JSON (permit type -&gt; dependencies[])</label>
+            <textarea
+              style={{ ...ss.ta, minHeight:140 }}
+              value={dependencyEditorText}
+              onChange={(e) => {
+                setDependencyEditorText(e.target.value);
+                setDependencyEditorError("");
+              }}
+              spellCheck={false}
+            />
+            {dependencyEditorError ? <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{dependencyEditorError}</div> : null}
+            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
+              Example: {`{"confined_space":[{"requiresActiveType":"loto","reason":"Confined space entry requires active LOTOTO isolation permit."}]}`}
+            </div>
+            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+              <button type="button" onClick={() => setDependencyEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>Cancel</button>
+              <button type="button" onClick={applyDependencyRuleOverrides} style={{ ...ss.btnO, fontSize:12 }}>Apply overrides</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div
+        className="app-panel-surface"
+        style={{
+          padding:10,
+          borderRadius:10,
+          marginBottom:16,
+          position: isNarrow ? "static" : "sticky",
+          bottom: isNarrow ? undefined : 8,
+          zIndex: 12,
+          boxShadow: hasSelectedPermits ? "0 8px 24px rgba(15,23,42,0.14)" : "none",
+          border: hasSelectedPermits ? "1px solid var(--permit-info-border)" : undefined,
+          background: hasSelectedPermits ? "var(--permit-panel-bg)" : undefined,
+        }}
+      >
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", minWidth:0, width: isNarrow ? "100%" : "auto" }}>
             <button type="button" onClick={toggleSelectAllFiltered} style={{ ...ss.btn, fontSize:12 }}>
               {allFilteredSelected ? "Unselect filtered" : "Select filtered"}
             </button>
@@ -2611,22 +6014,45 @@ export default function PermitSystem() {
               Clear selection
             </button>
             <span style={{ ...ss.chip, fontSize:11 }}>{selectedPermits.length} selected</span>
+            {hasSelectedPermits ? (
+              <span style={{ fontSize:11, color:"var(--color-text-secondary)", overflowWrap:"anywhere", width: isUltraNarrow ? "100%" : "auto" }}>
+                Activate ready: {selectedActivationSummary.activatable}
+                {selectedActivationSummary.warn > 0 ? ` · warn override: ${selectedActivationSummary.warn}` : ""}
+                {selectedActivationSummary.blocked > 0 ? ` · blocked: ${selectedActivationSummary.blocked}` : ""}
+              </span>
+            ) : null}
           </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <button type="button" onClick={bulkApproveSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }}>
-              Bulk approve
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isUltraNarrow ? "1fr" : isNarrow ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,max-content))",
+              gap: 8,
+              width: isNarrow ? "100%" : "auto",
+            }}
+          >
+            <button type="button" onClick={bulkApproveSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
+              {isUltraNarrow ? "Approve selected" : "Bulk approve"}
             </button>
-            <button type="button" onClick={bulkActivateSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }}>
-              Bulk activate
+            <button type="button" onClick={() => void bulkActivateSelected()} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
+              {isUltraNarrow ? "Activate selected" : "Bulk activate"}
             </button>
-            <button type="button" onClick={bulkCloseSelected} disabled={!hasSelectedPermits} style={{ ...ss.btnR, fontSize:12, minHeight:34, padding:"6px 10px", opacity: hasSelectedPermits ? 1 : 0.45 }}>
-              Bulk close
+            <button type="button" onClick={bulkCloseSelected} disabled={!hasSelectedPermits} style={{ ...ss.btnR, fontSize:12, minHeight:38, padding:"6px 10px", opacity: hasSelectedPermits ? 1 : 0.45, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
+              {isUltraNarrow ? "Close selected" : "Bulk close"}
             </button>
-            <button type="button" onClick={bulkExportSelectedCsv} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }}>
-              Export selected CSV
+            <button type="button" onClick={bulkSetIssuerSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
+              {isUltraNarrow ? "Set issuer" : "Bulk set issuer"}
             </button>
-            <button type="button" onClick={bulkDeleteSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595", opacity: hasSelectedPermits ? 1 : 0.45 }}>
-              Delete selected
+            <button type="button" onClick={bulkTagSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
+              {isUltraNarrow ? "Add tag" : "Bulk add tag"}
+            </button>
+            <button type="button" onClick={bulkExportSelectedCsv} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
+              {isUltraNarrow ? "Export CSV" : "Export selected CSV"}
+            </button>
+            <button type="button" onClick={bulkExportSitePackV2} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
+              {isUltraNarrow ? "Site pack" : "Site pack v2"}
+            </button>
+            <button type="button" onClick={bulkDeleteSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595", opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
+              {isUltraNarrow ? "Delete" : "Delete selected"}
             </button>
           </div>
         </div>
@@ -2662,6 +6088,22 @@ export default function PermitSystem() {
         ) : null}
       </div>
 
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:6, flexWrap:"wrap" }}>
+          <div style={{ fontSize:12, fontWeight:600 }}>Integration adapters (AI/Automation readiness)</div>
+          <span style={{ ...ss.chip, fontSize:11 }}>Hybrid mode</span>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:8 }}>
+          {integrationAdapters.map((row) => (
+            <div key={row.channel} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"6px 8px", fontSize:12 }}>
+              <strong>{row.channel}</strong>
+              <div style={{ color:"var(--color-text-secondary)", marginTop:2 }}>{row.enabled ? "enabled" : "placeholder"}</div>
+              <div style={{ color:"var(--color-text-secondary)", marginTop:2 }}>{row.note}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {supabase && (
         <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
@@ -2682,7 +6124,7 @@ export default function PermitSystem() {
                   <option value="">All permits</option>
                   {permits.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.id} - {(PERMIT_TYPES[p.type] || PERMIT_TYPES.general).label}
+                      {p.id} - {(effectivePermitTypes[p.type] || effectivePermitTypes.general).label}
                     </option>
                   ))}
                 </select>
@@ -2914,7 +6356,7 @@ export default function PermitSystem() {
             ) : (
               warRoomAlerts.map((p) => (
                 <div key={p.id} style={{ fontSize:12, padding:"6px 0", borderBottom:"1px solid var(--color-border-tertiary,#e5e5e5)" }}>
-                  <strong>{(PERMIT_TYPES[p.type] || PERMIT_TYPES.general).label}</strong> · {p.location || "Unknown location"}
+                  <strong>{(effectivePermitTypes[p.type] || effectivePermitTypes.general).label}</strong> · {p.location || "Unknown location"}
                   <div style={{ color:"#A32D2D" }}>{derivePermitStatus(p, now) === "expired" ? "Expired" : "Expires within 1 hour"}</div>
                 </div>
               ))
@@ -2924,13 +6366,26 @@ export default function PermitSystem() {
       )}
 
       {permits.length===0 ? (
-        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No permits issued yet.</p>
+        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, background:"var(--permit-panel-bg)" }}>
+          <div style={{ fontSize:28, lineHeight:1, marginBottom:10 }}>[]</div>
+          <p style={{ color:"var(--color-text-primary)", fontSize:14, fontWeight:600, margin:"0 0 6px" }}>No permits yet</p>
+          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>Create your first permit to start review, activation, and compliance workflows.</p>
           <button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnO}>+ Issue first permit</button>
         </div>
+      ) : listSkeleton && permits.length > 0 ? (
+        <div style={{ display:"grid", gap:10, marginBottom:12 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={`permit-skeleton-${i}`} className="app-surface-card" style={{ ...ss.card, height: i === 0 ? 104 : 90, borderRadius:10, background:"linear-gradient(90deg,#f8fafc 25%,#f1f5f9 37%,#f8fafc 63%)", backgroundSize:"400% 100%", animation:"permitSkeletonPulse 1.2s ease infinite" }} />
+          ))}
+          <style>{`@keyframes permitSkeletonPulse{0%{background-position:100% 0}100%{background-position:0 0}}`}</style>
+        </div>
       ) : filtered.length===0 ? (
-        <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, color:"var(--color-text-secondary)", fontSize:13 }}>
-          No permits match your filters.
+        <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, background:"var(--permit-panel-bg)" }}>
+          <p style={{ color:"var(--color-text-primary)", fontSize:14, fontWeight:600, margin:"0 0 6px" }}>No results for current filters</p>
+          <p style={{ color:"var(--color-text-secondary)", fontSize:13, margin:"0 0 10px" }}>Try clearing status/type filters or adjusting search text.</p>
+          <button type="button" onClick={()=>{setSearch("");setFilterType("");setFilterStatus("");setFilterHandoverDue(false);setFilterBlockedNow(false);}} style={{ ...ss.btn, fontSize:12 }}>
+            Clear filters
+          </button>
         </div>
       ) : effectiveViewMode === "wall" ? (
         <PermitLiveWall
@@ -2967,24 +6422,38 @@ export default function PermitSystem() {
           renderPermit={(p) => (
             <PermitCard key={p.id} permit={p}
               simopsConflicts={simopsMap.get(p.id) || []}
+              conflictMatrix={effectiveConflictMatrix}
+              permitTypes={effectivePermitTypes}
+              handoverState={handoverStateForPermit(p, now)}
+              activationHandoverRequirement={handoverRequirementForActivation(p, now)}
+              activationDependencyResult={evaluatePermitDependencies(p, permits, effectiveDependencyRules, { now })}
+              onOpenHandover={openHandoverDialog}
+              cardDensity={cardDensity}
+              onOpenMobileQuickActions={setMobileQuickActionsPermitId}
+              ultraCompact={isUltraNarrow}
               highlight={highlightPermitId === p.id}
               compact={isNarrow}
               selectable={true}
               selected={!!selectedPermitIds[p.id]}
               onToggleSelect={togglePermitSelection}
               onNotify={permitNotifyEnabled ? notifyPermitTeam : undefined}
+              onShareAckLink={sharePermitAckLink}
               onAcknowledge={acknowledgePermit}
+              onConfirmBriefing={confirmPermitBriefing}
               incidents={incidentsByPermit.get(p.id) || []}
               onReportIncident={reportPermitIncident}
               onLoadCloudAudit={loadPermitCloudAudit}
               onEdit={(x)=>setModal({type:"form",data:x})}
-              onClose={closePermit}
+              onClose={requestClosePermit}
               onReopen={reopenPermit}
               onDelete={deletePermit}
               onPreview={previewPermit}
               onPrint={exportPermitPdf}
               onApprove={approvePermit}
               onActivate={activatePermit}
+              onSuspend={suspendPermit}
+              onResume={resumePermit}
+              onExtendRevalidate={extendAndRevalidatePermit}
             />
           )}
         />
@@ -3012,7 +6481,7 @@ export default function PermitSystem() {
                 {fmtDateTime(permit.startDateTime)} → {fmtDateTime(permitEndIso(permit))}
               </div>
               <div>
-                <div style={{ fontSize:13, fontWeight:500 }}>{(PERMIT_TYPES[permit.type] || PERMIT_TYPES.general).label}</div>
+                <div style={{ fontSize:13, fontWeight:500 }}>{(effectivePermitTypes[permit.type] || effectivePermitTypes.general).label}</div>
                 <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>{permit.location || "—"}</div>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
@@ -3031,23 +6500,37 @@ export default function PermitSystem() {
         filtered.map(p=>(
           <PermitCard key={p.id} permit={p}
             simopsConflicts={simopsMap.get(p.id) || []}
+            conflictMatrix={effectiveConflictMatrix}
+            permitTypes={effectivePermitTypes}
+            handoverState={handoverStateForPermit(p, now)}
+            activationHandoverRequirement={handoverRequirementForActivation(p, now)}
+            activationDependencyResult={evaluatePermitDependencies(p, permits, effectiveDependencyRules, { now })}
+            onOpenHandover={openHandoverDialog}
+            cardDensity={cardDensity}
+            onOpenMobileQuickActions={setMobileQuickActionsPermitId}
+            ultraCompact={isUltraNarrow}
             highlight={highlightPermitId === p.id}
             compact={isNarrow}
             selectable={true}
             selected={!!selectedPermitIds[p.id]}
             onToggleSelect={togglePermitSelection}
             onNotify={permitNotifyEnabled ? notifyPermitTeam : undefined}
+            onShareAckLink={sharePermitAckLink}
             onAcknowledge={acknowledgePermit}
+            onConfirmBriefing={confirmPermitBriefing}
             incidents={incidentsByPermit.get(p.id) || []}
             onReportIncident={reportPermitIncident}
             onLoadCloudAudit={loadPermitCloudAudit}
             onEdit={p=>setModal({type:"form",data:p})}
-            onClose={closePermit} onReopen={reopenPermit}
+            onClose={requestClosePermit} onReopen={reopenPermit}
             onDelete={deletePermit}
             onPreview={previewPermit}
             onPrint={exportPermitPdf}
             onApprove={approvePermit}
             onActivate={activatePermit}
+            onSuspend={suspendPermit}
+            onResume={resumePermit}
+            onExtendRevalidate={extendAndRevalidatePermit}
           />
         ))
       )}

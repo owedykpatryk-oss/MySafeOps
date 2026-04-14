@@ -1,4 +1,4 @@
-// Merged hazard library: base + extended + pro (103 hazards, 33 categories)
+// Merged hazard library: base + extended + pro (108+ hazards; categories include Traffic Management TMP)
 import BASE, {
   TRADE_CATEGORIES as BASE_TRADE_CATEGORIES,
   getRiskLevel,

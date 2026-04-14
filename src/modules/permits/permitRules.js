@@ -6,7 +6,9 @@ export function derivePermitStatus(permit, now = new Date()) {
   if (permit?.status === "closed") return "closed";
   if (permit?.status === "draft") return "draft";
   if (permit?.status === "pending_review") return "pending_review";
+  if (permit?.status === "ready_for_review") return "pending_review";
   if (permit?.status === "approved") return "approved";
+  if (permit?.status === "suspended") return "suspended";
   const endIso = permitEndIso(permit);
   if (permit?.status === "active" && endIso && new Date(endIso) < now) return "expired";
   return permit?.status || "active";
