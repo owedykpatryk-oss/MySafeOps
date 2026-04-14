@@ -33,6 +33,7 @@ export function filterModuleTabsByQuery(tabs, rawQuery) {
 /** Flat list for More grid (order within sections below) */
 export const MORE_TABS = [
   { id: "site-map", label: "Site map" },
+  { id: "project-drawings", label: "Project drawings" },
   { id: "method-statement", label: "Method statement" },
   { id: "cdm", label: "CDM compliance" },
   { id: "daily-briefing", label: "Daily briefing" },
@@ -112,6 +113,7 @@ export const MORE_SECTIONS = [
     title: "Site operations",
     ids: [
       "site-map",
+      "project-drawings",
       "method-statement",
       "cdm",
       "daily-briefing",

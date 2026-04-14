@@ -11,6 +11,7 @@ import {
   getWorkerCertAlerts,
 } from "../utils/certifications";
 import { pushRecycleBinItem } from "../utils/recycleBin";
+import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -19,6 +20,124 @@ const load = (key) => loadOrgScoped(key, []);
 const save = (key, data) => saveOrgScoped(key, data);
 
 const genId = () => `w_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const addDaysIso = (days) => {
+  const d = new Date();
+  d.setDate(d.getDate() + Math.max(0, Number(days || 0)));
+  return d.toISOString().slice(0, 10);
+};
+
+const PROJECT_STARTERS = [
+  {
+    id: "general",
+    label: "General construction",
+    defaultPermitFlow: ["hot_work", "excavation", "electrical", "confined_space"],
+    starterChecklist: [
+      "Upload site drawing and mark key zones",
+      "Assign HSE lead and permit approver",
+      "Set project emergency contacts",
+    ],
+    riskHints: ["SIMOPS overlap", "unauthorised access", "temporary works"],
+  },
+  {
+    id: "fitout",
+    label: "Fit-out / interiors",
+    defaultPermitFlow: ["hot_work", "electrical", "loto", "work_at_height"],
+    starterChecklist: [
+      "Coordinate out-of-hours noisy works",
+      "Confirm fire alarm isolation procedure",
+      "Set waste segregation and removal plan",
+    ],
+    riskHints: ["fire load", "dust exposure", "live services"],
+  },
+  {
+    id: "infrastructure",
+    label: "Infrastructure / civils",
+    defaultPermitFlow: ["excavation", "lifting", "confined_space", "dsear"],
+    starterChecklist: [
+      "Plan utility scans and trial holes",
+      "Define traffic and plant segregation",
+      "Prepare adverse weather contingency",
+    ],
+    riskHints: ["underground services", "plant collision", "ground instability"],
+  },
+  {
+    id: "maintenance",
+    label: "Maintenance / shutdown",
+    defaultPermitFlow: ["loto", "electrical", "hot_work", "confined_space"],
+    starterChecklist: [
+      "Create lockout/tagout authority matrix",
+      "Confirm shutdown boundary and handback",
+      "Define permit escalation contacts",
+    ],
+    riskHints: ["residual energy", "restart hazards", "restricted access"],
+  },
+];
+
+function inferProjectStarter(form) {
+  const hay = `${form?.name || ""} ${form?.site || ""} ${form?.address || ""}`.toLowerCase();
+  if (hay.includes("fit") || hay.includes("interior") || hay.includes("refurb")) return "fitout";
+  if (hay.includes("road") || hay.includes("bridge") || hay.includes("drain") || hay.includes("civils")) return "infrastructure";
+  if (hay.includes("shutdown") || hay.includes("maintenance") || hay.includes("service")) return "maintenance";
+  return "general";
+}
+
+function suggestProjectRisks(form) {
+  const starterId = form?.industryStarter || inferProjectStarter(form);
+  const preset = PROJECT_STARTERS.find((p) => p.id === starterId) || PROJECT_STARTERS[0];
+  const address = String(form?.address || "").toLowerCase();
+  const extra = [];
+  if (address.includes("school") || address.includes("hospital")) extra.push("public interface");
+  if (address.includes("city") || address.includes("high street")) extra.push("traffic management");
+  return Array.from(new Set([...(preset.riskHints || []), ...extra])).slice(0, 8);
+}
+
+function projectMissingItems(form) {
+  const missing = [];
+  if (!String(form?.name || "").trim()) missing.push("Project name");
+  if (!String(form?.site || "").trim()) missing.push("Site / client");
+  if (!String(form?.address || "").trim()) missing.push("Address");
+  if (!String(form?.owner || "").trim()) missing.push("Project owner");
+  if (!String(form?.hseLead || "").trim()) missing.push("HSE lead");
+  if (!String(form?.timelineStart || "").trim()) missing.push("Start date");
+  if (!String(form?.timelineEnd || "").trim()) missing.push("Target end date");
+  if ((form?.lat == null || form?.lat === "") || (form?.lng == null || form?.lng === "")) missing.push("Coordinates");
+  return missing;
+}
+
+function projectHealthScore(form) {
+  const checks = [
+    Boolean(String(form?.name || "").trim()),
+    Boolean(String(form?.site || "").trim()),
+    Boolean(String(form?.address || "").trim()),
+    Boolean(String(form?.owner || "").trim()),
+    Boolean(String(form?.hseLead || "").trim()),
+    Boolean(String(form?.timelineStart || "").trim()),
+    Boolean(String(form?.timelineEnd || "").trim()),
+    form?.lat != null && form?.lat !== "" && form?.lng != null && form?.lng !== "",
+    Array.isArray(form?.riskRegister) && form.riskRegister.length > 0,
+    Boolean(String(form?.industryStarter || "").trim()),
+  ];
+  const done = checks.filter(Boolean).length;
+  return Math.round((done / checks.length) * 100);
+}
+
+function buildStartupChecklist(form) {
+  const starterId = form?.industryStarter || inferProjectStarter(form);
+  const preset = PROJECT_STARTERS.find((p) => p.id === starterId) || PROJECT_STARTERS[0];
+  const base = [
+    "Invite site team and assign responsibilities",
+    "Review permit default flow for this project",
+    "Run pre-start safety briefing",
+    ...(preset.starterChecklist || []),
+  ];
+  const missing = projectMissingItems(form).map((m) => `Fill missing: ${m}`);
+  return Array.from(new Set([...base, ...missing])).slice(0, 16).map((text, idx) => ({
+    id: `pc_${Date.now().toString(36)}_${idx}`,
+    text,
+    status: "todo",
+  }));
+}
 
 const ss = { ...ms, btnO: { padding: "10px 14px", borderRadius: 6, border: "0.5px solid #c2410c", background: "#f97316", color: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", minHeight: 44, lineHeight: 1.3 } };
 
@@ -86,7 +205,7 @@ export default function Workers() {
     });
   };
 
-  const saveProject = (form) => {
+  const saveProject = (form, options = {}) => {
     setProjects((prev) => {
       const i = prev.findIndex((x) => x.id === form.id);
       if (i >= 0) {
@@ -97,6 +216,10 @@ export default function Workers() {
       return [form, ...prev];
     });
     setModal(null);
+    if (options.openDrawingEditor) {
+      setWorkspaceNavTarget({ viewId: "project-drawings", projectId: form.id });
+      openWorkspaceView({ viewId: "project-drawings" });
+    }
   };
 
   const removeProject = (id) => {
@@ -245,6 +368,23 @@ export default function Workers() {
             <div style={{ flex: "1 1 200px", minWidth: 0 }}>
               <strong>{p.name || "Unnamed"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{p.site || p.address || ""}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                <span
+                  style={{
+                    ...ss.chip,
+                    fontSize: 11,
+                    background: (p.healthScore || 0) >= 80 ? "#EAF3DE" : (p.healthScore || 0) >= 50 ? "#FAEEDA" : "#FCEBEB",
+                    color: (p.healthScore || 0) >= 80 ? "#27500A" : (p.healthScore || 0) >= 50 ? "#633806" : "#791F1F",
+                  }}
+                >
+                  Health {Number(p.healthScore || 0)}%
+                </span>
+                {Array.isArray(p.startupChecklist) ? (
+                  <span style={{ ...ss.chip, fontSize: 11 }}>
+                    Checklist {p.startupChecklist.filter((x) => x?.status !== "done").length} open
+                  </span>
+                ) : null}
+              </div>
             </div>
             <button type="button" style={ss.btn} onClick={() => setModal({ type: "project", data: p })}>
               Edit
@@ -450,12 +590,41 @@ function WorkerForm({ item, onSave, onClose }) {
 
 function projectFormShape(p) {
   if (!p) {
-    return { id: genId(), name: "", site: "", address: "", lat: "", lng: "" };
+    return {
+      id: genId(),
+      name: "",
+      site: "",
+      address: "",
+      lat: "",
+      lng: "",
+      industryStarter: "general",
+      owner: "",
+      hseLead: "",
+      siteManager: "",
+      contractorLead: "",
+      timelineStart: todayIso(),
+      timelineEnd: addDaysIso(90),
+      riskRegister: [],
+      startupChecklist: [],
+      permitDefaults: { requiredPermitTypes: PROJECT_STARTERS[0].defaultPermitFlow },
+      healthScore: 0,
+      healthMissing: [],
+    };
   }
   return {
     ...p,
     lat: p.lat != null && p.lat !== "" ? String(p.lat) : "",
     lng: p.lng != null && p.lng !== "" ? String(p.lng) : "",
+    industryStarter: p.industryStarter || inferProjectStarter(p),
+    owner: p.owner || "",
+    hseLead: p.hseLead || "",
+    siteManager: p.siteManager || "",
+    contractorLead: p.contractorLead || "",
+    timelineStart: p.timelineStart || todayIso(),
+    timelineEnd: p.timelineEnd || addDaysIso(90),
+    riskRegister: Array.isArray(p.riskRegister) ? p.riskRegister.slice(0, 12) : suggestProjectRisks(p),
+    startupChecklist: Array.isArray(p.startupChecklist) ? p.startupChecklist.slice(0, 30) : [],
+    permitDefaults: p.permitDefaults || { requiredPermitTypes: PROJECT_STARTERS[0].defaultPermitFlow },
   };
 }
 
@@ -463,22 +632,67 @@ function ProjectForm({ item, onSave, onClose }) {
   const [form, setForm] = useState(() => projectFormShape(item));
   const [geoBusy, setGeoBusy] = useState(false);
   const [geoMsg, setGeoMsg] = useState("");
+  const [step, setStep] = useState(1);
+  const totalSteps = 5;
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const missing = projectMissingItems(form);
+  const health = projectHealthScore(form);
+  const starterMeta = PROJECT_STARTERS.find((p) => p.id === form.industryStarter) || PROJECT_STARTERS[0];
 
   useEffect(() => {
     setForm(projectFormShape(item));
+    setStep(1);
   }, [item?.id]);
 
-  const persist = () => {
+  const applyAutoSuggest = () => {
+    const nextStarter = inferProjectStarter(form);
+    const starter = PROJECT_STARTERS.find((p) => p.id === nextStarter) || PROJECT_STARTERS[0];
+    setForm((f) => ({
+      ...f,
+      industryStarter: nextStarter,
+      riskRegister: suggestProjectRisks({ ...f, industryStarter: nextStarter }),
+      permitDefaults: {
+        ...(f.permitDefaults || {}),
+        requiredPermitTypes: starter.defaultPermitFlow,
+      },
+      owner: f.owner || "Project lead",
+      hseLead: f.hseLead || "HSE lead",
+    }));
+  };
+
+  const persist = (options = {}) => {
     const latRaw = String(form.lat ?? "").trim();
     const lngRaw = String(form.lng ?? "").trim();
     const lat = latRaw === "" ? undefined : Number(latRaw);
     const lng = lngRaw === "" ? undefined : Number(lngRaw);
-    onSave({
+    const safeStarter = form.industryStarter || inferProjectStarter(form);
+    const starter = PROJECT_STARTERS.find((p) => p.id === safeStarter) || PROJECT_STARTERS[0];
+    const normalizedRiskRegister =
+      Array.isArray(form.riskRegister) && form.riskRegister.length > 0
+        ? form.riskRegister.slice(0, 12)
+        : suggestProjectRisks({ ...form, industryStarter: safeStarter });
+    const draft = {
       ...form,
+      industryStarter: safeStarter,
+      riskRegister: normalizedRiskRegister,
+      permitDefaults: {
+        ...(form.permitDefaults || {}),
+        requiredPermitTypes: starter.defaultPermitFlow,
+      },
+    };
+    const nextMissing = projectMissingItems(draft);
+    const nextHealth = projectHealthScore(draft);
+    onSave({
+      ...draft,
       lat: lat !== undefined && !Number.isNaN(lat) ? lat : undefined,
       lng: lng !== undefined && !Number.isNaN(lng) ? lng : undefined,
-    });
+      healthScore: nextHealth,
+      healthMissing: nextMissing,
+      startupChecklist:
+        Array.isArray(draft.startupChecklist) && draft.startupChecklist.length > 0
+          ? draft.startupChecklist.slice(0, 30)
+          : buildStartupChecklist(draft),
+    }, options);
   };
 
   const geocode = async () => {
@@ -506,39 +720,161 @@ function ProjectForm({ item, onSave, onClose }) {
   return (
     <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
       <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
-        <h2 style={{ marginTop: 0 }}>{item ? "Edit project" : "New project"}</h2>
-        <label style={ss.lbl}>Project name</label>
-        <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Site / client</label>
-        <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Address</label>
-        <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-          <div>
-            <label style={ss.lbl}>Latitude (optional)</label>
-            <input style={ss.inp} inputMode="decimal" value={form.lat ?? ""} onChange={(e) => set("lat", e.target.value)} placeholder="e.g. 51.5" />
-          </div>
-          <div>
-            <label style={ss.lbl}>Longitude (optional)</label>
-            <input style={ss.inp} inputMode="decimal" value={form.lng ?? ""} onChange={(e) => set("lng", e.target.value)} placeholder="e.g. -0.12" />
-          </div>
-        </div>
-        <div style={{ marginTop: 10 }}>
-          <button type="button" style={ss.btn} disabled={geoBusy} onClick={geocode}>
-            {geoBusy ? "Looking up…" : "Fill lat/lng from address"}
+        <h2 style={{ marginTop: 0 }}>{item ? "Edit project wizard" : "New project wizard"}</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <span style={ss.chip}>Step {step}/{totalSteps}</span>
+          <span style={{ ...ss.chip, background: health >= 80 ? "#EAF3DE" : health >= 50 ? "#FAEEDA" : "#FCEBEB", color: health >= 80 ? "#27500A" : health >= 50 ? "#633806" : "#791F1F" }}>
+            Health score {health}%
+          </span>
+          <button type="button" style={{ ...ss.btn, marginLeft: "auto" }} onClick={applyAutoSuggest}>
+            Auto-suggest
           </button>
-          {geoMsg && <span style={{ marginLeft: 10, fontSize: 12, color: "#b45309" }}>{geoMsg}</span>}
         </div>
+
+        {step === 1 ? (
+          <>
+            <label style={ss.lbl}>Project name</label>
+            <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} />
+            <label style={{ ...ss.lbl, marginTop: 10 }}>Site / client</label>
+            <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)} />
+          </>
+        ) : null}
+
+        {step === 2 ? (
+          <>
+            <label style={ss.lbl}>Industry starter</label>
+            <select
+              style={ss.inp}
+              value={form.industryStarter || "general"}
+              onChange={(e) => {
+                const id = e.target.value;
+                const preset = PROJECT_STARTERS.find((p) => p.id === id) || PROJECT_STARTERS[0];
+                setForm((f) => ({
+                  ...f,
+                  industryStarter: id,
+                  permitDefaults: { ...(f.permitDefaults || {}), requiredPermitTypes: preset.defaultPermitFlow },
+                }));
+              }}
+            >
+              {PROJECT_STARTERS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+            <label style={{ ...ss.lbl, marginTop: 10 }}>Project owner</label>
+            <input style={ss.inp} value={form.owner || ""} onChange={(e) => set("owner", e.target.value)} placeholder="e.g. PM / contract manager" />
+            <label style={{ ...ss.lbl, marginTop: 10 }}>HSE lead</label>
+            <input style={ss.inp} value={form.hseLead || ""} onChange={(e) => set("hseLead", e.target.value)} />
+            <label style={{ ...ss.lbl, marginTop: 10 }}>Site manager</label>
+            <input style={ss.inp} value={form.siteManager || ""} onChange={(e) => set("siteManager", e.target.value)} />
+            <label style={{ ...ss.lbl, marginTop: 10 }}>Main contractor lead</label>
+            <input style={ss.inp} value={form.contractorLead || ""} onChange={(e) => set("contractorLead", e.target.value)} />
+          </>
+        ) : null}
+
+        {step === 3 ? (
+          <>
+            <label style={ss.lbl}>Address</label>
+            <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+              <div>
+                <label style={ss.lbl}>Latitude (optional)</label>
+                <input style={ss.inp} inputMode="decimal" value={form.lat ?? ""} onChange={(e) => set("lat", e.target.value)} placeholder="e.g. 51.5" />
+              </div>
+              <div>
+                <label style={ss.lbl}>Longitude (optional)</label>
+                <input style={ss.inp} inputMode="decimal" value={form.lng ?? ""} onChange={(e) => set("lng", e.target.value)} placeholder="e.g. -0.12" />
+              </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <button type="button" style={ss.btn} disabled={geoBusy} onClick={geocode}>
+                {geoBusy ? "Looking up…" : "Fill lat/lng from address"}
+              </button>
+              {geoMsg && <span style={{ marginLeft: 10, fontSize: 12, color: "#b45309" }}>{geoMsg}</span>}
+            </div>
+          </>
+        ) : null}
+
+        {step === 4 ? (
+          <>
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+              <div>
+                <label style={ss.lbl}>Target start</label>
+                <input type="date" style={ss.inp} value={form.timelineStart || ""} onChange={(e) => set("timelineStart", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Target end</label>
+                <input type="date" style={ss.inp} value={form.timelineEnd || ""} onChange={(e) => set("timelineEnd", e.target.value)} />
+              </div>
+            </div>
+            <label style={{ ...ss.lbl, marginTop: 10 }}>Risk hints (editable)</label>
+            <textarea
+              style={{ ...ss.inp, minHeight: 84, resize: "vertical" }}
+              value={(form.riskRegister || []).join("\n")}
+              onChange={(e) =>
+                set(
+                  "riskRegister",
+                  e.target.value
+                    .split(/\r?\n/)
+                    .map((x) => x.trim())
+                    .filter(Boolean)
+                    .slice(0, 12)
+                )
+              }
+              placeholder="One risk per line"
+            />
+          </>
+        ) : null}
+
+        {step === 5 ? (
+          <>
+            <div style={{ fontSize: 13, marginBottom: 8 }}>
+              <strong>Starter:</strong> {starterMeta.label}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Default permit flow: {(starterMeta.defaultPermitFlow || []).join(", ")}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 12 }}>
+              <strong>Missing before go-live:</strong>{" "}
+              {missing.length === 0 ? (
+                <span style={{ color: "#27500A" }}>none</span>
+              ) : (
+                <span style={{ color: "#791F1F" }}>{missing.join(", ")}</span>
+              )}
+            </div>
+            <div style={{ marginTop: 10, border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, padding: 10 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Generated startup checklist</div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
+                {buildStartupChecklist(form).slice(0, 8).map((it) => (
+                  <li key={it.id}>{it.text}</li>
+                ))}
+              </ul>
+            </div>
+          </>
+        ) : null}
+
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 10, lineHeight: 1.45 }}>
-          Coordinates power the <strong>Site map</strong> module. You can paste OS grid converted to decimal degrees or use the button (OpenStreetMap Nominatim).
+          Wizard stores project defaults for permits and gives readiness insight before launch.
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-          <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" style={ss.btnP} onClick={persist}>
-            Save
-          </button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginTop: 16 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" style={ss.btn} onClick={() => setStep((s) => Math.max(1, s - 1))} disabled={step <= 1}>
+              Back
+            </button>
+            <button type="button" style={ss.btn} onClick={() => setStep((s) => Math.min(totalSteps, s + 1))} disabled={step >= totalSteps}>
+              Next
+            </button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" style={ss.btn} onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" style={ss.btnO} onClick={() => persist({ openDrawingEditor: true })}>
+              Save + drawing editor
+            </button>
+            <button type="button" style={ss.btnP} onClick={persist}>
+              Save
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -59,15 +59,26 @@ export function initSignatureChain(type, existing = []) {
   return getRequiredSignatureRoles(type).map((role) => ({
     role,
     signedBy: existingByRole[role]?.signedBy || "",
+    signedByWorkerId: existingByRole[role]?.signedByWorkerId || "",
     signedAt: existingByRole[role]?.signedAt || "",
     note: existingByRole[role]?.note || "",
+    signatureImageDataUrl: existingByRole[role]?.signatureImageDataUrl || "",
   }));
 }
 
-export function signPermitRole(draft, role, signedBy, note = "") {
+export function signPermitRole(draft, role, signedBy, note = "", signatureImageDataUrl = "", signedByWorkerId = "") {
   const now = new Date().toISOString();
   const nextSignatures = initSignatureChain(draft.type, draft.signatures).map((s) =>
-    s.role === role ? { ...s, signedBy: cleanText(signedBy), signedAt: now, note: cleanText(note) } : s
+    s.role === role
+      ? {
+          ...s,
+          signedBy: cleanText(signedBy),
+          signedByWorkerId: cleanText(signedByWorkerId),
+          signedAt: now,
+          note: cleanText(note),
+          signatureImageDataUrl: String(signatureImageDataUrl || s.signatureImageDataUrl || ""),
+        }
+      : s
   );
   return { ...draft, signatures: nextSignatures };
 }
@@ -276,6 +287,7 @@ function formatRoles(roles) {
  *   complianceResult?: { legalReady?: boolean, hardStops?: string[] },
  *   conflictResult?: { outcome?: "allow"|"warn"|"block", blockingConflicts?: any[], warningConflicts?: any[] },
  *   warnConflictOverride?: { reason?: string, approvedBy?: string, approvedAt?: string },
+ *   allowUnsignedSignatures?: boolean,
  *   handoverRequirement?: { required?: boolean, missing?: boolean, reason?: string },
  *   dependencyResult?: { required?: boolean, missing?: Array<{ requiresActiveType?: string, reason?: string }> }
  * }} options
@@ -296,7 +308,7 @@ export function evaluatePermitActionGate(permit, action, options = {}) {
   }
   if (action === "activate") {
     const unsigned = unsignedSignatureRoles(permit);
-    if (unsigned.length) {
+    if (unsigned.length && options.allowUnsignedSignatures !== true) {
       return {
         allowed: false,
         code: "signatures",

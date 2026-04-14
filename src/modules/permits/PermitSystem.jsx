@@ -24,7 +24,7 @@ import PermitLiveWall from "./components/PermitLiveWall";
 import { createDefaultChecklistItems, normalizeChecklistItems, normalizeChecklistState } from "./permitChecklistUtils";
 import { findSimopsConflicts, buildSimopsConflictMap } from "./permitSimops";
 import { evaluatePermitTypeConflicts, PERMIT_CONFLICT_MATRIX, normalizeConflictPair } from "./permitConflictMatrix";
-import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
+import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { getOrgId } from "../../utils/orgStorage";
 import { mirrorPermitsToSupabase } from "../../utils/permitSupabaseMirror";
 import {
@@ -55,6 +55,13 @@ import {
   addPlanEmergencyAsset,
   addPlanEscapeRoute,
 } from "./permitPlanOverlayRegistry";
+import {
+  PROJECT_DRAWING_OBJECT_TYPES,
+  drawingObjectLabel,
+  drawingObjectTypeMeta,
+  listProjectDrawingObjects,
+  objectsForProject,
+} from "./projectDrawingRegistry";
 import { buildPermitSlaQueue, buildPermitDigest } from "./permitAutomationSla";
 import { buildPermitRiskInsights } from "./permitRiskIntelligence";
 import {
@@ -76,6 +83,7 @@ import {
 } from "./permitAdvancedEngine";
 import { evaluatePermitHandoverRequirement, latestCompletedHandover, normalizeShiftHours } from "./permitHandover";
 import { evaluatePermitDependencies, mergeDependencyRules, normalizeDependencyRules } from "./permitDependencyRules";
+import { evaluatePermitConditionalRules, normalizePermitConditionalRules } from "./permitConditionalRules";
 import { useApp } from "../../context/AppContext";
 import {
   suggestPermitDescriptionText,
@@ -411,6 +419,30 @@ function isWorkflowRoleAllowed(targetState, role, rolePolicy) {
 
 const permitPersonLabel = (w) => `${w.name || ""}${w.role ? ` — ${w.role}` : ""}`.trim();
 const PERMIT_PREFS_KEY = "permit_form_prefs";
+const PERMIT_EVIDENCE_NOTE_SNIPPETS_KEY = "permit_evidence_note_snippets_v1";
+const PERMIT_CONDITIONS_SNIPPETS_KEY = "permit_conditions_snippets_v1";
+
+function certificationDisplayLabel(cert) {
+  if (!cert) return "";
+  return String(cert.label || cert.type || cert.name || cert.certification || cert.code || "").trim();
+}
+
+function loadSnippetList(key) {
+  try {
+    const rows = JSON.parse(localStorage.getItem(key) || "[]");
+    if (!Array.isArray(rows)) return [];
+    return rows.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 24);
+  } catch {
+    return [];
+  }
+}
+
+function saveSnippetToList(key, text) {
+  const clean = String(text || "").trim();
+  if (!clean) return;
+  const next = [clean, ...loadSnippetList(key).filter((x) => x.toLowerCase() !== clean.toLowerCase())].slice(0, 24);
+  localStorage.setItem(key, JSON.stringify(next));
+}
 
 function pickProjectLocation(project) {
   if (!project) return "";
@@ -423,6 +455,8 @@ function clonePermitForPrefill(permit, fallbackType) {
     type: permit.type || fallbackType || "hot_work",
     projectId: permit.projectId || "",
     location: permit.location || "",
+    locationObjectId: permit.locationObjectId || "",
+    locationObjectType: permit.locationObjectType || "",
     description: permit.description || "",
     issuedTo: permit.issuedTo || "",
     issuedBy: permit.issuedBy || "",
@@ -472,6 +506,122 @@ const PERMIT_THEME_MODES = ["auto", "light", "dark"];
 const PERMIT_WORKFLOW_OVERRIDES_KEY = "permit_workflow_overrides_v1";
 const PERMIT_WORKFLOW_ROLE_OVERRIDES_KEY = "permit_workflow_role_overrides_v1";
 const PERMIT_DEPENDENCY_RULE_OVERRIDES_KEY = "permit_dependency_rule_overrides_v1";
+const PERMIT_FORM_DEFAULTS_KEY = "permit_form_defaults_v1";
+const PERMIT_FORM_FIELD_OVERRIDES_KEY = "permit_form_field_overrides_v1";
+const PERMIT_CONDITIONAL_RULES_KEY = "permit_conditional_rules_v1";
+const PERMIT_RECENT_LOCATIONS_KEY = "permit_recent_locations_v1";
+const DEFAULT_PERMIT_FORM_DEFAULTS = {
+  defaultIssuedBy: "",
+  defaultIssuedTo: "",
+  defaultAuthorisingRole: "",
+  defaultValidityHours: 8,
+  signaturePolicy: "allow_later",
+  requireBriefingBeforeIssue: false,
+  requireEvidencePhotoBeforeIssue: false,
+  defaultConditionsTemplate: "",
+  defaultEvidenceNotesTemplate: "",
+};
+
+const PERMIT_FIELD_CATALOG = [
+  { id: "description", section: "Scope", label: "Description of work", type: "textarea", defaultRequired: true, defaultPlaceholder: "Describe the specific work to be carried out under this permit…", defaultHelp: "Short, clear work scope in plain language.", defaultMaxLength: 1200 },
+  { id: "location", section: "Scope", label: "Location", type: "text", defaultRequired: true, defaultPlaceholder: "Where will work be carried out?", defaultHelp: "Use exact area/zone reference for traceability.", defaultMaxLength: 240 },
+  { id: "linkedRamsId", section: "Scope", label: "Linked RAMS", type: "select", defaultRequired: false, defaultPlaceholder: "", defaultHelp: "Recommended for stronger legal context.", defaultMaxLength: 0 },
+  { id: "issuedTo", section: "People", label: "Permit issued to", type: "person", defaultRequired: true, defaultPlaceholder: "Name of person receiving permit", defaultHelp: "Worker responsible for permit execution.", defaultMaxLength: 120 },
+  { id: "issuedBy", section: "People", label: "Issued by", type: "person", defaultRequired: true, defaultPlaceholder: "Authorised person name", defaultHelp: "Authorised issuer approving the task scope.", defaultMaxLength: 120 },
+  { id: "authorisedByRole", section: "People", label: "Authorising role / competency reference", type: "text", defaultRequired: false, defaultPlaceholder: "e.g. Competent person (electrical), AP lifting", defaultHelp: "Role or competency baseline for issuer.", defaultMaxLength: 220 },
+  { id: "startDateTime", section: "Timing", label: "Start date / time", type: "date", defaultRequired: true, defaultPlaceholder: "", defaultHelp: "Planned safe start window.", defaultMaxLength: 0 },
+  { id: "endDateTime", section: "Timing", label: "Expiry date / time", type: "date", defaultRequired: true, defaultPlaceholder: "", defaultHelp: "Permit validity end; must be after start.", defaultMaxLength: 0 },
+  { id: "briefingConfirmedAt", section: "Evidence", label: "Briefing confirmed at", type: "date", defaultRequired: false, defaultPlaceholder: "", defaultHelp: "Record briefing completion timestamp.", defaultMaxLength: 0 },
+  { id: "evidencePhotoUrl", section: "Evidence", label: "Site evidence photo", type: "photo", defaultRequired: false, defaultPlaceholder: "https://…", defaultHelp: "Attach direct URL or upload image below.", defaultMaxLength: 1200 },
+  { id: "evidenceNotes", section: "Evidence", label: "Evidence notes", type: "textarea", defaultRequired: false, defaultPlaceholder: "Toolbox talk reference, barrier ID, etc.", defaultHelp: "Reference IDs and evidence context.", defaultMaxLength: 1200 },
+  { id: "notes", section: "Conditions", label: "Additional conditions / notes", type: "textarea", defaultRequired: false, defaultPlaceholder: "Any specific conditions, restrictions or additional requirements…", defaultHelp: "Restrictions and special controls for this permit.", defaultMaxLength: 2000 },
+];
+
+function normalizePermitFieldOverrides(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const out = {};
+  Object.entries(raw).forEach(([typeKey, fields]) => {
+    if (!fields || typeof fields !== "object" || Array.isArray(fields)) return;
+    const cleanedFields = {};
+    Object.entries(fields).forEach(([fieldId, cfg]) => {
+      if (!cfg || typeof cfg !== "object") return;
+      const entry = {};
+      if (cfg.required != null) entry.required = Boolean(cfg.required);
+      if (cfg.placeholder != null) entry.placeholder = String(cfg.placeholder).slice(0, 220);
+      if (cfg.helpText != null) entry.helpText = String(cfg.helpText).slice(0, 240);
+      if (cfg.maxLength != null) {
+        const n = Number(cfg.maxLength);
+        if (Number.isFinite(n) && n > 0) entry.maxLength = Math.max(20, Math.min(5000, Math.round(n)));
+      }
+      cleanedFields[fieldId] = entry;
+    });
+    out[String(typeKey || "").toLowerCase()] = cleanedFields;
+  });
+  return out;
+}
+
+function resolvePermitFieldConfig(type, overrides) {
+  const typeKey = String(type || "general").toLowerCase();
+  const ov = normalizePermitFieldOverrides(overrides);
+  const typeOverrides = ov[typeKey] || {};
+  const sharedOverrides = ov._all || {};
+  const out = {};
+  PERMIT_FIELD_CATALOG.forEach((field) => {
+    const patch = { ...(sharedOverrides[field.id] || {}), ...(typeOverrides[field.id] || {}) };
+    out[field.id] = {
+      ...field,
+      required: patch.required == null ? Boolean(field.defaultRequired) : Boolean(patch.required),
+      placeholder: patch.placeholder || field.defaultPlaceholder || "",
+      helpText: patch.helpText || field.defaultHelp || "",
+      maxLength: patch.maxLength || field.defaultMaxLength || 0,
+    };
+  });
+  return out;
+}
+
+function normalizePermitFormDefaults(raw) {
+  const src = raw && typeof raw === "object" ? raw : {};
+  const hoursNum = Number(src.defaultValidityHours);
+  const signaturePolicy = String(src.signaturePolicy || "").toLowerCase() === "required_now" ? "required_now" : "allow_later";
+  return {
+    ...DEFAULT_PERMIT_FORM_DEFAULTS,
+    defaultIssuedBy: String(src.defaultIssuedBy || "").slice(0, 120),
+    defaultIssuedTo: String(src.defaultIssuedTo || "").slice(0, 120),
+    defaultAuthorisingRole: String(src.defaultAuthorisingRole || "").slice(0, 220),
+    defaultValidityHours: Number.isFinite(hoursNum) ? Math.max(1, Math.min(24, Math.round(hoursNum))) : 8,
+    signaturePolicy,
+    requireBriefingBeforeIssue: Boolean(src.requireBriefingBeforeIssue),
+    requireEvidencePhotoBeforeIssue: Boolean(src.requireEvidencePhotoBeforeIssue),
+    defaultConditionsTemplate: String(src.defaultConditionsTemplate || "").slice(0, 1000),
+    defaultEvidenceNotesTemplate: String(src.defaultEvidenceNotesTemplate || "").slice(0, 1000),
+  };
+}
+
+function normalizeRecentPermitLocations(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const location = String(row.location || "").trim().slice(0, 240);
+      if (!location) return null;
+      return {
+        projectId: String(row.projectId || ""),
+        location,
+        locationObjectId: String(row.locationObjectId || ""),
+        locationObjectType: String(row.locationObjectType || ""),
+        at: String(row.at || new Date().toISOString()),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 60);
+}
+
+function recentLocationOptionLabel(row) {
+  if (!row) return "";
+  const typeLabel = drawingObjectTypeMeta(row.locationObjectType)?.label;
+  const suffix = typeLabel ? ` (${typeLabel})` : "";
+  return `${row.location}${suffix}`;
+}
 const DEFAULT_PERMIT_WORKFLOW_POLICY = {
   draft: ["ready_for_review", "issued", "closed"],
   ready_for_review: ["approved", "draft", "closed"],
@@ -513,6 +663,42 @@ function dateDaysAgoValue(days) {
   const d = new Date();
   d.setDate(d.getDate() - Math.max(0, Number(days || 0)));
   return d.toISOString().slice(0, 10);
+}
+
+const PERMIT_VERSION_DIFF_FIELDS = [
+  "status",
+  "type",
+  "projectId",
+  "location",
+  "description",
+  "issuedTo",
+  "issuedBy",
+  "startDateTime",
+  "endDateTime",
+  "notes",
+  "linkedRamsId",
+];
+
+function createPermitVersionEntry(previousPermit, nextPermit, actor, reason = "") {
+  if (!previousPermit || typeof previousPermit !== "object") return null;
+  const diffKeys = PERMIT_VERSION_DIFF_FIELDS.filter(
+    (key) => JSON.stringify(previousPermit?.[key] ?? null) !== JSON.stringify(nextPermit?.[key] ?? null)
+  );
+  return {
+    id: `pv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    at: new Date().toISOString(),
+    by: String(actor || "unknown").slice(0, 120),
+    reason: String(reason || "").slice(0, 220),
+    diffKeys,
+    snapshot: previousPermit,
+  };
+}
+
+function hasMaterialPermitChanges(previousPermit, nextPermit) {
+  if (!previousPermit || !nextPermit) return false;
+  return PERMIT_VERSION_DIFF_FIELDS.some(
+    (key) => JSON.stringify(previousPermit?.[key] ?? null) !== JSON.stringify(nextPermit?.[key] ?? null)
+  );
 }
 
 
@@ -565,17 +751,34 @@ function PermitForm({
   permitTypes = PERMIT_TYPES,
   handoverShiftHours = [6, 18],
   dependencyRules = {},
+  orgPermitDefaults = DEFAULT_PERMIT_FORM_DEFAULTS,
+  permitFieldOverrides = {},
+  conditionalRules = [],
 }) {
   const projects = load("mysafeops_projects",[]);
   const workers = load("mysafeops_workers",[]);
   const ramsDocs = load("rams_builder_docs", []);
   const permitPrefs = load(PERMIT_PREFS_KEY, {});
   const org = (() => { try { return JSON.parse(localStorage.getItem("mysafeops_org_settings")||"{}"); } catch { return {}; } })();
+  const formDefaults = normalizePermitFormDefaults(orgPermitDefaults);
   const flags = isFeatureEnabled("permits_template_builder_v2");
 
   const defaultType = permit?.type || "hot_work";
   const [type, setType] = useState(defaultType);
   const def = permitTypes[type] || permitTypes.general;
+  const fieldConfig = useMemo(
+    () => resolvePermitFieldConfig(type, permitFieldOverrides),
+    [type, permitFieldOverrides]
+  );
+  const getFieldConfig = useCallback(
+    (fieldId) => fieldConfig[fieldId] || resolvePermitFieldConfig(type, {})[fieldId] || { required: false, placeholder: "", helpText: "", maxLength: 0, label: fieldId },
+    [fieldConfig, type]
+  );
+  const isFieldRequired = useCallback((fieldId) => Boolean(getFieldConfig(fieldId)?.required), [getFieldConfig]);
+  const fieldLabel = useCallback(
+    (fieldId, fallback) => `${getFieldConfig(fieldId)?.label || fallback}${isFieldRequired(fieldId) ? " *" : ""}`,
+    [getFieldConfig, isFieldRequired]
+  );
   const typeMeta = getTypeComplianceMeta(type);
   const initChecklist = (items) => Object.fromEntries((items || []).map((item) => [item.id, false]));
   const template = getTemplateForType(defaultType, permitTypes);
@@ -585,10 +788,12 @@ function PermitForm({
 
   const blank = {
     id:genId(), type, projectId:"", location:"",
-    description:"", issuedTo:"", issuedBy: org.defaultLeadEngineer || permitPrefs.issuedBy || "",
+    locationObjectId: "",
+    locationObjectType: "",
+    description:"", issuedTo: formDefaults.defaultIssuedTo || "", issuedBy: formDefaults.defaultIssuedBy || org.defaultLeadEngineer || permitPrefs.issuedBy || "",
     linkedRamsId: "",
     startDateTime: new Date().toISOString(),
-    endDateTime: new Date(Date.now()+8*3600000).toISOString(),
+    endDateTime: new Date(Date.now() + formDefaults.defaultValidityHours * 3600000).toISOString(),
     checklistItems: initialChecklistItems,
     checklist: initChecklist(initialChecklistItems),
     extraFields:{ dynamic:{} }, status:"draft",
@@ -597,10 +802,10 @@ function PermitForm({
     templateId: template.templateId || `permit.${defaultType}.default`,
     legalContentOwner: "HSE / Legal Reviewer",
     createdAt: new Date().toISOString(),
-    notes:"",
-    authorisedByRole: "",
+    notes: formDefaults.defaultConditionsTemplate || "",
+    authorisedByRole: formDefaults.defaultAuthorisingRole || "",
     briefingConfirmedAt: "",
-    evidenceNotes: "",
+    evidenceNotes: formDefaults.defaultEvidenceNotesTemplate || "",
     evidencePhotoUrl: "",
     evidencePhotoStoragePath: "",
     workflow: { state: "draft", history: [] },
@@ -621,6 +826,8 @@ function PermitForm({
       type: permitType,
       checklistItems,
       checklist: normalizeChecklistState(permit.checklist, checklistItems),
+      locationObjectId: permit.locationObjectId || "",
+      locationObjectType: permit.locationObjectType || "",
       templateVersion: permit.templateVersion || 1,
       matrixVersion: permit.matrixVersion || "uk-v2",
       templateId: permit.templateId || `permit.${permitType}.default`,
@@ -642,6 +849,49 @@ function PermitForm({
     if (permit) return matchWorkerPick(permit.issuedBy, workers);
     return matchWorkerPick(org.defaultLeadEngineer || "", workers);
   });
+  const [allowSignLater, setAllowSignLater] = useState(() => {
+    if (permit && permit.allowSignLater != null) return Boolean(permit.allowSignLater);
+    return formDefaults.signaturePolicy !== "required_now";
+  });
+  const projectDrawingObjects = useMemo(
+    () => objectsForProject(form.projectId, listProjectDrawingObjects()),
+    [form.projectId]
+  );
+  const [locationObjectTypeFilter, setLocationObjectTypeFilter] = useState("all");
+  const [recentLocations, setRecentLocations] = useState(() =>
+    normalizeRecentPermitLocations(load(PERMIT_RECENT_LOCATIONS_KEY, []))
+  );
+  const filteredProjectDrawingObjects = useMemo(
+    () =>
+      projectDrawingObjects.filter((row) =>
+        locationObjectTypeFilter === "all" ? true : row.type === locationObjectTypeFilter
+      ),
+    [projectDrawingObjects, locationObjectTypeFilter]
+  );
+  const selectedLocationObject = useMemo(
+    () => projectDrawingObjects.find((row) => row.id === form.locationObjectId) || null,
+    [projectDrawingObjects, form.locationObjectId]
+  );
+  const drawingObjectsForPicker = useMemo(() => {
+    if (!selectedLocationObject) return filteredProjectDrawingObjects;
+    if (filteredProjectDrawingObjects.some((row) => row.id === selectedLocationObject.id)) {
+      return filteredProjectDrawingObjects;
+    }
+    return [selectedLocationObject, ...filteredProjectDrawingObjects];
+  }, [filteredProjectDrawingObjects, selectedLocationObject]);
+  const recentProjectLocations = useMemo(
+    () =>
+      recentLocations.filter((row) =>
+        form.projectId ? row.projectId === form.projectId : row.projectId === ""
+      ),
+    [recentLocations, form.projectId]
+  );
+  const [signatureDialog, setSignatureDialog] = useState(null);
+  const signatureCanvasRef = useRef(null);
+  const signatureDrawingRef = useRef(false);
+  const signaturePointerRef = useRef(null);
+  const [evidenceNoteSnippets, setEvidenceNoteSnippets] = useState(() => loadSnippetList(PERMIT_EVIDENCE_NOTE_SNIPPETS_KEY));
+  const [conditionSnippets, setConditionSnippets] = useState(() => loadSnippetList(PERMIT_CONDITIONS_SNIPPETS_KEY));
   const [wizardStep, setWizardStep] = useState(1);
   const baselineRef = useRef(null);
   const formSnapshotStr = useCallback(
@@ -651,9 +901,10 @@ function PermitForm({
         form,
         issuedToPick,
         issuedByPick,
+        allowSignLater,
         wizardStep,
       }),
-    [type, form, issuedToPick, issuedByPick, wizardStep]
+    [type, form, issuedToPick, issuedByPick, allowSignLater, wizardStep]
   );
   useEffect(() => {
     baselineRef.current = formSnapshotStr();
@@ -671,6 +922,9 @@ function PermitForm({
   useEffect(() => {
     savePermitComplianceProfiles(complianceProfiles);
   }, [complianceProfiles]);
+  useEffect(() => {
+    setLocationObjectTypeFilter("all");
+  }, [form.projectId]);
   const tryClose = () => {
     if (dirty && !window.confirm("Discard unsaved permit changes?")) return;
     onClose();
@@ -688,16 +942,244 @@ function PermitForm({
         type
       )
     );
+  const applyQualityAutofix = (rec) => {
+    const fix = rec?.autofix;
+    if (!fix || typeof fix !== "object") return;
+    if (fix.type === "append_notes") {
+      const next = [String(form.notes || "").trim(), String(fix.text || "").trim()].filter(Boolean).join("\n");
+      set("notes", next);
+      return;
+    }
+    if (fix.type === "append_evidence") {
+      const next = [String(form.evidenceNotes || "").trim(), String(fix.text || "").trim()].filter(Boolean).join("\n");
+      set("evidenceNotes", next);
+      return;
+    }
+    if (fix.type === "set_dynamic" && fix.key) {
+      setDynamic(String(fix.key), fix.value == null ? "" : fix.value);
+    }
+  };
 
   useEffect(() => {
     setForm((f) => normalizeAdvancedPermit(f, type));
   }, [type]);
 
-  const signRole = (role) => {
-    const who = window.prompt(`Sign as ${role}:`, form.issuedBy || form.issuedTo || "") || "";
-    if (!who.trim()) return;
-    const note = window.prompt("Optional signature note:", "") || "";
-    setForm((f) => normalizeAdvancedPermit(signPermitRole(f, role, who, note), type));
+  const assignMeLabel = String(org.defaultLeadEngineer || permitPrefs.issuedBy || "").trim();
+  const findWorkerById = useCallback((id) => workers.find((w) => w.id === id) || null, [workers]);
+  const clearSignatureCanvas = useCallback(() => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.save();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    signatureDrawingRef.current = false;
+  }, []);
+  const resizeSignatureCanvas = useCallback(() => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const ratio = typeof window !== "undefined" ? Math.max(1, window.devicePixelRatio || 1) : 1;
+    const cssWidth = canvas.clientWidth || 420;
+    const cssHeight = canvas.clientHeight || 140;
+    canvas.width = Math.floor(cssWidth * ratio);
+    canvas.height = Math.floor(cssHeight * ratio);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    clearSignatureCanvas();
+  }, [clearSignatureCanvas]);
+  useEffect(() => {
+    if (!signatureDialog) return;
+    resizeSignatureCanvas();
+    const existing = String(signatureDialog.signatureImageDataUrl || "");
+    if (!existing) return;
+    const canvas = signatureCanvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.clientWidth || 420, canvas.clientHeight || 140);
+      signatureDrawingRef.current = true;
+    };
+    img.src = existing;
+  }, [signatureDialog, resizeSignatureCanvas]);
+  const canvasPoint = (event) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  };
+  const handleSignaturePointerDown = (event) => {
+    const canvas = signatureCanvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    const pt = canvasPoint(event);
+    if (!ctx || !pt) return;
+    event.preventDefault();
+    signaturePointerRef.current = pt;
+    signatureDrawingRef.current = true;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(pt.x, pt.y);
+  };
+  const handleSignaturePointerMove = (event) => {
+    const canvas = signatureCanvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!ctx || !signaturePointerRef.current) return;
+    const pt = canvasPoint(event);
+    if (!pt) return;
+    event.preventDefault();
+    ctx.lineTo(pt.x, pt.y);
+    ctx.stroke();
+    signaturePointerRef.current = pt;
+  };
+  const handleSignaturePointerUp = (event) => {
+    if (signaturePointerRef.current) event.preventDefault();
+    signaturePointerRef.current = null;
+  };
+  const commitSignatureDialog = () => {
+    if (!signatureDialog) return;
+    const signerWorker = findWorkerById(signatureDialog.signedByWorkerId);
+    if (!signerWorker) {
+      window.alert("Select a worker for signature.");
+      return;
+    }
+    const allowed = Array.isArray(signatureDialog.allowedWorkerIds) ? signatureDialog.allowedWorkerIds : [];
+    if (allowed.length > 0 && !allowed.includes(signerWorker.id)) {
+      window.alert("This role can only be signed by assigned worker.");
+      return;
+    }
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return;
+    const hasDrawing = signatureDrawingRef.current;
+    if (!hasDrawing) {
+      window.alert("Draw signature on the pad before saving.");
+      return;
+    }
+    const signatureImageDataUrl = canvas.toDataURL("image/png");
+    setForm((f) =>
+      normalizeAdvancedPermit(
+        signPermitRole(
+          f,
+          signatureDialog.role,
+          permitPersonLabel(signerWorker) || signerWorker.name,
+          signatureDialog.note || "",
+          signatureImageDataUrl,
+          signerWorker.id
+        ),
+        type
+      )
+    );
+    setSignatureDialog(null);
+  };
+  const signRole = (role, preferredWorkerId = "") => {
+    const roleKey = String(role || "").toLowerCase();
+    const allowedWorkers =
+      roleKey === "issuer"
+        ? selectedIssuerWorker
+          ? [selectedIssuerWorker]
+          : []
+        : roleKey === "receiver"
+          ? selectedIssuedWorker
+            ? [selectedIssuedWorker]
+            : []
+          : workers;
+    if (!allowedWorkers.length) {
+      if (roleKey === "issuer" || roleKey === "receiver") {
+        window.alert("For issuer/receiver signature choose an assigned worker (not custom text).");
+      } else {
+        window.alert("No workers available for signature.");
+      }
+      return;
+    }
+    const existing = (form.signatures || []).find((s) => s.role === role) || {};
+    const fallbackWorkerId = existing.signedByWorkerId || preferredWorkerId || allowedWorkers[0]?.id || "";
+    setSignatureDialog({
+      role,
+      note: String(existing.note || ""),
+      signedByWorkerId: fallbackWorkerId,
+      allowedWorkerIds: allowedWorkers.map((w) => w.id),
+      signatureImageDataUrl: String(existing.signatureImageDataUrl || ""),
+    });
+  };
+
+  const sha256HexForDataUrl = async (dataUrl) => {
+    const parts = String(dataUrl || "").split(",");
+    if (parts.length < 2) return "";
+    const bin = atob(parts[1]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+    if (typeof crypto?.subtle?.digest === "function") {
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      return Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    }
+    return "";
+  };
+
+  const exportSignaturePackJson = async () => {
+    const signedRows = (form.signatures || []).filter((s) => s.signedAt && s.signatureImageDataUrl);
+    if (!signedRows.length) {
+      window.alert("No signed signature images to export.");
+      return;
+    }
+    const signatures = await Promise.all(
+      signedRows.map(async (row, idx) => ({
+        role: row.role,
+        signedBy: row.signedBy || "",
+        signedByWorkerId: row.signedByWorkerId || "",
+        signedAt: row.signedAt || "",
+        note: row.note || "",
+        sha256: await sha256HexForDataUrl(row.signatureImageDataUrl),
+        fileName: `${String(form.id || "permit")}_${row.role || "signature"}_${idx + 1}.png`,
+      }))
+    );
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      permit: {
+        id: form.id || "",
+        type,
+        status: form.status || "draft",
+      },
+      signatures,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${String(form.id || "permit").slice(-12)}_signature_pack.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const exportSignaturePngs = () => {
+    const signedRows = (form.signatures || []).filter((s) => s.signedAt && s.signatureImageDataUrl);
+    if (!signedRows.length) {
+      window.alert("No signed signature images to export.");
+      return;
+    }
+    signedRows.forEach((row, idx) => {
+      const a = document.createElement("a");
+      a.href = row.signatureImageDataUrl;
+      a.download = `${String(form.id || "permit").slice(-12)}_${row.role || "signature"}_${idx + 1}.png`;
+      a.click();
+    });
+  };
+
+  const rememberEvidenceNote = () => {
+    saveSnippetToList(PERMIT_EVIDENCE_NOTE_SNIPPETS_KEY, form.evidenceNotes);
+    setEvidenceNoteSnippets(loadSnippetList(PERMIT_EVIDENCE_NOTE_SNIPPETS_KEY));
+  };
+  const rememberConditionNote = () => {
+    saveSnippetToList(PERMIT_CONDITIONS_SNIPPETS_KEY, form.notes);
+    setConditionSnippets(loadSnippetList(PERMIT_CONDITIONS_SNIPPETS_KEY));
   };
 
   const rollbackTemplateVersion = () => {
@@ -818,6 +1300,30 @@ function PermitForm({
     });
   };
 
+  const rollbackToVersion = (entry) => {
+    const snap = entry?.snapshot;
+    if (!snap || typeof snap !== "object") return;
+    if (!window.confirm("Rollback form to selected snapshot? Current unsaved edits will be replaced.")) return;
+    const snapType = snap.type || type;
+    const nextItems = normalizeChecklistItems(snapType, snap, checklistStringsForType(snapType));
+    setType(snapType);
+    setForm((f) =>
+      normalizeAdvancedPermit(
+        {
+          ...f,
+          ...snap,
+          type: snapType,
+          checklistItems: nextItems,
+          checklist: normalizeChecklistState(snap.checklist, nextItems),
+        },
+        snapType
+      )
+    );
+    setIssuedToPick(matchWorkerPick(snap.issuedTo || "", workers));
+    setIssuedByPick(matchWorkerPick(snap.issuedBy || "", workers));
+    setPrefillNote(`Rolled back to snapshot ${fmtDateTime(entry?.at)}`);
+  };
+
   const saveCurrentAsOrgTemplate = () => {
     const nextTemplate = saveOrgTemplate(type, {
       checklistItems: trimmedChecklistItems,
@@ -864,6 +1370,23 @@ function PermitForm({
       projectId: String(draft.projectId || "").trim(),
       location: String(draft.location || "").trim(),
     });
+    const nextRecent = normalizeRecentPermitLocations([
+      {
+        projectId: String(draft.projectId || "").trim(),
+        location: String(draft.location || "").trim(),
+        locationObjectId: String(draft.locationObjectId || "").trim(),
+        locationObjectType: String(draft.locationObjectType || "").trim(),
+        at: new Date().toISOString(),
+      },
+      ...recentLocations.filter((row) => {
+        return !(
+          row.projectId === String(draft.projectId || "").trim() &&
+          row.location.toLowerCase() === String(draft.location || "").trim().toLowerCase()
+        );
+      }),
+    ]);
+    setRecentLocations(nextRecent);
+    save(PERMIT_RECENT_LOCATIONS_KEY, nextRecent);
   };
 
   const prefillFromRecent = () => {
@@ -875,6 +1398,14 @@ function PermitForm({
   const onIssuedToSelect = (e) => {
     const v = e.target.value;
     if (v === "") { setIssuedToPick(""); set("issuedTo", ""); return; }
+    if (v === "__me__") {
+      const me = String(assignMeLabel || "").trim();
+      if (me) {
+        setIssuedToPick("__custom__");
+        set("issuedTo", me);
+      }
+      return;
+    }
     if (v === "__custom__") { setIssuedToPick("__custom__"); return; }
     const w = workers.find((x) => x.id === v);
     if (w) { setIssuedToPick(v); set("issuedTo", permitPersonLabel(w) || w.name); }
@@ -882,14 +1413,59 @@ function PermitForm({
   const onIssuedBySelect = (e) => {
     const v = e.target.value;
     if (v === "") { setIssuedByPick(""); set("issuedBy", ""); return; }
+    if (v === "__me__") {
+      const me = String(assignMeLabel || "").trim();
+      if (me) {
+        setIssuedByPick("__custom__");
+        set("issuedBy", me);
+      }
+      return;
+    }
     if (v === "__custom__") { setIssuedByPick("__custom__"); return; }
     const w = workers.find((x) => x.id === v);
     if (w) { setIssuedByPick(v); set("issuedBy", permitPersonLabel(w) || w.name); }
   };
   const selectedIssuedWorker = useMemo(() => workers.find((w) => w.id === issuedToPick) || null, [workers, issuedToPick]);
+  const selectedIssuerWorker = useMemo(() => workers.find((w) => w.id === issuedByPick) || null, [workers, issuedByPick]);
   const issuedWorkerEligibility = useMemo(
     () => (selectedIssuedWorker ? evaluateWorkerPermitEligibility(selectedIssuedWorker, type) : null),
     [selectedIssuedWorker, type]
+  );
+  const selectedIssuedWorkerCerts = useMemo(
+    () => (selectedIssuedWorker?.certifications || []).map(certificationDisplayLabel).filter(Boolean),
+    [selectedIssuedWorker]
+  );
+  const selectedIssuerCerts = useMemo(
+    () => (selectedIssuerWorker?.certifications || []).map(certificationDisplayLabel).filter(Boolean),
+    [selectedIssuerWorker]
+  );
+  const competencySuggestions = useMemo(() => {
+    const fromWorkers = workers.flatMap((w) => (w?.certifications || []).map(certificationDisplayLabel)).filter(Boolean);
+    const merged = [...selectedIssuerCerts, ...fromWorkers];
+    return Array.from(new Set(merged.map((x) => x.trim()).filter(Boolean))).slice(0, 50);
+  }, [workers, selectedIssuerCerts]);
+  const conditionalEval = useMemo(
+    () =>
+      evaluatePermitConditionalRules(
+        { permitType: type, status: form.status || "draft", projectId: form.projectId || "" },
+        conditionalRules
+      ),
+    [type, form.status, form.projectId, conditionalRules]
+  );
+  const isFieldRequiredEffective = useCallback(
+    (fieldId) => {
+      if (conditionalEval.required[fieldId] != null) return Boolean(conditionalEval.required[fieldId]);
+      return isFieldRequired(fieldId);
+    },
+    [conditionalEval.required, isFieldRequired]
+  );
+  const isFieldVisible = useCallback(
+    (fieldId) => conditionalEval.visible[fieldId] !== false,
+    [conditionalEval.visible]
+  );
+  const fieldLabelResolved = useCallback(
+    (fieldId, fallback) => `${getFieldConfig(fieldId)?.label || fallback}${isFieldRequiredEffective(fieldId) ? " *" : ""}`,
+    [getFieldConfig, isFieldRequiredEffective]
   );
 
   const handleTypeChange = (newType) => {
@@ -919,7 +1495,42 @@ function PermitForm({
   const trimmedChecklistItems = checklistItems
     .map((item) => ({ ...item, text: String(item.text || "").trim() }))
     .filter((item) => item.text);
-  const quality = runPermitQualityGates(form);
+  const quality = runPermitQualityGates(form, {
+    required: {
+      description: isFieldRequiredEffective("description"),
+      location: isFieldRequiredEffective("location"),
+      issuedBy: isFieldRequiredEffective("issuedBy"),
+      issuedTo: isFieldRequiredEffective("issuedTo"),
+      timeRange: isFieldRequiredEffective("startDateTime") || isFieldRequiredEffective("endDateTime"),
+    },
+  });
+  const applyAllQualityAutofixes = useCallback(() => {
+    const list = (quality.recommendations || []).filter((r) => r?.autofix && typeof r.autofix === "object");
+    if (list.length === 0) return;
+    setForm((f0) => {
+      let f = f0;
+      for (const rec of list) {
+        const fix = rec.autofix;
+        if (fix.type === "append_notes") {
+          f = { ...f, notes: [String(f.notes || "").trim(), String(fix.text || "").trim()].filter(Boolean).join("\n") };
+        } else if (fix.type === "append_evidence") {
+          f = { ...f, evidenceNotes: [String(f.evidenceNotes || "").trim(), String(fix.text || "").trim()].filter(Boolean).join("\n") };
+        } else if (fix.type === "set_dynamic" && fix.key) {
+          f = normalizeAdvancedPermit(
+            {
+              ...f,
+              extraFields: {
+                ...(f.extraFields || {}),
+                dynamic: { ...(f.extraFields?.dynamic || {}), [String(fix.key)]: fix.value == null ? "" : fix.value },
+              },
+            },
+            type
+          );
+        }
+      }
+      return normalizeAdvancedPermit(f, type);
+    });
+  }, [quality.recommendations, type]);
   const complianceProfile = useMemo(
     () => resolvePermitComplianceProfile(type, complianceProfiles, form.complianceProfile || null),
     [type, complianceProfiles, form.complianceProfile]
@@ -936,25 +1547,35 @@ function PermitForm({
   const workerEligibilityBlockers = issuedWorkerEligibility
     ? [...issuedWorkerEligibility.missing, ...issuedWorkerEligibility.expired.map((x) => x.label)]
     : [];
+  const policyBlockers = [];
+  if (formDefaults.requireBriefingBeforeIssue && !form.briefingConfirmedAt) {
+    policyBlockers.push("Company policy: briefing confirmation is required before issue.");
+  }
+  if (formDefaults.requireEvidencePhotoBeforeIssue && !(form.evidencePhotoUrl || form.evidencePhotoStoragePath)) {
+    policyBlockers.push("Company policy: evidence photo is required before issue.");
+  }
+  conditionalEval.blockers.forEach((b) => policyBlockers.push(b.message));
   const missingSignatureRoles = getRequiredSignatureRoles(type).filter((role) => {
     const signed = (form.signatures || []).find((s) => s.role === role);
     return !signed?.signedAt;
   });
+  const effectiveMissingSignatureRoles = allowSignLater ? [] : missingSignatureRoles;
   const baseCanIssue = Boolean(quality.ok && trimmedChecklistItems.length > 0 && legalReady);
   const qualitySummary = summarizePermitQuality({
     canIssueBase: baseCanIssue,
     dynamicMissing: dynamicReq.missingRequired,
     ruleHardStops: [
       ...advancedRules.hardStops,
+      ...policyBlockers,
       ...workerEligibilityBlockers.map((x) => `Worker certification missing/expired: ${x}`),
     ],
     qualityFailed: quality.failed || [],
-    signatureMissing: missingSignatureRoles,
+    signatureMissing: effectiveMissingSignatureRoles,
   });
   const canIssue = qualitySummary.canIssue;
   const reviewGate = evaluatePermitActionGate(form, "approve", {});
   const permitCopilotHints = useMemo(() => {
-    const hints = [];
+    const hints = (quality.recommendations || []).map((r) => r.text).filter(Boolean);
     if (!form.location) hints.push("Add a precise work location before approval.");
     if (!form.issuedBy || !form.issuedTo) hints.push("Complete issuer + recipient to improve traceability.");
     if ((form.extraFields?.fieldCaptureEntries || []).length === 0) hints.push("Capture at least one field data entry for evidence quality.");
@@ -963,9 +1584,15 @@ function PermitForm({
     }
     if (!form.linkedRamsId) hints.push("Link RAMS document to strengthen permit context.");
     if (dynamicReq.missingRequired.length > 0) hints.push(`Complete dynamic fields: ${dynamicReq.missingRequired.join(", ")}`);
-    if (missingSignatureRoles.length > 0) hints.push(`Collect signatures: ${missingSignatureRoles.join(", ")}`);
-    return hints.slice(0, 5);
-  }, [form, compliance.missingCriticalRegulatory, dynamicReq.missingRequired, missingSignatureRoles]);
+    if (missingSignatureRoles.length > 0) {
+      hints.push(
+        allowSignLater
+          ? `Signature follow-up pending: ${missingSignatureRoles.join(", ")}`
+          : `Collect signatures: ${missingSignatureRoles.join(", ")}`
+      );
+    }
+    return Array.from(new Set(hints)).slice(0, 6);
+  }, [form, compliance.missingCriticalRegulatory, dynamicReq.missingRequired, missingSignatureRoles, allowSignLater, quality.recommendations]);
 
   const buildPermitPayload = (status) => {
     const safeItems = trimmedChecklistItems.length ? trimmedChecklistItems : createDefaultChecklistItems(type, checklistStringsForType(type));
@@ -982,6 +1609,7 @@ function PermitForm({
       complianceProfile,
       templateId: form.templateId || `permit.${type}.default`,
       legalContentOwner: form.legalContentOwner || "HSE / Legal Reviewer",
+      allowSignLater,
       complianceReviewedAt: form.complianceReviewedAt || null,
       endDateTime: form.endDateTime || form.expiryDate || "",
       workflow: {
@@ -1037,6 +1665,7 @@ function PermitForm({
     complianceResult: compliance,
     conflictResult: conflictEvaluation,
     warnConflictOverride: form.conflictWarnOverride,
+    allowUnsignedSignatures: allowSignLater,
     handoverRequirement: handoverRequirementForActivate,
     dependencyResult: dependencyEvaluation,
   });
@@ -1133,11 +1762,36 @@ function PermitForm({
     URL.revokeObjectURL(a.href);
   };
 
-  const step1Valid = !!(String(form.description || "").trim() && String(form.location || "").trim());
+  const step1DescriptionOk = isFieldRequiredEffective("description") ? !!String(form.description || "").trim() : true;
+  const step1LocationOk = isFieldRequiredEffective("location") ? !!String(form.location || "").trim() : true;
+  const step1Valid = step1DescriptionOk && step1LocationOk;
   const step2Valid = trimmedChecklistItems.length > 0 && dynamicReq.missingRequired.length === 0;
-  const step3Valid = quality.ok && missingSignatureRoles.length === 0;
+  const step3Valid = quality.ok && (allowSignLater || missingSignatureRoles.length === 0);
+  const issueFixes = useMemo(() => {
+    const fixes = [];
+    if (isFieldRequiredEffective("description") && !String(form.description || "").trim()) fixes.push({ id: "desc", label: "Add work description", step: 1 });
+    if (isFieldRequiredEffective("location") && !String(form.location || "").trim()) fixes.push({ id: "location", label: "Add work location", step: 1 });
+    if (isFieldRequiredEffective("issuedTo") && !String(form.issuedTo || "").trim()) fixes.push({ id: "issuedTo", label: "Select permit receiver", step: 3 });
+    if (isFieldRequiredEffective("issuedBy") && !String(form.issuedBy || "").trim()) fixes.push({ id: "issuedBy", label: "Select authorised issuer", step: 3 });
+    if ((isFieldRequiredEffective("startDateTime") || isFieldRequiredEffective("endDateTime")) && (!form.startDateTime || !form.endDateTime)) fixes.push({ id: "time", label: "Set valid start/expiry times", step: 3 });
+    if (formDefaults.requireBriefingBeforeIssue && !form.briefingConfirmedAt) fixes.push({ id: "briefing", label: "Confirm briefing timestamp", step: 3 });
+    if (formDefaults.requireEvidencePhotoBeforeIssue && !(form.evidencePhotoUrl || form.evidencePhotoStoragePath)) fixes.push({ id: "photo", label: "Add evidence photo", step: 3 });
+    if (dynamicReq.missingRequired.length > 0) fixes.push({ id: "dynamic", label: "Complete required dynamic fields", step: 2 });
+    if (!allowSignLater && missingSignatureRoles.length > 0) fixes.push({ id: "signatures", label: "Collect required signatures", step: 3 });
+    return fixes;
+  }, [form.description, form.location, form.issuedTo, form.issuedBy, form.startDateTime, form.endDateTime, form.briefingConfirmedAt, form.evidencePhotoUrl, form.evidencePhotoStoragePath, dynamicReq.missingRequired, allowSignLater, missingSignatureRoles, formDefaults.requireBriefingBeforeIssue, formDefaults.requireEvidencePhotoBeforeIssue, isFieldRequiredEffective]);
   const stepNextEnabled =
     wizardStep === 1 ? step1Valid : wizardStep === 2 ? step2Valid : wizardStep === 3 ? step3Valid : true;
+  const stepNextHint =
+    wizardStep === 1 && !step1Valid
+      ? "Complete required scope fields to continue."
+      : wizardStep === 2 && !step2Valid
+        ? "Complete required checklist/dynamic fields to continue."
+        : wizardStep === 3 && !step3Valid
+          ? allowSignLater
+            ? "Complete quality blockers to continue."
+            : "Complete quality blockers and required signatures to continue."
+          : "";
 
   const previewDoc = wizardStep === 4 ? renderPermitDocumentHtml(buildPermitPayload(form.status || "draft")) : null;
 
@@ -1215,6 +1869,43 @@ function PermitForm({
           ) : (
             <div style={{ marginTop:6, fontSize:12, color:"#27500A" }}>Issue-ready. All advanced gates passed.</div>
           )}
+          {Array.isArray(quality.recommendations) && quality.recommendations.length > 0 ? (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#0C447C" }}>Quality Gate AI hints</div>
+                {(quality.recommendations || []).some((r) => r?.autofix) ? (
+                  <button type="button" onClick={applyAllQualityAutofixes} style={{ ...ss.btn, fontSize: 10, padding: "3px 8px" }}>
+                    Apply all safe autofixes
+                  </button>
+                ) : null}
+              </div>
+              <ul
+                style={{
+                  margin: "0",
+                  paddingLeft: 18,
+                  fontSize: 12,
+                  color: "#0C447C",
+                  maxHeight: 220,
+                  overflowY: "auto",
+                }}
+              >
+                {quality.recommendations.map((hint) => (
+                  <li key={hint.id || hint.text}>
+                    <span>{hint.text}</span>
+                    {hint.autofix ? (
+                      <button
+                        type="button"
+                        onClick={() => applyQualityAutofix(hint)}
+                        style={{ ...ss.btn, fontSize: 10, padding: "2px 6px", marginLeft: 8 }}
+                      >
+                        Autofix
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
 
         {/* Step 1 — scope */}
@@ -1226,10 +1917,14 @@ function PermitForm({
           </div>
         )}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
+          {isFieldVisible("description") ? (
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Description of work</label>
+            <label style={ss.lbl}>{fieldLabelResolved("description", "Description of work")}</label>
             <textarea value={form.description||""} onChange={e=>set("description",e.target.value)} rows={2}
-              placeholder="Describe the specific work to be carried out under this permit…" style={{ ...ss.ta, minHeight:50 }} />
+              placeholder={getFieldConfig("description").placeholder || "Describe the specific work to be carried out under this permit..."}
+              maxLength={getFieldConfig("description").maxLength || undefined}
+              style={{ ...ss.ta, minHeight:50 }} />
+            {getFieldConfig("description").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("description").helpText}</div> : null}
             <div style={{ marginTop:6 }}>
               <button
                 type="button"
@@ -1240,10 +1935,131 @@ function PermitForm({
               </button>
             </div>
           </div>
+          ) : null}
+          {isFieldVisible("location") ? (
           <div>
-            <label style={ss.lbl}>Location</label>
-            <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="Where will work be carried out?" style={ss.inp} />
+            <label style={ss.lbl}>{fieldLabelResolved("location", "Location")}</label>
+            <input
+              value={form.location||""}
+              onChange={e=>{
+                set("location",e.target.value);
+                if (form.locationObjectId) {
+                  set("locationObjectId", "");
+                  set("locationObjectType", "");
+                }
+              }}
+              placeholder={getFieldConfig("location").placeholder || "Where will work be carried out?"}
+              maxLength={getFieldConfig("location").maxLength || undefined}
+              style={ss.inp}
+            />
+            {form.projectId ? (
+              <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                  <select
+                    value={locationObjectTypeFilter}
+                    onChange={(e) => setLocationObjectTypeFilter(e.target.value)}
+                    style={{ ...ss.inp, margin: 0, minWidth: 170 }}
+                  >
+                    <option value="all">All object types</option>
+                    {PROJECT_DRAWING_OBJECT_TYPES.map((meta) => (
+                      <option key={meta.id} value={meta.id}>
+                        {meta.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span style={{ ...ss.chip, fontSize: 11 }}>
+                    {drawingObjectsForPicker.length} object(s)
+                  </span>
+                </div>
+                <select
+                  value={form.locationObjectId || ""}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    if (!nextId) {
+                      set("locationObjectId", "");
+                      set("locationObjectType", "");
+                      return;
+                    }
+                    const obj = projectDrawingObjects.find((row) => row.id === nextId);
+                    set("locationObjectId", nextId);
+                    set("locationObjectType", obj?.type || "");
+                    set("location", drawingObjectLabel(obj));
+                  }}
+                  style={{ ...ss.inp, margin: 0 }}
+                >
+                  <option value="">Use free-text location</option>
+                  {drawingObjectsForPicker.map((obj) => (
+                    <option key={obj.id} value={obj.id}>
+                      {drawingObjectLabel(obj)}
+                    </option>
+                  ))}
+                </select>
+                {recentProjectLocations.length > 0 ? (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const idx = Number(e.target.value);
+                      if (!Number.isFinite(idx)) return;
+                      const row = recentProjectLocations[idx];
+                      if (!row) return;
+                      set("location", row.location);
+                      set("locationObjectId", row.locationObjectId || "");
+                      set("locationObjectType", row.locationObjectType || "");
+                    }}
+                    style={{ ...ss.inp, margin: 0 }}
+                  >
+                    <option value="">Recent locations for this project</option>
+                    {recentProjectLocations.slice(0, 8).map((row, idx) => (
+                      <option key={`${row.projectId}_${row.location}_${idx}`} value={idx}>
+                        {recentLocationOptionLabel(row)}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {PROJECT_DRAWING_OBJECT_TYPES.map((meta) => (
+                    <span
+                      key={meta.id}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        fontSize: 10,
+                        padding: "2px 6px",
+                        borderRadius: 999,
+                        border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+                        background: "var(--color-background-secondary,#f7f7f5)",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: meta.shape === "square" ? 2 : "50%",
+                          background: meta.color,
+                          display: "inline-block",
+                        }}
+                      />
+                      {meta.label}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  style={{ ...ss.btn, width: "fit-content", fontSize: 11, padding: "3px 8px" }}
+                  onClick={() => {
+                    setWorkspaceNavTarget({ viewId: "project-drawings", projectId: form.projectId });
+                    openWorkspaceView({ viewId: "project-drawings" });
+                  }}
+                >
+                  Manage project drawing objects
+                </button>
+              </div>
+            ) : null}
+            {getFieldConfig("location").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("location").helpText}</div> : null}
           </div>
+          ) : null}
+          {isFieldVisible("linkedRamsId") ? (
           <div>
             <label style={ss.lbl}>Project</label>
             <select
@@ -1251,6 +2067,8 @@ function PermitForm({
               onChange={e=>{
                 const nextId = e.target.value;
                 set("projectId", nextId);
+                set("locationObjectId", "");
+                set("locationObjectType", "");
                 if (!String(form.location || "").trim()) {
                   const project = projects.find((p) => p.id === nextId);
                   const projectLocation = pickProjectLocation(project);
@@ -1263,8 +2081,10 @@ function PermitForm({
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
+          ) : null}
+          {isFieldVisible("issuedTo") ? (
           <div>
-            <label style={ss.lbl}>Linked RAMS (optional)</label>
+            <label style={ss.lbl}>{fieldLabelResolved("linkedRamsId", "Linked RAMS")}</label>
             <select
               value={form.linkedRamsId || ""}
               onChange={(e) => {
@@ -1283,7 +2103,9 @@ function PermitForm({
                   </option>
                 ))}
             </select>
+            {getFieldConfig("linkedRamsId").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("linkedRamsId").helpText}</div> : null}
           </div>
+          ) : null}
           {dynamicSpec.length > 0 && (
             <div style={{ gridColumn:"1/-1", marginTop:4 }}>
               <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:6 }}>
@@ -1326,12 +2148,14 @@ function PermitForm({
         {wizardStep === 3 && (
         <>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
+          {isFieldVisible("issuedTo") ? (
           <div>
-            <label style={ss.lbl}>Permit issued to</label>
+            <label style={ss.lbl}>{fieldLabelResolved("issuedTo", "Permit issued to")}</label>
             {workers.length > 0 ? (
               <>
                 <select value={issuedToPick} onChange={onIssuedToSelect} style={{ ...ss.inp, marginBottom: issuedToPick === "__custom__" ? 8 : 0 }}>
                   <option value="">— Select from my workers —</option>
+                  {assignMeLabel ? <option value="__me__">Assign me ({assignMeLabel})</option> : null}
                   {workers.map((w) => (
                     <option key={w.id} value={w.id}>
                       {permitPersonLabel(w) || w.name}
@@ -1340,13 +2164,24 @@ function PermitForm({
                   <option value="__custom__">Other (type name)</option>
                 </select>
                 {issuedToPick === "__custom__" && (
-                  <input value={form.issuedTo || ""} onChange={(e) => set("issuedTo", e.target.value)} placeholder="Name of person receiving permit" style={ss.inp} />
+                  <input value={form.issuedTo || ""} onChange={(e) => set("issuedTo", e.target.value)} placeholder={getFieldConfig("issuedTo").placeholder || "Name of person receiving permit"} maxLength={getFieldConfig("issuedTo").maxLength || undefined} style={ss.inp} />
                 )}
               </>
             ) : (
-              <input value={form.issuedTo || ""} onChange={(e) => set("issuedTo", e.target.value)} placeholder="Name of person receiving permit" style={ss.inp} />
+              <input value={form.issuedTo || ""} onChange={(e) => set("issuedTo", e.target.value)} placeholder={getFieldConfig("issuedTo").placeholder || "Name of person receiving permit"} maxLength={getFieldConfig("issuedTo").maxLength || undefined} style={ss.inp} />
             )}
+            {getFieldConfig("issuedTo").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("issuedTo").helpText}</div> : null}
+            {selectedIssuedWorkerCerts.length > 0 ? (
+              <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:6 }}>
+                {selectedIssuedWorkerCerts.slice(0, 6).map((c) => (
+                  <span key={c} style={{ ...ss.chip, fontSize:11 }}>
+                    {c}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
+          ) : null}
           {issuedWorkerEligibility && (
             <div style={{ gridColumn: "1/-1", fontSize:12, padding:"8px 10px", borderRadius:8, border:"1px solid #e5e7eb", background: issuedWorkerEligibility.eligible ? "#EAF3DE" : "#FCEBEB", color: issuedWorkerEligibility.eligible ? "#27500A" : "#791F1F" }}>
               <strong>Worker permit eligibility:</strong>{" "}
@@ -1370,12 +2205,14 @@ function PermitForm({
               )}
             </div>
           )}
+          {isFieldVisible("issuedBy") ? (
           <div>
-            <label style={ss.lbl}>Issued by (authorised person)</label>
+            <label style={ss.lbl}>{fieldLabelResolved("issuedBy", "Issued by (authorised person)")}</label>
             {workers.length > 0 ? (
               <>
                 <select value={issuedByPick} onChange={onIssuedBySelect} style={{ ...ss.inp, marginBottom: issuedByPick === "__custom__" ? 8 : 0 }}>
                   <option value="">— Select from my workers —</option>
+                  {assignMeLabel ? <option value="__me__">Assign me ({assignMeLabel})</option> : null}
                   {workers.map((w) => (
                     <option key={w.id} value={w.id}>
                       {permitPersonLabel(w) || w.name}
@@ -1384,32 +2221,85 @@ function PermitForm({
                   <option value="__custom__">Other (type name)</option>
                 </select>
                 {issuedByPick === "__custom__" && (
-                  <input value={form.issuedBy || ""} onChange={(e) => set("issuedBy", e.target.value)} placeholder="Authorised person name" style={ss.inp} />
+                  <input value={form.issuedBy || ""} onChange={(e) => set("issuedBy", e.target.value)} placeholder={getFieldConfig("issuedBy").placeholder || "Authorised person name"} maxLength={getFieldConfig("issuedBy").maxLength || undefined} style={ss.inp} />
                 )}
               </>
             ) : (
-              <input value={form.issuedBy || ""} onChange={(e) => set("issuedBy", e.target.value)} placeholder="Authorised person name" style={ss.inp} />
+              <input value={form.issuedBy || ""} onChange={(e) => set("issuedBy", e.target.value)} placeholder={getFieldConfig("issuedBy").placeholder || "Authorised person name"} maxLength={getFieldConfig("issuedBy").maxLength || undefined} style={ss.inp} />
             )}
+            {getFieldConfig("issuedBy").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("issuedBy").helpText}</div> : null}
+            {selectedIssuerCerts.length > 0 ? (
+              <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:6 }}>
+                {selectedIssuerCerts.slice(0, 6).map((c) => (
+                  <span key={c} style={{ ...ss.chip, fontSize:11 }}>
+                    {c}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
+          ) : null}
+          {isFieldVisible("startDateTime") ? (
           <div>
-            <label style={ss.lbl}>Start date / time</label>
+            <label style={ss.lbl}>{fieldLabelResolved("startDateTime", "Start date / time")}</label>
             <input type="datetime-local" value={toLocalInput(form.startDateTime)} onChange={e=>set("startDateTime",new Date(e.target.value).toISOString())} style={ss.inp} />
+            {getFieldConfig("startDateTime").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("startDateTime").helpText}</div> : null}
           </div>
+          ) : null}
+          {isFieldVisible("endDateTime") ? (
           <div>
-            <label style={ss.lbl}>Expiry date / time</label>
+            <label style={ss.lbl}>{fieldLabelResolved("endDateTime", "Expiry date / time")}</label>
             <input type="datetime-local" value={toLocalInput(form.endDateTime)} onChange={e=>set("endDateTime",new Date(e.target.value).toISOString())} style={ss.inp} />
+            {getFieldConfig("endDateTime").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("endDateTime").helpText}</div> : null}
           </div>
+          ) : null}
+          {isFieldVisible("authorisedByRole") ? (
           <div style={{ gridColumn: "1/-1" }}>
-            <label style={ss.lbl}>Authorising role / competency reference</label>
-            <input value={form.authorisedByRole||""} onChange={(e)=>set("authorisedByRole",e.target.value)} placeholder="e.g. Competent person (electrical), AP lifting" style={ss.inp} />
+            <label style={ss.lbl}>{fieldLabelResolved("authorisedByRole", "Authorising role / competency reference")}</label>
+            <input
+              value={form.authorisedByRole||""}
+              onChange={(e)=>set("authorisedByRole",e.target.value)}
+              placeholder={getFieldConfig("authorisedByRole").placeholder || "e.g. Competent person (electrical), AP lifting"}
+              maxLength={getFieldConfig("authorisedByRole").maxLength || undefined}
+              style={ss.inp}
+              list="permit-competency-suggestions"
+            />
+            {getFieldConfig("authorisedByRole").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("authorisedByRole").helpText}</div> : null}
+            <datalist id="permit-competency-suggestions">
+              {competencySuggestions.map((label) => (
+                <option key={label} value={label} />
+              ))}
+            </datalist>
+            {selectedIssuerCerts.length > 0 ? (
+              <div style={{ marginTop:6 }}>
+                <button
+                  type="button"
+                  style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}
+                  onClick={() => set("authorisedByRole", selectedIssuerCerts.slice(0, 3).join(", "))}
+                >
+                  Use issuer certifications
+                </button>
+              </div>
+            ) : null}
           </div>
+          ) : null}
+          {isFieldVisible("briefingConfirmedAt") ? (
           <div>
-            <label style={ss.lbl}>Briefing confirmed at</label>
+            <label style={ss.lbl}>{fieldLabelResolved("briefingConfirmedAt", "Briefing confirmed at")}</label>
             <input type="datetime-local" value={toLocalInput(form.briefingConfirmedAt)} onChange={(e)=>set("briefingConfirmedAt", e.target.value ? new Date(e.target.value).toISOString() : "")} style={ss.inp} />
+            {getFieldConfig("briefingConfirmedAt").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("briefingConfirmedAt").helpText}</div> : null}
           </div>
+          ) : null}
+          {isFieldVisible("evidencePhotoUrl") ? (
           <div style={{ gridColumn: "1/-1" }}>
-            <label style={ss.lbl}>Site evidence photo URL (optional)</label>
-            <input value={form.evidencePhotoUrl||""} onChange={(e)=>set("evidencePhotoUrl",e.target.value)} placeholder="https://…" style={ss.inp} />
+            <label style={ss.lbl}>{fieldLabelResolved("evidencePhotoUrl", "Site evidence photo URL")}</label>
+            <input value={form.evidencePhotoUrl||""} onChange={(e)=>set("evidencePhotoUrl",e.target.value)} placeholder={getFieldConfig("evidencePhotoUrl").placeholder || "https://..."} maxLength={getFieldConfig("evidencePhotoUrl").maxLength || undefined} style={ss.inp} />
+            {getFieldConfig("evidencePhotoUrl").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("evidencePhotoUrl").helpText}</div> : null}
+            {(form.evidencePhotoUrl || form.evidencePhotoStoragePath) ? (
+              <div style={{ marginTop:8 }}>
+                <PermitEvidenceImage storagePath={form.evidencePhotoStoragePath} srcUrl={form.evidencePhotoUrl} />
+              </div>
+            ) : null}
             {supabase ? (
               <div style={{ marginTop:8 }}>
                 <label style={{ ...ss.lbl, fontSize:12 }}>Or upload image (signed in; 7-day view link)</label>
@@ -1436,10 +2326,24 @@ function PermitForm({
               </div>
             ) : null}
           </div>
+          ) : null}
+          {isFieldVisible("evidenceNotes") ? (
           <div style={{ gridColumn: "1/-1" }}>
-            <label style={ss.lbl}>Evidence notes</label>
-            <textarea value={form.evidenceNotes||""} onChange={(e)=>set("evidenceNotes",e.target.value)} rows={2} placeholder="Toolbox talk reference, barrier ID, etc." style={{ ...ss.ta, minHeight:44 }} />
+            <label style={ss.lbl}>{fieldLabelResolved("evidenceNotes", "Evidence notes")}</label>
+            <textarea value={form.evidenceNotes||""} onChange={(e)=>set("evidenceNotes",e.target.value)} rows={2} placeholder={getFieldConfig("evidenceNotes").placeholder || "Toolbox talk reference, barrier ID, etc."} maxLength={getFieldConfig("evidenceNotes").maxLength || undefined} style={{ ...ss.ta, minHeight:44 }} />
+            {getFieldConfig("evidenceNotes").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("evidenceNotes").helpText}</div> : null}
+            <div style={{ marginTop:6, display:"flex", gap:6, flexWrap:"wrap" }}>
+              <button type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={rememberEvidenceNote}>
+                Save for future use
+              </button>
+              {evidenceNoteSnippets.slice(0, 3).map((text) => (
+                <button key={text} type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={() => set("evidenceNotes", text)}>
+                  {text.slice(0, 46)}{text.length > 46 ? "..." : ""}
+                </button>
+              ))}
+            </div>
           </div>
+          ) : null}
           <div style={{ gridColumn: "1/-1" }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
               <label style={ss.lbl}>Field data capture (offline-first)</label>
@@ -1468,6 +2372,10 @@ function PermitForm({
                 {(form.signatures || []).filter((s) => s.signedAt).length}/{getRequiredSignatureRoles(type).length} signed
               </span>
             </div>
+            <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, marginBottom:6 }}>
+              <input type="checkbox" checked={allowSignLater} onChange={(e) => setAllowSignLater(e.target.checked)} />
+              Allow issue now and collect missing signatures later
+            </label>
             <div style={{ display:"grid", gap:6 }}>
               {getRequiredSignatureRoles(type).map((role) => {
                 const row = (form.signatures || []).find((s) => s.role === role) || { role, signedBy:"", signedAt:"" };
@@ -1478,20 +2386,115 @@ function PermitForm({
                       <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
                         {row.signedAt ? `${row.signedBy || "signed"} · ${fmtDateTime(row.signedAt)}` : "Not signed"}
                       </div>
+                      {row.signatureImageDataUrl ? (
+                        <div style={{ marginTop:6 }}>
+                          <img
+                            src={row.signatureImageDataUrl}
+                            alt={`${role} signature`}
+                            style={{ width:120, height:38, objectFit:"contain", border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:4, background:"#fff" }}
+                          />
+                        </div>
+                      ) : null}
                     </div>
-                    <button type="button" onClick={() => signRole(role)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
-                      {row.signedAt ? "Re-sign" : "Sign"}
-                    </button>
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                      <button type="button" onClick={() => signRole(role)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                        {row.signedAt ? "Re-sign" : "Sign"}
+                      </button>
+                      {selectedIssuerWorker ? (
+                        <button type="button" onClick={() => signRole(role, selectedIssuerWorker.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                          Sign as issuer
+                        </button>
+                      ) : null}
+                      {selectedIssuedWorker ? (
+                        <button type="button" onClick={() => signRole(role, selectedIssuedWorker.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                          Sign as receiver
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 );
               })}
             </div>
+            {signatureDialog ? (
+              <div
+                style={{
+                  position:"fixed",
+                  inset:0,
+                  zIndex:80,
+                  background:"rgba(0,0,0,0.45)",
+                  display:"flex",
+                  alignItems:"center",
+                  justifyContent:"center",
+                  padding:16,
+                }}
+                onMouseDown={(e) => {
+                  if (e.target === e.currentTarget) setSignatureDialog(null);
+                }}
+              >
+                <div
+                  style={{
+                    width:"100%",
+                    maxWidth:640,
+                    borderRadius:10,
+                    background:"var(--color-background-primary,#fff)",
+                    border:"1px solid var(--color-border-tertiary,#e5e5e5)",
+                    padding:12,
+                    boxShadow:"0 10px 32px rgba(0,0,0,0.22)",
+                  }}
+                >
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, marginBottom:8 }}>
+                    <div style={{ fontSize:13, fontWeight:700 }}>
+                      Signature pad · {signatureDialog.role?.replace(/_/g, " ")}
+                    </div>
+                    <button type="button" onClick={() => setSignatureDialog(null)} style={{ ...ss.btn, fontSize:12, padding:"3px 8px" }}>
+                      Close
+                    </button>
+                  </div>
+                  <div style={{ display:"grid", gap:8 }}>
+                    <select
+                      value={signatureDialog.signedByWorkerId || ""}
+                      onChange={(e) => setSignatureDialog((s) => (s ? { ...s, signedByWorkerId: e.target.value } : s))}
+                      style={ss.inp}
+                    >
+                      <option value="">Select worker for signature</option>
+                      {(signatureDialog.allowedWorkerIds || [])
+                        .map((id) => findWorkerById(id))
+                        .filter(Boolean)
+                        .map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {permitPersonLabel(w) || w.name}
+                          </option>
+                        ))}
+                    </select>
+                    <input
+                      value={signatureDialog.note || ""}
+                      onChange={(e) => setSignatureDialog((s) => (s ? { ...s, note: e.target.value } : s))}
+                      placeholder="Optional signature note"
+                      style={ss.inp}
+                    />
+                    <div style={{ border:"1px solid var(--color-border-secondary,#cbd5e1)", borderRadius:8, background:"#fff", padding:4 }}>
+                      <canvas
+                        ref={signatureCanvasRef}
+                        style={{ width:"100%", height:140, display:"block", touchAction:"none", cursor:"crosshair" }}
+                        onPointerDown={handleSignaturePointerDown}
+                        onPointerMove={handleSignaturePointerMove}
+                        onPointerUp={handleSignaturePointerUp}
+                        onPointerLeave={handleSignaturePointerUp}
+                      />
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap" }}>
+                      <button type="button" onClick={clearSignatureCanvas} style={{ ...ss.btn, fontSize:12 }}>
+                        Clear pad
+                      </button>
+                      <button type="button" onClick={commitSignatureDialog} style={{ ...ss.btnO, fontSize:12 }}>
+                        Save signature
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
-          {(form.evidencePhotoUrl || form.evidencePhotoStoragePath) && (
-            <div style={{ gridColumn: "1/-1" }}>
-              <PermitEvidenceImage storagePath={form.evidencePhotoStoragePath} srcUrl={form.evidencePhotoUrl} />
-            </div>
-          )}
         </div>
         {simopsHits.length > 0 && (
           <div style={{ marginBottom:12, fontSize:12, padding:"8px 10px", borderRadius:8, background:"#FCEBEB", border:"1px solid #f5c7c7", color:"#791F1F" }}>
@@ -1503,11 +2506,26 @@ function PermitForm({
             </ul>
           </div>
         )}
+        {isFieldVisible("notes") ? (
         <div style={{ marginBottom:16 }}>
-          <label style={ss.lbl}>Additional conditions / notes</label>
+          <label style={ss.lbl}>{fieldLabelResolved("notes", "Additional conditions / notes")}</label>
           <textarea value={form.notes||""} onChange={e=>set("notes",e.target.value)} rows={2}
-            placeholder="Any specific conditions, restrictions or additional requirements…" style={{ ...ss.ta, minHeight:50 }} />
+            placeholder={getFieldConfig("notes").placeholder || "Any specific conditions, restrictions or additional requirements..."}
+            maxLength={getFieldConfig("notes").maxLength || undefined}
+            style={{ ...ss.ta, minHeight:50 }} />
+          {getFieldConfig("notes").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("notes").helpText}</div> : null}
+          <div style={{ marginTop:6, display:"flex", gap:6, flexWrap:"wrap" }}>
+            <button type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={rememberConditionNote}>
+              Save for future use
+            </button>
+            {conditionSnippets.slice(0, 3).map((text) => (
+              <button key={text} type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={() => set("notes", text)}>
+                {text.slice(0, 46)}{text.length > 46 ? "..." : ""}
+              </button>
+            ))}
+          </div>
         </div>
+        ) : null}
         </>
         )}
 
@@ -1686,7 +2704,12 @@ function PermitForm({
         {wizardStep < 4 && (
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:16, paddingTop:12, borderTop:"1px solid var(--color-border-tertiary,#e5e5e5)" }}>
           <button type="button" style={ss.btn} disabled={wizardStep<=1} onClick={()=>setWizardStep((s)=>Math.max(1,s-1))}>Back</button>
-          <button type="button" style={{ ...ss.btnO, opacity: stepNextEnabled ? 1 : 0.45 }} disabled={!stepNextEnabled} onClick={()=>setWizardStep((s)=>Math.min(4,s+1))}>Next</button>
+          <div style={{ textAlign:"right" }}>
+            {!stepNextEnabled && stepNextHint ? (
+              <div style={{ fontSize:11, color:"#854d0e", marginBottom:4 }}>{stepNextHint}</div>
+            ) : null}
+            <button type="button" style={{ ...ss.btnO, opacity: stepNextEnabled ? 1 : 0.45 }} disabled={!stepNextEnabled} onClick={()=>setWizardStep((s)=>Math.min(4,s+1))}>Next</button>
+          </div>
         </div>
         )}
 
@@ -1708,6 +2731,34 @@ function PermitForm({
             <a href={typeMeta.hseUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#0C447C", marginTop:8, display:"inline-block" }}>Open HSE guidance</a>
           ) : null}
         </div>
+        {Array.isArray(form.versionHistory) && form.versionHistory.length > 0 ? (
+          <div style={{ marginBottom:12, fontSize:12, background:"var(--color-background-secondary,#f7f7f5)", border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", marginBottom:6 }}>
+              <div style={{ fontWeight:700 }}>Permit version history</div>
+              <span style={ss.chip}>{form.versionHistory.length} snapshot(s)</span>
+            </div>
+            <div style={{ display:"grid", gap:6 }}>
+              {form.versionHistory.slice(0, 4).map((entry) => (
+                <div key={entry.id} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:6, padding:"6px 8px", background:"var(--color-background-primary,#fff)" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", marginBottom:4 }}>
+                    <div>
+                      <strong>{fmtDateTime(entry.at)}</strong> · {entry.by || "unknown"}
+                    </div>
+                    <button type="button" onClick={() => rollbackToVersion(entry)} style={{ ...ss.btn, fontSize:11, padding:"2px 8px" }}>
+                      Rollback to this
+                    </button>
+                  </div>
+                  {entry.reason ? <div style={{ color:"var(--color-text-secondary)" }}>Why: {entry.reason}</div> : null}
+                  {Array.isArray(entry.diffKeys) && entry.diffKeys.length > 0 ? (
+                    <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+                      Changed: {entry.diffKeys.slice(0, 6).join(", ")}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div style={{ marginBottom:12, fontSize:12, background:"#f8fbff", border:"1px solid #dbeafe", borderRadius:8, padding:"8px 10px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:6 }}>
             <div style={{ fontWeight:700, color:"#0C447C" }}>UK evidence pack validator</div>
@@ -1717,6 +2768,12 @@ function PermitForm({
               </button>
               <button type="button" onClick={exportEvidencePackCsv} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
                 Export CSV
+              </button>
+              <button type="button" onClick={() => void exportSignaturePackJson()} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                Signature pack JSON
+              </button>
+              <button type="button" onClick={exportSignaturePngs} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                Signature PNGs
               </button>
             </div>
           </div>
@@ -1815,7 +2872,16 @@ function PermitForm({
         ) : null}
         {!canIssue && (
           <div style={{ marginTop:10, fontSize:12, color:"#633806", background:"#FAEEDA", border:"1px solid #f6d89f", borderRadius:8, padding:"8px 10px" }}>
-            Complete description, location, issuer/receiver, valid start/end time, and at least one checklist item before issuing.
+            Complete missing items below to issue permit. Click any quick fix to jump to the right step.
+            {issueFixes.length > 0 ? (
+              <div style={{ marginTop:6, display:"flex", gap:6, flexWrap:"wrap" }}>
+                {issueFixes.slice(0, 6).map((fix) => (
+                  <button key={fix.id} type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={() => setWizardStep(fix.step)}>
+                    Fix: {fix.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {quality.failed.length > 0 && (
               <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
                 {quality.failed.map((item) => (
@@ -1844,13 +2910,18 @@ function PermitForm({
                 ))}
               </ul>
             )}
-            {missingSignatureRoles.length > 0 && (
+            {!allowSignLater && missingSignatureRoles.length > 0 && (
               <ul style={{ margin:"6px 0 0", paddingLeft:18 }}>
                 {missingSignatureRoles.map((role) => (
                   <li key={role}>Missing signature: {role.replace(/_/g, " ")}</li>
                 ))}
               </ul>
             )}
+            {allowSignLater && missingSignatureRoles.length > 0 ? (
+              <div style={{ marginTop:6, color:"#0C447C" }}>
+                Signature follow-up pending ({missingSignatureRoles.length}). Permit can still be issued now.
+              </div>
+            ) : null}
           </div>
         )}
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"space-between" }}>
@@ -2515,6 +3586,14 @@ function exportPermitPdf(permit) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PermitSystem() {
   const { role: appRole = "admin" } = useApp();
+  const org = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+    } catch {
+      return {};
+    }
+  })();
+  const permitActorLabel = String(org.defaultLeadEngineer || "").trim() || `role:${appRole}`;
   const [permits, setPermits] = useState(()=>load("permits_v2",[]));
   const [modal, setModal] = useState(null);
   const [filterType, setFilterType] = useState("");
@@ -2590,6 +3669,17 @@ export default function PermitSystem() {
   const [dependencyRuleOverrides, setDependencyRuleOverrides] = useState(() =>
     normalizeDependencyRules(load(PERMIT_DEPENDENCY_RULE_OVERRIDES_KEY, {}))
   );
+  const [permitFormDefaults, setPermitFormDefaults] = useState(() =>
+    normalizePermitFormDefaults(load(PERMIT_FORM_DEFAULTS_KEY, DEFAULT_PERMIT_FORM_DEFAULTS))
+  );
+  const [permitFieldOverrides, setPermitFieldOverrides] = useState(() =>
+    normalizePermitFieldOverrides(load(PERMIT_FORM_FIELD_OVERRIDES_KEY, {}))
+  );
+  const [conditionalRuleOverrides, setConditionalRuleOverrides] = useState(() =>
+    normalizePermitConditionalRules(load(PERMIT_CONDITIONAL_RULES_KEY, []))
+  );
+  const [fieldEditorType, setFieldEditorType] = useState("_all");
+  const [fieldEditorFilter, setFieldEditorFilter] = useState("");
   const [workflowEditorOpen, setWorkflowEditorOpen] = useState(false);
   const [workflowEditorText, setWorkflowEditorText] = useState(() =>
     JSON.stringify(normalizeWorkflowPolicyOverrides(load(PERMIT_WORKFLOW_OVERRIDES_KEY, {})), null, 2)
@@ -2656,6 +3746,10 @@ export default function PermitSystem() {
     () => mergeDependencyRules(dependencyRuleOverrides),
     [dependencyRuleOverrides]
   );
+  const activeFieldConfig = useMemo(
+    () => resolvePermitFieldConfig(fieldEditorType === "_all" ? "general" : fieldEditorType, permitFieldOverrides),
+    [fieldEditorType, permitFieldOverrides]
+  );
   const permitThemeVars = useMemo(
     () => resolvePermitThemeVars(permitThemeMode, prefersDarkTheme),
     [permitThemeMode, prefersDarkTheme]
@@ -2668,6 +3762,9 @@ export default function PermitSystem() {
   useEffect(() => { save(PERMIT_WORKFLOW_OVERRIDES_KEY, workflowPolicyOverrides); }, [workflowPolicyOverrides]);
   useEffect(() => { save(PERMIT_WORKFLOW_ROLE_OVERRIDES_KEY, workflowRolePolicyOverrides); }, [workflowRolePolicyOverrides]);
   useEffect(() => { save(PERMIT_DEPENDENCY_RULE_OVERRIDES_KEY, dependencyRuleOverrides); }, [dependencyRuleOverrides]);
+  useEffect(() => { save(PERMIT_FORM_DEFAULTS_KEY, permitFormDefaults); }, [permitFormDefaults]);
+  useEffect(() => { save(PERMIT_FORM_FIELD_OVERRIDES_KEY, permitFieldOverrides); }, [permitFieldOverrides]);
+  useEffect(() => { save(PERMIT_CONDITIONAL_RULES_KEY, conditionalRuleOverrides); }, [conditionalRuleOverrides]);
   useEffect(() => { save(PERMIT_SHIFT_BOUNDARY_HOURS_KEY, shiftBoundaryHours); }, [shiftBoundaryHours]);
   useEffect(() => { save(PERMIT_THEME_MODE_KEY, permitThemeMode); }, [permitThemeMode]);
   useEffect(() => {
@@ -2984,7 +4081,30 @@ export default function PermitSystem() {
       const existing = prev.find((x) => x.id === p.id);
       const normalized = normalizeAdvancedPermit(p, p.type || existing?.type || "hot_work");
       const auditLog = appendPermitAuditEntry(existing, normalized);
-      const next = { ...normalized, auditLog };
+      let next = { ...normalized, auditLog };
+      if (existing) {
+        const history = Array.isArray(existing.versionHistory) ? existing.versionHistory : [];
+        if (hasMaterialPermitChanges(existing, next)) {
+          const reason =
+            window.prompt(
+              "Version note (why changed) — optional:",
+              ""
+            ) || "";
+          const versionEntry = createPermitVersionEntry(existing, next, permitActorLabel, reason);
+          if (versionEntry) {
+            next = {
+              ...next,
+              versionHistory: [versionEntry, ...history].slice(0, 60),
+              lastVersionNote: versionEntry.reason || "",
+              updatedBy: permitActorLabel,
+            };
+          }
+        } else {
+          next = { ...next, versionHistory: history, updatedBy: permitActorLabel };
+        }
+      } else {
+        next = { ...next, versionHistory: [], updatedBy: permitActorLabel };
+      }
       void logPermitAuditToSupabase(existing, next, getOrgId());
       return existing ? prev.map((x) => (x.id === p.id ? next : x)) : [next, ...prev];
     });
@@ -3650,6 +4770,113 @@ export default function PermitSystem() {
   const resetAllPermitTypeOverrides = () => {
     if (!window.confirm("Reset all permit type visual overrides for this org?")) return;
     setPermitTypeOverrides({});
+  };
+  const resetPermitFormDefaults = () => {
+    if (!window.confirm("Reset permit form company defaults to baseline?")) return;
+    setPermitFormDefaults(DEFAULT_PERMIT_FORM_DEFAULTS);
+  };
+  const updatePermitFieldSetting = (fieldId, patch) => {
+    const typeKey = String(fieldEditorType || "_all").toLowerCase();
+    const targetType = typeKey === "_all" ? "_all" : typeKey;
+    setPermitFieldOverrides((prev) => {
+      const next = { ...(prev || {}) };
+      const currentType = { ...(next[targetType] || {}) };
+      const currentField = { ...(currentType[fieldId] || {}) };
+      const mergedField = { ...currentField, ...patch };
+      const cleaned = {};
+      if (mergedField.required != null) cleaned.required = Boolean(mergedField.required);
+      if (mergedField.placeholder != null) cleaned.placeholder = String(mergedField.placeholder).slice(0, 220);
+      if (mergedField.helpText != null) cleaned.helpText = String(mergedField.helpText).slice(0, 240);
+      if (mergedField.maxLength != null) {
+        const n = Number(mergedField.maxLength);
+        if (Number.isFinite(n) && n > 0) cleaned.maxLength = Math.max(20, Math.min(5000, Math.round(n)));
+      }
+      const defaults = resolvePermitFieldConfig(targetType === "_all" ? "general" : targetType, {});
+      const d = defaults[fieldId];
+      const shouldKeep =
+        cleaned.required !== d.required ||
+        (cleaned.placeholder || "") !== (d.placeholder || "") ||
+        (cleaned.helpText || "") !== (d.helpText || "") ||
+        Number(cleaned.maxLength || 0) !== Number(d.maxLength || 0);
+      if (shouldKeep) currentType[fieldId] = cleaned;
+      else delete currentType[fieldId];
+      if (Object.keys(currentType).length) next[targetType] = currentType;
+      else delete next[targetType];
+      return next;
+    });
+  };
+  const resetFieldSettingsForType = () => {
+    const targetType = String(fieldEditorType || "_all").toLowerCase();
+    if (!window.confirm(`Reset field settings for ${targetType === "_all" ? "all permit types" : targetType}?`)) return;
+    setPermitFieldOverrides((prev) => {
+      const next = { ...(prev || {}) };
+      delete next[targetType];
+      return next;
+    });
+  };
+  const resetAllFieldSettings = () => {
+    if (!window.confirm("Reset all no-code field settings to defaults?")) return;
+    setPermitFieldOverrides({});
+  };
+  const addConditionalRuleRow = () => {
+    setConditionalRuleOverrides((prev) => [
+      ...prev,
+      {
+        id: `rule_${genId()}`,
+        enabled: true,
+        when: { permitType: "", status: "", projectId: "" },
+        whenOperator: "and",
+        whenClauses: [{ field: "permitType", value: "" }],
+        thenField: "description",
+        action: "required",
+        message: "",
+      },
+    ]);
+  };
+  const updateConditionalRuleRow = (ruleId, patch = {}) => {
+    setConditionalRuleOverrides((prev) =>
+      normalizePermitConditionalRules(
+        prev.map((row) => (row.id === ruleId ? { ...row, ...patch, when: { ...(row.when || {}), ...(patch.when || {}) } } : row))
+      )
+    );
+  };
+  const removeConditionalRuleRow = (ruleId) => {
+    setConditionalRuleOverrides((prev) => prev.filter((row) => row.id !== ruleId));
+  };
+  const addConditionalClause = (ruleId) => {
+    updateConditionalRuleRow(ruleId, {
+      whenClauses: [
+        ...((conditionalRuleOverrides.find((r) => r.id === ruleId)?.whenClauses || []).slice(0, 11)),
+        { field: "permitType", value: "" },
+      ],
+    });
+  };
+  const updateConditionalClause = (ruleId, idx, patch = {}) => {
+    const target = conditionalRuleOverrides.find((r) => r.id === ruleId);
+    const rows = Array.isArray(target?.whenClauses) ? [...target.whenClauses] : [];
+    if (!rows[idx]) return;
+    rows[idx] = { ...rows[idx], ...patch };
+    updateConditionalRuleRow(ruleId, { whenClauses: rows });
+  };
+  const removeConditionalClause = (ruleId, idx) => {
+    const target = conditionalRuleOverrides.find((r) => r.id === ruleId);
+    const rows = Array.isArray(target?.whenClauses) ? [...target.whenClauses] : [];
+    rows.splice(idx, 1);
+    updateConditionalRuleRow(ruleId, { whenClauses: rows });
+  };
+  const moveConditionalClause = (ruleId, idx, dir) => {
+    const target = conditionalRuleOverrides.find((r) => r.id === ruleId);
+    const rows = Array.isArray(target?.whenClauses) ? [...target.whenClauses] : [];
+    const nextIdx = dir === "up" ? idx - 1 : idx + 1;
+    if (!rows[idx] || !rows[nextIdx]) return;
+    const tmp = rows[idx];
+    rows[idx] = rows[nextIdx];
+    rows[nextIdx] = tmp;
+    updateConditionalRuleRow(ruleId, { whenClauses: rows });
+  };
+  const resetConditionalRules = () => {
+    if (!window.confirm("Reset all conditional rules for this org?")) return;
+    setConditionalRuleOverrides([]);
   };
   const applyShiftBoundaryHours = () => {
     const parsed = normalizeShiftHours(
@@ -4718,6 +5945,9 @@ export default function PermitSystem() {
           permitTypes={effectivePermitTypes}
           handoverShiftHours={shiftBoundaryHours}
           dependencyRules={effectiveDependencyRules}
+          orgPermitDefaults={permitFormDefaults}
+          permitFieldOverrides={permitFieldOverrides}
+          conditionalRules={conditionalRuleOverrides}
           onSave={savePermit}
           onClose={()=>setModal(null)}
         />
@@ -5619,6 +6849,359 @@ export default function PermitSystem() {
             </div>
           ))
         )}
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Conditional rules builder v2 (visual IF/AND/OR)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Build conditions visually using multiple IF clauses with ALL/ANY logic, then apply required/optional/show/hide/block.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={addConditionalRuleRow} style={{ ...ss.btnO, fontSize:12 }}>
+              + Add rule
+            </button>
+            <button type="button" onClick={resetConditionalRules} style={{ ...ss.btn, fontSize:12 }}>
+              Reset all
+            </button>
+          </div>
+        </div>
+        {conditionalRuleOverrides.length === 0 ? (
+          <div style={{ marginTop:10, fontSize:12, color:"var(--color-text-secondary)" }}>
+            No rules yet. Add first IF/THEN rule to automate permit form behavior.
+          </div>
+        ) : (
+          <div style={{ marginTop:10, display:"grid", gap:8 }}>
+            {conditionalRuleOverrides.map((rule) => (
+              <div key={rule.id} style={{ border:"1px solid var(--permit-panel-border)", borderRadius:8, padding:"8px 10px" }}>
+                <div style={{ display:"grid", gap:8 }}>
+                  <div style={{ display:"grid", gap:8 }}>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                      <label style={{ ...ss.lbl, marginBottom:0 }}>IF logic</label>
+                      <select
+                        value={rule.whenOperator || "and"}
+                        onChange={(e) => updateConditionalRuleRow(rule.id, { whenOperator: e.target.value })}
+                        style={{ ...ss.inp, width: 140 }}
+                      >
+                        <option value="and">ALL (AND)</option>
+                        <option value="or">ANY (OR)</option>
+                      </select>
+                      <button type="button" onClick={() => addConditionalClause(rule.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                        + Add IF clause
+                      </button>
+                      <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, minHeight:38 }}>
+                        <input
+                          type="checkbox"
+                          checked={rule.enabled !== false}
+                          onChange={(e) => updateConditionalRuleRow(rule.id, { enabled: e.target.checked })}
+                        />
+                        Enabled
+                      </label>
+                    </div>
+                    {(Array.isArray(rule.whenClauses) ? rule.whenClauses : []).map((clause, idx) => (
+                      <div key={`${rule.id}_clause_${idx}`} style={{ display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,150px) minmax(0,1fr) auto", gap:8, alignItems:"center" }}>
+                        <select
+                          value={clause.field || "permitType"}
+                          onChange={(e) => updateConditionalClause(rule.id, idx, { field: e.target.value, value: "" })}
+                          style={ss.inp}
+                        >
+                          <option value="permitType">Permit type</option>
+                          <option value="status">Status</option>
+                          <option value="projectId">Project</option>
+                        </select>
+                        {clause.field === "permitType" ? (
+                          <select
+                            value={clause.value || ""}
+                            onChange={(e) => updateConditionalClause(rule.id, idx, { value: e.target.value })}
+                            style={ss.inp}
+                          >
+                            <option value="">Any permit type</option>
+                            {Object.entries(effectivePermitTypes).map(([k, v]) => (
+                              <option key={k} value={k}>{v.label}</option>
+                            ))}
+                          </select>
+                        ) : clause.field === "status" ? (
+                          <select
+                            value={clause.value || ""}
+                            onChange={(e) => updateConditionalClause(rule.id, idx, { value: e.target.value })}
+                            style={ss.inp}
+                          >
+                            <option value="">Any status</option>
+                            {WORKFLOW_STATES.map((state) => (
+                              <option key={state} value={state}>{state}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <select
+                            value={clause.value || ""}
+                            onChange={(e) => updateConditionalClause(rule.id, idx, { value: e.target.value })}
+                            style={ss.inp}
+                          >
+                            <option value="">Any project</option>
+                            {load("mysafeops_projects", []).slice(0, 300).map((p) => (
+                              <option key={p.id} value={p.id}>{p.name || p.id}</option>
+                            ))}
+                          </select>
+                        )}
+                        <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
+                          <button type="button" onClick={() => moveConditionalClause(rule.id, idx, "up")} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} disabled={idx === 0}>↑</button>
+                          <button type="button" onClick={() => moveConditionalClause(rule.id, idx, "down")} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} disabled={idx === (rule.whenClauses || []).length - 1}>↓</button>
+                          <button type="button" onClick={() => removeConditionalClause(rule.id, idx)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px", color:"#A32D2D", borderColor:"#F09595" }}>
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "repeat(3,minmax(0,1fr))", gap:8 }}>
+                    <div>
+                      <label style={{ ...ss.lbl, marginBottom:4 }}>THEN action</label>
+                      <select value={rule.action || "required"} onChange={(e) => updateConditionalRuleRow(rule.id, { action: e.target.value })} style={ss.inp}>
+                        <option value="required">Set required</option>
+                        <option value="optional">Set optional</option>
+                        <option value="show">Show field</option>
+                        <option value="hide">Hide field</option>
+                        <option value="block">Block issue</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ ...ss.lbl, marginBottom:4 }}>THEN field</label>
+                      <select value={rule.thenField || ""} onChange={(e) => updateConditionalRuleRow(rule.id, { thenField: e.target.value })} style={ss.inp}>
+                        {PERMIT_FIELD_CATALOG.map((field) => (
+                          <option key={field.id} value={field.id}>{field.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ ...ss.lbl, marginBottom:4 }}>Block message (optional)</label>
+                      <input
+                        value={rule.message || ""}
+                        onChange={(e) => updateConditionalRuleRow(rule.id, { message: e.target.value })}
+                        placeholder="Shown when action = block"
+                        style={ss.inp}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <span style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+                      Rule ID: {rule.id}
+                    </span>
+                    <button type="button" onClick={() => removeConditionalRuleRow(rule.id)} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>
+                      Remove rule
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>No-code form fields editor (MVP)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Configure required/optional, helper text, placeholder, and max length for permit fields without JSON.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={resetFieldSettingsForType} style={{ ...ss.btn, fontSize:12 }}>
+              Reset selected
+            </button>
+            <button type="button" onClick={resetAllFieldSettings} style={{ ...ss.btn, fontSize:12 }}>
+              Reset all
+            </button>
+          </div>
+        </div>
+        <div style={{ marginTop:10, display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,220px) minmax(0,1fr)", gap:8 }}>
+          <div style={{ display:"grid", gap:8, alignContent:"start" }}>
+            <div>
+              <label style={ss.lbl}>Target permit type</label>
+              <select value={fieldEditorType} onChange={(e) => setFieldEditorType(e.target.value)} style={ss.inp}>
+                <option value="_all">All permit types (baseline)</option>
+                {Object.entries(effectivePermitTypes).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={ss.lbl}>Filter fields</label>
+              <input
+                value={fieldEditorFilter}
+                onChange={(e) => setFieldEditorFilter(e.target.value)}
+                placeholder="Search by label, id, section..."
+                style={ss.inp}
+              />
+            </div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Active overrides: {Object.keys(permitFieldOverrides[String(fieldEditorType || "_all").toLowerCase()] || {}).length}
+            </div>
+          </div>
+          <div style={{ display:"grid", gap:8 }}>
+            {PERMIT_FIELD_CATALOG
+              .filter((field) => {
+                const q = String(fieldEditorFilter || "").trim().toLowerCase();
+                if (!q) return true;
+                return (
+                  field.id.toLowerCase().includes(q) ||
+                  field.section.toLowerCase().includes(q) ||
+                  field.label.toLowerCase().includes(q)
+                );
+              })
+              .map((field) => {
+                const cfg = activeFieldConfig[field.id] || field;
+                return (
+                  <div key={field.id} style={{ border:"1px solid var(--permit-panel-border)", borderRadius:8, padding:"8px 10px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", gap:8, alignItems:"center", marginBottom:6, flexWrap:"wrap" }}>
+                      <div>
+                        <div style={{ fontSize:12, fontWeight:700 }}>{field.label}</div>
+                        <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>{field.section} · {field.id} · {field.type}</div>
+                      </div>
+                      <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12 }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(cfg.required)}
+                          onChange={(e) => updatePermitFieldSetting(field.id, { required: e.target.checked })}
+                        />
+                        Required
+                      </label>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:isUltraNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
+                      <div>
+                        <label style={{ ...ss.lbl, marginBottom:4 }}>Placeholder</label>
+                        <input
+                          value={cfg.placeholder || ""}
+                          onChange={(e) => updatePermitFieldSetting(field.id, { placeholder: e.target.value })}
+                          style={ss.inp}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ ...ss.lbl, marginBottom:4 }}>Max length</label>
+                        <input
+                          type="number"
+                          min={20}
+                          max={5000}
+                          value={cfg.maxLength || ""}
+                          onChange={(e) => updatePermitFieldSetting(field.id, { maxLength: Number(e.target.value || 0) })}
+                          style={ss.inp}
+                        />
+                      </div>
+                      <div style={{ gridColumn:"1/-1" }}>
+                        <label style={{ ...ss.lbl, marginBottom:4 }}>Helper text</label>
+                        <input
+                          value={cfg.helpText || ""}
+                          onChange={(e) => updatePermitFieldSetting(field.id, { helpText: e.target.value })}
+                          style={ss.inp}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Permit form company defaults</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Baseline defaults for new permits: people, text templates, signature policy, and required evidence toggles.
+            </div>
+          </div>
+          <button type="button" onClick={resetPermitFormDefaults} style={{ ...ss.btn, fontSize:12 }}>
+            Reset defaults
+          </button>
+        </div>
+        <div style={{ marginTop:10, display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
+          <div>
+            <label style={ss.lbl}>Default issued by</label>
+            <input
+              value={permitFormDefaults.defaultIssuedBy}
+              onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultIssuedBy: e.target.value }))}
+              placeholder="e.g. John Smith — Site manager"
+              style={ss.inp}
+            />
+          </div>
+          <div>
+            <label style={ss.lbl}>Default issued to</label>
+            <input
+              value={permitFormDefaults.defaultIssuedTo}
+              onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultIssuedTo: e.target.value }))}
+              placeholder="e.g. Internal maintenance team"
+              style={ss.inp}
+            />
+          </div>
+          <div>
+            <label style={ss.lbl}>Default authorising role / competency</label>
+            <input
+              value={permitFormDefaults.defaultAuthorisingRole}
+              onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultAuthorisingRole: e.target.value }))}
+              placeholder="e.g. AP electrical, lifting supervisor"
+              style={ss.inp}
+            />
+          </div>
+          <div>
+            <label style={ss.lbl}>Default validity (hours)</label>
+            <input
+              type="number"
+              min={1}
+              max={24}
+              value={permitFormDefaults.defaultValidityHours}
+              onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultValidityHours: Number(e.target.value || 8) }))}
+              style={ss.inp}
+            />
+          </div>
+          <div style={{ gridColumn:"1/-1" }}>
+            <label style={ss.lbl}>Default signature policy</label>
+            <select
+              value={permitFormDefaults.signaturePolicy}
+              onChange={(e) => setPermitFormDefaults((d) => ({ ...d, signaturePolicy: e.target.value === "required_now" ? "required_now" : "allow_later" }))}
+              style={ss.inp}
+            >
+              <option value="allow_later">Allow issue and collect signatures later</option>
+              <option value="required_now">Require signatures before issue</option>
+            </select>
+          </div>
+          <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12 }}>
+            <input
+              type="checkbox"
+              checked={permitFormDefaults.requireBriefingBeforeIssue}
+              onChange={(e) => setPermitFormDefaults((d) => ({ ...d, requireBriefingBeforeIssue: e.target.checked }))}
+            />
+            Require briefing timestamp before issue
+          </label>
+          <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12 }}>
+            <input
+              type="checkbox"
+              checked={permitFormDefaults.requireEvidencePhotoBeforeIssue}
+              onChange={(e) => setPermitFormDefaults((d) => ({ ...d, requireEvidencePhotoBeforeIssue: e.target.checked }))}
+            />
+            Require evidence photo before issue
+          </label>
+          <div style={{ gridColumn:"1/-1" }}>
+            <label style={ss.lbl}>Default additional conditions template</label>
+            <textarea
+              value={permitFormDefaults.defaultConditionsTemplate}
+              onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultConditionsTemplate: e.target.value }))}
+              style={{ ...ss.ta, minHeight:64 }}
+              placeholder="Standard restrictions and controls used by your company..."
+            />
+          </div>
+          <div style={{ gridColumn:"1/-1" }}>
+            <label style={ss.lbl}>Default evidence notes template</label>
+            <textarea
+              value={permitFormDefaults.defaultEvidenceNotesTemplate}
+              onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultEvidenceNotesTemplate: e.target.value }))}
+              style={{ ...ss.ta, minHeight:64 }}
+              placeholder="Standard evidence wording for toolbox/barriers/LOTO references..."
+            />
+          </div>
+        </div>
       </div>
 
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>

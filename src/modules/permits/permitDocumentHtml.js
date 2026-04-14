@@ -123,6 +123,29 @@ export function renderPermitDocumentHtml(permit) {
     ${legalRefs.map((ref) => `<li>${escapeHtml(ref)}</li>`).join("")}
   </ul>`
     : "";
+  const signatureRows = Array.isArray(permit.signatures) && permit.signatures.length > 0
+    ? permit.signatures
+    : [
+        { role: "issuer", signedBy: permit.issuedBy || "", signedAt: "", note: "", signatureImageDataUrl: "" },
+        { role: "receiver", signedBy: permit.issuedTo || "", signedAt: "", note: "", signatureImageDataUrl: "" },
+      ];
+  const signatureRowsHtml = signatureRows
+    .map((row) => {
+      const roleLabel = escapeHtml(String(row.role || "").replace(/_/g, " ") || "signature");
+      const signer = escapeHtml(row.signedBy || "—");
+      const when = escapeHtml(row.signedAt ? fmtDateTime(row.signedAt) : "—");
+      const note = row.note ? `<div style="font-size:10px;color:#666;margin-top:2px">${escapeHtml(row.note)}</div>` : "";
+      const signatureImage = row.signatureImageDataUrl
+        ? `<img src="${escapeAttr(row.signatureImageDataUrl)}" alt="${roleLabel} signature" style="max-width:100%;max-height:42px;object-fit:contain;display:block;margin:0 auto"/>`
+        : "";
+      return `<tr style="height:48px">
+        <td style="padding:6px;border:1px solid #ddd">${roleLabel}</td>
+        <td style="padding:6px;border:1px solid #ddd">${signer}${note}</td>
+        <td style="padding:4px;border:1px solid #ddd">${signatureImage}</td>
+        <td style="padding:6px;border:1px solid #ddd">${when}</td>
+      </tr>`;
+    })
+    .join("");
 
   const logoAttr = org.logo ? escapeAttr(org.logo) : "";
   const orgName = escapeHtml(org.name || "MySafeOps");
@@ -194,9 +217,7 @@ export function renderPermitDocumentHtml(permit) {
   <h2>Signatures</h2>
   <table>
     <tr><th>Role</th><th>Name</th><th>Signature</th><th>Date/Time</th></tr>
-    <tr style="height:48px"><td style="padding:6px;border:1px solid #ddd">Issued by (Authorised Person)</td><td style="padding:6px;border:1px solid #ddd">${escapeHtml(permit.issuedBy || "")}</td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td></tr>
-    <tr style="height:48px"><td style="padding:6px;border:1px solid #ddd">Received by (Permit holder)</td><td style="padding:6px;border:1px solid #ddd">${escapeHtml(permit.issuedTo || "")}</td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td></tr>
-    <tr style="height:48px"><td style="padding:6px;border:1px solid #ddd">Permit closed by</td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td><td style="border:1px solid #ddd"></td></tr>
+    ${signatureRowsHtml}
   </table>
   ${
     statusLc === "closed" && permit.closedAt

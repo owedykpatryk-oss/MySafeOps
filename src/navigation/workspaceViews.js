@@ -11,6 +11,7 @@ export const workspaceViewLoaders = {
   workers: () => import("../modules/Workers"),
   bin: () => import("../modules/RecycleBin"),
   "site-map": () => import("../modules/SitePresenceMap"),
+  "project-drawings": () => import("../modules/ProjectDrawingEditor"),
   "method-statement": () => import("../modules/MethodStatement"),
   cdm: () => import("../modules/CDMCompliance"),
   "daily-briefing": () => import("../modules/DailyBriefing"),

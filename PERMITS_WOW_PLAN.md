@@ -260,6 +260,7 @@ Started now (library entries added in `ramsHazardLibraryExtended.js`):
 
 ### D2. Customization backlog (platform)
 
+- ✅ Started now (MVP): No-code permit field settings editor (required/optional, helper text, placeholder, max length) in `PermitSystem` UI without JSON.
 - No-code permit type builder (fields, signatures, checklist, SLA defaults).
 - ✅ Started now (MVP): org-level permit type appearance overrides (label/color/description) with reset controls in `PermitSystem`.
 - Workflow designer by org (state transitions, gate logic, role permissions).
@@ -267,7 +268,7 @@ Started now (library entries added in `ramsHazardLibraryExtended.js`):
 - ✅ Started now (MVP): workflow role permissions per target state (admin/supervisor/operative policy overrides).
 - ✅ Started now (MVP): permit dependency rules (e.g. `confined_space` requires active `loto`) with activation gate enforcement.
 - ✅ Added: wizard-style editors for workflow transitions, role policy, and dependency rules (JSON kept as advanced mode).
-- Rule builder for conditional controls (`if X + Y -> require Z evidence/approver`).
+- ✅ Started now (MVP): Conditional Rules Builder v1 (no-code IF/THEN by permit type/status/project -> required/show/hide/block).
 - PDF branding/profile editor (logo, footer, legal block, language, section order).
 - Role-specific dashboard presets (issuer/reviewer/manager action-focused layouts).
 - Per-project view presets and mandatory evidence profiles.
@@ -343,3 +344,100 @@ Vitest covers compliance, evidence pack, document HTML, **permit advanced engine
 - Verify sticky bulk bar behavior does not cover content while scrolling.
 - Confirm cards, chips, and workflow rail keep alignment in list, board, and timeline views.
 - Verify no horizontal scrolling appears in main permits screen.
+
+---
+
+## H. Permits customization expansion (company-first)
+
+Goal: make permits editable by non-technical teams, with reusable company standards and consistent visual quality.
+
+### H1. Quick wins (high impact, low effort)
+
+- **Org text library**:
+  - saved snippets for `description`, `conditions`, `evidence notes`, `handover notes`,
+  - tags per snippet (`hot works`, `loto`, `night shift`) and one-click insert.
+- **Company defaults per permit type**:
+  - default issuer, default receiver role, default checklist state,
+  - default validity window (e.g. 8h, 12h), default reminder offsets.
+- **Preset bundles** (one-click apply):
+  - “Weekend hot works”, “Night LOTO”, “Confined space – rescue team on standby”.
+- **Optional/required toggles by org policy**:
+  - signatures required now vs later,
+  - mandatory fields by type (with hard/soft mode).
+- **Saved view packs by role**:
+  - issuer/reviewer/supervisor “home screens” with pinned filters and cards.
+
+### H2. Mid-level customization (builder UX)
+
+- **No-code section builder for permit form**:
+  - add/remove/reorder sections and fields from UI,
+  - field types: text, select, checkbox, date-time, person, attachment.
+- **Conditional logic builder**:
+  - “if `confined space` + `gas test fail` -> require rescue plan + supervisor signature”.
+- **Validation rule builder**:
+  - min/max, regex, required-if, cross-field checks.
+- **Reusable company checklists**:
+  - global libraries with versions, archive/restore, and “apply to all projects”.
+- **Permit-type cloning**:
+  - duplicate a configured type and adjust only deltas.
+
+### H3. Workforce + signature experience
+
+- **Worker profile autopopulation**:
+  - selecting person auto-fills role, employer, cert highlights.
+- **Competency-aware suggestions**:
+  - recommend eligible workers first; show “why blocked” for ineligible choices.
+- **Signature UX v2**:
+  - quick sign + typed sign + optional drawn signature pad,
+  - signature stamps with role + timestamp + device info.
+- **Signature policy matrix**:
+  - required signatures by status (`review`, `activate`, `close`) and by permit type.
+- **Delegation mode**:
+  - temporary substitute signer with reason and expiry window.
+
+### H4. Reuse and standardization at company scale
+
+- **Company standards pack**:
+  - legal references, emergency text, permit footer, escalation contacts.
+- **Project overrides on top of org baseline**:
+  - project-level deltas without duplicating full templates.
+- **Versioning + rollout controls**:
+  - draft/published template versions, effective date, rollback.
+- **Import/export standards**:
+  - JSON/CSV package for moving setups across orgs/projects.
+- **Approval workflow for template changes**:
+  - maker-checker before policy goes live.
+
+### H5. Visual quality and usability polish
+
+- **Form density and label modes**:
+  - compact / standard / training mode with helper text.
+- **Inline “why blocked” chips**:
+  - each blocker shows exact fix action and jump link.
+- **Live side-by-side preview editor**:
+  - edit text blocks and section order with immediate PDF/print preview.
+- **Smart empty states and onboarding**:
+  - first-time guided setup (“create your first company preset”).
+- **Accessibility polish**:
+  - larger targets, keyboard-first tab order, explicit aria labels, contrast-safe tones.
+
+### H6. Knowledge capture (learn from repeated usage)
+
+- **Auto-suggest from history**:
+  - suggest common phrases by permit type + project + user role.
+- **“Save this as company standard” prompt**:
+  - appears when same text is reused multiple times.
+- **Most-used controls dashboard**:
+  - discover which snippets/checklists are used vs ignored.
+- **Template quality score**:
+  - highlights noisy/unused fields and missing standards.
+- **Continuous improvement log**:
+  - track template changes and outcome metrics (rework, delays, blocked activations).
+
+### Suggested delivery order
+
+1. Org text library + company defaults + optional/required toggles.
+2. Preset bundles + role view packs + worker competency suggestions.
+3. No-code section builder + conditional logic + validation builder.
+4. Signature UX v2 + signature policy matrix + delegation mode.
+5. Versioned standards pack + project overrides + approval workflow.
