@@ -1,8 +1,8 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { loginLinkPrefetchProps, prefetchLoginPage } from "../../utils/routePrefetch";
+import LandingBlogSection from "./LandingBlogSection";
 
-const LandingSoroBlog = lazy(() => import("./LandingSoroBlog"));
 const LandingFaqSection = lazy(() => import("./LandingFaqSection"));
 
 function FaqSuspenseFallback() {
@@ -32,27 +32,6 @@ function FaqSuspenseFallback() {
               <div className="soro-blog-skeleton-line" style={{ marginBottom: 0 }} />
             </div>
           ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SoroBlogSuspenseFallback() {
-  return (
-    <section className="landing-soro-wrap" aria-busy="true" aria-label="Loading blog">
-      <div className="ctn">
-        <div className="soro-blog-host" style={{ minHeight: 280 }}>
-          <div className="soro-blog-skeleton" style={{ position: "relative", inset: "auto" }}>
-            <div className="soro-blog-skeleton-inner">
-              <div className="soro-blog-skeleton-line soro-blog-skeleton-line--lg" />
-              <div className="soro-blog-skeleton-line soro-blog-skeleton-line--sm" />
-              <div className="soro-blog-skeleton-cards">
-                <div className="soro-blog-skeleton-card" />
-                <div className="soro-blog-skeleton-card" />
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </section>
@@ -387,9 +366,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
 
       <RoiEstimatorSection />
 
-      <Suspense fallback={<SoroBlogSuspenseFallback />}>
-        <LandingSoroBlog />
-      </Suspense>
+      <LandingBlogSection />
 
       <Suspense fallback={<FaqSuspenseFallback />}>
         <LandingFaqSection />
