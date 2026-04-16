@@ -287,6 +287,14 @@
 
 .fu{opacity:0;transform:translateY(30px);transition:all .6s ease-out}.fu.vi{opacity:1;transform:translateY(0)}
 
+/* Fade-up (.fu → .vi) runs only on the home LandingPage (IntersectionObserver). Blog routes reuse .fu but have no observer — show immediately. */
+.blog-index-page .fu,
+.blog-article-page .fu {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+
 @media(max-width:900px){
   .hg{gap:36px}
 }
