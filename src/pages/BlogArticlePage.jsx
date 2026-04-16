@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { marked } from "marked";
+import { getBundledPostMarkdown } from "../blog/loadPostMarkdown";
 import LandingFooter from "../components/landing/LandingFooter";
 import { getPostMetaBySlug, isValidBlogSlug } from "../data/landingBlogPosts";
 import { prepareBlogMarkdown } from "../utils/blogMarkdown";
@@ -44,42 +45,27 @@ function useBlogArticleLinkDelegate(articleRef, html) {
 export default function BlogArticlePage() {
   const { slug } = useParams();
   const articleRef = useRef(null);
-  const [html, setHtml] = useState("");
-  const [status, setStatus] = useState("loading");
 
   const meta = slug ? getPostMetaBySlug(slug) : null;
 
-  useBlogArticleLinkDelegate(articleRef, html);
-
-  useEffect(() => {
-    if (!isValidBlogSlug(slug)) {
-      setStatus("invalid");
-      return;
+  const { html, loadError } = useMemo(() => {
+    if (!slug || !isValidBlogSlug(slug)) {
+      return { html: "", loadError: null };
     }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const base = import.meta.env.BASE_URL || "/";
-        const prefix = base.endsWith("/") ? base.slice(0, -1) : base;
-        const res = await fetch(`${prefix}/blog/posts/${slug}.md`);
-        if (!res.ok) throw new Error(String(res.status));
-        const raw = await res.text();
-        const md = prepareBlogMarkdown(raw);
-        const out = marked.parse(md, { async: false, gfm: true });
-        if (!cancelled) {
-          setHtml(typeof out === "string" ? out : String(out));
-          setStatus("ok");
-        }
-      } catch {
-        if (!cancelled) setStatus("error");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    const raw = getBundledPostMarkdown(slug);
+    if (!raw) {
+      return { html: "", loadError: "missing" };
+    }
+    try {
+      const md = prepareBlogMarkdown(raw);
+      const out = marked.parse(md, { async: false, gfm: true });
+      return { html: typeof out === "string" ? out : String(out), loadError: null };
+    } catch {
+      return { html: "", loadError: "parse" };
+    }
   }, [slug]);
+
+  useBlogArticleLinkDelegate(articleRef, html);
 
   useEffect(() => {
     if (!meta?.title) return undefined;
@@ -92,6 +78,36 @@ export default function BlogArticlePage() {
 
   if (!isValidBlogSlug(slug)) {
     return <Navigate to="/blog" replace />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="landing-page blog-article-page">
+        <header className="blog-index-header" role="banner">
+          <div className="ctn blog-index-header-inner">
+            <Link to="/" className="logo">
+              <span className="lt" style={{ fontSize: 18 }}>
+                <span style={{ color: "var(--teal)" }}>My</span>
+                <span style={{ color: "var(--navy)" }}>Safe</span>
+                <span style={{ color: "var(--org)" }}>Ops</span>
+              </span>
+            </Link>
+            <nav className="blog-index-nav" aria-label="Article">
+              <Link to="/blog">All articles</Link>
+            </nav>
+          </div>
+        </header>
+        <main className="blog-article-main">
+          <div className="ctn blog-article-state">
+            <p className="landing-blog-lead">This article could not be loaded.</p>
+            <p>
+              <Link to="/blog">← Back to blog</Link>
+            </p>
+          </div>
+        </main>
+        <LandingFooter supportEmail={SUPPORT_EMAIL} />
+      </div>
+    );
   }
 
   return (
@@ -127,40 +143,23 @@ export default function BlogArticlePage() {
       </header>
 
       <main id="blog-article-main" tabIndex={-1} className="blog-article-main">
-        {status === "loading" && (
-          <div className="ctn blog-article-state">
-            <p className="landing-blog-lead" style={{ margin: "24px 0" }}>
-              Loading article…
-            </p>
-          </div>
-        )}
-        {status === "error" && (
-          <div className="ctn blog-article-state">
-            <p className="landing-blog-lead">Could not load this article. Try again later or open the guides from the home page.</p>
-            <p>
-              <Link to="/blog">← Back to blog</Link>
-            </p>
-          </div>
-        )}
-        {status === "ok" && (
-          <div className="ctn blog-article-inner fu">
-            <p className="blog-article-kicker">
-              <Link to="/blog">Blog</Link>
-              <span aria-hidden> · </span>
-              <span>{meta?.dateLabel}</span>
-              <span aria-hidden> · </span>
-              <span>{meta?.readTime}</span>
-            </p>
-            <article
-              ref={articleRef}
-              className="blog-article-prose"
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
-            <p className="blog-article-back">
-              <Link to="/blog">← All articles</Link>
-            </p>
-          </div>
-        )}
+        <div className="ctn blog-article-inner fu">
+          <p className="blog-article-kicker">
+            <Link to="/blog">Blog</Link>
+            <span aria-hidden> · </span>
+            <span>{meta?.dateLabel}</span>
+            <span aria-hidden> · </span>
+            <span>{meta?.readTime}</span>
+          </p>
+          <article
+            ref={articleRef}
+            className="blog-article-prose"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+          <p className="blog-article-back">
+            <Link to="/blog">← All articles</Link>
+          </p>
+        </div>
       </main>
 
       <LandingFooter supportEmail={SUPPORT_EMAIL} />
