@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "npm run verify:blog && node scripts/generate-sitemap.mjs && node scripts/generate-blog-rss.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "stripe:seed-prices": "node scripts/stripe-seed-prices.mjs",
@@ -22,6 +23,7 @@
     "@fontsource-variable/dm-sans": "^5.2.8",
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "@supabase/supabase-js": "^2.102.1",
+    "dompurify": "^3.4.0",
     "html2canvas": "^1.4.1",
     "leaflet": "^1.9.4",
     "leaflet.markercluster": "^1.5.3",

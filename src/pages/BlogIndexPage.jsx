@@ -1,20 +1,25 @@
-import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import LandingFooter from "../components/landing/LandingFooter";
 import BlogPostsGrid from "../components/landing/BlogPostsGrid";
+import { getPublicSiteOrigin } from "../utils/blogPublicUrl";
+import { useBlogDocumentMeta } from "../utils/blogPageMeta";
 import "../styles/landing.css";
 
 const SUPPORT_EMAIL = "mysafeops@gmail.com";
 const TITLE = "Blog — UK construction safety guides | MySafeOps";
+const DESCRIPTION =
+  "Practical UK construction safety guides for site managers and H&S leads: permits, inductions, toolbox talks, COSHH, and compliance updates.";
 
 export default function BlogIndexPage() {
-  useEffect(() => {
-    const prev = document.title;
-    document.title = TITLE;
-    return () => {
-      document.title = prev;
-    };
-  }, []);
+  const origin = getPublicSiteOrigin();
+
+  useBlogDocumentMeta({
+    title: TITLE,
+    description: DESCRIPTION,
+    canonicalUrl: `${origin}/blog`,
+    ogType: "website",
+    rssFeedUrl: `${origin}/blog/rss.xml`,
+  });
 
   return (
     <div className="landing-page blog-index-page">
@@ -59,7 +64,13 @@ export default function BlogIndexPage() {
               </div>
               <h1 id="blog-index-heading">Safety guides &amp; compliance notes</h1>
               <p className="landing-blog-lead">
-                Practical articles for site managers and H&amp;S leads. Full articles open on our blog (new tab).
+                Practical articles for site managers and H&amp;S leads. Open any guide below to read the full article on MySafeOps.
+              </p>
+              <p className="landing-blog-rss-note">
+                <a href="/blog/rss.xml" className="landing-blog-index-link">
+                  RSS feed
+                </a>{" "}
+                for updates.
               </p>
             </div>
             <BlogPostsGrid variant="page" />

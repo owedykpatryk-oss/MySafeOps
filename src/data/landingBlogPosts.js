@@ -10,6 +10,7 @@ export const LANDING_BLOG_POSTS = [
     excerpt:
       "A practical guide to choosing a permit to work app for UK construction. Hot work, height, confined space and electrical permits — what matters and what is hype.",
     dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
     readTime: "6 min read",
     image: "/blog/images/permit-to-work-app-uk-hero.png",
   },
@@ -28,6 +29,7 @@ export const LANDING_BLOG_POSTS = [
     excerpt:
       "Atmospheric testing, rescue plans, and why digital permits keep arrangements visible when it matters.",
     dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
     readTime: "6 min read",
     image: "/blog/images/confined-space-permit-uk-hero.png",
   },
@@ -37,6 +39,7 @@ export const LANDING_BLOG_POSTS = [
     excerpt:
       "Why teams move toolbox talks to mobile apps, what HSE expects from records, and briefings workers actually engage with.",
     dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
     readTime: "5 min read",
     image: "/blog/images/digital-toolbox-talks-hero.png",
   },
@@ -46,6 +49,7 @@ export const LANDING_BLOG_POSTS = [
     excerpt:
       "CDM 2015 induction duties, why paper fails audits, and what good induction software includes.",
     dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
     readTime: "5 min read",
     image: "/blog/images/site-induction-software-hero.png",
   },
@@ -55,6 +59,7 @@ export const LANDING_BLOG_POSTS = [
     excerpt:
       "Replacing paper COSHH registers with apps: SDS version control, search, and evidence at the point of work.",
     dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
     readTime: "5 min read",
     image: "/blog/images/coshh-register-software-uk-hero.png",
   },
@@ -64,6 +69,7 @@ export const LANDING_BLOG_POSTS = [
     excerpt:
       "How per-seat pricing breaks adoption on UK sites, and why free worker accounts keep permits and briefings honest.",
     dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
     readTime: "5 min read",
     image: "/blog/images/free-safety-app-hero.png",
   },
@@ -73,6 +79,7 @@ export const LANDING_BLOG_POSTS = [
     excerpt:
       "HSE consultation on reporting injuries and ill health: dangerous occurrences, diseases, and the response window.",
     dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
     readTime: "7 min read",
     image: "/blog/images/riddor-changes-2026-hero.png",
   },

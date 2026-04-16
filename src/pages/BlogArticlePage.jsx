@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { marked } from "marked";
+import DOMPurify from "dompurify";
 import { getBundledPostMarkdown } from "../blog/loadPostMarkdown";
 import LandingFooter from "../components/landing/LandingFooter";
 import { getPostMetaBySlug, isValidBlogSlug } from "../data/landingBlogPosts";
-import { prepareBlogMarkdown } from "../utils/blogMarkdown";
+import { getBlogPostUrl, getPublicSiteOrigin } from "../utils/blogPublicUrl";
+import { useBlogDocumentMeta } from "../utils/blogPageMeta";
+import { addLazyLoadingToBlogImages, parseBlogPostHtml } from "../utils/blogMarkdownRender";
 import "../styles/landing.css";
 
 const SUPPORT_EMAIL = "mysafeops@gmail.com";
@@ -42,39 +44,98 @@ function useBlogArticleLinkDelegate(articleRef, html) {
   }, [articleRef, html, navigate]);
 }
 
+/**
+ * @param {{ level: number; text: string; id: string }[]} toc
+ */
+function BlogArticleToc({ toc }) {
+  if (toc.length === 0) return null;
+  return (
+    <nav className="blog-article-toc" aria-labelledby="blog-toc-heading">
+      <h2 id="blog-toc-heading" className="blog-article-toc-title">
+        On this page
+      </h2>
+      <ol className="blog-article-toc-list">
+        {toc.map((item) => (
+          <li
+            key={item.id}
+            className={`blog-article-toc-item blog-article-toc-item--h${item.level}`}
+          >
+            <a href={`#${item.id}`}>{item.text}</a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
 export default function BlogArticlePage() {
   const { slug } = useParams();
   const articleRef = useRef(null);
 
   const meta = slug ? getPostMetaBySlug(slug) : null;
 
-  const { html, loadError } = useMemo(() => {
+  const { html, toc, loadError } = useMemo(() => {
     if (!slug || !isValidBlogSlug(slug)) {
-      return { html: "", loadError: null };
+      return { html: "", toc: [], loadError: null };
     }
     const raw = getBundledPostMarkdown(slug);
     if (!raw) {
-      return { html: "", loadError: "missing" };
+      return { html: "", toc: [], loadError: "missing" };
     }
     try {
-      const md = prepareBlogMarkdown(raw);
-      const out = marked.parse(md, { async: false, gfm: true });
-      return { html: typeof out === "string" ? out : String(out), loadError: null };
+      const { html: rawHtml, toc: headings } = parseBlogPostHtml(raw);
+      const safe = DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } });
+      const withLazyImages = addLazyLoadingToBlogImages(safe);
+      return { html: withLazyImages, toc: headings, loadError: null };
     } catch {
-      return { html: "", loadError: "parse" };
+      return { html: "", toc: [], loadError: "parse" };
     }
   }, [slug]);
 
   useBlogArticleLinkDelegate(articleRef, html);
 
-  useEffect(() => {
-    if (!meta?.title) return undefined;
-    const prev = document.title;
-    document.title = `${meta.title} · MySafeOps`;
-    return () => {
-      document.title = prev;
+  const origin = getPublicSiteOrigin();
+  const metaForHead = meta && slug && !loadError ? meta : null;
+  const canonicalUrl = metaForHead && slug ? getBlogPostUrl(slug) : "";
+  useBlogDocumentMeta(
+    {
+      title: metaForHead ? `${metaForHead.title} · MySafeOps` : "",
+      description: metaForHead?.excerpt ?? "",
+      canonicalUrl,
+      ogImageUrl: metaForHead?.image ? `${origin}${metaForHead.image}` : undefined,
+      ogType: "article",
+      rssFeedUrl: `${origin}/blog/rss.xml`,
+    },
+    Boolean(metaForHead),
+  );
+
+  const jsonLd = useMemo(() => {
+    if (!metaForHead || !slug || loadError) return null;
+    const url = getBlogPostUrl(slug);
+    const imageUrl = metaForHead.image ? `${origin}${metaForHead.image}` : undefined;
+    return {
+      "@context": "https://schema.org",
+      "@type": "BlogPosting",
+      headline: metaForHead.title,
+      description: metaForHead.excerpt,
+      datePublished: metaForHead.publishedIso,
+      dateModified: metaForHead.publishedIso,
+      ...(imageUrl ? { image: [imageUrl] } : {}),
+      url,
+      mainEntityOfPage: {
+        "@type": "WebPage",
+        "@id": url,
+      },
+      author: {
+        "@type": "Organization",
+        name: "MySafeOps",
+      },
+      publisher: {
+        "@type": "Organization",
+        name: "MySafeOps",
+      },
     };
-  }, [meta?.title]);
+  }, [metaForHead, slug, loadError, origin]);
 
   if (!isValidBlogSlug(slug)) {
     return <Navigate to="/blog" replace />;
@@ -112,6 +173,12 @@ export default function BlogArticlePage() {
 
   return (
     <div className="landing-page blog-article-page">
+      {jsonLd ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      ) : null}
       <a href="#blog-article-main" className="landing-skip-link">
         Skip to article
       </a>
@@ -151,6 +218,7 @@ export default function BlogArticlePage() {
             <span aria-hidden> · </span>
             <span>{meta?.readTime}</span>
           </p>
+          <BlogArticleToc toc={toc} />
           <article
             ref={articleRef}
             className="blog-article-prose"

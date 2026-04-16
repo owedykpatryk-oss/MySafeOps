@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>MySafeOps — UK construction safety guides</title>
+    <link>https://mysafeops.com/blog</link>
+    <description>Practical articles for site managers and H&amp;S leads: permits, inductions, toolbox talks, COSHH, and compliance.</description>
+    <language>en-gb</language>
+    <lastBuildDate>Thu, 16 Apr 2026 22:38:09 GMT</lastBuildDate>
+    <atom:link href="https://mysafeops.com/blog/rss.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Permit to Work App UK: What Good Digital PTW Actually Looks Like</title>
+      <link>https://mysafeops.com/blog/permit-to-work-app-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/permit-to-work-app-uk</guid>
+      <pubDate>Thu, 16 Apr 2026 12:00:00 GMT</pubDate>
+      <description>A practical guide to choosing a permit to work app for UK construction. Hot work, height, confined space and electrical permits — what matters and what is hype.</description>
+    </item>
+    <item>
+      <title>Hot Work Permit UK: A Practical Guide for Construction Sites</title>
+      <link>https://mysafeops.com/blog/hot-work-permit-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/hot-work-permit-uk</guid>
+      <pubDate>Thu, 16 Apr 2026 12:00:00 GMT</pubDate>
+      <description>What a hot work permit must include, common mistakes, and how digital permits help close out the fire watch properly.</description>
+    </item>
+    <item>
+      <title>Confined Space Permit UK: The Controls That Actually Save Lives</title>
+      <link>https://mysafeops.com/blog/confined-space-permit-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/confined-space-permit-uk</guid>
+      <pubDate>Thu, 16 Apr 2026 12:00:00 GMT</pubDate>
+      <description>Atmospheric testing, rescue plans, and why digital permits keep arrangements visible when it matters.</description>
+    </item>
+    <item>
+      <title>Digital Toolbox Talks: How UK Construction Teams Are Ditching the Paper Register</title>
+      <link>https://mysafeops.com/blog/digital-toolbox-talks</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/digital-toolbox-talks</guid>
+      <pubDate>Thu, 16 Apr 2026 12:00:00 GMT</pubDate>
+      <description>Why teams move toolbox talks to mobile apps, what HSE expects from records, and briefings workers actually engage with.</description>
+    </item>
+    <item>
+      <title>Site Induction Software: Making the First 20 Minutes on Site Count</title>
+      <link>https://mysafeops.com/blog/site-induction-software-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/site-induction-software-uk</guid>
+      <pubDate>Thu, 16 Apr 2026 12:00:00 GMT</pubDate>
+      <description>CDM 2015 induction duties, why paper fails audits, and what good induction software includes.</description>
+    </item>
+    <item>
+      <title>COSHH Register Software UK: Managing Substances Without the Binder</title>
+      <link>https://mysafeops.com/blog/coshh-register-software-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/coshh-register-software-uk</guid>
+      <pubDate>Thu, 16 Apr 2026 12:00:00 GMT</pubDate>
+      <description>Replacing paper COSHH registers with apps: SDS version control, search, and evidence at the point of work.</description>
+    </item>
+    <item>
+      <title>Free Safety App for Construction Workers: Why Per-Seat Pricing Kills Adoption</title>
+      <link>https://mysafeops.com/blog/free-safety-app-construction-workers</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/free-safety-app-construction-workers</guid>
+      <pubDate>Thu, 16 Apr 2026 12:00:00 GMT</pubDate>
+      <description>How per-seat pricing breaks adoption on UK sites, and why free worker accounts keep permits and briefings honest.</description>
+    </item>
+    <item>
+      <title>RIDDOR Changes 2026: What UK Construction Firms Need to Know Before 30 June</title>
+      <link>https://mysafeops.com/blog/riddor-changes-2026</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/riddor-changes-2026</guid>
+      <pubDate>Thu, 16 Apr 2026 12:00:00 GMT</pubDate>
+      <description>HSE consultation on reporting injuries and ill health: dangerous occurrences, diseases, and the response window.</description>
+    </item>
+  </channel>
+</rss>
