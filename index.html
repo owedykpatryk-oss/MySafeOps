@@ -11,17 +11,17 @@
     <meta property="og:description" content="RAMS, permits to work, inspections, worker competency, and 40+ registers — browser-first for UK construction." />
     <meta property="og:type" content="website" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Single CSS request: fewer round-trips than separate family= links -->
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
+    <link rel="dns-prefetch" href="https://burgpzankkqvpcmdkhro.supabase.co" />
     <title>MySafeOps</title>
+    <!-- Inline critical styles for the loading skeleton (shown before JS boots) -->
+    <style>
+      .boot-skeleton{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f8fafc;font-family:system-ui,sans-serif;color:#94a3b8}
+      .boot-spinner{width:28px;height:28px;border:3px solid #e2e8f0;border-top-color:#0d9488;border-radius:50%;animation:bs .7s linear infinite}
+      @keyframes bs{to{transform:rotate(360deg)}}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot-skeleton" aria-label="Loading MySafeOps"><div class="boot-spinner"></div></div></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

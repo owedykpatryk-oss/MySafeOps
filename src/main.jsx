@@ -1,5 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+// Variable font files are referenced via @font-face in index.css (using original
+// family names so every existing font-family: "DM Sans" / "Plus Jakarta Sans"
+// reference works without changes).
 import "./index.css";
 import App from "./App.jsx";
 import { AppProvider } from "./context/AppContext";

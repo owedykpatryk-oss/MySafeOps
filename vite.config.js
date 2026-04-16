@@ -9,6 +9,7 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
+    modulePreload: { polyfill: false },
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -16,8 +17,17 @@ export default defineConfig({
           if (id.includes("@supabase")) return "supabase";
           if (id.includes("lucide-react")) return "lucide";
           if (id.includes("react-router")) return "router";
-          // One vendor chunk for React + other deps avoids Rollup circular-chunk warnings.
-          return "vendor";
+          if (
+            id.includes("/react/") ||
+            id.includes("\\react\\") ||
+            id.includes("react-dom") ||
+            id.includes("scheduler")
+          ) {
+            return "react-core";
+          }
+          // Let Rollup split the remaining deps by async boundaries.
+          // This keeps initial bundles leaner for landing-first visits.
+          return undefined;
         },
       },
     },

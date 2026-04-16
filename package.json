@@ -18,6 +18,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.2.8",
+    "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "@supabase/supabase-js": "^2.102.1",
     "html2canvas": "^1.4.1",
     "leaflet": "^1.9.4",
