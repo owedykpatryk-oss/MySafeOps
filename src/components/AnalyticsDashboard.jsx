@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loadOrgScoped as load } from "../utils/orgStorage";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
@@ -134,6 +134,7 @@ function ExpiryRow({ name, role, certType, expiryDate, urgent }) {
 export default function AnalyticsDashboard() {
   const [incidentWeeks, setIncidentWeeks] = useState(8);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const progressBadgeRef = useRef(null);
 
   // pull all data from localStorage
   const workers = load("mysafeops_workers", []);
@@ -350,6 +351,9 @@ export default function AnalyticsDashboard() {
   );
   const completedChecklist = checklist.filter((x) => x.done).length;
   const checklistDone = completedChecklist === checklist.length;
+  const checklistProgressPct = Math.round((completedChecklist / Math.max(1, checklist.length)) * 100);
+  const nextChecklistItem = checklist.find((item) => !item.done) || null;
+  const checklistDisplay = [...checklist].sort((a, b) => Number(a.done) - Number(b.done));
 
   useEffect(() => {
     try {
@@ -357,11 +361,36 @@ export default function AnalyticsDashboard() {
     } catch {}
   }, []);
 
+  useEffect(() => {
+    if (!checklistDone || onboardingDismissed || !progressBadgeRef.current) return;
+    progressBadgeRef.current.animate(
+      [
+        { transform: "scale(1)", boxShadow: "0 0 0 rgba(13,148,136,0)" },
+        { transform: "scale(1.08)", boxShadow: "0 0 0 6px rgba(13,148,136,0.18)" },
+        { transform: "scale(1)", boxShadow: "0 0 0 rgba(13,148,136,0)" },
+      ],
+      { duration: 700, easing: "ease-out", iterations: 1 }
+    );
+  }, [checklistDone, onboardingDismissed]);
+
   const dismissChecklist = () => {
     setOnboardingDismissed(true);
     try {
       localStorage.setItem(ONBOARDING_DISMISS_KEY, "1");
     } catch {}
+  };
+
+  const runChecklistCta = (cta) => {
+    if (cta === "organisation") openWorkspaceSettings({ tab: "organisation" });
+    else if (cta === "workers") openWorkspaceView({ viewId: "workers" });
+    else if (cta === "invites") openWorkspaceSettings({ tab: "invites" });
+  };
+
+  const checklistCtaLabel = (cta) => {
+    if (cta === "organisation") return "Open settings";
+    if (cta === "workers") return "Open workers";
+    if (cta === "invites") return "Open invites";
+    return "Open";
   };
 
   return (
@@ -507,36 +536,169 @@ export default function AnalyticsDashboard() {
           title="Getting started checklist"
           action={
             checklistDone ? (
-              <button type="button" style={{ ...ms.btn, padding: "6px 10px", fontSize: 12 }} onClick={dismissChecklist}>
-                Dismiss
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  ref={progressBadgeRef}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    borderRadius: 999,
+                    padding: "2px 8px",
+                    background: "#dcfce7",
+                    color: "#166534",
+                  }}
+                >
+                  100%
+                </span>
+                <button type="button" style={{ ...ms.btn, padding: "6px 10px", fontSize: 12 }} onClick={dismissChecklist}>
+                  Dismiss
+                </button>
+              </div>
             ) : (
-              <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                {completedChecklist}/{checklist.length} complete
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  {completedChecklist}/{checklist.length} complete
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    borderRadius: 999,
+                    padding: "2px 8px",
+                    background: "var(--color-accent-muted,#ccfbf1)",
+                    color: "var(--color-accent,#0d9488)",
+                  }}
+                >
+                  {checklistProgressPct}%
+                </span>
+              </div>
             )
           }
         >
           <div className="app-panel-surface" style={{ padding: "12px 14px" }}>
-            <div style={{ display: "grid", gap: 8 }}>
-              {checklist.map((item) => (
+            <div
+              role="progressbar"
+              aria-label="Onboarding checklist progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={checklistProgressPct}
+              style={{ marginBottom: 12 }}
+            >
+              <div style={{ height: 8, borderRadius: 999, background: "var(--color-border-tertiary,#e2e8f0)", overflow: "hidden" }}>
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${checklistProgressPct}%`,
+                    borderRadius: 999,
+                    background: "linear-gradient(90deg,#0d9488 0%, #14b8a6 100%)",
+                    transition: "width .25s ease",
+                  }}
+                />
+              </div>
+            </div>
+
+            {checklistDone && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  padding: "10px 12px",
+                  marginBottom: 10,
+                  borderRadius: 10,
+                  border: "1px solid #86efac",
+                  background: "#f0fdf4",
+                }}
+              >
+                <div style={{ minWidth: 220, flex: "1 1 260px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>Checklist complete</div>
+                  <div style={{ marginTop: 2, fontSize: 12, color: "#166534", lineHeight: 1.35 }}>
+                    Nice work. You can dismiss this panel to keep your dashboard cleaner.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={dismissChecklist}
+                  style={{
+                    ...ms.btn,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    borderColor: "#16a34a",
+                    background: "#dcfce7",
+                    color: "#166534",
+                    flexShrink: 0,
+                  }}
+                >
+                  Dismiss checklist
+                </button>
+              </div>
+            )}
+
+            {!checklistDone && nextChecklistItem?.cta && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  padding: "10px 12px",
+                  marginBottom: 10,
+                  borderRadius: 10,
+                  border: "1px solid rgba(13,148,136,.3)",
+                  background: "rgba(13,148,136,.08)",
+                }}
+              >
+                <div style={{ minWidth: 220, flex: "1 1 260px" }}>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", fontWeight: 700, color: "#0f766e" }}>
+                    Next best action
+                  </div>
+                  <div style={{ marginTop: 2, fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.35 }}>
+                    {nextChecklistItem.label}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => runChecklistCta(nextChecklistItem.cta)}
+                  style={{
+                    ...ms.btn,
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    borderColor: "#0d9488",
+                    background: "var(--color-accent-muted,#ccfbf1)",
+                    color: "#0f766e",
+                    flexShrink: 0,
+                  }}
+                >
+                  {checklistCtaLabel(nextChecklistItem.cta)}
+                </button>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gap: 10 }}>
+              {checklistDisplay.map((item) => (
                 <div
                   key={item.label}
                   style={{
                     display: "flex",
-                    alignItems: "center",
+                    alignItems: "flex-start",
                     justifyContent: "space-between",
-                    gap: 8,
-                    padding: "8px 0",
-                    borderBottom: "1px solid var(--color-border-tertiary,#e2e8f0)",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    padding: "10px 12px",
+                    border: "1px solid var(--color-border-tertiary,#e2e8f0)",
+                    borderRadius: 10,
+                    background: item.done ? "var(--color-background-secondary,#f8fafc)" : "var(--color-background-primary,#fff)",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10, flex: "1 1 320px", minWidth: 220 }}>
                     <span
                       aria-hidden
                       style={{
-                        width: 18,
-                        height: 18,
+                        width: 20,
+                        height: 20,
                         borderRadius: 999,
                         display: "inline-flex",
                         alignItems: "center",
@@ -549,20 +711,32 @@ export default function AnalyticsDashboard() {
                     >
                       {item.done ? "✓" : "•"}
                     </span>
-                    <span style={{ fontSize: 13, color: "var(--color-text-primary)" }}>{item.label}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.35 }}>{item.label}</div>
+                      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 3, lineHeight: 1.35 }}>
+                        Next: {item.next}
+                      </div>
+                    </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                    <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{item.next}</span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        borderRadius: 999,
+                        padding: "3px 8px",
+                        background: item.done ? "#dcfce7" : "#f1f5f9",
+                        color: item.done ? "#166534" : "#334155",
+                      }}
+                    >
+                      {item.done ? "Complete" : "Pending"}
+                    </span>
                     {item.cta && (
                       <button
                         type="button"
-                        onClick={() => {
-                          if (item.cta === "organisation") openWorkspaceSettings({ tab: "organisation" });
-                          else if (item.cta === "workers") openWorkspaceView({ viewId: "workers" });
-                          else if (item.cta === "invites") openWorkspaceSettings({ tab: "invites" });
-                        }}
+                        onClick={() => runChecklistCta(item.cta)}
                         style={{
-                          padding: "4px 10px",
+                          padding: "6px 10px",
                           fontSize: 11,
                           fontWeight: 600,
                           borderRadius: 8,
@@ -573,7 +747,7 @@ export default function AnalyticsDashboard() {
                           fontFamily: "inherit",
                         }}
                       >
-                        Open
+                        {checklistCtaLabel(item.cta)}
                       </button>
                     )}
                   </div>
