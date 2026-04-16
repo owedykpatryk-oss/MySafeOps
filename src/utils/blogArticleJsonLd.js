@@ -38,7 +38,7 @@ export function buildBlogArticleJsonLd(meta, slug, origin) {
       name: "MySafeOps",
       logo: {
         "@type": "ImageObject",
-        url: `${origin}/logo.png`,
+        url: `${origin}/vite.svg`,
       },
     },
     datePublished: meta.publishedIso,

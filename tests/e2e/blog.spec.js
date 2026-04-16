@@ -14,5 +14,9 @@ test.describe("Marketing blog", () => {
     await expect(prose).toBeVisible();
     await expect(prose).not.toBeEmpty();
     await expect.poll(async () => (await prose.innerText()).trim().length).toBeGreaterThan(400);
+
+    const bodyText = await prose.innerText();
+    expect(bodyText).not.toContain("Schema.org structured data (for CMS / SEO plugin)");
+    expect(bodyText).not.toContain("FAQPage schema (critical for FAQ rich snippets)");
   });
 });
