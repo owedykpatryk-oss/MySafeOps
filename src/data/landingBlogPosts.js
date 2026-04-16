@@ -19,7 +19,10 @@ export const LANDING_BLOG_POSTS = [
     title: "Hot Work Permit UK: A Practical Guide for Construction Sites",
     excerpt:
       "What a hot work permit must include, common mistakes, and how digital permits help close out the fire watch properly.",
+    jsonLdDescription:
+      "What a hot work permit needs to include on UK construction sites, common mistakes, and how digital permits remove fire risk from welding and cutting jobs.",
     dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
     readTime: "5 min read",
     image: "/blog/images/hot-work-permit-uk-hero.png",
   },
@@ -95,4 +98,20 @@ export function isValidBlogSlug(slug) {
 /** @param {string | undefined} slug */
 export function getPostMetaBySlug(slug) {
   return LANDING_BLOG_POSTS.find((p) => p.slug === slug);
+}
+
+/**
+ * Other guides for the article footer (newest first, stable tie-break).
+ * @param {string} currentSlug
+ * @param {number} [limit]
+ */
+export function getRelatedBlogPosts(currentSlug, limit = 3) {
+  return [...LANDING_BLOG_POSTS]
+    .filter((p) => p.slug !== currentSlug)
+    .sort((a, b) => {
+      const d = String(b.publishedIso || "").localeCompare(String(a.publishedIso || ""));
+      if (d !== 0) return d;
+      return a.slug.localeCompare(b.slug);
+    })
+    .slice(0, limit);
 }

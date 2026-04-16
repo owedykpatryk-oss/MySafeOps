@@ -10,7 +10,7 @@ css = css.replace(/^\*\{[^}]*\}/, ".landing-page, .landing-page *{margin:0;paddi
 css = css.replace(/:root\s*\{/, ".landing-page{");
 css = css.replace(/\bhtml\s*\{[^}]*\}/, "");
 css = css.replace(/\bbody\s*\{/, ".landing-page{");
-css = css.replace(/\bnav\s*\{/g, ".landing-page nav{");
+css = css.replace(/\bnav\s*\{/g, ".landing-page nav.landing-top-nav{");
 css = css.replace(/\bfooter\s*\{/g, ".landing-page footer{");
 
 fs.mkdirSync("src/styles", { recursive: true });

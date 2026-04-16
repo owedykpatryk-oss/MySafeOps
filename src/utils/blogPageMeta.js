@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 const MARK = "data-mysafeops-blog-meta";
+const JSON_LD_MARK = "data-mysafeops-blog-jsonld";
 
 /**
  * @param {{
@@ -10,11 +11,22 @@ const MARK = "data-mysafeops-blog-meta";
  *   ogImageUrl?: string;
  *   ogType?: "website" | "article";
  *   rssFeedUrl?: string;
+ *   articlePublishedTime?: string;
+ *   articleModifiedTime?: string;
  * }} opts
  * @param {boolean} [enabled]
  */
 export function useBlogDocumentMeta(opts, enabled = true) {
-  const { title, description, canonicalUrl, ogImageUrl, ogType = "website", rssFeedUrl } = opts;
+  const {
+    title,
+    description,
+    canonicalUrl,
+    ogImageUrl,
+    ogType = "website",
+    rssFeedUrl,
+    articlePublishedTime,
+    articleModifiedTime,
+  } = opts;
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -98,5 +110,46 @@ export function useBlogDocumentMeta(opts, enabled = true) {
         el.removeAttribute(MARK);
       }
     };
-  }, [enabled, title, description, canonicalUrl, ogImageUrl, ogType, rssFeedUrl]);
+  }, [
+    enabled,
+    title,
+    description,
+    canonicalUrl,
+    ogImageUrl,
+    ogType,
+    rssFeedUrl,
+    articlePublishedTime,
+    articleModifiedTime,
+  ]);
+}
+
+/**
+ * Injects JSON-LD `<script type="application/ld+json">` into `document.head` (SPA-safe cleanup).
+ * Google accepts JSON-LD in head or body; head matches CMS / SEO plugin expectations.
+ *
+ * @param {Record<string, unknown>[] | null | undefined} graphs
+ * @param {boolean} [enabled]
+ */
+export function useBlogJsonLdScripts(graphs, enabled = true) {
+  const serialized = graphs?.length ? JSON.stringify(graphs) : "";
+
+  useEffect(() => {
+    if (!enabled || !serialized) return undefined;
+    const list = /** @type {Record<string, unknown>[]} */ (JSON.parse(serialized));
+
+    const scripts = list.map((obj) => {
+      const el = document.createElement("script");
+      el.type = "application/ld+json";
+      el.setAttribute(JSON_LD_MARK, "1");
+      el.textContent = JSON.stringify(obj);
+      document.head.appendChild(el);
+      return el;
+    });
+
+    return () => {
+      for (const el of scripts) {
+        el.remove();
+      }
+    };
+  }, [enabled, serialized]);
 }

@@ -1,17 +1,27 @@
+import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { LANDING_BLOG_POSTS } from "../../data/landingBlogPosts";
 
 /**
- * Cards use plain `/blog/...` anchors so guides open reliably (full navigation + SPA boot).
+ * `/blog` index sorts newest first; landing section keeps editorial order from `LANDING_BLOG_POSTS`.
  * @param {{ variant?: "landing" | "page", className?: string }} props
  */
 export default function BlogPostsGrid({ variant = "landing", className = "" }) {
   const isPage = variant === "page";
+
+  const posts = useMemo(() => {
+    if (!isPage) return LANDING_BLOG_POSTS;
+    return [...LANDING_BLOG_POSTS].sort((a, b) =>
+      String(b.publishedIso || "").localeCompare(String(a.publishedIso || "")),
+    );
+  }, [isPage]);
+
   return (
     <div className={`landing-blog-grid-wrap ${className}`.trim()}>
       <ul className={`landing-blog-grid ${isPage ? "landing-blog-grid--page" : ""}`.trim()}>
-        {LANDING_BLOG_POSTS.map((post, index) => (
+        {posts.map((post, index) => (
           <li key={post.slug} className={`landing-blog-card${isPage ? "" : " fu"}`}>
-            <a href={`/blog/${post.slug}`} className="landing-blog-card-link">
+            <Link to={`/blog/${post.slug}`} className="landing-blog-card-link">
               <div className="landing-blog-card-image-wrap">
                 <img
                   src={post.image}
@@ -26,7 +36,7 @@ export default function BlogPostsGrid({ variant = "landing", className = "" }) {
               </div>
               <div className="landing-blog-card-body">
                 <div className="landing-blog-card-meta">
-                  <time dateTime="2026-04-16">{post.dateLabel}</time>
+                  <time dateTime={post.publishedIso ?? "2026-04-16"}>{post.dateLabel}</time>
                   <span aria-hidden> · </span>
                   <span>{post.readTime}</span>
                 </div>
@@ -34,7 +44,7 @@ export default function BlogPostsGrid({ variant = "landing", className = "" }) {
                 <p className="landing-blog-card-excerpt">{post.excerpt}</p>
                 <span className="landing-blog-card-cta">Read article →</span>
               </div>
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

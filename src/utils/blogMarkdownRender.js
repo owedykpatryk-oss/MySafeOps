@@ -64,7 +64,15 @@ export function parseBlogPostHtml(rawMarkdown) {
   const prepared = prepareBlogMarkdown(rawMarkdown);
   const out = marked.parse(prepared, { async: false, gfm: true });
   const html = typeof out === "string" ? out : String(out);
-  return { html, toc: [...tocBuild] };
+  return { html: wrapBlogTables(html), toc: [...tocBuild] };
+}
+
+/**
+ * Horizontal scroll on narrow viewports without breaking table layout.
+ * @param {string} html
+ */
+function wrapBlogTables(html) {
+  return html.replace(/<table[\s\S]*?<\/table>/gi, (table) => `<div class="blog-article-table-wrap">${table}</div>`);
 }
 
 /**
@@ -73,4 +81,31 @@ export function parseBlogPostHtml(rawMarkdown) {
  */
 export function addLazyLoadingToBlogImages(html) {
   return html.replace(/<img\b(?![^>]*\bloading=)/gi, '<img loading="lazy" decoding="async" ');
+}
+
+/**
+ * Adds `target="_blank"` and `rel="noopener noreferrer"` to external links in rendered HTML.
+ * Safe to run in the browser after DOMPurify (call only when `window` exists).
+ * @param {string} html
+ */
+export function addExternalLinkAttributes(html) {
+  if (typeof window === "undefined") return html;
+  return html.replace(/<a\b([^>]*?)>/gi, (full, attrs) => {
+    const hrefMatch = attrs.match(/\bhref\s*=\s*["']([^"']+)["']/i);
+    if (!hrefMatch) return full;
+    const href = hrefMatch[1];
+    if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return full;
+    let u;
+    try {
+      u = new URL(href, window.location.href);
+    } catch {
+      return full;
+    }
+    if (u.origin === window.location.origin) return full;
+    if (/\brel\s*=/.test(attrs)) return full;
+    if (/\btarget\s*=/.test(attrs)) {
+      return `<a${attrs} rel="noopener noreferrer">`;
+    }
+    return `<a${attrs} target="_blank" rel="noopener noreferrer">`;
+  });
 }

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import LandingFooter from "../components/landing/LandingFooter";
 import BlogPostsGrid from "../components/landing/BlogPostsGrid";
+import { LANDING_BLOG_POSTS } from "../data/landingBlogPosts";
 import { trackBlogIndexView } from "../utils/analytics";
 import { getPublicSiteOrigin } from "../utils/blogPublicUrl";
 import { useBlogDocumentMeta } from "../utils/blogPageMeta";
@@ -15,16 +16,24 @@ const DESCRIPTION =
 export default function BlogIndexPage() {
   const origin = getPublicSiteOrigin();
 
+  const defaultOgImage = LANDING_BLOG_POSTS[0]?.image;
+
   useBlogDocumentMeta({
     title: TITLE,
     description: DESCRIPTION,
     canonicalUrl: `${origin}/blog`,
     ogType: "website",
+    ogImageUrl: defaultOgImage ? `${origin}${defaultOgImage}` : undefined,
     rssFeedUrl: `${origin}/blog/rss.xml`,
   });
 
   useEffect(() => {
     trackBlogIndexView();
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.add("blog-smooth-scroll");
+    return () => document.documentElement.classList.remove("blog-smooth-scroll");
   }, []);
 
   return (

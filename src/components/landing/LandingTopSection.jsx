@@ -33,7 +33,7 @@ export default function LandingTopSection({ navScrolled, cloud }) {
 
   return (
     <>
-      <nav className={navScrolled ? "sc" : ""} aria-label="Primary">
+      <nav className={`landing-top-nav${navScrolled ? " sc" : ""}`} aria-label="Primary">
         <div className="ctn">
           <div className="ni">
             <Link to="/" className="logo">
