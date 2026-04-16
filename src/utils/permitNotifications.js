@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { workspaceDeepLink } from "./appDeepLinks";
 
 function normalizePersonKey(v) {
   return String(v || "")
@@ -105,7 +106,10 @@ export async function sendPermitNotificationWebPush(payload) {
     orgSlug: String(payload?.orgSlug || localStorage.getItem("mysafeops_orgId") || "default").trim().toLowerCase(),
     title: String(payload?.title || "Permit update"),
     body: String(payload?.body || ""),
-    url: String(payload?.url || "/?tab=permits"),
+    url: String(
+      payload?.url ||
+        workspaceDeepLink("permits", payload?.permit?.id ? { permitId: payload.permit.id } : {})
+    ),
     tag: String(payload?.tag || `permit_${payload?.permit?.id || "update"}`),
     permit: {
       id: payload?.permit?.id,

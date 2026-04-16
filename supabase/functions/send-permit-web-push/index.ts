@@ -1,9 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import webpush from "npm:web-push@3.6.7";
 
+/** Full CORS for browser + supabase-js (preflight sends apikey, authorization, content-type, x-client-info). */
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, prefer, accept, accept-profile",
+  "Access-Control-Max-Age": "86400",
 };
 
 function json(status: number, payload: unknown) {
@@ -23,7 +26,10 @@ function permitLabel(permit: Record<string, unknown>) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  // Respond without loading web-push so OPTIONS / health never fail on npm import issues.
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
   if (req.method !== "POST") return json(405, { error: "Method not allowed" });
 
   try {
@@ -41,6 +47,8 @@ Deno.serve(async (req) => {
       return json(500, { error: "VAPID keys are not configured" });
     }
 
+    const webpushMod = await import("npm:web-push@3.6.7");
+    const webpush = webpushMod.default ?? webpushMod;
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
     const supabase = createClient(supabaseUrl, serviceKey, {
@@ -59,7 +67,12 @@ Deno.serve(async (req) => {
     const permit = (body?.permit || {}) as Record<string, unknown>;
     const title = String(body?.title || "Permit update");
     const msg = String(body?.body || "").slice(0, 220);
-    const url = String(body?.url || "/?tab=permits");
+    const defaultPermitUrl = () => {
+      const id = permit?.id;
+      if (id) return `/app?view=permits&permitId=${encodeURIComponent(String(id))}`;
+      return "/app?view=permits";
+    };
+    const url = String(body?.url || defaultPermitUrl());
     const tag = String(body?.tag || `permit-${String(permit?.id || "notice")}`);
     const dryRun = Boolean(body?.dryRun);
 

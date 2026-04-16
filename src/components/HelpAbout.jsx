@@ -183,9 +183,21 @@ export default function HelpAbout() {
           </button>
         </div>
         <p style={{ ...ss.p, marginBottom: 0, marginTop: 14, fontSize: 12 }}>
-          <strong>Deep links (UK English UI)</strong> — module: <code style={{ fontSize: 11 }}>?view=permits</code>, <code style={{ fontSize: 11 }}>?view=workers</code>,{" "}
-          <code style={{ fontSize: 11 }}>?view=settings</code>. Settings tab: <code style={{ fontSize: 11 }}>?settingsTab=organisation</code> or{" "}
+          <strong>Deep links (UK English UI)</strong> — signed-in workspace: <code style={{ fontSize: 11 }}>/app?view=permits</code>,{" "}
+          <code style={{ fontSize: 11 }}>/app?view=workers</code>, <code style={{ fontSize: 11 }}>/app?view=settings</code>. Optional permit focus:{" "}
+          <code style={{ fontSize: 11 }}>/app?view=permits&amp;permitId=…</code>. Settings tab: <code style={{ fontSize: 11 }}>?settingsTab=organisation</code> or{" "}
           <code style={{ fontSize: 11 }}>?settingsTab=invites</code> (any tab id). The address bar updates as you move around so you can bookmark or share a link.
+        </p>
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
+          Release status
+        </h2>
+        <p style={{ ...ss.p, marginBottom: 0 }}>
+          The open-source tree runs automated <strong>tests and production builds in CI</strong> (GitHub Actions) on each push. Optional error monitoring (e.g. Sentry) can be wired via
+          environment variables documented in <code style={{ fontSize: 12 }}>.env.example</code>. The <strong>Dashboard</strong> includes a &quot;Site today&quot; snapshot and onboarding checklist
+          for a quick sense of permits, RAMS, workers, and site sign-ins in this browser.
         </p>
       </div>
 

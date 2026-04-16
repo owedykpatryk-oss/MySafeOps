@@ -3,9 +3,58 @@
 
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
+import { workspaceDeepLink } from "../utils/appDeepLinks";
 
 const VAPID_PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "").trim();
 const NOTIF_PREFS_KEY = "mysafeops_notif_prefs";
+const LAST_CLOUD_PUSH_KEY = "mysafeops_last_cloud_push_result";
+
+function readNotifPrefsObject() {
+  try {
+    return JSON.parse(localStorage.getItem(NOTIF_PREFS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+/** When true, scheduled local reminders should not pop (browser still allows explicit tests). */
+export function isWithinNotificationQuietHours() {
+  const p = readNotifPrefsObject();
+  if (!p.quiet_hours_enabled) return false;
+  const start = Number.isFinite(Number(p.quiet_hours_start)) ? Number(p.quiet_hours_start) : 22;
+  const end = Number.isFinite(Number(p.quiet_hours_end)) ? Number(p.quiet_hours_end) : 7;
+  const h = new Date().getHours();
+  if (start === end) return false;
+  if (start > end) return h >= start || h < end;
+  return h >= start && h < end;
+}
+
+function recordLastCloudPushResult(result) {
+  try {
+    const payload = {
+      at: new Date().toISOString(),
+      ok: Boolean(result?.ok),
+      sent: result?.sent ?? null,
+      skipped: Boolean(result?.skipped),
+      reason: String(result?.reason || result?.error || ""),
+    };
+    localStorage.setItem(LAST_CLOUD_PUSH_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** @returns {{ at: string, ok: boolean, sent?: number|null, skipped?: boolean, reason?: string } | null} */
+export function getLastCloudPushResult() {
+  try {
+    const raw = localStorage.getItem(LAST_CLOUD_PUSH_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return o && typeof o === "object" ? o : null;
+  } catch {
+    return null;
+  }
+}
 const DEFAULT_SCHEDULER_INTERVAL_MS = 30 * 60 * 1000;
 const BRIEFING_PENDING_MINUTES = 20;
 const PERMIT_TYPES_REQUIRING_BRIEFING = new Set([
@@ -40,6 +89,30 @@ function getOrgSlug() {
   return v || "default";
 }
 
+const SW_READY_TIMEOUT_MS = 8000;
+
+/**
+ * Avoid hanging on `navigator.serviceWorker.ready` (it never resolves if no SW was ever registered).
+ */
+async function waitForServiceWorkerRegistration(timeoutMs = SW_READY_TIMEOUT_MS) {
+  if (!("serviceWorker" in navigator)) return null;
+  try {
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+    if (reg) return reg;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    return regs[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function syncSubscriptionToCloud(subscription) {
   if (!supabase || !subscription) return;
   try {
@@ -72,7 +145,7 @@ export async function requestNotificationPermission() {
 }
 
 export async function subscribeToPush() {
-  const reg = await navigator.serviceWorker?.ready;
+  const reg = await waitForServiceWorkerRegistration();
   if (!reg) return null;
   if (!("PushManager" in window)) return null;
 
@@ -101,7 +174,7 @@ export async function subscribeToPush() {
 }
 
 export async function unsubscribeFromPush() {
-  const reg = await navigator.serviceWorker?.ready;
+  const reg = await waitForServiceWorkerRegistration();
   const sub = await reg?.pushManager.getSubscription();
   if (sub) {
     const endpoint = sub.endpoint || "";
@@ -113,7 +186,9 @@ export async function unsubscribeFromPush() {
 }
 
 export async function sendCloudPermitPush(payload = {}) {
-  if (!supabase) return { ok: false, skipped: true, reason: "supabase_not_configured" };
+  if (!supabase) {
+    return { ok: false, skipped: true, reason: "supabase_not_configured" };
+  }
   try {
     const body = {
       orgSlug: getOrgSlug(),
@@ -122,9 +197,13 @@ export async function sendCloudPermitPush(payload = {}) {
     const { data, error } = await supabase.functions.invoke("send-permit-web-push", { body });
     if (error) throw error;
     if (data?.error) throw new Error(String(data.error));
-    return data || { ok: true };
+    const out = data || { ok: true };
+    if (!payload?.dryRun) recordLastCloudPushResult(out);
+    return out;
   } catch (err) {
-    return { ok: false, error: String(err?.message || err) };
+    const out = { ok: false, error: String(err?.message || err) };
+    if (!payload?.dryRun) recordLastCloudPushResult(out);
+    return out;
   }
 }
 
@@ -148,7 +227,7 @@ export async function getCloudPushHealth() {
       title: "Push health check",
       body: "dry-run",
       tag: `push_health_${Date.now()}`,
-      url: "/?tab=settings",
+      url: workspaceDeepLink("settings"),
       permit: { id: "HEALTH", type: "general", status: "active", location: "Workspace" },
     });
     if (dry?.ok) {
@@ -192,8 +271,17 @@ export function showLocalNotification(title, options = {}) {
   };
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.ready.then(reg => {
-      reg.showNotification(title, { ...defaults, ...options });
+    void waitForServiceWorkerRegistration(4000).then((reg) => {
+      try {
+        if (reg) reg.showNotification(title, { ...defaults, ...options });
+        else new Notification(title, { ...defaults, ...options });
+      } catch {
+        try {
+          new Notification(title, { ...defaults, ...options });
+        } catch {
+          /* ignore */
+        }
+      }
     });
   } else {
     new Notification(title, { ...defaults, ...options });
@@ -233,8 +321,9 @@ function markSeen(notifId) {
   saveJSON(NOTIF_SEEN_KEY, seen);
 }
 
-export function checkExpiryNotifications() {
+export function checkExpiryNotifications(opts = {}) {
   if (Notification.permission !== "granted") return;
+  if (!opts.force && isWithinNotificationQuietHours()) return;
 
   const workers = loadJSON("mysafeops_workers", []);
   const permits = loadJSON("permits_v2", []);
@@ -261,7 +350,7 @@ export function checkExpiryNotifications() {
             body,
             tag: id,
             requireInteraction: days <= 1,
-            data: { url: "/?tab=workers" },
+            data: { url: workspaceDeepLink("workers") },
             actions: [{ action: "view", title: "View worker" }],
           });
           markSeen(id);
@@ -302,7 +391,7 @@ export function checkExpiryNotifications() {
           body,
           tag: id,
           requireInteraction: days <= 1,
-          data: { url: "/?tab=permits" },
+          data: { url: workspaceDeepLink("permits", { permitId: p.id }) },
         });
         markSeen(id);
       }
@@ -329,7 +418,7 @@ export function checkExpiryNotifications() {
       body: `${(p.type || "Permit").replace(/_/g, " ")} at ${p.location || "site"} has no briefing confirmation (${minutesLate}m since start).`,
       tag: id,
       requireInteraction: minutesLate >= 60,
-      data: { url: "/?tab=permits" },
+      data: { url: workspaceDeepLink("permits", { permitId: p.id }) },
     });
     markSeen(id);
   });
@@ -345,7 +434,7 @@ export function checkExpiryNotifications() {
     showLocalNotification("Active permit missing RAMS", {
       body: `${(p.type || "Permit").replace(/_/g, " ")} at ${p.location || "site"} has no linked RAMS document.`,
       tag: id,
-      data: { url: "/?tab=permits" },
+      data: { url: workspaceDeepLink("permits", { permitId: p.id }) },
     });
     markSeen(id);
   });
@@ -363,7 +452,7 @@ export function checkExpiryNotifications() {
         showLocalNotification("Equipment inspection due", {
           body: `${item.name || "Equipment"} inspection ${days <= 0 ? "overdue" : `due in ${days} day(s)`}.`,
           tag: id,
-          data: { url: "/?tab=equipment" },
+          data: { url: workspaceDeepLink("plant") },
         });
         markSeen(id);
       }
@@ -382,7 +471,7 @@ export function checkExpiryNotifications() {
       showLocalNotification("RAMS review due", {
         body: `"${doc.title}" is due for review in ${days} day(s).`,
         tag: id,
-        data: { url: "/?tab=rams" },
+        data: { url: workspaceDeepLink("rams") },
       });
       markSeen(id);
     }
@@ -404,7 +493,7 @@ export function stopNotificationScheduler() {
 }
 
 export function runNotificationCheckNow() {
-  checkExpiryNotifications();
+  checkExpiryNotifications({ force: true });
 }
 
 export function initNotificationRuntime() {
@@ -418,8 +507,8 @@ export function initNotificationRuntime() {
 export async function getNotificationStatus() {
   const supported = "Notification" in window;
   const permission = supported ? Notification.permission : "unsupported";
-  const reg = await navigator.serviceWorker?.ready;
-  const sub = await reg?.pushManager?.getSubscription();
+  const reg = await waitForServiceWorkerRegistration();
+  const sub = reg ? await reg.pushManager?.getSubscription() : null;
   return {
     supported,
     permission,

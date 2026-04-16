@@ -24,6 +24,7 @@ import PermitLiveWall from "./components/PermitLiveWall";
 import { createDefaultChecklistItems, normalizeChecklistItems, normalizeChecklistState } from "./permitChecklistUtils";
 import { findSimopsConflicts, buildSimopsConflictMap } from "./permitSimops";
 import { evaluatePermitTypeConflicts, PERMIT_CONFLICT_MATRIX, normalizeConflictPair } from "./permitConflictMatrix";
+import { workspaceDeepLink } from "../../utils/appDeepLinks";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { getOrgId } from "../../utils/orgStorage";
 import { mirrorPermitsToSupabase } from "../../utils/permitSupabaseMirror";
@@ -3793,7 +3794,11 @@ export default function PermitSystem() {
   useEffect(() => {
     if (navHandledRef.current) return;
     navHandledRef.current = true;
-    const t = consumeWorkspaceNavTarget();
+    let t = consumeWorkspaceNavTarget();
+    if (!t?.permitId && typeof window !== "undefined") {
+      const pid = new URLSearchParams(window.location.search).get("permitId");
+      if (pid) t = { viewId: "permits", permitId: pid };
+    }
     if (t?.viewId === "permits" && t.permitId) {
       setHighlightPermitId(t.permitId);
       setFilterStatus("");
@@ -5586,7 +5591,7 @@ export default function PermitSystem() {
         orgSlug: getOrgId(),
         title: `${org?.name || "MySafeOps"} · Permit update`,
         body: `${(permit.type || "permit").replace(/_/g, " ")} at ${permit.location || "site"} status: ${permit.status || "updated"}.`,
-        url: "/?tab=permits",
+        url: workspaceDeepLink("permits", { permitId: permit.id }),
         tag: `permit_notify_${permit.id}`,
       }).catch(() => null);
       const entry = {

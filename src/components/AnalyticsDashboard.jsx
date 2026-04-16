@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { loadOrgScoped as load } from "../utils/orgStorage";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
+import SiteTodayCard from "./SiteTodayCard";
 import { getOrgSettings } from "./OrgSettings";
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
 
@@ -422,6 +423,13 @@ export default function AnalyticsDashboard() {
             </div>
           </div>
         }
+      />
+
+      <SiteTodayCard
+        workerCount={workers.length}
+        activePermits={permitStats.active}
+        ramsCount={rams.length}
+        todaySignIns={todayInductions}
       />
 
       {actionNeededItems.length > 0 && (

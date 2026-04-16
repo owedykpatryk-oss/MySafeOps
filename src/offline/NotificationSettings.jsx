@@ -7,6 +7,7 @@ import {
   subscribeToPush,
   unsubscribeFromPush,
   getCloudPushHealth,
+  getLastCloudPushResult,
   getNotificationStatus,
   startNotificationScheduler,
   stopNotificationScheduler,
@@ -14,7 +15,9 @@ import {
   sendCloudPermitPush,
   showLocalNotification,
 } from "./pushNotifications";
+import { workspaceDeepLink } from "../utils/appDeepLinks";
 import PageHero from "../components/PageHero";
+import { useToast } from "../context/ToastContext";
 
 const ss = {
   btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
@@ -40,11 +43,14 @@ function Toggle({ value, onChange }) {
 }
 
 export default function NotificationSettings() {
+  const { pushToast } = useToast();
   const [status, setStatus] = useState(null);
   const [health, setHealth] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
   const [repairLoading, setRepairLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [cloudTestBusy, setCloudTestBusy] = useState(false);
+  const [lastCloudPush, setLastCloudPush] = useState(() => getLastCloudPushResult());
   const [prefs, setPrefs] = useState(() => {
     try { return JSON.parse(localStorage.getItem("mysafeops_notif_prefs") || "{}"); }
     catch { return {}; }
@@ -59,6 +65,10 @@ export default function NotificationSettings() {
   useEffect(() => {
     getNotificationStatus().then(setStatus);
   }, []);
+
+  useEffect(() => {
+    setLastCloudPush(getLastCloudPushResult());
+  }, [status?.subscribed, status?.swReady]);
 
   const refreshHealth = async () => {
     setHealthLoading(true);
@@ -103,25 +113,57 @@ export default function NotificationSettings() {
   };
 
   const testNotif = () => {
+    if (Notification.permission !== "granted") {
+      pushToast({ type: "warn", title: "Permission", message: "Enable notifications first." });
+      return;
+    }
     showLocalNotification("MySafeOps test", {
       body: "Notifications are working correctly.",
       tag: "test",
     });
+    pushToast({ type: "success", title: "Test sent", message: "Check for a system notification from this site." });
   };
 
   const testCloudPush = async () => {
-    const result = await sendCloudPermitPush({
-      title: "MySafeOps cloud push test",
-      body: "Background web push channel is working.",
-      tag: `cloud_test_${Date.now()}`,
-      url: "/?tab=permits",
-      permit: { id: "TEST", type: "general", status: "active", location: "Workspace" },
-    });
-    if (result?.ok && !result?.skipped) {
-      window.alert(`Cloud push sent (${result?.sent ?? 0} endpoint(s)).`);
-      return;
+    setCloudTestBusy(true);
+    try {
+      const result = await sendCloudPermitPush({
+        title: "MySafeOps cloud push test",
+        body: "Background web push channel is working.",
+        tag: `cloud_test_${Date.now()}`,
+        url: workspaceDeepLink("permits"),
+        permit: { id: "TEST", type: "general", status: "active", location: "Workspace" },
+      });
+      if (result?.ok && !result?.skipped) {
+        setLastCloudPush(getLastCloudPushResult());
+        pushToast({
+          type: "success",
+          title: "Cloud push",
+          message: `Sent to ${result?.sent ?? 0} endpoint(s).`,
+        });
+        return;
+      }
+      pushToast({
+        type: "error",
+        title: "Cloud push",
+        message:
+          result?.reason === "supabase_not_configured"
+            ? "Supabase not configured."
+            : String(result?.error || result?.reason || "Skipped or failed."),
+      });
+    } finally {
+      setLastCloudPush(getLastCloudPushResult());
+      setCloudTestBusy(false);
     }
-    window.alert(result?.reason === "supabase_not_configured" ? "Supabase not configured for cloud push." : (result?.error || "Cloud push test skipped/failed."));
+  };
+
+  const handleRunCheckNow = () => {
+    runNotificationCheckNow();
+    pushToast({
+      type: "info",
+      title: "Reminder scan",
+      message: "Completed. Alerts only appear when something is due and was not shown in the last 12 hours.",
+    });
   };
 
   const repairSubscription = async () => {
@@ -197,14 +239,36 @@ export default function NotificationSettings() {
                 {enabled ? "You will receive alerts for expiring items" : "Enable to receive reminders and alerts"}
               </div>
             </div>
-            <div style={{ display:"flex", gap:8 }}>
-              {enabled && <button onClick={testNotif} style={{ ...ss.btn, fontSize:12 }}>Test</button>}
-              {enabled && <button onClick={() => void testCloudPush()} style={{ ...ss.btn, fontSize:12 }}>Test cloud push</button>}
-              {enabled && <button onClick={runNotificationCheckNow} style={{ ...ss.btn, fontSize:12 }}>Run check now</button>}
-              {enabled
-                ? <button onClick={handleDisable} disabled={loading} style={{ ...ss.btn, fontSize:12 }}>{loading?"…":"Disable"}</button>
-                : <button onClick={handleEnable} disabled={loading} style={{ ...ss.btnP, fontSize:12 }}>{loading?"Enabling…":"Enable notifications"}</button>
-              }
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              {enabled && (
+                <button type="button" onClick={testNotif} style={{ ...ss.btn, fontSize:12 }}>
+                  Test
+                </button>
+              )}
+              {enabled && (
+                <button
+                  type="button"
+                  onClick={() => void testCloudPush()}
+                  disabled={cloudTestBusy}
+                  style={{ ...ss.btn, fontSize:12, opacity: cloudTestBusy ? 0.7 : 1 }}
+                >
+                  {cloudTestBusy ? "Sending…" : "Test cloud push"}
+                </button>
+              )}
+              {enabled && (
+                <button type="button" onClick={handleRunCheckNow} style={{ ...ss.btn, fontSize:12 }}>
+                  Run check now
+                </button>
+              )}
+              {enabled ? (
+                <button type="button" onClick={() => void handleDisable()} disabled={loading} style={{ ...ss.btn, fontSize:12 }}>
+                  {loading ? "…" : "Disable"}
+                </button>
+              ) : (
+                <button type="button" onClick={() => void handleEnable()} disabled={loading} style={{ ...ss.btnP, fontSize:12 }}>
+                  {loading ? "Enabling…" : "Enable notifications"}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -215,10 +279,15 @@ export default function NotificationSettings() {
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:8 }}>
                 <div style={{ fontSize:12, fontWeight:600 }}>Push health diagnostics</div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  <button onClick={() => void refreshHealth()} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                  <button type="button" onClick={() => void refreshHealth()} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
                     {healthLoading ? "Checking..." : "Refresh health"}
                   </button>
-                  <button onClick={() => void repairSubscription()} disabled={repairLoading} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => void repairSubscription()}
+                    disabled={repairLoading}
+                    style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}
+                  >
                     {repairLoading ? "Repairing..." : "Repair subscription"}
                   </button>
                 </div>
@@ -235,7 +304,71 @@ export default function NotificationSettings() {
                   {health?.cloud?.subscriptions != null ? ` · endpoints: ${health.cloud.subscriptions}` : ""}
                   {health?.cloud?.reason ? ` · ${health.cloud.reason}` : ""}
                 </div>
+                {lastCloudPush?.at && (
+                  <div style={{ marginTop: 4, paddingTop: 6, borderTop: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>
+                    Last non-dry-run cloud push:{" "}
+                    <strong>{lastCloudPush.ok ? "OK" : "Failed"}</strong>
+                    {lastCloudPush.sent != null ? ` · sent: ${lastCloudPush.sent}` : ""}
+                    {lastCloudPush.reason ? ` · ${lastCloudPush.reason}` : ""}
+                    <span style={{ color: "var(--color-text-tertiary,#94a3b8)" }}>
+                      {" "}
+                      ({new Date(lastCloudPush.at).toLocaleString()})
+                    </span>
+                  </div>
+                )}
               </div>
+            </div>
+            <div
+              style={{
+                marginTop: 12,
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
+                background: "var(--color-background-secondary,#f7f7f5)",
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Night quiet hours</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  Pause automatic reminder scans (not manual “Run check now” or Test).
+                </span>
+                <Toggle
+                  value={prefs.quiet_hours_enabled === true}
+                  onChange={() => savePref("quiet_hours_enabled", prefs.quiet_hours_enabled !== true)}
+                />
+              </div>
+              {prefs.quiet_hours_enabled && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10, alignItems: "center", fontSize: 12 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    Start
+                    <select
+                      value={Number.isFinite(Number(prefs.quiet_hours_start)) ? Number(prefs.quiet_hours_start) : 22}
+                      onChange={(e) => savePref("quiet_hours_start", Number(e.target.value))}
+                      style={{ padding: 4, borderRadius: 6, fontSize: 12 }}
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>
+                          {i}:00
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    End
+                    <select
+                      value={Number.isFinite(Number(prefs.quiet_hours_end)) ? Number(prefs.quiet_hours_end) : 7}
+                      onChange={(e) => savePref("quiet_hours_end", Number(e.target.value))}
+                      style={{ padding: 4, borderRadius: 6, fontSize: 12 }}
+                    >
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <option key={i} value={i}>
+                          {i}:00
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
             </div>
             <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>
               Notification types

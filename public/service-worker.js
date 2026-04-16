@@ -1,7 +1,7 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.1.0";
+const SW_VERSION = "mysafeops-v1.2.0";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -165,12 +165,23 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/";
+  const raw = event.notification.data?.url || "/app?view=dashboard";
+  const targetUrl = new URL(raw, self.location.origin).href;
   event.waitUntil(
-    self.clients.matchAll({ type: "window" }).then(clients => {
-      const targetUrl = new URL(url, self.location.origin).toString();
-      const existingClient = clients.find((c) => c.url === targetUrl && "focus" in c);
-      if (existingClient) return existingClient.focus();
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const appClient = clients.find((c) => {
+        try {
+          const u = new URL(c.url);
+          return u.origin === self.location.origin && u.pathname.startsWith("/app");
+        } catch {
+          return false;
+        }
+      });
+      if (appClient && "focus" in appClient) {
+        return appClient.focus().then(() => {
+          appClient.postMessage({ type: "NAVIGATE", url: targetUrl });
+        });
+      }
       return self.clients.openWindow(targetUrl);
     })
   );

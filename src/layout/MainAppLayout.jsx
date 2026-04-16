@@ -145,6 +145,10 @@ function getInitialLayoutState() {
   }
   if (viewParam && WORKSPACE_LAYOUT_VIEW_IDS.has(viewParam) && viewParam !== "settings") {
     const nav = primaryBottomNavIdSet.has(viewParam) ? viewParam : "more";
+    const permitId = qs.get("permitId");
+    if (viewParam === "permits" && permitId) {
+      setWorkspaceNavTarget({ viewId: "permits", permitId: String(permitId) });
+    }
     return { navTab: nav, view: viewParam, settingsInitialTab: "cloud", checkoutReturn: null };
   }
   try {
@@ -334,6 +338,37 @@ export default function MainAppLayout() {
       setNavTab("more");
     }
   };
+
+  useEffect(() => {
+    const sw = navigator.serviceWorker;
+    if (!sw?.addEventListener) return undefined;
+    const onMsg = (event) => {
+      if (event.data?.type !== "NAVIGATE" || !event.data?.url) return;
+      try {
+        const u = new URL(event.data.url, window.location.origin);
+        if (u.pathname !== "/app") return;
+        const viewId = u.searchParams.get("view");
+        const permitId = u.searchParams.get("permitId");
+        if (!viewId || !WORKSPACE_LAYOUT_VIEW_IDS.has(viewId)) return;
+        if (viewId === "permits" && permitId) {
+          setWorkspaceNavTarget({ viewId: "permits", permitId });
+        }
+        if (!primaryBottomNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
+        if (primaryBottomNavIdSet.has(viewId)) {
+          setNavTab(viewId);
+          setView(viewId);
+        } else {
+          setView(viewId);
+          setNavTab("more");
+        }
+        setSearchParams(Object.fromEntries(u.searchParams.entries()), { replace: true });
+      } catch {
+        /* ignore */
+      }
+    };
+    sw.addEventListener("message", onMsg);
+    return () => sw.removeEventListener("message", onMsg);
+  }, [allowedModuleIds, setSearchParams]);
 
   const goMainTab = (id) => {
     setNavTab(id);

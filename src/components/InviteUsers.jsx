@@ -127,13 +127,25 @@ export default function InviteUsers() {
         .order("created_at", { ascending: false });
 
     let { data, error } = await nextQuery();
-    if (error && String(error.message || "").toLowerCase().includes("email_delivery_status")) {
-      const fallback = await fallbackQuery();
-      data = fallback.data;
-      error = fallback.error;
+    // Remote DB may not have migration 20260409191000 (email_delivery_* columns); PostgREST returns 400 with varying messages.
+    if (error) {
+      const fb = await fallbackQuery();
+      if (!fb.error) {
+        data = fb.data;
+        error = null;
+      }
     }
     if (error) {
-      setStatus({ type: "error", text: error.message || "Could not load invites." });
+      const raw = String(error.message || "Could not load invites.");
+      const m = raw.toLowerCase();
+      let hint = "";
+      if (m.includes("42703") || m.includes("column") || m.includes("does not exist")) {
+        hint =
+          " If the error mentions a missing column, apply the latest Supabase migrations for this project (or refresh the PostgREST schema cache) so `org_invites` matches the app.";
+      } else if (m.includes("permission") || m.includes("policy") || m.includes("42501") || m.includes("jwt")) {
+        hint = " If this looks like access control, confirm your role can read `org_invites` and that RLS policies allow it for your organisation.";
+      }
+      setStatus({ type: "error", text: raw + hint });
       setLoading(false);
       return;
     }
