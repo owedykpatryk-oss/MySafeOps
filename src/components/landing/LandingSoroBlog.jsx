@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { getSoroEmbedSrc } from "./soroBlogConfig.js";
+import landingSoroOverridesCss from "./landingSoroOverrides.css?raw";
 
 const SORO_SCRIPT_ID = "soro-blog-embed-script";
+const OVERRIDES_STYLE_ID = "landing-soro-overrides";
+
+/** Never re-render after mount so React does not wipe Soro’s innerHTML. */
+const SoroBlogMountPoint = memo(function SoroBlogMountPoint() {
+  return <div id="soro-blog" className="soro-blog-mount" />;
+});
 
 function injectSoroPreconnect() {
   if (document.querySelector('link[data-soro-preconnect="1"]')) return;
@@ -12,11 +19,19 @@ function injectSoroPreconnect() {
   document.head.appendChild(l);
 }
 
-/**
- * Soro embed script runs an IIFE that requires `#soro-blog` in the DOM.
- * We lazy-load when the section is near the viewport, with an idle timeout fallback.
- * On SPA remount, any previous script node is removed so the embed can initialise again.
- */
+function injectVisualOverrides() {
+  document.getElementById(OVERRIDES_STYLE_ID)?.remove();
+  const st = document.createElement("style");
+  st.id = OVERRIDES_STYLE_ID;
+  st.setAttribute("data-landing-soro", "1");
+  st.textContent = landingSoroOverridesCss;
+  document.head.appendChild(st);
+}
+
+function removeVisualOverrides() {
+  document.getElementById(OVERRIDES_STYLE_ID)?.remove();
+}
+
 export default function LandingSoroBlog() {
   const sectionRef = useRef(null);
   const loadingRef = useRef(false);
@@ -30,8 +45,7 @@ export default function LandingSoroBlog() {
 
     const runEmbed = () => {
       if (loadingRef.current) return;
-      const el = mount();
-      if (!el) {
+      if (!mount()) {
         setStatus("error");
         return;
       }
@@ -52,6 +66,7 @@ export default function LandingSoroBlog() {
         setStatus("error");
       };
       s.onload = () => {
+        injectVisualOverrides();
         setStatus("ready");
       };
       document.body.appendChild(s);
@@ -97,20 +112,23 @@ export default function LandingSoroBlog() {
         clearTimeout(timeoutHandle);
       }
       document.getElementById(SORO_SCRIPT_ID)?.remove();
+      removeVisualOverrides();
       loadingRef.current = false;
     };
   }, []);
 
+  const showSkeleton = status === "loading";
+
   return (
     <section
       ref={sectionRef}
-      className="soro-blog"
+      className="landing-soro-wrap"
       id="blog"
       aria-labelledby="soro-blog-heading"
       aria-busy={status === "loading"}
     >
       <div className="ctn">
-        <div className="sh fu">
+        <div className="sh fu landing-soro-intro">
           <div className="badge" style={{ background: "rgba(6,182,212,.12)", color: "#0e7490" }}>
             Updates
           </div>
@@ -118,7 +136,20 @@ export default function LandingSoroBlog() {
           <p>Product notes, safety thinking, and what we are shipping next.</p>
         </div>
         <div className="soro-blog-host">
-          <div id="soro-blog" />
+          {showSkeleton && (
+            <div className="soro-blog-skeleton" aria-hidden>
+              <div className="soro-blog-skeleton-inner">
+                <div className="soro-blog-skeleton-line soro-blog-skeleton-line--lg" />
+                <div className="soro-blog-skeleton-line" />
+                <div className="soro-blog-skeleton-line soro-blog-skeleton-line--sm" />
+                <div className="soro-blog-skeleton-cards">
+                  <div className="soro-blog-skeleton-card" />
+                  <div className="soro-blog-skeleton-card" />
+                </div>
+              </div>
+            </div>
+          )}
+          <SoroBlogMountPoint />
           {status === "error" && (
             <p className="soro-blog-fallback" role="status">
               The blog could not load (network, firewall, or content blocker). Allow <strong>app.trysoro.com</strong> or try
