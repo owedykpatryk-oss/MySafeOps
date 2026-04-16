@@ -10,7 +10,7 @@ export default function BlogPostsGrid({ variant = "landing", className = "" }) {
     <div className={`landing-blog-grid-wrap ${className}`.trim()}>
       <ul className={`landing-blog-grid ${isPage ? "landing-blog-grid--page" : ""}`.trim()}>
         {LANDING_BLOG_POSTS.map((post, index) => (
-          <li key={post.slug} className="landing-blog-card fu">
+          <li key={post.slug} className={`landing-blog-card${isPage ? "" : " fu"}`}>
             <a href={`/blog/${post.slug}`} className="landing-blog-card-link">
               <div className="landing-blog-card-image-wrap">
                 <img

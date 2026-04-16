@@ -215,7 +215,7 @@ export default function BlogArticlePage() {
       </header>
 
       <main id="blog-article-main" tabIndex={-1} className="blog-article-main">
-        <div className="ctn blog-article-inner fu">
+        <div className="ctn blog-article-inner">
           <nav className="blog-breadcrumb" aria-label="Breadcrumb">
             <ol className="blog-breadcrumb-list">
               <li className="blog-breadcrumb-item">

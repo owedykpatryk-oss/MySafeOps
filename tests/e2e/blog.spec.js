@@ -10,6 +10,9 @@ test.describe("Marketing blog", () => {
 
     await page.locator("a.landing-blog-card-link").first().click();
     await expect(page).toHaveURL(/\/blog\/[a-z0-9-]+$/);
-    await expect(page.locator("article.blog-article-prose")).toBeVisible();
+    const prose = page.locator("article.blog-article-prose");
+    await expect(prose).toBeVisible();
+    await expect(prose).not.toBeEmpty();
+    await expect.poll(async () => (await prose.innerText()).trim().length).toBeGreaterThan(400);
   });
 });

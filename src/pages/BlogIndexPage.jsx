@@ -74,7 +74,7 @@ export default function BlogIndexPage() {
                 </li>
               </ol>
             </nav>
-            <div className="sh fu landing-blog-intro">
+            <div className="sh landing-blog-intro">
               <div className="badge" style={{ background: "rgba(13,148,136,.1)", color: "var(--teal)" }}>
                 UK construction
               </div>
