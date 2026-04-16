@@ -1,7 +1,7 @@
 /**
  * Marketing blog guides shown on the landing page and /blog index.
- * Images: public/blog/images/*-hero.png
- * Full text: public/blog/posts/{slug}.md
+ * Hero images: public/blog/images/ (paths in `image` below; also inline-* for article body).
+ * Full text (bundled): src/blog/posts/{slug}.md
  */
 export const LANDING_BLOG_POSTS = [
   {
