@@ -39,13 +39,16 @@ A minimal **web app manifest** is at [public/manifest.webmanifest](public/manife
 
 ## Configuration
 
-Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project root and fill in any optional values. Never commit `.env.local`.
+Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project root and fill in any optional values. Never commit `.env.local`. After editing, run **`npm run env:check`** for a read-only checklist (no secret values printed).
 
 | Area | Purpose |
 |------|---------|
 | `VITE_SUPABASE_*` | Optional sign-in and JSON cloud backup (`app_sync` table) |
+| `VITE_VAPID_PUBLIC_KEY` | Web Push in the browser; pair with Supabase Edge secrets `VAPID_*` |
 | `VITE_ANTHROPIC_*` | Optional AI features (RAMS, toolbox, photo hazard) |
 | `VITE_STORAGE_*` / `VITE_R2_PUBLIC_BASE_URL` | Optional document uploads via Cloudflare R2 Worker |
+| `VITE_OPENWEATHER_API_KEY` | Optional override for RAMS weather (otherwise Open-Meteo) |
+| `VITE_SORO_EMBED_URL` | Optional TrySoro embed script URL for the landing blog block (default embed is built in) |
 
 ### Security: `VITE_*` variables
 

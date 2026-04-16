@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import LandingSoroBlog from "./LandingSoroBlog";
+import LandingFaqSection from "./LandingFaqSection";
 
 const FEATURES = [
   { emoji: "⚠️", bg: "rgba(13,148,136,.1)", t: "RAMS Builder", d: "Clickable risk matrix, hazard suggestions, and method statements. Keep RAMS consistent and easy to review." },
@@ -147,6 +149,10 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
           </p>
         </div>
       </section>
+
+      <LandingSoroBlog />
+
+      <LandingFaqSection />
 
       <section className="missing" id="missing">
         <div className="ctn">

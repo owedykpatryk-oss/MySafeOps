@@ -8,6 +8,9 @@ import LandingContentSections from "../components/landing/LandingContentSections
 import LandingFooter from "../components/landing/LandingFooter";
 
 const SUPPORT_EMAIL = "mysafeops@gmail.com";
+const LANDING_TITLE = "MySafeOps — RAMS, permits & site safety for UK construction";
+const LANDING_DESCRIPTION =
+  "RAMS builder, permits to work, inspections, worker competency, and 40+ registers — browser-first for UK construction teams. Optional cloud sign-in and backup.";
 
 export default function LandingPage() {
   const cloud = isSupabaseConfigured();
@@ -24,7 +27,12 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const els = document.querySelectorAll(".landing-page .fu");
+    if (reduceMotion) {
+      els.forEach((el) => el.classList.add("vi"));
+      return undefined;
+    }
     const obs = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
@@ -35,6 +43,54 @@ export default function LandingPage() {
     );
     els.forEach((el) => obs.observe(el));
     return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const prevTitle = document.title;
+    document.title = LANDING_TITLE;
+    const metaDesc = document.querySelector('meta[name="description"]');
+    const prevDescContent = metaDesc?.getAttribute("content") ?? "";
+    if (metaDesc) metaDesc.setAttribute("content", LANDING_DESCRIPTION);
+
+    let canonical = document.querySelector('link[rel="canonical"]');
+    let canonicalCreated = false;
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.setAttribute("rel", "canonical");
+      document.head.appendChild(canonical);
+      canonicalCreated = true;
+    }
+    const prevCanonical = canonical.getAttribute("href") || "";
+    canonical.setAttribute("href", `${window.location.origin}/`);
+
+    const origin = window.location.origin;
+    const jsonLd = {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "MySafeOps",
+      url: origin,
+      description: LANDING_DESCRIPTION,
+      publisher: {
+        "@type": "Organization",
+        name: "MySafeOps",
+        url: origin,
+        email: SUPPORT_EMAIL,
+      },
+    };
+    const script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.setAttribute("data-landing-ld", "1");
+    script.textContent = JSON.stringify(jsonLd);
+    document.head.appendChild(script);
+
+    return () => {
+      document.title = prevTitle;
+      if (metaDesc) metaDesc.setAttribute("content", prevDescContent);
+      if (canonicalCreated) canonical.remove();
+      else if (prevCanonical) canonical.setAttribute("href", prevCanonical);
+      else canonical.removeAttribute("href");
+      document.querySelector('script[data-landing-ld="1"]')?.remove();
+    };
   }, []);
 
   const submitFeature = () => {
@@ -80,17 +136,22 @@ export default function LandingPage() {
 
   return (
     <div className="landing-page">
-      <LandingTopSection navScrolled={navScrolled} cloud={cloud} />
-      <LandingContentSections
-        supportEmail={SUPPORT_EMAIL}
-        featureForm={featureForm}
-        onChangeFeature={(k, v) => setFeatureForm((f) => ({ ...f, [k]: v }))}
-        onSubmitFeature={submitFeature}
-        ctaEmail={ctaEmail}
-        onCtaEmailChange={setCtaEmail}
-        onCtaGo={ctaGo}
-      />
-      <LandingFooter supportEmail={SUPPORT_EMAIL} />
+      <a href="#landing-main" className="landing-skip-link">
+        Skip to main content
+      </a>
+      <main id="landing-main" tabIndex={-1}>
+        <LandingTopSection navScrolled={navScrolled} cloud={cloud} />
+        <LandingContentSections
+          supportEmail={SUPPORT_EMAIL}
+          featureForm={featureForm}
+          onChangeFeature={(k, v) => setFeatureForm((f) => ({ ...f, [k]: v }))}
+          onSubmitFeature={submitFeature}
+          ctaEmail={ctaEmail}
+          onCtaEmailChange={setCtaEmail}
+          onCtaGo={ctaGo}
+        />
+        <LandingFooter supportEmail={SUPPORT_EMAIL} />
+      </main>
     </div>
   );
 }
