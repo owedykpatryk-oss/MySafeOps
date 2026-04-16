@@ -7,6 +7,7 @@ import { ViewFallback } from "./components/ViewFallback";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const BlogIndexPage = lazy(() => import("./pages/BlogIndexPage"));
+const BlogArticlePage = lazy(() => import("./pages/BlogArticlePage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const AcceptInvitePage = lazy(() => import("./pages/AcceptInvitePage"));
@@ -64,6 +65,7 @@ export default function App() {
       <Suspense fallback={<ViewFallback />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/blog/:slug" element={<BlogArticlePage />} />
           <Route path="/blog" element={<BlogIndexPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />

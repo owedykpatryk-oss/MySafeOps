@@ -14,8 +14,8 @@ export default function LandingBlogSection() {
             UK construction safety guides: permits, inductions, toolbox talks, COSHH, and compliance updates.{" "}
             <Link to="/blog" className="landing-blog-index-link">
               View all articles
-            </Link>{" "}
-            · opens full guides in a new tab.
+            </Link>
+            . Full text opens on MySafeOps.
           </p>
         </div>
         <BlogPostsGrid variant="landing" />

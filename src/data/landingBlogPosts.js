@@ -1,6 +1,7 @@
 /**
  * Marketing blog guides shown on the landing page and /blog index.
  * Images: public/blog/images/*-hero.png
+ * Full text: public/blog/posts/{slug}.md
  */
 export const LANDING_BLOG_POSTS = [
   {
@@ -76,3 +77,15 @@ export const LANDING_BLOG_POSTS = [
     image: "/blog/images/riddor-changes-2026-hero.png",
   },
 ];
+
+const SLUG_SET = new Set(LANDING_BLOG_POSTS.map((p) => p.slug));
+
+/** @param {string | undefined} slug */
+export function isValidBlogSlug(slug) {
+  return Boolean(slug && SLUG_SET.has(slug));
+}
+
+/** @param {string | undefined} slug */
+export function getPostMetaBySlug(slug) {
+  return LANDING_BLOG_POSTS.find((p) => p.slug === slug);
+}

@@ -376,3 +376,33 @@
 .blog-index-nav a{color:var(--navy);text-decoration:none}
 .blog-index-nav a:hover{color:var(--teal-d)}
 .blog-index-nav-current{color:var(--sl4);cursor:default}
+
+/* Blog article (markdown body) */
+.blog-article-page .blog-article-main{padding-bottom:clamp(48px,8vw,80px)}
+.blog-article-inner{max-width:720px}
+.blog-article-state{padding:24px 0 48px}
+.blog-article-kicker{font-size:13px;color:var(--sl5);margin:clamp(20px,4vw,32px) 0 8px}
+.blog-article-kicker a{color:var(--teal-d);font-weight:600;text-decoration:none}
+.blog-article-kicker a:hover{text-decoration:underline}
+.blog-article-prose{font-size:17px;line-height:1.7;color:#1e293b}
+.blog-article-prose > h1:first-of-type{font-size:clamp(1.65rem,3.5vw,2.1rem);font-weight:800;color:var(--navy);letter-spacing:-.03em;line-height:1.2;margin:0 0 16px}
+.blog-article-prose h2{font-size:clamp(1.25rem,2.5vw,1.5rem);font-weight:800;color:var(--navy);margin:2em 0 .65em;letter-spacing:-.02em;line-height:1.25}
+.blog-article-prose h3{font-size:1.12rem;font-weight:700;margin:1.5em 0 .5em;color:#0f172a}
+.blog-article-prose p{margin:0 0 1em}
+.blog-article-prose ul,.blog-article-prose ol{margin:0 0 1em 1.25em;padding:0}
+.blog-article-prose li{margin-bottom:.35em}
+.blog-article-prose blockquote{margin:1em 0;padding:12px 16px 12px 18px;border-left:4px solid rgba(13,148,136,.45);background:rgba(13,148,136,.06);border-radius:0 12px 12px 0;color:#334155;font-size:.95em}
+.blog-article-prose a{color:var(--teal-d);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.blog-article-prose a:hover{color:#0f766e}
+.blog-article-prose img{max-width:100%;height:auto;border-radius:12px;margin:1.25em 0;box-shadow:0 8px 28px rgba(15,23,42,.08)}
+.blog-article-prose hr{border:none;border-top:1px solid var(--sl2);margin:2em 0}
+.blog-article-prose pre{background:#0f172a;color:#e2e8f0;padding:16px 18px;border-radius:12px;overflow:auto;font-size:13px;line-height:1.5;margin:1.25em 0}
+.blog-article-prose code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:.88em}
+.blog-article-prose p code,.blog-article-prose li code{background:rgba(15,23,42,.06);padding:.12em .35em;border-radius:6px}
+.blog-article-prose pre code{background:transparent;padding:0;font-size:inherit;color:inherit}
+.blog-article-prose table{width:100%;border-collapse:collapse;font-size:15px;margin:1.25em 0}
+.blog-article-prose th,.blog-article-prose td{border:1px solid var(--sl2);padding:10px 12px;text-align:left}
+.blog-article-prose th{background:var(--sl1);font-weight:700}
+.blog-article-back{margin-top:2.5em;padding-top:20px;border-top:1px solid var(--sl2);font-weight:600}
+.blog-article-back a{color:var(--teal-d);text-decoration:none}
+.blog-article-back a:hover{text-decoration:underline}

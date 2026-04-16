@@ -1,4 +1,4 @@
-import { getBlogPostUrl } from "../../utils/blogPublicUrl";
+import { Link } from "react-router-dom";
 import { LANDING_BLOG_POSTS } from "../../data/landingBlogPosts";
 
 /**
@@ -11,7 +11,7 @@ export default function BlogPostsGrid({ variant = "landing", className = "" }) {
       <ul className={`landing-blog-grid ${isPage ? "landing-blog-grid--page" : ""}`.trim()}>
         {LANDING_BLOG_POSTS.map((post) => (
           <li key={post.slug} className="landing-blog-card fu">
-            <a href={getBlogPostUrl(post.slug)} className="landing-blog-card-link" target="_blank" rel="noopener noreferrer">
+            <Link to={`/blog/${post.slug}`} className="landing-blog-card-link">
               <div className="landing-blog-card-image-wrap">
                 <img
                   src={post.image}
@@ -33,7 +33,7 @@ export default function BlogPostsGrid({ variant = "landing", className = "" }) {
                 <p className="landing-blog-card-excerpt">{post.excerpt}</p>
                 <span className="landing-blog-card-cta">Read article →</span>
               </div>
-            </a>
+            </Link>
           </li>
         ))}
       </ul>
