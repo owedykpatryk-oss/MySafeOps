@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
+import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
+  { href: "#readiness", label: "Readiness check" },
+  { href: "#roi", label: "Value" },
   { href: "#roles", label: "How it works" },
   { href: "#pricing", label: "Pricing" },
   { href: "#blog", label: "Blog" },
@@ -56,10 +59,10 @@ export default function LandingTopSection({ navScrolled, cloud }) {
                   {label}
                 </a>
               ))}
-              <Link to="/login" className="btn btn-o nc">
+              <Link to="/login" className="btn btn-o nc" {...loginLinkPrefetchProps}>
                 Sign in
               </Link>
-              <Link to="/login" className="btn btn-p nc">
+              <Link to="/login" className="btn btn-p nc" {...loginLinkPrefetchProps}>
                 Get started
               </Link>
             </div>
@@ -102,10 +105,20 @@ export default function LandingTopSection({ navScrolled, cloud }) {
                   {label}
                 </a>
               ))}
-              <Link to="/login" className="landing-mobile-cta" onClick={() => setMobileOpen(false)}>
+              <Link
+                to="/login"
+                className="landing-mobile-cta"
+                {...loginLinkPrefetchProps}
+                onClick={() => setMobileOpen(false)}
+              >
                 Sign in
               </Link>
-              <Link to="/login" className="landing-mobile-cta landing-mobile-cta-primary" onClick={() => setMobileOpen(false)}>
+              <Link
+                to="/login"
+                className="landing-mobile-cta landing-mobile-cta-primary"
+                {...loginLinkPrefetchProps}
+                onClick={() => setMobileOpen(false)}
+              >
                 Get started
               </Link>
             </div>
@@ -128,11 +141,11 @@ export default function LandingTopSection({ navScrolled, cloud }) {
                 {cloud ? "Cloud sign-in and backup are enabled for this deployment." : "Add Supabase in your environment for optional cloud backup."}
               </p>
               <div className="hbs">
-                <Link to="/login" className="btn btn-p">
+                <Link to="/login" className="btn btn-p" {...loginLinkPrefetchProps}>
                   Get started →
                 </Link>
-                <a href="#features" className="btn btn-o">
-                  See Features
+                <a href="#readiness" className="btn btn-o">
+                  Run 2-min check
                 </a>
               </div>
               <div className="landing-trust-strip" role="note">

@@ -6,6 +6,7 @@ import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
 import WorkspaceSearchPalette from "../components/WorkspaceSearchPalette";
 import RouteErrorBoundary from "../components/RouteErrorBoundary";
+import { ViewFallback } from "../components/ViewFallback";
 import { prefetchView } from "../viewPrefetch";
 import {
   setWorkspaceNavTarget,
@@ -38,15 +39,6 @@ function isEditableSurfaceTarget(target) {
 }
 
 const LazySettingsCenter = lazy(() => import("../components/SettingsCenter"));
-
-export function ViewFallback() {
-  return (
-    <div className="app-view-fallback" style={{ fontFamily: "DM Sans, system-ui, sans-serif", textAlign: "center", color: "var(--color-text-secondary)", fontSize: 14 }}>
-      <div className="app-route-spinner" aria-hidden />
-      Loading module…
-    </div>
-  );
-}
 
 function MoreModuleTile({ tab, active, pinnedIds, onOpen, onTogglePin }) {
   const isPinned = pinnedIds.includes(tab.id);

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { scheduleIdleLoginPrefetch } from "../utils/routePrefetch";
 import "../styles/landing.css";
 import LandingTopSection from "../components/landing/LandingTopSection";
 import LandingContentSections from "../components/landing/LandingContentSections";
@@ -27,12 +28,21 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
+    if (cloud && (!ready || loading)) return undefined;
+    if (cloud && ready && user) return undefined;
+    return scheduleIdleLoginPrefetch();
+  }, [cloud, ready, loading, user]);
+
+  useEffect(() => {
+    const root = document.querySelector(".landing-page");
+    if (!root) return undefined;
+
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const els = document.querySelectorAll(".landing-page .fu");
     if (reduceMotion) {
-      els.forEach((el) => el.classList.add("vi"));
+      root.querySelectorAll(".fu").forEach((el) => el.classList.add("vi"));
       return undefined;
     }
+
     const obs = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
@@ -41,8 +51,33 @@ export default function LandingPage() {
       },
       { threshold: 0.1 }
     );
-    els.forEach((el) => obs.observe(el));
-    return () => obs.disconnect();
+
+    const observeFadeUpTargets = (scope) => {
+      scope.querySelectorAll?.(".fu").forEach((el) => {
+        if (!el.classList.contains("vi")) obs.observe(el);
+      });
+      if (scope.classList?.contains("fu") && !scope.classList.contains("vi")) {
+        obs.observe(scope);
+      }
+    };
+
+    observeFadeUpTargets(root);
+
+    // Lazy-loaded sections append new `.fu` nodes after first paint.
+    // Observe those nodes too so they don't stay invisible.
+    const mutationObs = new MutationObserver((mutations) => {
+      mutations.forEach((m) => {
+        m.addedNodes.forEach((node) => {
+          if (node instanceof Element) observeFadeUpTargets(node);
+        });
+      });
+    });
+    mutationObs.observe(root, { childList: true, subtree: true });
+
+    return () => {
+      obs.disconnect();
+      mutationObs.disconnect();
+    };
   }, []);
 
   useEffect(() => {

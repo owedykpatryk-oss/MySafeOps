@@ -117,7 +117,7 @@ export default function LandingSoroBlog() {
     };
   }, []);
 
-  const showSkeleton = status === "loading";
+  const showSkeleton = status === "idle" || status === "loading";
 
   return (
     <section
@@ -125,7 +125,7 @@ export default function LandingSoroBlog() {
       className="landing-soro-wrap"
       id="blog"
       aria-labelledby="soro-blog-heading"
-      aria-busy={status === "loading"}
+      aria-busy={status !== "ready"}
     >
       <div className="ctn">
         <div className="sh fu landing-soro-intro">

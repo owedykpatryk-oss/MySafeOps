@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
 
 export default function LandingFooter({ supportEmail }) {
   return (
@@ -17,6 +18,8 @@ export default function LandingFooter({ supportEmail }) {
             <h4>Product</h4>
             <ul>
               <li><a href="#features">Features</a></li>
+              <li><a href="#readiness">Readiness check</a></li>
+              <li><a href="#roi">Value</a></li>
               <li><a href="#roles">How it works</a></li>
               <li><a href="#pricing">Pricing</a></li>
               <li><a href="#blog">Blog</a></li>
@@ -28,7 +31,11 @@ export default function LandingFooter({ supportEmail }) {
           <div>
             <h4>Resources</h4>
             <ul>
-              <li><Link to="/login">Sign in</Link></li>
+              <li>
+                <Link to="/login" {...loginLinkPrefetchProps}>
+                  Sign in
+                </Link>
+              </li>
               <li><a href={`mailto:${supportEmail}`}>Contact</a></li>
               <li><span style={{ cursor: "default", opacity: 0.7 }}>Documentation (coming soon)</span></li>
             </ul>

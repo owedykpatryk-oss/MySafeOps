@@ -3,11 +3,13 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import ProtectedAppRoute from "./components/ProtectedAppRoute";
-import LandingPage from "./pages/LandingPage";
-import LoginPage from "./pages/LoginPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import AcceptInvitePage from "./pages/AcceptInvitePage";
-import MainAppLayout, { ViewFallback } from "./layout/MainAppLayout";
+import { ViewFallback } from "./components/ViewFallback";
+
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const AcceptInvitePage = lazy(() => import("./pages/AcceptInvitePage"));
+const MainAppLayout = lazy(() => import("./layout/MainAppLayout"));
 
 const PublicClientPortalView = lazy(() =>
   import("./components/ClientPortal").then((m) => ({ default: m.PublicClientPortalView }))
@@ -36,9 +38,7 @@ export default function App() {
   if (ramsShare) {
     return (
       <PublicShell>
-        <Suspense fallback={<ViewFallback />}>
-          <PublicRamsShareView token={ramsShare} />
-        </Suspense>
+        <PublicRamsShareView token={ramsShare} />
       </PublicShell>
     );
   }
@@ -60,21 +60,23 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/accept-invite" element={<AcceptInvitePage />} />
-        <Route
-          path="/app"
-          element={
-            <ProtectedAppRoute>
-              <MainAppLayout />
-            </ProtectedAppRoute>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<ViewFallback />}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/accept-invite" element={<AcceptInvitePage />} />
+          <Route
+            path="/app"
+            element={
+              <ProtectedAppRoute>
+                <MainAppLayout />
+              </ProtectedAppRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

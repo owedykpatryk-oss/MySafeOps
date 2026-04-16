@@ -1,6 +1,63 @@
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import LandingSoroBlog from "./LandingSoroBlog";
-import LandingFaqSection from "./LandingFaqSection";
+import { loginLinkPrefetchProps, prefetchLoginPage } from "../../utils/routePrefetch";
+
+const LandingSoroBlog = lazy(() => import("./LandingSoroBlog"));
+const LandingFaqSection = lazy(() => import("./LandingFaqSection"));
+
+function FaqSuspenseFallback() {
+  return (
+    <section className="landing-faq" id="faq" aria-busy="true" aria-label="Loading FAQ">
+      <div className="ctn">
+        <div className="sh">
+          <div className="badge" style={{ background: "rgba(13,148,136,.1)", color: "var(--teal)" }}>
+            FAQ
+          </div>
+          <h2 style={{ marginTop: 12, marginBottom: 8 }}>Common questions</h2>
+          <p style={{ color: "var(--sl6)" }}>Loading answers…</p>
+        </div>
+        <div className="landing-faq-list">
+          {[0, 1, 2].map((idx) => (
+            <div
+              key={idx}
+              style={{
+                border: "1px solid rgba(226,232,240,.95)",
+                borderRadius: "var(--landing-radius)",
+                background: "var(--w)",
+                padding: "18px 20px",
+                minHeight: 60,
+              }}
+            >
+              <div className="soro-blog-skeleton-line soro-blog-skeleton-line--lg" style={{ marginBottom: 10 }} />
+              <div className="soro-blog-skeleton-line" style={{ marginBottom: 0 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SoroBlogSuspenseFallback() {
+  return (
+    <section className="landing-soro-wrap" aria-busy="true" aria-label="Loading blog">
+      <div className="ctn">
+        <div className="soro-blog-host" style={{ minHeight: 280 }}>
+          <div className="soro-blog-skeleton" style={{ position: "relative", inset: "auto" }}>
+            <div className="soro-blog-skeleton-inner">
+              <div className="soro-blog-skeleton-line soro-blog-skeleton-line--lg" />
+              <div className="soro-blog-skeleton-line soro-blog-skeleton-line--sm" />
+              <div className="soro-blog-skeleton-cards">
+                <div className="soro-blog-skeleton-card" />
+                <div className="soro-blog-skeleton-card" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 const FEATURES = [
   { emoji: "⚠️", bg: "rgba(13,148,136,.1)", t: "RAMS Builder", d: "Clickable risk matrix, hazard suggestions, and method statements. Keep RAMS consistent and easy to review." },
@@ -39,6 +96,161 @@ const MODULE_TICKER = [
   "🖨️ PDF Export",
 ];
 
+const READINESS_SIGNALS = [
+  { id: "permits-live", title: "Live permit status", detail: "You can instantly spot active, expiring, and overdue permits." },
+  { id: "daily-briefing", title: "Daily briefing trail", detail: "Toolbox talks and briefings are signed and easy to evidence." },
+  { id: "competency-watch", title: "Competency expiry watch", detail: "Workers with expiring certs are flagged before deployment." },
+  { id: "incident-speed", title: "Incident capture speed", detail: "Near misses are logged with photos in under 2 minutes." },
+  { id: "audit-ready", title: "Audit-ready exports", detail: "You can export clear records without spreadsheet rework." },
+];
+
+function getReadinessTone(score) {
+  if (score >= 80) return { label: "Site ready", hint: "Strong baseline. Keep checks consistent across shifts." };
+  if (score >= 60) return { label: "Good baseline", hint: "You are close. Tighten the missing checks to reduce risk." };
+  if (score >= 40) return { label: "Needs attention", hint: "Some controls are inconsistent and could expose the site." };
+  return { label: "High exposure", hint: "Critical controls are not stable yet. Prioritize the basics first." };
+}
+
+function ReadinessCheckSection() {
+  const [selected, setSelected] = useState(["permits-live", "daily-briefing"]);
+  const score = useMemo(() => Math.round((selected.length / READINESS_SIGNALS.length) * 100), [selected.length]);
+  const missing = READINESS_SIGNALS.length - selected.length;
+  const tone = getReadinessTone(score);
+
+  const toggleSignal = (id) => {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  return (
+    <section className="wow-check" id="readiness">
+      <div className="ctn">
+        <div className="wow-shell fu">
+          <div>
+            <div className="badge wow-badge">2-minute check</div>
+            <h2>How ready is your site today?</h2>
+            <p className="wow-copy">
+              Toggle what is already in place and see your live readiness score. Teams use this to quickly spot where risk still leaks.
+            </p>
+            <div className="wow-list" role="group" aria-label="Readiness checklist">
+              {READINESS_SIGNALS.map((item) => {
+                const active = selected.includes(item.id);
+                return (
+                  <button key={item.id} type="button" className="wow-item" data-active={active} onClick={() => toggleSignal(item.id)}>
+                    <span className="wow-checkmark" aria-hidden>
+                      {active ? "✓" : "○"}
+                    </span>
+                    <span>
+                      <strong>{item.title}</strong>
+                      <small>{item.detail}</small>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <aside className="wow-panel" aria-live="polite">
+            <div className="wow-ring" style={{ "--score": `${score}%` }}>
+              <div className="wow-ring-inner">
+                <strong>{score}%</strong>
+                <span>Readiness</span>
+              </div>
+            </div>
+            <p className="wow-state">{tone.label}</p>
+            <p className="wow-hint">{tone.hint}</p>
+            <p className="wow-risk">
+              {missing === 0
+                ? "No obvious gaps selected — great baseline for the day."
+                : `${missing} key area${missing > 1 ? "s are" : " is"} still weak. Fixing them first usually cuts rework and surprises.`}
+            </p>
+            <Link to="/login" className="btn btn-p" {...loginLinkPrefetchProps}>
+              Unlock full readiness dashboard
+            </Link>
+          </aside>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function formatGBP(value) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function RoiEstimatorSection() {
+  const [teamSize, setTeamSize] = useState(8);
+  const [dailyDocs, setDailyDocs] = useState(5);
+  const [minutesSaved, setMinutesSaved] = useState(10);
+  const [hourlyRate, setHourlyRate] = useState(28);
+
+  const { weeklyHours, monthlyValue } = useMemo(() => {
+    const weeklyMinutes = teamSize * dailyDocs * minutesSaved * 5;
+    const hours = weeklyMinutes / 60;
+    const month = hours * 4.33 * hourlyRate;
+    return {
+      weeklyHours: hours,
+      monthlyValue: month,
+    };
+  }, [teamSize, dailyDocs, minutesSaved, hourlyRate]);
+
+  return (
+    <section className="roi" id="roi">
+      <div className="ctn">
+        <div className="sh fu">
+          <div className="badge" style={{ background: "rgba(249,115,22,.12)", color: "var(--org-d)" }}>
+            Value estimate
+          </div>
+          <h2>What is paperwork delay costing you?</h2>
+          <p>
+            Quick estimate only. Adjust a few numbers and see potential time and cost recovered when site documentation is handled in one flow.
+          </p>
+        </div>
+
+        <div className="roi-grid fu">
+          <div className="roi-controls">
+            <label>
+              Team members on active site
+              <input type="range" min={2} max={40} value={teamSize} onChange={(e) => setTeamSize(Number(e.target.value))} />
+              <strong>{teamSize} people</strong>
+            </label>
+            <label>
+              Docs/permits touched per person daily
+              <input type="range" min={1} max={12} value={dailyDocs} onChange={(e) => setDailyDocs(Number(e.target.value))} />
+              <strong>{dailyDocs} items/day</strong>
+            </label>
+            <label>
+              Minutes saved per item
+              <input type="range" min={3} max={20} value={minutesSaved} onChange={(e) => setMinutesSaved(Number(e.target.value))} />
+              <strong>{minutesSaved} min</strong>
+            </label>
+            <label>
+              Blended labour rate
+              <input type="range" min={16} max={65} value={hourlyRate} onChange={(e) => setHourlyRate(Number(e.target.value))} />
+              <strong>{formatGBP(hourlyRate)}/hour</strong>
+            </label>
+          </div>
+
+          <aside className="roi-result">
+            <p className="roi-kicker">Potential recovery</p>
+            <div className="roi-big">{weeklyHours.toFixed(1)} hrs / week</div>
+            <div className="roi-sub">~ {formatGBP(monthlyValue)} / month in productive time</div>
+            <p>
+              Estimation assumes steady activity over 5 working days. Use this as a planning baseline, not as a guaranteed financial forecast.
+            </p>
+            <Link to="/login" className="btn btn-p" {...loginLinkPrefetchProps}>
+              Test this in your workspace
+            </Link>
+          </aside>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function LandingContentSections({ supportEmail, featureForm, onChangeFeature, onSubmitFeature, ctaEmail, onCtaEmailChange, onCtaGo }) {
   return (
     <>
@@ -64,6 +276,8 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
           </div>
         </div>
       </section>
+
+      <ReadinessCheckSection />
 
       <section className="roles" id="roles">
         <div className="ctn">
@@ -126,17 +340,38 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
             <div className="pcard fu">
               <h3>Free</h3><div className="pr">£0</div><div className="yr">Evaluate locally</div><div className="wf">👷 Great for demos</div>
               <ul><li>Try core modules offline-first</li><li>Explore RAMS and permits workflows</li><li>Upgrade when you connect your team</li></ul>
-              <Link to="/login" className="btn btn-o" style={{ width: "100%", justifyContent: "center", fontSize: 14 }}>Open app</Link>
+              <Link
+                to="/login"
+                className="btn btn-o"
+                style={{ width: "100%", justifyContent: "center", fontSize: 14 }}
+                {...loginLinkPrefetchProps}
+              >
+                Open app
+              </Link>
             </div>
             <div className="pcard fu">
               <h3>Solo</h3><div className="pr">£19<span>/mo</span></div><div className="yr">Example pricing</div><div className="wf">👷 For small teams</div>
               <ul><li>Strong single-site workflows</li><li>Cloud backup (when configured)</li><li>Email-led support</li></ul>
-              <Link to="/login" className="btn btn-o" style={{ width: "100%", justifyContent: "center", fontSize: 14 }}>Start trial</Link>
+              <Link
+                to="/login"
+                className="btn btn-o"
+                style={{ width: "100%", justifyContent: "center", fontSize: 14 }}
+                {...loginLinkPrefetchProps}
+              >
+                Start trial
+              </Link>
             </div>
             <div className="pcard pop fu">
               <h3>Team</h3><div className="pr">£49<span>/mo</span></div><div className="yr">Example pricing</div><div className="wf">👷 Collaboration-first</div>
               <ul><li>Higher limits for active sites</li><li>Invites and role management</li><li>Priority support options</li><li className="free">Built for multi-supervisor sites</li></ul>
-              <Link to="/login" className="btn btn-p" style={{ width: "100%", justifyContent: "center", fontSize: 14 }}>Start trial</Link>
+              <Link
+                to="/login"
+                className="btn btn-p"
+                style={{ width: "100%", justifyContent: "center", fontSize: 14 }}
+                {...loginLinkPrefetchProps}
+              >
+                Start trial
+              </Link>
             </div>
             <div className="pcard fu">
               <h3>Business</h3><div className="pr">£99<span>/mo</span></div><div className="yr">Example pricing</div><div className="wf">👷 Scale & governance</div>
@@ -150,9 +385,15 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
         </div>
       </section>
 
-      <LandingSoroBlog />
+      <RoiEstimatorSection />
 
-      <LandingFaqSection />
+      <Suspense fallback={<SoroBlogSuspenseFallback />}>
+        <LandingSoroBlog />
+      </Suspense>
+
+      <Suspense fallback={<FaqSuspenseFallback />}>
+        <LandingFaqSection />
+      </Suspense>
 
       <section className="missing" id="missing">
         <div className="ctn">
@@ -210,6 +451,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
               placeholder="Work email (optional)"
               value={ctaEmail}
               onChange={(e) => onCtaEmailChange(e.target.value)}
+              onFocus={prefetchLoginPage}
               style={{
                 padding: "14px 24px",
                 borderRadius: "var(--r)",
@@ -223,7 +465,9 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
                 outline: "none",
               }}
             />
-            <button type="button" className="btn btn-p" onClick={onCtaGo}>Continue to sign in →</button>
+            <button type="button" className="btn btn-p" onMouseEnter={prefetchLoginPage} onFocus={prefetchLoginPage} onClick={onCtaGo}>
+              Continue to sign in →
+            </button>
           </div>
           <p style={{ fontSize: 13, color: "var(--sl6)", marginTop: 16, position: "relative" }}>
             Help: <a href={`mailto:${supportEmail}`} style={{ color: "var(--teal-l)" }}>{supportEmail}</a>

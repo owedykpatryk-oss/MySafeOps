@@ -8,8 +8,18 @@ import { ToastProvider } from "./context/ToastContext";
 import { initOfflineMode } from "./offline/offlineManager";
 import { initNotificationRuntime } from "./offline/pushNotifications";
 
-initOfflineMode().catch(() => {});
-initNotificationRuntime();
+function scheduleDeferredInit() {
+  const run = () => {
+    initOfflineMode().catch(() => {});
+    initNotificationRuntime();
+  };
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(() => run(), { timeout: 4000 });
+  } else {
+    setTimeout(run, 0);
+  }
+}
+scheduleDeferredInit();
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
