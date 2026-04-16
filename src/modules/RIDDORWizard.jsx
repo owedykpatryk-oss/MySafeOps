@@ -446,7 +446,7 @@ export default function RIDDORRegister() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      {modal?.type==="form" && <RIDDORWizard report={modal.data} onSave={saveReport} onClose={()=>setModal(null)} />}
+      {modal?.type==="form" && <RIDDORForm report={modal.data} onSave={saveReport} onClose={()=>setModal(null)} />}
 
       <PageHero
         badgeText="RID"

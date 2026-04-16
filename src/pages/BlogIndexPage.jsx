@@ -64,6 +64,16 @@ export default function BlogIndexPage() {
       <main id="blog-main" tabIndex={-1}>
         <section className="landing-blog-section landing-blog-section--page" aria-labelledby="blog-index-heading">
           <div className="ctn">
+            <nav className="blog-breadcrumb" aria-label="Breadcrumb">
+              <ol className="blog-breadcrumb-list">
+                <li className="blog-breadcrumb-item">
+                  <Link to="/">Home</Link>
+                </li>
+                <li className="blog-breadcrumb-item blog-breadcrumb-item--current" aria-current="page">
+                  Blog
+                </li>
+              </ol>
+            </nav>
             <div className="sh fu landing-blog-intro">
               <div className="badge" style={{ background: "rgba(13,148,136,.1)", color: "var(--teal)" }}>
                 UK construction

@@ -54,9 +54,6 @@ export default function PermitBuilder({ title, onClose, step = 1, children, prev
         /* ignore */
       }
     };
-    // Mount only: parent passes a new `onClose` each render; re-running this effect would
-    // repeatedly focus the first control and steal focus from text fields (e.g. description).
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, []);
 
   return (

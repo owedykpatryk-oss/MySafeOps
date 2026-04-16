@@ -14,6 +14,8 @@ npm install
 npm run dev
 ```
 
+**Code quality:** `npm run lint` (ESLint 9 + React; runs in CI). Prettier is configured (`.prettierrc.json`); `npm run format:check` / `npm run format` are available — a full-repo format may touch many files, so treat it as an optional cleanup pass.
+
 Open the URL Vite prints (usually `http://localhost:5173`). You should see the **landing page** first; use **Sign in** or **Get started** to reach **/login**, then open the **workspace** at **/app** (dashboard and modules).
 
 | Route | Purpose |

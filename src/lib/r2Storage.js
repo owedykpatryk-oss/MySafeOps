@@ -29,7 +29,7 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   if (!base) throw new Error("Cloud storage is not configured (set VITE_STORAGE_API_URL).");
 
   const token = getStorageUploadToken();
-  const safeName = (file.name || "file").replace(/[^\w.\-]+/g, "_").slice(0, 180);
+  const safeName = (file.name || "file").replace(/[^\w.-]+/g, "_").slice(0, 180);
   const key = `${subPath.replace(/^\/+|\/+$/g, "")}/org_${orgId}/${Date.now()}_${safeName}`;
 
   const fd = new FormData();

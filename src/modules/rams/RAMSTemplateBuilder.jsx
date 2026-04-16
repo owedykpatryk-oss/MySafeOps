@@ -1193,7 +1193,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
     },
     {
       label: "Strict quality mode configured (recommended)",
-      ok: !!form.strictMode ? Number(form.strictMinControls || 0) >= 2 : true,
+      ok: form.strictMode ? Number(form.strictMinControls || 0) >= 2 : true,
     },
   ];
 

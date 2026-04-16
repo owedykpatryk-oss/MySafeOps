@@ -45,6 +45,9 @@ const viteRows = [
   ["VITE_ANTHROPIC_MODEL", "Anthropic model id (optional)"],
   ["VITE_OPENWEATHER_API_KEY", "RAMS weather — optional; else Open-Meteo"],
   ["VITE_APP_VERSION", "Optional display version in Help / about"],
+  ["VITE_PUBLIC_SITE_URL", "Canonical site origin for OG, RSS, sitemap (set per Vercel Preview host when testing)"],
+  ["VITE_BLOG_POSTS_BASE_URL", "Optional base URL for blog markdown assets / canonical links"],
+  ["VITE_STRIPE_PUBLISHABLE_KEY", "Optional Stripe publishable key for Stripe.js in the browser (never secret keys)"],
 ];
 
 const cliRows = [
