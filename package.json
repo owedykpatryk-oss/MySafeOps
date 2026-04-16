@@ -13,6 +13,7 @@
     "billing:doctor": "node scripts/billing-doctor.mjs",
     "test:e2e": "playwright test",
     "test:e2e:blog": "playwright test tests/e2e/blog.spec.js",
+    "test:e2e:landing": "playwright test tests/e2e/landing.spec.js",
     "test:e2e:billing": "playwright test tests/e2e/billing.spec.js",
     "test:e2e:ui": "playwright test --ui",
     "env:check": "node scripts/env-doctor.mjs",

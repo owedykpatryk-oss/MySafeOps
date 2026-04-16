@@ -56,7 +56,8 @@ export default function LandingPage() {
           if (e.isIntersecting) e.target.classList.add("vi");
         });
       },
-      { threshold: 0.1 }
+      // threshold 0: reveal as soon as any pixel is visible; rootMargin nudges “near viewport” items
+      { threshold: 0, rootMargin: "0px 0px 15% 0px" }
     );
 
     const observeFadeUpTargets = (scope) => {
@@ -68,7 +69,20 @@ export default function LandingPage() {
       }
     };
 
+    /** One-shot fallback if IO fires late on first paint (keeps .fu from staying opacity:0). */
+    const revealInViewport = () => {
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      root.querySelectorAll(".fu:not(.vi)").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.top < vh && r.bottom > 0) el.classList.add("vi");
+      });
+    };
+
     observeFadeUpTargets(root);
+    revealInViewport();
+    requestAnimationFrame(() => {
+      revealInViewport();
+    });
 
     // Lazy-loaded sections append new `.fu` nodes after first paint.
     // Observe those nodes too so they don't stay invisible.

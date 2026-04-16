@@ -3,7 +3,7 @@ import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
 
 export default function LandingFooter({ supportEmail }) {
   return (
-    <footer>
+    <footer role="contentinfo">
       <div className="ctn">
         <div className="fgrid">
           <div className="fb">
