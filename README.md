@@ -19,6 +19,8 @@ Open the URL Vite prints (usually `http://localhost:5173`). You should see the *
 | Route | Purpose |
 |-------|---------|
 | `/` | Landing / marketing |
+| `/blog` | Blog index (guides from `src/blog/posts/*.md`) |
+| `/blog/:slug` | Single guide |
 | `/login` | Sign in / sign up (when Supabase is configured) |
 | `/reset-password` | Set a new password from Supabase recovery link |
 | `/accept-invite` | Public landing for an org invite (then continue to sign-in) |
@@ -49,6 +51,11 @@ Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project
 | `VITE_STORAGE_*` / `VITE_R2_PUBLIC_BASE_URL` | Optional document uploads via Cloudflare R2 Worker |
 | `VITE_OPENWEATHER_API_KEY` | Optional override for RAMS weather (otherwise Open-Meteo) |
 | `VITE_BLOG_POSTS_BASE_URL` / `VITE_PUBLIC_SITE_URL` | Optional canonical blog base and site origin for links, RSS, and Open Graph |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | Optional Stripe **publishable** key if you add Stripe.js in the browser (never put secret keys in `VITE_*`) |
+
+**Vercel Preview:** set `VITE_PUBLIC_SITE_URL` (and optionally `VITE_BLOG_POSTS_BASE_URL`) to your **preview** hostname so generated Open Graph / RSS URLs match the deployment you are testing.
+
+**Blog analytics (optional):** [`src/utils/analytics.js`](src/utils/analytics.js) emits `blog_index_view` and `blog_article_view` to `window.gtag` (GA4) and/or `window.plausible` when those globals exist. Load your tag manager or Plausible snippet in `index.html` (or behind consent).
 
 ### Security: `VITE_*` variables
 

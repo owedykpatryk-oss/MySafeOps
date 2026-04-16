@@ -15,8 +15,7 @@ export default function BlogPostsGrid({ variant = "landing", className = "" }) {
               <div className="landing-blog-card-image-wrap">
                 <img
                   src={post.image}
-                  alt=""
-                  role="presentation"
+                  alt={post.title}
                   className="landing-blog-card-image"
                   width={640}
                   height={360}

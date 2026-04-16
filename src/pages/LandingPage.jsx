@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
@@ -7,6 +7,7 @@ import "../styles/landing.css";
 import LandingTopSection from "../components/landing/LandingTopSection";
 import LandingContentSections from "../components/landing/LandingContentSections";
 import LandingFooter from "../components/landing/LandingFooter";
+import { useLandingHomeDocumentMeta } from "../utils/landingPageMeta";
 
 const SUPPORT_EMAIL = "mysafeops@gmail.com";
 const LANDING_TITLE = "MySafeOps — RAMS, permits & site safety for UK construction";
@@ -86,26 +87,9 @@ export default function LandingPage() {
     };
   }, []);
 
-  useEffect(() => {
-    const prevTitle = document.title;
-    document.title = LANDING_TITLE;
-    const metaDesc = document.querySelector('meta[name="description"]');
-    const prevDescContent = metaDesc?.getAttribute("content") ?? "";
-    if (metaDesc) metaDesc.setAttribute("content", LANDING_DESCRIPTION);
-
-    let canonical = document.querySelector('link[rel="canonical"]');
-    let canonicalCreated = false;
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.setAttribute("rel", "canonical");
-      document.head.appendChild(canonical);
-      canonicalCreated = true;
-    }
-    const prevCanonical = canonical.getAttribute("href") || "";
-    canonical.setAttribute("href", `${window.location.origin}/`);
-
-    const origin = window.location.origin;
-    const jsonLd = {
+  const landingJsonLd = useMemo(() => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    return {
       "@context": "https://schema.org",
       "@type": "WebSite",
       name: "MySafeOps",
@@ -118,21 +102,13 @@ export default function LandingPage() {
         email: SUPPORT_EMAIL,
       },
     };
-    const script = document.createElement("script");
-    script.type = "application/ld+json";
-    script.setAttribute("data-landing-ld", "1");
-    script.textContent = JSON.stringify(jsonLd);
-    document.head.appendChild(script);
-
-    return () => {
-      document.title = prevTitle;
-      if (metaDesc) metaDesc.setAttribute("content", prevDescContent);
-      if (canonicalCreated) canonical.remove();
-      else if (prevCanonical) canonical.setAttribute("href", prevCanonical);
-      else canonical.removeAttribute("href");
-      document.querySelector('script[data-landing-ld="1"]')?.remove();
-    };
   }, []);
+
+  useLandingHomeDocumentMeta({
+    title: LANDING_TITLE,
+    description: LANDING_DESCRIPTION,
+    jsonLd: landingJsonLd,
+  });
 
   const submitFeature = () => {
     const email = featureForm.email.trim();

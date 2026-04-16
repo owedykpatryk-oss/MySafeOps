@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import LandingFooter from "../components/landing/LandingFooter";
 import BlogPostsGrid from "../components/landing/BlogPostsGrid";
+import { trackBlogIndexView } from "../utils/analytics";
 import { getPublicSiteOrigin } from "../utils/blogPublicUrl";
 import { useBlogDocumentMeta } from "../utils/blogPageMeta";
 import "../styles/landing.css";
@@ -20,6 +22,10 @@ export default function BlogIndexPage() {
     ogType: "website",
     rssFeedUrl: `${origin}/blog/rss.xml`,
   });
+
+  useEffect(() => {
+    trackBlogIndexView();
+  }, []);
 
   return (
     <div className="landing-page blog-index-page">

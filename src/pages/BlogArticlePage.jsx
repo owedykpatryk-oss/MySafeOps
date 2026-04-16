@@ -4,6 +4,7 @@ import DOMPurify from "dompurify";
 import { getBundledPostMarkdown } from "../blog/loadPostMarkdown";
 import LandingFooter from "../components/landing/LandingFooter";
 import { getPostMetaBySlug, isValidBlogSlug } from "../data/landingBlogPosts";
+import { trackBlogArticleView } from "../utils/analytics";
 import { getBlogPostUrl, getPublicSiteOrigin } from "../utils/blogPublicUrl";
 import { useBlogDocumentMeta } from "../utils/blogPageMeta";
 import { addLazyLoadingToBlogImages, parseBlogPostHtml } from "../utils/blogMarkdownRender";
@@ -109,6 +110,10 @@ export default function BlogArticlePage() {
     Boolean(metaForHead),
   );
 
+  useEffect(() => {
+    if (slug && metaForHead) trackBlogArticleView(slug);
+  }, [slug, metaForHead]);
+
   const jsonLd = useMemo(() => {
     if (!metaForHead || !slug || loadError) return null;
     const url = getBlogPostUrl(slug);
@@ -211,9 +216,20 @@ export default function BlogArticlePage() {
 
       <main id="blog-article-main" tabIndex={-1} className="blog-article-main">
         <div className="ctn blog-article-inner fu">
+          <nav className="blog-breadcrumb" aria-label="Breadcrumb">
+            <ol className="blog-breadcrumb-list">
+              <li className="blog-breadcrumb-item">
+                <Link to="/">Home</Link>
+              </li>
+              <li className="blog-breadcrumb-item">
+                <Link to="/blog">Blog</Link>
+              </li>
+              <li className="blog-breadcrumb-item blog-breadcrumb-item--current" aria-current="page">
+                {meta?.title}
+              </li>
+            </ol>
+          </nav>
           <p className="blog-article-kicker">
-            <Link to="/blog">Blog</Link>
-            <span aria-hidden> · </span>
             <span>{meta?.dateLabel}</span>
             <span aria-hidden> · </span>
             <span>{meta?.readTime}</span>
