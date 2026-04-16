@@ -65,8 +65,8 @@ export default function App() {
       <Suspense fallback={<ViewFallback />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/blog/:slug" element={<BlogArticlePage />} />
           <Route path="/blog" element={<BlogIndexPage />} />
+          <Route path="/blog/:slug" element={<BlogArticlePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/accept-invite" element={<AcceptInvitePage />} />

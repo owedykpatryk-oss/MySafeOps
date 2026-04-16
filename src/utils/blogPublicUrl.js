@@ -1,5 +1,5 @@
 /**
- * Canonical URLs for published guides (TrySoro / CMS or same-origin when mirrored).
+ * Canonical URLs for published guides (same-origin `/blog/*` or production domain).
  * Override with VITE_BLOG_POSTS_BASE_URL (no trailing slash), e.g. https://mysafeops.com/blog
  */
 export function getBlogPostsBase() {

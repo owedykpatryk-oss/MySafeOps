@@ -1,7 +1,7 @@
-import { Link } from "react-router-dom";
 import { LANDING_BLOG_POSTS } from "../../data/landingBlogPosts";
 
 /**
+ * Cards use plain `/blog/...` anchors so guides open reliably (full navigation + SPA boot).
  * @param {{ variant?: "landing" | "page", className?: string }} props
  */
 export default function BlogPostsGrid({ variant = "landing", className = "" }) {
@@ -11,7 +11,7 @@ export default function BlogPostsGrid({ variant = "landing", className = "" }) {
       <ul className={`landing-blog-grid ${isPage ? "landing-blog-grid--page" : ""}`.trim()}>
         {LANDING_BLOG_POSTS.map((post, index) => (
           <li key={post.slug} className="landing-blog-card fu">
-            <Link to={`/blog/${post.slug}`} className="landing-blog-card-link">
+            <a href={`/blog/${post.slug}`} className="landing-blog-card-link">
               <div className="landing-blog-card-image-wrap">
                 <img
                   src={post.image}
@@ -35,7 +35,7 @@ export default function BlogPostsGrid({ variant = "landing", className = "" }) {
                 <p className="landing-blog-card-excerpt">{post.excerpt}</p>
                 <span className="landing-blog-card-cta">Read article →</span>
               </div>
-            </Link>
+            </a>
           </li>
         ))}
       </ul>

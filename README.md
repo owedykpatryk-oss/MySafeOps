@@ -48,7 +48,7 @@ Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project
 | `VITE_ANTHROPIC_*` | Optional AI features (RAMS, toolbox, photo hazard) |
 | `VITE_STORAGE_*` / `VITE_R2_PUBLIC_BASE_URL` | Optional document uploads via Cloudflare R2 Worker |
 | `VITE_OPENWEATHER_API_KEY` | Optional override for RAMS weather (otherwise Open-Meteo) |
-| `VITE_SORO_EMBED_URL` | Optional TrySoro embed script URL for the landing blog block (default embed is built in) |
+| `VITE_BLOG_POSTS_BASE_URL` / `VITE_PUBLIC_SITE_URL` | Optional canonical blog base and site origin for links, RSS, and Open Graph |
 
 ### Security: `VITE_*` variables
 

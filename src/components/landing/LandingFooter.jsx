@@ -23,7 +23,7 @@ export default function LandingFooter({ supportEmail }) {
               <li><a href="#roles">How it works</a></li>
               <li><a href="#pricing">Pricing</a></li>
               <li>
-                <Link to="/blog">Blog</Link>
+                <a href="/blog">Blog</a>
               </li>
               <li><a href="#faq">FAQ</a></li>
               <li><a href="#missing">Request feature</a></li>

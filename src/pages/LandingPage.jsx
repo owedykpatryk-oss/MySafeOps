@@ -33,6 +33,12 @@ export default function LandingPage() {
     return scheduleIdleLoginPrefetch();
   }, [cloud, ready, loading, user]);
 
+  /** Warm blog route chunks so first click from the marketing page loads quickly. */
+  useEffect(() => {
+    void import("./BlogIndexPage.jsx");
+    void import("./BlogArticlePage.jsx");
+  }, []);
+
   useEffect(() => {
     const root = document.querySelector(".landing-page");
     if (!root) return undefined;

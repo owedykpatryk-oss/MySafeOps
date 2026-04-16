@@ -28,8 +28,8 @@ function FaqSuspenseFallback() {
                 minHeight: 60,
               }}
             >
-              <div className="soro-blog-skeleton-line soro-blog-skeleton-line--lg" style={{ marginBottom: 10 }} />
-              <div className="soro-blog-skeleton-line" style={{ marginBottom: 0 }} />
+              <div className="landing-faq-skeleton-line landing-faq-skeleton-line--lg" style={{ marginBottom: 10 }} />
+              <div className="landing-faq-skeleton-line" style={{ marginBottom: 0 }} />
             </div>
           ))}
         </div>

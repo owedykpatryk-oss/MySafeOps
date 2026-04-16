@@ -9,7 +9,7 @@ const NAV_LINKS = [
   { href: "#roi", label: "Value" },
   { href: "#roles", label: "How it works" },
   { href: "#pricing", label: "Pricing" },
-  { to: "/blog", label: "Blog", isRouter: true },
+  { href: "/blog", label: "Blog" },
   { href: "#faq", label: "FAQ" },
   { href: "#missing", label: "Request feature" },
 ];
@@ -54,17 +54,11 @@ export default function LandingTopSection({ navScrolled, cloud }) {
               </div>
             </Link>
             <div className="nl">
-              {NAV_LINKS.map((item) =>
-                item.isRouter ? (
-                  <Link key={item.to} to={item.to}>
-                    {item.label}
-                  </Link>
-                ) : (
-                  <a key={item.href} href={item.href}>
-                    {item.label}
-                  </a>
-                )
-              )}
+              {NAV_LINKS.map((item) => (
+                <a key={item.href} href={item.href}>
+                  {item.label}
+                </a>
+              ))}
               <Link to="/login" className="btn btn-o nc" {...loginLinkPrefetchProps}>
                 Sign in
               </Link>
@@ -106,17 +100,17 @@ export default function LandingTopSection({ navScrolled, cloud }) {
               </button>
             </div>
             <div className="landing-mobile-links">
-              {NAV_LINKS.map((item) =>
-                item.isRouter ? (
-                  <Link key={item.to} to={item.to} onClick={() => setMobileOpen(false)}>
-                    {item.label}
-                  </Link>
-                ) : (
-                  <a key={item.href} href={item.href} onClick={() => setMobileOpen(false)}>
-                    {item.label}
-                  </a>
-                )
-              )}
+              {NAV_LINKS.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => {
+                    setMobileOpen(false);
+                  }}
+                >
+                  {item.label}
+                </a>
+              ))}
               <Link
                 to="/login"
                 className="landing-mobile-cta"
