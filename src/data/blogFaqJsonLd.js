@@ -130,6 +130,58 @@ export const FAQ_MAIN_ENTITY_BY_SLUG = {
       text: "They shouldn't. Platforms that charge per-worker make digital adoption painful for large teams. MySafeOps keeps worker accounts free permanently, so everyone on site can sign briefings and acknowledge permits without a cost barrier.",
     },
   ],
+  "safetyculture-alternative-uk": [
+    {
+      name: "How much does SafetyCulture actually cost for UK construction?",
+      text: "The Premium plan is approximately $24 per user per month on annual billing. On 50 workers and 5 supervisors that's around £780 per month, or £9,400 per year. Enterprise pricing is custom and typically higher.",
+    },
+    {
+      name: "Does SafetyCulture have UK permit to work templates?",
+      text: "The platform supports custom templates that users can build to represent UK permits. It does not come with pre-built UK permit types (hot work, confined space, etc.) with full permit lifecycle in the way UK-specific platforms do.",
+    },
+    {
+      name: "What's the cheapest UK construction safety software?",
+      text: "For small firms, HBXL Health & Safety Xpert has a low entry price but is desktop-focused. For worker-heavy sites, MySafeOps is often cheapest because worker accounts are free, removing the per-seat cost that dominates most other pricing.",
+    },
+    {
+      name: "Is SafetyCulture good for CDM 2015 compliance?",
+      text: "It can be configured for CDM compliance, but doesn't come with CDM-specific workflows pre-built. A Construction Phase Plan or principal contractor duty checklist would all need to be built as custom templates.",
+    },
+    {
+      name: "Can I switch from SafetyCulture to an alternative without losing data?",
+      text: "Yes. Most platforms support data export (SafetyCulture exports as PDF, DOCX, XML, CSV). A structured migration over 4-8 weeks, running both platforms in parallel, is the usual approach. The data loss risk is low if planned properly.",
+    },
+    {
+      name: "How long does it take to switch safety platforms?",
+      text: "Small firms (under 30 workers) can typically switch inside 2-3 weeks. Mid-size contractors (50-200 workers) usually take 4-8 weeks including parallel running. Large firms with multiple sites can take 3-6 months for full rollout with minimal disruption.",
+    },
+  ],
+  "best-permit-to-work-software-uk-2026": [
+    {
+      name: "What's the cheapest permit to work software for UK construction?",
+      text: "For worker-heavy sites, MySafeOps is typically cheapest because worker accounts are free. For small firms with few workers, The Site Book (£30/month flat) or SafetyCulture free tier (up to 10 users) are entry points. Cheapest depends heavily on site size.",
+    },
+    {
+      name: "Which permit to work software is easiest to use on site?",
+      text: "SafetyCulture and MySafeOps both score high on mobile UX. The key test is offline capability on a real UK site with patchy signal. SafetyCulture is slightly more polished globally, MySafeOps is more tailored to UK permit-specific workflows.",
+    },
+    {
+      name: "Do all these platforms support CDM 2015?",
+      text: "Most UK-focused platforms (HandsHQ, The Site Book, HBXL, MySafeOps, SmartQHSE, EcoOnline) support CDM 2015 to varying depths. SafetyCulture supports it via custom templates but doesn't come with CDM workflows pre-built.",
+    },
+    {
+      name: "How long does it take to implement permit to work software?",
+      text: "Small firms (under 30 workers) can be live inside 1-2 weeks on most platforms. Mid-size contractors (50-200 workers) usually need 4-8 weeks including team training. Enterprise platforms (HandsHQ, EcoOnline) can take 2-3 months for full rollout with configuration and integrations.",
+    },
+    {
+      name: "Can I switch between these platforms later without losing data?",
+      text: "Yes for most. All seven support data export (CSV, PDF, or API). A parallel-run switch over 4-6 weeks is the typical approach. Plan for 2-3 weeks of double data entry during migration to ensure no gaps in compliance evidence.",
+    },
+    {
+      name: "Which platform is best for managing subcontractors on UK sites?",
+      text: "MySafeOps handles subcontractor workers through free accounts, so subbies join at zero marginal cost. HandsHQ has strong subcontractor approval workflows but charges per seat. EcoOnline offers contractor management through integration with Alcumus/CHAS. Best fit depends on whether you pay per-subbie or share the platform with them.",
+    },
+  ],
   "riddor-changes-2026": [
     {
       name: "When does the RIDDOR consultation close?",

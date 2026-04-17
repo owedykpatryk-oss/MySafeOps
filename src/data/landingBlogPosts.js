@@ -86,6 +86,26 @@ export const LANDING_BLOG_POSTS = [
     readTime: "7 min read",
     image: "/blog/images/riddor-changes-2026-hero.png",
   },
+  {
+    slug: "safetyculture-alternative-uk",
+    title: "SafetyCulture Alternative for UK Construction: Honest Comparison for 2026",
+    excerpt:
+      "Pricing, UK compliance fit, offline use and per-user cost: what to look for when replacing iAuditor on real UK sites.",
+    dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
+    readTime: "7 min read",
+    image: "/blog/images/safetyculture-alternative-uk-hero.png",
+  },
+  {
+    slug: "best-permit-to-work-software-uk-2026",
+    title: "Best Permit to Work Software UK 2026: Honest Comparison for Construction Firms",
+    excerpt:
+      "Seven platforms UK firms actually shortlist: pricing, permit lifecycles, offline use and when each option makes sense.",
+    dateLabel: "Apr 2026",
+    publishedIso: "2026-04-16",
+    readTime: "9 min read",
+    image: "/blog/images/best-permit-to-work-software-uk-2026-hero.png",
+  },
 ];
 
 const SLUG_SET = new Set(LANDING_BLOG_POSTS.map((p) => p.slug));
