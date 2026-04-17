@@ -8,33 +8,51 @@ on:
 
 jobs:
   billing-doctor:
-    if: ${{ secrets.E2E_SUPABASE_URL != '' && secrets.E2E_SUPABASE_ANON_KEY != '' }}
     runs-on: ubuntu-latest
+    # secrets cannot be used in job-level `if:`; expose only a boolean via env, then gate steps.
+    env:
+      BILLING_DOCTOR_READY: ${{ secrets.E2E_SUPABASE_URL != '' && secrets.E2E_SUPABASE_ANON_KEY != '' }}
     steps:
+      - name: Skip (secrets not configured)
+        if: ${{ env.BILLING_DOCTOR_READY != 'true' }}
+        run: echo '::notice::billing-doctor skipped — set E2E_SUPABASE_URL and E2E_SUPABASE_ANON_KEY'
       - uses: actions/checkout@v4
+        if: ${{ env.BILLING_DOCTOR_READY == 'true' }}
       - uses: actions/setup-node@v4
+        if: ${{ env.BILLING_DOCTOR_READY == 'true' }}
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
+      - if: ${{ env.BILLING_DOCTOR_READY == 'true' }}
+        run: npm ci
       - name: Run billing doctor
+        if: ${{ env.BILLING_DOCTOR_READY == 'true' }}
         env:
           VITE_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
         run: npm run billing:doctor
 
   billing-e2e:
-    if: ${{ secrets.E2E_BASE_URL != '' && secrets.E2E_BILLING_EMAIL != '' && secrets.E2E_BILLING_PASSWORD != '' }}
     runs-on: ubuntu-latest
+    env:
+      BILLING_E2E_READY: ${{ secrets.E2E_BASE_URL != '' && secrets.E2E_BILLING_EMAIL != '' && secrets.E2E_BILLING_PASSWORD != '' }}
     steps:
+      - name: Skip (secrets not configured)
+        if: ${{ env.BILLING_E2E_READY != 'true' }}
+        run: echo '::notice::billing-e2e skipped — set E2E_BASE_URL, E2E_BILLING_EMAIL, E2E_BILLING_PASSWORD'
       - uses: actions/checkout@v4
+        if: ${{ env.BILLING_E2E_READY == 'true' }}
       - uses: actions/setup-node@v4
+        if: ${{ env.BILLING_E2E_READY == 'true' }}
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - if: ${{ env.BILLING_E2E_READY == 'true' }}
+        run: npm ci
+      - if: ${{ env.BILLING_E2E_READY == 'true' }}
+        run: npx playwright install --with-deps chromium
       - name: Run billing smoke e2e
+        if: ${{ env.BILLING_E2E_READY == 'true' }}
         env:
           E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
           E2E_BILLING_EMAIL: ${{ secrets.E2E_BILLING_EMAIL }}

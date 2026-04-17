@@ -16,7 +16,7 @@ const LANDING_DESCRIPTION =
 
 export default function LandingPage() {
   const cloud = isSupabaseConfigured();
-  const { user, ready, loading } = useSupabaseAuth();
+  const { user, ready } = useSupabaseAuth();
   const [navScrolled, setNavScrolled] = useState(false);
   const [featureForm, setFeatureForm] = useState({ email: "", name: "", desc: "" });
   const [ctaEmail, setCtaEmail] = useState("");
@@ -29,10 +29,9 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
-    if (cloud && (!ready || loading)) return undefined;
-    if (cloud && ready && user) return undefined;
+    if (!cloud || !ready || user) return undefined;
     return scheduleIdleLoginPrefetch();
-  }, [cloud, ready, loading, user]);
+  }, [cloud, ready, user]);
 
   /** Warm blog route chunks so first click from the marketing page loads quickly. */
   useEffect(() => {
@@ -83,6 +82,8 @@ export default function LandingPage() {
     requestAnimationFrame(() => {
       revealInViewport();
     });
+    const t1 = window.setTimeout(revealInViewport, 120);
+    const t2 = window.setTimeout(revealInViewport, 450);
 
     // Lazy-loaded sections append new `.fu` nodes after first paint.
     // Observe those nodes too so they don't stay invisible.
@@ -96,6 +97,8 @@ export default function LandingPage() {
     mutationObs.observe(root, { childList: true, subtree: true });
 
     return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
       obs.disconnect();
       mutationObs.disconnect();
     };
@@ -142,24 +145,9 @@ export default function LandingPage() {
     window.location.assign(`/login${q}`);
   };
 
-  if (cloud && (!ready || loading)) {
-    return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "DM Sans, system-ui, sans-serif",
-          gap: 12,
-          background: "#f8fafc",
-        }}
-      >
-        <div className="app-route-spinner" aria-hidden />
-        <span style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>Loading…</span>
-      </div>
-    );
-  }
+  // Do not block the marketing page on Supabase session bootstrap. Previously we showed a
+  // full-page spinner until `ready`, but the fade-up observer effect ([]) ran once with no
+  // `.landing-page` in the DOM and never re-ran — leaving `.fu` sections at opacity:0 until refresh.
 
   if (cloud && ready && user) {
     return <Navigate to="/app?view=dashboard" replace />;
