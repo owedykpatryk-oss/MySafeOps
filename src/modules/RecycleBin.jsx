@@ -10,6 +10,8 @@ import {
   purgeExpiredRecycleBinEntries,
 } from "../utils/recycleBin";
 
+const RECYCLE_LIST_PAGE = 50;
+
 const ss = { ...ms };
 
 function fmtDateTime(iso) {
@@ -31,12 +33,12 @@ function remainingDays(expiresAt) {
 
 export default function RecycleBin() {
   const [items, setItems] = useState(() => listRecycleBinEntries());
-  const [listCap, setListCap] = useState(RECYCLE_LIST_PAGE);
+  const listPg = useRegisterListPaging(RECYCLE_LIST_PAGE);
 
   const refresh = () => setItems(listRecycleBinEntries());
 
   const refreshAndResetPaging = () => {
-    setListCap(RECYCLE_LIST_PAGE);
+    listPg.reset();
     setItems(listRecycleBinEntries());
   };
 
