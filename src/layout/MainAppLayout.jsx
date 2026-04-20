@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
-import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Trash2 } from "lucide-react";
+import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Shield, Trash2 } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
@@ -20,6 +20,7 @@ import {
   getMoreTabsForSection,
   filterModuleTabsByQuery,
   primaryBottomNavIdSet,
+  PRIMARY_BOTTOM_NAV_IDS,
 } from "../navigation/appModules";
 import { getPinnedModuleIds, togglePinnedModule } from "../utils/pinnedModules";
 import { recordRecentModule } from "../utils/recentModules";
@@ -162,9 +163,11 @@ const NAV_ICONS = {
   workers: Users,
   "site-map": MapPin,
   bin: Trash2,
+  superadmin: Shield,
   more: Menu,
 };
 
+/** Base bottom bar (More is last). Platform owner tab is inserted in layout when `isSuperadmin`. */
 const NAV_TABS = [
   { id: "dashboard", label: "Dashboard", icon: NAV_ICONS.dashboard },
   { id: "permits", label: "Permits", icon: NAV_ICONS.permits },
@@ -178,6 +181,17 @@ const NAV_TABS = [
 export default function MainAppLayout() {
   const { user } = useSupabaseAuth();
   const isSuperadmin = isSuperAdminEmail(user?.email);
+  const bottomNavTabs = useMemo(() => {
+    if (!isSuperadmin) return NAV_TABS;
+    const more = NAV_TABS[NAV_TABS.length - 1];
+    const beforeMore = NAV_TABS.slice(0, -1);
+    return [...beforeMore, { id: "superadmin", label: "Owner", icon: NAV_ICONS.superadmin }, more];
+  }, [isSuperadmin]);
+  const primaryNavIdSet = useMemo(() => {
+    const s = new Set(PRIMARY_BOTTOM_NAV_IDS);
+    if (isSuperadmin) s.add("superadmin");
+    return s;
+  }, [isSuperadmin]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [layoutSeed] = useState(() => getInitialLayoutState());
   const [navTab, setNavTab] = useState(layoutSeed.navTab);
@@ -227,6 +241,12 @@ export default function MainAppLayout() {
     setNavTab("dashboard");
   }, [view, isSuperadmin]);
 
+  /** Bottom bar highlights "Owner" when URL / session restored superadmin with nav still on "more". */
+  useLayoutEffect(() => {
+    if (!isSuperadmin || view !== "superadmin" || navTab === "superadmin") return;
+    setNavTab("superadmin");
+  }, [isSuperadmin, view, navTab]);
+
   useEffect(() => {
     const settingsTab = searchParams.get("settingsTab");
     const checkout = searchParams.get("checkout");
@@ -269,8 +289,8 @@ export default function MainAppLayout() {
     const onOpenView = (e) => {
       const viewId = e.detail?.viewId;
       if (!viewId) return;
-      if (!primaryBottomNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
-      if (primaryBottomNavIdSet.has(viewId)) {
+      if (!primaryNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
+      if (primaryNavIdSet.has(viewId)) {
         setNavTab(viewId);
         setView(viewId);
       } else {
@@ -280,7 +300,7 @@ export default function MainAppLayout() {
     };
     window.addEventListener(OPEN_WORKSPACE_VIEW_EVENT, onOpenView);
     return () => window.removeEventListener(OPEN_WORKSPACE_VIEW_EVENT, onOpenView);
-  }, [allowedModuleIds]);
+  }, [allowedModuleIds, primaryNavIdSet]);
 
   useEffect(() => {
     document.body.classList.add("mysafeops-app-bottom-nav");
@@ -318,11 +338,11 @@ export default function MainAppLayout() {
   }, [openHelpModule]);
 
   const navigateFromSearch = ({ viewId, permitId }) => {
-    if (!primaryBottomNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
+    if (!primaryNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
     if (viewId === "permits" && permitId) {
       setWorkspaceNavTarget({ viewId: "permits", permitId });
     }
-    if (primaryBottomNavIdSet.has(viewId)) {
+    if (primaryNavIdSet.has(viewId)) {
       setNavTab(viewId);
       setView(viewId);
     } else {
@@ -345,8 +365,8 @@ export default function MainAppLayout() {
         if (viewId === "permits" && permitId) {
           setWorkspaceNavTarget({ viewId: "permits", permitId });
         }
-        if (!primaryBottomNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
-        if (primaryBottomNavIdSet.has(viewId)) {
+        if (!primaryNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
+        if (primaryNavIdSet.has(viewId)) {
           setNavTab(viewId);
           setView(viewId);
         } else {
@@ -360,7 +380,7 @@ export default function MainAppLayout() {
     };
     sw.addEventListener("message", onMsg);
     return () => sw.removeEventListener("message", onMsg);
-  }, [allowedModuleIds, setSearchParams]);
+  }, [allowedModuleIds, primaryNavIdSet, setSearchParams]);
 
   const goMainTab = (id) => {
     setNavTab(id);
@@ -560,7 +580,7 @@ export default function MainAppLayout() {
           zIndex: 40,
         }}
       >
-        {NAV_TABS.map((t) => {
+        {bottomNavTabs.map((t) => {
           const Icon = t.icon;
           const active = navTab === t.id;
           return (
@@ -569,6 +589,8 @@ export default function MainAppLayout() {
               type="button"
               className="app-bottom-nav__btn"
               aria-current={active ? "page" : undefined}
+              aria-label={t.id === "superadmin" ? "Owner dashboard (platform owner only)" : undefined}
+              title={t.id === "superadmin" ? "Platform owner dashboard — visible only on your account" : undefined}
               onClick={() => goMainTab(t.id)}
               onMouseEnter={() => t.id !== "more" && prefetchView(t.id)}
               onFocus={() => t.id !== "more" && prefetchView(t.id)}

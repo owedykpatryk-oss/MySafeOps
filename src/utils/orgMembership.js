@@ -1,11 +1,22 @@
 import { pushAudit } from "./auditLog";
 import { getOrgId, setOrgId } from "./orgStorage";
+
+const MEMBERSHIP_ROLES = new Set(["admin", "supervisor", "operative"]);
 import { clearPendingInvite, peekPendingInvite } from "../lib/inviteToken";
 
 export const ORG_BILLING_PLAN_KEY = "mysafeops_billing_plan";
 export const ORG_SUBSCRIPTION_STATUS_KEY = "mysafeops_subscription_status";
 
 export function persistOrgRow(row) {
+  const slug = getOrgId();
+  const r = String(row?.role || "").trim().toLowerCase();
+  if (slug && MEMBERSHIP_ROLES.has(r)) {
+    try {
+      localStorage.setItem(`mysafeops_role_${slug}`, r);
+    } catch {
+      /* ignore */
+    }
+  }
   if (row.trial_ends_at) {
     localStorage.setItem("mysafeops_trial_ends_at", String(row.trial_ends_at));
   }

@@ -20,6 +20,7 @@ const SUPERADMIN_DB_MIGRATIONS = [
   "20260420160000_superadmin_platform_stats.sql",
   "20260420180000_superadmin_platform_stats_extend.sql",
   "20260420190000_superadmin_recent_orgs.sql",
+  "20260420200000_superadmin_recent_orgs_paging.sql",
 ];
 const ORG_AUDIT_KEY_PREFIX = "mysafeops_audit_";
 
@@ -82,6 +83,47 @@ function fmtIsoShort(iso) {
   } catch {
     return String(iso);
   }
+}
+
+function mergeRecentOrgRows(existing, incoming) {
+  const seen = new Set(
+    existing.map((r) => (r.id != null && r.id !== "" ? `id:${r.id}` : `slug:${String(r.slug || "")}`))
+  );
+  const out = [...existing];
+  for (const r of incoming) {
+    const k = r.id != null && r.id !== "" ? `id:${r.id}` : `slug:${String(r.slug || "")}`;
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(r);
+    }
+  }
+  return out;
+}
+
+/** @typedef {{ key: string, dir: "asc" | "desc" }} RecentOrgSort */
+
+/** @param {RecentOrgSort} sort */
+function compareRecentOrgRows(a, b, sort) {
+  const mul = sort.dir === "asc" ? 1 : -1;
+  if (sort.key === "created_at") {
+    const va = Date.parse(a?.created_at) || 0;
+    const vb = Date.parse(b?.created_at) || 0;
+    if (va !== vb) return (va - vb) * mul;
+  } else if (sort.key === "has_stripe") {
+    const va = a?.has_stripe ? 1 : 0;
+    const vb = b?.has_stripe ? 1 : 0;
+    if (va !== vb) return (va - vb) * mul;
+  } else {
+    const va = String(a?.[sort.key] ?? "").toLowerCase();
+    const vb = String(b?.[sort.key] ?? "").toLowerCase();
+    if (va < vb) return -mul;
+    if (va > vb) return mul;
+  }
+  const sa = String(a?.slug ?? "");
+  const sb = String(b?.slug ?? "");
+  if (sa < sb) return -1;
+  if (sa > sb) return 1;
+  return 0;
 }
 
 function readLocalOrgUsage() {
@@ -225,28 +267,58 @@ async function readCloudSummary(supabase) {
 }
 
 /**
- * Latest organisations (limited rows) — SECURITY DEFINER RPC, owner email only.
- * Migration: supabase/migrations/20260420190000_superadmin_recent_orgs.sql
+ * Latest organisations page — SECURITY DEFINER RPC, owner email only.
+ * Migrations: 20260420190000_superadmin_recent_orgs.sql, 20260420200000_superadmin_recent_orgs_paging.sql (offset + has_more).
  */
-async function readRecentOrganisations(supabase) {
-  if (!supabase) return { ok: false, message: "Cloud database not configured.", rows: [] };
+async function readRecentOrganisations(supabase, { offset = 0, limit = 50 } = {}) {
+  if (!supabase) {
+    return { ok: false, message: "Cloud database not configured.", rows: [], hasMore: false, pageLimit: limit };
+  }
   try {
-    const { data, error } = await supabase.rpc("superadmin_recent_organisations", { p_limit: 50 });
+    const { data, error } = await supabase.rpc("superadmin_recent_organisations", {
+      p_limit: limit,
+      p_offset: offset,
+    });
     if (error) throw error;
     if (!data || data.ok === false) {
       const reason = data?.error === "forbidden" ? "Forbidden (sign in as platform owner)." : String(data?.error || "forbidden");
-      return { ok: false, fetchedAt: new Date().toISOString(), message: reason, rows: [] };
+      return {
+        ok: false,
+        fetchedAt: new Date().toISOString(),
+        message: reason,
+        rows: [],
+        hasMore: false,
+        pageLimit: limit,
+        errorCode: null,
+      };
     }
     const rows = Array.isArray(data.rows) ? data.rows : [];
-    return { ok: true, rows, fetchedAt: data.fetched_at || new Date().toISOString(), message: "" };
+    const hasMore = Boolean(data.has_more);
+    return {
+      ok: true,
+      rows,
+      fetchedAt: data.fetched_at || new Date().toISOString(),
+      message: "",
+      hasMore,
+      pageLimit: toNum(data.limit, limit),
+      errorCode: null,
+    };
   } catch (err) {
     const code = err?.code ? ` [${err.code}]` : "";
     const msg = `${err?.message || "Recent organisations not available."}${code}`;
     const hint =
       String(msg).includes("superadmin_recent_organisations") || String(msg).includes("function")
-        ? `${msg} — deploy ${SUPERADMIN_DB_MIGRATIONS[2]} (or all: ${SUPERADMIN_DB_MIGRATIONS.join(", ")}).`
+        ? `${msg} — deploy ${SUPERADMIN_DB_MIGRATIONS.slice(2).join(", ")} (or all: ${SUPERADMIN_DB_MIGRATIONS.join(", ")}).`
         : msg;
-    return { ok: false, fetchedAt: new Date().toISOString(), message: hint, rows: [], errorCode: err?.code || null };
+    return {
+      ok: false,
+      fetchedAt: new Date().toISOString(),
+      message: hint,
+      rows: [],
+      hasMore: false,
+      pageLimit: limit,
+      errorCode: err?.code || null,
+    };
   }
 }
 
@@ -284,18 +356,64 @@ function MiniBars({ rows }) {
   );
 }
 
+function RecentOrgSortTh({ colKey, label, sort, onSort }) {
+  const active = sort.key === colKey;
+  const arrow = active ? (sort.dir === "asc" ? "↑" : "↓") : "";
+  return (
+    <th
+      scope="col"
+      style={{ padding: "8px 10px", fontWeight: 600 }}
+      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button
+        type="button"
+        style={{
+          ...ss.btn,
+          padding: "4px 8px",
+          fontSize: 11,
+          fontWeight: 600,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          background: active ? "var(--color-background-secondary,#f0f0ec)" : "transparent",
+          border: `1px solid ${active ? "var(--color-border-tertiary,#ddd)" : "transparent"}`,
+          color: "inherit",
+        }}
+        onClick={() => onSort(colKey)}
+      >
+        {label}
+        {arrow ? <span aria-hidden="true">{arrow}</span> : null}
+      </button>
+    </th>
+  );
+}
+
 export default function SuperAdminPanel() {
   const { user, supabase } = useSupabaseAuth();
   const { billing, trialStatus } = useApp();
   const [cloud, setCloud] = useState({ ok: false, message: "Loading..." });
-  const [recentOrgs, setRecentOrgs] = useState({ ok: false, message: "Loading…", rows: [] });
+  const [recentOrgs, setRecentOrgs] = useState({
+    ok: false,
+    message: "Loading…",
+    rows: [],
+    hasMore: false,
+    pageLimit: 50,
+  });
   const [loadingCloud, setLoadingCloud] = useState(false);
+  const [loadingMoreRecent, setLoadingMoreRecent] = useState(false);
   const [localRefreshKey, setLocalRefreshKey] = useState(0);
   const [showAllModules, setShowAllModules] = useState(false);
+  const [recentOrgQuery, setRecentOrgQuery] = useState("");
+  /** @type {React.MutableRefObject<typeof recentOrgs>} */
+  const recentOrgsRef = useRef(recentOrgs);
+  const loadMoreRecentInFlightRef = useRef(false);
+  const [recentSort, setRecentSort] = useState({ key: "created_at", dir: "desc" });
   const [copyHint, setCopyHint] = useState("");
   const copyTimerRef = useRef(null);
   const cloudFetchSeq = useRef(0);
   const allowed = isSuperAdminEmail(user?.email);
+
+  recentOrgsRef.current = recentOrgs;
 
   const flashCopy = (label) => {
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
@@ -310,14 +428,67 @@ export default function SuperAdminPanel() {
     if (!allowed) return;
     const seq = ++cloudFetchSeq.current;
     setLoadingCloud(true);
-    Promise.all([readCloudSummary(supabase), readRecentOrganisations(supabase)]).then(([stats, recent]) => {
+    Promise.all([readCloudSummary(supabase), readRecentOrganisations(supabase, { offset: 0 })]).then(([stats, recent]) => {
       if (seq !== cloudFetchSeq.current) return;
       setCloud(stats);
       setRecentOrgs(recent);
+      setRecentOrgQuery("");
+      setRecentSort({ key: "created_at", dir: "desc" });
       setLoadingCloud(false);
     });
   }, [allowed, supabase]);
+
+  const loadMoreRecentOrgs = useCallback(async () => {
+    if (!allowed || !supabase || loadMoreRecentInFlightRef.current) return;
+    const snap = recentOrgsRef.current;
+    if (!snap.ok || !snap.hasMore) return;
+    const generationAtStart = cloudFetchSeq.current;
+    loadMoreRecentInFlightRef.current = true;
+    setLoadingMoreRecent(true);
+    const limit = snap.pageLimit || 50;
+    const next = await readRecentOrganisations(supabase, { offset: snap.rows.length, limit });
+    loadMoreRecentInFlightRef.current = false;
+    setLoadingMoreRecent(false);
+    if (generationAtStart !== cloudFetchSeq.current) return;
+    if (!next.ok) return;
+    setRecentOrgs((prev) => ({
+      ...prev,
+      rows: mergeRecentOrgRows(prev.rows, next.rows),
+      hasMore: next.hasMore,
+      fetchedAt: next.fetchedAt,
+      pageLimit: next.pageLimit || prev.pageLimit,
+    }));
+  }, [allowed, supabase]);
+
+  const toggleRecentOrgSort = useCallback((key) => {
+    setRecentSort((prev) => {
+      if (prev.key === key) return { key, dir: prev.dir === "asc" ? "desc" : "asc" };
+      return { key, dir: key === "created_at" ? "desc" : "asc" };
+    });
+  }, []);
+
   const localSummary = useMemo(() => (allowed ? readLocalOrgUsage() : EMPTY_LOCAL_ORG_USAGE), [allowed, localRefreshKey]);
+  const filteredRecentOrgRows = useMemo(() => {
+    const rows = Array.isArray(recentOrgs.rows) ? recentOrgs.rows : [];
+    const q = recentOrgQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => {
+      const slug = String(r.slug || "").toLowerCase();
+      const name = String(r.name || "").toLowerCase();
+      return slug.includes(q) || name.includes(q);
+    });
+  }, [recentOrgs.rows, recentOrgQuery]);
+  const displayRecentOrgRows = useMemo(() => {
+    const rows = [...filteredRecentOrgRows];
+    rows.sort((a, b) => compareRecentOrgRows(a, b, recentSort));
+    return rows;
+  }, [filteredRecentOrgRows, recentSort]);
+  const cloudDataStale = useMemo(() => {
+    if (!cloud.ok || !cloud.fetchedAt) return false;
+    const t = Date.parse(cloud.fetchedAt);
+    if (!Number.isFinite(t)) return false;
+    return Date.now() - t > 10 * 60 * 1000;
+  }, [cloud.ok, cloud.fetchedAt]);
   const supabaseDashboardUrl = useMemo(() => getSupabaseDashboardProjectUrl(), []);
   const supabaseProjectRef = useMemo(() => getSupabaseProjectRef(), []);
   const publicSiteOrigin = useMemo(
@@ -368,6 +539,58 @@ export default function SuperAdminPanel() {
           : null,
     };
     downloadFile(`mysafeops-superadmin-snapshot-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2), "application/json");
+  };
+
+  /** Cloud + recent orgs only (no device/localStorage metrics) — for sharing with ops without local browser data. */
+  const exportCloudOnlyCsv = () => {
+    const lines = [];
+    lines.push(toCsvLine(["section", "metric", "value"]));
+    lines.push(toCsvLine(["meta", "exported_at", new Date().toISOString()]));
+    lines.push(toCsvLine(["meta", "exported_by", user?.email || ""]));
+    lines.push(toCsvLine(["meta", "app_version", buildVersion]));
+    lines.push(toCsvLine(["meta", "vite_mode", viteMode]));
+    lines.push(toCsvLine(["meta", "supabase_project_ref", supabaseProjectRef || ""]));
+    if (cloud.ok) {
+      lines.push(toCsvLine(["cloud", "fetched_at", cloud.fetchedAt || ""]));
+      lines.push(toCsvLine(["cloud", "total_organisations", cloud.totalOrganisations]));
+      lines.push(toCsvLine(["cloud", "new_organisations_30d", cloud.organisations30d]));
+      lines.push(toCsvLine(["cloud", "total_memberships", cloud.totalMembers ?? ""]));
+      lines.push(toCsvLine(["cloud", "new_memberships_7d", cloud.newMembers7d ?? ""]));
+      lines.push(toCsvLine(["cloud", "orgs_with_stripe_customer", cloud.orgsWithStripeCustomer ?? ""]));
+      lines.push(toCsvLine(["cloud", "paid_org_count", cloud.paidCount ?? ""]));
+      lines.push(toCsvLine(["cloud", "paid_conversion_pct_estimate", cloudPaidPct]));
+      if (cloud.trialingOrgCount != null) lines.push(toCsvLine(["cloud", "trialing_orgs", cloud.trialingOrgCount]));
+      if (cloud.pastDueOrUnpaidOrgCount != null) lines.push(toCsvLine(["cloud", "past_due_or_unpaid_orgs", cloud.pastDueOrUnpaidOrgCount]));
+      if (cloud.orgsWithZeroMembers != null) lines.push(toCsvLine(["cloud", "orgs_zero_members", cloud.orgsWithZeroMembers]));
+      if (cloud.pendingInvites != null) lines.push(toCsvLine(["cloud", "pending_invites", cloud.pendingInvites]));
+      (cloud.plans || []).forEach(([plan, count]) => lines.push(toCsvLine(["plan", plan, count])));
+      (cloud.subscriptions || []).forEach(([status, count]) => lines.push(toCsvLine(["subscription", status, count])));
+      (cloud.registrationsTrend || []).forEach((row) =>
+        lines.push(toCsvLine(["registrations_trend", row.key || row.label || "", row.count ?? ""]))
+      );
+    } else {
+      lines.push(toCsvLine(["cloud", "status", "unavailable"]));
+      lines.push(toCsvLine(["cloud", "message", cloud.message || ""]));
+    }
+    if (recentOrgs.ok && Array.isArray(recentOrgs.rows)) {
+      recentOrgs.rows.forEach((r) =>
+        lines.push(
+          toCsvLine([
+            "recent_org",
+            r.slug || "",
+            r.name || "",
+            r.created_at || "",
+            r.billing_plan || "",
+            r.subscription_status || "",
+            r.has_stripe ? "yes" : "no",
+          ])
+        )
+      );
+    } else {
+      lines.push(toCsvLine(["recent_org", "status", recentOrgs.ok ? "empty" : "unavailable"]));
+      if (!recentOrgs.ok && recentOrgs.message) lines.push(toCsvLine(["recent_org", "message", recentOrgs.message]));
+    }
+    downloadFile(`mysafeops-superadmin-cloud-${new Date().toISOString().slice(0, 10)}.csv`, `${lines.join("\n")}\n`, "text/csv");
   };
 
   const exportSnapshotCsv = () => {
@@ -455,6 +678,9 @@ export default function SuperAdminPanel() {
             <button type="button" onClick={exportSnapshotCsv} style={ss.btn}>
               Export CSV
             </button>
+            <button type="button" onClick={exportCloudOnlyCsv} style={ss.btn} title="CSV without device/localStorage metrics">
+              Export cloud CSV
+            </button>
           </div>
         }
       />
@@ -502,6 +728,11 @@ export default function SuperAdminPanel() {
               <li>
                 <a href="https://dashboard.stripe.com/" target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>
                   Stripe Dashboard
+                </a>
+              </li>
+              <li>
+                <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>
+                  Vercel Dashboard
                 </a>
               </li>
               {publicSiteOrigin ? (
@@ -598,6 +829,22 @@ export default function SuperAdminPanel() {
         >
           Cloud RPC: {cloud.ok ? "OK" : loadingCloud ? "Loading…" : "Unavailable"}
         </div>
+        {cloudDataStale ? (
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              padding: "6px 12px",
+              borderRadius: 999,
+              background: "#e0e7ff",
+              color: "#3730a3",
+              border: "1px solid #c7d2fe",
+            }}
+            title={`Last cloud fetch: ${cloud.fetchedAt ? new Date(cloud.fetchedAt).toLocaleString() : ""}`}
+          >
+            Cloud fetch over 10 min ago — use Refresh cloud for current numbers
+          </div>
+        ) : null}
         {cloud.ok && toNum(cloud.pastDueOrUnpaidOrgCount) > 0 ? (
           <div
             style={{
@@ -719,6 +966,9 @@ export default function SuperAdminPanel() {
           <div style={{ fontWeight: 700 }}>Platform cloud summary (Supabase RPC)</div>
           <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
             Last fetch: {cloud?.fetchedAt ? new Date(cloud.fetchedAt).toLocaleString() : "—"}
+            {cloud.ok && cloudDataStale ? (
+              <span style={{ marginLeft: 8, color: "#4338ca", fontWeight: 600 }}>(stale)</span>
+            ) : null}
           </div>
         </div>
         {loadingCloud ? (
@@ -747,19 +997,27 @@ export default function SuperAdminPanel() {
                 </>
               ) : null}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Subscriptions</div>
+                {(cloud.subscriptions || []).length ? (
+                  <MiniBars
+                    rows={(cloud.subscriptions || []).map(([name, count]) => ({ label: name, count: toNum(count) }))}
+                  />
+                ) : null}
                 {(cloud.subscriptions || []).map(([name, count]) => (
-                  <div key={`sub_${name}`} style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  <div key={`sub_${name}`} style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 2 }}>
                     {name}: {count}
                   </div>
                 ))}
               </div>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Plans</div>
+                {(cloud.plans || []).length ? (
+                  <MiniBars rows={(cloud.plans || []).map(([name, count]) => ({ label: name, count: toNum(count) }))} />
+                ) : null}
                 {(cloud.plans || []).map(([name, count]) => (
-                  <div key={`plan_${name}`} style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  <div key={`plan_${name}`} style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 2 }}>
                     {name}: {count}
                   </div>
                 ))}
@@ -852,38 +1110,156 @@ export default function SuperAdminPanel() {
             Last fetch: {recentOrgs?.fetchedAt ? new Date(recentOrgs.fetchedAt).toLocaleString() : "—"}
           </div>
         </div>
+        {recentOrgs.ok && recentOrgs.rows.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            <label htmlFor="superadmin-org-filter" style={{ fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 600 }}>
+              Filter
+            </label>
+            <input
+              id="superadmin-org-filter"
+              type="search"
+              value={recentOrgQuery}
+              onChange={(e) => setRecentOrgQuery(e.target.value)}
+              placeholder="Slug or name…"
+              autoComplete="off"
+              style={{
+                flex: "1 1 180px",
+                minWidth: 140,
+                maxWidth: 320,
+                padding: "8px 10px",
+                fontSize: 13,
+                borderRadius: 8,
+                border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+                background: "var(--color-background-primary,#fff)",
+                color: "var(--color-text-primary)",
+              }}
+            />
+            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }} aria-live="polite">
+              Showing {filteredRecentOrgRows.length} of {recentOrgs.rows.length} loaded
+              {recentOrgs.hasMore ? " · more available (Load below)" : ""}
+            </span>
+          </div>
+        ) : null}
         {loadingCloud ? (
           <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Loading organisation list…</div>
         ) : recentOrgs.ok ? (
           recentOrgs.rows.length === 0 ? (
             <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>No organisations in the database yet.</div>
           ) : (
+            <>
             <div style={{ overflow: "auto", maxHeight: 360, border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <caption style={{ captionSide: "top", textAlign: "left", padding: "0 0 8px", fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  Newest organisations (RPC, up to 100 per request). Sort columns, filter by slug/name, use Load more after deploying paging migration.
+                </caption>
                 <thead>
                   <tr style={{ background: "var(--color-background-secondary,#f7f7f5)", textAlign: "left" }}>
-                    <th style={{ padding: "8px 10px", fontWeight: 600 }}>Slug</th>
-                    <th style={{ padding: "8px 10px", fontWeight: 600 }}>Name</th>
-                    <th style={{ padding: "8px 10px", fontWeight: 600 }}>Created</th>
-                    <th style={{ padding: "8px 10px", fontWeight: 600 }}>Plan</th>
-                    <th style={{ padding: "8px 10px", fontWeight: 600 }}>Subscription</th>
-                    <th style={{ padding: "8px 10px", fontWeight: 600 }}>Stripe</th>
+                    <RecentOrgSortTh colKey="slug" label="Slug" sort={recentSort} onSort={toggleRecentOrgSort} />
+                    <RecentOrgSortTh colKey="name" label="Name" sort={recentSort} onSort={toggleRecentOrgSort} />
+                    <RecentOrgSortTh colKey="created_at" label="Created" sort={recentSort} onSort={toggleRecentOrgSort} />
+                    <RecentOrgSortTh colKey="billing_plan" label="Plan" sort={recentSort} onSort={toggleRecentOrgSort} />
+                    <RecentOrgSortTh colKey="subscription_status" label="Subscription" sort={recentSort} onSort={toggleRecentOrgSort} />
+                    <RecentOrgSortTh colKey="has_stripe" label="Stripe" sort={recentSort} onSort={toggleRecentOrgSort} />
+                    <th scope="col" style={{ padding: "8px 10px", fontWeight: 600 }}>
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {recentOrgs.rows.map((r) => (
+                  {displayRecentOrgRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding: "12px 10px", color: "var(--color-text-secondary)" }}>
+                        No rows match this filter.
+                      </td>
+                    </tr>
+                  ) : null}
+                  {displayRecentOrgRows.map((r) => (
                     <tr key={String(r.id || r.slug)} style={{ borderTop: "0.5px solid var(--color-border-tertiary,#eee)" }}>
-                      <td style={{ padding: "8px 10px", fontFamily: "ui-monospace, monospace", wordBreak: "break-all" }}>{r.slug || "—"}</td>
+                      <td style={{ padding: "8px 10px", fontFamily: "ui-monospace, monospace", wordBreak: "break-all" }}>
+                        <span style={{ verticalAlign: "middle" }}>{r.slug || "—"}</span>
+                        {r.slug ? (
+                          <button
+                            type="button"
+                            style={{ ...ss.btn, padding: "2px 8px", fontSize: 11, marginLeft: 6, verticalAlign: "middle" }}
+                            title="Copy slug"
+                            onClick={() => {
+                              if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                                navigator.clipboard.writeText(String(r.slug)).then(() => flashCopy("Slug copied")).catch(() => {});
+                              }
+                            }}
+                          >
+                            Copy
+                          </button>
+                        ) : null}
+                      </td>
                       <td style={{ padding: "8px 10px", wordBreak: "break-word" }}>{r.name || "—"}</td>
                       <td style={{ padding: "8px 10px", whiteSpace: "nowrap", color: "var(--color-text-secondary)" }}>{fmtIsoShort(r.created_at)}</td>
                       <td style={{ padding: "8px 10px" }}>{r.billing_plan || "—"}</td>
                       <td style={{ padding: "8px 10px" }}>{r.subscription_status || "—"}</td>
-                      <td style={{ padding: "8px 10px" }}>{r.has_stripe ? "Yes" : "No"}</td>
+                      <td style={{ padding: "8px 10px" }}>
+                        {r.has_stripe ? (
+                          <span>
+                            Yes{" · "}
+                            <a
+                              href={`https://dashboard.stripe.com/search?query=${encodeURIComponent(String(r.slug || r.name || "").trim())}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: "#0d9488", fontWeight: 600 }}
+                            >
+                              Stripe search
+                            </a>
+                          </span>
+                        ) : (
+                          "No"
+                        )}
+                      </td>
+                      <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>
+                        <button
+                          type="button"
+                          style={{ ...ss.btn, padding: "2px 8px", fontSize: 11, marginRight: 6 }}
+                          title="Copy row JSON for support tickets"
+                          onClick={() => {
+                            const payload = {
+                              id: r.id,
+                              slug: r.slug,
+                              name: r.name,
+                              created_at: r.created_at,
+                              billing_plan: r.billing_plan,
+                              subscription_status: r.subscription_status,
+                              has_stripe: r.has_stripe,
+                            };
+                            if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                              navigator.clipboard
+                                .writeText(JSON.stringify(payload))
+                                .then(() => flashCopy("Row JSON copied"))
+                                .catch(() => {});
+                            }
+                          }}
+                        >
+                          Copy JSON
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            {recentOrgs.hasMore ? (
+              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                <button
+                  type="button"
+                  style={ss.btn}
+                  onClick={loadMoreRecentOrgs}
+                  disabled={loadingMoreRecent || loadingCloud}
+                >
+                  {loadingMoreRecent ? "Loading…" : "Load more from cloud"}
+                </button>
+                <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  Next batch starts at offset {recentOrgs.rows.length} (max {recentOrgs.pageLimit || 50} rows per request).
+                </span>
+              </div>
+            ) : null}
+            </>
           )
         ) : (
           <div
@@ -911,7 +1287,7 @@ export default function SuperAdminPanel() {
               if (!show || m.includes("forbidden")) return null;
               return (
                 <p style={{ margin: "8px 0 0", fontSize: 11, color: "#9a3412" }}>
-                  Deploy <code style={{ fontSize: 10 }}>supabase/migrations/{SUPERADMIN_DB_MIGRATIONS[2]}</code>, then Refresh cloud.
+                  Deploy recent-org migrations ({SUPERADMIN_DB_MIGRATIONS.slice(2).join(", ")}), then Refresh cloud.
                 </p>
               );
             })()}
@@ -936,7 +1312,13 @@ export default function SuperAdminPanel() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
             <div style={{ fontWeight: 700 }}>Module adoption (avg records/org)</div>
             {localSummary.moduleAdoption.length > 8 ? (
-              <button type="button" style={{ ...ss.btn, padding: "6px 12px", fontSize: 12 }} onClick={() => setShowAllModules((v) => !v)}>
+              <button
+                type="button"
+                style={{ ...ss.btn, padding: "6px 12px", fontSize: 12 }}
+                aria-expanded={showAllModules}
+                aria-controls="superadmin-module-adoption-list"
+                onClick={() => setShowAllModules((v) => !v)}
+              >
                 {showAllModules ? "Show top 8" : `Show all (${localSummary.moduleAdoption.length})`}
               </button>
             ) : null}
@@ -944,11 +1326,13 @@ export default function SuperAdminPanel() {
           {localSummary.moduleAdoption.length === 0 ? (
             <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>No local datasets detected.</div>
           ) : (
-            (showAllModules ? localSummary.moduleAdoption : localSummary.moduleAdoption.slice(0, 8)).map((row) => (
-              <div key={row.module} style={{ fontSize: 12, color: "var(--color-text-secondary)", padding: "4px 0" }}>
-                {row.module}: <strong>{row.count}</strong> total (avg {row.avgPerOrg}/org)
-              </div>
-            ))
+            <div id="superadmin-module-adoption-list" aria-live="polite">
+              {(showAllModules ? localSummary.moduleAdoption : localSummary.moduleAdoption.slice(0, 8)).map((row) => (
+                <div key={row.module} style={{ fontSize: 12, color: "var(--color-text-secondary)", padding: "4px 0" }}>
+                  {row.module}: <strong>{row.count}</strong> total (avg {row.avgPerOrg}/org)
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

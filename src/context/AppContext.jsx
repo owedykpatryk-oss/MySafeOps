@@ -6,20 +6,25 @@ const Ctx = createContext(null);
 
 const ROLES = ["admin", "supervisor", "operative"];
 
+function readMembershipRoleForCurrentOrg() {
+  try {
+    const r = localStorage.getItem(`mysafeops_role_${getOrgId()}`);
+    return ROLES.includes(r) ? r : null;
+  } catch {
+    return null;
+  }
+}
+
 export function AppProvider({ children }) {
   const [orgId, setOrgIdState] = useState(() => getOrgId());
   const rk = `mysafeops_role_${orgId}`;
 
-  const [role, setRoleState] = useState(() => {
-    const r = localStorage.getItem(rk);
-    return ROLES.includes(r) ? r : "admin";
-  });
+  const [role, setRoleState] = useState(() => readMembershipRoleForCurrentOrg() || "admin");
   const [trialStatus, setTrialStatus] = useState(() => getTrialStatus());
   const [billing, setBilling] = useState(() => getBillingEntitlements());
 
   useEffect(() => {
-    const r = localStorage.getItem(rk);
-    setRoleState(ROLES.includes(r) ? r : "admin");
+    setRoleState(readMembershipRoleForCurrentOrg() || "admin");
   }, [rk]);
 
   useEffect(() => {
@@ -44,17 +49,21 @@ export function AppProvider({ children }) {
     const onOrgUpdated = () => {
       setTrialStatus(getTrialStatus());
       setBilling(getBillingEntitlements());
+      const next = readMembershipRoleForCurrentOrg();
+      if (next) setRoleState(next);
     };
     window.addEventListener("mysafeops-org-updated", onOrgUpdated);
     return () => window.removeEventListener("mysafeops-org-updated", onOrgUpdated);
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem(rk, role);
-  }, [rk, role]);
-
   const setRole = useCallback((r) => {
-    if (ROLES.includes(r)) setRoleState(r);
+    if (!ROLES.includes(r)) return;
+    setRoleState(r);
+    try {
+      localStorage.setItem(`mysafeops_role_${getOrgId()}`, r);
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const caps = useMemo(

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useApp } from "../context/AppContext";
+import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { refreshOrgFromSupabase } from "../utils/orgMembership";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
@@ -66,10 +68,12 @@ function Field({ label, hint, children }) {
 }
 
 export default function OrgSettings() {
-  const { role, setRole, caps } = useApp();
+  const { role, caps } = useApp();
+  const { supabase } = useSupabaseAuth();
   const [form, setForm] = useState(loadOrg());
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState("brand");
+  const [roleSyncing, setRoleSyncing] = useState(false);
   const logoRef = useRef();
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -325,23 +329,47 @@ export default function OrgSettings() {
       )}
 
       {tab==="access" && (
-        <Section title="App role (this browser)">
-          <Field label="Your role" hint="Admin: full access. Supervisor: no org settings / backup import. Operative: no deletes or bulk actions.">
-            <select
-              value={role}
-              onChange={(e) => {
-                const v = e.target.value;
-                setRole(v);
-                pushAudit({ action: "role_change", entity: "session", detail: v });
+        <Section title="Organisation role (Supabase)">
+          <Field
+            label="Your membership role"
+            hint="Stored in org_memberships for your account. Admin: full access including organisation settings. Supervisor: no org settings or backup import. Operative: no deletes or bulk actions."
+          >
+            <div
+              style={{
+                padding: "11px 14px",
+                borderRadius: "var(--radius-sm, 10px)",
+                border: "1px solid var(--color-border-secondary,#cbd5e1)",
+                background: "var(--color-background-secondary,#f8fafc)",
+                fontSize: 14,
+                fontWeight: 600,
+                textTransform: "capitalize",
               }}
-              style={ss.inp}
             >
-              <option value="admin">Admin</option>
-              <option value="supervisor">Supervisor</option>
-              <option value="operative">Operative</option>
-            </select>
+              {role}
+            </div>
           </Field>
-          <p style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Tip: if you lock yourself down as Operative, switch back to Admin here to restore full access.</p>
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>
+            To change your role, an organisation admin updates membership in <strong>Settings → Invites / Members</strong> (or in Supabase). Your app permissions refresh after the next sync.
+          </p>
+          <button
+            type="button"
+            style={ss.btnP}
+            disabled={!supabase || roleSyncing}
+            onClick={async () => {
+              if (!supabase) return;
+              setRoleSyncing(true);
+              try {
+                await refreshOrgFromSupabase(supabase);
+                pushAudit({ action: "membership_role_refresh", entity: "org", detail: "ensure_my_org" });
+              } catch (err) {
+                alert(err?.message || "Could not refresh organisation from the cloud.");
+              } finally {
+                setRoleSyncing(false);
+              }
+            }}
+          >
+            {roleSyncing ? "Syncing…" : "Refresh role from cloud"}
+          </button>
         </Section>
       )}
 
