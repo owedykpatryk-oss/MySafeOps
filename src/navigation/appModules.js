@@ -89,7 +89,7 @@ export const MORE_TABS = [
   { id: "documents", label: "Documents" },
   { id: "backup", label: "Backup" },
   { id: "audit", label: "Audit log" },
-  { id: "superadmin", label: "Superadmin" },
+  { id: "superadmin", label: "Owner dashboard" },
   { id: "help", label: "Help" },
   { id: "settings", label: "Settings" },
 ];

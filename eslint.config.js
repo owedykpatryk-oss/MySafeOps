@@ -6,7 +6,7 @@ import globals from "globals";
 export default [
   js.configs.recommended,
   {
-    ignores: ["dist/**", "node_modules/**", "coverage/**", "playwright-report/**", "test-results/**"],
+    ignores: ["dist/**", "node_modules/**", "coverage/**", "playwright-report/**", "test-results/**", "api/**"],
   },
   react.configs.flat.recommended,
   react.configs.flat["jsx-runtime"],
@@ -22,6 +22,7 @@ export default [
     rules: {
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
+      "react/jsx-no-target-blank": "warn",
       "react/prop-types": "off",
       // UK copy uses straight quotes and apostrophes in JSX; escaping hurts readability
       "react/no-unescaped-entities": "off",

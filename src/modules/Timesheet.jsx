@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
@@ -25,12 +25,55 @@ const getWeekStart = (offset = 0) => {
 const formatDate = (d) =>
   d.toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" });
 
+/** ISO 8601 week number; `isoYear` is the ISO year (year of that week's Thursday). */
+const isoWeekMetaFromMonday = (monday) => {
+  const date = new Date(monday.getTime());
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  const week =
+    1 +
+    Math.round(
+      ((date.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+    );
+  return { week: Math.max(1, Math.min(53, week)), isoYear: date.getFullYear() };
+};
+
 const weekDays = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+const cardShell = {
+  borderRadius: 12,
+  border: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
+  background: "var(--color-background-primary,#fff)",
+  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 28px rgba(15, 23, 42, 0.06)",
+};
 
 const totalHours = (days) =>
   Object.values(days || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
 
 const overtime = (h) => Math.max(0, h - 40);
+
+/** Sum hours per worker across entries (same week). */
+const hoursTotalsByWorker = (list) => {
+  const m = {};
+  (list || []).forEach((e) => {
+    const t = totalHours(e.days);
+    m[e.workerId] = (m[e.workerId] || 0) + t;
+  });
+  return m;
+};
+
+/** Total overtime hours for the week: each worker gets max(0, sum−40) once. */
+const overtimeHoursAcrossWorkers = (list) => {
+  return Object.values(hoursTotalsByWorker(list)).reduce((s, h) => s + overtime(h), 0);
+};
+
+const parseWeekKeyLocal = (weekKey) => {
+  if (!weekKey || typeof weekKey !== "string") return null;
+  const p = weekKey.split("-").map(Number);
+  if (p.length !== 3 || p.some(Number.isNaN)) return null;
+  return new Date(p[0], p[1] - 1, p[2]);
+};
 
 const avatarColor = (name) => {
   const colors = [
@@ -55,10 +98,35 @@ const STATUS_COLORS = {
 };
 
 // ─── export helpers ──────────────────────────────────────────────────────────
+const UTF8_BOM = "\uFEFF";
+
+const csvEscape = (c) => `"${String(c ?? "").replace(/"/g, '""')}"`;
+
+const downloadCsv = (filename, rows) => {
+  const csv = UTF8_BOM + rows.map((r) => r.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+const downloadJson = (filename, data) => {
+  const blob = new Blob([UTF8_BOM + JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 const exportCSV = (entries, workers, projects, weekLabel) => {
   const workerMap = Object.fromEntries(workers.map(w => [w.id, w.name]));
   const projectMap = Object.fromEntries(projects.map(p => [p.id, p.name]));
-  const rows = [["Worker","Project","Task","Mon","Tue","Wed","Thu","Fri","Sat","Sun","Total hrs","Overtime","Status"]];
+  const rows = [["Worker","Project","Task","Mon","Tue","Wed","Thu","Fri","Sat","Sun","Total hrs","Overtime (row)","Status","Reject reason","Notes"]];
   entries.forEach(e => {
     const d = e.days || {};
     const tot = totalHours(d);
@@ -70,36 +138,123 @@ const exportCSV = (entries, workers, projects, weekLabel) => {
       tot.toFixed(1),
       overtime(tot).toFixed(1),
       e.status || "pending",
+      e.rejectReason || "",
+      e.notes || "",
     ]);
   });
-  const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type:"text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `timesheet_${weekLabel.replace(/\s/g,"_")}.csv`;
-  a.click(); URL.revokeObjectURL(url);
+  downloadCsv(`timesheet_${weekLabel.replace(/\s/g,"_")}.csv`, rows);
+};
+
+/** Approved entries only — same columns as full CSV. */
+const exportApprovedCSV = (entries, workers, projects, weekLabel) => {
+  exportCSV(entries.filter(e => e.status === "approved"), workers, projects, `${weekLabel}_approved`);
 };
 
 const exportPayroll = (entries, workers, weekLabel) => {
   const workerMap = Object.fromEntries(workers.map(w => [w.id, w.name]));
   const rows = [["Worker","Regular hrs","Overtime hrs","Total hrs"]];
-  const byWorker = {};
-  entries.filter(e => e.status === "approved").forEach(e => {
-    const tot = totalHours(e.days);
-    if (!byWorker[e.workerId]) byWorker[e.workerId] = { reg:0, ot:0 };
+  const approved = entries.filter(e => e.status === "approved");
+  const totals = hoursTotalsByWorker(approved);
+  Object.entries(totals).forEach(([id, tot]) => {
     const ot = overtime(tot);
-    byWorker[e.workerId].ot += ot;
-    byWorker[e.workerId].reg += tot - ot;
+    const reg = tot - ot;
+    rows.push([workerMap[id] || id, reg.toFixed(1), ot.toFixed(1), tot.toFixed(1)]);
   });
-  Object.entries(byWorker).forEach(([id, v]) => {
-    rows.push([workerMap[id]||id, v.reg.toFixed(1), v.ot.toFixed(1), (v.reg+v.ot).toFixed(1)]);
+  downloadCsv(`payroll_${weekLabel.replace(/\s/g,"_")}.csv`, rows);
+};
+
+/** One row per worker: total hours, OT (40h cap per worker), #lines. */
+const exportWorkerSummaryCSV = (entries, workers, weekLabel) => {
+  const workerMap = Object.fromEntries(workers.map(w => [w.id, w.name]));
+  const counts = {};
+  entries.forEach((e) => { counts[e.workerId] = (counts[e.workerId] || 0) + 1; });
+  const totals = hoursTotalsByWorker(entries);
+  const rows = [["Worker","Total hrs","Overtime (40h cap)","# entries"]];
+  Object.entries(totals).forEach(([id, tot]) => {
+    rows.push([
+      workerMap[id] || id,
+      tot.toFixed(1),
+      overtime(tot).toFixed(1),
+      counts[id] || 0,
+    ]);
   });
-  const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type:"text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `payroll_${weekLabel.replace(/\s/g,"_")}.csv`;
-  a.click(); URL.revokeObjectURL(url);
+  downloadCsv(`timesheet_workers_${weekLabel.replace(/\s/g,"_")}.csv`, rows);
+};
+
+/** One row per project: total hours, distinct workers, #lines. */
+const exportProjectSummaryCSV = (entries, projects, weekLabel) => {
+  const projectMap = Object.fromEntries(projects.map(p => [p.id, p.name]));
+  const byProject = {};
+  entries.forEach((e) => {
+    const t = totalHours(e.days);
+    if (!byProject[e.projectId]) byProject[e.projectId] = { hours: 0, workers: new Set(), n: 0 };
+    byProject[e.projectId].hours += t;
+    byProject[e.projectId].workers.add(e.workerId);
+    byProject[e.projectId].n += 1;
+  });
+  const rows = [["Project","Total hrs","# workers","# entries"]];
+  Object.entries(byProject).forEach(([id, v]) => {
+    rows.push([
+      projectMap[id] || id,
+      v.hours.toFixed(1),
+      v.workers.size,
+      v.n,
+    ]);
+  });
+  downloadCsv(`timesheet_projects_${weekLabel.replace(/\s/g,"_")}.csv`, rows);
+};
+
+const exportWeekJson = (entries, workers, projects, weekLabel, weekKey) => {
+  downloadJson(`timesheet_${weekKey}.json`, {
+    exportedAt: new Date().toISOString(),
+    weekLabel,
+    weekKey,
+    workers,
+    projects,
+    entries,
+  });
+};
+
+const entriesInCalendarMonth = (allEntries, yyyymm) => {
+  const [y, m] = yyyymm.split("-").map(Number);
+  if (!y || !m) return [];
+  return (allEntries || []).filter((e) => {
+    const d = parseWeekKeyLocal(e.weekKey);
+    return d && d.getFullYear() === y && d.getMonth() === m - 1;
+  });
+};
+
+/** Sum each weekday across a list of entries (for footer totals). */
+const sumDailyHours = (list) => {
+  const acc = Object.fromEntries(weekDays.map((d) => [d, 0]));
+  (list || []).forEach((e) => {
+    weekDays.forEach((d) => {
+      acc[d] += parseFloat(e.days?.[d] || 0) || 0;
+    });
+  });
+  return acc;
+};
+
+const calendarDayLabel = (weekStartMonday, weekdayName) => {
+  const i = weekDays.indexOf(weekdayName);
+  if (i < 0) return "";
+  const x = new Date(weekStartMonday);
+  x.setDate(x.getDate() + i);
+  return x.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+};
+
+/** Human-readable checks: heavy worker weeks, heavy site days. */
+const buildTimesheetWarnings = (list, workerMap) => {
+  const msgs = [];
+  const totals = hoursTotalsByWorker(list);
+  Object.entries(totals).forEach(([id, h]) => {
+    if (h > 48) msgs.push(`${workerMap[id] || id}: ${h.toFixed(1)}h this week (>48h)`);
+  });
+  const daySite = sumDailyHours(list);
+  weekDays.forEach((d) => {
+    if (daySite[d] > 14) msgs.push(`${d}: ${daySite[d].toFixed(1)}h total on site (>14h)`);
+  });
+  return msgs;
 };
 
 // ─── sub-components ──────────────────────────────────────────────────────────
@@ -150,11 +305,43 @@ function DayDots({ days }) {
   );
 }
 
-function HoursBar({ hours }) {
+function SortTh({ id, label, sortKey, sortAsc, onSort }) {
+  const active = sortKey === id;
+  const title = active
+    ? `${label}: sorted ${sortAsc ? "ascending" : "descending"} — click to reverse`
+    : `${label}: click to sort (stable tie-break by row id)`;
+  return (
+    <th key={id} style={{
+      padding:"10px 12px", textAlign:"left",
+      fontSize:11, fontWeight:600, color:"var(--color-text-secondary)",
+      borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
+      whiteSpace:"nowrap",
+      letterSpacing:"0.02em",
+      background:"#ecefec",
+    }}>
+      <button
+        type="button"
+        title={title}
+        onClick={() => onSort(id)}
+        style={{
+          background:active ? "var(--color-background-secondary,#f0fdfa)" : "none",
+          border:"none", borderRadius:6, padding:"4px 6px", margin:"-4px -6px", cursor:"pointer",
+          font:"inherit", color:"inherit", display:"inline-flex", alignItems:"center", gap:5,
+          transition:"background .15s ease",
+        }}
+      >
+        {label}
+        {active ? <span style={{ fontSize:10, opacity:0.9, color:"#0d9488" }}>{sortAsc ? "▲" : "▼"}</span> : <span style={{ fontSize:10, opacity:0.35 }}>↕</span>}
+      </button>
+    </th>
+  );
+}
+
+function HoursBar({ hours, title: barTitle }) {
   const pct = Math.min(100, (hours / 50) * 100);
   const over = hours > 40;
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+    <div style={{ display:"flex", alignItems:"center", gap:8 }} title={barTitle}>
       <span style={{ minWidth:32, fontWeight:500, fontSize:13, color: over ? "#BA7517" : "var(--color-text-primary)" }}>
         {hours.toFixed(1)}
       </span>
@@ -171,30 +358,37 @@ function HoursBar({ hours }) {
 
 function SummaryCards({ entries }) {
   const allHours = entries.reduce((s, e) => s + totalHours(e.days), 0);
-  const allOT = entries.reduce((s, e) => s + overtime(totalHours(e.days)), 0);
+  const allOT = overtimeHoursAcrossWorkers(entries);
   const workers = new Set(entries.map(e => e.workerId)).size;
   const pending = entries.filter(e => e.status === "pending").length;
 
   const cards = [
     { label:"Total hours", value: allHours.toFixed(0), sub:"this week" },
-    { label:"Overtime", value: allOT.toFixed(0), sub:"hours over 40", warn: allOT > 0 },
+    { label:"Overtime", value: allOT.toFixed(0), sub:"over 40h per worker", warn: allOT > 0 },
     { label:"Workers active", value: workers, sub:"with entries" },
     { label:"Pending approval", value: pending, sub:"timesheets", info: pending > 0 },
   ];
 
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:10, marginBottom:20 }}>
+    <div style={{
+      display:"grid",
+      gridTemplateColumns:"repeat(auto-fit, minmax(min(140px, 100%), 1fr))",
+      gap:12,
+      marginBottom:20,
+    }}>
       {cards.map(c => (
         <div key={c.label} style={{
-          background:"var(--color-background-secondary,#f7f7f5)",
-          borderRadius:8, padding:"12px 14px",
+          ...cardShell,
+          background:"var(--color-background-secondary,#f8faf9)",
+          padding:"14px 16px",
+          transition:"transform .15s ease, box-shadow .15s ease",
         }}>
-          <div style={{ fontSize:12, color:"var(--color-text-secondary,#888)", marginBottom:4 }}>{c.label}</div>
+          <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary,#888)", marginBottom:6, letterSpacing:"0.04em", textTransform:"uppercase" }}>{c.label}</div>
           <div style={{
-            fontSize:22, fontWeight:500,
+            fontSize:24, fontWeight:600, letterSpacing:"-0.02em",
             color: c.warn ? "#BA7517" : c.info ? "#185FA5" : "var(--color-text-primary)",
           }}>{c.value}</div>
-          <div style={{ fontSize:11, color:"var(--color-text-tertiary,#aaa)", marginTop:2 }}>{c.sub}</div>
+          <div style={{ fontSize:11, color:"var(--color-text-tertiary,#aaa)", marginTop:4, lineHeight:1.35 }}>{c.sub}</div>
         </div>
       ))}
     </div>
@@ -202,11 +396,15 @@ function SummaryCards({ entries }) {
 }
 
 // ─── Entry modal ─────────────────────────────────────────────────────────────
-function EntryModal({ entry, workers, projects, onSave, onDelete, onClose }) {
-  const [form, setForm] = useState(entry || {
+function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelete, onClose }) {
+  const [form, setForm] = useState(() => entry ? {
+    ...entry,
+    rejectReason: entry.rejectReason || "",
+    notes: entry.notes || "",
+  } : {
     id: genId(), workerId:"", projectId:"", task:"",
     days:{ Mon:0, Tue:0, Wed:0, Thu:0, Fri:0, Sat:0, Sun:0 },
-    status:"pending", notes:"",
+    status:"pending", notes:"", rejectReason:"",
   });
 
   const set = (k, v) => setForm(f => ({ ...f, [k]:v }));
@@ -271,7 +469,10 @@ function EntryModal({ entry, workers, projects, onSave, onDelete, onClose }) {
           <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 }}>
             {weekDays.map(d => (
               <div key={d} style={{ textAlign:"center" }}>
-                <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:4, fontWeight:500 }}>{d}</div>
+                <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:2, fontWeight:500 }}>{d}</div>
+                <div style={{ fontSize:10, color:"var(--color-text-tertiary,#aaa)", marginBottom:4 }}>
+                  {weekStartMonday ? calendarDayLabel(weekStartMonday, d) : ""}
+                </div>
                 <input
                   type="number" min={0} max={24} step={0.5}
                   value={form.days[d] || ""}
@@ -293,6 +494,33 @@ function EntryModal({ entry, workers, projects, onSave, onDelete, onClose }) {
           />
         </div>
 
+        {entry && (
+          <div style={{ marginBottom:16 }}>
+            <label style={labelStyle}>Status</label>
+            <select
+              value={form.status || "pending"}
+              onChange={(e) => set("status", e.target.value)}
+              style={{ ...inputStyle, marginBottom: form.status === "rejected" ? 10 : 0 }}
+            >
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            {form.status === "rejected" && (
+              <>
+                <label style={{ ...labelStyle, marginTop:10 }}>Reject reason</label>
+                <textarea
+                  value={form.rejectReason || ""}
+                  onChange={(e) => set("rejectReason", e.target.value)}
+                  placeholder="Why was this line rejected?"
+                  rows={2}
+                  style={{ ...inputStyle, resize:"vertical", height:"auto", lineHeight:1.5 }}
+                />
+              </>
+            )}
+          </div>
+        )}
+
         <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"space-between", alignItems:"center", gap:8 }}>
           <div>
             {entry && (
@@ -304,7 +532,10 @@ function EntryModal({ entry, workers, projects, onSave, onDelete, onClose }) {
           <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
             <button onClick={onClose} style={btnStyle}>Cancel</button>
             <button
-              onClick={()=>onSave(form)}
+              onClick={() => onSave({
+                ...form,
+                rejectReason: form.status === "rejected" ? String(form.rejectReason || "").trim() : "",
+              })}
               disabled={!form.workerId || !form.projectId}
               style={{ ...btnStyle, background:"#0d9488", color:"#E1F5EE", borderColor:"#085041",
                 opacity: (!form.workerId||!form.projectId) ? 0.5 : 1 }}
@@ -409,7 +640,11 @@ export default function Timesheet() {
   const [filterWorker, setFilterWorker] = useState("");
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [view, setView] = useState("week"); // 'week' | 'month'
+  const [filterTask, setFilterTask] = useState("");
+  const [exportMonth, setExportMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [sortKey, setSortKey] = useState("");
+  const [sortAsc, setSortAsc] = useState(true);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // load
   useEffect(() => {
@@ -427,19 +662,55 @@ export default function Timesheet() {
   const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
   const weekLabel = `${formatDate(weekStart)} – ${formatDate(weekEnd)}`;
   const weekKey = weekStart.toISOString().slice(0,10);
+  const isoMeta = isoWeekMetaFromMonday(weekStart);
 
   // filter entries for current week
   const weekEntries = entries.filter(e => e.weekKey === weekKey);
 
+  const taskNeedle = filterTask.trim().toLowerCase();
   const filtered = weekEntries.filter(e => {
     if (filterWorker && e.workerId !== filterWorker) return false;
     if (filterProject && e.projectId !== filterProject) return false;
     if (filterStatus && e.status !== filterStatus) return false;
+    if (taskNeedle && !(e.task || "").toLowerCase().includes(taskNeedle)) return false;
     return true;
   });
 
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
   const projectMap = Object.fromEntries(projects.map(p=>[p.id,p.name]));
+
+  const sortedFiltered = useMemo(() => {
+    const arr = [...filtered];
+    if (!sortKey) return arr;
+    const wm = Object.fromEntries(workers.map((w) => [w.id, w.name]));
+    const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
+    const statusOrder = { pending: 0, approved: 1, rejected: 2 };
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "worker":
+          cmp = (wm[a.workerId] || "").localeCompare(wm[b.workerId] || "", undefined, { sensitivity: "base" });
+          break;
+        case "project":
+          cmp = (pm[a.projectId] || "").localeCompare(pm[b.projectId] || "", undefined, { sensitivity: "base" });
+          break;
+        case "task":
+          cmp = (a.task || "").localeCompare(b.task || "", undefined, { sensitivity: "base" });
+          break;
+        case "hours":
+          cmp = totalHours(a.days) - totalHours(b.days);
+          break;
+        case "status":
+          cmp = (statusOrder[a.status] ?? 0) - (statusOrder[b.status] ?? 0);
+          break;
+        default:
+          return 0;
+      }
+      if (cmp !== 0) return sortAsc ? cmp : -cmp;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    return arr;
+  }, [filtered, sortKey, sortAsc, workers, projects]);
 
   const saveEntry = (form) => {
     const withWeek = { ...form, weekKey };
@@ -457,8 +728,36 @@ export default function Timesheet() {
     setModal(null);
   };
 
+  const duplicateEntry = (e) => {
+    const clone = {
+      ...e,
+      id: genId(),
+      weekKey,
+      status: "pending",
+      rejectReason: "",
+    };
+    setEntries((prev) => [...prev, clone]);
+  };
+
+  const refreshRosterFromStorage = () => {
+    setWorkers(load(WORKERS_KEY));
+    setProjects(load(PROJECTS_KEY));
+  };
+
+  const handleSortColumn = (key) => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      setSortAsc(true);
+    } else {
+      setSortAsc((a) => !a);
+    }
+  };
+
   const updateStatus = (id, status) =>
-    setEntries(prev=>prev.map(e=>e.id===id?{...e,status}:e));
+    setEntries((prev) => prev.map((e) => {
+      if (e.id !== id) return e;
+      return { ...e, status, rejectReason: status === "rejected" ? (e.rejectReason || "") : "" };
+    }));
 
   const approveAll = () =>
     setEntries(prev=>prev.map(e=>
@@ -466,6 +765,49 @@ export default function Timesheet() {
     ));
 
   const pendingCount = weekEntries.filter(e=>e.status==="pending").length;
+
+  const copyFromPreviousWeek = () => {
+    const prevStart = getWeekStart(weekOffset - 1);
+    const prevKey = prevStart.toISOString().slice(0, 10);
+    const prevEntries = entries.filter((e) => e.weekKey === prevKey);
+    if (!prevEntries.length) return;
+    if (weekEntries.length > 0) {
+      const ok = typeof window !== "undefined" && window.confirm(
+        "This week already has entries. Copy last week anyway? (Adds extra lines; you can edit or delete.)"
+      );
+      if (!ok) return;
+    }
+    const clones = prevEntries.map((e) => ({
+      ...e,
+      id: genId(),
+      weekKey,
+      status: "pending",
+      rejectReason: "",
+    }));
+    setEntries((prev) => [...prev, ...clones]);
+  };
+
+  const prevWeekStart = getWeekStart(weekOffset - 1);
+  const prevWeekKey = prevWeekStart.toISOString().slice(0, 10);
+  const prevWeekHasEntries = entries.some((e) => e.weekKey === prevWeekKey);
+
+  const workerWeekTotals = hoursTotalsByWorker(weekEntries);
+  const filteredDayTotals = sumDailyHours(filtered);
+  const filteredHoursSum = filtered.reduce((s, e) => s + totalHours(e.days), 0);
+  const weekWarnings = weekEntries.length ? buildTimesheetWarnings(weekEntries, workerMap) : [];
+
+  const weekTotalHoursAll = weekEntries.reduce((s, e) => s + totalHours(e.days), 0);
+  const workersWithEntries = new Set(weekEntries.map((e) => e.workerId)).size;
+  const nominalWeekCapacity = Math.max(40, workersWithEntries * 40);
+  const weekLoadRatio = weekTotalHoursAll / nominalWeekCapacity;
+  const weekLoadPct = Math.min(100, Math.round(weekLoadRatio * 100));
+  const weekLoadOver = weekLoadRatio > 1;
+
+  const filterChips = [];
+  if (filterWorker) filterChips.push({ key: "w", label: `Worker: ${workerMap[filterWorker] || filterWorker}`, clear: () => setFilterWorker("") });
+  if (filterProject) filterChips.push({ key: "p", label: `Project: ${projectMap[filterProject] || filterProject}`, clear: () => setFilterProject("") });
+  if (filterStatus) filterChips.push({ key: "s", label: `Status: ${filterStatus}`, clear: () => setFilterStatus("") });
+  if (taskNeedle) filterChips.push({ key: "t", label: `Task: “${filterTask.trim()}”`, clear: () => setFilterTask("") });
 
   return (
     <div style={{
@@ -477,7 +819,9 @@ export default function Timesheet() {
       {/* modals */}
       {modal?.type === "entry" && (
         <EntryModal
+          key={(modal.data && modal.data.id) || "new-entry"}
           entry={modal.data}
+          weekStartMonday={weekStart}
           workers={workers}
           projects={projects}
           onSave={saveEntry}
@@ -505,9 +849,17 @@ export default function Timesheet() {
       <PageHero
         badgeText="TS"
         title="Timesheet"
-        lead="Track and approve worker hours per project (local storage)."
+        lead="Track and approve worker hours per project. Workers and projects are the same lists as elsewhere in the workspace (local keys mysafeops_workers / mysafeops_projects — RAMS, permits, toolbox talks, etc.)."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={refreshRosterFromStorage}
+              style={btnStyle}
+              title="Reload workers and projects from storage (e.g. after editing them elsewhere)"
+            >
+              Refresh lists
+            </button>
             <button type="button" onClick={() => setModal({ type: "workers" })} style={btnStyle}>
               Manage workers
             </button>
@@ -539,6 +891,7 @@ export default function Timesheet() {
           </span>
           <div style={{ display:"flex", gap:8 }}>
             <button
+              type="button"
               onClick={approveAll}
               style={{ padding:"5px 12px", borderRadius:6, border:"none",
                 background:"#0d9488", color:"#E1F5EE", fontSize:12, cursor:"pointer" }}
@@ -546,6 +899,7 @@ export default function Timesheet() {
               Approve all
             </button>
             <button
+              type="button"
               onClick={()=>setFilterStatus("pending")}
               style={{ padding:"5px 12px", borderRadius:6, fontSize:12, cursor:"pointer",
                 background:"var(--color-background-primary,#fff)",
@@ -558,22 +912,85 @@ export default function Timesheet() {
         </div>
       )}
 
-      {/* week nav */}
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16, flexWrap:"wrap" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <button onClick={()=>setWeekOffset(w=>w-1)} style={{ ...btnStyle, padding:"5px 10px" }}>‹</button>
-          <span style={{ fontSize:14, fontWeight:500, minWidth:240, textAlign:"center" }}>
-            Week {weekOffset===0?"(current)":weekOffset>0?`+${weekOffset}`:weekOffset} — {weekLabel}
-          </span>
-          <button onClick={()=>setWeekOffset(w=>w+1)} style={{ ...btnStyle, padding:"5px 10px" }}>›</button>
-          {weekOffset!==0 && (
-            <button onClick={()=>setWeekOffset(0)} style={{ ...btnStyle, fontSize:12, padding:"5px 10px" }}>Today</button>
+      {/* week nav — elevated toolbar */}
+      <div style={{ ...cardShell, padding:"14px 16px", marginBottom:14 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            <button type="button" onClick={()=>setWeekOffset(w=>w-1)} style={{ ...btnStyle, padding:"6px 12px", fontWeight:600 }} aria-label="Previous week">‹</button>
+            <div style={{ textAlign:"center", minWidth:200 }}>
+              <div style={{ fontSize:15, fontWeight:600, color:"var(--color-text-primary)", letterSpacing:"-0.01em" }}>
+                {weekLabel}
+              </div>
+              <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4, display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
+                <span title="Monday start date for stored rows">Week key <code style={{ fontSize:10 }}>{weekKey}</code></span>
+                <span style={{ opacity:0.5 }}>·</span>
+                <span>ISO week <strong>{isoMeta.week}</strong> · {isoMeta.isoYear}</span>
+                {weekOffset !== 0 ? (
+                  <>
+                    <span style={{ opacity:0.5 }}>·</span>
+                    <span>{weekOffset > 0 ? `+${weekOffset}` : weekOffset} from today</span>
+                  </>
+                ) : (
+                  <>
+                <span style={{ opacity:0.5 }}>·</span>
+                <span style={{ color:"#0d9488", fontWeight:600 }}>Current week</span>
+                  </>
+                )}
+                {weekEntries.length > 0 && (
+                  <>
+                    <span style={{ opacity:0.5 }}>·</span>
+                    <span title="Lines stored for this weekKey">{weekEntries.length} entr{weekEntries.length === 1 ? "y" : "ies"}</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <button type="button" onClick={()=>setWeekOffset(w=>w+1)} style={{ ...btnStyle, padding:"6px 12px", fontWeight:600 }} aria-label="Next week">›</button>
+            {weekOffset!==0 && (
+              <button type="button" onClick={()=>setWeekOffset(0)} style={{ ...btnStyle, fontSize:12, padding:"6px 12px" }}>This week</button>
+            )}
+          </div>
+          {prevWeekHasEntries && (
+            <button
+              type="button"
+              onClick={copyFromPreviousWeek}
+              style={{ ...btnStyle, fontSize:12, padding:"6px 14px" }}
+              title="Duplicate all lines from the previous calendar week into this week (new IDs, status pending)"
+            >
+              Copy from last week
+            </button>
           )}
         </div>
+        {weekEntries.length > 0 && (
+          <div style={{ marginTop:14, paddingTop:12, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:6, flexWrap:"wrap", gap:8 }}>
+              <span style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", letterSpacing:"0.04em", textTransform:"uppercase" }}>
+                Week load vs nominal capacity
+              </span>
+              <span style={{ fontSize:12, color:"var(--color-text-secondary)" }}>
+                <strong style={{ color: weekLoadOver ? "#b91c1c" : "var(--color-text-primary)" }}>
+                  {weekTotalHoursAll.toFixed(1)}h
+                </strong>
+                {" / "}
+                {nominalWeekCapacity}h
+                <span style={{ fontWeight:600, marginLeft:6, color: weekLoadOver ? "#b91c1c" : "var(--color-text-secondary)" }}>
+                  ({Math.round(weekLoadRatio * 100)}%)
+                </span>
+                <span style={{ color:"var(--color-text-tertiary)", marginLeft:6 }}>nominal 40h × {workersWithEntries || 1} worker{workersWithEntries !== 1 ? "s" : ""} with entries</span>
+              </span>
+            </div>
+            <div style={{ height:8, borderRadius:99, background:"var(--color-border-tertiary,#e8e8e6)", overflow:"hidden" }}>
+              <div style={{
+                width:`${weekLoadPct}%`, height:"100%", borderRadius:99,
+                background: weekLoadOver ? "#dc2626" : weekLoadPct > 85 ? "#EA580C" : "linear-gradient(90deg, #0d9488, #14b8a6)",
+                transition:"width .35s ease",
+              }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* filters */}
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+      <div style={{ display:"flex", gap:8, marginBottom:10, flexWrap:"wrap", alignItems:"center" }}>
         <select value={filterWorker} onChange={e=>setFilterWorker(e.target.value)} style={{ ...inputStyle, width:"auto" }}>
           <option value="">All workers</option>
           {workers.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
@@ -588,16 +1005,146 @@ export default function Timesheet() {
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
-        {(filterWorker||filterProject||filterStatus) && (
+        <input
+          type="search"
+          value={filterTask}
+          onChange={(e) => setFilterTask(e.target.value)}
+          placeholder="Search task…"
+          style={{ ...inputStyle, minWidth:160, flex:1, maxWidth:280 }}
+        />
+        {(filterWorker||filterProject||filterStatus||filterTask.trim()) && (
           <button
-            onClick={()=>{ setFilterWorker(""); setFilterProject(""); setFilterStatus(""); }}
+            type="button"
+            onClick={()=>{ setFilterWorker(""); setFilterProject(""); setFilterStatus(""); setFilterTask(""); }}
             style={{ ...btnStyle, fontSize:12 }}
           >Clear filters</button>
+        )}
+        {sortKey && (
+          <button
+            type="button"
+            onClick={() => { setSortKey(""); setSortAsc(true); }}
+            style={{ ...btnStyle, fontSize:12 }}
+            title="Return to default row order"
+          >
+            Clear sort
+          </button>
+        )}
+      </div>
+
+      <div style={{ display:"flex", flexWrap:"wrap", gap:6, alignItems:"center", marginBottom:12 }}>
+        <span style={{ fontSize:11, fontWeight:600, color:"var(--color-text-tertiary)", textTransform:"uppercase", letterSpacing:"0.05em", marginRight:4 }}>Status</span>
+        {[
+          { value: "", label: "All" },
+          { value: "pending", label: "Pending" },
+          { value: "approved", label: "Approved" },
+          { value: "rejected", label: "Rejected" },
+        ].map((opt) => {
+          const on = filterStatus === opt.value;
+          return (
+            <button
+              key={opt.value || "all"}
+              type="button"
+              onClick={() => setFilterStatus(opt.value)}
+              style={{
+                fontSize:12,
+                fontWeight:600,
+                padding:"5px 12px",
+                borderRadius:999,
+                border:`0.5px solid ${on ? "#0f766e" : "var(--color-border-secondary,#ccc)"}`,
+                background: on ? "linear-gradient(180deg, #ccfbf1, #b2f5ea)" : "var(--color-background-primary,#fff)",
+                color: on ? "#064e3b" : "var(--color-text-secondary)",
+                cursor:"pointer",
+                boxShadow: on ? "0 1px 2px rgba(13,148,136,0.15)" : "none",
+              }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {filterChips.length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center", marginBottom:14 }}>
+          <span style={{ fontSize:11, fontWeight:600, color:"var(--color-text-tertiary)", textTransform:"uppercase", letterSpacing:"0.05em" }}>Active</span>
+          {filterChips.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={c.clear}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:6,
+                fontSize:12, fontWeight:500,
+                padding:"5px 10px 5px 12px",
+                borderRadius:999,
+                border:"0.5px solid var(--color-border-secondary,#d4d4d4)",
+                background:"var(--color-background-secondary,#f4f4f2)",
+                color:"var(--color-text-primary)",
+                cursor:"pointer",
+              }}
+              title="Remove filter"
+            >
+              {c.label}
+              <span style={{ fontSize:14, lineHeight:1, opacity:0.55 }} aria-hidden>×</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ marginBottom:16 }}>
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((o) => !o)}
+          style={{
+            ...btnStyle,
+            fontSize:12,
+            padding:"6px 12px",
+            display:"inline-flex",
+            alignItems:"center",
+            gap:6,
+            borderColor:"var(--color-border-secondary,#ccc)",
+          }}
+          aria-expanded={advancedOpen}
+        >
+          <span style={{ fontWeight:600 }}>Advanced</span>
+          <span style={{ fontSize:10, opacity:0.7 }}>{advancedOpen ? "▼" : "▶"}</span>
+          <span style={{ fontSize:11, color:"var(--color-text-secondary)", fontWeight:400 }}>sorting, rules, exports</span>
+        </button>
+        {advancedOpen && (
+          <div style={{ ...cardShell, marginTop:10, padding:"14px 16px", fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.6 }}>
+            <ul style={{ margin:0, paddingLeft:18 }}>
+              <li><strong>Sort</strong> — click column headers (Worker, Project, Task, Hours, Status). First click ascending, second descending. Equal values stay ordered by row id.</li>
+              <li><strong>Overtime card</strong> — sums hours over <strong>40h per worker per week</strong> (all their lines combined).</li>
+              <li><strong>Review suggested</strong> — flags any worker over <strong>48h</strong> or any single day over <strong>14h</strong> site-wide (all rows).</li>
+              <li><strong>Row tint</strong> — light highlight when that worker&apos;s week total exceeds <strong>40h</strong>.</li>
+              <li><strong>Duplicate</strong> — copies one line (new id, pending, clears reject reason). <strong>Copy from last week</strong> copies the whole previous week.</li>
+              <li><strong>Refresh lists</strong> — reloads <code style={{ fontSize:11 }}>mysafeops_workers</code> / <code style={{ fontSize:11 }}>mysafeops_projects</code> from storage without reloading the page.</li>
+              <li><strong>Exports</strong> — CSV with UTF-8 BOM for Excel; payroll uses approved hours only, 40h cap per worker; JSON backup is the full week payload.</li>
+              <li><strong>Quick status</strong> — pill buttons filter by pending / approved / rejected (same as the status dropdown).</li>
+              <li><strong>Clear sort</strong> — restores default row order after sorting by column.</li>
+            </ul>
+          </div>
         )}
       </div>
 
       {/* summary */}
       {weekEntries.length > 0 && <SummaryCards entries={weekEntries} />}
+
+      {weekWarnings.length > 0 && (
+        <div style={{
+          ...cardShell,
+          marginBottom:16, padding:"12px 16px",
+          background:"linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+          borderColor:"#fcd34d",
+          fontSize:12, color:"#633806", lineHeight:1.45,
+        }}>
+          <strong style={{ display:"block", marginBottom:6, letterSpacing:"0.02em" }}>Review suggested</strong>
+          <ul style={{ margin:0, paddingLeft:18 }}>
+            {weekWarnings.map((msg, i) => (
+              <li key={i}>{msg}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* empty states */}
       {workers.length === 0 && (
@@ -626,7 +1173,7 @@ export default function Timesheet() {
 
       {/* table */}
       {workers.length > 0 && projects.length > 0 && (
-        <div style={{ border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:12, overflow:"hidden" }}>
+        <div style={{ ...cardShell, overflow:"hidden" }}>
           {filtered.length === 0 ? (
             <div style={{ padding:"2.5rem", textAlign:"center" }}>
               <p style={{ color:"var(--color-text-secondary)", fontSize:13 }}>
@@ -644,25 +1191,48 @@ export default function Timesheet() {
               )}
             </div>
           ) : (
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-              <thead>
-                <tr style={{ background:"var(--color-background-secondary,#f7f7f5)" }}>
-                  {["Worker","Project","Task","Days","Hours","Status",""].map(h=>(
-                    <th key={h} style={{
-                      padding:"8px 12px", textAlign:"left",
-                      fontSize:11, fontWeight:500, color:"var(--color-text-secondary)",
-                      borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
-                    }}>{h}</th>
-                  ))}
+            <div style={{ overflowX:"auto", overflowY:"auto", maxHeight:"min(62vh, 520px)", WebkitOverflowScrolling:"touch" }}>
+            <table style={{ width:"100%", minWidth:720, borderCollapse:"collapse", fontSize:13 }}>
+              <thead style={{ position:"sticky", top:0, zIndex:3 }}>
+                <tr style={{
+                  background:"linear-gradient(180deg, var(--color-background-secondary,#f4f6f5) 0%, #ecefec 100%)",
+                  boxShadow:"0 1px 0 rgba(15,23,42,0.06)",
+                }}>
+                  <SortTh id="worker" label="Worker" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  <SortTh id="project" label="Project" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  <SortTh id="task" label="Task" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  <th style={{
+                    padding:"10px 12px", textAlign:"left",
+                    fontSize:11, fontWeight:600, color:"var(--color-text-secondary)",
+                    borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
+                    letterSpacing:"0.02em",
+                    background:"#ecefec",
+                  }} title="Visual Mon–Sun; sort other columns">Days</th>
+                  <SortTh id="hours" label="Hours" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  <SortTh id="status" label="Status" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  <th style={{
+                    padding:"10px 12px", textAlign:"left", width:1,
+                    fontSize:11, fontWeight:600, color:"var(--color-text-secondary)",
+                    borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
+                    background:"#ecefec",
+                  }} aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(e => {
+                {sortedFiltered.map((e, rowIdx) => {
                   const wName = workerMap[e.workerId] || e.workerId;
                   const pName = projectMap[e.projectId] || e.projectId;
                   const hrs = totalHours(e.days);
+                  const wk = workerWeekTotals[e.workerId] ?? hrs;
+                  const barTitle = `This line: ${hrs.toFixed(1)}h — worker week total: ${wk.toFixed(1)}h`;
+                  const heavyWorkerWeek = wk > 40;
+                  const stripe = !heavyWorkerWeek && rowIdx % 2 === 1 ? "rgba(15,23,42,0.025)" : undefined;
                   return (
-                    <tr key={e.id} style={{ borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
+                    <tr key={e.id} style={{
+                      borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
+                      background: heavyWorkerWeek ? "rgba(239, 159, 39, 0.09)" : stripe,
+                      transition:"background .12s ease",
+                    }}>
                       <td style={{ padding:"10px 12px" }}>
                         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                           <Avatar name={wName} size={28} />
@@ -670,34 +1240,82 @@ export default function Timesheet() {
                         </div>
                       </td>
                       <td style={{ padding:"10px 12px", color:"var(--color-text-secondary)" }}>{pName}</td>
-                      <td style={{ padding:"10px 12px", color:"var(--color-text-secondary)", maxWidth:160,
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {e.task || "—"}
+                      <td style={{ padding:"10px 12px", color:"var(--color-text-secondary)", maxWidth:200, verticalAlign:"top" }}>
+                        <div style={{ fontWeight:400 }}>{e.task || "—"}</div>
+                        {e.status === "rejected" && e.rejectReason ? (
+                          <div style={{
+                            fontSize:11, color:"#791F1F", marginTop:4, lineHeight:1.35,
+                            whiteSpace:"pre-wrap", wordBreak:"break-word",
+                          }} title={e.rejectReason}>{e.rejectReason}</div>
+                        ) : null}
+                        {e.status === "rejected" && !e.rejectReason ? (
+                          <div style={{ fontSize:10, color:"var(--color-text-tertiary,#aaa)", marginTop:4 }}>
+                            Use Edit to add a reject reason.
+                          </div>
+                        ) : null}
                       </td>
                       <td style={{ padding:"10px 12px" }}><DayDots days={e.days} /></td>
-                      <td style={{ padding:"10px 12px", minWidth:100 }}><HoursBar hours={hrs} /></td>
-                      <td style={{ padding:"10px 12px" }}>
-                        <select
-                          value={e.status||"pending"}
-                          onChange={ev=>updateStatus(e.id, ev.target.value)}
-                          style={{ ...inputStyle, width:"auto", padding:"3px 8px", fontSize:12 }}
-                        >
-                          <option value="pending">Pending</option>
-                          <option value="approved">Approved</option>
-                          <option value="rejected">Rejected</option>
-                        </select>
+                      <td style={{ padding:"10px 12px", minWidth:100 }}><HoursBar hours={hrs} title={barTitle} /></td>
+                      <td style={{ padding:"10px 12px", verticalAlign:"middle" }}>
+                        <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:6 }}>
+                          <Badge status={e.status || "pending"} />
+                          <select
+                            value={e.status||"pending"}
+                            onChange={ev=>updateStatus(e.id, ev.target.value)}
+                            style={{ ...inputStyle, width:"auto", padding:"3px 8px", fontSize:12 }}
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                          </select>
+                        </div>
                       </td>
                       <td style={{ padding:"10px 12px" }}>
-                        <button
-                          onClick={()=>setModal({type:"entry", data:e})}
-                          style={{ ...btnStyle, padding:"4px 10px", fontSize:12 }}
-                        >Edit</button>
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
+                          <button
+                            type="button"
+                            onClick={()=>setModal({type:"entry", data:e})}
+                            style={{ ...btnStyle, padding:"4px 10px", fontSize:12 }}
+                          >Edit</button>
+                          <button
+                            type="button"
+                            onClick={()=>duplicateEntry(e)}
+                            title="Copy this line for this week (new row, pending)"
+                            style={{ ...btnStyle, padding:"4px 10px", fontSize:12 }}
+                          >Duplicate</button>
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
+                <tr style={{
+                  background:"var(--color-background-secondary,#f7f7f5)",
+                  fontWeight:500,
+                  fontSize:12,
+                  color:"var(--color-text-secondary)",
+                }}>
+                  <td colSpan={3} style={{ padding:"10px 12px", borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
+                    Totals ({filtered.length} row{filtered.length !== 1 ? "s" : ""}
+                    {taskNeedle || filterWorker || filterProject || filterStatus ? ", filtered" : ""})
+                  </td>
+                  <td style={{ padding:"10px 12px", borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)", verticalAlign:"middle" }}>
+                    <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                      {weekDays.map((d) => (
+                        <span key={d} title={`${d} total`} style={{ fontSize:10, minWidth:22, textAlign:"center" }}>
+                          <span style={{ display:"block", color:"var(--color-text-tertiary,#aaa)", fontWeight:500 }}>{d}</span>
+                          <span style={{ color:"var(--color-text-primary)" }}>{filteredDayTotals[d].toFixed(1)}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td style={{ padding:"10px 12px", borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)", color:"var(--color-text-primary)" }}>
+                    {filteredHoursSum.toFixed(1)}h
+                  </td>
+                  <td colSpan={2} style={{ padding:"10px 12px", borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }} />
+                </tr>
               </tbody>
             </table>
+            </div>
           )}
 
           {/* add row */}
@@ -728,18 +1346,38 @@ export default function Timesheet() {
 
       {/* export */}
       {weekEntries.length > 0 && (
-        <>
+        <div style={{ ...cardShell, marginTop:20, padding:"16px 18px" }}>
           <div style={{
-            fontSize:11, fontWeight:500, color:"var(--color-text-secondary)",
-            letterSpacing:"0.06em", textTransform:"uppercase",
-            margin:"1.25rem 0 0.5rem",
-          }}>Export options</div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            fontSize:11, fontWeight:600, color:"var(--color-text-secondary)",
+            letterSpacing:"0.08em", textTransform:"uppercase",
+            marginBottom:8,
+          }}>Export &amp; reporting</div>
+          <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"0 0 12px", lineHeight:1.5 }}>
+            CSV files include a UTF-8 BOM for Excel. Payroll uses each worker&apos;s <strong>total approved hours</strong> for the week, then splits regular vs overtime above 40h.
+          </p>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
             {[
               {
                 label:"CSV (all entries)",
                 icon:<path d="M4 2h8v12H4zM7 5h2M7 8h2M7 11h4M11 9l2 2-2 2" />,
                 action:()=>exportCSV(weekEntries, workers, projects, weekLabel),
+              },
+              {
+                label:"CSV (approved only)",
+                icon:<path d="M4 2h8v12H4zM6 8l2 2 4-4" />,
+                action:()=>exportApprovedCSV(weekEntries, workers, projects, weekLabel),
+              },
+              {
+                label:"Worker summary",
+                icon:<path d="M8 3a2 2 0 100 4 2 2 0 000-4zM4 14c0-2 2-3.5 4-3.5s4 1.5 4 3.5" />,
+                action:()=>exportWorkerSummaryCSV(weekEntries, workers, weekLabel),
+                note:"per worker",
+              },
+              {
+                label:"Project summary",
+                icon:<path d="M2 4h5v9H2zM9 2h5v11H9z" />,
+                action:()=>exportProjectSummaryCSV(weekEntries, projects, weekLabel),
+                note:"per project",
               },
               {
                 label:"Payroll export",
@@ -748,20 +1386,12 @@ export default function Timesheet() {
                 note:"approved only",
               },
               {
-                label:"Monthly summary",
-                icon:<><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 7h12M6 3V1M10 3V1"/></>,
-                action:()=>{
-                  const monthEntries = entries.filter(e => {
-                    if (!e.weekKey) return false;
-                    const d = new Date(e.weekKey);
-                    const now = new Date();
-                    return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
-                  });
-                  exportCSV(monthEntries, workers, projects, `month_${new Date().toISOString().slice(0,7)}`);
-                },
+                label:"JSON (backup)",
+                icon:<path d="M5 3h6v10H5zM7 6h2M7 9h4" />,
+                action:()=>exportWeekJson(weekEntries, workers, projects, weekLabel, weekKey),
               },
             ].map(b=>(
-              <button key={b.label} onClick={b.action} style={{
+              <button key={b.label} type="button" onClick={b.action} style={{
                 ...btnStyle, display:"flex", alignItems:"center", gap:6,
               }}>
                 <svg width={14} height={14} viewBox="0 0 16 16" fill="none"
@@ -773,7 +1403,43 @@ export default function Timesheet() {
               </button>
             ))}
           </div>
-        </>
+          <div style={{
+            display:"flex", flexWrap:"wrap", gap:8, alignItems:"center",
+            marginTop:12, padding:"10px 12px",
+            background:"var(--color-background-secondary,#f7f7f5)",
+            borderRadius:8,
+            border:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
+          }}>
+            <span style={{ fontSize:12, fontWeight:500, color:"var(--color-text-secondary)" }}>Month CSV</span>
+            <input
+              type="month"
+              value={exportMonth}
+              onChange={(e) => setExportMonth(e.target.value)}
+              style={{ ...inputStyle, width:"auto", fontSize:13 }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const monthEntries = entriesInCalendarMonth(entries, exportMonth);
+                if (!monthEntries.length) {
+                  if (typeof window !== "undefined") window.alert("No timesheet weeks in that month.");
+                  return;
+                }
+                exportCSV(monthEntries, workers, projects, `month_${exportMonth}`);
+              }}
+              style={{ ...btnStyle, display:"flex", alignItems:"center", gap:6 }}
+            >
+              <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                <rect x="2" y="3" width="12" height="11" rx="1" />
+                <path d="M2 7h12M6 3V1M10 3V1" />
+              </svg>
+              Download month
+            </button>
+            <span style={{ fontSize:11, color:"var(--color-text-tertiary,#aaa)" }}>
+              All lines whose week starts in the selected month
+            </span>
+          </div>
+        </div>
       )}
 
       {/* footer note */}

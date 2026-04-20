@@ -1,40 +1,10 @@
 import { useState, useRef } from "react";
-import { getAnthropicKey, getAnthropicModel } from "../utils/anthropicClient";
+import { anthropicVision, isAnthropicConfigured } from "../utils/anthropicClient";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 
 const ss = ms;
-
-async function anthropicVision({ prompt, base64, mediaType }) {
-  const apiKey = getAnthropicKey();
-  if (!apiKey) throw new Error("Missing VITE_ANTHROPIC_API_KEY");
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: getAnthropicModel(),
-      max_tokens: 2048,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-            { type: "text", text: prompt },
-          ],
-        },
-      ],
-    }),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.error?.message || res.statusText);
-  return json?.content?.find((c) => c.type === "text")?.text || "";
-}
 
 export default function PhotoHazardAI() {
   const [loading, setLoading] = useState(false);
@@ -86,7 +56,7 @@ export default function PhotoHazardAI() {
       />
       <div style={ss.card}>
         <input ref={ref} type="file" accept="image/*" style={{ display: "none" }} onChange={onPick} />
-        <button type="button" style={ss.btnP} disabled={loading || !getAnthropicKey()} onClick={() => ref.current?.click()}>
+        <button type="button" style={ss.btnP} disabled={loading || !isAnthropicConfigured()} onClick={() => ref.current?.click()}>
           {loading ? "Analysing…" : "Choose photo"}
         </button>
       </div>

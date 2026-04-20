@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { isR2StorageConfigured, uploadFileToR2Storage } from "../lib/r2Storage";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
@@ -7,6 +7,7 @@ import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import { getOrgId, loadOrgScoped, saveOrgScoped, orgScopedKey } from "../utils/orgStorage";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import PageHero from "../components/PageHero";
 
 const DOC_META_KEY = "mysafeops_doc_library";
@@ -22,6 +23,8 @@ const loadMeta = () => loadOrgScoped(DOC_META_KEY, {});
 const saveMeta = (m) => saveOrgScoped(DOC_META_KEY, m);
 
 const ss = ms;
+const FILE_LIST_PAGE = 120;
+const R2_LIST_PAGE = 60;
 
 async function readDirRecursive(dirHandle, basePath = "") {
   const out = [];
@@ -51,6 +54,12 @@ export default function DocumentLibrary() {
   const [r2Msg, setR2Msg] = useState("");
   const r2InputRef = useRef(null);
   const r2Enabled = isR2StorageConfigured();
+  const fileListPg = useRegisterListPaging(FILE_LIST_PAGE);
+  const r2ListPg = useRegisterListPaging(R2_LIST_PAGE);
+
+  useEffect(() => {
+    fileListPg.reset();
+  }, [dirName]);
 
   useEffect(() => {
     return () => {
@@ -182,8 +191,17 @@ export default function DocumentLibrary() {
             {r2Msg && <p style={{ marginTop: 10, fontSize: 13 }}>{r2Msg}</p>}
             {r2Uploads.length > 0 && (
               <div style={{ marginTop: 14, maxHeight: 240, overflow: "auto" }}>
-                {r2Uploads.map((u) => (
-                  <div key={u.id} style={{ fontSize: 12, padding: "8px 0", borderBottom: "0.5px solid #e5e5e5" }}>
+                {r2ListPg.visible(r2Uploads).map((u) => (
+                  <div
+                    key={u.id}
+                    style={{
+                      fontSize: 12,
+                      padding: "8px 0",
+                      borderBottom: "0.5px solid #e5e5e5",
+                      contentVisibility: "auto",
+                      containIntrinsicSize: "0 72px",
+                    }}
+                  >
                     <strong>{u.name}</strong>
                     <div style={{ wordBreak: "break-all", color: "var(--color-text-secondary)" }}>{u.key}</div>
                     {u.publicUrl && (() => {
@@ -201,6 +219,13 @@ export default function DocumentLibrary() {
                     </button>
                   </div>
                 ))}
+                {r2ListPg.hasMore(r2Uploads) ? (
+                  <div style={{ marginTop: 10, textAlign: "center" }}>
+                    <button type="button" style={ss.btn} onClick={r2ListPg.showMore}>
+                      Show more uploads ({r2ListPg.remaining(r2Uploads)} remaining)
+                    </button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -241,7 +266,7 @@ export default function DocumentLibrary() {
           {r2Msg && <p style={{ marginTop: 10, fontSize: 13 }}>{r2Msg}</p>}
           {r2Uploads.length > 0 && (
             <div style={{ marginTop: 14, maxHeight: 200, overflow: "auto" }}>
-              {r2Uploads.map((u) => (
+              {r2ListPg.visible(r2Uploads).map((u) => (
                 <div
                   key={u.id}
                   style={{
@@ -252,6 +277,8 @@ export default function DocumentLibrary() {
                     justifyContent: "space-between",
                     gap: 8,
                     flexWrap: "wrap",
+                    contentVisibility: "auto",
+                    containIntrinsicSize: "0 56px",
                   }}
                 >
                   <div style={{ minWidth: 0 }}>
@@ -273,6 +300,13 @@ export default function DocumentLibrary() {
                   </button>
                 </div>
               ))}
+              {r2ListPg.hasMore(r2Uploads) ? (
+                <div style={{ marginTop: 10, textAlign: "center" }}>
+                  <button type="button" style={ss.btn} onClick={r2ListPg.showMore}>
+                    Show more uploads ({r2ListPg.remaining(r2Uploads)} remaining)
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -286,10 +320,13 @@ export default function DocumentLibrary() {
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 16 }}>
         <div style={ss.card}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Files ({files.length})</div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>
+            Files ({files.length}
+            {fileListPg.hasMore(files) ? ` · showing ${Math.min(fileListPg.cap, files.length)}` : ""})
+          </div>
           <div style={{ maxHeight: 360, overflow: "auto" }}>
             {files.length === 0 && <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>Choose a folder to list documents.</div>}
-            {files.map((f) => (
+            {fileListPg.visible(files).map((f) => (
               <button
                 key={f.path}
                 type="button"
@@ -305,11 +342,20 @@ export default function DocumentLibrary() {
                   cursor: "pointer",
                   fontSize: 13,
                   fontFamily: "DM Sans,sans-serif",
+                  contentVisibility: "auto",
+                  containIntrinsicSize: "0 36px",
                 }}
               >
                 {f.path}
               </button>
             ))}
+            {fileListPg.hasMore(files) ? (
+              <div style={{ marginTop: 10, textAlign: "center" }}>
+                <button type="button" style={ss.btn} onClick={fileListPg.showMore}>
+                  Show more files ({fileListPg.remaining(files)} remaining)
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
         <div style={ss.card}>
@@ -333,7 +379,7 @@ export default function DocumentLibrary() {
               {previewUrl && (selectedPath.toLowerCase().endsWith(".pdf") ? (
                 <iframe title="preview" src={previewUrl} style={{ width: "100%", height: 280, border: "0.5px solid #ccc", borderRadius: 6, marginTop: 12 }} />
               ) : (
-                <img alt="" src={previewUrl} style={{ maxWidth: "100%", maxHeight: 240, marginTop: 12, objectFit: "contain" }} />
+                <img alt="" src={previewUrl} loading="lazy" decoding="async" style={{ maxWidth: "100%", maxHeight: 240, marginTop: 12, objectFit: "contain" }} />
               ))}
             </>
           )}

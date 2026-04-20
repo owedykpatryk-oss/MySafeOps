@@ -3,6 +3,9 @@ export function ViewFallback() {
   return (
     <div
       className="app-view-fallback"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
       style={{
         fontFamily: "DM Sans, system-ui, sans-serif",
         textAlign: "center",
@@ -11,7 +14,7 @@ export function ViewFallback() {
       }}
     >
       <div className="app-route-spinner" aria-hidden />
-      Loading…
+      <span className="app-view-fallback-text">Loading…</span>
     </div>
   );
 }

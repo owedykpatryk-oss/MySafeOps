@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import PageHero from "../components/PageHero";
 import { ms } from "../utils/moduleStyles";
 import {
@@ -30,8 +31,14 @@ function remainingDays(expiresAt) {
 
 export default function RecycleBin() {
   const [items, setItems] = useState(() => listRecycleBinEntries());
+  const [listCap, setListCap] = useState(RECYCLE_LIST_PAGE);
 
   const refresh = () => setItems(listRecycleBinEntries());
+
+  const refreshAndResetPaging = () => {
+    setListCap(RECYCLE_LIST_PAGE);
+    setItems(listRecycleBinEntries());
+  };
 
   useEffect(() => {
     const t = setInterval(refresh, 60000);
@@ -75,7 +82,7 @@ export default function RecycleBin() {
         lead={`Deleted records stay here for ${RECYCLE_RETENTION_DAYS} days, then are auto-removed. You can restore or permanently delete now.`}
         right={
           <>
-            <button type="button" style={ss.btn} onClick={refresh}>
+            <button type="button" style={ss.btn} onClick={refreshAndResetPaging}>
               Refresh
             </button>
             <button type="button" style={ss.btn} onClick={onPurgeExpired}>
@@ -101,7 +108,12 @@ export default function RecycleBin() {
           <div style={{ color: "var(--color-text-secondary)" }}>Recycle bin is empty.</div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
-            {items.map((item) => (
+            {listPg.hasMore(items) ? (
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                Showing {Math.min(listPg.cap, items.length)} of {items.length} items
+              </div>
+            ) : null}
+            {listPg.visible(items).map((item) => (
               <div
                 key={item.id}
                 style={{
@@ -109,6 +121,8 @@ export default function RecycleBin() {
                   borderRadius: 10,
                   padding: "10px 10px",
                   background: "var(--color-background-primary,#fff)",
+                  contentVisibility: "auto",
+                  containIntrinsicSize: "0 72px",
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -132,6 +146,13 @@ export default function RecycleBin() {
                 </div>
               </div>
             ))}
+            {listPg.hasMore(items) ? (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+                <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                  Show more ({listPg.remaining(items)} remaining)
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
@@ -154,25 +155,33 @@ export default function InspectionTracker() {
   const [filterResult, setFilterResult] = useState("");
   const [filterDue, setFilterDue] = useState("all");
   const [search, setSearch] = useState("");
+  const listPg = useRegisterListPaging(50);
 
   useEffect(()=>{ save("inspection_records",items); },[items]);
+
+  useEffect(() => {
+    listPg.reset();
+  }, [filterType, filterResult, filterDue, search]);
 
   const saveItem = (item) => {
     setItems(prev=>prev.find(x=>x.id===item.id)?prev.map(x=>x.id===item.id?item:x):[item,...prev]);
     setModal(null);
   };
 
-  const now = new Date();
-  const filtered = items.filter(i=>{
-    if (filterType && i.type!==filterType) return false;
-    if (filterResult && i.result!==filterResult) return false;
-    if (search && !i.name?.toLowerCase().includes(search.toLowerCase()) && !i.serialNo?.toLowerCase().includes(search.toLowerCase()) && !i.location?.toLowerCase().includes(search.toLowerCase())) return false;
-    const days = daysUntil(i.nextInspectionDate);
-    if (filterDue==="overdue" && !(days!==null&&days<0)) return false;
-    if (filterDue==="due30" && !(days!==null&&days>=0&&days<=30)) return false;
-    if (filterDue==="ok" && !(days===null||days>30)) return false;
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      items.filter((i) => {
+        if (filterType && i.type !== filterType) return false;
+        if (filterResult && i.result !== filterResult) return false;
+        if (search && !i.name?.toLowerCase().includes(search.toLowerCase()) && !i.serialNo?.toLowerCase().includes(search.toLowerCase()) && !i.location?.toLowerCase().includes(search.toLowerCase())) return false;
+        const days = daysUntil(i.nextInspectionDate);
+        if (filterDue === "overdue" && !(days !== null && days < 0)) return false;
+        if (filterDue === "due30" && !(days !== null && days >= 0 && days <= 30)) return false;
+        if (filterDue === "ok" && !(days === null || days > 30)) return false;
+        return true;
+      }),
+    [items, filterType, filterResult, filterDue, search]
+  );
 
   const stats = {
     overdue: items.filter(i=>daysUntil(i.nextInspectionDate)<0).length,
@@ -235,7 +244,7 @@ export default function InspectionTracker() {
           <option value="due30">Due in 30 days</option>
           <option value="ok">Up to date</option>
         </select>
-        {(search||filterType||filterResult||(filterDue!=="all"))&&<button onClick={()=>{setSearch("");setFilterType("");setFilterResult("");setFilterDue("all");}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
+        {(search||filterType||filterResult||(filterDue!=="all"))&&<button onClick={()=>{setSearch("");setFilterType("");setFilterResult("");setFilterDue("all");listPg.reset();}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
       </div>
 
       {items.length===0 ? (
@@ -245,11 +254,16 @@ export default function InspectionTracker() {
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {filtered.map(item=>{
+          {listPg.hasMore(filtered) ? (
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} records
+            </div>
+          ) : null}
+          {listPg.visible(filtered).map((item) => {
             const def = INSPECTION_TYPES[item.type]||INSPECTION_TYPES.other;
             const pill = getStatusPill(item);
             return (
-              <div key={item.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"center", borderLeft:`3px solid ${def.color}` }}>
+              <div key={item.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"center", borderLeft:`3px solid ${def.color}`, contentVisibility:"auto", containIntrinsicSize:"0 72px" }}>
                 {item.photo && <img src={item.photo} alt="inspection" style={{ width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }} />}
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
@@ -273,6 +287,13 @@ export default function InspectionTracker() {
               </div>
             );
           })}
+          {listPg.hasMore(filtered) ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+              <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                Show more ({listPg.remaining(filtered)} remaining)
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

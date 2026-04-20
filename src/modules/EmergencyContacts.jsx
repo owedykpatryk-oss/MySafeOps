@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { MapPin, Phone } from "lucide-react";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
@@ -36,6 +37,7 @@ export default function EmergencyContacts() {
     if (Array.isArray(data) && data.length) return data;
     return DEFAULT_ROWS;
   });
+  const listPg = useRegisterListPaging(50);
 
   useEffect(() => {
     save("emergency_contacts", rows);
@@ -148,7 +150,12 @@ export default function EmergencyContacts() {
           Contact list
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {rows.map((row) => (
+          {listPg.hasMore(rows) ? (
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Showing {Math.min(listPg.cap, rows.length)} of {rows.length} contacts
+            </div>
+          ) : null}
+          {listPg.visible(rows).map((row) => (
             <div
               key={row.id}
               style={{
@@ -157,6 +164,8 @@ export default function EmergencyContacts() {
                 gap: 8,
                 paddingBottom: 12,
                 borderBottom: "0.5px solid var(--color-border-tertiary,#eee)",
+                contentVisibility: "auto",
+                containIntrinsicSize: "0 120px",
               }}
             >
               <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
@@ -183,6 +192,13 @@ export default function EmergencyContacts() {
               </div>
             </div>
           ))}
+          {listPg.hasMore(rows) ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+              <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                Show more ({listPg.remaining(rows)} remaining)
+              </button>
+            </div>
+          ) : null}
         </div>
         <button type="button" style={{ ...ss.btnP, marginTop: 8 }} onClick={addRow}>
           + Add contact

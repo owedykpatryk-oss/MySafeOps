@@ -11,6 +11,7 @@ import {
   uploadBackupToSupabase,
 } from "../utils/cloudSync";
 import { formatBytes, getEffectivePlan } from "../lib/billingPlans";
+import { isSuperAdminEmail } from "../utils/superAdmin";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
@@ -27,7 +28,7 @@ export default function BackupExport() {
   const fileRef = useRef(null);
 
   const cloudEnabled = isSupabaseConfigured() && supabase;
-  const plan = getEffectivePlan(trialStatus, billing);
+  const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner: isSuperAdminEmail(user?.email) });
 
   useEffect(() => {
     if (!cloudEnabled || !user || !ready) {

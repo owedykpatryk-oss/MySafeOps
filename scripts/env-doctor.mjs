@@ -41,8 +41,11 @@ const viteRows = [
   ["VITE_STORAGE_API_URL", "R2 upload Worker URL (optional)"],
   ["VITE_STORAGE_UPLOAD_TOKEN", "Worker upload token (optional)"],
   ["VITE_R2_PUBLIC_BASE_URL", "Public object base URL (optional)"],
-  ["VITE_ANTHROPIC_API_KEY", "AI modules — exposed in browser bundle; dev/local only"],
+  ["VITE_ANTHROPIC_API_KEY", "AI modules — exposed in bundle; use only with VITE_ANTHROPIC_PROXY_URL in prod"],
+  ["VITE_ANTHROPIC_PROXY_URL", "Optional same-origin Anthropic proxy e.g. /api/anthropic-messages (Vercel)"],
+  ["VITE_AI_PROXY_SECRET", "Optional header secret; pair with AI_PROXY_SHARED_SECRET on Vercel"],
   ["VITE_ANTHROPIC_MODEL", "Anthropic model id (optional)"],
+  ["VITE_WEB_VITALS_URL", "Optional POST endpoint for Web Vitals (default prod: /api/web-vitals)"],
   ["VITE_OPENWEATHER_API_KEY", "RAMS weather — optional; else Open-Meteo"],
   ["VITE_APP_VERSION", "Optional display version in Help / about"],
   ["VITE_PUBLIC_SITE_URL", "Canonical site origin for OG, RSS, sitemap (set per Vercel Preview host when testing)"],
@@ -83,8 +86,10 @@ if (/NEXT_PUBLIC_/m.test(raw)) {
 for (const [k, n] of keyCounts) {
   if (n > 1) hygiene.push(`Duplicate key "${k}" (${n} assignments) — keep a single line.`);
 }
-if (set("VITE_ANTHROPIC_API_KEY")) {
-  hygiene.push("VITE_ANTHROPIC_API_KEY is shipped to browsers — do not use for production traffic without a proxy.");
+if (set("VITE_ANTHROPIC_API_KEY") && !set("VITE_ANTHROPIC_PROXY_URL")) {
+  hygiene.push(
+    "VITE_ANTHROPIC_API_KEY is shipped to browsers — for production set VITE_ANTHROPIC_PROXY_URL=/api/anthropic-messages and ANTHROPIC_API_KEY on Vercel."
+  );
 }
 
 console.log("\nHygiene / security:\n");

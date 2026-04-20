@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
@@ -534,8 +535,13 @@ export default function MethodStatement() {
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const listPg = useRegisterListPaging(50);
 
   useEffect(()=>{ save("method_statements",docs); },[docs]);
+
+  useEffect(() => {
+    listPg.reset();
+  }, [search, filterStatus]);
 
   const saveDoc = (doc) => {
     setDocs(prev => prev.find(d=>d.id===doc.id) ? prev.map(d=>d.id===doc.id?doc:d) : [doc,...prev]);
@@ -544,11 +550,15 @@ export default function MethodStatement() {
 
   const deleteDoc = (id) => { if(confirm("Delete this method statement?")) setDocs(prev=>prev.filter(d=>d.id!==id)); };
 
-  const filtered = docs.filter(d => {
-    if (filterStatus && d.status!==filterStatus) return false;
-    if (search && !d.title?.toLowerCase().includes(search.toLowerCase()) && !d.location?.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      docs.filter((d) => {
+        if (filterStatus && d.status !== filterStatus) return false;
+        if (search && !d.title?.toLowerCase().includes(search.toLowerCase()) && !d.location?.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      }),
+    [docs, filterStatus, search]
+  );
 
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
 
@@ -571,7 +581,7 @@ export default function MethodStatement() {
           <option value="approved">Approved</option>
           <option value="superseded">Superseded</option>
         </select>
-        {(search||filterStatus)&&<button onClick={()=>{setSearch("");setFilterStatus("");}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
+        {(search||filterStatus)&&<button onClick={()=>{setSearch("");setFilterStatus("");listPg.reset();}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
       </div>
 
       {docs.length===0 ? (
@@ -583,10 +593,15 @@ export default function MethodStatement() {
         <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, color:"var(--color-text-secondary)", fontSize:13 }}>No results match your filters.</div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {filtered.map(doc => {
+          {listPg.hasMore(filtered) ? (
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} method statements
+            </div>
+          ) : null}
+          {listPg.visible(filtered).map((doc) => {
             const operatives = (doc.operativeIds||[]).map(id=>workerMap[id]).filter(Boolean);
             return (
-              <div key={doc.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"center" }}
+              <div key={doc.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"center", contentVisibility:"auto", containIntrinsicSize:"0 80px" }}
                 onMouseEnter={e=>e.currentTarget.style.borderColor="#f97316"}
                 onMouseLeave={e=>e.currentTarget.style.borderColor="var(--color-border-tertiary,#e5e5e5)"}>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -619,6 +634,13 @@ export default function MethodStatement() {
               </div>
             );
           })}
+          {listPg.hasMore(filtered) ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+              <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                Show more ({listPg.remaining(filtered)} remaining)
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
@@ -108,6 +109,7 @@ export default function HotWorkRegister() {
   const [items, setItems] = useState(() => load("hot_work_register", []));
   const [projects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
+  const listPg = useRegisterListPaging(50);
 
   useEffect(() => {
     save("hot_work_register", items);
@@ -169,8 +171,13 @@ export default function HotWorkRegister() {
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No hot work records.</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {items.map((r) => (
-            <div key={r.id} style={ss.card}>
+          {listPg.hasMore(items) ? (
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Showing {Math.min(listPg.cap, items.length)} of {items.length} records
+            </div>
+          ) : null}
+          {listPg.visible(items).map((r) => (
+            <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{r.permitRef || "Hot work"}</strong> · {r.workDate} {r.timeFrom}–{r.timeTo}
@@ -198,6 +205,13 @@ export default function HotWorkRegister() {
               </div>
             </div>
           ))}
+          {listPg.hasMore(items) ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+              <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                Show more ({listPg.remaining(items)} remaining)
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

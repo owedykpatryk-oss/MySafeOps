@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
@@ -13,6 +14,7 @@ const STATUSES = { open:{ label:"Open", bg:"#FCEBEB", color:"#791F1F" }, in_prog
 const CATEGORIES = ["Electrical","Mechanical","Pipework","Civil/Structural","Finishing","Safety","Commissioning","Other"];
 
 const ss = ms;
+const SNAG_LIST_PAGE = 60;
 
 function Badge({ type, value }) {
   const map = type==="status" ? STATUSES : PRIORITIES;
@@ -40,7 +42,7 @@ function PhotoCapture({ photos, onChange }) {
       <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:8 }}>
         {photos.map(p => (
           <div key={p.id} style={{ position:"relative", width:80, height:80 }}>
-            <img src={p.dataUrl} alt={p.name} style={{ width:80, height:80, objectFit:"cover", borderRadius:6, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }} />
+            <img src={p.dataUrl} alt={p.name} loading="lazy" decoding="async" style={{ width:80, height:80, objectFit:"cover", borderRadius:6, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }} />
             <button onClick={() => onChange(prev => prev.filter(x => x.id !== p.id))}
               style={{ position:"absolute", top:-6, right:-6, width:18, height:18, borderRadius:"50%", background:"#E24B4A", color:"#fff", border:"none", cursor:"pointer", fontSize:12, lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
           </div>
@@ -162,7 +164,7 @@ function SnagCard({ snag, workers, onEdit, onDelete, onStatusChange, bulkMode, s
   const overdue = snag.dueDate && snag.status==="open" && new Date(snag.dueDate) < new Date();
 
   return (
-    <div style={{ ...ss.card, marginBottom:8 }}>
+    <div style={{ ...ss.card, marginBottom: 8, contentVisibility: "auto", containIntrinsicSize: "0 100px" }}>
       <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
         {bulkMode && (
           <label style={{ display:"flex", alignItems:"flex-start", paddingTop:4, cursor:"pointer" }}>
@@ -171,7 +173,13 @@ function SnagCard({ snag, workers, onEdit, onDelete, onStatusChange, bulkMode, s
         )}
         {/* photos */}
         {snag.photos?.length > 0 && (
-          <img src={snag.photos[0].dataUrl} alt="snag" style={{ width:72, height:72, objectFit:"cover", borderRadius:8, flexShrink:0, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }} />
+          <img
+            src={snag.photos[0].dataUrl}
+            alt="snag"
+            loading="lazy"
+            decoding="async"
+            style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8, flexShrink: 0, border: "0.5px solid var(--color-border-tertiary,#e5e5e5)" }}
+          />
         )}
         {!snag.photos?.length && (
           <div style={{ width:72, height:72, borderRadius:8, background:"var(--color-background-secondary,#f7f7f5)", border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -231,6 +239,11 @@ export default function SnagRegister() {
   const [filterAssigned, setFilterAssigned] = useState("");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
+  const listPg = useRegisterListPaging(SNAG_LIST_PAGE);
+
+  useEffect(() => {
+    listPg.reset();
+  }, [filterStatus, filterPriority, filterProject, filterCategory, filterAssigned, search, sort]);
 
   useEffect(()=>{ save("snags",snags); },[snags]);
 
@@ -271,23 +284,34 @@ export default function SnagRegister() {
     setSelected(new Set());
   };
 
-  let filtered = snags.filter(s=>{
-    if (filterStatus && s.status!==filterStatus) return false;
-    if (filterPriority && s.priority!==filterPriority) return false;
-    if (filterProject && s.projectId!==filterProject) return false;
-    if (filterCategory && s.category!==filterCategory) return false;
-    if (filterAssigned && s.assignedTo!==filterAssigned) return false;
-    if (search && !s.title.toLowerCase().includes(search.toLowerCase()) && !s.description?.toLowerCase().includes(search.toLowerCase()) && !s.location?.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-
-  filtered = [...filtered].sort((a,b)=>{
-    if (sort==="newest") return new Date(b.createdAt)-new Date(a.createdAt);
-    if (sort==="oldest") return new Date(a.createdAt)-new Date(b.createdAt);
-    if (sort==="priority") { const o={high:0,medium:1,low:2}; return (o[a.priority]||1)-(o[b.priority]||1); }
-    if (sort==="due") return (a.dueDate||"9999")>(b.dueDate||"9999")?1:-1;
-    return 0;
-  });
+  const filtered = useMemo(() => {
+    const list = snags.filter((s) => {
+      if (filterStatus && s.status !== filterStatus) return false;
+      if (filterPriority && s.priority !== filterPriority) return false;
+      if (filterProject && s.projectId !== filterProject) return false;
+      if (filterCategory && s.category !== filterCategory) return false;
+      if (filterAssigned && s.assignedTo !== filterAssigned) return false;
+      if (
+        search &&
+        !s.title.toLowerCase().includes(search.toLowerCase()) &&
+        !s.description?.toLowerCase().includes(search.toLowerCase()) &&
+        !s.location?.toLowerCase().includes(search.toLowerCase())
+      ) {
+        return false;
+      }
+      return true;
+    });
+    return [...list].sort((a, b) => {
+      if (sort === "newest") return new Date(b.createdAt) - new Date(a.createdAt);
+      if (sort === "oldest") return new Date(a.createdAt) - new Date(b.createdAt);
+      if (sort === "priority") {
+        const o = { high: 0, medium: 1, low: 2 };
+        return (o[a.priority] || 1) - (o[b.priority] || 1);
+      }
+      if (sort === "due") return (a.dueDate || "9999") > (b.dueDate || "9999") ? 1 : -1;
+      return 0;
+    });
+  }, [snags, filterStatus, filterPriority, filterProject, filterCategory, filterAssigned, search, sort]);
 
   const stats = {
     open: snags.filter(s=>s.status==="open").length,
@@ -304,7 +328,15 @@ export default function SnagRegister() {
     const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download=`snag_register_${today()}.csv`; a.click();
   };
 
-  const clearFilters = () => { setFilterStatus(""); setFilterPriority(""); setFilterProject(""); setFilterCategory(""); setFilterAssigned(""); setSearch(""); };
+  const clearFilters = () => {
+    setFilterStatus("");
+    setFilterPriority("");
+    setFilterProject("");
+    setFilterCategory("");
+    setFilterAssigned("");
+    setSearch("");
+    listPg.reset();
+  };
   const hasFilters = filterStatus||filterPriority||filterProject||filterCategory||filterAssigned||search;
 
   return (
@@ -399,9 +431,10 @@ export default function SnagRegister() {
       </div>
 
       {/* count */}
-      {snags.length>0 && (
-        <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:12 }}>
+      {snags.length > 0 && (
+        <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 12 }}>
           Showing {filtered.length} of {snags.length} items
+          {listPg.hasMore(filtered) ? ` · displaying ${Math.min(listPg.cap, filtered.length)}` : ""}
         </div>
       )}
 
@@ -419,9 +452,12 @@ export default function SnagRegister() {
       )}
 
       {/* list */}
-      {filtered.map(s=>(
-        <SnagCard key={s.id} snag={s} workers={workers}
-          onEdit={(s)=>setModal({type:"form",data:s})}
+      {listPg.visible(filtered).map((s) => (
+        <SnagCard
+          key={s.id}
+          snag={s}
+          workers={workers}
+          onEdit={(sn) => setModal({ type: "form", data: sn })}
           onDelete={deleteSnag}
           onStatusChange={statusChange}
           bulkMode={bulkMode}
@@ -430,6 +466,13 @@ export default function SnagRegister() {
           canDelete={caps.deleteRecords}
         />
       ))}
+      {listPg.hasMore(filtered) ? (
+        <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+          <button type="button" style={ss.btn} onClick={listPg.showMore}>
+            Show more ({listPg.remaining(filtered)} remaining)
+          </button>
+        </div>
+      ) : null}
 
       <div style={{ marginTop:20, padding:"12px 14px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.6 }}>
         Auto-numbered references (SN-001, SN-002…). Add photos directly from phone camera. Export full register to CSV. Data isolated per organisation.

@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { safeHttpUrl } from "../utils/safeUrl";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
@@ -192,7 +193,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
 function SubstanceCard({ item, onEdit, onDelete }) {
   const rl = RISK_LEVELS[item.riskLevel] || RISK_LEVELS.medium;
   return (
-    <div style={{ ...ss.card, marginBottom:8 }}>
+    <div style={{ ...ss.card, marginBottom: 8, contentVisibility: "auto", containIntrinsicSize: "0 120px" }}>
       <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
         {/* hazard icon block */}
         <div style={{ width:48, height:48, borderRadius:8, background:rl.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -268,8 +269,13 @@ export default function COSHHRegister() {
   const [filterProject, setFilterProject] = useState("");
   const [filterHazard, setFilterHazard] = useState("");
   const [search, setSearch] = useState("");
+  const listPg = useRegisterListPaging(50);
 
   useEffect(()=>{ save("coshh_items",items); },[items]);
+
+  useEffect(() => {
+    listPg.reset();
+  }, [filterRisk, filterProject, filterHazard, search]);
 
   const saveItem = (item) => {
     setItems(prev => prev.find(i=>i.id===item.id) ? prev.map(i=>i.id===item.id?item:i) : [item,...prev]);
@@ -277,13 +283,17 @@ export default function COSHHRegister() {
   };
   const deleteItem = (id) => { if(confirm("Remove this substance?")) setItems(prev=>prev.filter(i=>i.id!==id)); };
 
-  const filtered = items.filter(i=>{
-    if (filterRisk && i.riskLevel!==filterRisk) return false;
-    if (filterProject && i.projectId!==filterProject) return false;
-    if (filterHazard && !i.hazardTypes?.includes(filterHazard)) return false;
-    if (search && !i.name.toLowerCase().includes(search.toLowerCase()) && !i.manufacturer?.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      items.filter((i) => {
+        if (filterRisk && i.riskLevel !== filterRisk) return false;
+        if (filterProject && i.projectId !== filterProject) return false;
+        if (filterHazard && !i.hazardTypes?.includes(filterHazard)) return false;
+        if (search && !i.name.toLowerCase().includes(search.toLowerCase()) && !i.manufacturer?.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      }),
+    [items, filterRisk, filterProject, filterHazard, search]
+  );
 
   const stats = {
     high: items.filter(i=>i.riskLevel==="high").length,
@@ -347,7 +357,7 @@ export default function COSHHRegister() {
             {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         )}
-        {(filterRisk||filterProject||filterHazard||search) && <button onClick={()=>{setFilterRisk("");setFilterProject("");setFilterHazard("");setSearch("");}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
+        {(filterRisk||filterProject||filterHazard||search) && <button onClick={()=>{setFilterRisk("");setFilterProject("");setFilterHazard("");setSearch("");listPg.reset();}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
       </div>
 
       {items.length===0 ? (
@@ -358,7 +368,23 @@ export default function COSHHRegister() {
       ) : filtered.length===0 ? (
         <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, color:"var(--color-text-secondary)", fontSize:13 }}>No items match your filters.</div>
       ) : (
-        filtered.map(i=><SubstanceCard key={i.id} item={i} onEdit={i=>setModal({type:"form",data:i})} onDelete={deleteItem} />)
+        <>
+          {listPg.hasMore(filtered) ? (
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} substances
+            </div>
+          ) : null}
+          {listPg.visible(filtered).map((i) => (
+            <SubstanceCard key={i.id} item={i} onEdit={(x) => setModal({ type: "form", data: x })} onDelete={deleteItem} />
+          ))}
+          {listPg.hasMore(filtered) ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+              <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                Show more ({listPg.remaining(filtered)} remaining)
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
 
       <div style={{ marginTop:20, padding:"12px 14px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.6 }}>

@@ -1,12 +1,9 @@
 import { Link } from "react-router-dom";
-import packageJson from "../../package.json";
 import PageHero from "./PageHero";
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
+import { getDisplayAppVersion } from "../utils/appBuildInfo";
 
-const DISPLAY_APP_VERSION =
-  typeof import.meta.env.VITE_APP_VERSION === "string" && import.meta.env.VITE_APP_VERSION.trim()
-    ? import.meta.env.VITE_APP_VERSION.trim()
-    : packageJson.version;
+const DISPLAY_APP_VERSION = getDisplayAppVersion();
 
 const ss = {
   card: {
@@ -395,6 +392,17 @@ export default function HelpAbout() {
             </ul>
           </div>
         ))}
+      </div>
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
+          Production hardening (Vercel)
+        </h2>
+        <p style={ss.p}>
+          Deployed builds can use a <strong>Content-Security-Policy</strong> and short HTML cache (see <code style={{ fontSize: 12 }}>vercel.json</code>
+          ). Anthropic calls can go through <code style={{ fontSize: 12 }}>/api/anthropic-messages</code> with <code style={{ fontSize: 12 }}>ANTHROPIC_API_KEY</code> on the server — set{" "}
+          <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_PROXY_URL</code> in the client env. Optional <code style={{ fontSize: 12 }}>VITE_WEB_VITALS_URL</code> (default{" "}
+          <code style={{ fontSize: 12 }}>/api/web-vitals</code>) posts Core Web Vitals for server logs. Details: <code style={{ fontSize: 12 }}>.env.example</code>.
+        </p>
       </div>
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>

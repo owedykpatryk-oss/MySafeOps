@@ -24,6 +24,10 @@ function scheduleDeferredInit() {
 }
 scheduleDeferredInit();
 
+import("./utils/reportWebVitals.js")
+  .then((m) => m.reportWebVitals())
+  .catch(() => {});
+
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <AppProvider>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { anthropicMessages, getAnthropicKey } from "../utils/anthropicClient";
+import { anthropicMessages, isAnthropicConfigured } from "../utils/anthropicClient";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
@@ -69,7 +69,7 @@ export default function AIRamsGenerator() {
     }
   };
 
-  const hasKey = !!getAnthropicKey();
+  const hasKey = isAnthropicConfigured();
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
@@ -78,8 +78,9 @@ export default function AIRamsGenerator() {
         title="AI RAMS generator"
         lead={
           <>
-            Uses Anthropic Claude (browser key — dev only). Set <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_API_KEY</code> in <code style={{ fontSize: 12 }}>.env</code> and restart{" "}
-            <code style={{ fontSize: 12 }}>npm run dev</code>.
+            Uses Anthropic Claude. Local dev: <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_API_KEY</code> in <code style={{ fontSize: 12 }}>.env</code>. Production:{" "}
+            <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_PROXY_URL=/api/anthropic-messages</code> plus server{" "}
+            <code style={{ fontSize: 12 }}>ANTHROPIC_API_KEY</code> on Vercel.
           </>
         }
       />

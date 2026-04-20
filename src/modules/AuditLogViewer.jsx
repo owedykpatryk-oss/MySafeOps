@@ -5,13 +5,18 @@ import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 
 const ss = ms;
+const AUDIT_PAGE = 120;
 
 export default function AuditLogViewer() {
   const { caps } = useApp();
   const [, bump] = useState(0);
   const rows = useMemo(() => readAudit(), [bump]);
+  const [visible, setVisible] = useState(AUDIT_PAGE);
 
-  const refresh = () => bump((x) => x + 1);
+  const refresh = () => {
+    setVisible(AUDIT_PAGE);
+    bump((x) => x + 1);
+  };
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
@@ -46,13 +51,15 @@ export default function AuditLogViewer() {
           <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>No entries yet.</div>
         ) : (
           <div style={{ maxHeight: 480, overflow: "auto" }}>
-            {rows.map((r) => (
+            {rows.slice(0, visible).map((r) => (
               <div
                 key={r.id}
                 style={{
                   padding: "10px 0",
                   borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
                   fontSize: 13,
+                  contentVisibility: "auto",
+                  containIntrinsicSize: "0 52px",
                 }}
               >
                 <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{new Date(r.at).toLocaleString("en-GB")}</div>
@@ -63,6 +70,13 @@ export default function AuditLogViewer() {
                 </div>
               </div>
             ))}
+            {visible < rows.length ? (
+              <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+                <button type="button" style={ss.btn} onClick={() => setVisible((v) => v + AUDIT_PAGE)}>
+                  Show more ({rows.length - visible} remaining)
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

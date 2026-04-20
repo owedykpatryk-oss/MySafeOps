@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
@@ -497,10 +498,15 @@ export default function IncidentNearMiss() {
   const [projects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
   const [filter, setFilter] = useState("all");
+  const listPg = useRegisterListPaging(50);
 
   useEffect(() => {
     save(INCIDENTS_KEY, items);
   }, [items]);
+
+  useEffect(() => {
+    listPg.reset();
+  }, [filter]);
 
   const filtered = useMemo(() => {
     if (filter === "all") return items;
@@ -647,8 +653,13 @@ export default function IncidentNearMiss() {
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No records match this filter.</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {filtered.map((r) => (
-            <div key={r.id} style={ss.card}>
+          {listPg.hasMore(filtered) ? (
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} records
+            </div>
+          ) : null}
+          {listPg.visible(filtered).map((r) => (
+            <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 120px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{labelType(r.type)}</strong>
@@ -719,6 +730,13 @@ export default function IncidentNearMiss() {
               </div>
             </div>
           ))}
+          {listPg.hasMore(filtered) ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+              <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                Show more ({listPg.remaining(filtered)} remaining)
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

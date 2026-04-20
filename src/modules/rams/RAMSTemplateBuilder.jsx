@@ -19,6 +19,7 @@ import { ms } from "../../utils/moduleStyles";
 import { safeHttpUrl } from "../../utils/safeUrl";
 import PageHero from "../../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
@@ -4159,6 +4160,7 @@ function SavedList({
   const projectMap = Object.fromEntries(projects.map(p=>[p.id,p.name]));
   const [q, setQ] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const listPg = useRegisterListPaging(50);
   const favoriteCount = useMemo(() => ramsDocs.filter((d) => !!d.isFavorite).length, [ramsDocs]);
   const importRef = useRef(null);
 
@@ -4204,6 +4206,10 @@ function SavedList({
       );
     });
   }, [sortedByDate, q, projectMap, favoritesOnly]);
+
+  useEffect(() => {
+    listPg.reset();
+  }, [q, favoritesOnly]);
 
   return (
     <div>
@@ -4254,7 +4260,12 @@ function SavedList({
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {filtered.map((doc) => (
+          {listPg.hasMore(filtered) ? (
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} documents
+            </div>
+          ) : null}
+          {listPg.visible(filtered).map((doc) => (
             <div
               key={doc.id}
               className="app-rams-doc-row"
@@ -4268,6 +4279,8 @@ function SavedList({
                   ? "linear-gradient(180deg,#fffdf5 0%, #ffffff 68%)"
                   : "linear-gradient(180deg,var(--color-background-primary,#fff) 0%, #fbfdff 100%)",
                 boxShadow: doc.isFavorite ? "0 4px 16px rgba(245,158,11,0.14)" : "0 2px 10px rgba(15,23,42,0.06)",
+                contentVisibility: "auto",
+                containIntrinsicSize: "0 100px",
               }}
             >
               <div style={{ flex:1, minWidth:0 }}>
@@ -4341,6 +4354,13 @@ function SavedList({
               </div>
             </div>
           ))}
+          {listPg.hasMore(filtered) ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+              <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                Show more ({listPg.remaining(filtered)} remaining)
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

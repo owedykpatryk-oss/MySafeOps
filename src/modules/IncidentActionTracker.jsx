@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { pushRecycleBinItem } from "../utils/recycleBin";
@@ -152,10 +153,15 @@ export default function IncidentActionTracker() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("");
+  const listPg = useRegisterListPaging(50);
 
   useEffect(() => {
     save(ACTIONS_KEY, items);
   }, [items]);
+
+  useEffect(() => {
+    listPg.reset();
+  }, [search, statusFilter, ownerFilter]);
 
   const owners = useMemo(() => Array.from(new Set(items.map((x) => String(x.owner || "").trim()).filter(Boolean))).sort(), [items]);
 
@@ -432,11 +438,17 @@ export default function IncidentActionTracker() {
           {filtered.length === 0 ? (
             <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No actions found.</div>
           ) : (
-            filtered.map((row) => {
+            <>
+              {listPg.hasMore(filtered) ? (
+                <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} actions
+                </div>
+              ) : null}
+              {listPg.visible(filtered).map((row) => {
               const d = daysToDue(row.dueDate);
               const dueTone = row.status === "closed" ? "#64748b" : d == null ? "#64748b" : d < 0 ? "#b91c1c" : d <= 7 ? "#92400e" : "#1d4ed8";
               return (
-                <div key={row.id} className="app-surface-card" style={{ ...ss.card, padding: 10 }}>
+                <div key={row.id} className="app-surface-card" style={{ ...ss.card, padding: 10, contentVisibility: "auto", containIntrinsicSize: "0 96px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600 }}>{row.title || "Untitled action"}</div>
@@ -473,7 +485,15 @@ export default function IncidentActionTracker() {
                   </div>
                 </div>
               );
-            })
+            })}
+              {listPg.hasMore(filtered) ? (
+                <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+                  <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                    Show more ({listPg.remaining(filtered)} remaining)
+                  </button>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </div>

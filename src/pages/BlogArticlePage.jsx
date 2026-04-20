@@ -19,6 +19,12 @@ import "../styles/landing.css";
 
 const SUPPORT_EMAIL = "mysafeops@gmail.com";
 
+/** Blog HTML is trusted only after markdown parse; strip active content and embedded documents. */
+const BLOG_HTML_SANITIZE = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ["form", "iframe", "object", "embed", "base", "link", "meta", "style", "input", "textarea", "button", "select"],
+};
+
 /** @param {string | undefined} isoDate `YYYY-MM-DD` */
 function toOgArticleTime(isoDate) {
   if (!isoDate) return undefined;
@@ -98,7 +104,7 @@ export default function BlogArticlePage() {
     }
     try {
       const { html: rawHtml, toc: headings } = parseBlogPostHtml(raw);
-      const safe = DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } });
+      const safe = DOMPurify.sanitize(rawHtml, BLOG_HTML_SANITIZE);
       const withLinks = addExternalLinkAttributes(safe);
       const withLazyImages = addLazyLoadingToBlogImages(withLinks);
       return { html: withLazyImages, toc: headings, loadError: null };

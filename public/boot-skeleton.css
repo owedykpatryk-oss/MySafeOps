@@ -1,0 +1,23 @@
+/* Critical path before JS — keep tiny; main fonts live in index.css after load. */
+.boot-skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #f8fafc;
+  font-family: system-ui, sans-serif;
+  color: #94a3b8;
+}
+.boot-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #0d9488;
+  border-radius: 50%;
+  animation: boot-skeleton-spin 0.7s linear infinite;
+}
+@keyframes boot-skeleton-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

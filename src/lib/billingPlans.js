@@ -1,5 +1,19 @@
 import { getBillingEntitlements } from "../utils/orgMembership";
 
+/** Effectively unlimited limits for the platform owner account (mysafeops@gmail.com) — client-side UX only. */
+export const PLATFORM_OWNER_PLAN = {
+  id: "platform_owner",
+  name: "Platform owner",
+  priceLabel: "—",
+  interval: "—",
+  limits: {
+    workers: 10_000_000,
+    projects: 10_000_000,
+    cloudBytes: Number.MAX_SAFE_INTEGER,
+  },
+  includes: ["Unlimited workers, projects and storage estimate for this login only"],
+};
+
 export const BILLING_PLANS = {
   trial: {
     id: "trial",
@@ -60,7 +74,11 @@ export function getEffectivePlanId(trialStatus, billing) {
   return "starter";
 }
 
-export function getEffectivePlan(trialStatus, billing) {
+/**
+ * @param {{ isPlatformOwner?: boolean }} [options] When true (mysafeops@gmail.com), billing UI uses unlimited limits.
+ */
+export function getEffectivePlan(trialStatus, billing, options) {
+  if (options?.isPlatformOwner) return PLATFORM_OWNER_PLAN;
   return BILLING_PLANS[getEffectivePlanId(trialStatus, billing)];
 }
 

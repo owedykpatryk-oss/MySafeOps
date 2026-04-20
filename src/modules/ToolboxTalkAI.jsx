@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { anthropicMessages, getAnthropicKey } from "../utils/anthropicClient";
+import { anthropicMessages, isAnthropicConfigured } from "../utils/anthropicClient";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
@@ -42,7 +42,7 @@ export default function ToolboxTalkAI() {
       />
       <div style={ss.card}>
         <textarea style={ss.ta} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Working near forklift routes, manual handling of panels…" />
-        <button type="button" style={{ ...ss.btnP, marginTop: 10 }} disabled={loading || !getAnthropicKey()} onClick={run}>
+        <button type="button" style={{ ...ss.btnP, marginTop: 10 }} disabled={loading || !isAnthropicConfigured()} onClick={run}>
           {loading ? "…" : "Generate talk"}
         </button>
       </div>

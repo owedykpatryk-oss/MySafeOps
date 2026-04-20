@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
+import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
+import { isSuperAdminEmail } from "../utils/superAdmin";
 import { getSupabaseUrl, isSupabaseConfigured, supabase } from "../lib/supabase";
 import { BILLING_PLANS, formatBytes, getEffectivePlan } from "../lib/billingPlans";
 import { trackBillingError, trackBillingEvent } from "../lib/billingTelemetry";
@@ -63,8 +65,10 @@ function formatDateTime(value) {
 
 export default function BillingLimits({ checkoutReturn = null }) {
   const { orgId, trialStatus, billing, role } = useApp();
+  const { user } = useSupabaseAuth();
   const { pushToast } = useToast();
-  const plan = getEffectivePlan(trialStatus, billing);
+  const isPlatformOwner = isSuperAdminEmail(user?.email);
+  const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner });
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
@@ -341,6 +345,15 @@ export default function BillingLimits({ checkoutReturn = null }) {
         title="Billing & limits"
         lead="Transparent plan, usage, and limits per organisation. Subscribe with Stripe when you are ready."
       />
+
+      {isPlatformOwner && (
+        <div style={{ marginBottom: 12 }}>
+          <InlineAlert
+            type="info"
+            text="You are signed in as the platform owner. Usage limits in this app are shown as unlimited for your workspace (billing with Stripe still follows your organisation if you subscribe)."
+          />
+        </div>
+      )}
 
       {actionError && (
         <div style={{ marginBottom: 12 }}>
