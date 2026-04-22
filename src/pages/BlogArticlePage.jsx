@@ -16,8 +16,9 @@ import {
   parseBlogPostHtml,
 } from "../utils/blogMarkdownRender";
 import "../styles/landing.css";
+import { getSupportEmail } from "../config/supportContact";
 
-const SUPPORT_EMAIL = "mysafeops@gmail.com";
+const SUPPORT_EMAIL = getSupportEmail();
 
 /** Blog HTML is trusted only after markdown parse; strip active content and embedded documents. */
 const BLOG_HTML_SANITIZE = {

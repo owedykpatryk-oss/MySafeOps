@@ -7,8 +7,9 @@ import { trackBlogIndexView } from "../utils/analytics";
 import { getPublicSiteOrigin } from "../utils/blogPublicUrl";
 import { useBlogDocumentMeta } from "../utils/blogPageMeta";
 import "../styles/landing.css";
+import { getSupportEmail } from "../config/supportContact";
 
-const SUPPORT_EMAIL = "mysafeops@gmail.com";
+const SUPPORT_EMAIL = getSupportEmail();
 const TITLE = "Blog — UK construction safety guides | MySafeOps";
 const DESCRIPTION =
   "Practical UK construction safety guides for site managers and H&S leads: permits, inductions, toolbox talks, COSHH, and compliance updates.";

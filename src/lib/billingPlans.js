@@ -1,6 +1,6 @@
 import { getBillingEntitlements } from "../utils/orgMembership";
 
-/** Effectively unlimited limits for the platform owner account (mysafeops@gmail.com) — client-side UX only. */
+/** Effectively unlimited limits for the platform owner login — client-side UX only (`VITE_PLATFORM_OWNER_EMAIL`). */
 export const PLATFORM_OWNER_PLAN = {
   id: "platform_owner",
   name: "Platform owner",
@@ -75,7 +75,7 @@ export function getEffectivePlanId(trialStatus, billing) {
 }
 
 /**
- * @param {{ isPlatformOwner?: boolean }} [options] When true (mysafeops@gmail.com), billing UI uses unlimited limits.
+ * @param {{ isPlatformOwner?: boolean }} [options] When true (platform owner email), billing UI uses unlimited limits.
  */
 export function getEffectivePlan(trialStatus, billing, options) {
   if (options?.isPlatformOwner) return PLATFORM_OWNER_PLAN;

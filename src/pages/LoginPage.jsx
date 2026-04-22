@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
@@ -13,12 +13,19 @@ import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
 import { getPasswordStrengthMeta } from "../utils/passwordStrength";
 import { getInboxUrl } from "../utils/emailInbox";
+import { MIN_PASSWORD_LENGTH_SIGNUP } from "../config/authPolicy";
+import { getSupportEmail } from "../config/supportContact";
+import { getRequiresMfaStep } from "../lib/mfaAal";
+import { showAdminLoginHints } from "../lib/showAdminLoginHints";
+import { safeInternalPath } from "../utils/safeUrl";
+import MfaLoginChallenge from "../components/MfaLoginChallenge";
 
 const ss = ms;
 const teal = "#0d9488";
 const navy = "#0f172a";
-const SUPPORT_EMAIL = "mysafeops@gmail.com";
-const MIN_PASSWORD_LENGTH = 6;
+const SUPPORT_EMAIL = getSupportEmail();
+const SHOW_ADMIN_LOGIN_HINTS = showAdminLoginHints();
+const MIN_PASSWORD_LENGTH = MIN_PASSWORD_LENGTH_SIGNUP;
 const RESEND_COOLDOWN_SECONDS = 45;
 const LAST_AUTH_EMAIL_KEY = "mysafeops_last_auth_email";
 
@@ -62,12 +69,13 @@ export default function LoginPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [acceptLegalTerms, setAcceptLegalTerms] = useState(false);
   const [, setTick] = useState(0);
   const inviteToken = searchParams.get("invite") || "";
   const inviteEmail = (searchParams.get("email") || "").trim().toLowerCase();
   const oauthError = searchParams.get("error_description") || searchParams.get("error") || "";
-  const nextPath = searchParams.get("next") || "/app";
-  const safeNextPath = nextPath.startsWith("/") ? nextPath : "/app";
+  const nextParam = searchParams.get("next") || "/app";
+  const safeNextPath = useMemo(() => safeInternalPath(nextParam, "/app"), [nextParam]);
   const normalizedEmail = email.trim().toLowerCase();
   const lockout = getAuthLockoutState(normalizedEmail, Date.now());
   const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
@@ -118,9 +126,51 @@ export default function LoginPage() {
     return () => window.clearInterval(id);
   }, [resendCooldown]);
 
-  if (cloud && ready && user) {
-    return <Navigate to={safeNextPath} replace />;
-  }
+  const [aalState, setAalState] = useState("idle");
+  const mfaGateActiveRef = useRef(false);
+
+  useEffect(() => {
+    if (!user || !ready || !client) {
+      if (!user) {
+        mfaGateActiveRef.current = false;
+        setAalState("idle");
+      }
+      return;
+    }
+    if (mfaGateActiveRef.current) return;
+    let cancelled = false;
+    setAalState("unknown");
+    (async () => {
+      const { needsMfa, error } = await getRequiresMfaStep(client);
+      if (cancelled) return;
+      if (error) {
+        setMsg((m) => (m ? m : `Sign-in check: ${error}`));
+        setAalState("form_error");
+        return;
+      }
+      if (needsMfa) {
+        mfaGateActiveRef.current = true;
+        setAalState("mfa");
+        return;
+      }
+      try {
+        await ensureUserOrgContext(client);
+        const ue = (user.email || "").trim();
+        if (ue) {
+          trackAuthEvent("sign_in_success", { email: ue.toLowerCase() });
+          rememberAuthEmail(ue);
+        }
+        setPassword("");
+        navigate(safeNextPath, { replace: true });
+      } catch (e) {
+        setMsg(e?.message || "Could not prepare workspace");
+        setAalState("form_error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, ready, client, safeNextPath, navigate]);
 
   const signIn = async () => {
     if (!client) return;
@@ -144,11 +194,8 @@ export default function LoginPage() {
       if (error) throw error;
       pushAudit({ action: "supabase_sign_in", entity: "auth", detail: email.trim() });
       clearAuthFailures(normalizedEmail);
-      await ensureUserOrgContext(client);
-      trackAuthEvent("sign_in_success", { email: normalizedEmail });
       rememberAuthEmail(email.trim());
       setPassword("");
-      navigate(safeNextPath, { replace: true });
     } catch (e) {
       const rawMessage = String(e?.message || "");
       const unconfirmed =
@@ -206,6 +253,10 @@ export default function LoginPage() {
       setMsg("Enter your email address first.");
       return;
     }
+    if (!acceptLegalTerms) {
+      setMsg("Please confirm you have read the terms of service and privacy policy.");
+      return;
+    }
     if (password.length < MIN_PASSWORD_LENGTH) {
       setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
@@ -225,10 +276,9 @@ export default function LoginPage() {
       trackAuthEvent("sign_up_success", { email: normalizedEmail });
       // If email confirmation is disabled in Supabase, a session may be returned immediately.
       if (data?.session) {
-        setMsg("Account created and signed in.");
+        setMsg("Account created. Finishing sign-in…");
         rememberAuthEmail(email.trim());
         setPassword("");
-        navigate(safeNextPath, { replace: true });
         return;
       }
       setPendingConfirmationEmail(normalizedEmail);
@@ -304,11 +354,176 @@ export default function LoginPage() {
 
   if (cloud && (!ready || loading)) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "DM Sans, sans-serif" }}>
-        <div className="app-route-spinner" aria-hidden />
-        <span style={{ marginLeft: 12, color: "var(--color-text-secondary)" }}>Loading…</span>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "DM Sans, sans-serif",
+          padding: "1rem",
+          background: "var(--color-background-tertiary, #f8fafc)",
+        }}
+      >
+        <div className="app-view-fallback" role="status" aria-live="polite" aria-busy="true">
+          <div className="app-route-spinner" aria-hidden />
+          <span className="app-view-fallback-text">Loading…</span>
+        </div>
       </div>
     );
+  }
+
+  if (cloud && ready && user) {
+    if (aalState === "unknown" || aalState === "idle") {
+      return (
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: "DM Sans, system-ui, sans-serif",
+            padding: "1rem",
+            background:
+              "radial-gradient(130% 70% at 50% -8%, rgba(20,184,166,0.16), transparent 55%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%)",
+          }}
+        >
+          <div className="app-view-fallback" style={{ textAlign: "center" }} role="status" aria-live="polite" aria-busy="true">
+            <div className="app-route-spinner" aria-hidden />
+            <span className="app-view-fallback-text">Checking your session…</span>
+          </div>
+        </div>
+      );
+    }
+    if (aalState === "mfa" && client) {
+      return (
+        <div
+          style={{
+            minHeight: "100vh",
+            fontFamily: "DM Sans, system-ui, sans-serif",
+            padding: "1.5rem 1rem 2rem",
+            background:
+              "radial-gradient(130% 70% at 50% -8%, rgba(20,184,166,0.16), transparent 55%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%)",
+          }}
+        >
+          <div style={{ maxWidth: 420, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <span style={{ fontWeight: 700, fontSize: 20, color: navy, display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 44, height: 44, borderRadius: 10, background: teal, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                  <ShieldCheck size={26} strokeWidth={2} aria-hidden />
+                </span>
+                MySafeOps
+              </span>
+            </div>
+            <div
+              style={{
+                ...ss.card,
+                border: "1px solid rgba(203,213,225,0.8)",
+                boxShadow: "0 12px 34px rgba(15,23,42,0.09)",
+                backdropFilter: "blur(3px)",
+              }}
+            >
+              <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>Verify it&apos;s you</h1>
+              <MfaLoginChallenge
+                client={client}
+                setBusy={setBusy}
+                onSuccess={async () => {
+                  mfaGateActiveRef.current = false;
+                  const em = (user?.email || email || "").trim();
+                  if (!em) return;
+                  try {
+                    await ensureUserOrgContext(client);
+                    trackAuthEvent("sign_in_success", { email: em.toLowerCase() });
+                    clearAuthFailures(em.toLowerCase());
+                    rememberAuthEmail(em);
+                    setPassword("");
+                    navigate(safeNextPath, { replace: true });
+                  } catch (e) {
+                    setMsg(e?.message || "Could not prepare workspace");
+                    setAalState("form_error");
+                  }
+                }}
+                supportEmail={SUPPORT_EMAIL}
+              />
+            </div>
+            <p style={{ textAlign: "center", marginTop: 20, fontSize: 13 }}>
+              <Link to="/" style={{ color: teal, fontWeight: 500 }}>
+                ← Back to home
+              </Link>
+            </p>
+          </div>
+        </div>
+      );
+    }
+    if (aalState === "form_error" && client) {
+      return (
+        <div
+          style={{
+            minHeight: "100vh",
+            fontFamily: "DM Sans, system-ui, sans-serif",
+            padding: "1.5rem 1rem 2rem",
+            background:
+              "radial-gradient(130% 70% at 50% -8%, rgba(20,184,166,0.16), transparent 55%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%)",
+          }}
+        >
+          <div style={{ maxWidth: 420, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <span style={{ fontWeight: 700, fontSize: 20, color: navy, display: "inline-flex", alignItems: "center", gap: 10 }}>
+                <span
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 10,
+                    background: teal,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                  }}
+                >
+                  <ShieldCheck size={26} strokeWidth={2} aria-hidden />
+                </span>
+                MySafeOps
+              </span>
+            </div>
+            <div
+              className="app-surface-card"
+              style={{
+                ...ss.card,
+                border: "1px solid rgba(203,213,225,0.8)",
+                boxShadow: "0 12px 34px rgba(15,23,42,0.09)",
+                backdropFilter: "blur(3px)",
+              }}
+            >
+              <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>Session check</h1>
+              {msg ? (
+                <p id="login-session-check-msg" role="alert" style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+                  {msg}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                style={{ ...ss.btn, marginTop: 12, width: "100%" }}
+                onClick={async () => {
+                  mfaGateActiveRef.current = false;
+                  setAalState("idle");
+                  await client.auth.signOut();
+                }}
+              >
+                Start over
+              </button>
+            </div>
+            <p style={{ textAlign: "center", marginTop: 20, fontSize: 13 }}>
+              <Link to="/" style={{ color: teal, fontWeight: 500 }}>
+                ← Back to home
+              </Link>
+            </p>
+          </div>
+        </div>
+      );
+    }
   }
 
   return (
@@ -332,6 +547,7 @@ export default function LoginPage() {
         </div>
 
         <div
+          data-login-next={safeNextPath}
           style={{
             ...ss.card,
             border: "1px solid rgba(203,213,225,0.8)",
@@ -355,16 +571,18 @@ export default function LoginPage() {
             }}
           >
             <Sparkles size={13} aria-hidden />
-            Secure workspace access
+            Site safety workspace
           </div>
-          <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>Workspace access</h1>
+          <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>Welcome back to MySafeOps</h1>
           {cloud ? (
             <>
               <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 16px", lineHeight: 1.55 }}>
-                Sign in with your Supabase account to use cloud backup (Backup module). Your organisation data still lives in this browser unless you upload a
-                backup.
+                Sign in to manage your site safety. Use your work email and password (or Google, if your organisation enabled it). Cloud backup is available from
+                Backup after you sign in.
               </p>
-              <label style={ss.lbl}>Email</label>
+              <label htmlFor="login-email" style={ss.lbl}>
+                Email
+              </label>
               <div
                 style={{
                   ...ss.inp,
@@ -377,6 +595,7 @@ export default function LoginPage() {
               >
                 <Mail size={15} color="#64748b" aria-hidden />
                 <input
+                  id="login-email"
                   ref={emailInputRef}
                   type="email"
                   autoComplete="email"
@@ -399,7 +618,9 @@ export default function LoginPage() {
                   Invite detected{inviteEmail ? ` for ${inviteEmail}` : ""}. Sign in or create account with this email to join your organisation.
                 </p>
               )}
-              <label style={{ ...ss.lbl, marginTop: 10 }}>Password</label>
+              <label htmlFor="login-password" style={{ ...ss.lbl, marginTop: 10 }}>
+                Password
+              </label>
               <div
                 style={{
                   ...ss.inp,
@@ -412,6 +633,7 @@ export default function LoginPage() {
               >
                 <LockKeyhole size={15} color="#64748b" aria-hidden />
                 <input
+                  id="login-password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   value={password}
@@ -445,7 +667,7 @@ export default function LoginPage() {
                   type="checkbox"
                   checked={showPassword}
                   onChange={(e) => setShowPassword(e.target.checked)}
-                  aria-label="Show password"
+                  aria-label="Toggle password visibility"
                 />
                 Show password
               </label>
@@ -476,11 +698,43 @@ export default function LoginPage() {
                   </div>
                 </div>
               )}
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 10,
+                  marginTop: 14,
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  color: "var(--color-text-secondary)",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={acceptLegalTerms}
+                  onChange={(e) => setAcceptLegalTerms(e.target.checked)}
+                  style={{ marginTop: 2 }}
+                  aria-label="I agree to the Terms of service and Privacy policy"
+                  aria-describedby="login-legal-hint"
+                />
+                <span id="login-legal-hint">
+                  I have read and agree to the{" "}
+                  <Link to="/terms" style={{ color: teal, fontWeight: 600 }}>
+                    Terms of service
+                  </Link>{" "}
+                  and{" "}
+                  <Link to="/privacy" style={{ color: teal, fontWeight: 600 }}>
+                    Privacy policy
+                  </Link>
+                  .
+                </span>
+              </label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 14 }}>
                 <button type="button" style={{ ...ss.btnP, width: "100%" }} disabled={busy || lockout.isLocked} onClick={signIn}>
                   Sign in
                 </button>
-                <button type="button" style={{ ...ss.btn, width: "100%" }} disabled={busy} onClick={signUp}>
+                <button type="button" style={{ ...ss.btn, width: "100%" }} disabled={busy || !acceptLegalTerms} onClick={signUp}>
                   Create account
                 </button>
               </div>
@@ -561,12 +815,22 @@ export default function LoginPage() {
                   </svg>
                   Continue with Google
                 </button>
-                <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "8px 0 0", lineHeight: 1.45 }}>
-                  Enable Google under Supabase → Authentication → Providers, and add this site&apos;s URL + <code style={{ fontSize: 10 }}>/login</code> to Redirect URLs.
-                </p>
-                <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "6px 0 0", lineHeight: 1.45 }}>
-                  Password reset links should redirect to <code style={{ fontSize: 10 }}>/reset-password</code>.
-                </p>
+                {SHOW_ADMIN_LOGIN_HINTS && (
+                  <details style={{ marginTop: 10, fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                    <summary style={{ cursor: "pointer", fontWeight: 600, color: navy }}>
+                      Advanced: IT setup (Supabase)
+                    </summary>
+                    <div style={{ marginTop: 8, paddingLeft: 2 }}>
+                      <p style={{ margin: "0 0 8px" }}>
+                        Enable Google under Supabase → Authentication → Providers, and add this site&apos;s origin plus{" "}
+                        <code style={{ fontSize: 10 }}>/login</code> to Redirect URLs.
+                      </p>
+                      <p style={{ margin: 0 }}>
+                        Password reset emails should use redirect URL <code style={{ fontSize: 10 }}>/reset-password</code>.
+                      </p>
+                    </div>
+                  </details>
+                )}
               </div>
               <InlineAlert
                 type={
@@ -588,22 +852,50 @@ export default function LoginPage() {
               </p>
               <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--color-border-tertiary,#e2e8f0)" }}>
                 <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0, lineHeight: 1.5 }}>
-                  Account required. Sign in or create an account to access workspace data and your organisation trial.
+                  You need an account to open your organisation workspace and trial.
                 </p>
               </div>
             </>
           ) : (
             <>
               <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 16px", lineHeight: 1.55 }}>
-                Cloud authentication is not configured. Open the workspace to use MySafeOps with data stored in this browser. Add <code style={{ fontSize: 12 }}>VITE_SUPABASE_URL</code> and{" "}
-                <code style={{ fontSize: 12 }}>VITE_SUPABASE_ANON_KEY</code> in <code style={{ fontSize: 12 }}>.env.local</code> to enable sign-in and backup.
+                Cloud sign-in isn&apos;t set up on this device yet. You can still open the workspace — your data stays in this browser until your team enables cloud
+                backup.
               </p>
+              {SHOW_ADMIN_LOGIN_HINTS && (
+                <details style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 16px", lineHeight: 1.5 }}>
+                  <summary style={{ cursor: "pointer", fontWeight: 600, color: navy }}>Advanced: enable cloud sign-in (.env)</summary>
+                  <p style={{ margin: "8px 0 0" }}>
+                    Add <code style={{ fontSize: 11 }}>VITE_SUPABASE_URL</code> and <code style={{ fontSize: 11 }}>VITE_SUPABASE_ANON_KEY</code> in{" "}
+                    <code style={{ fontSize: 11 }}>.env.local</code> (see project README), then reload.
+                  </p>
+                </details>
+              )}
               <button type="button" style={ss.btnP} onClick={() => navigate("/app", { replace: true })}>
                 Open workspace
               </button>
             </>
           )}
         </div>
+
+        <p
+          style={{
+            textAlign: "center",
+            marginTop: 14,
+            marginBottom: 0,
+            fontSize: 11,
+            color: "var(--color-text-secondary)",
+            lineHeight: 1.45,
+            maxWidth: 420,
+            marginLeft: "auto",
+            marginRight: "auto",
+          }}
+        >
+          MySafeOps uses essential cookies only to keep you signed in. No third-party ads.{" "}
+          <Link to="/cookies" style={{ color: teal, fontWeight: 600 }}>
+            Cookie policy
+          </Link>
+        </p>
 
         <p style={{ textAlign: "center", marginTop: 20, fontSize: 13 }}>
           <Link to="/" style={{ color: teal, fontWeight: 500 }}>

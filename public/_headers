@@ -1,0 +1,15 @@
+# Cloudflare Pages / static hosts that honour this file.
+# Tighten further at the CDN (WAF, HSTS preload) once the apex domain is stable.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  X-Permitted-Cross-Domain-Policies: none
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(self), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), serial=(), bluetooth=(), display-capture=(), interest-cohort=()
+  # Trial CSP (report-only): monitor violations before enforcing. Tighten connect-src to known APIs when ready.
+  Content-Security-Policy-Report-Only: default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' https:; object-src 'none'; img-src 'self' data: blob: https:; font-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https: wss:; frame-src 'self' https:; media-src 'self' https:; worker-src 'self' blob:
+
+# Long cache for fingerprinted assets (Vite build output)
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

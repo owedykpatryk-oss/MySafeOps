@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
@@ -9,13 +9,22 @@ import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
 import { useApp } from "../context/AppContext";
+import { ensureUserOrgContext } from "../utils/orgMembership";
+import { getRequiresMfaStep } from "../lib/mfaAal";
+import { showAdminLoginHints } from "../lib/showAdminLoginHints";
+import MfaLoginChallenge from "./MfaLoginChallenge";
+import { getSupportEmail } from "../config/supportContact";
 import { getPasswordStrengthMeta } from "../utils/passwordStrength";
 import { getInboxUrl } from "../utils/emailInbox";
+import { MIN_PASSWORD_LENGTH_SIGNUP } from "../config/authPolicy";
 
 const ss = ms;
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = MIN_PASSWORD_LENGTH_SIGNUP;
 const RESEND_COOLDOWN_SECONDS = 45;
 const LAST_AUTH_EMAIL_KEY = "mysafeops_last_auth_email";
+const teal = "#0d9488";
+const SUPPORT_EMAIL = getSupportEmail();
+const SHOW_ADMIN_LOGIN_HINTS = showAdminLoginHints();
 
 function mapAuthErrorMessage(error, fallback = "Authentication request failed") {
   const raw = String(error?.message || "").trim();
@@ -36,6 +45,170 @@ function mapAuthErrorMessage(error, fallback = "Authentication request failed") 
 }
 
 /**
+ * TOTP MFA enrollment and status (requires MFA enabled in Supabase project settings).
+ * @param {{ client: import("@supabase/supabase-js").SupabaseClient }} props
+ */
+function CloudTotpMfaPanel({ client }) {
+  const [factors, setFactors] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(null);
+  const [code, setCode] = useState("");
+
+  const loadFactors = useCallback(async () => {
+    const mfaApi = client?.auth?.mfa;
+    if (!mfaApi?.listFactors) return;
+    const { data, error } = await mfaApi.listFactors();
+    if (error) {
+      setFactors([]);
+      return;
+    }
+    setFactors(Array.isArray(data?.all) ? data.all : []);
+  }, [client]);
+
+  useEffect(() => {
+    void loadFactors();
+  }, [loadFactors]);
+
+  const mfa = client?.auth?.mfa;
+  if (!mfa?.enroll || !mfa?.listFactors) {
+    return (
+      <p style={{ fontSize: 12, margin: 0, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+        Multi-factor authentication is not available in this client build.
+      </p>
+    );
+  }
+
+  const verifiedTotp = factors.filter((f) => f?.factor_type === "totp" && f?.status === "verified");
+
+  const startEnroll = async () => {
+    setMsg("");
+    setBusy(true);
+    try {
+      const { data, error } = await mfa.enroll({
+        factorType: "totp",
+        friendlyName: "Authenticator app",
+        issuer: "MySafeOps",
+      });
+      if (error) throw error;
+      const id = data?.id;
+      const qr = data?.totp?.qr_code;
+      const secret = data?.totp?.secret;
+      if (!id || !qr) {
+        setMsg("Could not start authenticator setup. Check that MFA / TOTP is enabled for this project in Supabase.");
+        return;
+      }
+      setPending({ id, qr, secret: secret || "" });
+      setCode("");
+    } catch (e) {
+      setMsg(String(e?.message || "Authenticator setup failed."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmEnroll = async () => {
+    if (!pending?.id) return;
+    const trimmed = code.replace(/\s/g, "");
+    if (trimmed.length < 6) {
+      setMsg("Enter the 6-digit code from your authenticator app.");
+      return;
+    }
+    setMsg("");
+    setBusy(true);
+    try {
+      const ch = await mfa.challenge({ factorId: pending.id });
+      if (ch.error) throw ch.error;
+      const challengeId = ch.data?.id;
+      if (!challengeId) throw new Error("Missing MFA challenge.");
+      const v = await mfa.verify({ factorId: pending.id, challengeId, code: trimmed });
+      if (v.error) throw v.error;
+      setPending(null);
+      setCode("");
+      await loadFactors();
+      setMsg("Authenticator app is now enabled for this account.");
+    } catch (e) {
+      setMsg(String(e?.message || "Could not verify code."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeFactor = async (factorId) => {
+    setMsg("");
+    setBusy(true);
+    try {
+      const { error } = await mfa.unenroll({ factorId });
+      if (error) throw error;
+      await loadFactors();
+      setMsg("Authenticator factor removed.");
+    } catch (e) {
+      setMsg(String(e?.message || "Could not remove factor."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <p style={{ fontSize: 12, margin: "0 0 10px", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+        Add a time-based one-time password (TOTP) as a second step after your password. Enable MFA under Supabase → Authentication → Multi-factor authentication.
+      </p>
+      {verifiedTotp.length > 0 ? (
+        <ul style={{ margin: "0 0 12px", paddingLeft: 18, fontSize: 13 }}>
+          {verifiedTotp.map((f) => (
+            <li key={f.id} style={{ marginBottom: 6 }}>
+              <span style={{ fontWeight: 600 }}>{f.friendly_name || "Authenticator"}</span>{" "}
+              <button type="button" style={{ ...ss.btn, marginLeft: 8, fontSize: 11, padding: "4px 10px" }} disabled={busy} onClick={() => removeFactor(f.id)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p style={{ fontSize: 12, margin: "0 0 10px", color: "var(--color-text-secondary)" }}>No verified authenticator yet.</p>
+      )}
+      {!pending && verifiedTotp.length === 0 && (
+        <button type="button" style={ss.btnP} disabled={busy} onClick={startEnroll}>
+          Set up authenticator app
+        </button>
+      )}
+      {pending && (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ fontSize: 12, margin: "0 0 8px", fontWeight: 600 }}>Scan this QR in your app, then enter the code</p>
+          <img src={pending.qr} alt="Authenticator QR code" style={{ width: 180, height: 180, display: "block", marginBottom: 8 }} />
+          {pending.secret ? (
+            <p style={{ fontSize: 11, wordBreak: "break-all", color: "var(--color-text-secondary)", margin: "0 0 8px" }}>
+              Or enter secret manually: <code>{pending.secret}</code>
+            </p>
+          ) : null}
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="6-digit code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            style={{ ...ss.inp, maxWidth: 200, marginBottom: 8 }}
+          />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <button type="button" style={ss.btnP} disabled={busy} onClick={confirmEnroll}>
+              Verify and enable
+            </button>
+            <button type="button" style={ss.btn} disabled={busy} onClick={() => { setPending(null); setCode(""); setMsg(""); }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {msg ? (
+        <p style={{ fontSize: 12, marginTop: 10, color: msg.toLowerCase().includes("fail") ? "#b91c1c" : "var(--color-text-secondary)" }}>{msg}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * Supabase email/password — enable Email provider in Dashboard → Authentication → Providers.
  */
 export default function CloudAccount() {
@@ -50,8 +223,24 @@ export default function CloudAccount() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [acceptLegalTerms, setAcceptLegalTerms] = useState(false);
+  const [mfaForSession, setMfaForSession] = useState(false);
   const r2Enabled = isR2StorageConfigured();
   const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
+
+  useEffect(() => {
+    if (!user || !client) {
+      setMfaForSession(false);
+      return;
+    }
+    let cancelled = false;
+    getRequiresMfaStep(client).then(({ needsMfa }) => {
+      if (!cancelled) setMfaForSession(Boolean(needsMfa));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, client]);
 
   const rememberAuthEmail = (value) => {
     const v = String(value || "").trim().toLowerCase();
@@ -178,6 +367,10 @@ export default function CloudAccount() {
       setMsg("Enter your email address first.");
       return;
     }
+    if (!acceptLegalTerms) {
+      setMsg("Please confirm you have read the terms of service and privacy policy.");
+      return;
+    }
     if (password.length < MIN_PASSWORD_LENGTH) {
       setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
@@ -253,33 +446,62 @@ export default function CloudAccount() {
     }
   };
 
-  if (user) {
+  if (user && mfaForSession) {
     return (
       <>
         <PageHero
           badgeText="☁"
           title="Cloud account"
+          lead="Your account needs a second step (authenticator) before cloud backup is fully active."
+        />
+        <div style={{ ...ss.card, marginBottom: 24 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Two-step sign-in</div>
+          {client ? (
+            <MfaLoginChallenge
+              client={client}
+              supportEmail={SUPPORT_EMAIL}
+              onSuccess={async () => {
+                setMfaForSession(false);
+                await ensureUserOrgContext(client);
+              }}
+            />
+          ) : null}
+        </div>
+      </>
+    );
+  }
+
+  if (user) {
+    return (
+      <>
+        <PageHero
+          badgeText="☁"
+          title="Your cloud account"
           lead={
             r2Enabled
-              ? "Signed in to Supabase — use Backup for JSON cloud backup/restore. Cloudflare R2 uploads are available in Documents."
-              : "Signed in to Supabase — use Backup for JSON cloud backup/restore."
+              ? "Signed in — use Backup for JSON cloud backup and restore. Document uploads use cloud storage when enabled."
+              : "Signed in — use Backup for JSON cloud backup and restore."
           }
         />
         <div style={{ ...ss.card, marginBottom: 24 }}>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Supabase account (auth & backup)</div>
-        <p style={{ fontSize: 13, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
-          Signed in as <strong>{user.email}</strong>
-        </p>
-        {trialStatus && (
-          <p style={{ fontSize: 12, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
-            Organisation: <strong>{orgId}</strong> · Trial{" "}
-            {trialStatus.isActive ? `active (${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left)` : "ended"}
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Account & cloud backup</div>
+          <p style={{ fontSize: 13, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
+            Signed in as <strong>{user.email}</strong>
           </p>
-        )}
-        <button type="button" style={ss.btn} onClick={signOut} disabled={busy}>
-          Sign out
-        </button>
-      </div>
+          {trialStatus && (
+            <p style={{ fontSize: 12, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
+              Organisation: <strong>{orgId}</strong> · Trial{" "}
+              {trialStatus.isActive ? `active (${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left)` : "ended"}
+            </p>
+          )}
+          <button type="button" style={ss.btn} onClick={signOut} disabled={busy}>
+            Sign out
+          </button>
+        </div>
+        <div style={{ ...ss.card, marginBottom: 24 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Two-step sign-in (TOTP)</div>
+          <CloudTotpMfaPanel client={client} />
+        </div>
       </>
     );
   }
@@ -288,22 +510,31 @@ export default function CloudAccount() {
     <>
       <PageHero
         badgeText="☁"
-        title="Cloud account"
+        title="Your cloud account"
         lead={
           r2Enabled
-            ? "Sign in to use Supabase cloud backup from the Backup screen. Cloudflare R2 uploads are available in Documents."
-            : "Sign in to use cloud backup from the Backup screen. Enable Email and Google in Supabase Authentication."
+            ? "Sign in to turn on cloud backup from the Backup screen. Document uploads can use cloud storage when your organisation has it enabled."
+            : "Sign in to turn on cloud backup from the Backup screen. Your administrator sets up email or Google sign-in for your team."
         }
       />
     <div style={{ ...ss.card, marginBottom: 24 }}>
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>Supabase account (auth & backup)</div>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Account & cloud backup</div>
       <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.5 }}>
-        Sign in to use cloud backup (Backup screen → upload). Enable Email and Google under Authentication → Providers; add redirect URL for <code style={{ fontSize: 11 }}>/login</code>.
+        After you sign in, open Backup to upload or restore a JSON backup to the cloud. Your site data still lives in this workspace unless you back it up.
       </p>
       {r2Enabled && (
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.5 }}>
-          Cloudflare R2 storage is configured for document uploads in Documents.
+          Cloud document storage is enabled for uploads in Documents.
         </p>
+      )}
+      {SHOW_ADMIN_LOGIN_HINTS && (
+        <details style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.45 }}>
+          <summary style={{ cursor: "pointer", fontWeight: 600 }}>Advanced: IT setup (Supabase)</summary>
+          <p style={{ margin: "8px 0 0" }}>
+            In Supabase → Authentication → Providers, enable Email and Google as needed. Add this site&apos;s origin plus <code style={{ fontSize: 10 }}>/login</code>{" "}
+            to Redirect URLs.
+          </p>
+        </details>
       )}
       <label style={ss.lbl}>Email</label>
       <input type="email" autoComplete="email" style={ss.inp} value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -363,11 +594,41 @@ export default function CloudAccount() {
           </div>
         </div>
       )}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          marginTop: 14,
+          fontSize: 12,
+          lineHeight: 1.5,
+          color: "var(--color-text-secondary)",
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={acceptLegalTerms}
+          onChange={(e) => setAcceptLegalTerms(e.target.checked)}
+          style={{ marginTop: 2 }}
+        />
+        <span>
+          I have read and agree to the{" "}
+          <Link to="/terms" style={{ color: teal, fontWeight: 600 }}>
+            Terms of service
+          </Link>{" "}
+          and{" "}
+          <Link to="/privacy" style={{ color: teal, fontWeight: 600 }}>
+            Privacy policy
+          </Link>
+          .
+        </span>
+      </label>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
         <button type="button" style={ss.btnP} disabled={busy} onClick={signIn}>
           Sign in
         </button>
-        <button type="button" style={ss.btn} disabled={busy} onClick={signUp}>
+        <button type="button" style={ss.btn} disabled={busy || !acceptLegalTerms} onClick={signUp}>
           Create account
         </button>
       </div>

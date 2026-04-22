@@ -569,6 +569,9 @@ export default function ProjectDrawingEditor() {
         prev.map((row) => {
           if (row.id !== id) return row;
           let next = { ...row, ...patch, updatedAt: at };
+          if (patch.meta && typeof patch.meta === "object") {
+            next.meta = { ...(row.meta || {}), ...patch.meta };
+          }
           const isMap = next.placement === "map" || row.placement === "map";
           if (gridStep && (patch.x != null || patch.y != null) && !isMap) {
             next.x = snapValue(next.x, gridStep);
@@ -619,6 +622,7 @@ export default function ProjectDrawingEditor() {
         placement: "map",
         geoLat: row.geoLat + 0.00012,
         geoLng: row.geoLng + 0.00012,
+        meta: row.type === "atex_zone" && row.meta ? { ...row.meta } : undefined,
       });
       setRows((prev) => [next, ...prev].slice(0, 1500));
       setSelectedIds([next.id]);
@@ -631,6 +635,7 @@ export default function ProjectDrawingEditor() {
       label: row.label ? `${String(row.label).slice(0, 100)} (copy)` : "",
       x: Math.min(100, (row.x || 0) + 3),
       y: Math.min(100, (row.y || 0) + 3),
+      meta: row.type === "atex_zone" && row.meta ? { ...row.meta } : undefined,
     });
     setRows((prev) => [next, ...prev].slice(0, 1500));
     setSelectedIds([next.id]);
@@ -2261,7 +2266,7 @@ export default function ProjectDrawingEditor() {
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Choose project first.</div>
           ) : objects.length === 0 ? (
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              No objects yet. Add zone, excavation, fire exit, or master point.
+              No objects yet. Add zone, excavation, fire exit, master point, or ATEX / DSEAR zone marker.
             </div>
           ) : filteredList.length === 0 ? (
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>No objects match filter or visibility.</div>
@@ -2392,6 +2397,85 @@ export default function ProjectDrawingEditor() {
                       Remove
                     </button>
                   </div>
+                  {row.type === "atex_zone" ? (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: 10,
+                        borderRadius: 8,
+                        background: "var(--color-background-secondary,#f8fafc)",
+                        border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))",
+                        gap: 8,
+                      }}
+                    >
+                      <div>
+                        <label style={ss.lbl}>Area classification</label>
+                        <select
+                          style={ss.inp}
+                          value={row.meta?.areaClassification || ""}
+                          onChange={(e) => upsertObject(row.id, { meta: { areaClassification: e.target.value } })}
+                        >
+                          <option value="">—</option>
+                          {["zone_0", "zone_1", "zone_2", "zone_20", "zone_21", "zone_22", "safe"].map((z) => (
+                            <option key={z} value={z}>
+                              {z.replace(/_/g, " ")}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={ss.lbl}>Atmosphere</label>
+                        <select
+                          style={ss.inp}
+                          value={row.meta?.atmosphereType || ""}
+                          onChange={(e) => upsertObject(row.id, { meta: { atmosphereType: e.target.value } })}
+                        >
+                          <option value="">—</option>
+                          {["gas", "dust", "mist", "hybrid"].map((z) => (
+                            <option key={z} value={z}>
+                              {z}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={ss.lbl}>Substance / vapour (if applicable)</label>
+                        <input
+                          style={ss.inp}
+                          value={row.meta?.substance || ""}
+                          onChange={(e) => upsertObject(row.id, { meta: { substance: e.target.value } })}
+                        />
+                      </div>
+                      <div>
+                        <label style={ss.lbl}>T class</label>
+                        <input
+                          style={ss.inp}
+                          value={row.meta?.temperatureClass || ""}
+                          onChange={(e) => upsertObject(row.id, { meta: { temperatureClass: e.target.value } })}
+                          placeholder="e.g. T3"
+                        />
+                      </div>
+                      <div>
+                        <label style={ss.lbl}>Equipment group</label>
+                        <input
+                          style={ss.inp}
+                          value={row.meta?.equipmentGroup || ""}
+                          onChange={(e) => upsertObject(row.id, { meta: { equipmentGroup: e.target.value } })}
+                          placeholder="e.g. II A"
+                        />
+                      </div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, gridColumn: "1 / -1" }}>
+                        <input
+                          type="checkbox"
+                          checked={!!row.meta?.permitRequired}
+                          onChange={(e) => upsertObject(row.id, { meta: { permitRequired: e.target.checked } })}
+                        />
+                        Permit required for work in this zone
+                      </label>
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>

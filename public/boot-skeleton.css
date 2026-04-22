@@ -21,3 +21,10 @@
     transform: rotate(360deg);
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .boot-spinner {
+    animation: none;
+    border-top-color: #0d9488;
+    opacity: 0.85;
+  }
+}

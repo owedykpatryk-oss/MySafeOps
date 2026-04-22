@@ -11,6 +11,9 @@ const BlogArticlePage = lazy(() => import("./pages/BlogArticlePage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const AcceptInvitePage = lazy(() => import("./pages/AcceptInvitePage"));
+const LegalPage = lazy(() => import("./pages/LegalPage"));
+const DocsHubPage = lazy(() => import("./pages/DocsHubPage"));
+const StatusPage = lazy(() => import("./pages/StatusPage"));
 const MainAppLayout = lazy(() => import("./layout/MainAppLayout"));
 
 const PublicClientPortalView = lazy(() =>
@@ -70,6 +73,12 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/accept-invite" element={<AcceptInvitePage />} />
+          <Route path="/privacy" element={<LegalPage docKey="privacy" />} />
+          <Route path="/terms" element={<LegalPage docKey="terms" />} />
+          <Route path="/cookies" element={<LegalPage docKey="cookies" />} />
+          <Route path="/dpa" element={<LegalPage docKey="dpa" />} />
+          <Route path="/docs" element={<DocsHubPage />} />
+          <Route path="/status" element={<StatusPage />} />
           <Route
             path="/app"
             element={

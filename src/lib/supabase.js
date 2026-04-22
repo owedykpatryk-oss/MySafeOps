@@ -9,6 +9,15 @@ const FALLBACK_SUPABASE_ANON_KEY =
 const url = (import.meta.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL || "").trim();
 const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_ANON_KEY || "").trim();
 
+if (import.meta.env.PROD) {
+  const missingEnv = !import.meta.env.VITE_SUPABASE_URL?.trim() || !import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+  if (missingEnv && typeof console !== "undefined" && console.warn) {
+    console.warn(
+      "[MySafeOps] Production build is using bundled Supabase fallbacks. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY on the host for a dedicated project and easier key rotation."
+    );
+  }
+}
+
 /** Null until env vars are set (app keeps working on localStorage-only). */
 export const supabase = url && anon
   ? createClient(url, anon, {

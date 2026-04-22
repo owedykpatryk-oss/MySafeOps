@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { getSupportEmail } from "../config/supportContact";
 import { scheduleIdleLoginPrefetch } from "../utils/routePrefetch";
 import "../styles/landing.css";
 import LandingTopSection from "../components/landing/LandingTopSection";
@@ -9,7 +10,7 @@ import LandingContentSections from "../components/landing/LandingContentSections
 import LandingFooter from "../components/landing/LandingFooter";
 import { useLandingHomeDocumentMeta } from "../utils/landingPageMeta";
 
-const SUPPORT_EMAIL = "mysafeops@gmail.com";
+const SUPPORT_EMAIL = getSupportEmail();
 const LANDING_TITLE = "MySafeOps — RAMS, permits & site safety for UK construction";
 const LANDING_DESCRIPTION =
   "RAMS builder, permits to work, inspections, worker competency, and 40+ registers — browser-first for UK construction teams. Optional cloud sign-in and backup.";

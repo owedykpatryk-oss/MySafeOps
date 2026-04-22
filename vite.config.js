@@ -44,6 +44,8 @@ export default defineConfig(({ mode }) => {
             if (id.includes("@supabase")) return "supabase";
             if (id.includes("lucide-react")) return "lucide";
             if (id.includes("react-router")) return "router";
+            if (id.includes("leaflet")) return "leaflet";
+            if (id.includes("html2canvas") || id.includes("jspdf")) return "print-export";
             if (
               id.includes("/react/") ||
               id.includes("\\react\\") ||

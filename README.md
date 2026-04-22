@@ -43,7 +43,7 @@ A minimal **web app manifest** is at [public/manifest.webmanifest](public/manife
 
 ## Configuration
 
-Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project root and fill in any optional values. Never commit `.env.local`. After editing, run **`npm run env:check`** for a read-only checklist (no secret values printed).
+Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project root and fill in any optional values. Never commit `.env.local`. After editing, run **`npm run env:check`** for a read-only checklist (no secret values printed). For **Vercel → Environment Variables** (co skopiować, Production vs Preview, Supabase redirect URLs), use **[DOCS/VERCEL_ENV_CHECKLIST.md](DOCS/VERCEL_ENV_CHECKLIST.md)**.
 
 | Area | Purpose |
 |------|---------|
@@ -79,7 +79,7 @@ Anything prefixed with `VITE_` is **embedded in the browser bundle**. Do not put
 5. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`.
 
 **Optional: automatic invite email (Edge Function)**  
-Deploy `send-org-invite` from [`supabase/functions/send-org-invite/`](supabase/functions/send-org-invite/) (`supabase functions deploy send-org-invite`). Set secrets: `RESEND_API_KEY`, `SITE_URL` (your production origin, no trailing slash), and optionally `INVITE_FROM_EMAIL` (e.g. `MySafeOps <notifications@yourdomain.com>`). Without `RESEND_API_KEY`, the function returns success with `skipped: true` and invites still work via the copied link.
+Deploy `send-org-invite` from [`supabase/functions/send-org-invite/`](supabase/functions/send-org-invite/) (`supabase functions deploy send-org-invite`). Set secrets: `RESEND_API_KEY`, `SITE_URL` (your production origin, no trailing slash), optionally `INVITE_FROM_EMAIL` (e.g. `MySafeOps <notifications@yourdomain.com>`), and optionally `SUPPORT_CONTACT_EMAIL` (shown in invite footer; default `support@mysafeops.com`). Without `RESEND_API_KEY`, the function returns success with `skipped: true` and invites still work via the copied link.
 
 **Optional: Stripe subscriptions (Edge Functions)**  
 1. **Products & prices:** either run `npm run stripe:seed-prices` (requires `STRIPE_SECRET_KEY` in `.env.local`; creates GBP monthly Starter £19 / Team £49 / Business £99 and prints `STRIPE_PRICE_*` ids), or create three recurring prices manually in the [Stripe Dashboard](https://dashboard.stripe.com/).  
@@ -130,8 +130,9 @@ Use this before production go-live:
 - [ ] Each user is mapped to one organisation (`org_memberships`), and organisation data remains isolated.
 - [ ] Admin can invite teammates from Settings → Invite users.
 - [ ] Invite links use `/accept-invite?invite=...` (then sign-in) and are accepted only for the invited email.
-- [ ] Optional Sentry SDK enabled if you want auth breadcrumbs/telemetry.
-- [ ] Support contact is correct in UI (`mysafeops@gmail.com`).
+- [ ] Optional Sentry: set `VITE_SENTRY_DSN` (browser DSN) to load `@sentry/react` at startup.
+- [ ] Support contact: set `VITE_SUPPORT_EMAIL` on the host (default in app: `support@mysafeops.com`).
+- [ ] Platform owner: `VITE_PLATFORM_OWNER_EMAIL` matches Supabase superadmin RPC allow-list (see `supabase/migrations/*superadmin*`).
 
 ## Billing transparency & limits
 

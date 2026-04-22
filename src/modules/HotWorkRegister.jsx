@@ -1,20 +1,64 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { orgHasFoodIndustrialPack } from "../utils/industrialSectors";
+import { getAuthorisedLiveLotoList } from "./LOTORegister";
 
 const genId = () => `hw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
 
 const ss = ms;
 
-function Form({ item, projects, onSave, onClose }) {
-  const [form, setForm] = useState(
-    () =>
-      item || {
+const FOOD_ZONES = [
+  { id: "ambient", label: "Ambient / low care" },
+  { id: "low_risk", label: "Low risk" },
+  { id: "high_risk", label: "High risk" },
+  { id: "high_care", label: "High care" },
+];
+
+const PROD_STATUS = [
+  { id: "running", label: "Production running" },
+  { id: "changeover", label: "Changeover" },
+  { id: "down", label: "Line down" },
+  { id: "cip", label: "CIP / cleaning" },
+];
+
+function defaultFoodFields() {
+  return {
+    foodZoneClass: "high_care",
+    productionStatus: "down",
+    foreignBodyControls: {
+      magnetCheckBefore: false,
+      magnetCheckAfter: false,
+      sparkContainment: "",
+      debrisSheet: false,
+      postWorkMetalDetector: false,
+    },
+    allergenControls: {
+      allergensInArea: "",
+      additionalPpe: "",
+      cleaningBefore: false,
+      cleaningAfterRequired: false,
+      cleaningSignedOffBy: "",
+    },
+    linkedLotoId: "",
+    noLotoJustification: "",
+    qcSignoffRequired: true,
+    qcSignedOffBy: "",
+    qcSignedOffAt: null,
+  };
+}
+
+function Form({ item, projects, liveLotos, onSave, onClose }) {
+  const food = orgHasFoodIndustrialPack();
+  const [form, setForm] = useState(() => {
+    const base =
+      item ||
+      {
         id: genId(),
         permitRef: "",
         workDescription: "",
@@ -32,16 +76,56 @@ function Form({ item, projects, onSave, onClose }) {
         closedAt: "",
         notes: "",
         createdAt: new Date().toISOString(),
-      }
-  );
+        ...defaultFoodFields(),
+      };
+    if (item && !item.foodZoneClass && food) return { ...defaultFoodFields(), ...item };
+    return base;
+  });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const setNested = (parent, k, v) => setForm((f) => ({ ...f, [parent]: { ...f[parent], [k]: v } }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
+  const handleSubmit = () => {
+    if (food) {
+      if (form.status === "completed" && form.qcSignoffRequired && !form.qcSignedOffAt) {
+        alert("QC sign-off is required before closing this hot work record. Enter who signed off and mark the time.");
+        return;
+      }
+      if (form.status === "active" && !form.linkedLotoId && !String(form.noLotoJustification || "").trim()) {
+        alert("Link a live LOTO or enter a brief justification when hot work proceeds without LOTO on file.");
+        return;
+      }
+    }
+    onSave({ ...form, projectName: pm[form.projectId] || "" });
+  };
+
+  const markQc = () => {
+    const who = window.prompt("QC / production sign-off — name or initials:");
+    if (!who || !who.trim()) return;
+    set("qcSignedOffBy", who.trim());
+    set("qcSignedOffAt", Date.now());
+  };
+
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 540, marginTop: 24 }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "rgba(0,0,0,0.45)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "1.5rem 1rem",
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        overflow: "auto",
+      }}
+    >
+      <div style={{ ...ss.card, width: "100%", maxWidth: 560, marginTop: 24 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit hot work" : "Hot work record"}</h2>
-        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>Supports UK site practice — link to your permit-to-work where used.</p>
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>
+          Align with your fire plan and PTW. Food-sector controls appear when your organisation includes food-related sectors in Settings → Sectors.
+        </p>
         <label style={ss.lbl}>Permit / reference</label>
         <input style={ss.inp} value={form.permitRef} onChange={(e) => set("permitRef", e.target.value)} />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Work description</label>
@@ -89,13 +173,108 @@ function Form({ item, projects, onSave, onClose }) {
           <option value="completed">Completed / cooled</option>
           <option value="cancelled">Cancelled</option>
         </select>
+
+        {food && (
+          <div style={{ marginTop: 16, padding: 12, borderRadius: 8, border: "1px solid #BFDBFE", background: "#F0F9FF" }}>
+            <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 13 }}>Food environment controls</div>
+            <label style={ss.lbl}>Food zone class</label>
+            <select style={ss.inp} value={form.foodZoneClass || "high_care"} onChange={(e) => set("foodZoneClass", e.target.value)}>
+              {FOOD_ZONES.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.label}
+                </option>
+              ))}
+            </select>
+            <label style={{ ...ss.lbl, marginTop: 10 }}>Production status</label>
+            <select style={ss.inp} value={form.productionStatus || "down"} onChange={(e) => set("productionStatus", e.target.value)}>
+              {PROD_STATUS.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.label}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ fontWeight: 600, marginTop: 12, fontSize: 12 }}>Foreign body controls</div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 13 }}>
+              <input type="checkbox" checked={!!form.foreignBodyControls?.magnetCheckBefore} onChange={(e) => setNested("foreignBodyControls", "magnetCheckBefore", e.target.checked)} />
+              Magnet / foreign-body check before
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 13 }}>
+              <input type="checkbox" checked={!!form.foreignBodyControls?.magnetCheckAfter} onChange={(e) => setNested("foreignBodyControls", "magnetCheckAfter", e.target.checked)} />
+              Magnet / check after
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 13 }}>
+              <input type="checkbox" checked={!!form.foreignBodyControls?.debrisSheet} onChange={(e) => setNested("foreignBodyControls", "debrisSheet", e.target.checked)} />
+              Debris sheet deployed
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 13 }}>
+              <input type="checkbox" checked={!!form.foreignBodyControls?.postWorkMetalDetector} onChange={(e) => setNested("foreignBodyControls", "postWorkMetalDetector", e.target.checked)} />
+              Post-work metal detector check required
+            </label>
+            <label style={{ ...ss.lbl, marginTop: 8 }}>Spark containment (e.g. welding blanket)</label>
+            <input
+              style={ss.inp}
+              value={form.foreignBodyControls?.sparkContainment || ""}
+              onChange={(e) => setNested("foreignBodyControls", "sparkContainment", e.target.value)}
+            />
+
+            <div style={{ fontWeight: 600, marginTop: 12, fontSize: 12 }}>Allergen controls</div>
+            <label style={ss.lbl}>Allergens present in area (comma-separated)</label>
+            <input
+              style={ss.inp}
+              value={form.allergenControls?.allergensInArea || ""}
+              onChange={(e) => setNested("allergenControls", "allergensInArea", e.target.value)}
+              placeholder="e.g. milk, gluten"
+            />
+            <label style={{ ...ss.lbl, marginTop: 8 }}>Additional PPE / gowning</label>
+            <input
+              style={ss.inp}
+              value={form.allergenControls?.additionalPpe || ""}
+              onChange={(e) => setNested("allergenControls", "additionalPpe", e.target.value)}
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 13 }}>
+              <input type="checkbox" checked={!!form.allergenControls?.cleaningBefore} onChange={(e) => setNested("allergenControls", "cleaningBefore", e.target.checked)} />
+              Area cleaning before work
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 13 }}>
+              <input type="checkbox" checked={!!form.allergenControls?.cleaningAfterRequired} onChange={(e) => setNested("allergenControls", "cleaningAfterRequired", e.target.checked)} />
+              Cleaning after required before line release
+            </label>
+
+            <label style={{ ...ss.lbl, marginTop: 12 }}>Link live LOTO (interlock)</label>
+            <select style={ss.inp} value={form.linkedLotoId || ""} onChange={(e) => set("linkedLotoId", e.target.value)}>
+              <option value="">— None selected —</option>
+              {liveLotos.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.equipmentName || l.id} {l.equipmentTag ? `(${l.equipmentTag})` : ""}
+                </option>
+              ))}
+            </select>
+            <label style={{ ...ss.lbl, marginTop: 10 }}>If no LOTO — brief justification</label>
+            <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.noLotoJustification || ""} onChange={(e) => set("noLotoJustification", e.target.value)} />
+
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
+              <input type="checkbox" checked={!!form.qcSignoffRequired} onChange={(e) => set("qcSignoffRequired", e.target.checked)} />
+              QC / production sign-off required before closure
+            </label>
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 6 }}>
+              {form.qcSignedOffAt
+                ? `Signed off by ${form.qcSignedOffBy} at ${new Date(form.qcSignedOffAt).toLocaleString()}`
+                : "Not signed off yet."}
+            </div>
+            <button type="button" style={{ ...ss.btn, marginTop: 8 }} onClick={markQc}>
+              Record QC sign-off
+            </button>
+          </div>
+        )}
+
         <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
         <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={handleSubmit}>
             Save
           </button>
         </div>
@@ -108,6 +287,7 @@ export default function HotWorkRegister() {
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("hot_work_register", []));
   const [projects] = useState(() => load("mysafeops_projects", []));
+  const [lotoSnap, setLotoSnap] = useState(() => load("loto_register", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
@@ -115,11 +295,42 @@ export default function HotWorkRegister() {
     save("hot_work_register", items);
   }, [items]);
 
+  useEffect(() => {
+    const t = setInterval(() => setLotoSnap(load("loto_register", [])), 4000);
+    return () => clearInterval(t);
+  }, []);
+
+  const liveLotos = useMemo(() => getAuthorisedLiveLotoList(lotoSnap), [lotoSnap]);
+
   const activeCount = items.filter((r) => r.status === "active").length;
 
   const exportCsv = () => {
-    const h = ["Permit", "Date", "Location", "Project", "From", "To", "Fire watch", "Status", "Issued by"];
-    const rows = items.map((r) => [r.permitRef, r.workDate, r.location, r.projectName || "", r.timeFrom, r.timeTo, r.fireWatchName, r.status, r.issuedBy]);
+    const h = [
+      "Permit",
+      "Date",
+      "Location",
+      "Project",
+      "From",
+      "To",
+      "Fire watch",
+      "Status",
+      "Issued by",
+      "LOTO",
+      "QC",
+    ];
+    const rows = items.map((r) => [
+      r.permitRef,
+      r.workDate,
+      r.location,
+      r.projectName || "",
+      r.timeFrom,
+      r.timeTo,
+      r.fireWatchName,
+      r.status,
+      r.issuedBy,
+      r.linkedLotoId || "",
+      r.qcSignedOffAt ? "yes" : "",
+    ]);
     const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -144,11 +355,13 @@ export default function HotWorkRegister() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-            <PageHero
+      {modal?.type === "form" && (
+        <Form item={modal.data} projects={projects} liveLotos={liveLotos} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />
+      )}
+      <PageHero
         badgeText="HW"
         title="Hot work register"
-        lead="Welding, cutting, grinding — align with your fire plan and PTW module."
+        lead="Welding, cutting, grinding — with optional food-sector controls and LOTO interlock."
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             {activeCount > 0 && (
@@ -181,7 +394,11 @@ export default function HotWorkRegister() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{r.permitRef || "Hot work"}</strong> · {r.workDate} {r.timeFrom}–{r.timeTo}
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.location} · {r.status}</div>
+                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                    {r.location} · {r.status}
+                    {r.linkedLotoId ? ` · LOTO ${r.linkedLotoId.slice(-6)}` : ""}
+                    {r.qcSignoffRequired && !r.qcSignedOffAt && r.status === "active" ? " · QC pending" : ""}
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>

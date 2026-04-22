@@ -7,11 +7,13 @@ import { pushAudit } from "../utils/auditLog";
 import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
+import { MIN_PASSWORD_LENGTH_RESET } from "../config/authPolicy";
+import { getSupportEmail } from "../config/supportContact";
 
 const ss = ms;
 const teal = "#0d9488";
 const navy = "#0f172a";
-const SUPPORT_EMAIL = "mysafeops@gmail.com";
+const SUPPORT_EMAIL = getSupportEmail();
 
 export default function ResetPasswordPage() {
   const { supabase: client, user, ready, loading } = useSupabaseAuth();
@@ -27,8 +29,8 @@ export default function ResetPasswordPage() {
       setMsg("Open the reset link from your email first, then return here to set your new password.");
       return;
     }
-    if (!password || password.length < 8) {
-      setMsg("New password must be at least 8 characters.");
+    if (!password || password.length < MIN_PASSWORD_LENGTH_RESET) {
+      setMsg(`New password must be at least ${MIN_PASSWORD_LENGTH_RESET} characters.`);
       return;
     }
     if (password !== confirmPassword) {

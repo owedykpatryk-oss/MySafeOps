@@ -1,3 +1,5 @@
+import { safeInternalPath } from "../utils/safeUrl";
+
 /**
  * OAuth redirect URL — must be listed in Supabase Dashboard → Authentication → URL Configuration → Redirect URLs.
  * Use `/login` (or `/login?next=...`), not `/app`: protected routes can drop the auth `code` before exchange,
@@ -6,7 +8,8 @@
  */
 export function getOAuthRedirectTo(pathname) {
   if (typeof window === "undefined") return "";
-  return new URL(pathname, window.location.origin).href;
+  const path = safeInternalPath(String(pathname || ""), "/login");
+  return new URL(path, window.location.origin).href;
 }
 
 export async function signInWithGoogleOAuth(supabaseClient, redirectPath = "/login") {

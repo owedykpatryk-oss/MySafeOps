@@ -7,7 +7,19 @@ function uniqueEmail() {
 test.describe("Auth flows", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/login");
-    await expect(page.getByRole("heading", { name: "Workspace access" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome back to MySafeOps" })).toBeVisible();
+  });
+
+  test("sanitizes malicious next= so post-login path stays in-app", async ({ page }) => {
+    await page.goto("/login?next=//evil.com/phish");
+    const card = page.locator("[data-login-next]");
+    await expect(card).toHaveAttribute("data-login-next", "/app");
+  });
+
+  test("preserves safe next= for post-login redirect", async ({ page }) => {
+    await page.goto("/login?next=%2Fsettings");
+    const card = page.locator("[data-login-next]");
+    await expect(card).toHaveAttribute("data-login-next", "/settings");
   });
 
   test("signup shows confirmation instructions", async ({ page }) => {
@@ -15,10 +27,11 @@ test.describe("Auth flows", () => {
     const password = process.env.E2E_SIGNUP_PASSWORD || "MySafeOpsE2E!234";
 
     await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password").fill(password);
+    await page.locator("#login-password").fill(password);
+    await page.getByRole("checkbox", { name: /agree to the Terms/i }).check();
     await page.getByRole("button", { name: "Create account" }).click();
 
-    await expect(page.getByText(/Account created\. Check your inbox/i)).toBeVisible();
+    await expect(page.getByText(/Account created/i)).toBeVisible();
   });
 
   test("resend confirmation email action works", async ({ page }) => {

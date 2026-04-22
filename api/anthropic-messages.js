@@ -6,6 +6,7 @@
  */
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const MAX_JSON_BYTES = 512_000;
 const ALLOWED_BODY_KEYS = new Set(["model", "max_tokens", "system", "messages"]);
 
 function pickAnthropicBody(obj) {
@@ -17,9 +18,15 @@ function pickAnthropicBody(obj) {
   return out;
 }
 
+const API_JSON_HEADERS = {
+  "Content-Type": "application/json; charset=utf-8",
+  "X-Content-Type-Options": "nosniff",
+  "Cache-Control": "no-store",
+};
+
 function sendJson(res, status, obj) {
   const body = JSON.stringify(obj);
-  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  res.writeHead(status, API_JSON_HEADERS);
   res.end(body);
 }
 
@@ -28,7 +35,12 @@ async function readJsonBody(req) {
     return req.body;
   }
   const chunks = [];
+  let total = 0;
   for await (const chunk of req) {
+    total += chunk.length;
+    if (total > MAX_JSON_BYTES) {
+      return { __body_too_large: true };
+    }
     chunks.push(chunk);
   }
   const raw = Buffer.concat(chunks).toString("utf8");
@@ -46,6 +58,8 @@ export default async function handler(req, res) {
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, anthropic-version, x-mysafeops-ai-secret",
       "Access-Control-Max-Age": "86400",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
     });
     return res.end();
   }
@@ -69,6 +83,9 @@ export default async function handler(req, res) {
   }
 
   const parsed = await readJsonBody(req);
+  if (parsed?.__body_too_large) {
+    return sendJson(res, 413, { error: "payload_too_large" });
+  }
   if (parsed === null) {
     return sendJson(res, 400, { error: "invalid_json" });
   }
@@ -97,6 +114,10 @@ export default async function handler(req, res) {
 
   const text = await upstream.text();
   const ct = upstream.headers.get("content-type") || "application/json";
-  res.writeHead(upstream.status, { "Content-Type": ct });
+  res.writeHead(upstream.status, {
+    "Content-Type": ct,
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store",
+  });
   return res.end(text);
 }

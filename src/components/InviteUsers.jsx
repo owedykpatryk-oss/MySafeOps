@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
+import { getSupportEmail } from "../config/supportContact";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
@@ -417,7 +418,7 @@ export default function InviteUsers() {
                 <div style={{ wordBreak: "break-all", color: "#0d9488" }}>{lastInviteLink}</div>
                 <div style={{ marginTop: 8 }}>
                   <a
-                    href={`mailto:${encodeURIComponent(lastInviteEmail)}?subject=${encodeURIComponent("Invitation to MySafeOps")}&body=${encodeURIComponent(`You have been invited to MySafeOps.\n\nAccept your invite:\n${lastInviteLink}\n\nSupport: mysafeops@gmail.com`)}`}
+                    href={`mailto:${encodeURIComponent(lastInviteEmail)}?subject=${encodeURIComponent("Invitation to MySafeOps")}&body=${encodeURIComponent(`You have been invited to MySafeOps.\n\nAccept your invite:\n${lastInviteLink}\n\nSupport: ${getSupportEmail()}`)}`}
                     style={{ color: "#0d9488", fontWeight: 600, textDecoration: "none" }}
                   >
                     Open email draft

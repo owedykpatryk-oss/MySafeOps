@@ -87,7 +87,7 @@ mysafeops-app/
 - [ ] Upload index.html + privacy + terms to Cloudflare Pages
 - [ ] Point mysafeops.com DNS to Cloudflare
 - [ ] Test on mobile
-- [ ] Set up email (hello@mysafeops.com, privacy@mysafeops.com)
+- [ ] Set up email (support@mysafeops.com, privacy@mysafeops.com)
 - [ ] Submit to Google Search Console
 - [ ] Share on LinkedIn / construction forums
 

@@ -24,12 +24,14 @@ export default function ProtectedAppRoute({ children }) {
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "DM Sans, system-ui, sans-serif",
-          gap: 12,
-          color: "var(--color-text-secondary)",
+          padding: "1rem",
+          background: "var(--color-background-tertiary, #f8fafc)",
         }}
       >
-        <div className="app-route-spinner" aria-hidden />
-        <span style={{ fontSize: 14 }}>Checking session…</span>
+        <div className="app-view-fallback" role="status" aria-live="polite" aria-busy="true">
+          <div className="app-route-spinner" aria-hidden />
+          <span className="app-view-fallback-text">Checking session…</span>
+        </div>
       </div>
     );
   }

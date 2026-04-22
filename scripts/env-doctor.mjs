@@ -51,6 +51,12 @@ const viteRows = [
   ["VITE_PUBLIC_SITE_URL", "Canonical site origin for OG, RSS, sitemap (set per Vercel Preview host when testing)"],
   ["VITE_BLOG_POSTS_BASE_URL", "Optional base URL for blog markdown assets / canonical links"],
   ["VITE_STRIPE_PUBLISHABLE_KEY", "Optional Stripe publishable key for Stripe.js in the browser (never secret keys)"],
+  ["VITE_SUPPORT_EMAIL", "Public support inbox shown in UI (default support@mysafeops.com)"],
+  ["VITE_SHOW_LOGIN_ADMIN_HINTS", "Show Supabase / .env IT hints on /login + Cloud account (off in prod; dev always shows)"],
+  ["VITE_SENTRY_DSN", "Optional Sentry browser DSN for client error reporting"],
+  ["VITE_PUBLIC_DOCS_PATH", "Footer /docs link: path (default /docs) or https URL to external documentation"],
+  ["VITE_PUBLIC_STATUS_URL", "Optional external status page URL; else in-app /status is used"],
+  ["VITE_PLATFORM_OWNER_EMAIL", "Superadmin / owner JWT email(s), comma-separated — pair with DB migrations"],
 ];
 
 const cliRows = [
@@ -90,6 +96,13 @@ if (set("VITE_ANTHROPIC_API_KEY") && !set("VITE_ANTHROPIC_PROXY_URL")) {
   hygiene.push(
     "VITE_ANTHROPIC_API_KEY is shipped to browsers — for production set VITE_ANTHROPIC_PROXY_URL=/api/anthropic-messages and ANTHROPIC_API_KEY on Vercel."
   );
+}
+if (!set("VITE_SUPABASE_URL") && !set("VITE_SUPABASE_ANON_KEY")) {
+  hygiene.push(
+    "No VITE_SUPABASE_* in .env.local — app uses built-in fallbacks; set your own Supabase project in production for tenant isolation and key control."
+  );
+} else if (!set("VITE_SUPABASE_URL") || !set("VITE_SUPABASE_ANON_KEY")) {
+  hygiene.push("Set both VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or remove both to use fallbacks).");
 }
 
 console.log("\nHygiene / security:\n");

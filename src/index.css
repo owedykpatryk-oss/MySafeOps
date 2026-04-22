@@ -479,11 +479,28 @@ button:disabled {
 .app-view-fallback {
   background: var(--color-background-primary);
   border: 1px solid var(--color-border-tertiary);
+  border-top: 3px solid var(--color-accent, #0d9488);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   max-width: 360px;
   margin: 3rem auto;
   padding: 2rem 1.5rem;
+  animation: app-surface-fade-in 0.35s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-view-fallback {
+    animation: none;
+  }
+}
+
+.app-view-fallback .app-view-fallback-text,
+.app-view-fallback-text {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--color-text-secondary, #64748b);
+  line-height: 1.45;
 }
 
 .app-rams-doc-row {

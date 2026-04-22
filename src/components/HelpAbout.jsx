@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import PageHero from "./PageHero";
+import { getSupportEmail } from "../config/supportContact";
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
 import { getDisplayAppVersion } from "../utils/appBuildInfo";
 
@@ -84,7 +85,8 @@ const ss = {
   },
   btnRow: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12, alignItems: "center" },
 };
-const SUPPORT_EMAIL = "mysafeops@gmail.com";
+
+const SUPPORT_EMAIL = getSupportEmail();
 
 const MODULE_GROUPS = [
   {

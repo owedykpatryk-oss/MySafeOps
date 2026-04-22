@@ -4,6 +4,7 @@ import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
 import { isSuperAdminEmail } from "../utils/superAdmin";
 import { getSupabaseUrl, isSupabaseConfigured, supabase } from "../lib/supabase";
+import { getSupportEmail } from "../config/supportContact";
 import { BILLING_PLANS, formatBytes, getEffectivePlan } from "../lib/billingPlans";
 import { trackBillingError, trackBillingEvent } from "../lib/billingTelemetry";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
@@ -12,7 +13,7 @@ import InlineAlert from "./InlineAlert";
 import PageHero from "./PageHero";
 
 const ss = ms;
-const SUPPORT_EMAIL = "mysafeops@gmail.com";
+const SUPPORT_EMAIL = getSupportEmail();
 const NO_MEMBERSHIP_MSG = "No organisation membership";
 const STRIPE_FN_KEYS = ["stripe-checkout", "stripe-portal", "stripe-webhook"];
 const EDGE_FN_TIMEOUT_MS = 10000;

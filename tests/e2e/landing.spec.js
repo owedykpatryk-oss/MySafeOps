@@ -21,4 +21,12 @@ test.describe("Landing page", () => {
 
     await expect(page.getByRole("contentinfo")).toBeVisible();
   });
+
+  test("footer links to legal pages", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: /Site safety/i })).toBeVisible({ timeout: 20000 });
+    await page.getByRole("contentinfo").getByRole("link", { name: "Privacy policy" }).click();
+    await expect(page).toHaveURL(/\/privacy$/);
+    await expect(page.locator('iframe[title="Privacy policy"]')).toBeVisible();
+  });
 });

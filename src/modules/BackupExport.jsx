@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { collectBackupBundle, restoreBackupBundle, validateBackupBundle } from "../utils/backup";
 import { pushAudit } from "../utils/auditLog";
 import { useApp } from "../context/AppContext";
@@ -234,6 +235,17 @@ export default function BackupExport() {
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 10, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
           Export
         </div>
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5, margin: "0 0 12px", maxWidth: 580 }}>
+          Downloaded files may include <strong>personal data</strong> (for example about workers or site teams). In the UK, data protection law
+          is the <strong>UK GDPR</strong> together with the <strong>Data Protection Act 2018</strong> (the post-Brexit UK regime, aligned with
+          the same core principles as the EU GDPR, but with UK-specific rules). Your organisation is usually the <strong>data controller</strong>{" "}
+          for operational data you enter; only export, share, and store backups where you have a <strong>lawful basis</strong> and appropriate
+          safeguards. For how MySafeOps processes data as a provider, see the{" "}
+          <Link to="/privacy" style={{ color: "var(--color-link, #0d9488)", fontWeight: 600 }}>
+            Privacy policy
+          </Link>
+          .
+        </p>
         <label
           style={{
             display: "flex",

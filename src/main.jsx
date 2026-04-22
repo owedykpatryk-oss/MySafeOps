@@ -10,6 +10,7 @@ import { SupabaseAuthProvider } from "./context/SupabaseAuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { initOfflineMode } from "./offline/offlineManager";
 import { initNotificationRuntime } from "./offline/pushNotifications";
+import { initSentryIfConfigured } from "./utils/initSentry.js";
 
 function scheduleDeferredInit() {
   const run = () => {
@@ -23,6 +24,8 @@ function scheduleDeferredInit() {
   }
 }
 scheduleDeferredInit();
+
+void initSentryIfConfigured();
 
 import("./utils/reportWebVitals.js")
   .then((m) => m.reportWebVitals())

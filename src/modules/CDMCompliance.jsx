@@ -7,6 +7,14 @@ const genId = () => `cdm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`
 const today = () => new Date().toISOString().slice(0,10);
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 
+function computeNotifiable(form) {
+  return (
+    parseInt(form.estimatedPersonDays || 0, 10) > 500 ||
+    parseInt(form.estimatedWorkers || 0, 10) > 20 ||
+    parseInt(form.calendarPhaseDays || 0, 10) > 30
+  );
+}
+
 const ss = {
   ...ms,
   btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
@@ -15,7 +23,8 @@ const ss = {
 };
 
 const CDM_DUTYHOLDERS = ["Client","Principal Designer","Principal Contractor","Designer","Contractor"];
-const NOTIFICATION_THRESHOLDS = "A project is notifiable to HSE if: construction phase will last longer than 30 working days with more than 20 workers simultaneously, OR exceeds 500 person-days of construction work.";
+const NOTIFICATION_THRESHOLDS =
+  "A project is notifiable to HSE if: construction phase will last longer than 30 working days with more than 20 workers simultaneously, OR exceeds 500 person-days of construction work. CDM 2026 reform may adjust thresholds — keep your F10 assessment under review.";
 
 const CPP_SECTIONS = [
   { key:"projectDesc", label:"Project description and programme", placeholder:"Describe the construction works, phasing and programme…" },
@@ -54,6 +63,11 @@ function CDMForm({ cdm, onSave, onClose }) {
     principalDesignerName:"", principalDesignerCompany:"",
     principalContractorName:"", principalContractorCompany:"",
     startDate:"", endDate:"", estimatedWorkers:"", estimatedPersonDays:"",
+    calendarPhaseDays:"",
+    cdmOrgRole:"contractor",
+    pciSummary:"",
+    hsFileSummary:"",
+    cdm2026Notes:"",
     notifiable:false, f10Submitted:false, f10Date:"",
     dutyholderChecks:{}, preConstructionInfo:{}, cppSections:{},
     status:"draft", createdAt:new Date().toISOString(), date:today(),
@@ -63,7 +77,7 @@ function CDMForm({ cdm, onSave, onClose }) {
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const setNested = (parent,k,v) => setForm(f=>({...f,[parent]:{...f[parent],[k]:v}}));
 
-  const notifiable = parseInt(form.estimatedPersonDays||0)>500 || (parseInt(form.estimatedWorkers||0)>20);
+  const notifiable = computeNotifiable(form);
   const completedSections = CPP_SECTIONS.filter(s=>form.cppSections?.[s.key]?.trim()).length;
 
   const DUTYHOLDER_CHECKS = [
@@ -116,6 +130,49 @@ function CDMForm({ cdm, onSave, onClose }) {
         {/* PROJECT TAB */}
         {tab==="project" && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
+            <div style={{ gridColumn: "1/-1", padding: "10px 12px", background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, fontSize: 12, color: "#14532D", lineHeight: 1.5 }}>
+              <strong>CDM 2026 readiness</strong> — HSE is reviewing CDM duties. Use the fields below to capture your organisation's CDM role, PCI summary, and Health & Safety File plan so templates stay aligned when regulations update.
+            </div>
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={ss.lbl}>Your CDM role (this organisation)</label>
+              <select value={form.cdmOrgRole || "contractor"} onChange={(e) => set("cdmOrgRole", e.target.value)} style={ss.inp}>
+                <option value="client">Client</option>
+                <option value="principal_designer">Principal designer</option>
+                <option value="principal_contractor">Principal contractor</option>
+                <option value="contractor">Contractor</option>
+                <option value="designer">Designer</option>
+              </select>
+            </div>
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={ss.lbl}>Pre-construction information (PCI) summary</label>
+              <textarea
+                value={form.pciSummary || ""}
+                onChange={(e) => set("pciSummary", e.target.value)}
+                placeholder="Key PCI received / issued — surveys, asbestos, utilities, design risks…"
+                rows={3}
+                style={ss.ta}
+              />
+            </div>
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={ss.lbl}>Health &amp; Safety File — accumulation plan</label>
+              <textarea
+                value={form.hsFileSummary || ""}
+                onChange={(e) => set("hsFileSummary", e.target.value)}
+                placeholder="What will be handed to the client; RAMS, permits, as-built safety info…"
+                rows={3}
+                style={ss.ta}
+              />
+            </div>
+            <div style={{ gridColumn: "1/-1" }}>
+              <label style={ss.lbl}>CDM 2026 tracking notes</label>
+              <textarea
+                value={form.cdm2026Notes || ""}
+                onChange={(e) => set("cdm2026Notes", e.target.value)}
+                placeholder="Links to HSE consultations, internal review dates…"
+                rows={2}
+                style={ss.ta}
+              />
+            </div>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl}>Project title *</label>
               <input value={form.projectTitle||""} onChange={e=>set("projectTitle",e.target.value)} placeholder="e.g. Kettle replacement — 2SFG Scunthorpe" style={ss.inp} />
@@ -151,10 +208,20 @@ function CDMForm({ cdm, onSave, onClose }) {
               <label style={ss.lbl}>Total person-days</label>
               <input type="number" value={form.estimatedPersonDays||""} onChange={e=>set("estimatedPersonDays",e.target.value)} placeholder="e.g. 350" style={ss.inp} />
             </div>
+            <div>
+              <label style={ss.lbl}>Construction phase calendar days (optional)</label>
+              <input
+                type="number"
+                value={form.calendarPhaseDays || ""}
+                onChange={(e) => set("calendarPhaseDays", e.target.value)}
+                placeholder="e.g. 35 — flag if &gt; 30 for review"
+                style={ss.inp}
+              />
+            </div>
             <div style={{ gridColumn:"1/-1", padding:"8px 12px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)" }}>
               {NOTIFICATION_THRESHOLDS}
               <div style={{ marginTop:4, fontWeight:500, color:notifiable?"#791F1F":"#27500A" }}>
-                {notifiable ? "⚠ This project IS notifiable — submit F10 to HSE" : "✓ This project is not notifiable based on figures entered"}
+                {notifiable ? "⚠ This project IS notifiable or exceeds review threshold — verify F10 / CDM duties" : "✓ Below common notification thresholds on figures entered (confirm against current HSE guidance)"}
               </div>
             </div>
             {notifiable && (
@@ -281,7 +348,7 @@ function printCDM(form) {
   const win = window.open("","_blank");
   const checked = Object.entries(form.dutyholderChecks||{}).filter(([,v])=>v).length;
   const cppFilled = CPP_SECTIONS.filter(s=>form.cppSections?.[s.key]?.trim()).length;
-  const notifiable = parseInt(form.estimatedPersonDays||0)>500||(parseInt(form.estimatedWorkers||0)>20);
+  const notifiable = computeNotifiable(form);
   const cppHTML = CPP_SECTIONS.filter(s=>form.cppSections?.[s.key]?.trim()).map(s=>`
     <h3 style="font-size:12px;font-weight:bold;color:#0f172a;background:#f5f5f5;padding:4px 8px;margin:12px 0 4px">${s.label}</h3>
     <p style="font-size:12px;line-height:1.6;margin:0 0 8px">${(form.cppSections[s.key]||"").replace(/\n/g,"<br/>")}</p>`).join("");
@@ -329,7 +396,7 @@ export default function CDMCompliance() {
       <PageHero
         badgeText="CDM"
         title="CDM 2015 compliance"
-        lead="Construction Phase Plan, dutyholder checklist, and F10 notification tracking for UK CDM 2015."
+        lead="Construction Phase Plan, dutyholder checklist, F10 tracking, and CDM 2026 readiness fields (PCI / H&S File / role)."
         right={<button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ New CDM pack</button>}
       />
 
@@ -345,7 +412,7 @@ export default function CDMCompliance() {
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {packs.map(pack=>{
-            const notifiable = parseInt(pack.estimatedPersonDays||0)>500||(parseInt(pack.estimatedWorkers||0)>20);
+            const notifiable = computeNotifiable(pack);
             const checked = Object.values(pack.dutyholderChecks||{}).filter(Boolean).length;
             const cppPct = Math.round((CPP_SECTIONS.filter(s=>pack.cppSections?.[s.key]?.trim()).length/CPP_SECTIONS.length)*100);
             return (

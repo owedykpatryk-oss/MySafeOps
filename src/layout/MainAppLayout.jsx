@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Shield, Trash2 } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
+import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
 import WorkspaceSearchPalette from "../components/WorkspaceSearchPalette";
 import RouteErrorBoundary from "../components/RouteErrorBoundary";
@@ -423,6 +424,9 @@ export default function MainAppLayout() {
         Skip to main content
       </a>
       <OfflineStatusBanner />
+      <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
+        <IndustrialSectorBanners />
+      </div>
       <WorkspaceAppBar
         view={view}
         navTab={navTab}

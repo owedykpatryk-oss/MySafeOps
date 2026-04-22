@@ -3,7 +3,7 @@ import PageHero from "../components/PageHero";
 import { ms } from "../utils/moduleStyles";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useApp } from "../context/AppContext";
-import { isSuperAdminEmail, SUPERADMIN_EMAIL } from "../utils/superAdmin";
+import { isSuperAdminEmail } from "../utils/superAdmin";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { isR2StorageConfigured } from "../lib/r2Storage";
 import {
@@ -220,7 +220,7 @@ const EMPTY_LOCAL_ORG_USAGE = {
 };
 
 /**
- * Cross-tenant metrics via SECURITY DEFINER RPC (only succeeds for mysafeops@gmail.com).
+ * Cross-tenant metrics via SECURITY DEFINER RPC (JWT email must match DB owner allow-list; sync with `VITE_PLATFORM_OWNER_EMAIL` + migrations).
  * Apply migration: supabase/migrations/20260420160000_superadmin_platform_stats.sql
  */
 async function readCloudSummary(supabase) {
@@ -658,7 +658,7 @@ export default function SuperAdminPanel() {
       <PageHero
         badgeText="SA"
         title="Platform owner dashboard"
-        lead={`Signed in as ${SUPERADMIN_EMAIL}. Cross-organisation metrics (aggregates). Not visible to any other user.`}
+        lead={`Signed in as ${user?.email || "platform owner"}. Cross-organisation metrics (aggregates). Not visible to any other user.`}
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             {copyHint ? (

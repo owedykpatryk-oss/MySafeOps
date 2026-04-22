@@ -1,4 +1,5 @@
 import { Component } from "react";
+import { getSupportEmail } from "../config/supportContact";
 
 export default class RouteErrorBoundary extends Component {
   constructor(props) {
@@ -10,8 +11,22 @@ export default class RouteErrorBoundary extends Component {
     return { error };
   }
 
+  componentDidCatch(error, errorInfo) {
+    if (import.meta.env.DEV) {
+      console.error("[RouteErrorBoundary]", error, errorInfo);
+    }
+    if (import.meta.env.VITE_SENTRY_DSN?.trim()) {
+      void import("@sentry/react")
+        .then((Sentry) => {
+          Sentry.captureException(error, { extra: { componentStack: errorInfo?.componentStack } });
+        })
+        .catch(() => {});
+    }
+  }
+
   render() {
     if (this.state.error) {
+      const support = getSupportEmail();
       return (
         <div
           role="alert"
@@ -24,8 +39,14 @@ export default class RouteErrorBoundary extends Component {
           }}
         >
           <div style={{ fontSize: 16, fontWeight: 600, color: "#791F1F", marginBottom: 8 }}>Something went wrong</div>
-          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5, marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5, marginBottom: 12 }}>
             This screen failed to load. Try again, or refresh the page if the problem continues.
+          </p>
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5, marginBottom: 16 }}>
+            Need help?{" "}
+            <a href={`mailto:${support}`} style={{ color: "#0d9488", fontWeight: 600 }}>
+              {support}
+            </a>
           </p>
           <button
             type="button"

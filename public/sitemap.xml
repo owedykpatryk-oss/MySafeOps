@@ -11,6 +11,36 @@
     <priority>0.85</priority>
   </url>
   <url>
+    <loc>https://mysafeops.com/privacy</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/terms</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/cookies</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/dpa</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/docs</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/status</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
     <loc>https://mysafeops.com/blog/permit-to-work-app-uk</loc>
     <changefreq>weekly</changefreq>
     <priority>0.75</priority>

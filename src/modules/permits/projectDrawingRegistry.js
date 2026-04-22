@@ -8,6 +8,8 @@ export const PROJECT_DRAWING_OBJECT_TYPES = [
   { id: "excavation", label: "Excavation", color: "#7C2D12", shape: "diamond" },
   { id: "fire_exit", label: "Fire exit", color: "#166534", shape: "square" },
   { id: "master_point", label: "Master point", color: "#7E22CE", shape: "star" },
+  /** ATEX / DSEAR hazardous zone marker on the site plan (metadata on the object). */
+  { id: "atex_zone", label: "ATEX / DSEAR zone", color: "#A32D2D", shape: "diamond" },
 ];
 
 const TYPE_BY_ID = Object.fromEntries(PROJECT_DRAWING_OBJECT_TYPES.map((t) => [t.id, t]));
@@ -19,6 +21,18 @@ function normalizePercent(value, fallback = 50) {
 }
 
 const GEO_FALLBACK = { lat: 51.505, lng: -0.09 };
+
+function normalizeAtexMeta(meta) {
+  if (!meta || typeof meta !== "object") return {};
+  return {
+    areaClassification: String(meta.areaClassification || "").slice(0, 32),
+    atmosphereType: String(meta.atmosphereType || "").slice(0, 24),
+    substance: String(meta.substance || "").slice(0, 160),
+    temperatureClass: String(meta.temperatureClass || "").slice(0, 8),
+    equipmentGroup: String(meta.equipmentGroup || "").slice(0, 16),
+    permitRequired: Boolean(meta.permitRequired),
+  };
+}
 
 function normalizeObject(row) {
   if (!row || typeof row !== "object") return null;
@@ -48,6 +62,7 @@ function normalizeObject(row) {
     placement,
     geoLat,
     geoLng,
+    meta: type === "atex_zone" ? normalizeAtexMeta(row.meta) : {},
     createdAt: String(row.createdAt || new Date().toISOString()),
     updatedAt: String(row.updatedAt || new Date().toISOString()),
   };
@@ -86,6 +101,7 @@ export function buildProjectDrawingObject(input = {}) {
     placement: input.placement,
     geoLat: input.geoLat,
     geoLng: input.geoLng,
+    meta: input.meta,
     createdAt: now,
     updatedAt: now,
   });
@@ -95,7 +111,9 @@ export function drawingObjectLabel(row) {
   if (!row) return "";
   const typeLabel = TYPE_BY_ID[row.type]?.label || "Point";
   const base = String(row.label || "").trim();
-  return base ? `${base} (${typeLabel})` : typeLabel;
+  const ac = row.type === "atex_zone" && row.meta?.areaClassification ? ` [${row.meta.areaClassification}]` : "";
+  if (base) return `${base} (${typeLabel})${ac}`;
+  return `${typeLabel}${ac}`;
 }
 
 export function drawingObjectTypeMeta(type) {

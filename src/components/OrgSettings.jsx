@@ -5,6 +5,7 @@ import { refreshOrgFromSupabase } from "../utils/orgMembership";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
+import { INDUSTRY_SECTOR_OPTIONS } from "../utils/industrialSectors";
 
 const ORG_KEY = "mysafeops_org_settings";
 const loadOrg = () => { try { return JSON.parse(localStorage.getItem(ORG_KEY) || "{}"); } catch { return {}; } };
@@ -35,6 +36,8 @@ export const getOrgSettings = () => {
     safetyPolicy: s.safetyPolicy || "",
     emergencyContact: s.emergencyContact || "",
     customFields: s.customFields || [],
+    /** @type {string[]} Sectors for industrial pack (food, pharma, etc.) */
+    industrySectors: Array.isArray(s.industrySectors) && s.industrySectors.length ? s.industrySectors : ["construction"],
   };
 };
 
@@ -110,7 +113,7 @@ export default function OrgSettings() {
     set("customFields", (form.customFields||[]).filter(f=>f.id!==id));
   };
 
-  const TABS = [["brand","Branding & logo"],["company","Company info"],["pdf","PDF defaults"],["custom","Custom fields"],["access","Access"],["preview","Preview"]];
+  const TABS = [["brand","Branding & logo"],["company","Company info"],["sectors","Sectors"],["pdf","PDF defaults"],["custom","Custom fields"],["access","Access"],["preview","Preview"]];
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
@@ -195,6 +198,42 @@ export default function OrgSettings() {
             </div>
           </Section>
         </>
+      )}
+
+      {tab==="sectors" && (
+        <Section title="Industry sectors">
+          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 14, lineHeight: 1.55 }}>
+            Select the environments your teams work in. This turns on food/pharma registers, allergen banners, LOTO ↔ hot work links, and ATEX markers on site plans — without hiding core construction tools.
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {INDUSTRY_SECTOR_OPTIONS.map((opt) => {
+              const set = new Set(form.industrySectors || ["construction"]);
+              const checked = set.has(opt.id);
+              return (
+                <label
+                  key={opt.id}
+                  style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 14 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      const next = new Set(form.industrySectors || ["construction"]);
+                      if (e.target.checked) next.add(opt.id);
+                      else {
+                        next.delete(opt.id);
+                        if (next.size === 0) next.add("construction");
+                      }
+                      set("industrySectors", [...next]);
+                    }}
+                    style={{ width: 16, height: 16, accentColor: "#0d9488" }}
+                  />
+                  {opt.label}
+                </label>
+              );
+            })}
+          </div>
+        </Section>
       )}
 
       {tab==="company" && (
