@@ -67,7 +67,10 @@ export default function SecurityPosturePage() {
         <section style={{ marginBottom: 28 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Cloud data &amp; backups (optional modules)</h2>
           <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.65, color: "var(--color-text-secondary, #64748b)" }}>
-            <li>When enabled, organisation sync and audit features use <strong>Cloudflare Workers</strong> with <strong>D1</strong> storage and verified access via Supabase RPCs.</li>
+            <li>
+              When enabled, organisation sync and audit features use <strong>Cloudflare Workers</strong> with <strong>D1</strong> storage. Access is checked with Supabase RPCs (including organisation isolation on KV and{" "}
+              <strong>separate read rules</strong> for the server-side audit chain: typically admin and supervisor roles).
+            </li>
             <li>Scheduled D1 snapshots can be written to <strong>Cloudflare R2</strong> by the <code>d1-backup</code> worker (see project documentation for operations).</li>
           </ul>
         </section>

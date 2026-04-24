@@ -16,7 +16,7 @@ Ten dokument wiąże opis z **kodem w repozytorium** (D1, Worker, klient). Pełn
 ## Świadomie niewykonane (większa praca)
 
 - **Prawda wyłącznie na serwerze**: aplikacja nadal inicjuje z `localStorage` i **natychmiast** zapisuje lokalnie; D1 jest autorytatywne po hydratacji, ale pełne „tylko API, zero zaufania do klienta” wymaga kolejnej fazy (kolejka offline, tryb tylko online, itp.).
-- **Reguły ról w audycie** (kto czyta): obecnie ten sam poziom co KV (członek org). Osobne role (np. tylko audytor) wymagają rozszerzenia RPC / JWT claims.
+- **Reguły ról w audycie** (serwer): zapis (`POST /v1/audit/append`) nadal po RPC `user_can_access_org_slug` (członek org). **Odczyt** łańcucha na Workerze (`GET /v1/audit`, `GET /v1/audit/verify`) wymaga RPC `user_can_read_org_audit` (w typowej konfiguracji **admin + supervisor**); front nie woła odczytu D1 dla roli **operative**. Osobne role (np. dedykowany audytor tylko-read) wymagałyby rozszerzenia RPC / claims.
 - **CRDT / lock na dokumencie**: używane jest wersjonowanie i merge przy 409; nie ma edycji wieloużytkowniczej w czasie rzeczywistym.
 - **Migracja terenowa**: używaj modułu **Backup / export** w aplikacji + ewent. skryptu seed (patrz `DOCS/D1_SETUP.md`); dedykowany migrator masowy w repo można dodać w następnym kroku.
 

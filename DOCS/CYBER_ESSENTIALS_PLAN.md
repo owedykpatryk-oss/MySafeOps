@@ -124,7 +124,7 @@ Wiele pozycji jest już w `DOCS/FESS/CURSOR_BRIEF_FESS_READINESS.md` (Phase 2). 
 
 1. **Już w repo:** nagłówki, `security.txt`, `SECURITY.md`, strona `/security` (trust).
 2. **Supabase:** MFA dla wszystkich kont operacyjnych; polityka haseł; ewent. rate limit na logowanie (jeśli CAB pyta o brute-force).
-3. **CI:** `npm audit` (lub `pnpm audit`) na `main`.
+3. **CI:** na każdym push/PR uruchamiane jest `npm audit --audit-level=high` (`.github/workflows/ci.yml`) — utrzymaj zieloność; na critical reaguj w SLA z kwestionariusza (zwykle 14 dni).
 4. **Monitoring:** Sentry (`VITE_SENTRY_DSN`), uptime (np. Better Stack / UptimeRobot) — zrzut konfiguracji jako dowód.
 5. **Backup:** potwierdzenie w R2 + **jeden** udokumentowany test restore (nawet na staging).
 

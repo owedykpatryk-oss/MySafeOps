@@ -12,9 +12,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const envLocal = resolve(root, ".env.local");
 
+function printManualOpsChecklist() {
+  console.log("\nManual ops (not verified here — see DOCS/CYBER_ESSENTIALS_PLAN.md + DOCS/BACKEND_CONTINUATION_PLAN.md §C):\n");
+  console.log("  · Supabase: MFA + password policy for operator accounts; apply migrations (org RPCs + audit read RPC).\n");
+  console.log("  · Cloudflare: D1 schemas 0001+0002 on remote; wrangler secret put AUDIT_CHAIN_SECRET on d1-api; deploy d1-backup → R2.\n");
+  console.log("  · Vercel Production: set VITE_D1_API_URL when org sync is live; redeploy after env changes.\n");
+}
+
 if (!existsSync(envLocal)) {
   console.log("env:check — no .env.local found.");
   console.log("  Copy .env.local.example → .env.local and fill values (file is gitignored).\n");
+  printManualOpsChecklist();
   process.exit(0);
 }
 
@@ -144,7 +152,8 @@ if (set("VITE_D1_API_URL")) {
   console.log("D1: (optional) set VITE_D1_API_URL for org JSON sync — see DOCS/D1_SETUP.md\n  Tip: npm run d1:smoke\n");
 }
 
-    console.log("Done. Address any items above, then restart `npm run dev`.\n");
+printManualOpsChecklist();
+console.log("Done. Address any items above, then restart `npm run dev`.\n");
   })();
 }
 
