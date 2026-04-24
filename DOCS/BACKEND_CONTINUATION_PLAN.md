@@ -62,7 +62,7 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 
 ### B4. Migracja masowa z JSON (teren / import)
 
-**Status:** `npm run d1:import-backup` — `scripts/d1-import-backup.mjs` (JWT użytkownika + `--file` + `D1_IMPORT_ORG_SLUG`); lista namespace w `src/lib/d1ImportNamespaces.js`. **UI:** Settings → Backup — przycisk „Push current data to D1” (`pushBackupBundleToD1` w `src/utils/d1BackupPush.js`), wymaga `VITE_D1_API_URL`, zalogowania i roli z importem backupu.
+**Status:** `npm run d1:import-backup` — `scripts/d1-import-backup.mjs` (JWT użytkownika + `--file` + `D1_IMPORT_ORG_SLUG`); lista namespace w `src/lib/d1ImportNamespaces.js`. **UI:** Settings → Backup — przycisk „Push current data to D1” (`pushBackupBundleToD1` w `src/utils/d1BackupPush.js`), wymaga `VITE_D1_API_URL`, zalogowania i roli z importem backupu. **Testy:** `src/utils/d1BackupPush.test.js` (Vitest + mock `d1SyncClient`).
 
 ---
 

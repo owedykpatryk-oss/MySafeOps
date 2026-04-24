@@ -9,16 +9,17 @@ Ten dokument wiąże opis z **kodem w repozytorium** (D1, Worker, klient). Pełn
 | Wspólna baza (D1) | Tabela `org_sync_kv` — JSON per `org_slug` + `namespace` + `data_key`, wersjonowanie, optymistyczna współbieżność (`ifVersion` / 409). |
 | API HTTP | Worker `d1-api`: `GET/PUT/DELETE /v1/kv`, `GET /v1/health`, audyt: `POST /v1/audit/append`, `GET /v1/audit`, `GET /v1/audit/verify` (schemat `0002_org_audit_log.sql` + sekret `AUDIT_CHAIN_SECRET`). |
 | Izolacja org | Nagłówek `X-Org-Slug` + Supabase RPC `user_can_access_org_slug` (JWT użytkownika). |
-| Klient | `src/lib/d1SyncClient.js` — wywołania do Workera; wspólny hook `src/hooks/useD1OrgArraySync.js` — **permity**, **RAMS** (`rams_builder_docs`), **method statements** (`method_statements`): hydratacja z D1, zapis z debounce, `localStorage` jako cache; konflikt wersji → refetch z serwera. |
+| Klient | `src/lib/d1SyncClient.js` — wywołania do Workera; hook `src/hooks/useD1OrgArraySync.js` (+ `useD1WorkersProjectsSync`) — wiele modułów/rejestrów (lista i wyjątki: [BACKEND_CONTINUATION_PLAN.md](./BACKEND_CONTINUATION_PLAN.md)): hydratacja z D1, zapis z debounce, `localStorage` jako cache; konflikt wersji → refetch z serwera. |
 | Lokalny audit | `src/utils/auditLog.js` — pierścień w `localStorage` (max 500) + **mirror** do serwera (`d1AppendServerAudit`), gdy D1 + org ≠ `default`. |
 | Backup D1 → R2 | Worker `d1-backup` (cron domyślnie 03:00 UTC), pliki JSON w R2 pod `d1-snapshots/`. Skrypt: `npm run d1:deploy:backup`. |
+| Backup JSON → D1 (push) | W aplikacji: **Backup** — „Push current data to D1” (`src/utils/d1BackupPush.js`, allowlist `src/lib/d1ImportNamespaces.js`). CLI: `npm run d1:import-backup`. |
 
 ## Świadomie niewykonane (większa praca)
 
 - **Prawda wyłącznie na serwerze**: aplikacja nadal inicjuje z `localStorage` i **natychmiast** zapisuje lokalnie; D1 jest autorytatywne po hydratacji, ale pełne „tylko API, zero zaufania do klienta” wymaga kolejnej fazy (kolejka offline, tryb tylko online, itp.).
 - **Reguły ról w audycie** (serwer): zapis (`POST /v1/audit/append`) nadal po RPC `user_can_access_org_slug` (członek org). **Odczyt** łańcucha na Workerze (`GET /v1/audit`, `GET /v1/audit/verify`) wymaga RPC `user_can_read_org_audit` (w typowej konfiguracji **admin + supervisor**); front nie woła odczytu D1 dla roli **operative**. Osobne role (np. dedykowany audytor tylko-read) wymagałyby rozszerzenia RPC / claims.
 - **CRDT / lock na dokumencie**: używane jest wersjonowanie i merge przy 409; nie ma edycji wieloużytkowniczej w czasie rzeczywistym.
-- **Migracja terenowa**: używaj modułu **Backup / export** w aplikacji + ewent. skryptu seed (patrz `DOCS/D1_SETUP.md`); dedykowany migrator masowy w repo można dodać w następnym kroku.
+- **Migracja terenowa**: eksport JSON z **Backup**, następnie **Push current data to D1** (przy włączonym `VITE_D1_API_URL`) lub `npm run d1:import-backup` — patrz `DOCS/D1_SETUP.md`.
 
 ## Wybór architektury: „tylko D1+Workers” vs Supabase Postgres
 

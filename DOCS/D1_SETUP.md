@@ -21,6 +21,8 @@
 
 4. **Opcjonalnie** — `npm run d1:deploy` z katalogu głównego (wdrożenie workera po zmianach w `index.mjs`).
 
+5. **Import wielu rejestrów z pliku JSON do D1** — w aplikacji: **Settings → Backup & restore → „Push current data to D1”** (wymaga zalogowania, roli z importem backupu, `VITE_D1_API_URL` oraz prawdziwego `org` ≠ `default`). Alternatywa CLI: `npm run d1:import-backup` (`scripts/d1-import-backup.mjs`, zmienne `D1_IMPORT_JWT`, `D1_IMPORT_ORG_SLUG`, `--file`). Lista dozwolonych namespace (`org_sync_kv`): `src/lib/d1ImportNamespaces.js` (`D1_BACKUP_PUSH_NAMESPACES`).
+
 ---
 
 ## Instrukcja krok po kroku (od zera)
