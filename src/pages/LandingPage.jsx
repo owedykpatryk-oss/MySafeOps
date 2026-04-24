@@ -13,7 +13,7 @@ import { useLandingHomeDocumentMeta } from "../utils/landingPageMeta";
 const SUPPORT_EMAIL = getSupportEmail();
 const LANDING_TITLE = "MySafeOps — RAMS, permits & site safety for UK construction";
 const LANDING_DESCRIPTION =
-  "RAMS builder, permits to work, inspections, worker competency, and 40+ registers — browser-first for UK construction teams. Optional cloud sign-in and backup.";
+  "RAMS builder, permits to work, inspections, worker competency, and 40+ registers — browser-first for UK construction teams. Flat organisation pricing (not per seat). Optional cloud sign-in and backup.";
 
 export default function LandingPage() {
   const cloud = isSupabaseConfigured();
@@ -38,6 +38,7 @@ export default function LandingPage() {
   useEffect(() => {
     void import("./BlogIndexPage.jsx");
     void import("./BlogArticlePage.jsx");
+    void import("./SecurityPosturePage.jsx");
   }, []);
 
   useEffect(() => {
@@ -112,7 +113,17 @@ export default function LandingPage() {
       "@type": "WebSite",
       name: "MySafeOps",
       url: origin,
+      inLanguage: "en-GB",
       description: LANDING_DESCRIPTION,
+      keywords: [
+        "RAMS",
+        "permit to work",
+        "UK construction",
+        "site safety",
+        "toolbox talk",
+        "COSHH",
+        "RIDDOR",
+      ],
       publisher: {
         "@type": "Organization",
         name: "MySafeOps",

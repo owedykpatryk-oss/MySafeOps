@@ -5,11 +5,12 @@ import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
+  { href: "#modules", label: "Modules" },
   { href: "#readiness", label: "Readiness check" },
   { href: "#roi", label: "Value" },
   { href: "#roles", label: "How it works" },
   { href: "#pricing", label: "Pricing" },
-  { href: "/blog", label: "Blog" },
+  { href: "/blog", label: "Blog", spa: true },
   { href: "#faq", label: "FAQ" },
   { href: "#missing", label: "Request feature" },
 ];
@@ -54,11 +55,17 @@ export default function LandingTopSection({ navScrolled, cloud }) {
               </div>
             </Link>
             <div className="nl">
-              {NAV_LINKS.map((item) => (
-                <a key={item.href} href={item.href}>
-                  {item.label}
-                </a>
-              ))}
+              {NAV_LINKS.map((item) =>
+                item.spa ? (
+                  <Link key={item.href} to={item.href}>
+                    {item.label}
+                  </Link>
+                ) : (
+                  <a key={item.href} href={item.href}>
+                    {item.label}
+                  </a>
+                )
+              )}
               <Link to="/login" className="btn btn-o nc" {...loginLinkPrefetchProps}>
                 Sign in
               </Link>
@@ -100,17 +107,29 @@ export default function LandingTopSection({ navScrolled, cloud }) {
               </button>
             </div>
             <div className="landing-mobile-links">
-              {NAV_LINKS.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => {
-                    setMobileOpen(false);
-                  }}
-                >
-                  {item.label}
-                </a>
-              ))}
+              {NAV_LINKS.map((item) =>
+                item.spa ? (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    onClick={() => {
+                      setMobileOpen(false);
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                ) : (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => {
+                      setMobileOpen(false);
+                    }}
+                  >
+                    {item.label}
+                  </a>
+                )
+              )}
               <Link
                 to="/login"
                 className="landing-mobile-cta"
@@ -153,6 +172,9 @@ export default function LandingTopSection({ navScrolled, cloud }) {
                 <a href="#readiness" className="btn btn-o">
                   Run 2-min check
                 </a>
+                <a href="#pricing" className="btn btn-o">
+                  View pricing
+                </a>
               </div>
               <div className="landing-trust-strip" role="note">
                 <span>Offline-capable core</span>
@@ -160,6 +182,10 @@ export default function LandingTopSection({ navScrolled, cloud }) {
                   ·
                 </span>
                 <span>UK-oriented copy &amp; registers</span>
+                <span className="landing-trust-dot" aria-hidden>
+                  ·
+                </span>
+                <span>Flat org pricing — not per seat</span>
                 <span className="landing-trust-dot" aria-hidden>
                   ·
                 </span>

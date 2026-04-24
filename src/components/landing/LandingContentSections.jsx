@@ -17,7 +17,7 @@ function FaqSuspenseFallback() {
           <p style={{ color: "var(--sl6)" }}>Loading answers…</p>
         </div>
         <div className="landing-faq-list">
-          {[0, 1, 2].map((idx) => (
+          {[0, 1, 2, 3, 4, 5].map((idx) => (
             <div
               key={idx}
               style={{
@@ -220,6 +220,13 @@ function RoiEstimatorSection() {
             <p>
               Estimation assumes steady activity over 5 working days. Use this as a planning baseline, not as a guaranteed financial forecast.
             </p>
+            <p style={{ fontSize: 13, color: "var(--sl5)", marginTop: 12, lineHeight: 1.5 }}>
+              Subscription is priced <strong>per organisation</strong> (tier caps), not per worker seat — compare with the{" "}
+              <a href="#pricing" style={{ color: "var(--teal)", fontWeight: 600 }}>
+                pricing table
+              </a>
+              .
+            </p>
             <Link to="/login" className="btn btn-p" {...loginLinkPrefetchProps}>
               Test this in your workspace
             </Link>
@@ -308,11 +315,11 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
         </div>
       </section>
 
-      <section className="pricing" id="pricing">
+      <section className="pricing" id="pricing" aria-labelledby="pricing-heading">
         <div className="ctn">
           <div className="sh fu">
             <div className="badge" style={{ background: "rgba(249,115,22,.1)", color: "var(--org)" }}>Pricing</div>
-            <h2>Plans that stay transparent</h2>
+            <h2 id="pricing-heading">Plans that stay transparent</h2>
             <p>Flat organisation pricing — not per seat. Live limits and usage are in the app under Settings → Billing & limits.</p>
           </div>
           <div className="prc">

@@ -1,3 +1,6 @@
+import { Link } from "react-router-dom";
+
+/** @type {{ q: string; a: import("react").ReactNode }[]} */
 const FAQ = [
   {
     q: "Do I need an internet connection on site?",
@@ -14,6 +17,14 @@ const FAQ = [
   {
     q: "Is pricing per worker or per seat?",
     a: "Plans are a flat monthly price per organisation (tiers differ by how many workers and projects you can run). Field users are included up to each tier’s caps — see the Pricing section above and Billing & limits in the app for live numbers.",
+  },
+  {
+    q: "Where can I read about security and data handling?",
+    a: (
+      <>
+        See the public <Link to="/security">Security &amp; trust</Link> page for a procurement-friendly summary, and legal policies (privacy, terms, DPA) linked in the footer.
+      </>
+    ),
   },
   {
     q: "Can we use our own branding on PDFs?",
