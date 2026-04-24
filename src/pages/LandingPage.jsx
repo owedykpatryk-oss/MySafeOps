@@ -8,6 +8,7 @@ import "../styles/landing.css";
 import LandingTopSection from "../components/landing/LandingTopSection";
 import LandingContentSections from "../components/landing/LandingContentSections";
 import LandingFooter from "../components/landing/LandingFooter";
+import { BILLING_PLANS } from "../lib/billingPlans";
 import { useLandingHomeDocumentMeta } from "../utils/landingPageMeta";
 
 const SUPPORT_EMAIL = getSupportEmail();
@@ -108,35 +109,72 @@ export default function LandingPage() {
 
   const landingJsonLd = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const siteId = `${origin}/#website`;
+    const orgId = `${origin}/#org`;
+    const appId = `${origin}/#software`;
+    const paidPlanIds = ["starter", "team", "business", "enterprise"];
+    const highGbp = Math.max(
+      ...paidPlanIds.map((id) => {
+        const digits = String(BILLING_PLANS[id]?.priceLabel || "").replace(/\D/g, "");
+        const n = parseInt(digits, 10);
+        return Number.isFinite(n) ? n : 0;
+      })
+    );
     return {
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: "MySafeOps",
-      url: origin,
-      inLanguage: "en-GB",
-      description: LANDING_DESCRIPTION,
-      keywords: [
-        "RAMS",
-        "permit to work",
-        "UK construction",
-        "site safety",
-        "toolbox talk",
-        "COSHH",
-        "RIDDOR",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": siteId,
+          name: "MySafeOps",
+          url: `${origin}/`,
+          inLanguage: "en-GB",
+          description: LANDING_DESCRIPTION,
+          publisher: { "@id": orgId },
+        },
+        {
+          "@type": "Organization",
+          "@id": orgId,
+          name: "MySafeOps",
+          url: origin || undefined,
+          email: SUPPORT_EMAIL,
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": appId,
+          name: "MySafeOps",
+          applicationCategory: "BusinessApplication",
+          applicationSubCategory: "Construction safety software",
+          operatingSystem: "Web browser",
+          description: LANDING_DESCRIPTION,
+          inLanguage: "en-GB",
+          url: `${origin}/`,
+          isAccessibleForFree: true,
+          offers: {
+            "@type": "AggregateOffer",
+            priceCurrency: "GBP",
+            lowPrice: "0",
+            highPrice: String(highGbp),
+            offerCount: String(paidPlanIds.length + 1),
+            availability: "https://schema.org/InStock",
+            url: `${origin}/#pricing`,
+          },
+          publisher: { "@id": orgId },
+        },
       ],
-      publisher: {
-        "@type": "Organization",
-        name: "MySafeOps",
-        url: origin,
-        email: SUPPORT_EMAIL,
-      },
     };
+  }, []);
+
+  const ogImageAbsoluteUrl = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return `${window.location.origin}/blog/images/permit-to-work-app-uk-hero.png`;
   }, []);
 
   useLandingHomeDocumentMeta({
     title: LANDING_TITLE,
     description: LANDING_DESCRIPTION,
     jsonLd: landingJsonLd,
+    ogImageAbsoluteUrl: ogImageAbsoluteUrl || undefined,
   });
 
   const submitFeature = () => {

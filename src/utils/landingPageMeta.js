@@ -10,10 +10,11 @@ const LD_MARK = "data-mysafeops-landing-ld";
  *   title: string;
  *   description: string;
  *   jsonLd: Record<string, unknown>;
- * }} opts
+ *   ogImageAbsoluteUrl?: string;
+ * }} opts ogImageAbsoluteUrl — full URL for og:image and twitter:image
  */
 export function useLandingHomeDocumentMeta(opts) {
-  const { title, description, jsonLd } = opts;
+  const { title, description, jsonLd, ogImageAbsoluteUrl } = opts;
 
   useEffect(() => {
     const canonicalUrl = `${window.location.origin}/`;
@@ -57,6 +58,19 @@ export function useLandingHomeDocumentMeta(opts) {
     ensure("meta", { property: "og:site_name", content: "MySafeOps" });
     ensure("meta", { property: "og:locale", content: "en_GB" });
 
+    if (ogImageAbsoluteUrl) {
+      ensure("meta", { property: "og:image", content: ogImageAbsoluteUrl });
+      ensure("meta", {
+        property: "og:image:alt",
+        content: "MySafeOps — UK construction RAMS, permits, and site safety workspace",
+      });
+      ensure("meta", { name: "twitter:image", content: ogImageAbsoluteUrl });
+      ensure("meta", {
+        name: "twitter:image:alt",
+        content: "MySafeOps — UK construction RAMS, permits, and site safety workspace",
+      });
+    }
+
     ensure("meta", { name: "twitter:card", content: "summary_large_image" });
     ensure("meta", { name: "twitter:title", content: title });
     ensure("meta", { name: "twitter:description", content: description });
@@ -86,5 +100,5 @@ export function useLandingHomeDocumentMeta(opts) {
         el.removeAttribute(MARK);
       }
     };
-  }, [title, description, jsonLd]);
+  }, [title, description, jsonLd, ogImageAbsoluteUrl]);
 }

@@ -22,12 +22,13 @@ export default function LandingFooter({ supportEmail }) {
             <h4>Product</h4>
             <ul>
               <li><a href="#features">Features</a></li>
+              <li><a href="#modules">Modules</a></li>
               <li><a href="#readiness">Readiness check</a></li>
               <li><a href="#roi">Value</a></li>
               <li><a href="#roles">How it works</a></li>
               <li><a href="#pricing">Pricing</a></li>
               <li>
-                <a href="/blog">Blog</a>
+                <Link to="/blog">Blog</Link>
               </li>
               <li><a href="#faq">FAQ</a></li>
               <li><a href="#missing">Request feature</a></li>

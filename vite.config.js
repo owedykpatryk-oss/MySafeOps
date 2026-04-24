@@ -21,8 +21,14 @@ export default defineConfig(({ mode }) => {
       {
         name: "inject-supabase-resource-hints",
         transformIndexHtml(html) {
-          if (!supabaseDnsOrigin) return html;
-          return html.replace(
+          const site = String(env.VITE_PUBLIC_SITE_URL || "https://mysafeops.com").replace(/\/$/, "");
+          const ogImage = `${site}/blog/images/permit-to-work-app-uk-hero.png`;
+          const ogBlock = `    <meta property="og:image" content="${ogImage}" />\n    <meta property="og:image:alt" content="MySafeOps — UK construction RAMS and permits" />\n    <meta name="twitter:image" content="${ogImage}" />\n    <meta name="twitter:image:alt" content="MySafeOps — UK construction RAMS and permits" />\n`;
+          let out = /<\/title>/i.test(html)
+            ? html.replace(/<\/title>\s*/i, `</title>\n${ogBlock}`)
+            : html.replace("</head>", `${ogBlock}</head>`);
+          if (!supabaseDnsOrigin) return out;
+          return out.replace(
             "</head>",
             `    <link rel="preconnect" href="${supabaseDnsOrigin}" crossorigin />\n    <link rel="dns-prefetch" href="${supabaseDnsOrigin}" />\n</head>`
           );
