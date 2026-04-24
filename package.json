@@ -21,6 +21,7 @@
     "d1:deploy": "npx wrangler@3 deploy --config cloudflare/workers/d1-api/wrangler.toml",
     "d1:deploy:backup": "npx wrangler@3 deploy --config cloudflare/workers/d1-backup/wrangler.toml",
     "d1:smoke": "node scripts/d1-smoke.mjs",
+    "d1:import-backup": "node scripts/d1-import-backup.mjs",
     "verify:blog": "node scripts/verify-blog.mjs",
     "lint": "eslint \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\"",
     "lint:fix": "eslint \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\" --fix",

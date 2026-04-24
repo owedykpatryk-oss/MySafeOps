@@ -38,7 +38,9 @@ try {
     console.error(`d1:smoke — ${res.status} ${url}\n${typeof body === "string" ? body : JSON.stringify(body, null, 2)}\n`);
     process.exit(1);
   }
+  const rid = res.headers.get("x-request-id") || res.headers.get("X-Request-Id") || "";
   console.log(`d1:smoke — OK ${res.status} ${url}`);
+  if (rid) console.log(`X-Request-Id: ${rid}`);
   console.log(JSON.stringify(body, null, 2));
 } catch (e) {
   console.error(`d1:smoke — ${e?.message || e}\n`);

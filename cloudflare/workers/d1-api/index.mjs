@@ -121,8 +121,8 @@ async function verifyOrgAccess(env, authHeader, orgSlug) {
   return { ok: true };
 }
 
-function handleHealth(c) {
-  return json({ ok: true, service: "mysafeops-d1-api" }, 200, c);
+function handleHealth(c, requestId) {
+  return json({ ok: true, service: "mysafeops-d1-api", request_id: requestId }, 200, c);
 }
 
 async function handleKvGet(request, env, orgSlug, c) {
@@ -354,7 +354,8 @@ async function handleAuditVerify(env, orgSlug, c) {
 
 export default {
   async fetch(request, env) {
-    const c = { ...corsHeaders(request, env), ...secHeaders() };
+    const requestId = crypto.randomUUID();
+    const c = { ...corsHeaders(request, env), ...secHeaders(), "X-Request-Id": requestId };
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: c });
     }
@@ -364,9 +365,9 @@ export default {
 
     if (path === "/v1/health" || path === "/health") {
       if (request.method !== "GET") {
-        return json({ error: "method_not_allowed" }, 405, c);
+        return json({ error: "method_not_allowed", request_id: requestId }, 405, c);
       }
-      return handleHealth(c);
+      return handleHealth(c, requestId);
     }
 
     if (path === "/v1/audit/append" && request.method === "POST") {
