@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
@@ -77,9 +79,7 @@ function SigCanvas({ onCapture, compact }) {
 }
 
 // ─── New briefing form ────────────────────────────────────────────────────────
-function BriefingForm({ onSave, onClose }) {
-  const workers = load("mysafeops_workers", []);
-  const projects = load("mysafeops_projects", []);
+function BriefingForm({ onSave, onClose, workers, projects }) {
 
   const [form, setForm] = useState({
     date: today(), time: new Date().toTimeString().slice(0,5),
@@ -464,11 +464,29 @@ function printBriefing(brief) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function DailyBriefing() {
   const [briefings, setBriefings] = useState(()=>load("daily_briefings",[]));
+  const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [showForm, setShowForm] = useState(false);
   const [filterDate, setFilterDate] = useState("");
   const [search, setSearch] = useState("");
 
-  useEffect(()=>{ save("daily_briefings",briefings); },[briefings]);
+  const { d1Syncing: d1BriefSync } = useD1OrgArraySync({
+    storageKey: "daily_briefings",
+    namespace: "daily_briefings",
+    value: briefings,
+    setValue: setBriefings,
+    load,
+    save,
+  });
+  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+    workers,
+    setWorkers,
+    projects,
+    setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1BriefSync || d1WpSyncing;
 
   const saveBriefing = (form) => {
     setBriefings(prev=>[{...form, id:genId()},...prev]);
@@ -488,7 +506,17 @@ export default function DailyBriefing() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      {showForm && <BriefingForm onSave={saveBriefing} onClose={()=>setShowForm(false)} />}
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing briefings and team lists with cloud…
+        </div>
+      ) : null}
+      {showForm && (
+        <BriefingForm workers={workers} projects={projects} onSave={saveBriefing} onClose={() => setShowForm(false)} />
+      )}
 
       <PageHero
         badgeText="BR"

@@ -43,6 +43,10 @@ const D1_KNOWN_NAMESPACES = new Set([
   "mysafeops_incidents",
   "incident_actions_v1",
   "training_matrix",
+  "inspection_records",
+  "gate_book",
+  "daily_briefings",
+  "visitor_log",
 ]);
 
 function parseArgs() {

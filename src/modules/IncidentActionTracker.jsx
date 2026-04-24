@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
@@ -145,19 +146,57 @@ function ActionForm({ item, incidents, onSave, onClose }) {
 
 export default function IncidentActionTracker() {
   const [items, setItems] = useState(() => load(ACTIONS_KEY, []));
-  const [incidents] = useState(() => load(INCIDENTS_KEY, []));
-  const [inspections] = useState(() => load(INSPECTIONS_KEY, []));
-  const [permits] = useState(() => load(PERMITS_KEY, []));
-  const [projects] = useState(() => load(PROJECTS_KEY, []));
+  const [incidents, setIncidents] = useState(() => load(INCIDENTS_KEY, []));
+  const [inspections, setInspections] = useState(() => load(INSPECTIONS_KEY, []));
+  const [permits, setPermits] = useState(() => load(PERMITS_KEY, []));
+  const [projects, setProjects] = useState(() => load(PROJECTS_KEY, []));
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("");
   const listPg = useRegisterListPaging(50);
 
-  useEffect(() => {
-    save(ACTIONS_KEY, items);
-  }, [items]);
+  const { d1Syncing: d1Actions } = useD1OrgArraySync({
+    storageKey: ACTIONS_KEY,
+    namespace: ACTIONS_KEY,
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
+  const { d1Syncing: d1Inc } = useD1OrgArraySync({
+    storageKey: INCIDENTS_KEY,
+    namespace: INCIDENTS_KEY,
+    value: incidents,
+    setValue: setIncidents,
+    load,
+    save,
+  });
+  const { d1Syncing: d1Insp } = useD1OrgArraySync({
+    storageKey: INSPECTIONS_KEY,
+    namespace: INSPECTIONS_KEY,
+    value: inspections,
+    setValue: setInspections,
+    load,
+    save,
+  });
+  const { d1Syncing: d1Perm } = useD1OrgArraySync({
+    storageKey: PERMITS_KEY,
+    namespace: PERMITS_KEY,
+    value: permits,
+    setValue: setPermits,
+    load,
+    save,
+  });
+  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+    storageKey: PROJECTS_KEY,
+    namespace: PROJECTS_KEY,
+    value: projects,
+    setValue: setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1Actions || d1Inc || d1Insp || d1Perm || d1Proj;
 
   useEffect(() => {
     listPg.reset();
@@ -343,6 +382,14 @@ export default function IncidentActionTracker() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", color: "var(--color-text-primary)" }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing actions and linked registers with cloud…
+        </div>
+      ) : null}
       {modal && <ActionForm item={modal.item} incidents={incidents} onSave={saveItem} onClose={() => setModal(null)} />}
       <PageHero
         badgeText="CAPA"
