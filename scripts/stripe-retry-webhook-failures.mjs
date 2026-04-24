@@ -10,6 +10,7 @@
  *
  * Optional:
  * - STRIPE_RETRY_LIMIT (default: 25)
+ * - STRIPE_PRICE_STARTER, STRIPE_PRICE_TEAM, STRIPE_PRICE_BUSINESS, STRIPE_PRICE_ENTERPRISE (same ids as Supabase Edge secrets) so retried events map billing_plan correctly
  */
 import { config } from "dotenv";
 import { resolve } from "node:path";
@@ -45,9 +46,11 @@ function planFromPriceId(priceId) {
   const s = (process.env.STRIPE_PRICE_STARTER || "").trim();
   const t = (process.env.STRIPE_PRICE_TEAM || "").trim();
   const b = (process.env.STRIPE_PRICE_BUSINESS || "").trim();
+  const e = (process.env.STRIPE_PRICE_ENTERPRISE || "").trim();
   if (s && p === s) return "starter";
   if (t && p === t) return "team";
   if (b && p === b) return "business";
+  if (e && p === e) return "enterprise";
   return null;
 }
 

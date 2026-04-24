@@ -35,6 +35,7 @@ Główny **bloker merytoryczny** w obu: **jedna spójna, serwerowa baza** dla mu
 - Polityki: hasła, MFA, BYOD, incydenty, backup/restore (opis gdzie leżą kopie R2, kto ma dostęp), lista podwykonawców (Supabase, Cloudflare, Vercel, Stripe…), RODO.
 - W repozytorium typowe **dowody techniczne** (gdy wdrożone w prod): `SECURITY.md`, nagłówki, HTTPS, brak sekretów w froncie, Sentry, MFA Supabase.
 - Plan procesu + mapowanie backendu pod certyfikat: [CYBER_ESSENTIALS_PLAN.md](./CYBER_ESSENTIALS_PLAN.md); strona publiczna `/security`.
+- **Billing (Stripe):** cztery ceny miesięczne GBP (`starter`→Solo, `team`, `business`, `enterprise`) + opcjonalny `enterprise_plus` tylko w DB (umowa); limity w `src/lib/billingPlans.js`; retry webhooków lokalnie: `npm run stripe:retry-webhooks` wymaga tych samych `STRIPE_PRICE_*` co Edge (patrz `scripts/stripe-retry-webhook-failures.mjs`).
 
 ## Checklist operacyjna (krótko)
 

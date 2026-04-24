@@ -12,6 +12,10 @@ const FAQ = [
     a: "When cloud billing is enabled for your deployment, you typically get a trial window in-product — see Settings → Billing & limits after sign-in.",
   },
   {
+    q: "Is pricing per worker or per seat?",
+    a: "Plans are a flat monthly price per organisation (tiers differ by how many workers and projects you can run). Field users are included up to each tier’s caps — see the Pricing section above and Billing & limits in the app for live numbers.",
+  },
+  {
     q: "Can we use our own branding on PDFs?",
     a: "Yes. Organisation settings support logo, colours, and PDF footer lines so exports match your company.",
   },

@@ -66,6 +66,10 @@ const viteRows = [
 const cliRows = [
   ["STRIPE_SECRET_KEY", "Local `npm run stripe:seed-prices` — production: Supabase Edge secrets only"],
   ["STRIPE_WEBHOOK_SECRET", "Stripe webhook signing secret (Supabase in prod)"],
+  ["STRIPE_PRICE_STARTER", "Optional local: Stripe Price id for Solo (npm run stripe:retry-webhooks)"],
+  ["STRIPE_PRICE_TEAM", "Optional local: Stripe Price id for Team"],
+  ["STRIPE_PRICE_BUSINESS", "Optional local: Stripe Price id for Business"],
+  ["STRIPE_PRICE_ENTERPRISE", "Optional local: Stripe Price id for Enterprise"],
   ["GOOGLE_OAUTH_CLIENT_ID", "Google provider — configure in Supabase Dashboard"],
   ["GOOGLE_OAUTH_CLIENT_SECRET", "Google provider — Supabase Dashboard only"],
 ];
