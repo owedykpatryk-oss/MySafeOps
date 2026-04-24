@@ -14,17 +14,23 @@ function jsonResponse(body, status = 200) {
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runSnapshot(env, event.cron));
+    const runId = crypto.randomUUID();
+    console.log(`[d1-backup] cron start run_id=${runId} cron=${event.cron || ""}`);
+    ctx.waitUntil(
+      runSnapshot(env, event.cron, runId).catch((e) => {
+        console.error(`[d1-backup] run_id=${runId} FAILED`, e?.message || e);
+      })
+    );
   },
   async fetch() {
     return jsonResponse({ error: "use_scheduled_cron" }, 404);
   },
 };
 
-async function runSnapshot(env, cron) {
+async function runSnapshot(env, cron, runId = "") {
   const { DB, BUCKET } = env;
   if (!DB || !BUCKET) {
-    console.error("[d1-backup] missing DB or BUCKET binding");
+    console.error(`[d1-backup] run_id=${runId} missing DB or BUCKET binding`);
     return;
   }
 
@@ -40,7 +46,7 @@ async function runSnapshot(env, cron) {
       `SELECT org_slug, seq, created_at, actor_sub, action, entity, detail, client_row_id, prev_hash, entry_hash, payload_json FROM org_audit_log ORDER BY org_slug, seq`
     ).all();
   } catch (e) {
-    console.warn("[d1-backup] org_audit_log query skipped (apply schema/0002 if missing):", e?.message || e);
+    console.warn(`[d1-backup] run_id=${runId} org_audit_log query skipped:`, e?.message || e);
   }
 
   const dump = {
@@ -48,6 +54,7 @@ async function runSnapshot(env, cron) {
       kind: "mysafeops_d1_dump",
       exported_at: now.toISOString(),
       cron: cron || "",
+      run_id: runId || undefined,
       tables: { org_sync_kv: (kv.results || []).length, org_audit_log: (audit.results || []).length },
     },
     org_sync_kv: kv.results || [],
@@ -59,8 +66,8 @@ async function runSnapshot(env, cron) {
 
   await BUCKET.put(key, u8, {
     httpMetadata: { contentType: "application/json" },
-    customMetadata: { exportedAt: now.toISOString() },
+    customMetadata: { exportedAt: now.toISOString(), runId: runId || "" },
   });
 
-  console.log(`[d1-backup] wrote ${key} (${u8.byteLength} bytes)`);
+  console.log(`[d1-backup] run_id=${runId} wrote ${key} (${u8.byteLength} bytes)`);
 }

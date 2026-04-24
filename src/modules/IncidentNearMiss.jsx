@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
@@ -495,14 +497,37 @@ export default function IncidentNearMiss() {
   const { caps } = useApp();
   const [items, setItems] = useState(loadIncidentsMerged);
   const [actions, setActions] = useState(() => load(ACTIONS_KEY, []));
-  const [projects] = useState(() => load("mysafeops_projects", []));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
+  const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
   const [modal, setModal] = useState(null);
   const [filter, setFilter] = useState("all");
   const listPg = useRegisterListPaging(50);
 
-  useEffect(() => {
-    save(INCIDENTS_KEY, items);
-  }, [items]);
+  const { d1Syncing: d1IncidentsSyncing } = useD1OrgArraySync({
+    storageKey: INCIDENTS_KEY,
+    namespace: INCIDENTS_KEY,
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
+  const { d1Syncing: d1ActionsSyncing } = useD1OrgArraySync({
+    storageKey: ACTIONS_KEY,
+    namespace: ACTIONS_KEY,
+    value: actions,
+    setValue: setActions,
+    load,
+    save,
+  });
+  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+    workers,
+    setWorkers,
+    projects,
+    setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1IncidentsSyncing || d1ActionsSyncing || d1WpSyncing;
 
   useEffect(() => {
     listPg.reset();
@@ -596,13 +621,20 @@ export default function IncidentNearMiss() {
     }
     const next = [buildActionFromIncident(incident), ...(actions || [])];
     setActions(next);
-    save(ACTIONS_KEY, next);
     pushAudit({ action: "incident_action_create", entity: "incident_action", detail: incident.id });
     window.alert("Incident action created. Open Incident Action Tracker to assign and set due date.");
   };
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing incidents and lists with cloud…
+        </div>
+      ) : null}
       {modal?.type === "form" && (
         <IncidentForm
           item={modal.data}

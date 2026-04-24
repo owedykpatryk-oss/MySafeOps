@@ -121,6 +121,46 @@ async function verifyOrgAccess(env, authHeader, orgSlug) {
   return { ok: true };
 }
 
+/** GET audit / verify only — admin + supervisor (RPC). Falls back to org membership if RPC missing (404). */
+async function verifyOrgAuditRead(env, authHeader, orgSlug) {
+  const url = (env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const anon = env.SUPABASE_ANON_KEY || "";
+  if (!url || !anon) {
+    return { ok: false, error: "Server misconfiguration: missing SUPABASE_URL or SUPABASE_ANON_KEY" };
+  }
+  if (!orgSlug || !authHeader || !String(authHeader).toLowerCase().startsWith("bearer ")) {
+    return { ok: false, error: "Missing Authorization or X-Org-Slug" };
+  }
+
+  const res = await fetch(`${url}/rest/v1/rpc/user_can_read_org_audit`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: anon,
+      Authorization: authHeader,
+    },
+    body: JSON.stringify({ p_org_slug: orgSlug }),
+  });
+
+  if (res.status === 404) {
+    return verifyOrgAccess(env, authHeader, orgSlug);
+  }
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, error: "Unauthorized" };
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    return { ok: false, error: `Supabase error ${res.status}: ${t.slice(0, 200)}` };
+  }
+
+  const data = await res.json();
+  const allowed = data === true || data === "true";
+  if (!allowed) {
+    return { ok: false, error: "Forbidden: audit read requires admin or supervisor role" };
+  }
+  return { ok: true };
+}
+
 function handleHealth(c, requestId) {
   return json({ ok: true, service: "mysafeops-d1-api", request_id: requestId }, 200, c);
 }
@@ -386,10 +426,10 @@ export default {
       const auth = request.headers.get("Authorization") || "";
       const orgSlug = (request.headers.get("X-Org-Slug") || "").trim();
       if (!orgSlug) return json({ error: "missing_org_slug" }, 400, c);
-      const gate = await verifyOrgAccess(env, auth, orgSlug);
+      const gate = await verifyOrgAuditRead(env, auth, orgSlug);
       if (!gate.ok) {
         const status = gate.error === "Unauthorized" ? 401 : 403;
-        return json({ error: gate.error || "forbidden" }, status, c);
+        return json({ error: gate.error || "forbidden", request_id: requestId }, status, c);
       }
       if (url.searchParams.get("verify") === "1") {
         return handleAuditVerify(env, orgSlug, c);
@@ -401,10 +441,10 @@ export default {
       const auth = request.headers.get("Authorization") || "";
       const orgSlug = (request.headers.get("X-Org-Slug") || "").trim();
       if (!orgSlug) return json({ error: "missing_org_slug" }, 400, c);
-      const gate = await verifyOrgAccess(env, auth, orgSlug);
+      const gate = await verifyOrgAuditRead(env, auth, orgSlug);
       if (!gate.ok) {
         const status = gate.error === "Unauthorized" ? 401 : 403;
-        return json({ error: gate.error || "forbidden" }, status, c);
+        return json({ error: gate.error || "forbidden", request_id: requestId }, status, c);
       }
       return handleAuditVerify(env, orgSlug, c);
     }

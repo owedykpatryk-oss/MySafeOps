@@ -38,6 +38,11 @@ const D1_KNOWN_NAMESPACES = new Set([
   "permits_v2",
   "rams_builder_docs",
   "method_statements",
+  "toolbox_talks",
+  "snags",
+  "mysafeops_incidents",
+  "incident_actions_v1",
+  "training_matrix",
 ]);
 
 function parseArgs() {

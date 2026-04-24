@@ -11,7 +11,8 @@ const ss = ms;
 const AUDIT_PAGE = 120;
 
 export default function AuditLogViewer() {
-  const { caps } = useApp();
+  const { caps, role } = useApp();
+  const canReadServerAudit = role === "admin" || role === "supervisor";
   const [bump, setBump] = useState(0);
   const [serverRows, setServerRows] = useState([]);
   const [serverStatus, setServerStatus] = useState("idle");
@@ -19,6 +20,12 @@ export default function AuditLogViewer() {
 
   useEffect(() => {
     if (!isD1Configured() || !supabase) {
+      setServerRows([]);
+      setServerStatus("skipped");
+      setServerError("");
+      return;
+    }
+    if (!canReadServerAudit) {
       setServerRows([]);
       setServerStatus("skipped");
       setServerError("");
@@ -60,7 +67,7 @@ export default function AuditLogViewer() {
     return () => {
       cancelled = true;
     };
-  }, [bump, supabase]);
+  }, [bump, supabase, canReadServerAudit]);
 
   const rows = useMemo(() => {
     const local = readAudit().map((r) => ({ ...r, source: "local" }));
@@ -85,7 +92,7 @@ export default function AuditLogViewer() {
       <PageHero
         badgeText="LOG"
         title="Audit log"
-        lead="Local ring (max 500) plus server copy when D1 is configured. Clear removes only the browser list; D1 append-only log stays in the cloud."
+        lead="Local ring (max 500) plus D1 server copy for admins and supervisors. Clear removes only the browser list; D1 append-only log stays in the cloud."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button type="button" style={ss.btn} onClick={refresh}>
@@ -108,11 +115,21 @@ export default function AuditLogViewer() {
           </div>
         }
       />
+      {!canReadServerAudit && isD1Configured() ? (
+        <div style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 10 }}>
+          Server audit (D1): your role is <strong>{role}</strong> — only organisation admins and supervisors can load the cloud audit list. Local entries below still apply.
+        </div>
+      ) : null}
       {serverStatus === "loading" ? (
         <div style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 10 }}>Loading server audit…</div>
       ) : null}
       {serverError && serverError !== "d1_not_configured" ? (
-        <div style={{ color: "#b45309", fontSize: 13, marginBottom: 10 }}>Server audit: {serverError}</div>
+        <div style={{ color: "#b45309", fontSize: 13, marginBottom: 10 }}>
+          Server audit:{" "}
+          {String(serverError).includes("Forbidden") || String(serverError).includes("supervisor")
+            ? "You need admin or supervisor role in this organisation to read the D1 audit log."
+            : serverError}
+        </div>
       ) : null}
 
       <div style={ss.card}>

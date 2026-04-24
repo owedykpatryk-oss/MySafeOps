@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { ms } from "../utils/moduleStyles";
 import { geocodeAddressNominatim } from "../utils/geocode";
 import PageHero from "../components/PageHero";
@@ -157,23 +157,14 @@ export default function Workers() {
   const [projects, setProjects] = useState(() => load(PROJECTS_KEY));
   const [modal, setModal] = useState(null);
 
-  const { d1Syncing: d1WorkersSyncing } = useD1OrgArraySync({
-    storageKey: WORKERS_KEY,
-    namespace: WORKERS_KEY,
-    value: workers,
-    setValue: setWorkers,
+  const { d1Syncing } = useD1WorkersProjectsSync({
+    workers,
+    setWorkers,
+    projects,
+    setProjects,
     load,
     save,
   });
-  const { d1Syncing: d1ProjectsSyncing } = useD1OrgArraySync({
-    storageKey: PROJECTS_KEY,
-    namespace: PROJECTS_KEY,
-    value: projects,
-    setValue: setProjects,
-    load,
-    save,
-  });
-  const d1Syncing = d1WorkersSyncing || d1ProjectsSyncing;
 
   const exportWorkersCsv = () => {
     const header = ["Name", "Role", "Phone", "Email", "Certs / notes", "Structured certifications"];

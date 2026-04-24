@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { ms } from "../utils/moduleStyles";
@@ -227,8 +229,8 @@ function SnagCard({ snag, workers, onEdit, onDelete, onStatusChange, bulkMode, s
 export default function SnagRegister() {
   const { caps } = useApp();
   const [snags, setSnags] = useState(()=>load("snags",[]));
-  const [workers] = useState(()=>load("mysafeops_workers",[]));
-  const [projects] = useState(()=>load("mysafeops_projects",[]));
+  const [workers, setWorkers] = useState(()=>load("mysafeops_workers",[]));
+  const [projects, setProjects] = useState(()=>load("mysafeops_projects",[]));
   const [modal, setModal] = useState(null);
   const [bulkMode, setBulkMode] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
@@ -241,11 +243,27 @@ export default function SnagRegister() {
   const [sort, setSort] = useState("newest");
   const listPg = useRegisterListPaging(SNAG_LIST_PAGE);
 
+  const { d1Syncing: d1SnagsSyncing } = useD1OrgArraySync({
+    storageKey: "snags",
+    namespace: "snags",
+    value: snags,
+    setValue: setSnags,
+    load,
+    save,
+  });
+  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+    workers,
+    setWorkers,
+    projects,
+    setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1SnagsSyncing || d1WpSyncing;
+
   useEffect(() => {
     listPg.reset();
   }, [filterStatus, filterPriority, filterProject, filterCategory, filterAssigned, search, sort]);
-
-  useEffect(()=>{ save("snags",snags); },[snags]);
 
   const saveSnag = (snag) => {
     setSnags(prev => prev.find(s=>s.id===snag.id) ? prev.map(s=>s.id===snag.id?snag:s) : [snag,...prev]);
@@ -341,6 +359,14 @@ export default function SnagRegister() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing snags and lists with cloud…
+        </div>
+      ) : null}
       {modal?.type==="form" && <SnagForm snag={modal.data} workers={workers} projects={projects} onSave={saveSnag} onClose={()=>setModal(null)} />}
 
       <PageHero

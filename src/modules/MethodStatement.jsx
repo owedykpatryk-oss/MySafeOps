@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
@@ -531,7 +532,7 @@ function printMS(form, workers, projects) {
 
 export default function MethodStatement() {
   const [docs, setDocs] = useState(()=>load("method_statements",[]));
-  const { d1Syncing } = useD1OrgArraySync({
+  const { d1Syncing: d1MsSyncing } = useD1OrgArraySync({
     storageKey: "method_statements",
     namespace: "method_statements",
     value: docs,
@@ -539,8 +540,17 @@ export default function MethodStatement() {
     load,
     save,
   });
-  const [workers] = useState(()=>load("mysafeops_workers",[]));
-  const [projects] = useState(()=>load("mysafeops_projects",[]));
+  const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
+  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+    workers,
+    setWorkers,
+    projects,
+    setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1MsSyncing || d1WpSyncing;
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -578,7 +588,7 @@ export default function MethodStatement() {
           className="app-panel-surface"
           style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
         >
-          Syncing method statements with cloud…
+          Syncing method statements and shared lists with cloud…
         </div>
       ) : null}
 

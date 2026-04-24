@@ -44,7 +44,9 @@
 
 3. Dzięki temu Worker później może bezpiecznie sprawdzić: *„czy ten użytkownik należy do tej organizacji (slug)?”*.
 
-**Bez tego kroku** Worker zwróci błąd z Supabase przy wywołaniu RPC.
+4. **Odczyt audytu D1** (`GET /v1/audit`, `GET /v1/audit/verify`): migracja `20260424100000_user_can_read_org_audit.sql` dodaje RPC `user_can_read_org_audit` — tylko rola **admin** lub **supervisor** w `org_memberships`. **Append** audytu (`POST /v1/audit/append`) nadal wymaga tylko członkostwa w org (`user_can_access_org_slug`). Po `db push` zaktualizuj Worker (`npm run d1:deploy`).
+
+**Bez kroku 3** Worker zwróci błąd przy zapisie/odczycie KV. **Bez kroku 4** przy wdrożonym Workerze z nowszym kodem odczyt audytu może zwracać 404 z RPC — Worker wtedy **fallbackuje** do starego zachowania (dowolny członek) dopóki migracja nie wejdzie.
 
 ---
 

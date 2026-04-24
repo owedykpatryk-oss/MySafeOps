@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
@@ -120,14 +122,28 @@ function Form({ item, projects, workers, onSave, onClose }) {
 export default function ToolboxTalkRegister() {
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("toolbox_talks", []));
-  const [projects] = useState(() => load("mysafeops_projects", []));
-  const [workers] = useState(() => load("mysafeops_workers", []));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
+  const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  useEffect(() => {
-    save("toolbox_talks", items);
-  }, [items]);
+  const { d1Syncing: d1ListSyncing } = useD1OrgArraySync({
+    storageKey: "toolbox_talks",
+    namespace: "toolbox_talks",
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
+  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+    workers,
+    setWorkers,
+    projects,
+    setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1ListSyncing || d1WpSyncing;
 
   const exportCsv = () => {
     const h = ["Date", "Topic", "Project", "Presenter", "Attendees", "Summary"];
@@ -156,6 +172,14 @@ export default function ToolboxTalkRegister() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing toolbox data with cloud…
+        </div>
+      ) : null}
       {modal?.type === "form" && (
         <Form item={modal.data} projects={projects} workers={workers} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />
       )}

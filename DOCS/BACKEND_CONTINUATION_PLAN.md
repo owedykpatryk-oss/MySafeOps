@@ -20,9 +20,9 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 | D1 `org_sync_kv` + `org_audit_log` | Schematy w `cloudflare/workers/d1-api/schema/`; zastosować na remote przez `wrangler d1 execute` (nie mylić z Postgres). |
 | Worker `d1-api` | KV, health, audyt HMAC; wymaga `AUDIT_CHAIN_SECRET` + Supabase RPC `user_can_access_org_slug`. |
 | Worker `d1-backup` | Cron → R2 `d1-snapshots/`; `npm run d1:deploy:backup`. |
-| Front | `useD1OrgArraySync` dla **permits** (`permits_v2`), **RAMS** (`rams_builder_docs`), **method statements** (`method_statements`). |
-| Audyt | `pushAudit` → mirror D1; `AuditLogViewer` łączy lokal + serwer. |
-| Supabase | Migracje m.in. z `user_can_access_org_slug` + fix overload `superadmin_recent_organisations` (patrz `20260423120000_*.sql`). |
+| Front | `useD1OrgArraySync` (+ `useD1WorkersProjectsSync`) m.in.: **permits**, **RAMS**, **method statements**, **Workers & projects**, **toolbox talks**, **snags**, **incidents + actions**, **training matrix**. |
+| Audyt | `pushAudit` → mirror D1 (append: każdy członek org). **Odczyt** łańcucha D1: tylko **admin + supervisor** (RPC `user_can_read_org_audit` + Worker); `AuditLogViewer` pokazuje lokalnie wszystkim. |
+| Supabase | `user_can_access_org_slug`, `user_can_read_org_audit`, fix overload `superadmin_recent_organisations` (`20260423120000_*.sql`, `20260424100000_*.sql`). |
 
 ---
 
@@ -30,57 +30,39 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 
 ### B1. Rozszerzyć D1 na kolejne moduły (taki sam wzorzec co MS/RAMS/PTW)
 
+**Status (repo):** wdrożone m.in. `Workers.jsx`, `ToolboxTalkRegister.jsx`, `SnagRegister.jsx`, `IncidentNearMiss.jsx`, `TrainingMatrix.jsx`, wspólne listy w `MethodStatement.jsx` przez `useD1WorkersProjectsSync.js`. Nadal bez D1: wiele rejestrów tylko z `load("mysafeops_projects")` (jednorazowy stan mount) — kolejne wg potrzeby.
+
 **Cel:** Więcej danych org w jednej chmurze, mniej „tylko ten komputer”.
 
-**Jak:** W module z tablicą / dużym JSON w `orgStorage` dodać `useD1OrgArraySync({ storageKey, namespace, value, setValue, load, save })` + cienki pasek „Syncing…”, tak jak w `MethodStatement.jsx`. Namespace w D1 = czytelna nazwa (np. `incident_register` + `key: main`).
+**Jak:** `useD1OrgArraySync` + pasek „Syncing…”; dla `mysafeops_workers` / `mysafeops_projects` → `useD1WorkersProjectsSync`.
 
-**Kandydaci (duży zasięg):** rejestry pod `load("…")` w `src/modules/*`, wspólne listy: `mysafeops_workers`, `mysafeops_projects`, backup/moduły z własnym kluczem.
+**Pliki wzorcowe:** `src/hooks/useD1WorkersProjectsSync.js`, `src/modules/MethodStatement.jsx`.
 
-**Pliki wzorcowe:** `src/modules/MethodStatement.jsx`, `src/hooks/useD1OrgArraySync.js`.
-
-**Ukończone, gdy:** Dla wybranego modułu zapis w D1 widać w `org_sync_kv` i po odświeżeniu inna przeglądarka widzi te same dane (ta sama org, zalogowany user).
-
-**Ryzyka:** Limit rozmiaru JSON w Workerze (~4.5 MB) — duże zbiory: tylko metadane w D1 + R2, albo shardowanie namespace.
+**Ryzyka:** Limit ~4.5 MB JSON na PUT w Workerze.
 
 ---
 
 ### B2. Serwer jako *jedyna* prawda (faza twarda — duża praca)
 
-**Cel:** Brak sytuacji, w której użytkownik myśli, że „zapisał”, a tylko `localStorage` ma dane, a D1 nie.
+**Częściowo:** `useD1OrgArraySync` — druga próba GET po ~1,2 s przy chwilowej awarii sieci / Workerze.
 
-**Kierunki (wybrać jeden spójny):**
+**Do zrobienia:** kolejka offline (IndexedDB), blokada edycji do `d1Ready`, lub jawny model konfliktów — wymaga decyzji produktowej.
 
-1. **Kolejka offline:** mutacje w IndexedDB/queue, retry do API; UI „pending sync”.
-2. **Tylko online:** blokada edycji bez odpowiedzi D1.
-3. **Weryfikacja przy starcie:** nie pozwalać na zapis lokalny zanim pierwszy GET D1 się nie uda (obecnie jest `d1Syncing` / `d1Ready`).
-
-**Pliki:** hook `useD1OrgArraySync.js` + ewent. `src/utils/offlineQueue.js` (nowy).
-
-**Ukończone, gdy:** Opisany model konfliktu (single writer, last-write z ostrzeżeniem, itd.) i zachowanie przy utracie sieci.
+**Pliki:** `src/hooks/useD1OrgArraySync.js` (retry); docelowo osobny moduł kolejki.
 
 ---
 
 ### B3. Audyt serwerowy — role i odczyt
 
-**Cel:** Nie każdy członek org musi czytać pełny łańcuch; ewent. tylko rola compliance.
+**Status (repo):** RPC `user_can_read_org_audit` (admin + supervisor); Worker `verifyOrgAuditRead` dla `GET /v1/audit` i `GET /v1/audit/verify`; **POST append** nadal `user_can_access_org_slug`. Fallback: jeśli RPC zwraca 404 (stary projekt), Worker dopuszcza każdego członka (jak wcześniej). Front: `AuditLogViewer` nie woła D1 dla roli `operative`.
 
-**Jak:** Rozszerzyć Worker (lub Supabase RLS + osobna tabela) o sprawdzenie roli przed `GET /v1/audit`. Wymaga modelu ról w JWT lub tabeli członkostw + RPC.
-
-**Pliki:** `cloudflare/workers/d1-api/index.mjs`, migracje Supabase, ewent. `d1SyncClient.js` (`d1ListServerAudit`).
-
-**Ukończone, gdy:** Zdefiniowane kto może `GET /v1/audit` / `verify` (testy manualne + opis w `D1_SETUP.md`).
+**Pliki:** `supabase/migrations/20260424100000_user_can_read_org_audit.sql`, `cloudflare/workers/d1-api/index.mjs`, `src/modules/AuditLogViewer.jsx`, `DOCS/D1_SETUP.md`.
 
 ---
 
 ### B4. Migracja masowa z JSON (teren / import)
 
-**Cel:** Jednorazowy import wielu org/kluczy z eksportu backupu do D1 bez klikania w każdym kliencie.
-
-**Jak:** Skrypt Node z `fetch` + Supabase user token (lub service path tylko po stronie serwera — **nie** osadzaj service role w repo). Alternatywa: rozszerzyć moduł **Backup** o „Upload to D1” krok po kroku.
-
-**Nowe pliki (propozycja):** `scripts/d1-import-backup.mjs` (szkielet + README w komentarzu).
-
-**Ukończone, gdy:** Opisany flow i minimalny skrypt albo ścieżka tylko-UI.
+**Status:** `npm run d1:import-backup` — `scripts/d1-import-backup.mjs` (JWT użytkownika + `--file` + `D1_IMPORT_ORG_SLUG`). UI „Upload to D1” w module Backup: opcjonalnie później.
 
 ---
 
@@ -88,15 +70,17 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 
 | Zadanie | Działanie |
 |--------|-----------|
-| Alerty z `d1-backup` | Cloudflare Notifications / email gdy cron fail (logi Workera, brak nowego pliku w R2). |
-| Metryki Worker | Logi w dashboardzie; ewent. request id w odpowiedziach. |
-| Testy obciążeniowe | K6/Artillery na `PUT /v1/kv` z limitem — poza standardowym scope małej aplikacji. |
+| Alerty z `d1-backup` | Nadal: Cloudflare Notifications (poza repo). |
+| Metryki / śledzenie | Worker `d1-api`: nagłówek `X-Request-Id` + pole `request_id` w `/v1/health`. `d1-backup`: `run_id` w logach i w `meta` zrzutu JSON. |
+| Testy obciążeniowe | K6/Artillery — opcjonalnie, poza domyślnym scope. |
 
 ---
 
 ### B6. Hook vs duplikacja (refaktor opcjonalny)
 
-**Cel:** Wszystkie moduły D1 używają `useD1OrgArraySync` (już: PTW, RAMS, MS). Gdy jakiś moduł zostaje na ręcznym Kodzie — zrefaktorować.
+**Cel:** Wszystkie moduły z własnym stanem tablic używają hooków D1 zamiast tylko `useState(() => load(...))` bez syncu.
+
+**Status:** `useD1WorkersProjectsSync` redukuje duplikację workers/projects; wiele modułów nadal czyta listy jednorazowo przy mount — akceptowalne do czasu edycji list w tym module.
 
 ---
 

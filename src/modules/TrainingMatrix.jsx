@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
@@ -79,13 +80,27 @@ function Form({ item, workers, onSave, onClose }) {
 export default function TrainingMatrix() {
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("training_matrix", []));
-  const [workers] = useState(() => load("mysafeops_workers", []));
+  const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  useEffect(() => {
-    save("training_matrix", items);
-  }, [items]);
+  const { d1Syncing: d1TrainSyncing } = useD1OrgArraySync({
+    storageKey: "training_matrix",
+    namespace: "training_matrix",
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
+  const { d1Syncing: d1WorkersSyncing } = useD1OrgArraySync({
+    storageKey: "mysafeops_workers",
+    namespace: "mysafeops_workers",
+    value: workers,
+    setValue: setWorkers,
+    load,
+    save,
+  });
+  const d1Syncing = d1TrainSyncing || d1WorkersSyncing;
 
   const expiring = useMemo(() => items.filter((r) => r.expiryDate && daysUntil(r.expiryDate) <= 60 && daysUntil(r.expiryDate) >= 0), [items]);
   const expired = useMemo(() => items.filter((r) => r.expiryDate && daysUntil(r.expiryDate) < 0), [items]);
@@ -117,6 +132,14 @@ export default function TrainingMatrix() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing training matrix with cloud…
+        </div>
+      ) : null}
       {modal?.type === "form" && <Form item={modal.data} workers={workers} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
       <PageHero
         badgeText="TM"

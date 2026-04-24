@@ -59,7 +59,11 @@ export function useD1OrgArraySync({
     }
     let cancelled = false;
     (async () => {
-      const r = await d1GetKv(supabase, orgSlug, namespace, d1DataKey);
+      let r = await d1GetKv(supabase, orgSlug, namespace, d1DataKey);
+      if (!r.ok && !cancelled) {
+        await new Promise((res) => setTimeout(res, 1200));
+        r = await d1GetKv(supabase, orgSlug, namespace, d1DataKey);
+      }
       if (cancelled) return;
       if (!r.ok) {
         d1VersionRef.current = 0;
