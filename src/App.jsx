@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import ProtectedAppRoute from "./components/ProtectedAppRoute";
@@ -14,6 +14,7 @@ const AcceptInvitePage = lazy(() => import("./pages/AcceptInvitePage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 const DocsHubPage = lazy(() => import("./pages/DocsHubPage"));
 const StatusPage = lazy(() => import("./pages/StatusPage"));
+const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 const MainAppLayout = lazy(() => import("./layout/MainAppLayout"));
 
 const PublicClientPortalView = lazy(() =>
@@ -87,7 +88,7 @@ export default function App() {
               </ProtectedAppRoute>
             }
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </BrowserRouter>

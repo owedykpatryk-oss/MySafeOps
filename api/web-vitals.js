@@ -55,7 +55,9 @@ export default async function handler(req, res) {
   const name = String(parsed.name || parsed.metric || "unknown");
   const value = typeof parsed.value === "number" ? parsed.value : parsed.delta;
   const id = String(parsed.id || "");
-  console.log(`[web-vitals] ${name} value=${value} id=${id}`);
+  const path = String(parsed.path || "").slice(0, 512);
+  const pathSuffix = path ? ` path=${path}` : "";
+  console.log(`[web-vitals] ${name} value=${value} id=${id}${pathSuffix}`);
 
   res.writeHead(204, {
     "X-Content-Type-Options": "nosniff",

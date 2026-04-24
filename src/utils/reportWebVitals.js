@@ -10,6 +10,10 @@ function vitalsEndpoint() {
 function sendToServer(metric) {
   const url = vitalsEndpoint();
   if (!url) return;
+  const path =
+    typeof window !== "undefined" && window.location?.pathname
+      ? String(window.location.pathname).slice(0, 512)
+      : "";
   const body = JSON.stringify({
     name: metric.name,
     value: metric.value,
@@ -17,6 +21,7 @@ function sendToServer(metric) {
     id: metric.id,
     rating: metric.rating,
     navigationType: metric.navigationType,
+    path,
   });
   try {
     fetch(url, {
@@ -24,6 +29,7 @@ function sendToServer(metric) {
       headers: { "Content-Type": "application/json" },
       body,
       keepalive: true,
+      credentials: "same-origin",
     }).catch(() => {});
   } catch {
     /* ignore */

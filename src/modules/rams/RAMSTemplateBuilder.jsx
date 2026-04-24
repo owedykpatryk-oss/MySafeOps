@@ -19,6 +19,7 @@ import { ms } from "../../utils/moduleStyles";
 import { safeHttpUrl } from "../../utils/safeUrl";
 import PageHero from "../../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
@@ -4440,6 +4441,14 @@ export default function RAMSTemplateBuilder() {
   const [view, setView] = useState("list"); // list | builder
   const [step, setStep] = useState(1);
   const [ramsDocs, setRamsDocs] = useState(()=>load("rams_builder_docs",[]));
+  const { d1Syncing } = useD1OrgArraySync({
+    storageKey: "rams_builder_docs",
+    namespace: "rams_builder_docs",
+    value: ramsDocs,
+    setValue: setRamsDocs,
+    load,
+    save,
+  });
   const [orgActivities, setOrgActivities] = useState(() => load(RAMS_ORG_ACTIVITIES_KEY, []));
   const [hazardPrefs, setHazardPrefs] = useState(() =>
     load(RAMS_HAZARD_PREFS_KEY, { favoriteIds: [], usageCounts: {}, recentIds: [] })
@@ -4492,7 +4501,6 @@ export default function RAMSTemplateBuilder() {
     return () => clearTimeout(t);
   }, [view, step, form, editedRows, selectedHazards]);
 
-  useEffect(()=>{ save("rams_builder_docs",ramsDocs); },[ramsDocs]);
   useEffect(()=>{ save(RAMS_ORG_ACTIVITIES_KEY, orgActivities); },[orgActivities]);
   useEffect(()=>{ save(RAMS_HAZARD_PREFS_KEY, hazardPrefs); },[hazardPrefs]);
   useEffect(()=>{ save(RAMS_HAZARD_PACKS_KEY, hazardPacks); },[hazardPacks]);
@@ -5432,6 +5440,14 @@ export default function RAMSTemplateBuilder() {
   if (view==="list") {
     return (
       <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+        {d1Syncing ? (
+          <div
+            className="app-panel-surface"
+            style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+          >
+            Syncing RAMS with cloud…
+          </div>
+        ) : null}
         <PageHero
           badgeText="RAMS"
           title="RAMS builder"
@@ -5461,6 +5477,14 @@ export default function RAMSTemplateBuilder() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing RAMS with cloud…
+        </div>
+      ) : null}
       {/* header */}
       <div
         className="app-panel-surface app-rams-builder-header"

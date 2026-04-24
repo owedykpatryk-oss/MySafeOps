@@ -1,0 +1,347 @@
+================================================================================
+MySafeOps — odpowiedź factualna do: „MySafeOps_App_Review_FESS.pdf”
+(J. Haswell, 22 April 2026) + aktualny stan repozytorium kodu (baza faktów)
+================================================================================
+Data pliku: 2026-04-22
+Źródło wiedzy o produkcie: pliki w E:\MySafeOps\ (głównie src/, api/, public/,
+vercel.json, SECURITY.md, supabase/). Bez marketingu, bez gwarancji prawnych.
+
+Ten dokument łączy: (1) streszczenie tez z PDF, (2) odniesienie faktami z kodu
+gdzie to możliwe, (3) wykaz modułów RAMS/permit/ rejestrów.
+
+--------------------------------------------------------------------------------
+1. CEL
+--------------------------------------------------------------------------------
+- Dać jeden plik „same fakty”: co jest w aplikacji, gdzie leżą dane, jakie są
+  zabezpieczenia po stronie wdrożenia, jakie są typy permitów i sekcje RAMS.
+- Umożliwić dalszą obrótkę (np. .docx) bez dopisywania obietnic spoza kodu.
+
+--------------------------------------------------------------------------------
+2. STRESZCZENIE PDF (9 stron) — TREŚĆ, KTÓRĄ PDF PODNOSI
+--------------------------------------------------------------------------------
+2.1. Co PDF chwali (przykłady)
+     - UI mobile-first, readiness / score jako „hak” rozmowny.
+     - Szerokie pokrycie typowych tematów UK: RAMS, typy permitów, COSHH,
+       wybrane rejestry (waste, visitors, training, equipment itd. w sensie
+       „zakresu produktu”).
+     - Trzy role (Admin / Supervisor / Worker) jako punkt wyjścia.
+     - Działanie offline jako cecha produktu.
+     - Eksport PDF, brandowanie, kalkulator wartości (w kontekście strony
+       marketingowej / produktu).
+
+2.2. Słabe dopasowanie do „planu wzrostu FESS” (5 filarów) wg PDF
+     - Brak: pipeline akwizycji, konsolidacja grupy, deal MI.
+     - Brak: CRM, pipeline ofert, rejestr klient/serwis, renewals.
+     - Częściowo: „operational efficiency” — dowody H&S obok pracy, ale
+       PDF mówi o braku: job costing, timesheet jako koszt, PO.
+     - Częściowo: training matrix, ale brak: org chart, SOP przypięte do ról,
+       delegowane zatwierdzenia wielopoziomowe.
+     - Brak: board KPI, „group dashboard”, EBITDA mostek.
+
+2.3. Dopasowanie do „fabryk, nie czysto construction”
+     PDF wypunktowuje: hot work w food + foreign body/allergen/high-care;
+     LOTO; high-care; CIP; allergen changeover; ATEX/DSEAR; GMP deviation;
+     gotowość pod CDM 2026. Opis: „głównie nowe template’y, pola, rejestry”.
+
+2.4. Lista „kiedy to byłby system całej firmy” (poza scope safety)
+     Rejestr jobów, timesheety, PO, client/site, scheduling, group MI, asset
+     u klienta, integracja księgowa, benchmark dostawców, public API/eksport
+     (wg PDF). Alternatywa: best-of-breed obok MySafeOps.
+
+2.5. Uwagi „domowe” w PDF (stan z kwietnia 2026 z perspektywy recenzenta)
+     - Login: notatki developerskie w copy (Supabase, redirect) — do posprzątania.
+     - Support: „mysafeops@gmail.com” — migracja na domenę.
+     - Privacy/T&Cs/cookies: „coming soon” — wymóg GDPR.
+     - Dane: w przeglądarce + ręczny cloud backup; przy dwóch użytkownikach
+       konflikty edycji — sugestia: server of record.
+     - Role: rozbudowa (group admin, client read-only, approverzy).
+     - Audit trail — „worth confirming / worth adding” (słowa PDF).
+     - Integracje, Cyber Essentials, ownership domen/kluczy.
+
+2.6. Trasy decyzyjne w PDF: A = tylko safety, B = OS całej firmy, C = inny tool.
+
+2.7. Następne kroki: porządki, polityki prawne, decyzja data model, pilotaż
+     na 2 jobach, potem ewent. moduły sector (LOTO, hot work food, ATEX…).
+
+--------------------------------------------------------------------------------
+3. AKTUALIZACJA FAKTÓW Z KODU (w stosunku do niektórych punktów PDF)
+--------------------------------------------------------------------------------
+- Domyślny publiczny e-mail wsparcia w kodzie: support@mysafeops.com
+  (src/config/supportContact.js, zmienna VITE_SUPPORT_EMAIL nadpisuje, jeśli
+  poprawna forma adresu). PDF wspominał gmail — w tej wersji repo domyślnie
+  jest domena produktu; fizyczne działanie skrzynki zależy od DNS/Workspace,
+  nie od kodu.
+
+- Publiczne strony prawne: w repozytorium są m.in. public/legal/*.html, routy
+  /privacy, /terms, /cookies, /dpa oraz komponent LegalPage. Teza PDF
+  „coming soon” NIE odpowiada tej wersji repo — należy ocenić, czy treści
+  są prawnie zaakceptowane, ale „brak plików” w kodzie nie jest prawdą.
+
+- Typów permitów w KODZIE jest WIĘCEJ niż „siedem” w PDF. Kanoniczna lista
+  jest w src/modules/permits/permitTypes.js (zob. sekcja 7.2 poniżej) —
+  15+ typów zdefiniowanych w PERMIT_TYPES (plus ewent. „general” itd.).
+
+- Sekcja 3 PDF (LOTO, hot work food, high-care, CIP, allergen, ATEX, GMP,
+  CDM 2026) — w kodzie OBECNE są m.in.:
+  * LOTORegister, HotWorkRegister (pola food/pharma: strefa, produkcja,
+    foreign body, allergen, powiązanie LOTO, QC), HighCareAccessRegister,
+    CIPSignoffRegister, AllergenChangeoverRegister, GMPDeviationLog,
+    DSEARLog (DSEAR/ATEX w nazewnictwie modułu), CDMCompliance (należy
+    sprawdzić etykiety pól w module pod kątem „2026” dosłownie w UI).
+  To nie jest gwarancja pełnej homologacji BRC/GMP u klienta — to wykaz
+  ekranów/rejestrów w aplikacji.
+
+- Architektura „localStorage + backup” z PDF: NADAL aktualne dla danych
+  roboczych: moduły używają orgStorage (localStorage z scope organizacji) dla
+  wielu rejestrów, w tym permits (permits_v2) i RAMS (rams_builder_docs).
+  Autentykacja/organizacja: Supabase gdy skonfigurowany. „Server of record
+  D1/Workers” z pliku DOCS/FESS/CURSOR_BRIEF_* to CEL/PLAN, nie opis
+  bieżącej implementacji w tym repo w całości.
+
+--------------------------------------------------------------------------------
+4. STACK I HOSTING (FAKTY)
+--------------------------------------------------------------------------------
+- Frontend: React (Vite), SPA, react-router. Build: „npm run build”, output dist/.
+- Część publiczna i /app: przeglądarka; dane rejestrów w localStorage
+  (patrz orgStorage) chyba że funkcja używa innej ścieżki.
+- supabase-js: projekt łączy się z Supabase, gdy podane VITE_SUPABASE_*
+  (anon key w bundlu — design Vite).
+- Stripe: klucz publikowany tylko publishable w UI; logika tajnych kluczy
+  po stronie serwera/Edge (nie w tym pliku ujemnym — patrz README/SECURITY).
+- Vercel: opis w vercel.json — m.in. nagłówki HSTS, X-Frame-Options, CSP, cache
+  /api/* = no-store, /assets długi cache, SPA rewrite.
+- public/_headers: odpowiednik nagłówków dla hostów typu Cloudflare Pages
+  (SECURITY.md mówi o synchronizacji z Vercel).
+- public/.well-known/security.txt: kontakt mailto (faktyczny adres w pliku
+  w repo).
+- API Vercel (katalog api/): co najmniej api/web-vitals.js (limity ciała JSON,
+  413 gdy przekroczenie), api/anthropic-messages.js (limit 512k JSON, whitelista
+  kluczy ciała przekazywanych do Anthropic, sekret opcjonalny).
+- Service worker: public/service-worker.js, wersja w SW_VERSION; offline shell.
+
+--------------------------------------------------------------------------------
+5. ZABEZPIECZENIA (FAKTY Z KODU — NIE = „Certyfikat ukończony”)
+--------------------------------------------------------------------------------
+5.1. Transport i nagłówki
+     - HSTS, nosniff, X-Frame-Options SAMEORIGIN, Referrer-Policy, Permissions-
+       Policy, CSP w vercel.json (długa allowlista connect-src m.in. Supabase,
+       Stripe, mapy, ewent. AI, pogoda).
+     - Odpowiedzi /api: no-store, nosniff.
+     - Treść: SECURITY.md — CSP report-only w _headers; promocja do pełnej CSP
+       z nonce jest „do decyzji przy CDN”.
+
+5.2. Aplikacja
+     - safeInternalPath: redirect po logowaniu tylko do ścieżek wewnętrznych
+       (open redirect ograniczany) — src/utils/safeUrl.js.
+     - Hasła w UI: minimalna długość 12 znaków w polityce klienckiej
+       (src/config/authPolicy.js); Supabase ma ostateczne reguły serwera.
+     - Sentry: opcjonalne VITE_SENTRY_DSN; RouteErrorBoundary może
+       Sentry.captureException.
+     - MFA: getRequiresMfaStep, MfaLoginChallenge, mfaAal (logika poziomu AAL) —
+       zależne od konfiguracji Supabase użytkownika/tenant.
+     - Konto platform owner: VITE_PLATFORM_OWNER_EMAIL + migracje
+       supabase/…platform_owner_email_allowlist (RPC po stronie DB) — wymagana
+       spójność z Supabase.
+     - Web vitals: POST z path w payload; fetch credentials same-origin.
+
+5.3. Czego KOD NIE robi sam
+     - RLS, polityka haseł, MFA, rate limit w Supabase: konfiguracja w
+       dashboardzie.
+     - TLS, HSTS na innych hostach: operator infrastruktury.
+     - Cyber Essentials / ISO: proces organizacyjny, nie plik w repo.
+
+--------------------------------------------------------------------------------
+6. MODEL RÓL (JAK W KODZIE)
+--------------------------------------------------------------------------------
+- W PDF: Admin / Supervisor / Worker — produkt nawiązuje do tego w kontekście
+  uprawnień/UX (dokładne reguły per ekran w komponentach; Settings/Org).
+- Uprawnienia superadmin/owner: osobna ścieżka (SuperAdminPanel) z ograniczeniami
+  e-mail (patrz allowlist).
+
+--------------------------------------------------------------------------------
+7. BAZA „RAMS” (MODUŁ, NIE BAZA SQL)
+--------------------------------------------------------------------------------
+7.1. Główny moduł: src/modules/rams/RAMSTemplateBuilder.jsx
+7.2. Trwałość w przeglądarce
+     - Dokumenty RAMS (lista): localStorage, klucz logiczny „rams_builder_docs”
+       (w kodzie: load("rams_builder_docs", [])).
+     - Szkic: mysafeops_rams_builder_draft; szablony aktywności org.:
+       rams_org_activity_templates; preferencje: rams_hazard_picker_prefs,
+       rams_hazard_quick_packs, rams_header_recent_values.
+     - Hash „integrity” w ramsSectionConfig: documentContentHash to hash
+       JSON (nie kryptograficzny podpis).
+
+7.3. Sekcje dokumentu / druku (kolejność, print)
+     - Plik: src/modules/rams/ramsSectionConfig.js
+     - Id sekcji: cover, weather, map, hospital, operative_certs, hazards,
+       signatures, integrity.
+     - Print: default wł./wył. wg RAMS_PRINT_SECTIONS (m.in. operative_certs
+       opcjonalna opt-in).
+
+7.4. Macierz ryzyk / biblioteka zagrożeń
+     - HAZARD_LIBRARY scalone przez ramsAllHazards / rozszerzenia — kategorie
+       trade, wyszukiwanie, poziomy ryzyka. Szczegółowa lista kategorii w
+       plikach ramsHazardLibrary* (długie pliki; tu: funkcja produktu = wybór
+       hazardów i generowanie RAMS/print).
+
+7.5. Integracje pomocnicze w module (gdy włączone/klucze)
+     - Pogoda: Open-Meteo / ewent. OpenWeather (kod w builderze, klucze env).
+     - Mapa / geokodowanie: wzorce integracji z usługami zewn. (CSP zawiera
+       domeny kafelków map).
+
+7.6. Publiczny odczyt: PublicRamsShareView (?ramsShare=TOKEN) — czyta z tego
+     samego schematu local storage co builder (ten sam storage profilu).
+
+--------------------------------------------------------------------------------
+8. BAZA „PERMITS” (MODUŁ, NIE BAZA SQL)
+--------------------------------------------------------------------------------
+8.1. Główny moduł: src/modules/permits/PermitSystem.jsx
+8.2. Trwałość
+     - Główna tablica permitów: localStorage key „permits_v2” (load/save
+       permits_v2).
+     - Prefs / widoki / matrix konfliktów: osobne klucze PERMIT_* w tym
+       module (m.in. nadpisania typów, workflow, role policy, reguły zależności
+       LOTO, domyślne pola formularza) — wszystkie jako JSON w localStorage
+       przez te same mechanizmy zapisu co moduł.
+
+8.3. KANONICZNE TYPY PTW (PERMIT_TYPES w src/modules/permits/permitTypes.js)
+     Id w kodzie (15 wpisów w słowniku) — każdy ma: etykietę, kolor, checklisty,
+     extraFields, opis. Lista identyfikatorów:
+     1) hot_work
+     2) electrical (electrical isolation permit)
+     3) work_at_height
+     4) confined_space
+     5) excavation
+     6) lifting
+     7) cold_work
+     8) line_break
+     9) roof_access
+     10) night_works
+     11) valve_isolation
+     12) visitor_access
+     13) radiography
+     14) ground_disturbance
+     15) general (general permit to work)
+
+8.4. Rejestr „hot work” OSOBNO od formularza PTW
+     - hot_work_register (src/modules/HotWorkRegister.jsx) — rejestr wykonania
+       prac gorących z polami BHP + sektor spożywczy (FOOD_ZONES, PROD_STATUS,
+       foreignBodyControls, allergenControls, link do LOTO, QC) gdy
+       orgHasFoodIndustrialPack() = true w oparciu o industrySectors w
+       mysafeops_org_settings.
+
+8.5. Rysunek / registry ATEX: ProjectDrawingEditor + projectDrawingRegistry.js
+     — meta związane z rejestry DSEAR/ATEX w kontekście rysunków (szczegóły w
+     plikach; tutaj: obszar DSEAR jest w workspace jako moduł DSEARLog).
+
+--------------------------------------------------------------------------------
+9. WSZYSTKIE WIDOKI / REJESTRY (workspace — pojedyncza mapa)
+--------------------------------------------------------------------------------
+Poniżej identyfikatory (id) z src/navigation/workspaceViews.js = lazy import.
+Dashboard i analytics mogą dublikować dashboard; „settings” jest w layout,
+nie w tej liście loaderów w ten sam sposób.
+
+- dashboard, analytics — AnalyticsDashboard
+- permits — PermitSystem
+- rams — RAMSTemplateBuilder
+- workers — Workers
+- bin — RecycleBin
+- site-map — SitePresenceMap
+- project-drawings — ProjectDrawingEditor
+- method-statement — MethodStatement
+- cdm — CDMCompliance
+- daily-briefing — DailyBriefing
+- induction — QRInduction
+- signatures — DigitalSignature
+- timesheets — Timesheet
+- snags — SnagRegister
+- coshh — COSHHRegister
+- inspections — InspectionTracker
+- incidents — IncidentNearMiss
+- incident-actions — IncidentActionTracker
+- incident-map — IncidentHotspotMap
+- riddor — RIDDORWizard
+- emergency — EmergencyContacts
+- ppe — PPERegister
+- plant — PlantEquipmentRegister
+- fire — FireSafetyLog
+- hot-work — HotWorkRegister
+- training — TrainingMatrix
+- visitors — VisitorLog
+- toolbox-reg — ToolboxTalkRegister
+- first-aid — FirstAidRegister
+- lone-working — LoneWorkingLog
+- environmental — EnvironmentalLog
+- observations — SafetyObservations
+- ladders — LadderInspection
+- mewp — MEWPLog
+- gate — GateBook
+- asbestos — AsbestosRegister
+- confined-space — ConfinedSpaceLog
+- loto — LOTORegister
+- electrical-pat — ElectricalPATLog
+- lifting — LiftingPlanRegister
+- dsear — DSEARLog
+- high-care-access — HighCareAccessRegister
+- cip-signoff — CIPSignoffRegister
+- allergen-changeovers — AllergenChangeoverRegister
+- gmp-deviations — GMPDeviationLog
+- noise — NoiseVibrationLog
+- scaffold — ScaffoldRegister
+- excavation — ExcavationLog
+- temp-works — TemporaryWorksRegister
+- welfare — WelfareCheckLog
+- water-hygiene — WaterHygieneLog
+- monthly-report — MonthlyReport
+- waste — WasteRegister
+- templates — DocumentTemplates
+- ai-rams — AIRamsGenerator
+- ai-toolbox — ToolboxTalkAI
+- ai-photo — PhotoHazardAI
+- client-portal — ClientPortal
+- client-acquisition — ClientAcquisitionPlaybook
+- sales-enablement — SalesEnablementHub
+- enterprise-readiness — EnterpriseReadinessHub
+- subcontractor — SubcontractorPortal
+- documents — DocumentLibrary
+- backup — BackupExport
+- audit — AuditLogViewer
+- superadmin — SuperAdminPanel
+- help — HelpAbout
+
+(Plus ekrany publiczne: landing, blog, legal, login, reset, 404, invite, status,
+docs — poza główną listą „workspace” ale w App.jsx / routes.)
+
+--------------------------------------------------------------------------------
+10. SEKTORY PRZEMYSŁOWE (Ustawienia org — food/pharma)
+--------------------------------------------------------------------------------
+- Lista opcji: src/utils/industrialSectors.js — construction, food_beverage,
+  pet_food, pharma, petrochem, dairy, brewing.
+- Przechowanie: localStorage mysafeops_org_settings, pole industrySectors[].
+- Skutki: orgHasFoodIndustrialPack(), orgHasPharmaPack() sterują m.in.
+  wymaganiem pól w hot work, bannerami (IndustrialSectorBanners), listą
+  rejestrów w menu „More” (patrz appModules MORE_SECTIONS).
+
+--------------------------------------------------------------------------------
+11. AUDYT (FAKTY)
+--------------------------------------------------------------------------------
+- pushAudit / AuditLogViewer: lokalne śledzenie działań w wielu akcjach
+  (funkcja audit w utils); „tamper-proof server audit” wymagałby modelu
+  zapisu po stronie serwera — w PDF jest postulat, w kodzie jest lokalny
+  widok audytu + ewent. integracje chmurowe poza tym plikiem.
+
+--------------------------------------------------------------------------------
+12. CZEGO APLIKACJA NIE JEST (ZGODNIE Z PDF I Z KODEM)
+--------------------------------------------------------------------------------
+- System ERP: brak pełnego job costingu, fakturowania, księgowości.
+- Pełny CRM, harmonogram inżynierów, PO: brak w sensie domeny produktu.
+- „Jedna baza SQL jako źródło prawdy” dla wszystkich rejestrów w tym
+  kształcie: niezrealizowane globalnie — dominuje localStorage + opcjonalnie
+  Supabase dla tożsamości i funkcji w chmurze (patrz moduł backup, org sync
+  w README tylko jeśli opisany tam).
+
+================================================================================
+KONIEC — dokument do dalszej obróki przez zespół. Sprawdzić prawnie treści
+stron /privacy /terms itd. przed wykorzystaniem w RODO. Sprawdzić, czy PDF
+Firmy wymaga aktualizacji liczby typów permitów (15 vs „seven” w starym tekście).
+================================================================================

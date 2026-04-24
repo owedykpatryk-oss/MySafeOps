@@ -34,6 +34,9 @@ for (const line of raw.split("\n")) {
   keyCounts.set(k, (keyCounts.get(k) || 0) + 1);
 }
 
+function run() {
+  return (async () => {
+
 const viteRows = [
   ["VITE_SUPABASE_URL", "Supabase project URL"],
   ["VITE_SUPABASE_ANON_KEY", "Supabase anon (public) key"],
@@ -52,6 +55,7 @@ const viteRows = [
   ["VITE_BLOG_POSTS_BASE_URL", "Optional base URL for blog markdown assets / canonical links"],
   ["VITE_STRIPE_PUBLISHABLE_KEY", "Optional Stripe publishable key for Stripe.js in the browser (never secret keys)"],
   ["VITE_SUPPORT_EMAIL", "Public support inbox shown in UI (default support@mysafeops.com)"],
+  ["VITE_D1_API_URL", "Optional Cloudflare D1 Worker URL for org JSON sync (see DOCS/D1_SETUP.md)"],
   ["VITE_SHOW_LOGIN_ADMIN_HINTS", "Show Supabase / .env IT hints on /login + Cloud account (off in prod; dev always shows)"],
   ["VITE_SENTRY_DSN", "Optional Sentry browser DSN for client error reporting"],
   ["VITE_PUBLIC_DOCS_PATH", "Footer /docs link: path (default /docs) or https URL to external documentation"],
@@ -114,4 +118,33 @@ if (hygiene.length === 0) {
   }
 }
 
-console.log("Done. Address any items above, then restart `npm run dev`.\n");
+if (set("VITE_D1_API_URL")) {
+  const u = String(process.env.VITE_D1_API_URL || "")
+    .trim()
+    .replace(/\/+$/, "");
+  if (u) {
+    try {
+      const r = await fetch(`${u}/v1/health`);
+      const j = await r.json().catch(() => ({}));
+      console.log("D1 Worker:\n");
+      console.log(
+        `  ${r.ok ? "✓" : "✗"} GET ${u}/v1/health → ${r.status} ${JSON.stringify(j)}`
+      );
+    } catch (e) {
+      console.log("D1 Worker:\n");
+      console.log(`  ✗ /v1/health — ${e?.message || e}`);
+    }
+    console.log("");
+  }
+} else {
+  console.log("D1: (optional) set VITE_D1_API_URL for org JSON sync — see DOCS/D1_SETUP.md\n  Tip: npm run d1:smoke\n");
+}
+
+    console.log("Done. Address any items above, then restart `npm run dev`.\n");
+  })();
+}
+
+run().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

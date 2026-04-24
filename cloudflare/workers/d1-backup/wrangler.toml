@@ -1,0 +1,24 @@
+# Nightly (or on-demand) JSON dump of D1 → R2. Same database as d1-api.
+#
+# 1. Create R2 bucket in Cloudflare (e.g. mysafeops-d1-backups) or reuse mysafeops-files.
+# 2. Copy database_id from cloudflare/workers/d1-api/wrangler.toml.
+# 3. npx wrangler@3 deploy --config cloudflare/workers/d1-backup/wrangler.toml
+#
+# Snapshots: <bucket>/d1-snapshots/mysafeops-d1-<iso>.json
+
+name = "mysafeops-d1-backup"
+main = "index.mjs"
+compatibility_date = "2024-09-23"
+
+[triggers]
+crons = ["0 3 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mysafeops-d1"
+database_id = "1eaba498-ae25-49a8-b701-e70c3b5c2b07"
+
+[[r2_buckets]]
+binding = "BUCKET"
+# Change to your bucket name in Cloudflare R2
+bucket_name = "mysafeops-files"

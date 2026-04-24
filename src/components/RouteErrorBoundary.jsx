@@ -31,13 +31,28 @@ export default class RouteErrorBoundary extends Component {
         <div
           role="alert"
           style={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxSizing: "border-box",
             fontFamily: "DM Sans, system-ui, sans-serif",
             padding: "2rem 1.25rem",
-            maxWidth: 520,
-            margin: "0 auto",
-            textAlign: "center",
+            background: "var(--color-background-tertiary, #f8fafc)",
           }}
         >
+          <div
+            className="app-surface-card"
+            style={{
+              maxWidth: 520,
+              width: "100%",
+              textAlign: "center",
+              padding: "1.5rem 1.25rem",
+              borderRadius: 12,
+              border: "1px solid var(--color-border-tertiary, #e2e8f0)",
+              background: "var(--color-background-primary, #fff)",
+            }}
+          >
           <div style={{ fontSize: 16, fontWeight: 600, color: "#791F1F", marginBottom: 8 }}>Something went wrong</div>
           <p style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5, marginBottom: 12 }}>
             This screen failed to load. Try again, or refresh the page if the problem continues.
@@ -64,6 +79,7 @@ export default class RouteErrorBoundary extends Component {
           >
             Try again
           </button>
+          </div>
         </div>
       );
     }

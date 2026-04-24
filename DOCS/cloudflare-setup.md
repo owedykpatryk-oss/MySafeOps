@@ -1,10 +1,10 @@
 # MySafeOps — Cloudflare Deployment Guide
 
-## Current app vs optional future backend
+## Current app vs optional backend
 
-**Today, the repo’s React app** does **not** depend on Cloudflare D1 or a custom JWT API. Data lives in the browser (**localStorage**), with optional **Supabase** for sign-in and JSON backup (`app_sync`), and optional **R2 uploads** via the Worker under `cloudflare/workers/r2-upload`. See **[architecture-current.md](./architecture-current.md)** and **[README.md](../README.md)**.
+**The React app** works with **localStorage** only. Optionally: **Supabase** (auth + `app_sync` backup), **R2** uploads via `cloudflare/workers/r2-upload`, and **Cloudflare D1** via a separate **Worker** when `VITE_D1_API_URL` is set (org JSON + audit — see **[D1_SETUP.md](./D1_SETUP.md)** and **[architecture-current.md](./architecture-current.md)**). You can deploy the static SPA without D1 or R2.
 
-The sections below that reference **D1**, **`/api/*` Pages Functions**, and **JWT** describe a **possible future** full-backend architecture (aligned with [database-schema.sql](./database-schema.sql) and early product planning). You can deploy **only** the static SPA + R2 Worker without implementing D1.
+The sections below that reference **D1** with **Pages-embedded `/api/*`** and a **custom JWT** story describe an **older / alternative** full-backend sketch (see [database-schema.sql](./database-schema.sql)). The **implemented** D1 path is the standalone Worker in `cloudflare/workers/d1-api`, not Pages Functions.
 
 ---
 

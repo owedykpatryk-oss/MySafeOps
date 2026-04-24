@@ -1,0 +1,46 @@
+#!/usr/bin/env node
+/**
+ * GET {VITE_D1_API_URL}/v1/health — no auth; verifies Worker is reachable.
+ * Uses .env.local when present; override with: VITE_D1_API_URL=... node scripts/d1-smoke.mjs
+ */
+import dotenv from "dotenv";
+import { existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const root = resolve(__dirname, "..");
+const envLocal = resolve(root, ".env.local");
+
+if (existsSync(envLocal)) {
+  dotenv.config({ path: envLocal });
+}
+
+const base = String(process.env.VITE_D1_API_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
+if (!base) {
+  console.error("d1:smoke — VITE_D1_API_URL is empty. Set in .env.local or export it.\n");
+  process.exit(1);
+}
+
+const url = `${base}/v1/health`;
+try {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const text = await res.text();
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = text;
+  }
+  if (!res.ok) {
+    console.error(`d1:smoke — ${res.status} ${url}\n${typeof body === "string" ? body : JSON.stringify(body, null, 2)}\n`);
+    process.exit(1);
+  }
+  console.log(`d1:smoke — OK ${res.status} ${url}`);
+  console.log(JSON.stringify(body, null, 2));
+} catch (e) {
+  console.error(`d1:smoke — ${e?.message || e}\n`);
+  process.exit(1);
+}

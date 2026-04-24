@@ -23,11 +23,11 @@ The package index [FILE-INDEX.md](./FILE-INDEX.md) and guide [CURSOR-AI-GUIDE.md
 | **Data layer** | IndexedDB (`idb`) suggested | localStorage (+ optional Supabase JSON sync) |
 | **Global search** | Across all entities in prototype | Not a single global search UX |
 | **Site plan / weather / calendar / timeline** | Called out in prototype marketing | Not implemented as in monolith |
-| **Cloudflare D1 + JWT API** | [cloudflare-setup.md](./cloudflare-setup.md) full backend | **Optional future**; app does not require D1 (see [architecture-current.md](./architecture-current.md)) |
+| **Cloudflare D1 + Worker API** | [D1_SETUP.md](./D1_SETUP.md), [cloudflare-setup.md](./cloudflare-setup.md) | **Optional**; when `VITE_D1_API_URL` is set, org-scoped JSON (e.g. permits, RAMS) and server audit sync to D1. App does not require D1 for local-only use. |
 | **Stripe / plan tiers** | Launch checklist in FILE-INDEX | Not implemented in app |
 | **PWA** | manifest + icons in package story | [public/manifest.webmanifest](../public/manifest.webmanifest) + `service-worker.js` + `vite.svg`; add dedicated **maskable PNG** icons for best install UX |
 
 ## How to use this doc
 
-- **Product / sales**: do not promise D1, Stripe, or monolith-only features without checking `src/`.
+- **Product / sales**: do not promise D1 for every module, Stripe, or monolith-only features without checking `src/` and [SERVER_SOURCE_OF_TRUTH.md](./SERVER_SOURCE_OF_TRUTH.md).
 - **Engineering**: when porting a feature from `DOCS/rams-pro.jsx`, treat it as **reference UX**, reimplement in the current patterns (`ms`, org-scoped keys, `pushAudit`, etc.).

@@ -133,6 +133,9 @@ begin
 end;
 $$;
 
+-- Only one public.superadmin_recent_organisations (2-arg) must exist: drop 1-arg overload.
+drop function if exists public.superadmin_recent_organisations(int);
+
 create or replace function public.superadmin_recent_organisations(p_limit int default 50, p_offset int default 0)
 returns jsonb
 language plpgsql
@@ -206,5 +209,5 @@ comment on table public.platform_owner_email_allowlist is
 comment on function public.superadmin_platform_stats is
   'Cross-tenant platform metrics; JWT email must exist in platform_owner_email_allowlist.';
 
-comment on function public.superadmin_recent_organisations is
+comment on function public.superadmin_recent_organisations(int, int) is
   'Latest organisations page; JWT email must exist in platform_owner_email_allowlist. p_limit max 100.';

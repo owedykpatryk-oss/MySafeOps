@@ -27,6 +27,7 @@ Jeśli masz już tylko `VITE_STORAGE_API_URL` i `VITE_STORAGE_UPLOAD_TOKEN`, **d
 | 13 | `AI_PROXY_SHARED_SECRET` | serwer | Opcjonalnie: zabezpieczenie proxy; para z `VITE_AI_PROXY_SECRET` | Jeśli używasz |
 | 14 | `VITE_AI_PROXY_SECRET` | `VITE_*` | Musi = `AI_PROXY_SHARED_SECRET` jeśli włączysz | j.w. |
 | 15 | `VITE_SHOW_LOGIN_ADMIN_HINTS` | `VITE_*` | `true` tylko gdy chcesz podpowiedzi IT na `/login` w **produkcyjnym** bundlu | Zwykle puste / false; opcjonalnie `true` na Preview |
+| 16 | `VITE_D1_API_URL` | `VITE_*` | URL workera D1 (np. `https://mysafeops-d1-api.<konto>.workers.dev`, **bez** `/` na końcu) — patrz `DOCS/D1_SETUP.md` | Production + Preview (gdy używasz D1) |
 
 **Już masz w Vercel (nie duplikuj inaczej):** `VITE_STORAGE_API_URL`, `VITE_STORAGE_UPLOAD_TOKEN`.
 

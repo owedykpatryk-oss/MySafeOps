@@ -1,7 +1,14 @@
--- Pagination for superadmin_recent_organisations (owner dashboard "Load more").
--- Replaces single-argument overload with one function (p_limit, p_offset).
+-- Resolves "function name superadmin_recent_organisations is not unique" (42725) when
+-- multiple overloads exist and COMMENT/REPLACE is ambiguous. Drops all known signatures
+-- and recreates the single canonical 2-argument version (platform owner allowlist).
+
+create table if not exists public.platform_owner_email_allowlist (
+  email text primary key
+);
+insert into public.platform_owner_email_allowlist (email) values ('mysafeops@gmail.com') on conflict (email) do nothing;
 
 drop function if exists public.superadmin_recent_organisations(int);
+drop function if exists public.superadmin_recent_organisations(int, int);
 
 create or replace function public.superadmin_recent_organisations(p_limit int default 50, p_offset int default 0)
 returns jsonb
@@ -17,8 +24,10 @@ declare
   v_off int := greatest(coalesce(p_offset, 0), 0);
   v_rows jsonb;
   v_has_more boolean;
+  v_ok boolean;
 begin
-  if v_email <> 'mysafeops@gmail.com' then
+  select exists (select 1 from public.platform_owner_email_allowlist e where e.email = v_email) into v_ok;
+  if v_email = '' or v_ok is not true then
     return jsonb_build_object('ok', false, 'error', 'forbidden');
   end if;
 
@@ -66,4 +75,26 @@ revoke all on function public.superadmin_recent_organisations(int, int) from pub
 grant execute on function public.superadmin_recent_organisations(int, int) to authenticated;
 
 comment on function public.superadmin_recent_organisations(int, int) is
-  'Latest organisations page for mysafeops@gmail.com only. p_limit max 100; returns has_more for UI paging.';
+  'Latest organisations page; JWT email must exist in platform_owner_email_allowlist. p_limit max 100.';
+
+-- Idempotent: D1 Worker membership check
+create or replace function public.user_can_access_org_slug(p_org_slug text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.org_memberships m
+    join public.organizations o on o.id = m.org_id
+    where m.user_id = auth.uid()
+      and o.slug = p_org_slug
+  );
+$$;
+
+grant execute on function public.user_can_access_org_slug(text) to authenticated;
+
+comment on function public.user_can_access_org_slug(text) is
+  'Returns true if the authenticated user is a member of the organisation with the given slug; used by Cloudflare D1 API Worker.';

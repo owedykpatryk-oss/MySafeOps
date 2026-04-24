@@ -1,0 +1,26 @@
+# Cloudflare Worker: D1 REST API for MySafeOps (org-scoped key/value JSON).
+#
+# 1. wrangler d1 create mysafeops-d1
+# 2. Copy database_id from output into [[d1_databases]] below.
+# 3. wrangler d1 execute mysafeops-d1 --file=./schema/0001_org_sync_kv.sql --remote   # production
+#    wrangler d1 execute mysafeops-d1 --file=./schema/0001_org_sync_kv.sql            # local
+# 4. [vars] SUPABASE_URL, SUPABASE_ANON_KEY (public anon key is OK in vars).
+# 5. wrangler deploy
+# 6. VITE_D1_API_URL=https://<worker>.<subdomain>.workers.dev
+#
+name = "mysafeops-d1-api"
+main = "index.mjs"
+compatibility_date = "2024-09-23"
+
+# Replace with `wrangler d1 create` output (UUID).
+[[d1_databases]]
+binding = "DB"
+database_name = "mysafeops-d1"
+database_id = "1eaba498-ae25-49a8-b701-e70c3b5c2b07"
+
+# Krok 3 w DOCS/D1_SETUP.md: ODKOMENTUJ [vars] i wklej z .env.local (VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY).
+# Hash chain audytu (serwer): npx wrangler@3 secret put AUDIT_CHAIN_SECRET  # długi losowy string, min. 16 znaków
+# [vars]
+# SUPABASE_URL = "https://xxxxx.supabase.co"
+# SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...."
+# ALLOWED_ORIGINS = "https://mysafeops.com,http://localhost:5173"

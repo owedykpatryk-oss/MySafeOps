@@ -1,6 +1,10 @@
 -- Recent organisations list for platform owner (mysafeops@gmail.com) only.
 -- Complements superadmin_platform_stats with actionable rows (support / billing triage).
 
+-- Repair: avoid multiple overloads before (re)creating the single-argument form.
+drop function if exists public.superadmin_recent_organisations(int, int);
+drop function if exists public.superadmin_recent_organisations(int);
+
 create or replace function public.superadmin_recent_organisations(p_limit int default 50)
 returns jsonb
 language plpgsql
@@ -47,7 +51,7 @@ $$;
 revoke all on function public.superadmin_recent_organisations(int) from public;
 grant execute on function public.superadmin_recent_organisations(int) to authenticated;
 
-comment on function public.superadmin_recent_organisations is
+comment on function public.superadmin_recent_organisations(int) is
   'Returns latest organisations (limited) for mysafeops@gmail.com only.';
 
 -- Speeds up pending invite counts and future invite listings.

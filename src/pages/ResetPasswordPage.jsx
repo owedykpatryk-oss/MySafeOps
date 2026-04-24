@@ -76,7 +76,16 @@ export default function ResetPasswordPage() {
               Cloud authentication is not configured in this environment.
             </p>
           ) : !ready || loading ? (
-            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0, lineHeight: 1.55 }}>Checking reset session…</p>
+            <div
+              className="app-view-fallback"
+              style={{ minHeight: 100, padding: "16px 0" }}
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <div className="app-route-spinner" aria-hidden />
+              <span className="app-view-fallback-text">Checking reset session…</span>
+            </div>
           ) : !user ? (
             <>
               <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.55 }}>
@@ -91,10 +100,28 @@ export default function ResetPasswordPage() {
               <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 16px", lineHeight: 1.55 }}>
                 Updating password for <strong>{user.email}</strong>.
               </p>
-              <label style={ss.lbl}>New password</label>
-              <input type="password" autoComplete="new-password" style={ss.inp} value={password} onChange={(e) => setPassword(e.target.value)} />
-              <label style={{ ...ss.lbl, marginTop: 10 }}>Confirm new password</label>
-              <input type="password" autoComplete="new-password" style={ss.inp} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+              <label htmlFor="reset-password-new" style={ss.lbl}>
+                New password
+              </label>
+              <input
+                id="reset-password-new"
+                type="password"
+                autoComplete="new-password"
+                style={ss.inp}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <label htmlFor="reset-password-confirm" style={{ ...ss.lbl, marginTop: 10 }}>
+                Confirm new password
+              </label>
+              <input
+                id="reset-password-confirm"
+                type="password"
+                autoComplete="new-password"
+                style={ss.inp}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
               <div style={{ marginTop: 14 }}>
                 <button type="button" style={ss.btnP} disabled={busy || !password || !confirmPassword} onClick={completeReset}>
                   Save new password

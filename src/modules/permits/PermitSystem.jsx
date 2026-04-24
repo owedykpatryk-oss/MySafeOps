@@ -27,6 +27,7 @@ import { evaluatePermitTypeConflicts, PERMIT_CONFLICT_MATRIX, normalizeConflictP
 import { workspaceDeepLink } from "../../utils/appDeepLinks";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { getOrgId } from "../../utils/orgStorage";
+import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { mirrorPermitsToSupabase } from "../../utils/permitSupabaseMirror";
 import {
   logPermitAuditToSupabase,
@@ -3596,6 +3597,15 @@ export default function PermitSystem() {
   })();
   const permitActorLabel = String(org.defaultLeadEngineer || "").trim() || `role:${appRole}`;
   const [permits, setPermits] = useState(()=>load("permits_v2",[]));
+  const { d1Syncing } = useD1OrgArraySync({
+    storageKey: "permits_v2",
+    namespace: "permits_v2",
+    d1DataKey: "main",
+    value: permits,
+    setValue: setPermits,
+    load,
+    save,
+  });
   const [modal, setModal] = useState(null);
   const [filterType, setFilterType] = useState("");
   const [filterStatus, setFilterStatus] = useState("active");
@@ -3756,7 +3766,6 @@ export default function PermitSystem() {
     [permitThemeMode, prefersDarkTheme]
   );
 
-  useEffect(()=>{ save("permits_v2",permits); },[permits]);
   useEffect(()=>{ save(PERMIT_SAVED_VIEWS_KEY, savedViews); },[savedViews]);
   useEffect(() => { save(PERMIT_CONFLICT_MATRIX_OVERRIDES_KEY, conflictMatrixOverrides); }, [conflictMatrixOverrides]);
   useEffect(() => { save(PERMIT_TYPE_OVERRIDES_KEY, permitTypeOverrides); }, [permitTypeOverrides]);
@@ -6260,6 +6269,15 @@ export default function PermitSystem() {
               </button>
             )}
           </div>
+        </div>
+      ) : null}
+
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing with cloud…
         </div>
       ) : null}
 

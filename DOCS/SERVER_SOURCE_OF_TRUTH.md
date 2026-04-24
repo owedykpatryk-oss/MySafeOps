@@ -1,0 +1,46 @@
+# Serwer jako źródło prawdy (MySafeOps) — stan i plan
+
+Ten dokument wiąże opis z **kodem w repozytorium** (D1, Worker, klient). Pełna zgodność z **IASME / Cyber Essentials** to osobna ścieżka procesowa (kwestionariusz, polityki, DPA) — zob. sekcja **Compliance poza repozytorium**.
+
+## Co jest wdrożone w kodzie (D1 + Workers)
+
+| Obszar | Implementacja |
+|--------|----------------|
+| Wspólna baza (D1) | Tabela `org_sync_kv` — JSON per `org_slug` + `namespace` + `data_key`, wersjonowanie, optymistyczna współbieżność (`ifVersion` / 409). |
+| API HTTP | Worker `d1-api`: `GET/PUT/DELETE /v1/kv`, `GET /v1/health`, audyt: `POST /v1/audit/append`, `GET /v1/audit`, `GET /v1/audit/verify` (schemat `0002_org_audit_log.sql` + sekret `AUDIT_CHAIN_SECRET`). |
+| Izolacja org | Nagłówek `X-Org-Slug` + Supabase RPC `user_can_access_org_slug` (JWT użytkownika). |
+| Klient | `src/lib/d1SyncClient.js` — wywołania do Workera; wspólny hook `src/hooks/useD1OrgArraySync.js` — **permity**, **RAMS** (`rams_builder_docs`), **method statements** (`method_statements`): hydratacja z D1, zapis z debounce, `localStorage` jako cache; konflikt wersji → refetch z serwera. |
+| Lokalny audit | `src/utils/auditLog.js` — pierścień w `localStorage` (max 500) + **mirror** do serwera (`d1AppendServerAudit`), gdy D1 + org ≠ `default`. |
+| Backup D1 → R2 | Worker `d1-backup` (cron domyślnie 03:00 UTC), pliki JSON w R2 pod `d1-snapshots/`. Skrypt: `npm run d1:deploy:backup`. |
+
+## Świadomie niewykonane (większa praca)
+
+- **Prawda wyłącznie na serwerze**: aplikacja nadal inicjuje z `localStorage` i **natychmiast** zapisuje lokalnie; D1 jest autorytatywne po hydratacji, ale pełne „tylko API, zero zaufania do klienta” wymaga kolejnej fazy (kolejka offline, tryb tylko online, itp.).
+- **Reguły ról w audycie** (kto czyta): obecnie ten sam poziom co KV (członek org). Osobne role (np. tylko audytor) wymagają rozszerzenia RPC / JWT claims.
+- **CRDT / lock na dokumencie**: używane jest wersjonowanie i merge przy 409; nie ma edycji wieloużytkowniczej w czasie rzeczywistym.
+- **Migracja terenowa**: używaj modułu **Backup / export** w aplikacji + ewent. skryptu seed (patrz `DOCS/D1_SETUP.md`); dedykowany migrator masowy w repo można dodać w następnym kroku.
+
+## Wybór architektury: „tylko D1+Workers” vs Supabase Postgres
+
+| Wariant | Zalety | Wastrzegi |
+|---------|--------|-----------|
+| **D1 + Worker (obecny kierunek)** | Niskie koszty, jeden model KV, łatwy backup JSON, zgodne z obecnym kodem. | SQL w D1; audyt i kv w jednej bazie — patrz retencja i limity. |
+| **Postgres (Supabase) jako prawda** | RLS, relacje, zapytania, ekosystem Supabase. | Trzeba przenieść modele, możliwy duży refaktor; Worker tylko jako brama lub wcale. |
+
+Główny **bloker merytoryczny** w obu: **jedna spójna, serwerowa baza** dla mutacji, którą respektują wszystkie klienty.
+
+## Compliance poza repozytorium (IASME / Cyber Essentials)
+
+- Zgłoszenie przez IASME, kwestionariusz, ewent. skan.
+- Polityki: hasła, MFA, BYOD, incydenty, backup/restore (opis gdzie leżą kopie R2, kto ma dostęp), lista podwykonawców (Supabase, Cloudflare, Vercel, Stripe…), RODO.
+- W repozytorium typowe **dowody techniczne** (gdy wdrożone w prod): `SECURITY.md`, nagłówki, HTTPS, brak sekretów w froncie, Sentry, MFA Supabase.
+
+## Checklist operacyjna (krótko)
+
+- [ ] `0001` + `0002` schemat na D1 **remote**
+- [ ] `user_can_access_org_slug` w Supabase (SQL Editor, jeśli `db push` blokuje starsze migracje)
+- [ ] `wrangler secret put AUDIT_CHAIN_SECRET` dla workera `d1-api`
+- [ ] `VITE_D1_API_URL` w Vercel + Redeploy
+- [ ] Worker `d1-backup`: `npm run d1:deploy:backup`; zrzuty w R2 pod `d1-snapshots/` (bucket w `cloudflare/workers/d1-backup/wrangler.toml`)
+
+**Szczegółowy plan na dalsze prace (backlog, nowy chat):** [BACKEND_CONTINUATION_PLAN.md](./BACKEND_CONTINUATION_PLAN.md).

@@ -5,10 +5,12 @@ import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { setPendingInviteToken } from "../lib/inviteToken";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
+import { getSupportEmail } from "../config/supportContact";
 
 const ss = ms;
 const teal = "#0d9488";
 const navy = "#0f172a";
+const SUPPORT_EMAIL = getSupportEmail();
 
 export default function AcceptInvitePage() {
   const [searchParams] = useSearchParams();
@@ -17,6 +19,14 @@ export default function AcceptInvitePage() {
 
   const [preview, setPreview] = useState(null);
   const [err, setErr] = useState("");
+
+  useEffect(() => {
+    const prev = document.title;
+    document.title = "Accept invite — MySafeOps";
+    return () => {
+      document.title = prev;
+    };
+  }, []);
 
   useEffect(() => {
     if (!invite) {
@@ -87,7 +97,16 @@ export default function AcceptInvitePage() {
               </p>
             </>
           ) : (
-            <p style={{ margin: 0, fontSize: 14, color: "var(--color-text-secondary)" }}>Loading invite…</p>
+            <div
+              className="app-view-fallback"
+              style={{ minHeight: 100, padding: "12px 0" }}
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <div className="app-route-spinner" aria-hidden />
+              <span className="app-view-fallback-text">Loading invite…</span>
+            </div>
           )}
 
           {invite && !err && (
@@ -116,6 +135,12 @@ export default function AcceptInvitePage() {
             <Link to="/" style={{ color: teal, fontWeight: 500 }}>
               ← Back to home
             </Link>
+          </p>
+          <p style={{ marginTop: 14, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+            Need help?{" "}
+            <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: teal, fontWeight: 500 }}>
+              {SUPPORT_EMAIL}
+            </a>
           </p>
         </div>
       </div>
