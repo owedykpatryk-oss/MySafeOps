@@ -23,14 +23,15 @@ export default defineConfig(({ mode }) => {
         transformIndexHtml(html) {
           const site = String(env.VITE_PUBLIC_SITE_URL || "https://mysafeops.com").replace(/\/$/, "");
           const ogImage = `${site}/blog/images/permit-to-work-app-uk-hero.png`;
-          const ogBlock = `    <meta property="og:image" content="${ogImage}" />\n    <meta property="og:image:alt" content="MySafeOps — UK construction RAMS and permits" />\n    <meta name="twitter:image" content="${ogImage}" />\n    <meta name="twitter:image:alt" content="MySafeOps — UK construction RAMS and permits" />\n`;
+          const ogAlt = "MySafeOps — UK construction RAMS, permits, and site safety workspace";
+          const ogBlock = `    <meta property="og:url" content="${site}/" />\n    <meta property="og:image" content="${ogImage}" />\n    <meta property="og:image:alt" content="${ogAlt}" />\n    <meta name="twitter:image" content="${ogImage}" />\n    <meta name="twitter:image:alt" content="${ogAlt}" />\n`;
           let out = /<\/title>/i.test(html)
             ? html.replace(/<\/title>\s*/i, `</title>\n${ogBlock}`)
             : html.replace("</head>", `${ogBlock}</head>`);
           if (!supabaseDnsOrigin) return out;
           return out.replace(
             "</head>",
-            `    <link rel="preconnect" href="${supabaseDnsOrigin}" crossorigin />\n    <link rel="dns-prefetch" href="${supabaseDnsOrigin}" />\n</head>`
+            `    <link rel="preconnect" href="${supabaseDnsOrigin}" crossorigin />\n    <link rel="dns-prefetch" href="${supabaseDnsOrigin}" />\n  </head>`
           );
         },
       },

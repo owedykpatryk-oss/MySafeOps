@@ -91,6 +91,9 @@
 .badge{display:inline-block;padding:6px 16px;border-radius:50px;font-size:13px;font-weight:600;letter-spacing:.5px}
 
 /* NAV — only the marketing top bar (not blog breadcrumb / article TOC <nav>) */
+/* Offset in-page anchors so fixed nav does not cover section headings */
+.landing-page main section[id]{scroll-margin-top:clamp(88px,14vw,112px)}
+
 .landing-page nav.landing-top-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding-top:max(16px, env(safe-area-inset-top));padding-bottom:16px;transition:background .35s var(--ease-out),box-shadow .35s var(--ease-out),padding .35s var(--ease-out)}
 .landing-page nav.landing-top-nav.sc{background:rgba(255,255,255,.92);backdrop-filter:saturate(1.2) blur(16px);-webkit-backdrop-filter:saturate(1.2) blur(16px);box-shadow:0 1px 0 rgba(15,23,42,.06),0 12px 40px rgba(15,23,42,.06);padding-top:max(10px, env(safe-area-inset-top));padding-bottom:10px}
 .landing-page nav.landing-top-nav .ctn{max-width:min(1280px,100%)}
