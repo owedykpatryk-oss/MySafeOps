@@ -5,7 +5,7 @@
     <link>https://mysafeops.com/blog</link>
     <description>Practical articles for site managers and H&amp;S leads: permits, inductions, toolbox talks, COSHH, and compliance.</description>
     <language>en-gb</language>
-    <lastBuildDate>Fri, 24 Apr 2026 08:18:39 GMT</lastBuildDate>
+    <lastBuildDate>Fri, 24 Apr 2026 10:59:53 GMT</lastBuildDate>
     <atom:link href="https://mysafeops.com/blog/rss.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>Permit to Work App UK: What Good Digital PTW Actually Looks Like</title>
@@ -76,6 +76,34 @@
       <guid isPermaLink="true">https://mysafeops.com/blog/best-permit-to-work-software-uk-2026</guid>
       <pubDate>Thu, 16 Apr 2026 12:00:00 GMT</pubDate>
       <description>Seven platforms UK firms actually shortlist: pricing, permit lifecycles, offline use and when each option makes sense.</description>
+    </item>
+    <item>
+      <title>How to Write a RAMS: UK Construction Guide + Free Template for 2026</title>
+      <link>https://mysafeops.com/blog/how-to-write-a-rams-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/how-to-write-a-rams-uk</guid>
+      <pubDate>Wed, 22 Apr 2026 12:00:00 GMT</pubDate>
+      <description>Step-by-step RAMS for UK sites: risk matrix, method statement, common failures, and a template structure that passes principal-contractor scrutiny.</description>
+    </item>
+    <item>
+      <title>CDM 2015 for Small Contractors: Plain English Guide + Free Template 2026</title>
+      <link>https://mysafeops.com/blog/cdm-2015-small-contractor-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/cdm-2015-small-contractor-uk</guid>
+      <pubDate>Wed, 22 Apr 2026 12:00:00 GMT</pubDate>
+      <description>What CDM 2015 actually requires from sole traders and small firms: contractor duties, the domestic-client trap, and a Construction Phase Plan you can use.</description>
+    </item>
+    <item>
+      <title>Scaffold Inspection Checklist UK: Weekly Register + Free Template 2026</title>
+      <link>https://mysafeops.com/blog/scaffold-inspection-checklist-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/scaffold-inspection-checklist-uk</guid>
+      <pubDate>Wed, 22 Apr 2026 12:00:00 GMT</pubDate>
+      <description>Work at Height rules, the 7-day inspection cycle, competence, tags, and a register format that survives HSE and client audits.</description>
+    </item>
+    <item>
+      <title>Paper vs Digital RAMS: Real Cost Comparison for UK Contractors 2026</title>
+      <link>https://mysafeops.com/blog/paper-vs-digital-rams-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/paper-vs-digital-rams-uk</guid>
+      <pubDate>Wed, 22 Apr 2026 12:00:00 GMT</pubDate>
+      <description>Paper RAMS admin time vs digital subscriptions: scenarios for small, mid-size and larger UK contractors, hidden costs, and break-even maths.</description>
     </item>
   </channel>
 </rss>

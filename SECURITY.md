@@ -4,7 +4,7 @@ This document supports procurement and internal review. It is not a legal warran
 
 ## What ships with the static app
 
-- **Public `/security` route**: customer-facing summary of transport, auth, secrets handling, and optional Cloudflare D1/R2 components — complements this file for procurement questionnaires.
+- **Public `/security` route**: customer-facing summary of transport, auth, secrets handling, optional Cloudflare D1/R2 components, subprocessors, and CI dependency scanning — complements this file for procurement questionnaires.
 - **Vercel (`vercel.json`)**: HSTS, X-Frame-Options, `X-Permitted-Cross-Domain-Policies`, stricter `Permissions-Policy` (e.g. `payment`/`usb` off), CSP, `no-store` for `/api/*` responses, long-cache for `/assets/*`.
 - **`public/_headers`**: same class of headers for static hosts that apply it (e.g. Cloudflare Pages) — keep in sync with Vercel where possible.
 - **`public/.well-known/security.txt`**: contact for responsible disclosure. Update the `Canonical` line to your production URL.
@@ -26,3 +26,15 @@ This document supports procurement and internal review. It is not a legal warran
 ## Reporting
 
 Use the address in `security.txt`. Do not report through public GitHub issues if the finding is sensitive.
+
+## Cyber Essentials (UK) — repository mapping
+
+Process, evidence folders, and CAB questionnaire flow are described in **`DOCS/CYBER_ESSENTIALS_PLAN.md`**. That document is the single place for certification scope, policies outside the repo, and screenshot checklists.
+
+## CI — automated supply-chain gate
+
+GitHub Actions (`.github/workflows/ci.yml`) runs **`npm audit --audit-level=high`** on every push and pull request, then lint, unit tests, Playwright smoke (blog, landing, **public security.txt + `/security`**), and a production build. Keep the workflow green; treat `high` / `critical` advisories per your patch SLA.
+
+## Backend operations (D1 + Workers)
+
+Deployment secrets, remote D1 schema, Supabase RPCs for org isolation, and backup worker setup are summarised in **`DOCS/BACKEND_CONTINUATION_PLAN.md`** (section C checklist) and **`DOCS/SERVER_SOURCE_OF_TRUTH.md`**. The D1 API Worker attaches **`X-Request-Id`** to JSON responses (and `request_id` in `/v1/health`) for log correlation. The browser client (`src/lib/d1SyncClient.js`) copies that value into failed call results as **`request_id`** so support can match UI errors to Cloudflare Worker logs.

@@ -6,6 +6,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `tw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -108,7 +109,7 @@ export default function TemporaryWorksRegister() {
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  const { d1Syncing: d1Items } = useD1OrgArraySync({
+  const { d1Hydrating: d1ItemsH, d1OutboxPending: d1ItemsO } = useD1OrgArraySync({
     storageKey: "temporary_works_register",
     namespace: "temporary_works_register",
     value: items,
@@ -116,7 +117,7 @@ export default function TemporaryWorksRegister() {
     load,
     save,
   });
-  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+  const { d1Hydrating: d1ProjH, d1OutboxPending: d1ProjO } = useD1OrgArraySync({
     storageKey: "mysafeops_projects",
     namespace: "mysafeops_projects",
     value: projects,
@@ -124,7 +125,8 @@ export default function TemporaryWorksRegister() {
     load,
     save,
   });
-  const d1Syncing = d1Items || d1Proj;
+  const d1Hydrating = d1ItemsH || d1ProjH;
+  const d1OutboxPending = d1ItemsO || d1ProjO;
 
   const exportCsv = () => {
     const h = ["Ref", "Category", "Date", "Location", "Project", "Inspector", "Status", "Next"];
@@ -153,14 +155,7 @@ export default function TemporaryWorksRegister() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing temporary works register with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="temporary works register" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
             <PageHero
         badgeText="TW"

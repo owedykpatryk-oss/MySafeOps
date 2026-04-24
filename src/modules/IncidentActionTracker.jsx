@@ -5,6 +5,7 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { pushRecycleBinItem } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const ACTIONS_KEY = "incident_actions_v1";
 const INCIDENTS_KEY = "mysafeops_incidents";
@@ -156,7 +157,7 @@ export default function IncidentActionTracker() {
   const [ownerFilter, setOwnerFilter] = useState("");
   const listPg = useRegisterListPaging(50);
 
-  const { d1Syncing: d1Actions } = useD1OrgArraySync({
+  const { d1Hydrating: d1ActionsH, d1OutboxPending: d1ActionsO } = useD1OrgArraySync({
     storageKey: ACTIONS_KEY,
     namespace: ACTIONS_KEY,
     value: items,
@@ -164,7 +165,7 @@ export default function IncidentActionTracker() {
     load,
     save,
   });
-  const { d1Syncing: d1Inc } = useD1OrgArraySync({
+  const { d1Hydrating: d1IncH, d1OutboxPending: d1IncO } = useD1OrgArraySync({
     storageKey: INCIDENTS_KEY,
     namespace: INCIDENTS_KEY,
     value: incidents,
@@ -172,7 +173,7 @@ export default function IncidentActionTracker() {
     load,
     save,
   });
-  const { d1Syncing: d1Insp } = useD1OrgArraySync({
+  const { d1Hydrating: d1InspH, d1OutboxPending: d1InspO } = useD1OrgArraySync({
     storageKey: INSPECTIONS_KEY,
     namespace: INSPECTIONS_KEY,
     value: inspections,
@@ -180,7 +181,7 @@ export default function IncidentActionTracker() {
     load,
     save,
   });
-  const { d1Syncing: d1Perm } = useD1OrgArraySync({
+  const { d1Hydrating: d1PermH, d1OutboxPending: d1PermO } = useD1OrgArraySync({
     storageKey: PERMITS_KEY,
     namespace: PERMITS_KEY,
     value: permits,
@@ -188,7 +189,7 @@ export default function IncidentActionTracker() {
     load,
     save,
   });
-  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+  const { d1Hydrating: d1ProjH, d1OutboxPending: d1ProjO } = useD1OrgArraySync({
     storageKey: PROJECTS_KEY,
     namespace: PROJECTS_KEY,
     value: projects,
@@ -196,7 +197,8 @@ export default function IncidentActionTracker() {
     load,
     save,
   });
-  const d1Syncing = d1Actions || d1Inc || d1Insp || d1Perm || d1Proj;
+  const d1Hydrating = d1ActionsH || d1IncH || d1InspH || d1PermH || d1ProjH;
+  const d1OutboxPending = d1ActionsO || d1IncO || d1InspO || d1PermO || d1ProjO;
 
   useEffect(() => {
     listPg.reset();
@@ -382,14 +384,7 @@ export default function IncidentActionTracker() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", color: "var(--color-text-primary)" }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing actions and linked registers with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="actions and linked registers" />
       {modal && <ActionForm item={modal.item} incidents={incidents} onSave={saveItem} onClose={() => setModal(null)} />}
       <PageHero
         badgeText="CAPA"

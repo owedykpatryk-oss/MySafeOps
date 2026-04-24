@@ -24,6 +24,7 @@ import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
+import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
@@ -4441,7 +4442,7 @@ export default function RAMSTemplateBuilder() {
   const [view, setView] = useState("list"); // list | builder
   const [step, setStep] = useState(1);
   const [ramsDocs, setRamsDocs] = useState(()=>load("rams_builder_docs",[]));
-  const { d1Syncing } = useD1OrgArraySync({
+  const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
     storageKey: "rams_builder_docs",
     namespace: "rams_builder_docs",
     value: ramsDocs,
@@ -5440,14 +5441,7 @@ export default function RAMSTemplateBuilder() {
   if (view==="list") {
     return (
       <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-        {d1Syncing ? (
-          <div
-            className="app-panel-surface"
-            style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-          >
-            Syncing RAMS with cloud…
-          </div>
-        ) : null}
+        <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="RAMS" />
         <PageHero
           badgeText="RAMS"
           title="RAMS builder"
@@ -5477,14 +5471,7 @@ export default function RAMSTemplateBuilder() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing RAMS with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="RAMS" />
       {/* header */}
       <div
         className="app-panel-surface app-rams-builder-header"

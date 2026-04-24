@@ -7,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const INCIDENTS_KEY = "mysafeops_incidents";
 const LEGACY_INCIDENT_KEY = "incident_register";
@@ -503,7 +504,7 @@ export default function IncidentNearMiss() {
   const [filter, setFilter] = useState("all");
   const listPg = useRegisterListPaging(50);
 
-  const { d1Syncing: d1IncidentsSyncing } = useD1OrgArraySync({
+  const { d1Hydrating: d1IncH, d1OutboxPending: d1IncO } = useD1OrgArraySync({
     storageKey: INCIDENTS_KEY,
     namespace: INCIDENTS_KEY,
     value: items,
@@ -511,7 +512,7 @@ export default function IncidentNearMiss() {
     load,
     save,
   });
-  const { d1Syncing: d1ActionsSyncing } = useD1OrgArraySync({
+  const { d1Hydrating: d1ActH, d1OutboxPending: d1ActO } = useD1OrgArraySync({
     storageKey: ACTIONS_KEY,
     namespace: ACTIONS_KEY,
     value: actions,
@@ -519,7 +520,7 @@ export default function IncidentNearMiss() {
     load,
     save,
   });
-  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+  const { d1Hydrating: d1WpH, d1OutboxPending: d1WpO } = useD1WorkersProjectsSync({
     workers,
     setWorkers,
     projects,
@@ -527,7 +528,8 @@ export default function IncidentNearMiss() {
     load,
     save,
   });
-  const d1Syncing = d1IncidentsSyncing || d1ActionsSyncing || d1WpSyncing;
+  const d1Hydrating = d1IncH || d1ActH || d1WpH;
+  const d1OutboxPending = d1IncO || d1ActO || d1WpO;
 
   useEffect(() => {
     listPg.reset();
@@ -627,14 +629,7 @@ export default function IncidentNearMiss() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing incidents and lists with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="incidents and lists" />
       {modal?.type === "form" && (
         <IncidentForm
           item={modal.data}

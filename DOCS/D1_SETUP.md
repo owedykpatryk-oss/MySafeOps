@@ -189,6 +189,7 @@ npx wrangler@3 deploy
 ### Krok 7 — Test „czy działa” (opcjonalnie, techniczny)
 
 - **Bez logowania:** `npm run d1:smoke` (albo `npm run env:check` — na końcu próbuje `GET …/v1/health`) — oczekuj `ok: true`.
+- **Nagłówki odpowiedzi JSON** (po ostatnim deployu workera): `X-Request-Id`, `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `Referrer-Policy: strict-origin-when-cross-origin` — sprawdź w DevTools → Network albo `curl -sI "$VITE_D1_API_URL/v1/health"`.
 - Zalogowana sesja w aplikacji + ręczny `fetch` z tokenem — tylko gdy debugujesz RPC/KV.
 - Po pierwszym zapisie z aplikacji: w [Cloudflare Dashboard](https://dash.cloudflare.com) → **D1** → `mysafeops-d1` → tabela `org_sync_kv` powinna mieć wiersze.
 - Błąd 401/403: sprawdź nagłówek `X-Org-Slug` = dokładny `slug` organizacji z `ensure_my_org` (nie rób zapisu jako `default` gdy wymagana jest prawdziwa org).

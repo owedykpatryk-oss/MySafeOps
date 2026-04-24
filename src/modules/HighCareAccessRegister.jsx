@@ -6,6 +6,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const KEY = "high_care_access_register";
 const genId = () => `hca_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
@@ -131,7 +132,7 @@ export default function HighCareAccessRegister() {
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  const { d1Syncing: d1Items } = useD1OrgArraySync({
+  const { d1Hydrating: d1ItemsH, d1OutboxPending: d1ItemsO } = useD1OrgArraySync({
     storageKey: KEY,
     namespace: KEY,
     value: items,
@@ -139,7 +140,7 @@ export default function HighCareAccessRegister() {
     load,
     save,
   });
-  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+  const { d1Hydrating: d1ProjH, d1OutboxPending: d1ProjO } = useD1OrgArraySync({
     storageKey: "mysafeops_projects",
     namespace: "mysafeops_projects",
     value: projects,
@@ -147,7 +148,8 @@ export default function HighCareAccessRegister() {
     load,
     save,
   });
-  const d1Syncing = d1Items || d1Proj;
+  const d1Hydrating = d1ItemsH || d1ProjH;
+  const d1OutboxPending = d1ItemsO || d1ProjO;
 
   const openOnSite = items.filter((r) => !r.exitTimestamp);
 
@@ -187,14 +189,7 @@ export default function HighCareAccessRegister() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing high-care access register with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="high-care access register" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
       <PageHero
         badgeText="HC"

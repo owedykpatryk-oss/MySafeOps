@@ -72,7 +72,51 @@ export default function SecurityPosturePage() {
               <strong>separate read rules</strong> for the server-side audit chain: typically admin and supervisor roles).
             </li>
             <li>Scheduled D1 snapshots can be written to <strong>Cloudflare R2</strong> by the <code>d1-backup</code> worker (see project documentation for operations).</li>
+            <li>
+              The D1 HTTP API returns <code>X-Request-Id</code> (and includes <code>request_id</code> in <code>/v1/health</code> JSON) to correlate support requests with Worker logs.
+            </li>
           </ul>
+        </section>
+
+        <section style={{ marginBottom: 28 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Subprocessors (typical production stack)</h2>
+          <p style={{ margin: "0 0 10px", lineHeight: 1.65, color: "var(--color-text-secondary, #64748b)" }}>
+            Exact contracts depend on your deployment. A typical MySafeOps production footprint includes:
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.65, color: "var(--color-text-secondary, #64748b)" }}>
+            <li>
+              <strong>Vercel</strong> — static hosting / CDN for the web app (TLS terminated by the platform).
+            </li>
+            <li>
+              <strong>Supabase</strong> — authentication, Postgres (where used), Row Level Security, Edge Functions for Stripe.
+            </li>
+            <li>
+              <strong>Stripe</strong> — card payments and billing portal (secret keys only on server-side functions).
+            </li>
+            <li>
+              <strong>Cloudflare</strong> — optional Workers + D1 + R2 for org sync and encrypted audit-chain snapshots (when enabled).
+            </li>
+            <li>
+              <strong>Optional:</strong> Sentry (browser error reporting) when <code>VITE_SENTRY_DSN</code> is configured.
+            </li>
+          </ul>
+        </section>
+
+        <section style={{ marginBottom: 28 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Patching &amp; dependency hygiene</h2>
+          <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.65, color: "var(--color-text-secondary, #64748b)" }}>
+            <li>
+              CI runs <code>npm audit --audit-level=high</code> on every push and pull request (see <code>.github/workflows/ci.yml</code> in the repository).
+            </li>
+            <li>High and critical findings should be triaged against your internal SLA (Cyber Essentials commonly expects critical patches within 14 days).</li>
+          </ul>
+        </section>
+
+        <section style={{ marginBottom: 24 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Cyber Essentials / procurement pack</h2>
+          <p style={{ fontSize: 14, lineHeight: 1.65, color: "var(--color-text-secondary, #64748b)" }}>
+            A maintainer-facing checklist that maps controls to this codebase and infrastructure lives in <code>DOCS/CYBER_ESSENTIALS_PLAN.md</code> (version controlled). Operational deployment steps for D1/Workers live in <code>DOCS/BACKEND_CONTINUATION_PLAN.md</code> and <code>DOCS/D1_SETUP.md</code>.
+          </p>
         </section>
 
         <section style={{ marginBottom: 24 }}>

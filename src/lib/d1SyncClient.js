@@ -8,6 +8,22 @@
 
 const NS = (s) => String(s || "").trim();
 
+/**
+ * Correlation id from Worker (`X-Request-Id` header or JSON `request_id` on some bodies).
+ * @param {Response} res
+ * @param {object} [body]
+ */
+function d1Meta(res, body) {
+  let rid = "";
+  try {
+    rid = res.headers?.get?.("X-Request-Id") || res.headers?.get?.("x-request-id") || "";
+  } catch {
+    rid = "";
+  }
+  if (!rid && body && typeof body.request_id === "string") rid = body.request_id;
+  return rid ? { request_id: rid } : {};
+}
+
 function baseUrl() {
   const u = (import.meta.env.VITE_D1_API_URL || "").trim().replace(/\/+$/, "");
   return u || null;
@@ -28,7 +44,7 @@ async function authHeaders(supabase) {
  * @param {string} orgSlug from getOrgId()
  * @param {string} namespace e.g. "permits_v2"
  * @param {string} key e.g. "main" or "list"
- * @returns {Promise<{ ok: boolean, value?: *, version?: number, updated_at?: string | null, error?: string }>}
+ * @returns {Promise<{ ok: boolean, value?: *, version?: number, updated_at?: string | null, error?: string, request_id?: string }>}
  */
 export async function d1GetKv(supabase, orgSlug, namespace, key) {
   const base = baseUrl();
@@ -39,15 +55,20 @@ export async function d1GetKv(supabase, orgSlug, namespace, key) {
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
   const q = new URLSearchParams({ namespace: NS(namespace), key: NS(key) });
-  const res = await fetch(`${base}/v1/kv?${q}`, {
-    method: "GET",
-    headers: {
-      ...h,
-      "X-Org-Slug": org,
-    },
-  });
+  let res;
+  try {
+    res = await fetch(`${base}/v1/kv?${q}`, {
+      method: "GET",
+      headers: {
+        ...h,
+        "X-Org-Slug": org,
+      },
+    });
+  } catch {
+    return { ok: false, error: "fetch_failed" };
+  }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}` };
+  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
   return {
     ok: true,
     value: body.value,
@@ -77,20 +98,25 @@ export async function d1PutKv(supabase, orgSlug, namespace, key, value, ifVersio
     payload.ifVersion = ifVersion;
   }
 
-  const res = await fetch(`${base}/v1/kv`, {
-    method: "PUT",
-    headers: {
-      ...h,
-      "X-Org-Slug": org,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
+  let res;
+  try {
+    res = await fetch(`${base}/v1/kv`, {
+      method: "PUT",
+      headers: {
+        ...h,
+        "X-Org-Slug": org,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    return { ok: false, error: "fetch_failed" };
+  }
   const body = await res.json().catch(() => ({}));
   if (res.status === 409) {
-    return { ok: false, error: "version_conflict", ...body };
+    return { ok: false, error: "version_conflict", ...body, ...d1Meta(res, body) };
   }
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}` };
+  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
   return { ok: true, version: body.version, updated_at: body.updated_at };
 }
 
@@ -117,7 +143,7 @@ export async function d1ListKvKeys(supabase, orgSlug, namespace) {
     },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}` };
+  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
   return { ok: true, items: body.items || [] };
 }
 
@@ -146,7 +172,7 @@ export async function d1DeleteKv(supabase, orgSlug, namespace, key) {
     },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}` };
+  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
   return { ok: true, deleted: body.deleted };
 }
 
@@ -178,8 +204,8 @@ export async function d1AppendServerAudit(supabase, orgSlug, row) {
     }),
   });
   const body = await res.json().catch(() => ({}));
-  if (res.status === 503) return { ok: false, error: "audit_not_configured" };
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}` };
+  if (res.status === 503) return { ok: false, error: "audit_not_configured", ...d1Meta(res, body) };
+  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
   return { ok: true, seq: body.seq };
 }
 
@@ -200,7 +226,7 @@ export async function d1ListServerAudit(supabase, orgSlug, { limit = 50, afterSe
     headers: { ...h, "X-Org-Slug": org },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}` };
+  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
   return { ok: true, items: body.items || [] };
 }
 
@@ -220,8 +246,8 @@ export async function d1VerifyServerAuditChain(supabase, orgSlug) {
     headers: { ...h, "X-Org-Slug": org },
   });
   const body = await res.json().catch(() => ({}));
-  if (res.status === 503) return { ok: false, error: "audit_not_configured" };
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}` };
-  if (body.ok === false) return { ok: false, error: body.error, at_seq: body.at_seq };
+  if (res.status === 503) return { ok: false, error: "audit_not_configured", ...d1Meta(res, body) };
+  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
+  if (body.ok === false) return { ok: false, error: body.error, at_seq: body.at_seq, ...d1Meta(res, body) };
   return { ok: true, entries: body.entries, head: body.head };
 }

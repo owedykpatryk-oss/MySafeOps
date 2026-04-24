@@ -4,6 +4,7 @@ import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `brief_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
@@ -470,7 +471,7 @@ export default function DailyBriefing() {
   const [filterDate, setFilterDate] = useState("");
   const [search, setSearch] = useState("");
 
-  const { d1Syncing: d1BriefSync } = useD1OrgArraySync({
+  const { d1Hydrating: d1BriefH, d1OutboxPending: d1BriefO } = useD1OrgArraySync({
     storageKey: "daily_briefings",
     namespace: "daily_briefings",
     value: briefings,
@@ -478,7 +479,7 @@ export default function DailyBriefing() {
     load,
     save,
   });
-  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+  const { d1Hydrating: d1WpH, d1OutboxPending: d1WpO } = useD1WorkersProjectsSync({
     workers,
     setWorkers,
     projects,
@@ -486,7 +487,8 @@ export default function DailyBriefing() {
     load,
     save,
   });
-  const d1Syncing = d1BriefSync || d1WpSyncing;
+  const d1Hydrating = d1BriefH || d1WpH;
+  const d1OutboxPending = d1BriefO || d1WpO;
 
   const saveBriefing = (form) => {
     setBriefings(prev=>[{...form, id:genId()},...prev]);
@@ -506,14 +508,7 @@ export default function DailyBriefing() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing briefings and team lists with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="briefings and team lists" />
       {showForm && (
         <BriefingForm workers={workers} projects={projects} onSave={saveBriefing} onClose={() => setShowForm(false)} />
       )}

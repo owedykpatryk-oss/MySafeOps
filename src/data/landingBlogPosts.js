@@ -106,6 +106,54 @@ export const LANDING_BLOG_POSTS = [
     readTime: "9 min read",
     image: "/blog/images/best-permit-to-work-software-uk-2026-hero.png",
   },
+  {
+    slug: "how-to-write-a-rams-uk",
+    title: "How to Write a RAMS: UK Construction Guide + Free Template for 2026",
+    excerpt:
+      "Step-by-step RAMS for UK sites: risk matrix, method statement, common failures, and a template structure that passes principal-contractor scrutiny.",
+    jsonLdDescription:
+      "Step-by-step guide to writing a RAMS for UK construction. Real examples, template structure, CDM alignment and what inspectors typically look for.",
+    dateLabel: "Apr 2026",
+    publishedIso: "2026-04-22",
+    readTime: "10 min read",
+    image: "/blog/images/how-to-write-a-rams-uk-hero.png",
+  },
+  {
+    slug: "cdm-2015-small-contractor-uk",
+    title: "CDM 2015 for Small Contractors: Plain English Guide + Free Template 2026",
+    excerpt:
+      "What CDM 2015 actually requires from sole traders and small firms: contractor duties, the domestic-client trap, and a Construction Phase Plan you can use.",
+    jsonLdDescription:
+      "Plain English CDM 2015 guide for small UK contractors: legal duties, Construction Phase Plan content, and common prosecution triggers.",
+    dateLabel: "Apr 2026",
+    publishedIso: "2026-04-22",
+    readTime: "9 min read",
+    image: "/blog/images/cdm-2015-small-contractor-uk-hero.png",
+  },
+  {
+    slug: "scaffold-inspection-checklist-uk",
+    title: "Scaffold Inspection Checklist UK: Weekly Register + Free Template 2026",
+    excerpt:
+      "Work at Height rules, the 7-day inspection cycle, competence, tags, and a register format that survives HSE and client audits.",
+    jsonLdDescription:
+      "Scaffold inspection checklist for UK construction: WAHR 2005, weekly register, competent persons, tags, and template structure.",
+    dateLabel: "Apr 2026",
+    publishedIso: "2026-04-22",
+    readTime: "8 min read",
+    image: "/blog/images/scaffold-inspection-checklist-uk-hero.png",
+  },
+  {
+    slug: "paper-vs-digital-rams-uk",
+    title: "Paper vs Digital RAMS: Real Cost Comparison for UK Contractors 2026",
+    excerpt:
+      "Paper RAMS admin time vs digital subscriptions: scenarios for small, mid-size and larger UK contractors, hidden costs, and break-even maths.",
+    jsonLdDescription:
+      "Honest cost comparison between paper and digital RAMS for UK construction: time, audit prep, platform pricing bands, and when digital pays back.",
+    dateLabel: "Apr 2026",
+    publishedIso: "2026-04-22",
+    readTime: "8 min read",
+    image: "/blog/images/paper-vs-digital-rams-uk-hero.png",
+  },
 ];
 
 const SLUG_SET = new Set(LANDING_BLOG_POSTS.map((p) => p.slug));

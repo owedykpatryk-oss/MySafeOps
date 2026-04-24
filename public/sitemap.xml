@@ -95,4 +95,24 @@
     <changefreq>weekly</changefreq>
     <priority>0.75</priority>
   </url>
+  <url>
+    <loc>https://mysafeops.com/blog/how-to-write-a-rams-uk</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/blog/cdm-2015-small-contractor-uk</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/blog/scaffold-inspection-checklist-uk</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/blog/paper-vs-digital-rams-uk</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.75</priority>
+  </url>
 </urlset>

@@ -6,6 +6,7 @@ import { useApp } from "../context/AppContext";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `snag_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
@@ -243,7 +244,7 @@ export default function SnagRegister() {
   const [sort, setSort] = useState("newest");
   const listPg = useRegisterListPaging(SNAG_LIST_PAGE);
 
-  const { d1Syncing: d1SnagsSyncing } = useD1OrgArraySync({
+  const { d1Hydrating: d1SnagsH, d1OutboxPending: d1SnagsO } = useD1OrgArraySync({
     storageKey: "snags",
     namespace: "snags",
     value: snags,
@@ -251,7 +252,7 @@ export default function SnagRegister() {
     load,
     save,
   });
-  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+  const { d1Hydrating: d1WpH, d1OutboxPending: d1WpO } = useD1WorkersProjectsSync({
     workers,
     setWorkers,
     projects,
@@ -259,7 +260,8 @@ export default function SnagRegister() {
     load,
     save,
   });
-  const d1Syncing = d1SnagsSyncing || d1WpSyncing;
+  const d1Hydrating = d1SnagsH || d1WpH;
+  const d1OutboxPending = d1SnagsO || d1WpO;
 
   useEffect(() => {
     listPg.reset();
@@ -359,14 +361,7 @@ export default function SnagRegister() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing snags and lists with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="snags and lists" />
       {modal?.type==="form" && <SnagForm snag={modal.data} workers={workers} projects={projects} onSave={saveSnag} onClose={()=>setModal(null)} />}
 
       <PageHero

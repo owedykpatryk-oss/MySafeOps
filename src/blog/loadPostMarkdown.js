@@ -2,7 +2,8 @@
  * Blog markdown is bundled at build time (Vite `?raw`). No network fetch, so it works
  * behind Vercel’s SPA rewrite to index.html (which was returning HTML for `/blog/posts/*.md`).
  *
- * To edit an article: change the matching file in `./posts/` (or sync from DOCS/Blog).
+ * To edit an article: change `./posts/{slug}.md`, or edit drafts under `DOCS/Blog/` and run
+ * `node scripts/sync-blog-from-docs.mjs`, then `npm run verify:blog`.
  */
 const modules = import.meta.glob("./posts/*.md", { query: "?raw", import: "default", eager: true });
 

@@ -41,6 +41,7 @@ function secHeaders() {
   return {
     "X-Content-Type-Options": "nosniff",
     "Cache-Control": "no-store",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
   };
 }
 

@@ -122,9 +122,9 @@ To jest sekcja „**co audytor rozumie jako backend**”, spójna z kodem w tym 
 
 Wiele pozycji jest już w `DOCS/FESS/CURSOR_BRIEF_FESS_READINESS.md` (Phase 2). Skrót:
 
-1. **Już w repo:** nagłówki, `security.txt`, `SECURITY.md`, strona `/security` (trust).
+1. **Już w repo:** nagłówki (`vercel.json`, `public/_headers`), `security.txt`, `SECURITY.md`, strona `/security` (trust + subprocessory + CI), E2E: `tests/e2e/security.spec.js` (Playwright w `.github/workflows/ci.yml`).
 2. **Supabase:** MFA dla wszystkich kont operacyjnych; polityka haseł; ewent. rate limit na logowanie (jeśli CAB pyta o brute-force).
-3. **CI:** na każdym push/PR uruchamiane jest `npm audit --audit-level=high` (`.github/workflows/ci.yml`) — utrzymaj zieloność; na critical reaguj w SLA z kwestionariusza (zwykle 14 dni).
+3. **CI:** na każdym push/PR: `npm audit --audit-level=high`, lint, testy Vitest, Playwright (blog, landing, **security**), `npm run build` — plik `.github/workflows/ci.yml`. Utrzymuj zieloność; na critical reaguj w SLA z kwestionariusza (zwykle 14 dni).
 4. **Monitoring:** Sentry (`VITE_SENTRY_DSN`), uptime (np. Better Stack / UptimeRobot) — zrzut konfiguracji jako dowód.
 5. **Backup:** potwierdzenie w R2 + **jeden** udokumentowany test restore (nawet na staging).
 

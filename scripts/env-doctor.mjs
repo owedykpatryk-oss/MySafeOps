@@ -138,10 +138,22 @@ if (set("VITE_D1_API_URL")) {
     try {
       const r = await fetch(`${u}/v1/health`);
       const j = await r.json().catch(() => ({}));
+      const rid = r.headers.get("x-request-id") || r.headers.get("X-Request-Id") || "";
+      const refPol = r.headers.get("referrer-policy") || r.headers.get("Referrer-Policy") || "";
+      const nosniff = r.headers.get("x-content-type-options") || r.headers.get("X-Content-Type-Options") || "";
       console.log("D1 Worker:\n");
       console.log(
         `  ${r.ok ? "✓" : "✗"} GET ${u}/v1/health → ${r.status} ${JSON.stringify(j)}`
       );
+      if (rid) console.log(`  X-Request-Id: ${rid}`);
+      if (r.ok) {
+        if (!refPol || !/strict-origin-when-cross-origin/i.test(refPol)) {
+          console.log("  ⚠ Referrer-Policy: expected strict-origin-when-cross-origin on JSON API (redeploy d1-api worker?)");
+        }
+        if (!nosniff || !/nosniff/i.test(nosniff)) {
+          console.log("  ⚠ X-Content-Type-Options: expected nosniff");
+        }
+      }
     } catch (e) {
       console.log("D1 Worker:\n");
       console.log(`  ✗ /v1/health — ${e?.message || e}`);

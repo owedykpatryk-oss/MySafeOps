@@ -1,9 +1,11 @@
 # Cloudflare Pages / static hosts that honour this file.
+# Keep broadly aligned with vercel.json (SPA + Stripe/hCaptcha frames).
 # Tighten further at the CDN (WAF, HSTS preload) once the apex domain is stable.
 
 /*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
-  X-Frame-Options: DENY
+  X-Frame-Options: SAMEORIGIN
   X-Permitted-Cross-Domain-Policies: none
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: accelerometer=(), camera=(), geolocation=(self), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), serial=(), bluetooth=(), display-capture=(), interest-cohort=()

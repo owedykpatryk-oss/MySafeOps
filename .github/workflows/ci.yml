@@ -23,7 +23,7 @@ jobs:
         run: npm test
       - name: Install Playwright (Chromium)
         run: npx playwright install --with-deps chromium
-      - name: E2E marketing (blog + landing)
-        run: npm run test:e2e:blog && npm run test:e2e:landing
+      - name: E2E marketing (blog + landing + security)
+        run: npm run test:e2e:blog && npm run test:e2e:landing && npm run test:e2e:security
       - name: Production build
         run: npm run build

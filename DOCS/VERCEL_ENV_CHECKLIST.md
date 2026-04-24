@@ -80,7 +80,7 @@ Jeśli masz już tylko `VITE_STORAGE_API_URL` i `VITE_STORAGE_UPLOAD_TOKEN`, **d
 npm run env:check
 ```
 
-Bez wypisywania sekretów — tylko checklista obecności kluczy i ostrzeżeń (m.in. brak `VITE_SUPABASE_*` vs fallbacke).
+Bez wypisywania sekretów — tylko checklista obecności kluczy i ostrzeżeń (m.in. brak `VITE_SUPABASE_*` vs fallbacke). Gdy ustawione jest `VITE_D1_API_URL`, na końcu wykonywane jest `GET …/v1/health` oraz podstawowa weryfikacja nagłówków (`X-Request-Id`, `Referrer-Policy`, `X-Content-Type-Options`) — analogicznie do `npm run d1:smoke`.
 
 ---
 

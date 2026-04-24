@@ -8,7 +8,12 @@ const SNAPSHOT_PREFIX = "d1-snapshots/";
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+    },
   });
 }
 

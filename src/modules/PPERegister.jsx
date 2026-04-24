@@ -6,6 +6,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `ppe_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -80,7 +81,7 @@ export default function PPERegister() {
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  const { d1Syncing: d1Items } = useD1OrgArraySync({
+  const { d1Hydrating: d1ItemsH, d1OutboxPending: d1ItemsO } = useD1OrgArraySync({
     storageKey: "ppe_register",
     namespace: "ppe_register",
     value: items,
@@ -88,7 +89,7 @@ export default function PPERegister() {
     load,
     save,
   });
-  const { d1Syncing: d1Workers } = useD1OrgArraySync({
+  const { d1Hydrating: d1WorkersH, d1OutboxPending: d1WorkersO } = useD1OrgArraySync({
     storageKey: "mysafeops_workers",
     namespace: "mysafeops_workers",
     value: workers,
@@ -96,7 +97,8 @@ export default function PPERegister() {
     load,
     save,
   });
-  const d1Syncing = d1Items || d1Workers;
+  const d1Hydrating = d1ItemsH || d1WorkersH;
+  const d1OutboxPending = d1ItemsO || d1WorkersO;
 
   const exportCsv = () => {
     const h = ["Date", "Worker", "Item", "OK", "Notes"];
@@ -125,14 +127,7 @@ export default function PPERegister() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing PPE register with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="PPE register" />
       {modal?.type === "form" && <Form item={modal.data} workers={workers} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
             <PageHero
         badgeText="PPE"

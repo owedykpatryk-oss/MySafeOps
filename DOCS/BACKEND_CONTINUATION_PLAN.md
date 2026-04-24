@@ -2,6 +2,17 @@
 
 Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częściowo), w kolejności sensu zależności. Na start nowej rozmowy: wklej link do tego pliku + powiedz, od którego punktu chcesz zacząć.
 
+---
+
+## Ostatnia aktualizacja w repozytorium (cyber + backend, bez zmian w chmurze użytkownika)
+
+- **Worker `d1-api`:** nagłówki odpowiedzi JSON rozszerzone o `Referrer-Policy: strict-origin-when-cross-origin` (obok istniejącego `X-Content-Type-Options`, `Cache-Control: no-store`, `X-Request-Id`).
+- **Worker `d1-backup`:** odpowiedzi JSON z `nosniff`, `no-store`, `Referrer-Policy` (endpoint i tak zwraca 404 — cron jest główną ścieżką).
+- **`public/_headers`:** HSTS + `X-Frame-Options: SAMEORIGIN` (wyrównanie z `vercel.json` dla SPA).
+- **Cyber / dowód:** strona `/security` uzupełniona o subprocessory, patching/CI, D1 `X-Request-Id`; `SECURITY.md` — odsyłacze do `CYBER_ESSENTIALS_PLAN`, CI, backend ops; Playwright `tests/e2e/security.spec.js` + krok w `ci.yml`.
+- **Klient D1:** `d1SyncClient` przy błędach HTTP zwraca też `request_id` (nagłówek `X-Request-Id`); błąd `fetch` → `{ ok: false, error: "fetch_failed" }`; `npm run d1:smoke` i **`npm run env:check`** ostrzegają, jeśli na `/v1/health` brakuje oczekiwanych nagłówków; hydratacja `useD1OrgArraySync` — do **3** prób GET; debounced **PUT** — jedna ponowiona próba przy `502/503/504/429`; **kolejka offline** `src/lib/d1SyncOutbox.js` + replay po hydratacji / `online` / interwał ~45 s; `d1Syncing` = hydratacja **lub** oczekujący outbox; baner modułu: `D1ModuleSyncBanner`.
+- **Nadal poza commitem:** checklista sekcji C (Vercel env, `wrangler secret`, migracje Supabase na remote, schemat D1 na remote) — wykonuje operator produkcji.
+
 **Dokumenty już istniejące (nie duplikuj treści — tylko odniesienia):**
 
 - `DOCS/D1_SETUP.md` — kroki operacyjne D1, `VITE_D1_API_URL`, wrangler, schematy SQL (D1 = SQLite; **nie** Supabase SQL Editor dla `0002`).
@@ -9,7 +20,7 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 - `DOCS/VERCEL_ENV_CHECKLIST.md` — zmienne Vercel.
 - `DOCS/architecture-current.md` — architektura aplikacji.
 - `cloudflare/workers/d1-api/index.mjs` — API.
-- `src/lib/d1SyncClient.js`, `src/hooks/useD1OrgArraySync.js` — klient.
+- `src/lib/d1SyncClient.js`, `src/lib/d1SyncOutbox.js`, `src/hooks/useD1OrgArraySync.js`, `src/components/D1ModuleSyncBanner.jsx` — klient.
 
 ---
 
@@ -44,11 +55,11 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 
 ### B2. Serwer jako *jedyna* prawda (faza twarda — duża praca)
 
-**Częściowo:** `useD1OrgArraySync` — druga próba GET po ~1,2 s przy chwilowej awarii sieci / Workerze.
+**Częściowo (repo):** `useD1OrgArraySync` — do **3** prób GET (0 / 1,2 s / 2,8 s) przy hydratacji; jedna **ponowna próba PUT** po ~0,9 s przy `http_502`, `http_503`, `http_504`, `http_429`; **kolejka IndexedDB** (`d1SyncOutbox.js`) — enqueue po nieudanym PUT (z wyjątkiem ścieżki 409 → refetch), flush po hydratacji, `window` `online` oraz co ~45 s gdy pending; przy 409 na flush — serwer wygrywa (jak przy zwykłym PUT). **Retry ręczny:** `requestD1OutboxManualRetry()` (`d1OutboxRetryEvent.js`) + nasłuch w hooku; przycisk w `D1ModuleSyncBanner`. Hook zwraca `d1Hydrating`, `d1OutboxPending`, `d1Syncing`; moduły używają banera (hydratacja vs „upload queued”, a11y `role="status"`).
 
-**Do zrobienia:** kolejka offline (IndexedDB), blokada edycji do `d1Ready`, lub jawny model konfliktów — wymaga decyzji produktowej.
+**Do zrobienia (opcjonalnie / produkt):** blokada edycji do `d1Ready` gdy skonfigurowano D1; jawny ekran konfliktów przy równoległej edycji.
 
-**Pliki:** `src/hooks/useD1OrgArraySync.js` (retry); docelowo osobny moduł kolejki.
+**Pliki:** `src/hooks/useD1OrgArraySync.js`, `src/lib/d1SyncOutbox.js`, `src/lib/d1SyncOutbox.test.js`, `src/lib/d1OutboxRetryEvent.js`, `src/components/D1ModuleSyncBanner.jsx`.
 
 ---
 
@@ -71,7 +82,7 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 | Zadanie | Działanie |
 |--------|-----------|
 | Alerty z `d1-backup` | Nadal: Cloudflare Notifications (poza repo). |
-| Metryki / śledzenie | **Wdrożone w repo:** Worker `d1-api` — nagłówek `X-Request-Id` + `request_id` w JSON `/v1/health`. Worker `d1-backup` — `run_id` w logach i w `meta` zrzutu JSON. |
+| Metryki / śledzenie | **Wdrożone w repo:** Worker `d1-api` — nagłówek `X-Request-Id` + `request_id` w JSON `/v1/health`; `d1SyncClient` zwraca `request_id` przy błędach HTTP; `npm run env:check` / `d1:smoke` ostrzegają przy braku oczekiwanych nagłówków na `/v1/health`. Worker `d1-backup` — `run_id` w logach i w `meta` zrzutu JSON. |
 | Testy obciążeniowe | K6/Artillery — opcjonalnie, poza domyślnym scope. |
 
 ---

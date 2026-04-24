@@ -3,6 +3,7 @@ import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { ms } from "../utils/moduleStyles";
 import { geocodeAddressNominatim } from "../utils/geocode";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { getOrgId, orgScopedKey, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import {
   CERT_LIBRARY,
@@ -157,7 +158,7 @@ export default function Workers() {
   const [projects, setProjects] = useState(() => load(PROJECTS_KEY));
   const [modal, setModal] = useState(null);
 
-  const { d1Syncing } = useD1WorkersProjectsSync({
+  const { d1Hydrating, d1OutboxPending } = useD1WorkersProjectsSync({
     workers,
     setWorkers,
     projects,
@@ -250,14 +251,11 @@ export default function Workers() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14, color: "var(--color-text-primary)" }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing workers and projects with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner
+        d1Hydrating={d1Hydrating}
+        d1OutboxPending={d1OutboxPending}
+        scopeLabel="workers and projects"
+      />
       {modal?.type === "worker" && (
         <WorkerForm
           item={modal.data}

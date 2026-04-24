@@ -6,6 +6,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `vis_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -92,7 +93,7 @@ export default function VisitorLog() {
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  const { d1Syncing: d1Vis } = useD1OrgArraySync({
+  const { d1Hydrating: d1VisH, d1OutboxPending: d1VisO } = useD1OrgArraySync({
     storageKey: "visitor_log",
     namespace: "visitor_log",
     value: items,
@@ -100,7 +101,7 @@ export default function VisitorLog() {
     load,
     save,
   });
-  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+  const { d1Hydrating: d1ProjH, d1OutboxPending: d1ProjO } = useD1OrgArraySync({
     storageKey: "mysafeops_projects",
     namespace: "mysafeops_projects",
     value: projects,
@@ -108,7 +109,8 @@ export default function VisitorLog() {
     load,
     save,
   });
-  const d1Syncing = d1Vis || d1Proj;
+  const d1Hydrating = d1VisH || d1ProjH;
+  const d1OutboxPending = d1VisO || d1ProjO;
 
   const exportCsv = () => {
     const h = ["Date", "Visitor", "Company", "Vehicle", "Host", "Project", "In", "Out", "Induction", "Notes"];
@@ -137,14 +139,7 @@ export default function VisitorLog() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing visitor log with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="visitor log" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
             <PageHero
         badgeText="VIS"

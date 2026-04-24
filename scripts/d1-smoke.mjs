@@ -39,8 +39,20 @@ try {
     process.exit(1);
   }
   const rid = res.headers.get("x-request-id") || res.headers.get("X-Request-Id") || "";
+  const refPol = res.headers.get("referrer-policy") || res.headers.get("Referrer-Policy") || "";
+  const nosniff = res.headers.get("x-content-type-options") || res.headers.get("X-Content-Type-Options") || "";
   console.log(`d1:smoke — OK ${res.status} ${url}`);
   if (rid) console.log(`X-Request-Id: ${rid}`);
+  if (!refPol || !/strict-origin-when-cross-origin/i.test(refPol)) {
+    console.warn("d1:smoke — WARNING: missing or unexpected Referrer-Policy (expected strict-origin-when-cross-origin)");
+  } else {
+    console.log(`Referrer-Policy: ${refPol}`);
+  }
+  if (!nosniff || !/nosniff/i.test(nosniff)) {
+    console.warn("d1:smoke — WARNING: missing X-Content-Type-Options: nosniff");
+  } else {
+    console.log(`X-Content-Type-Options: ${nosniff}`);
+  }
   console.log(JSON.stringify(body, null, 2));
 } catch (e) {
   console.error(`d1:smoke — ${e?.message || e}\n`);

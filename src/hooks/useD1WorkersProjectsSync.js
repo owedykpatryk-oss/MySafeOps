@@ -6,6 +6,8 @@ const PROJECTS_KEY = "mysafeops_projects";
 /**
  * Hydrate + debounce-sync the shared workers/projects lists to D1 (two KV namespaces).
  * Use wherever the module keeps workers/projects in React state (not one-shot load() in forms).
+ *
+ * @returns {{ d1Ready: boolean, d1Hydrating: boolean, d1OutboxPending: boolean, d1Syncing: boolean }}
  */
 export function useD1WorkersProjectsSync({ workers, setWorkers, projects, setProjects, load, save }) {
   const w = useD1OrgArraySync({
@@ -26,6 +28,8 @@ export function useD1WorkersProjectsSync({ workers, setWorkers, projects, setPro
   });
   return {
     d1Ready: w.d1Ready && p.d1Ready,
+    d1Hydrating: w.d1Hydrating || p.d1Hydrating,
+    d1OutboxPending: w.d1OutboxPending || p.d1OutboxPending,
     d1Syncing: w.d1Syncing || p.d1Syncing,
   };
 }

@@ -94,6 +94,7 @@ import {
 } from "./permitIntegrationAdapters";
 import { evaluateWorkerPermitEligibility } from "../../utils/certifications";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
+import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 
 const genId = () => `ptw_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const genAckToken = () => `ack_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
@@ -3597,7 +3598,7 @@ export default function PermitSystem() {
   })();
   const permitActorLabel = String(org.defaultLeadEngineer || "").trim() || `role:${appRole}`;
   const [permits, setPermits] = useState(()=>load("permits_v2",[]));
-  const { d1Syncing } = useD1OrgArraySync({
+  const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
     storageKey: "permits_v2",
     namespace: "permits_v2",
     d1DataKey: "main",
@@ -6272,14 +6273,12 @@ export default function PermitSystem() {
         </div>
       ) : null}
 
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner
+        d1Hydrating={d1Hydrating}
+        d1OutboxPending={d1OutboxPending}
+        hydrateMessage="Syncing with cloud…"
+        queueMessage="Permits: upload queued — will retry when you're online."
+      />
 
       <PageHero
         badgeText="PTW"

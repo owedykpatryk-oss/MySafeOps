@@ -5,6 +5,7 @@ import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
@@ -532,7 +533,7 @@ function printMS(form, workers, projects) {
 
 export default function MethodStatement() {
   const [docs, setDocs] = useState(()=>load("method_statements",[]));
-  const { d1Syncing: d1MsSyncing } = useD1OrgArraySync({
+  const { d1Hydrating: d1MsH, d1OutboxPending: d1MsO } = useD1OrgArraySync({
     storageKey: "method_statements",
     namespace: "method_statements",
     value: docs,
@@ -542,7 +543,7 @@ export default function MethodStatement() {
   });
   const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
-  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+  const { d1Hydrating: d1WpH, d1OutboxPending: d1WpO } = useD1WorkersProjectsSync({
     workers,
     setWorkers,
     projects,
@@ -550,7 +551,8 @@ export default function MethodStatement() {
     load,
     save,
   });
-  const d1Syncing = d1MsSyncing || d1WpSyncing;
+  const d1Hydrating = d1MsH || d1WpH;
+  const d1OutboxPending = d1MsO || d1WpO;
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -583,14 +585,7 @@ export default function MethodStatement() {
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {modal?.type==="form" && <MSForm ms={modal.data} onSave={saveDoc} onClose={()=>setModal(null)} />}
 
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing method statements and shared lists with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="method statements and shared lists" />
 
       <PageHero
         badgeText="MS"

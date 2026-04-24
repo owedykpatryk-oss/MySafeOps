@@ -12,15 +12,14 @@
 
 # Best Permit to Work Software UK 2026: Honest Comparison for Construction Firms
 
-*By the MySafeOps team · Last updated 16 April 2026 · 9 min read*
+*By the MySafeOps team · Last updated 24 April 2026 · 9 min read*
 
 > **Key takeaways**
 > - No single "best" PTW platform wins for every UK construction firm. Fit depends on site size, permit complexity and whether worker licence cost is a blocker.
-> - MySafeOps is strongest for UK contractors with 20+ workers where per-seat pricing breaks budgets.
-> - SafetyCulture wins on polished mobile UX and huge global template library, but per-user cost scales poorly on larger UK sites.
-> - HandsHQ is the enterprise choice for 10+ person H&S teams with approval workflows and collaboration needs.
-> - The Site Book offers AI-generated RAMS with flat-rate pricing, newer to market but strong for small-to-mid builders.
-> - EcoOnline and SmartQHSE suit firms wanting broad EHS suites beyond just permits.
+> - Pricing and packaging can change quickly, so all figures below are indicative snapshots and must be re-checked before purchase.
+> - For worker-heavy sites, per-user pricing can materially increase total cost versus plans that include worker access.
+> - For small teams, flat-rate or free-tier options can be cost-effective starting points.
+> - For larger teams, workflow depth, approvals, integrations and evidence exports usually matter more than headline monthly price.
 
 ![UK construction site — late afternoon, crews and plant](https://mysafeops.com/blog/images/best-permit-to-work-software-uk-2026-hero.png)
 
@@ -38,9 +37,9 @@
 
 ---
 
-Most "best permit to work software" lists are paid rankings dressed up as reviews. This isn't one of those. What follows is a straight comparison of the seven platforms UK construction firms actually shortlist in 2026, with honest pricing (where publicly available), honest strengths, and honest weaknesses.
+Most "best permit to work software" lists are paid rankings dressed up as reviews. This one is an editorial comparison based on publicly available vendor information and product positioning at time of writing.
 
-Yes, we build MySafeOps. We'll be upfront about where it fits and where it doesn't, and we'll recommend other platforms where they're a better match for a given site profile. An honest comparison is more useful than a rigged one, and UK construction buyers have gotten good at spotting the difference.
+Yes, we build MySafeOps. That commercial interest is important context. Treat this article as a starting point for vendor due diligence, not as procurement, legal, or financial advice.
 
 ## How to actually judge PTW software for UK sites
 
@@ -94,21 +93,21 @@ Now the platforms.
 **Positioning:** Global inspection platform with huge template library.
 
 **Strengths:**
-- Polished mobile app, best-in-class UX on iOS/Android
+- Polished mobile app with strong UX on iOS/Android
 - 40,000+ templates across industries (HSE-aligned options available)
 - Strong offline mode with sync-on-reconnect
 - Mature integrations: Procore, Microsoft Teams, Google Drive, more
 - Free tier for up to 10 users
-- Global scale (50M+ inspections logged)
+- Large global user base and broad template ecosystem
 
 **Weaknesses:**
 - Built for inspections, not full permit lifecycles
-- Per-user pricing: ~$24/user/month Premium, ~£9,400/year for 50 workers on annual billing
+- Per-user pricing model can rise quickly on worker-heavy sites
 - UK permit types not pre-built, require custom templates
 - Some reported sync issues in very low-signal environments
 - Generic compliance language, not UK construction specific
 
-**Pricing:** Free tier (up to 10 users), Premium from ~$24/user/month, Enterprise custom.
+**Pricing:** Free tier (up to 10 users), paid plans and enterprise pricing are vendor-defined and subject to change.
 
 **Best for:** Inspection-heavy operations (facilities, retail audits, food safety) where global reach matters more than UK construction specificity. Also a solid [SafetyCulture alternative comparison](https://mysafeops.com/blog/safetyculture-alternative-uk) explores this in more depth.
 
@@ -129,7 +128,7 @@ Now the platforms.
 - No built-in worker cert tracking, incident log, permits-to-work, site diary, or subcontractor tracking at entry level
 - Not cost-effective for small firms (1-10 person teams)
 
-**Pricing:** £70-135/month per user depending on tier (publicly reported ranges).
+**Pricing:** Commonly reported as per-user and tiered; verify live quote directly with vendor.
 
 **Best for:** Mid-to-large UK contractors (50+ employees) with dedicated H&S managers and enterprise approval processes.
 
@@ -150,7 +149,7 @@ Now the platforms.
 - Documents live inside the platform, export as PDF
 - UK-only focus, international users need to adapt
 
-**Pricing:** From £30/month flat-rate.
+**Pricing:** Publicly marketed as flat-rate entry pricing; verify current package details directly with vendor.
 
 **Best for:** Small-to-mid UK builders (1-50 users) who need a full CDM pack without per-seat pricing.
 
@@ -213,7 +212,7 @@ Now the platforms.
 - Less suited for real-time multi-site coordination
 - Permit-to-work lifecycle workflows not core strength
 
-**Pricing:** From ~£30-60/month depending on bundle.
+**Pricing:** Bundle-based pricing is published by vendor and may vary by package.
 
 **Best for:** Small UK builders and contractors focused on CDM paperwork generation rather than live site PTW workflow.
 
@@ -222,45 +221,43 @@ Now the platforms.
 | Platform | UK Construction Native | Permit Lifecycle | Worker Licence Cost | Mobile Offline | Best Fit |
 |----------|----------------------|------------------|---------------------|----------------|----------|
 | **MySafeOps** | Yes | Full, all 7 UK types | Free | Native | UK contractors 20+ workers |
-| **SafetyCulture** | No (global) | Custom templates | ~$24/user/month | Strong | Inspection-heavy ops |
-| **HandsHQ** | Yes | Configurable | £70-135/user/month | Yes | Large UK contractors with H&S team |
+| **SafetyCulture** | No (global) | Custom templates | Per-user (vendor pricing) | Strong | Inspection-heavy ops |
+| **HandsHQ** | Yes | Configurable | Per-user (quote/tier based) | Yes | Large UK contractors with H&S team |
 | **The Site Book** | Yes | RAMS-focused | Included (flat rate) | Yes | Small-to-mid builders |
 | **EcoOnline** | Partly | Full | Per-user | Yes | Enterprise EHS |
 | **SmartQHSE** | Yes | Full | Per-user | Yes | AI-first mid-large firms |
 | **HBXL H&S Xpert** | Yes | Limited | Flat fee | Limited | CDM document generation |
 
-Pricing is current as of April 2026 based on publicly available information and may change. Always verify directly with the vendor.
+Pricing is a public-information snapshot as of April 2026 and may change without notice. Always verify directly with each vendor before making a purchase decision.
 
 ## Pricing reality check
 
-This is the part most comparison sites skip. Here's the honest cost for a **realistic UK construction scenario**: one site with 50 operatives, 5 supervisors and 2 admins over 12 months.
+This is the part most comparison sites skip. Below is an **illustrative scenario** (not a quote): one site with 50 operatives, 5 supervisors and 2 admins over 12 months.
 
-**SafetyCulture Premium** (annual billing at ~$24/user/month, USD to GBP approx):
-- 57 users × roughly £18–22/user/month equivalent × 12 ≈ **~£12,000–15,000/year** (verify current vendor pricing)
+**SafetyCulture-style per-user model** (illustrative only):
+- 57 users × per-user monthly price × 12 can produce a high four-figure to low five-figure annual total depending on live plan and FX.
 
-**HandsHQ** (mid-tier per user/month):
-- 7 paid users (admins + supervisors) × £100/month × 12 = **~£8,400/year**
-- No worker access without additional licensing
+**HandsHQ-style per-user model** (illustrative only):
+- 7 paid users (admins + supervisors) × per-user monthly price × 12.
+- Worker access and module scope should be confirmed in writing during procurement.
 
-**EcoOnline** (quote-based, industry average per-user):
-- Similar structure to SafetyCulture: **~£10,000-15,000/year** depending on modules
+**EcoOnline** (quote-based):
+- Final cost depends on module mix, user count, and contract structure.
 
-**MySafeOps** (flat organisation subscription — workers included up to tier caps, not priced per seat):
-- Example: **Team ~£79/mo** (~£948/year) for up to 20 workers on that tier; **Business £149/mo** for higher caps — see in-app Billing & limits
-- 50 site workers fit within Business tier limits for field use (verify current plan table)
+**MySafeOps** (organisation subscription, not worker-seat priced on current plans):
+- Pricing tiers are shown in-app and may change; verify live plan table at checkout.
+- Confirm worker limits and included features on the active plan version before purchase.
 
-**The Site Book** (flat-rate £30/month):
-- All users included: **~£360/year**
-- Document-focused, smaller permit lifecycle depth
+**The Site Book** (flat-rate positioning):
+- Vendor markets flat-rate entry pricing; verify exact inclusions and limits on current plan pages.
 
 **HBXL H&S Xpert** (bundle pricing):
-- Typical small contractor bundle: **~£400-700/year**
-- Desktop-centric, not a live site tool
+- Vendor bundle pricing varies by package and add-ons; verify current pricing directly.
 
-The cost variance for the same site is roughly **£360 to £15,000 per year**. That's a 40× difference for effectively similar compliance outcomes. The per-user platforms are priced for enterprises with deep pockets or small firms with few operatives, not the middle ground where most UK construction firms sit.
+Across vendor pricing models, total annual cost can vary significantly for the same headcount. The key driver is usually whether field workers require paid seats and which modules are included.
 
-> 💡 **£13,000 saved a year isn't marketing fluff, it's the difference between per-user and free-worker pricing**
-> On a 50-person UK site, MySafeOps delivers full permit lifecycle, all 14 document types, and unlimited free worker accounts for roughly 10% of what SafetyCulture would cost. Try it free and see the cost side-by-side on your own scenario.
+> 💡 **Run a like-for-like quote comparison before you buy**
+> Ask each vendor for a written annual quote with the same user mix, modules, onboarding, support, and contract term. This is the safest way to compare true cost.
 > [Start free at mysafeops.com →](https://mysafeops.com)
 
 ## When to choose which platform
@@ -314,11 +311,11 @@ Based on the comparison, a rough decision guide:
 
 Things that should make you skip a platform regardless of marketing.
 
-**"Call for a quote" on the main pricing page.**
-If a vendor won't publish any pricing, they're likely expensive and relying on sales calls to qualify out smaller firms. This isn't always bad, but budget-conscious buyers should ask for a written quote early, not after 3 demo calls.
+**"Call for a quote" only pricing.**
+Quote-led models are common in B2B software. Ask for a written quote early, including renewal assumptions and add-on costs.
 
-**No free trial, only paid pilot.**
-Any mature platform offers a free trial. Vendors who gate trials behind payment lack confidence in their product or target only enterprise.
+**No practical trial path.**
+If there is no realistic trial, request a time-limited pilot with clear success criteria before committing.
 
 **Sales demo refuses to show offline mode in a real scenario.**
 "Our platform is mobile-first" but the demo is always online? Press on this. Ask for a recorded video of a permit being issued, signed and closed in airplane mode with sync verified afterwards.
@@ -339,7 +336,7 @@ Vendor lock-in disguised as convenience. Every serious platform offers CSV, PDF,
 ## Frequently asked questions
 
 **What's the cheapest permit to work software for UK construction?**
-For worker-heavy sites, MySafeOps is typically cheapest because worker accounts are free, avoiding the per-seat cost that dominates most pricing. For small firms with few workers, The Site Book (£30/month flat) or SafetyCulture free tier (up to 10 users) are entry points. Cheapest depends heavily on site size.
+It depends on user mix and required features. For worker-heavy sites, plans that don't charge per worker can be cheaper. For very small teams, flat-rate or free-tier options may be the lowest entry cost. Always compare written quotes on the same scope.
 
 **Which permit to work software is easiest to use on site?**
 SafetyCulture and MySafeOps both score high on mobile UX. The key test is offline capability on a real UK site with patchy signal. SafetyCulture is slightly more polished globally, MySafeOps is more tailored to UK permit-specific workflows.
@@ -351,7 +348,7 @@ Most UK-focused platforms (HandsHQ, The Site Book, HBXL, MySafeOps, SmartQHSE, E
 Small firms (under 30 workers) can be live inside 1-2 weeks on most platforms. Mid-size contractors (50-200 workers) usually need 4-8 weeks including team training. Enterprise platforms (HandsHQ, EcoOnline) can take 2-3 months for full rollout with configuration and integrations.
 
 **Can I switch between these platforms later without losing data?**
-Yes for most. All seven support data export (CSV, PDF, or API). A parallel-run switch over 4-6 weeks is the typical approach. Plan for 2-3 weeks of double data entry during migration to ensure no gaps in compliance evidence.
+Usually yes, but export depth varies by vendor and plan. Confirm export formats (CSV, PDF, API), retention terms, and migration support contractually before signing.
 
 **Which platform is best for managing subcontractors on UK sites?**
 MySafeOps handles subcontractor workers through free accounts, so subbies join at zero marginal cost. HandsHQ has strong subcontractor approval workflows but charges per seat. EcoOnline offers contractor management through integration with Alcumus/CHAS. Best fit depends on whether you pay per-subbie or share the platform with them.
@@ -376,6 +373,6 @@ The right permit to work software isn't the one with the longest feature list or
 
 **See also:** [Permit to work app UK](https://mysafeops.com/blog/permit-to-work-app-uk) · [SafetyCulture alternative UK](https://mysafeops.com/blog/safetyculture-alternative-uk) · [Free safety app for construction workers](https://mysafeops.com/blog/free-safety-app-construction-workers) · [RIDDOR changes 2026](https://mysafeops.com/blog/riddor-changes-2026)
 
-**Disclaimer:** Pricing and feature information is current as of April 2026 based on publicly available sources and may change. This article is general guidance, not a purchase recommendation. Always verify current pricing, features and UK compliance support directly with each vendor before making a buying decision.
+**Disclaimer:** Pricing, features and integrations in this article are editorial snapshots based on publicly available information and may change without notice. This content is marketing and general guidance only; it is not legal, financial, insurance, or procurement advice. Before publication and before any buying decision, verify live pricing and feature scope directly on vendor websites, then obtain written quotes/terms (including renewal, user limits, add-ons, and support SLAs).
 
 ---

@@ -7,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `tt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -127,7 +128,7 @@ export default function ToolboxTalkRegister() {
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  const { d1Syncing: d1ListSyncing } = useD1OrgArraySync({
+  const { d1Hydrating: d1ListH, d1OutboxPending: d1ListO } = useD1OrgArraySync({
     storageKey: "toolbox_talks",
     namespace: "toolbox_talks",
     value: items,
@@ -135,7 +136,7 @@ export default function ToolboxTalkRegister() {
     load,
     save,
   });
-  const { d1Syncing: d1WpSyncing } = useD1WorkersProjectsSync({
+  const { d1Hydrating: d1WpH, d1OutboxPending: d1WpO } = useD1WorkersProjectsSync({
     workers,
     setWorkers,
     projects,
@@ -143,7 +144,8 @@ export default function ToolboxTalkRegister() {
     load,
     save,
   });
-  const d1Syncing = d1ListSyncing || d1WpSyncing;
+  const d1Hydrating = d1ListH || d1WpH;
+  const d1OutboxPending = d1ListO || d1WpO;
 
   const exportCsv = () => {
     const h = ["Date", "Topic", "Project", "Presenter", "Attendees", "Summary"];
@@ -172,14 +174,7 @@ export default function ToolboxTalkRegister() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      {d1Syncing ? (
-        <div
-          className="app-panel-surface"
-          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
-        >
-          Syncing toolbox data with cloud…
-        </div>
-      ) : null}
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="toolbox data" />
       {modal?.type === "form" && (
         <Form item={modal.data} projects={projects} workers={workers} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />
       )}
