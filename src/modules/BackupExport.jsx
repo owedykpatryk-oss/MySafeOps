@@ -5,6 +5,8 @@ import { pushAudit } from "../utils/auditLog";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured } from "../lib/supabase";
+import { isD1Configured } from "../lib/d1SyncClient";
+import { pushBackupBundleToD1 } from "../utils/d1BackupPush";
 import {
   downloadBackupFromSupabase,
   formatCloudSyncError,
@@ -24,6 +26,7 @@ export default function BackupExport() {
   const { supabase, user, ready } = useSupabaseAuth();
   const [msg, setMsg] = useState("");
   const [cloudBusy, setCloudBusy] = useState(false);
+  const [d1Busy, setD1Busy] = useState(false);
   const [cloudUpdated, setCloudUpdated] = useState(null);
   const [includeGeocodeCache, setIncludeGeocodeCache] = useState(false);
   const fileRef = useRef(null);
@@ -156,6 +159,50 @@ export default function BackupExport() {
     }
   };
 
+  const pushToD1 = async () => {
+    if (!cloudEnabled || !user || !caps.backupImport) return;
+    if (!isD1Configured()) {
+      setMsg("D1 is not configured (set VITE_D1_API_URL and redeploy).");
+      return;
+    }
+    if (!orgId || orgId === "default") {
+      setMsg("Select a real organisation (not “default”) before pushing to D1.");
+      return;
+    }
+    if (
+      !window.confirm(
+        "Upload matching register arrays from this device to Cloudflare D1? Remote keys for this organisation will be overwritten where a matching backup key exists."
+      )
+    ) {
+      return;
+    }
+    setMsg("");
+    setD1Busy(true);
+    try {
+      const bundle = collectBackupBundle({ includeGeocodeCache });
+      const v = validateBackupBundle(bundle);
+      if (!v.ok) {
+        setMsg(v.message);
+        return;
+      }
+      const slug = await syncOrgSlugIfNeeded(supabase);
+      const r = await pushBackupBundleToD1(supabase, bundle, { orgSlug: slug || orgId });
+      if (r.errors.length > 0) {
+        const first = r.errors.map((e) => `${e.namespace}: ${e.error}`).slice(0, 3).join("; ");
+        setMsg(`D1 push finished with errors (${r.pushed} ok). ${first}${r.errors.length > 3 ? " …" : ""}`);
+      } else {
+        setMsg(`Pushed ${r.pushed} register bundle(s) to D1.`);
+      }
+      if (r.pushed > 0) {
+        pushAudit({ action: "backup_d1_push", entity: "all", detail: `${r.pushed} namespaces` });
+      }
+    } catch (e) {
+      setMsg(e?.message || String(e));
+    } finally {
+      setD1Busy(false);
+    }
+  };
+
   const downloadCloud = async (merge) => {
     if (!cloudEnabled || !user || !caps.backupImport) return;
     setMsg("");
@@ -228,6 +275,30 @@ export default function BackupExport() {
                 )}
               </div>
             </>
+          )}
+        </div>
+      )}
+      {cloudEnabled && caps.backupImport && (
+        <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
+          <div
+            className="app-section-label"
+            style={{ fontWeight: 600, marginBottom: 10, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}
+          >
+            D1 (Cloudflare Workers)
+          </div>
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5, margin: "0 0 12px", maxWidth: 640 }}>
+            When <code style={{ fontSize: 11 }}>VITE_D1_API_URL</code> is set, push the same JSON arrays as a desktop export (keys listed in{" "}
+            <code style={{ fontSize: 11 }}>src/lib/d1ImportNamespaces.js</code>) to org KV in D1 — useful after a site export or a new device.
+            CLI alternative: <code style={{ fontSize: 11 }}>npm run d1:import-backup</code>.
+          </p>
+          {!user ? (
+            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>Sign in to push registers to D1.</p>
+          ) : !isD1Configured() ? (
+            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>D1 Worker URL is not configured for this build.</p>
+          ) : (
+            <button type="button" style={ss.btnP} disabled={d1Busy || cloudBusy} onClick={pushToD1}>
+              {d1Busy ? "Pushing…" : "Push current data to D1"}
+            </button>
           )}
         </div>
       )}

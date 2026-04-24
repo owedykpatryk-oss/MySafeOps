@@ -26,34 +26,14 @@ import dotenv from "dotenv";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { D1_BACKUP_PUSH_NAMESPACES } from "../src/lib/d1ImportNamespaces.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const envLocal = resolve(root, ".env.local");
 if (existsSync(envLocal)) dotenv.config({ path: envLocal });
 
-const D1_KNOWN_NAMESPACES = new Set([
-  "mysafeops_workers",
-  "mysafeops_projects",
-  "permits_v2",
-  "rams_builder_docs",
-  "method_statements",
-  "toolbox_talks",
-  "snags",
-  "mysafeops_incidents",
-  "incident_actions_v1",
-  "training_matrix",
-  "inspection_records",
-  "gate_book",
-  "daily_briefings",
-  "visitor_log",
-  "welfare_check_log",
-  "ladder_inspections",
-  "water_hygiene_log",
-  "environmental_log",
-  "waste_register",
-  "mewp_log",
-]);
+const D1_KNOWN_NAMESPACES = D1_BACKUP_PUSH_NAMESPACES;
 
 function parseArgs() {
   const argv = process.argv.slice(2);

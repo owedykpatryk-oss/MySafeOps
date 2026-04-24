@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
@@ -379,18 +380,40 @@ export function getAuthorisedLiveLotoList(items) {
 
 export default function LOTORegister() {
   const { caps } = useApp();
-  const [items, setItems] = useState(() => {
+  const [items, setItemsRaw] = useState(() => {
     const raw = load(STORAGE_KEY, []);
     if (!Array.isArray(raw)) return [];
     return raw.map(migrateToWorkflow).filter(Boolean);
   });
-  const [projects] = useState(() => load("mysafeops_projects", []));
+  /** Normalise D1 / local payloads so legacy rows always match the workflow shape. */
+  const setItems = useCallback((valueOrUpdater) => {
+    setItemsRaw((prev) => {
+      const next = typeof valueOrUpdater === "function" ? valueOrUpdater(prev) : valueOrUpdater;
+      if (!Array.isArray(next)) return [];
+      return next.map(migrateToWorkflow).filter(Boolean);
+    });
+  }, []);
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  useEffect(() => {
-    save(STORAGE_KEY, items);
-  }, [items]);
+  const { d1Syncing: d1Items } = useD1OrgArraySync({
+    storageKey: STORAGE_KEY,
+    namespace: STORAGE_KEY,
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
+  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+    storageKey: "mysafeops_projects",
+    namespace: "mysafeops_projects",
+    value: projects,
+    setValue: setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1Items || d1Proj;
 
   const live = useMemo(() => items.filter((r) => r.phase === "live"), [items]);
 
@@ -430,6 +453,14 @@ export default function LOTORegister() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing LOTO workflows with cloud…
+        </div>
+      ) : null}
       {modal?.type === "form" && (
         <DetailModal item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />
       )}
