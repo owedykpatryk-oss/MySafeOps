@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
@@ -26,8 +27,7 @@ const INSPECTION_TYPES = {
 
 const ss = { ...ms, ta: { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", minHeight:50 } };
 
-function InspectionForm({ item, onSave, onClose }) {
-  const projects = load("mysafeops_projects",[]);
+function InspectionForm({ item, onSave, onClose, projects }) {
   const blank = {
     id:genId(), type:"loler", name:"", serialNo:"", location:"",
     projectId:"", manufacturer:"", model:"", swl:"",
@@ -150,6 +150,7 @@ function InspectionForm({ item, onSave, onClose }) {
 
 export default function InspectionTracker() {
   const [items, setItems] = useState(()=>load("inspection_records",[]));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
   const [filterType, setFilterType] = useState("");
   const [filterResult, setFilterResult] = useState("");
@@ -157,7 +158,23 @@ export default function InspectionTracker() {
   const [search, setSearch] = useState("");
   const listPg = useRegisterListPaging(50);
 
-  useEffect(()=>{ save("inspection_records",items); },[items]);
+  const { d1Syncing: d1Insp } = useD1OrgArraySync({
+    storageKey: "inspection_records",
+    namespace: "inspection_records",
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
+  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+    storageKey: "mysafeops_projects",
+    namespace: "mysafeops_projects",
+    value: projects,
+    setValue: setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1Insp || d1Proj;
 
   useEffect(() => {
     listPg.reset();
@@ -203,7 +220,17 @@ export default function InspectionTracker() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      {modal?.type==="form" && <InspectionForm item={modal.data} onSave={saveItem} onClose={()=>setModal(null)} />}
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing inspection register with cloud…
+        </div>
+      ) : null}
+      {modal?.type==="form" && (
+        <InspectionForm item={modal.data} projects={projects} onSave={saveItem} onClose={() => setModal(null)} />
+      )}
 
       <PageHero
         badgeText="IN"

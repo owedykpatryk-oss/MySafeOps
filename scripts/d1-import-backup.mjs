@@ -47,6 +47,7 @@ const D1_KNOWN_NAMESPACES = new Set([
   "gate_book",
   "daily_briefings",
   "visitor_log",
+  "welfare_check_log",
 ]);
 
 function parseArgs() {
