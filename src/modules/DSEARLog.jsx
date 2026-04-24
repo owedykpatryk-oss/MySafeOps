@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
@@ -92,13 +93,27 @@ function Form({ item, projects, onSave, onClose }) {
 export default function DSEARLog() {
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("dsear_register", []));
-  const [projects] = useState(() => load("mysafeops_projects", []));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  useEffect(() => {
-    save("dsear_register", items);
-  }, [items]);
+  const { d1Syncing: d1Items } = useD1OrgArraySync({
+    storageKey: "dsear_register",
+    namespace: "dsear_register",
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
+  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+    storageKey: "mysafeops_projects",
+    namespace: "mysafeops_projects",
+    value: projects,
+    setValue: setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1Items || d1Proj;
 
   const exportCsv = () => {
     const h = ["Substance/area", "Hazard", "Project", "Zone", "Assessment ref", "Review", "Next", "Responsible"];
@@ -127,6 +142,14 @@ export default function DSEARLog() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing DSEAR register with cloud…
+        </div>
+      ) : null}
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
             <PageHero
         badgeText="DS"

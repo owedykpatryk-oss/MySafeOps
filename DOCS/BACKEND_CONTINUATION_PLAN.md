@@ -20,7 +20,7 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 | D1 `org_sync_kv` + `org_audit_log` | Schematy w `cloudflare/workers/d1-api/schema/`; zastosować na remote przez `wrangler d1 execute` (nie mylić z Postgres). |
 | Worker `d1-api` | KV, health, audyt HMAC; wymaga `AUDIT_CHAIN_SECRET` + Supabase RPC `user_can_access_org_slug`. |
 | Worker `d1-backup` | Cron → R2 `d1-snapshots/`; `npm run d1:deploy:backup`. |
-| Front | `useD1OrgArraySync` (+ `useD1WorkersProjectsSync`) m.in.: **permits**, **RAMS**, **method statements**, **Workers & projects**, **toolbox talks**, **snags**, **incidents + actions**, **Incident Action Tracker**, **training matrix**, **Daily briefing**, **Gate book**, **Visitor log**, **Inspection register**, **Welfare checks**, **Ladder inspections**, **Water hygiene**, **Environmental log**, **Waste register**, **MEWP log**. |
+| Front | `useD1OrgArraySync` (+ `useD1WorkersProjectsSync`) m.in.: **permits**, **RAMS**, **method statements**, **Workers & projects**, **toolbox talks**, **snags**, **incidents + actions**, **Incident Action Tracker**, **training matrix**, **Daily briefing**, **Gate book**, **Visitor log**, **Inspection register**, **Welfare checks**, **Ladder inspections**, **Water hygiene**, **Environmental log**, **Waste register**, **MEWP log**, **excavations**, **scaffold**, **electrical/PAT**, **plant register**, **safety observations**, **confined space**, **noise/vibration**, **lifting operations**, **DSEAR**, **asbestos**, **hot work** (bez syncu `loto_register` — tylko odczyt lokalny), **temporary works**, **lone working**, **GMP deviations**, **CIP sign-off**, **allergen changeovers**, **high-care access**, **COSHH**, **PPE** (workers + register), **project drawing editor** (tylko lista `mysafeops_projects`). |
 | Audyt | `pushAudit` → mirror D1 (append: każdy członek org). **Odczyt** łańcucha D1: tylko **admin + supervisor** (RPC `user_can_read_org_audit` + Worker); `AuditLogViewer` pokazuje lokalnie wszystkim. |
 | Supabase | `user_can_access_org_slug`, `user_can_read_org_audit`, fix overload `superadmin_recent_organisations` (`20260423120000_*.sql`, `20260424100000_*.sql`). |
 
@@ -30,7 +30,7 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 
 ### B1. Rozszerzyć D1 na kolejne moduły (taki sam wzorzec co MS/RAMS/PTW)
 
-**Status (repo):** wdrożone m.in. `Workers.jsx`, `ToolboxTalkRegister.jsx`, `SnagRegister.jsx`, `IncidentNearMiss.jsx`, `IncidentActionTracker.jsx`, `TrainingMatrix.jsx`, `DailyBriefing.jsx`, `GateBook.jsx`, `VisitorLog.jsx`, `InspectionTracker.jsx`, `WelfareCheckLog.jsx`, `LadderInspection.jsx`, `WaterHygieneLog.jsx`, `EnvironmentalLog.jsx`, `WasteRegister.jsx`, `MEWPLog.jsx`, wspólne listy w `MethodStatement.jsx` przez `useD1WorkersProjectsSync.js`. Nadal bez D1: pozostałe rejestry z `load("mysafeops_projects")` przy mount — kolejne wg potrzeby.
+**Status (repo):** wdrożone moduły jak w tabeli sekcji A (m.in. `Workers.jsx`, `ToolboxTalkRegister.jsx`, `SnagRegister.jsx`, `IncidentNearMiss.jsx`, `IncidentActionTracker.jsx`, `TrainingMatrix.jsx`, `DailyBriefing.jsx`, `GateBook.jsx`, `VisitorLog.jsx`, `InspectionTracker.jsx`, `WelfareCheckLog.jsx`, `LadderInspection.jsx`, `WaterHygieneLog.jsx`, `EnvironmentalLog.jsx`, `WasteRegister.jsx`, `MEWPLog.jsx`, `ExcavationLog.jsx`, `ScaffoldRegister.jsx`, `ElectricalPATLog.jsx`, `PlantEquipmentRegister.jsx`, `SafetyObservations.jsx`, `ConfinedSpaceLog.jsx`, `NoiseVibrationLog.jsx`, `LiftingPlanRegister.jsx`, `DSEARLog.jsx`, `AsbestosRegister.jsx`, `HotWorkRegister.jsx`, `TemporaryWorksRegister.jsx`, `LoneWorkingLog.jsx`, `GMPDeviationLog.jsx`, `CIPSignoffRegister.jsx`, `AllergenChangeoverRegister.jsx`, `HighCareAccessRegister.jsx`, `COSHHRegister.jsx`, `PPERegister.jsx`, `ProjectDrawingEditor.jsx` — projects; wspólne listy w `MethodStatement.jsx` przez `useD1WorkersProjectsSync.js`). **Bez D1 (świadomie):** `LOTORegister.jsx` — stan początkowy przechodzi przez `migrateToWorkflow`; sync wymagałby opakowania `setValue` albo migracji po stronie serwera.
 
 **Cel:** Więcej danych org w jednej chmurze, mniej „tylko ten komputer”.
 
@@ -71,7 +71,7 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 | Zadanie | Działanie |
 |--------|-----------|
 | Alerty z `d1-backup` | Nadal: Cloudflare Notifications (poza repo). |
-| Metryki / śledzenie | Worker `d1-api`: nagłówek `X-Request-Id` + pole `request_id` w `/v1/health`. `d1-backup`: `run_id` w logach i w `meta` zrzutu JSON. |
+| Metryki / śledzenie | **Wdrożone w repo:** Worker `d1-api` — nagłówek `X-Request-Id` + `request_id` w JSON `/v1/health`. Worker `d1-backup` — `run_id` w logach i w `meta` zrzutu JSON. |
 | Testy obciążeniowe | K6/Artillery — opcjonalnie, poza domyślnym scope. |
 
 ---

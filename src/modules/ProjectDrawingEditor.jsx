@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { getOrgId, loadOrgScoped as load, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
@@ -212,7 +213,15 @@ function shortMapLabel(text, max = 22) {
 
 export default function ProjectDrawingEditor() {
   const { supabase } = useSupabaseAuth();
-  const [projects] = useState(() => load("mysafeops_projects", []));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
+  useD1OrgArraySync({
+    storageKey: "mysafeops_projects",
+    namespace: "mysafeops_projects",
+    value: projects,
+    setValue: setProjects,
+    load,
+    save: saveOrgScoped,
+  });
   const [projectPlans, setProjectPlans] = useState(() => listProjectPlans());
   const [rows, setRows] = useState(() => listProjectDrawingObjects());
   const [projectId, setProjectId] = useState("");

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
@@ -286,14 +287,28 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
 export default function HotWorkRegister() {
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("hot_work_register", []));
-  const [projects] = useState(() => load("mysafeops_projects", []));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [lotoSnap, setLotoSnap] = useState(() => load("loto_register", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  useEffect(() => {
-    save("hot_work_register", items);
-  }, [items]);
+  const { d1Syncing: d1Items } = useD1OrgArraySync({
+    storageKey: "hot_work_register",
+    namespace: "hot_work_register",
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
+  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+    storageKey: "mysafeops_projects",
+    namespace: "mysafeops_projects",
+    value: projects,
+    setValue: setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1Items || d1Proj;
 
   useEffect(() => {
     const t = setInterval(() => setLotoSnap(load("loto_register", [])), 4000);
@@ -355,6 +370,14 @@ export default function HotWorkRegister() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing hot work register with cloud…
+        </div>
+      ) : null}
       {modal?.type === "form" && (
         <Form item={modal.data} projects={projects} liveLotos={liveLotos} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />
       )}
