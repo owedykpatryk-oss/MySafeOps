@@ -19,6 +19,7 @@ const urls = [
   "/dpa",
   "/docs",
   "/status",
+  "/security",
   ...LANDING_BLOG_POSTS.map((p) => `/blog/${p.slug}`),
 ];
 
@@ -32,12 +33,13 @@ ${urls
         ? "1.0"
         : path === "/blog"
           ? "0.85"
-          : ["/privacy", "/terms", "/cookies", "/dpa", "/docs", "/status"].includes(path)
+          : ["/privacy", "/terms", "/cookies", "/dpa", "/docs", "/status", "/security"].includes(path)
             ? "0.35"
             : "0.75";
+    const changefreq = path === "/security" ? "monthly" : "weekly";
     return `  <url>
     <loc>${loc}</loc>
-    <changefreq>weekly</changefreq>
+    <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
   </url>`;
   })

@@ -6,7 +6,7 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-type PlanId = "starter" | "team" | "business";
+type PlanId = "starter" | "team" | "business" | "enterprise";
 
 function isValidStripeSecret(value: string): boolean {
   return value.startsWith("sk_");
@@ -31,7 +31,9 @@ function priceForPlan(planId: PlanId): string | undefined {
       ? "STRIPE_PRICE_STARTER"
       : planId === "team"
         ? "STRIPE_PRICE_TEAM"
-        : "STRIPE_PRICE_BUSINESS";
+        : planId === "business"
+          ? "STRIPE_PRICE_BUSINESS"
+          : "STRIPE_PRICE_ENTERPRISE";
   const v = Deno.env.get(key);
   return v && v.trim() ? v.trim() : undefined;
 }
@@ -47,6 +49,7 @@ Deno.serve(async (req) => {
     const starter = Deno.env.get("STRIPE_PRICE_STARTER")?.trim() ?? "";
     const team = Deno.env.get("STRIPE_PRICE_TEAM")?.trim() ?? "";
     const business = Deno.env.get("STRIPE_PRICE_BUSINESS")?.trim() ?? "";
+    const enterprise = Deno.env.get("STRIPE_PRICE_ENTERPRISE")?.trim() ?? "";
     const siteUrl = Deno.env.get("SITE_URL")?.trim() ?? "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
@@ -58,6 +61,7 @@ Deno.serve(async (req) => {
         stripePriceStarter: Boolean(starter),
         stripePriceTeam: Boolean(team),
         stripePriceBusiness: Boolean(business),
+        stripePriceEnterprise: Boolean(enterprise),
         siteUrl: Boolean(siteUrl),
         supabaseUrl: Boolean(supabaseUrl),
         serviceRoleKey: Boolean(serviceKey),
@@ -67,6 +71,7 @@ Deno.serve(async (req) => {
         stripePriceStarterFormat: !starter || isValidPriceId(starter),
         stripePriceTeamFormat: !team || isValidPriceId(team),
         stripePriceBusinessFormat: !business || isValidPriceId(business),
+        stripePriceEnterpriseFormat: !enterprise || isValidPriceId(enterprise),
         siteUrlFormat: !siteUrl || isValidSiteUrl(siteUrl),
       },
       requestId,
@@ -143,8 +148,8 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const planId = body?.planId as PlanId | undefined;
-    if (!planId || !["starter", "team", "business"].includes(planId)) {
-      return new Response(JSON.stringify({ error: "planId must be starter, team, or business" }), {
+    if (!planId || !["starter", "team", "business", "enterprise"].includes(planId)) {
+      return new Response(JSON.stringify({ error: "planId must be starter, team, business, or enterprise" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
       });
@@ -154,7 +159,7 @@ Deno.serve(async (req) => {
     if (!priceId) {
       return new Response(
         JSON.stringify({
-          error: "Stripe Price ID not configured for this plan. Set STRIPE_PRICE_STARTER / TEAM / BUSINESS.",
+          error: "Stripe Price ID not configured for this plan. Set STRIPE_PRICE_STARTER / TEAM / BUSINESS / ENTERPRISE.",
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId } },
       );

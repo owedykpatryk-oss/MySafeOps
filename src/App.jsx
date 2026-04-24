@@ -14,6 +14,7 @@ const AcceptInvitePage = lazy(() => import("./pages/AcceptInvitePage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 const DocsHubPage = lazy(() => import("./pages/DocsHubPage"));
 const StatusPage = lazy(() => import("./pages/StatusPage"));
+const SecurityPosturePage = lazy(() => import("./pages/SecurityPosturePage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 const MainAppLayout = lazy(() => import("./layout/MainAppLayout"));
 
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="/dpa" element={<LegalPage docKey="dpa" />} />
           <Route path="/docs" element={<DocsHubPage />} />
           <Route path="/status" element={<StatusPage />} />
+          <Route path="/security" element={<SecurityPosturePage />} />
           <Route
             path="/app"
             element={

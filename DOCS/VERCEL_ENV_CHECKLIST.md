@@ -33,6 +33,8 @@ Jeśli masz już tylko `VITE_STORAGE_API_URL` i `VITE_STORAGE_UPLOAD_TOKEN`, **d
 
 **Nie dodawaj do Vercel (sekrety tylko lokalnie / Supabase Edge / Stripe po stronie serwera):** `VAPID_PRIVATE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `GOOGLE_OAUTH_CLIENT_SECRET` w sensie **frontend bundle** — OAuth konfigurujesz w **Supabase**, nie jako `VITE_GOOGLE_SECRET`. `OPENAI_API_KEY` tylko jeśli kiedyś podłączysz serwer używający go na Vercel (osobna funkcja).
 
+**Supabase Edge Functions (Stripe billing)** — w Dashboard → Edge Functions → **Secrets** (nie Vercel): `STRIPE_SECRET_KEY`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_TEAM`, `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_ENTERPRISE`, `STRIPE_WEBHOOK_SECRET`, `SITE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (już często ustawione), zgodnie z `README.md`. Po `npm run stripe:seed-prices` wklej wydrukowane `price_…` dla wszystkich czterech planów.
+
 ---
 
 ## 1. Warto ustawić w Vercel (produkcja)

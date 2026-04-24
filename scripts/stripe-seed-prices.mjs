@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Creates Stripe Products + monthly GBP Prices for MySafeOps plans (Starter / Team / Business).
+ * Creates Stripe Products + monthly GBP Prices for MySafeOps plans (Solo / Team / Business / Enterprise).
  * Idempotent: reuses products/prices found by metadata `mysafeops_plan_id`.
  *
  * Requires in .env.local (or env):
@@ -20,9 +20,10 @@ config({ path: resolve(__dirname, "../.env.local") });
 config({ path: resolve(__dirname, "../.env") });
 
 const PLANS = [
-  { planId: "starter", productName: "MySafeOps — Starter", amountPence: 1900 },
-  { planId: "team", productName: "MySafeOps — Team", amountPence: 4900 },
-  { planId: "business", productName: "MySafeOps — Business", amountPence: 9900 },
+  { planId: "starter", productName: "MySafeOps — Solo", amountPence: 2900 },
+  { planId: "team", productName: "MySafeOps — Team", amountPence: 7900 },
+  { planId: "business", productName: "MySafeOps — Business", amountPence: 14900 },
+  { planId: "enterprise", productName: "MySafeOps — Enterprise", amountPence: 39900 },
 ];
 
 const SECRET = process.env.STRIPE_SECRET_KEY?.trim();
@@ -94,6 +95,7 @@ async function main() {
     starter: "STRIPE_PRICE_STARTER",
     team: "STRIPE_PRICE_TEAM",
     business: "STRIPE_PRICE_BUSINESS",
+    enterprise: "STRIPE_PRICE_ENTERPRISE",
   };
   for (const r of rows) {
     console.log(`${map[r.planId]}=${r.priceId}`);

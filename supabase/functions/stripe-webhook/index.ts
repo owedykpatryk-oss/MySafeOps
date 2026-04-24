@@ -32,14 +32,16 @@ type Diagnostics = {
   requestId: string;
 };
 
-function planFromPriceId(priceId: string): "starter" | "team" | "business" | null {
+function planFromPriceId(priceId: string): "starter" | "team" | "business" | "enterprise" | null {
   const p = priceId.trim();
   const s = Deno.env.get("STRIPE_PRICE_STARTER")?.trim();
   const t = Deno.env.get("STRIPE_PRICE_TEAM")?.trim();
   const b = Deno.env.get("STRIPE_PRICE_BUSINESS")?.trim();
+  const e = Deno.env.get("STRIPE_PRICE_ENTERPRISE")?.trim();
   if (s && p === s) return "starter";
   if (t && p === t) return "team";
   if (b && p === b) return "business";
+  if (e && p === e) return "enterprise";
   return null;
 }
 

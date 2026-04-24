@@ -11,7 +11,7 @@
 - **Brand:** teal `#0d9488`, orange `#f97316`, navy `#0f172a`. Plus Jakarta Sans (landing), DM Sans (app). Logo = teal shield with orange checkmark.
 - **Infra target:** Cloudflare Pages (hosting) + D1 (SQLite) + R2 (files) + Workers (API) + KV (sessions/rate limits).
 - **Payments:** Stripe hosted Checkout / Payment Links — **Secret Key NEVER client-side**.
-- **Pricing:** Free £0 · Solo £19/mo · Team £49/mo · Business £99/mo. **Worker accounts free forever** — core differentiator, don't gate.
+- **Pricing:** Free £0 · Solo £29/mo · Team £79/mo · Business £149/mo · Enterprise £399/mo · Enterprise Plus (contact). **Flat org price (not per seat); field users within tier caps** — core differentiator, don't gate workers behind a per-head tax.
 - **Roles:** Admin (full) · Supervisor (reports/checklists/permits) · Worker (read/sign/report — free).
 
 **Driver:** review from Jack Haswell (FESS Group, ~20 engineers, food/pet/pharma/petrochem contractor). Using this sprint to win the FESS pilot AND make the product generically stronger for every other UK contractor.

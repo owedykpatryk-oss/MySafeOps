@@ -225,7 +225,7 @@
 
 /* PRICING */
 .pricing{padding:var(--section-space) 0;background:var(--sl1)}
-.prc{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(16px,2.5vw,22px);margin-top:34px}
+.prc{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:clamp(16px,2.5vw,22px);margin-top:34px;max-width:1200px;margin-left:auto;margin-right:auto}
 .pcard{background:var(--w);border-radius:var(--landing-radius-lg);padding:clamp(24px,4vw,36px);text-align:center;border:1px solid rgba(226,232,240,.9);transition:transform .3s var(--ease-out),box-shadow .3s var(--ease-out),border-color .25s;box-shadow:var(--shadow-sm)}
 .pcard:hover{transform:translateY(-4px);box-shadow:var(--shadow-md);border-color:rgba(13,148,136,.25)}
 .pcard.pop{border:2px solid var(--teal);position:relative;transform:scale(1.02);box-shadow:0 16px 48px rgba(13,148,136,.15)}

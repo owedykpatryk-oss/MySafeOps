@@ -4,6 +4,7 @@ This document supports procurement and internal review. It is not a legal warran
 
 ## What ships with the static app
 
+- **Public `/security` route**: customer-facing summary of transport, auth, secrets handling, and optional Cloudflare D1/R2 components — complements this file for procurement questionnaires.
 - **Vercel (`vercel.json`)**: HSTS, X-Frame-Options, `X-Permitted-Cross-Domain-Policies`, stricter `Permissions-Policy` (e.g. `payment`/`usb` off), CSP, `no-store` for `/api/*` responses, long-cache for `/assets/*`.
 - **`public/_headers`**: same class of headers for static hosts that apply it (e.g. Cloudflare Pages) — keep in sync with Vercel where possible.
 - **`public/.well-known/security.txt`**: contact for responsible disclosure. Update the `Canonical` line to your production URL.

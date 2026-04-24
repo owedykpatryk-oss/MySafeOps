@@ -120,14 +120,18 @@ mysafeops-app/
 
 ## 💰 Pricing Summary
 
-| Plan | Price | Admins | Supervisors | Workers | Storage |
-|------|-------|--------|-------------|---------|---------|
-| Free | £0 | 1 | 0 | 5 | 100MB |
-| Solo | £19/mo | 1 | 1 | 10 | 2GB |
-| Team | £49/mo | 3 | 5 | Unlimited FREE | 10GB |
-| Business | £99/mo | Unlimited | Unlimited | Unlimited FREE | 50GB |
+Source of truth: `src/lib/billingPlans.js` + Stripe seed `scripts/stripe-seed-prices.mjs`.
 
-Annual: 20% off (Solo £15/mo, Team £39/mo, Business £79/mo)
+| Plan | Price | Workers cap | Projects cap | Cloud backup cap |
+|------|-------|-------------|----------------|------------------|
+| Free | £0 | 5 | 2 | 500MB |
+| Solo (starter) | £29/mo | 5 | 3 | 2GB |
+| Team | £79/mo | 20 | 10 | 10GB |
+| Business | £149/mo | 75 | 40 | 50GB |
+| Enterprise | £399/mo | 150 | 80 | 200GB |
+| Enterprise Plus | Contact us | Unlimited | Unlimited | Unlimited |
+
+Annual discounts (if offered) are sales/marketing — not encoded in the app by default.
 
 ---
 

@@ -5,7 +5,16 @@ import { useToast } from "../context/ToastContext";
 import { isSuperAdminEmail } from "../utils/superAdmin";
 import { getSupabaseUrl, isSupabaseConfigured, supabase } from "../lib/supabase";
 import { getSupportEmail } from "../config/supportContact";
-import { BILLING_PLANS, formatBytes, getEffectivePlan } from "../lib/billingPlans";
+import {
+  BILLING_COMPARISON_PLAN_IDS,
+  BILLING_PLANS,
+  STRIPE_SUBSCRIBABLE_PLAN_IDS,
+  formatBytes,
+  formatLimitCount,
+  formatStorageLimit,
+  getEffectivePlan,
+  getPlanByComparisonId,
+} from "../lib/billingPlans";
 import { trackBillingError, trackBillingEvent } from "../lib/billingTelemetry";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
@@ -387,7 +396,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
         <div style={{ marginBottom: 12 }}>
           <InlineAlert
             type="warn"
-            text="stripe-checkout is deployed but not configured. Set STRIPE_SECRET_KEY, STRIPE_PRICE_STARTER/TEAM/BUSINESS and SITE_URL in Supabase Edge Function secrets."
+            text="stripe-checkout is deployed but not configured. Set STRIPE_SECRET_KEY, STRIPE_PRICE_STARTER/TEAM/BUSINESS/ENTERPRISE and SITE_URL in Supabase Edge Function secrets."
           />
         </div>
       )}
@@ -455,14 +464,14 @@ export default function BillingLimits({ checkoutReturn = null }) {
         </p>
         {!trialStatus?.isActive && !paidActive && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>
-            Trial ended. Starter limits apply until you subscribe to a paid plan.
+            Trial ended. Free-tier limits apply until you subscribe to a paid plan.
           </p>
         )}
         {isAdmin && cloudOk && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>Subscribe (Stripe Checkout)</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {(["starter", "team", "business"]).map((id) => {
+              {STRIPE_SUBSCRIBABLE_PLAN_IDS.map((id) => {
                 const p = BILLING_PLANS[id];
                 const loading = checkoutLoading === id;
                 return (
@@ -481,6 +490,22 @@ export default function BillingLimits({ checkoutReturn = null }) {
                   </button>
                 );
               })}
+              <a
+                href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("MySafeOps Enterprise Plus")}`}
+                style={{
+                  ...ss.btn,
+                  fontSize: 13,
+                  alignSelf: "center",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  border: "1px solid var(--color-border-secondary, #cbd5e1)",
+                  color: "var(--color-text-primary)",
+                }}
+              >
+                Enterprise Plus (contact)
+              </a>
             </div>
             <button
               type="button"
@@ -584,17 +609,27 @@ export default function BillingLimits({ checkoutReturn = null }) {
               </tr>
             </thead>
             <tbody>
-              {Object.values(BILLING_PLANS).map((p) => (
-                <tr key={p.id}>
-                  <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>{p.name}</td>
-                  <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>
-                    {p.priceLabel}/{p.interval}
-                  </td>
-                  <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>{p.limits.workers}</td>
-                  <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>{p.limits.projects}</td>
-                  <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>{formatBytes(p.limits.cloudBytes)}</td>
-                </tr>
-              ))}
+              {BILLING_COMPARISON_PLAN_IDS.map((cid) => {
+                const p = getPlanByComparisonId(cid);
+                if (!p) return null;
+                return (
+                  <tr key={p.id}>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>{p.name}</td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>
+                      {p.priceLabel}/{p.interval}
+                    </td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>
+                      {formatLimitCount(p.limits.workers)}
+                    </td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>
+                      {formatLimitCount(p.limits.projects)}
+                    </td>
+                    <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>
+                      {formatStorageLimit(p.limits.cloudBytes)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

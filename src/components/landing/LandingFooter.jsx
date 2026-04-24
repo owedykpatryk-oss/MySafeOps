@@ -61,6 +61,9 @@ export default function LandingFooter({ supportEmail }) {
                   <Link to={statusTo}>Service status</Link>
                 )}
               </li>
+              <li>
+                <Link to="/security">Security &amp; trust</Link>
+              </li>
             </ul>
           </div>
           <div>

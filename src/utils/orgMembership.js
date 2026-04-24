@@ -101,6 +101,7 @@ export function getTrialStatus(now = Date.now()) {
 export function getBillingEntitlements() {
   const sub = localStorage.getItem(ORG_SUBSCRIPTION_STATUS_KEY) || "none";
   const paid = localStorage.getItem(ORG_BILLING_PLAN_KEY);
-  const paidPlanId = paid && ["starter", "team", "business"].includes(paid) ? paid : null;
+  const paidPlanId =
+    paid && ["starter", "team", "business", "enterprise", "enterprise_plus"].includes(paid) ? paid : null;
   return { subscriptionStatus: sub, paidPlanId };
 }

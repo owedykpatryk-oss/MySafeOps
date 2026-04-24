@@ -95,10 +95,15 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 
 ## D. Compliance (IASME / Cyber Essentials) — nie jest „funkcją w React”
 
-- Zgłoszenie, kwestionariusz, ewent. skan (IASME).
+**Pełny plan (proces + backend + dowody):** [CYBER_ESSENTIALS_PLAN.md](./CYBER_ESSENTIALS_PLAN.md)
+
+Skrót:
+
+- Zgłoszenie, kwestionariusz, ewent. skan (IASME / CAB).
 - Dokumentacja: polityki (hasła, BYOD, incydenty, backup/restore, podwykonawcy, RODO).
-- Mapowanie: gdzie leżą kopie D1 (R2 `d1-snapshots/`), kto ma dostęp, procedura odtwarzania — **wewnętrzny dokument**, nawet 1 strona A4.
-- Powiązanie z kodem: `SECURITY.md`, HTTPS, MFA Supabase, brak sekretów w bundlu — tylko jeśli **wdrożone w produkcji** i opisane w audycie.
+- Mapowanie backendu: Supabase (Auth, RLS, RPC, Edge Functions), Cloudflare (Worker `d1-api`, `d1-backup` → R2), Vercel (hosting + nagłówki), Stripe (sekrety tylko server-side) — szczegóły w pliku powyżej.
+- Mapowanie operacyjne: gdzie leżą kopie D1 (R2 `d1-snapshots/`), kto ma dostęp, procedura odtwarzania — **wewnętrzny dokument**, nawet 1 strona A4.
+- Powiązanie z kodem: `SECURITY.md`, strona publiczna `/security`, `/.well-known/security.txt`, HTTPS, MFA Supabase, brak sekretów w bundlu — tylko jeśli **wdrożone w produkcji** i opisane w audycie.
 
 ---
 

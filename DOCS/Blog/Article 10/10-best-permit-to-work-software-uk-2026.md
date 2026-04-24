@@ -232,8 +232,8 @@ Pricing is current as of April 2026 based on publicly available information and 
 
 This is the part most comparison sites skip. Here's the honest cost for a **realistic UK construction scenario**: one site with 50 operatives, 5 supervisors and 2 admins over 12 months.
 
-**SafetyCulture Premium** (annual billing at $24/user/month, USD to GBP approx):
-- 57 users × £19/month × 12 = **~£13,000/year**
+**SafetyCulture Premium** (annual billing at ~$24/user/month, USD to GBP approx):
+- 57 users × roughly £18–22/user/month equivalent × 12 ≈ **~£12,000–15,000/year** (verify current vendor pricing)
 
 **HandsHQ** (mid-tier per user/month):
 - 7 paid users (admins + supervisors) × £100/month × 12 = **~£8,400/year**
@@ -242,9 +242,9 @@ This is the part most comparison sites skip. Here's the honest cost for a **real
 **EcoOnline** (quote-based, industry average per-user):
 - Similar structure to SafetyCulture: **~£10,000-15,000/year** depending on modules
 
-**MySafeOps** (admin/supervisor paid, workers free):
-- 7 paid users on Team/Business tier = **~£600-1,200/year**
-- 50 free workers included
+**MySafeOps** (flat organisation subscription — workers included up to tier caps, not priced per seat):
+- Example: **Team ~£79/mo** (~£948/year) for up to 20 workers on that tier; **Business £149/mo** for higher caps — see in-app Billing & limits
+- 50 site workers fit within Business tier limits for field use (verify current plan table)
 
 **The Site Book** (flat-rate £30/month):
 - All users included: **~£360/year**

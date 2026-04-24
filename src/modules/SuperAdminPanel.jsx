@@ -777,7 +777,7 @@ export default function SuperAdminPanel() {
               <code style={{ fontSize: 11 }}>superadmin_platform_stats</code> in Supabase — whole platform, gated to your owner email only.
             </li>
             <li style={{ marginTop: 8 }}>
-              <strong style={{ color: "var(--color-text-primary)" }}>Paid conversion</strong> is paying orgs / all orgs: plan in starter / team / business with
+              <strong style={{ color: "var(--color-text-primary)" }}>Paid conversion</strong> is paying orgs / all orgs: plan in starter / team / business / enterprise with
               subscription status active or trialing.
             </li>
           </ul>

@@ -65,6 +65,14 @@ export default function DocsHubPage() {
                 : "Internal status page for quick checks."}
             </div>
           </li>
+          <li>
+            <Link to="/security" style={{ fontWeight: 600, color: "#0d9488" }}>
+              Security &amp; trust
+            </Link>
+            <div style={{ fontSize: 13, color: "var(--color-text-secondary, #64748b)", marginTop: 4 }}>
+              High-level posture for procurement and Cyber Essentials–style questionnaires (not legal advice).
+            </div>
+          </li>
         </ul>
         <h2 className="blog-article-toc-title" style={{ fontSize: 18, marginTop: 32, marginBottom: 10 }}>
           Legal
