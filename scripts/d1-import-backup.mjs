@@ -48,6 +48,11 @@ const D1_KNOWN_NAMESPACES = new Set([
   "daily_briefings",
   "visitor_log",
   "welfare_check_log",
+  "ladder_inspections",
+  "water_hygiene_log",
+  "environmental_log",
+  "waste_register",
+  "mewp_log",
 ]);
 
 function parseArgs() {

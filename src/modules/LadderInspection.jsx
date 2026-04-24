@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
@@ -91,13 +92,27 @@ function Form({ item, projects, onSave, onClose }) {
 export default function LadderInspection() {
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("ladder_inspections", []));
-  const [projects] = useState(() => load("mysafeops_projects", []));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
 
-  useEffect(() => {
-    save("ladder_inspections", items);
-  }, [items]);
+  const { d1Syncing: d1Items } = useD1OrgArraySync({
+    storageKey: "ladder_inspections",
+    namespace: "ladder_inspections",
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
+  const { d1Syncing: d1Proj } = useD1OrgArraySync({
+    storageKey: "mysafeops_projects",
+    namespace: "mysafeops_projects",
+    value: projects,
+    setValue: setProjects,
+    load,
+    save,
+  });
+  const d1Syncing = d1Items || d1Proj;
 
   const exportCsv = () => {
     const h = ["Ladder ref", "Type", "Location", "Project", "Date", "Next due", "Result", "Inspector"];
@@ -126,6 +141,14 @@ export default function LadderInspection() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+      {d1Syncing ? (
+        <div
+          className="app-panel-surface"
+          style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+        >
+          Syncing ladder inspections with cloud…
+        </div>
+      ) : null}
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
             <PageHero
         badgeText="LD"

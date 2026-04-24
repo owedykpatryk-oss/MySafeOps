@@ -20,7 +20,7 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 | D1 `org_sync_kv` + `org_audit_log` | Schematy w `cloudflare/workers/d1-api/schema/`; zastosować na remote przez `wrangler d1 execute` (nie mylić z Postgres). |
 | Worker `d1-api` | KV, health, audyt HMAC; wymaga `AUDIT_CHAIN_SECRET` + Supabase RPC `user_can_access_org_slug`. |
 | Worker `d1-backup` | Cron → R2 `d1-snapshots/`; `npm run d1:deploy:backup`. |
-| Front | `useD1OrgArraySync` (+ `useD1WorkersProjectsSync`) m.in.: **permits**, **RAMS**, **method statements**, **Workers & projects**, **toolbox talks**, **snags**, **incidents + actions**, **Incident Action Tracker**, **training matrix**, **Daily briefing**, **Gate book**, **Visitor log**, **Inspection register**, **Welfare checks**. |
+| Front | `useD1OrgArraySync` (+ `useD1WorkersProjectsSync`) m.in.: **permits**, **RAMS**, **method statements**, **Workers & projects**, **toolbox talks**, **snags**, **incidents + actions**, **Incident Action Tracker**, **training matrix**, **Daily briefing**, **Gate book**, **Visitor log**, **Inspection register**, **Welfare checks**, **Ladder inspections**, **Water hygiene**, **Environmental log**, **Waste register**, **MEWP log**. |
 | Audyt | `pushAudit` → mirror D1 (append: każdy członek org). **Odczyt** łańcucha D1: tylko **admin + supervisor** (RPC `user_can_read_org_audit` + Worker); `AuditLogViewer` pokazuje lokalnie wszystkim. |
 | Supabase | `user_can_access_org_slug`, `user_can_read_org_audit`, fix overload `superadmin_recent_organisations` (`20260423120000_*.sql`, `20260424100000_*.sql`). |
 
@@ -30,7 +30,7 @@ Ten plik zbiera **to, co jeszcze nie jest zrobione** (lub zrobione tylko częśc
 
 ### B1. Rozszerzyć D1 na kolejne moduły (taki sam wzorzec co MS/RAMS/PTW)
 
-**Status (repo):** wdrożone m.in. `Workers.jsx`, `ToolboxTalkRegister.jsx`, `SnagRegister.jsx`, `IncidentNearMiss.jsx`, `IncidentActionTracker.jsx`, `TrainingMatrix.jsx`, `DailyBriefing.jsx`, `GateBook.jsx`, `VisitorLog.jsx`, `InspectionTracker.jsx`, `WelfareCheckLog.jsx`, wspólne listy w `MethodStatement.jsx` przez `useD1WorkersProjectsSync.js`. Nadal bez D1: wiele rejestrów tylko z `load("mysafeops_projects")` przy mount — kolejne wg potrzeby.
+**Status (repo):** wdrożone m.in. `Workers.jsx`, `ToolboxTalkRegister.jsx`, `SnagRegister.jsx`, `IncidentNearMiss.jsx`, `IncidentActionTracker.jsx`, `TrainingMatrix.jsx`, `DailyBriefing.jsx`, `GateBook.jsx`, `VisitorLog.jsx`, `InspectionTracker.jsx`, `WelfareCheckLog.jsx`, `LadderInspection.jsx`, `WaterHygieneLog.jsx`, `EnvironmentalLog.jsx`, `WasteRegister.jsx`, `MEWPLog.jsx`, wspólne listy w `MethodStatement.jsx` przez `useD1WorkersProjectsSync.js`. Nadal bez D1: pozostałe rejestry z `load("mysafeops_projects")` przy mount — kolejne wg potrzeby.
 
 **Cel:** Więcej danych org w jednej chmurze, mniej „tylko ten komputer”.
 
