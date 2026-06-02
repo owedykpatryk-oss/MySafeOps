@@ -14,7 +14,8 @@ const envLocal = resolve(root, ".env.local");
 
 function printManualOpsChecklist() {
   console.log("\nManual ops (not verified here — see DOCS/CYBER_ESSENTIALS_PLAN.md + DOCS/BACKEND_CONTINUATION_PLAN.md §C):\n");
-  console.log("  · Supabase: MFA + password policy for operator accounts; apply migrations (org RPCs + audit read RPC).\n");
+  console.log("  · Supabase: MFA + password policy; Turnstile secret in Auth → Bot protection (site key: VITE_TURNSTILE_SITE_KEY).\n");
+  console.log("  · Supabase: apply migrations (org RPCs + audit read RPC) for operator accounts.\n");
   console.log("  · Cloudflare: D1 schemas 0001+0002 on remote; wrangler secret put AUDIT_CHAIN_SECRET on d1-api; deploy d1-backup → R2.\n");
   console.log("  · Vercel Production: set VITE_D1_API_URL when org sync is live; redeploy after env changes.\n");
 }
@@ -48,6 +49,7 @@ function run() {
 const viteRows = [
   ["VITE_SUPABASE_URL", "Supabase project URL"],
   ["VITE_SUPABASE_ANON_KEY", "Supabase anon (public) key"],
+  ["VITE_TURNSTILE_SITE_KEY", "Cloudflare Turnstile site key — pair with captcha secret in Supabase Auth"],
   ["VITE_VAPID_PUBLIC_KEY", "Web Push public key — pair with Supabase secrets VAPID_*"],
   ["VITE_STORAGE_API_URL", "R2 upload Worker URL (optional)"],
   ["VITE_STORAGE_UPLOAD_TOKEN", "Worker upload token (optional)"],

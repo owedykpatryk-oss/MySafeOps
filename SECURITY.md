@@ -9,6 +9,7 @@ This document supports procurement and internal review. It is not a legal warran
 - **`public/_headers`**: same class of headers for static hosts that apply it (e.g. Cloudflare Pages) — keep in sync with Vercel where possible.
 - **`public/.well-known/security.txt`**: contact for responsible disclosure. Update the `Canonical` line to your production URL.
 - **Password UX**: sign-up and password reset flows require at least **12 characters** in the UI (Supabase remains the source of truth for final acceptance).
+- **Turnstile (optional)**: when **`VITE_TURNSTILE_SITE_KEY`** is set, `/login` and Cloud account show Cloudflare Turnstile and send `captchaToken` to Supabase Auth. Configure the matching **secret** in Supabase Dashboard → Authentication → Bot and Abuse Protection (never in `VITE_*`).
 - **Support contact**: `getSupportEmail()` reads **`VITE_SUPPORT_EMAIL`** (validated shape); default **`support@mysafeops.com`**. Invite emails from Edge Functions use secret **`SUPPORT_CONTACT_EMAIL`** (default `support@mysafeops.com`).
 - **Platform owner**: **`VITE_PLATFORM_OWNER_EMAIL`** controls who sees the Owner dashboard in the app; database RPCs in `supabase/migrations/*superadmin*` must use the same allow-list after you migrate off the legacy address.
 - **Optional error monitoring**: set **`VITE_SENTRY_DSN`** (browser DSN only) to load `@sentry/react` at startup; omit in environments where third-party reporting is not allowed. When set, `RouteErrorBoundary` also calls **`Sentry.captureException`** for lazy-route load failures.

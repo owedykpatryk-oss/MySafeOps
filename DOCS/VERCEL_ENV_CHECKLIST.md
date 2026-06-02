@@ -28,6 +28,7 @@ Jeśli masz już tylko `VITE_STORAGE_API_URL` i `VITE_STORAGE_UPLOAD_TOKEN`, **d
 | 14 | `VITE_AI_PROXY_SECRET` | `VITE_*` | Musi = `AI_PROXY_SHARED_SECRET` jeśli włączysz | j.w. |
 | 15 | `VITE_SHOW_LOGIN_ADMIN_HINTS` | `VITE_*` | `true` tylko gdy chcesz podpowiedzi IT na `/login` w **produkcyjnym** bundlu | Zwykle puste / false; opcjonalnie `true` na Preview |
 | 16 | `VITE_D1_API_URL` | `VITE_*` | URL workera D1 (np. `https://mysafeops-d1-api.<konto>.workers.dev`, **bez** `/` na końcu) — patrz `DOCS/D1_SETUP.md` | Production + Preview (gdy używasz D1) |
+| 17 | `VITE_TURNSTILE_SITE_KEY` | `VITE_*` | Cloudflare Turnstile **site key** (publiczny). Para: secret tylko w **Supabase → Auth → Bot protection**. Lokalnie: `npm run setup:turnstile` | Production + Preview |
 
 **Już masz w Vercel (nie duplikuj inaczej):** `VITE_STORAGE_API_URL`, `VITE_STORAGE_UPLOAD_TOKEN`.
 
@@ -70,6 +71,7 @@ Jeśli masz już tylko `VITE_STORAGE_API_URL` i `VITE_STORAGE_UPLOAD_TOKEN`, **d
 
 ## 3. Supabase (poza Vercel — tego Vercel nie wypełni)
 
+- **Authentication → Bot and Abuse Protection:** włącz **CAPTCHA**, provider **Turnstile**, wklej **Secret key** z Cloudflare (ten sam co dla widgetu; **nie** dodawaj secretu do Vercel). Automatyzacja: `SUPABASE_ACCESS_TOKEN` w `.env.local` + `npm run setup:turnstile:all` (patrz `DOCS/TURNSTILE_SETUP.md`).
 - **Authentication → URL Configuration:** Site URL + **Redirect URLs** (każda domena, na której działa apka, np. `https://domena/login`, `.../reset-password`, `.../app`, lokalny `http://localhost:5173/...`).
 
 ---

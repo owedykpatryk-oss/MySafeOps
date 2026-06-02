@@ -5,7 +5,16 @@ import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
 import { signInWithGoogleOAuth } from "../lib/authRedirect";
-import { clearAuthFailures, formatLockoutRemaining, getAuthLockoutState, recordAuthFailure } from "../lib/authLockout";
+import {
+  clearAuthFailures,
+  formatLockoutRemaining,
+  getAuthLockoutState,
+  getSignUpThrottleState,
+  recordAuthFailure,
+  recordSignUpAttempt,
+} from "../lib/authLockout";
+import { useAuthCaptcha } from "../hooks/useAuthCaptcha";
+import TurnstileWidget from "../components/TurnstileWidget";
 import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
 import { setPendingInviteToken } from "../lib/inviteToken";
 import { ensureUserOrgContext } from "../utils/orgMembership";
@@ -48,6 +57,9 @@ function mapAuthErrorMessage(error, fallback = "Authentication request failed") 
   if (m.includes("rate limit") || m.includes("too many requests")) {
     return "Too many attempts right now. Please wait a moment and try again.";
   }
+  if (m.includes("captcha") || m.includes("turnstile")) {
+    return "Security check failed or expired. Complete the check and try again.";
+  }
   if (m.includes("password")) {
     return raw;
   }
@@ -78,7 +90,16 @@ export default function LoginPage() {
   const safeNextPath = useMemo(() => safeInternalPath(nextParam, "/app"), [nextParam]);
   const normalizedEmail = email.trim().toLowerCase();
   const lockout = getAuthLockoutState(normalizedEmail, Date.now());
+  const signUpThrottle = getSignUpThrottleState(Date.now());
   const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
+  const {
+    enabled: captchaEnabled,
+    setCaptchaToken,
+    turnstileNonce,
+    resetCaptcha,
+    validateCaptcha,
+    wrapAuthOptions,
+  } = useAuthCaptcha();
 
   const rememberAuthEmail = (value) => {
     const v = String(value || "").trim().toLowerCase();
@@ -113,10 +134,10 @@ export default function LoginPage() {
   }, [oauthError]);
 
   useEffect(() => {
-    if (!lockout.isLocked) return undefined;
+    if (!lockout.isLocked && !signUpThrottle.isThrottled) return undefined;
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
     return () => window.clearInterval(id);
-  }, [lockout.isLocked]);
+  }, [lockout.isLocked, signUpThrottle.isThrottled]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return undefined;
@@ -186,16 +207,26 @@ export default function LoginPage() {
       setMsg(`Too many failed attempts. Try again in ${formatLockoutRemaining(lockout.remainingMs)}.`);
       return;
     }
+    const captchaErr = validateCaptcha();
+    if (captchaErr) {
+      setMsg(captchaErr);
+      return;
+    }
     setMsg("");
     setBusy(true);
     trackAuthEvent("sign_in_attempt", { email: normalizedEmail });
     try {
-      const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
+      const { error } = await client.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+        options: wrapAuthOptions(),
+      });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_in", entity: "auth", detail: email.trim() });
       clearAuthFailures(normalizedEmail);
       rememberAuthEmail(email.trim());
       setPassword("");
+      resetCaptcha();
     } catch (e) {
       const rawMessage = String(e?.message || "");
       const unconfirmed =
@@ -214,6 +245,7 @@ export default function LoginPage() {
       } else {
         setMsg(`${e.message || "Sign-in failed"} (${state.attemptsLeft} attempts left before temporary lockout).`);
       }
+      resetCaptcha();
     } finally {
       setBusy(false);
     }
@@ -261,19 +293,30 @@ export default function LoginPage() {
       setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
+    if (signUpThrottle.isThrottled) {
+      setMsg(`Too many sign-up attempts. Try again in ${formatLockoutRemaining(signUpThrottle.remainingMs)}.`);
+      return;
+    }
+    const captchaErr = validateCaptcha();
+    if (captchaErr) {
+      setMsg(captchaErr);
+      return;
+    }
     setMsg("");
     setBusy(true);
+    recordSignUpAttempt(Date.now());
     trackAuthEvent("sign_up_attempt", { email: normalizedEmail });
     try {
       const emailRedirectTo = new URL("/login", window.location.origin).href;
       const { data, error } = await client.auth.signUp({
         email: email.trim(),
         password,
-        options: { emailRedirectTo },
+        options: wrapAuthOptions({ emailRedirectTo }),
       });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_up", entity: "auth", detail: email.trim() });
       trackAuthEvent("sign_up_success", { email: normalizedEmail });
+      resetCaptcha();
       // If email confirmation is disabled in Supabase, a session may be returned immediately.
       if (data?.session) {
         setMsg("Account created. Finishing sign-in…");
@@ -289,6 +332,7 @@ export default function LoginPage() {
     } catch (e) {
       trackAuthError("sign_up_failed", e, { email: normalizedEmail });
       setMsg(mapAuthErrorMessage(e, "Sign-up failed"));
+      resetCaptcha();
     } finally {
       setBusy(false);
     }
@@ -300,18 +344,25 @@ export default function LoginPage() {
       setMsg("Enter your email address first.");
       return;
     }
+    const captchaErr = validateCaptcha();
+    if (captchaErr) {
+      setMsg(captchaErr);
+      return;
+    }
     setMsg("");
     setBusy(true);
     trackAuthEvent("password_reset_email_request", { email: normalizedEmail });
     try {
       const redirectTo = new URL("/reset-password", window.location.origin).href;
-      const { error } = await client.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+      const { error } = await client.auth.resetPasswordForEmail(email.trim(), wrapAuthOptions({ redirectTo }));
       if (error) throw error;
       pushAudit({ action: "supabase_reset_password_requested", entity: "auth", detail: email.trim() });
       setMsg("Password reset email sent. Open the link in that email to set a new password.");
+      resetCaptcha();
     } catch (e) {
       trackAuthError("password_reset_email_failed", e, { email: normalizedEmail });
       setMsg(mapAuthErrorMessage(e, "Could not send reset email"));
+      resetCaptcha();
     } finally {
       setBusy(false);
     }
@@ -328,6 +379,11 @@ export default function LoginPage() {
       setMsg(`Please wait ${resendCooldown}s before sending another confirmation email.`);
       return;
     }
+    const captchaErr = validateCaptcha();
+    if (captchaErr) {
+      setMsg(captchaErr);
+      return;
+    }
     setMsg("");
     setBusy(true);
     trackAuthEvent("resend_confirmation_attempt", { email: targetEmail });
@@ -336,7 +392,7 @@ export default function LoginPage() {
       const { error } = await client.auth.resend({
         type: "signup",
         email: targetEmail,
-        options: { emailRedirectTo },
+        options: wrapAuthOptions({ emailRedirectTo }),
       });
       if (error) throw error;
       trackAuthEvent("resend_confirmation_success", { email: targetEmail });
@@ -344,9 +400,11 @@ export default function LoginPage() {
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
       rememberAuthEmail(targetEmail);
       setMsg("Confirmation email re-sent. Check inbox and spam.");
+      resetCaptcha();
     } catch (e) {
       trackAuthError("resend_confirmation_failed", e, { email: targetEmail });
       setMsg(mapAuthErrorMessage(e, "Could not resend confirmation email"));
+      resetCaptcha();
     } finally {
       setBusy(false);
     }
@@ -730,11 +788,30 @@ export default function LoginPage() {
                   .
                 </span>
               </label>
+              {captchaEnabled && (
+                <TurnstileWidget
+                  resetKey={turnstileNonce}
+                  action="login"
+                  onTokenChange={setCaptchaToken}
+                />
+              )}
+              {signUpThrottle.isThrottled && (
+                <InlineAlert
+                  type="error"
+                  text={`Too many sign-up attempts on this device. Try again in ${formatLockoutRemaining(signUpThrottle.remainingMs)}.`}
+                  style={{ fontSize: 12, marginTop: 12 }}
+                />
+              )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 14 }}>
                 <button type="button" style={{ ...ss.btnP, width: "100%" }} disabled={busy || lockout.isLocked} onClick={signIn}>
                   Sign in
                 </button>
-                <button type="button" style={{ ...ss.btn, width: "100%" }} disabled={busy || !acceptLegalTerms} onClick={signUp}>
+                <button
+                  type="button"
+                  style={{ ...ss.btn, width: "100%" }}
+                  disabled={busy || !acceptLegalTerms || signUpThrottle.isThrottled}
+                  onClick={signUp}
+                >
                   Create account
                 </button>
               </div>

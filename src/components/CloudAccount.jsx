@@ -17,6 +17,13 @@ import { getSupportEmail } from "../config/supportContact";
 import { getPasswordStrengthMeta } from "../utils/passwordStrength";
 import { getInboxUrl } from "../utils/emailInbox";
 import { MIN_PASSWORD_LENGTH_SIGNUP } from "../config/authPolicy";
+import { useAuthCaptcha } from "../hooks/useAuthCaptcha";
+import TurnstileWidget from "./TurnstileWidget";
+import {
+  formatLockoutRemaining,
+  getSignUpThrottleState,
+  recordSignUpAttempt,
+} from "../lib/authLockout";
 
 const ss = ms;
 const MIN_PASSWORD_LENGTH = MIN_PASSWORD_LENGTH_SIGNUP;
@@ -40,6 +47,9 @@ function mapAuthErrorMessage(error, fallback = "Authentication request failed") 
   }
   if (m.includes("rate limit") || m.includes("too many requests")) {
     return "Too many attempts right now. Please wait a moment and try again.";
+  }
+  if (m.includes("captcha") || m.includes("turnstile")) {
+    return "Security check failed or expired. Complete the check and try again.";
   }
   return raw || fallback;
 }
@@ -227,6 +237,15 @@ export default function CloudAccount() {
   const [mfaForSession, setMfaForSession] = useState(false);
   const r2Enabled = isR2StorageConfigured();
   const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
+  const signUpThrottle = getSignUpThrottleState(Date.now());
+  const {
+    enabled: captchaEnabled,
+    setCaptchaToken,
+    turnstileNonce,
+    resetCaptcha,
+    validateCaptcha,
+    wrapAuthOptions,
+  } = useAuthCaptcha();
 
   useEffect(() => {
     if (!user || !client) {
@@ -321,19 +340,30 @@ export default function CloudAccount() {
       setMsg("Enter your password first.");
       return;
     }
+    const captchaErr = validateCaptcha();
+    if (captchaErr) {
+      setMsg(captchaErr);
+      return;
+    }
     setMsg("");
     setBusy(true);
     try {
-      const { error } = await client.auth.signInWithPassword({ email: email.trim(), password });
+      const { error } = await client.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+        options: wrapAuthOptions(),
+      });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_in", entity: "auth", detail: email.trim() });
       rememberAuthEmail(email.trim());
       setPassword("");
+      resetCaptcha();
     } catch (e) {
       const maybeEmail = email.trim().toLowerCase();
       const unconfirmed = String(e?.message || "").toLowerCase().includes("email not confirmed");
       if (unconfirmed && maybeEmail) setPendingConfirmationEmail(maybeEmail);
       setMsg(mapAuthErrorMessage(e, "Sign-in failed"));
+      resetCaptcha();
     } finally {
       setBusy(false);
     }
@@ -375,17 +405,28 @@ export default function CloudAccount() {
       setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
+    if (signUpThrottle.isThrottled) {
+      setMsg(`Too many sign-up attempts. Try again in ${formatLockoutRemaining(signUpThrottle.remainingMs)}.`);
+      return;
+    }
+    const captchaErr = validateCaptcha();
+    if (captchaErr) {
+      setMsg(captchaErr);
+      return;
+    }
     setMsg("");
     setBusy(true);
+    recordSignUpAttempt(Date.now());
     try {
       const emailRedirectTo = new URL("/login", window.location.origin).href;
       const { data, error } = await client.auth.signUp({
         email: email.trim(),
         password,
-        options: { emailRedirectTo },
+        options: wrapAuthOptions({ emailRedirectTo }),
       });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_up", entity: "auth", detail: email.trim() });
+      resetCaptcha();
       if (data?.session) {
         setMsg("Account created and signed in.");
         rememberAuthEmail(email.trim());
@@ -399,6 +440,7 @@ export default function CloudAccount() {
       setPassword("");
     } catch (e) {
       setMsg(mapAuthErrorMessage(e, "Sign-up failed"));
+      resetCaptcha();
     } finally {
       setBusy(false);
     }
@@ -414,6 +456,11 @@ export default function CloudAccount() {
       setMsg(`Please wait ${resendCooldown}s before sending another confirmation email.`);
       return;
     }
+    const captchaErr = validateCaptcha();
+    if (captchaErr) {
+      setMsg(captchaErr);
+      return;
+    }
     setMsg("");
     setBusy(true);
     try {
@@ -421,15 +468,17 @@ export default function CloudAccount() {
       const { error } = await client.auth.resend({
         type: "signup",
         email: targetEmail,
-        options: { emailRedirectTo },
+        options: wrapAuthOptions({ emailRedirectTo }),
       });
       if (error) throw error;
       setPendingConfirmationEmail(targetEmail);
       setResendCooldown(RESEND_COOLDOWN_SECONDS);
       rememberAuthEmail(targetEmail);
       setMsg("Confirmation email re-sent. Check inbox and spam.");
+      resetCaptcha();
     } catch (e) {
       setMsg(mapAuthErrorMessage(e, "Could not resend confirmation email"));
+      resetCaptcha();
     } finally {
       setBusy(false);
     }
@@ -624,11 +673,21 @@ export default function CloudAccount() {
           .
         </span>
       </label>
+      {captchaEnabled && (
+        <TurnstileWidget resetKey={turnstileNonce} action="login" onTokenChange={setCaptchaToken} />
+      )}
+      {signUpThrottle.isThrottled && (
+        <InlineAlert
+          type="error"
+          text={`Too many sign-up attempts on this device. Try again in ${formatLockoutRemaining(signUpThrottle.remainingMs)}.`}
+          style={{ fontSize: 12, marginTop: 12 }}
+        />
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
         <button type="button" style={ss.btnP} disabled={busy} onClick={signIn}>
           Sign in
         </button>
-        <button type="button" style={ss.btn} disabled={busy || !acceptLegalTerms} onClick={signUp}>
+        <button type="button" style={ss.btn} disabled={busy || !acceptLegalTerms || signUpThrottle.isThrottled} onClick={signUp}>
           Create account
         </button>
       </div>
