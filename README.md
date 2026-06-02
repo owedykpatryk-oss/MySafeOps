@@ -43,7 +43,7 @@ A minimal **web app manifest** is at [public/manifest.webmanifest](public/manife
 
 ## Configuration
 
-Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project root and fill in any optional values. Never commit `.env.local`. After editing, run **`npm run env:check`** for a read-only checklist (no secret values printed). For **Vercel → Environment Variables** (co skopiować, Production vs Preview, Supabase redirect URLs), use **[DOCS/VERCEL_ENV_CHECKLIST.md](DOCS/VERCEL_ENV_CHECKLIST.md)**.
+Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project root and fill in any optional values. Never commit `.env.local`. After editing, run **`npm run env:check`** for a read-only checklist (no secret values printed). For **Vercel → Environment Variables** (co skopiować, Production vs Preview, Supabase redirect URLs), use **[DOCS/VERCEL_ENV_CHECKLIST.md](DOCS/VERCEL_ENV_CHECKLIST.md)**. Anti-bot (Cloudflare Turnstile on `/login`): **`npm run setup:turnstile`** and **[DOCS/TURNSTILE_SETUP.md](DOCS/TURNSTILE_SETUP.md)**.
 
 | Area | Purpose |
 |------|---------|
