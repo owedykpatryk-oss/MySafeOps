@@ -7,6 +7,10 @@ const SIGNUP_GLOBAL_KEY = "__signup__";
 const MAX_SIGNUP_ATTEMPTS = 5;
 const SIGNUP_THROTTLE_MS = 15 * 60 * 1000; // 15 minutes
 
+const PASSWORD_RESET_GLOBAL_KEY = "__password_reset__";
+const MAX_PASSWORD_RESET_ATTEMPTS = 5;
+const PASSWORD_RESET_THROTTLE_MS = 15 * 60 * 1000;
+
 function safeParse(json) {
   try {
     const parsed = JSON.parse(json || "{}");
@@ -130,5 +134,45 @@ export function recordSignUpAttempt(now = Date.now()) {
   store[SIGNUP_GLOBAL_KEY] = { attempts, throttleUntil };
   writeStore(store);
   return getSignUpThrottleState(now);
+}
+
+/** Browser-wide password-reset email throttle (complements Supabase rate limits + Turnstile). */
+export function getPasswordResetThrottleState(now = Date.now()) {
+  const store = readStore();
+  const entry = store[PASSWORD_RESET_GLOBAL_KEY] || {};
+  const attempts = Array.isArray(entry.attempts)
+    ? entry.attempts.filter((ts) => Number(ts) > now - FAILURE_WINDOW_MS)
+    : [];
+  const throttleUntil = Number(entry.throttleUntil || 0);
+  const remainingMs = Math.max(0, throttleUntil - now);
+  const isThrottled = remainingMs > 0;
+
+  if (attempts.length !== (entry.attempts || []).length) {
+    store[PASSWORD_RESET_GLOBAL_KEY] = { ...entry, attempts, throttleUntil };
+    writeStore(store);
+  }
+
+  return {
+    isThrottled,
+    remainingMs,
+    attempts: attempts.length,
+    attemptsLeft: Math.max(0, MAX_PASSWORD_RESET_ATTEMPTS - attempts.length),
+  };
+}
+
+export function recordPasswordResetAttempt(now = Date.now()) {
+  const store = readStore();
+  const prev = store[PASSWORD_RESET_GLOBAL_KEY] || {};
+  const attempts = Array.isArray(prev.attempts)
+    ? prev.attempts.filter((ts) => Number(ts) > now - FAILURE_WINDOW_MS)
+    : [];
+  attempts.push(now);
+  const throttleUntil =
+    attempts.length >= MAX_PASSWORD_RESET_ATTEMPTS
+      ? now + PASSWORD_RESET_THROTTLE_MS
+      : Number(prev.throttleUntil || 0);
+  store[PASSWORD_RESET_GLOBAL_KEY] = { attempts, throttleUntil };
+  writeStore(store);
+  return getPasswordResetThrottleState(now);
 }
 

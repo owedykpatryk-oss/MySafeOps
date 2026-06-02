@@ -9,10 +9,13 @@ import {
   clearAuthFailures,
   formatLockoutRemaining,
   getAuthLockoutState,
+  getPasswordResetThrottleState,
   getSignUpThrottleState,
   recordAuthFailure,
+  recordPasswordResetAttempt,
   recordSignUpAttempt,
 } from "../lib/authLockout";
+import { isDisposableSignupEmail } from "../lib/disposableEmail";
 import { useAuthCaptcha } from "../hooks/useAuthCaptcha";
 import TurnstileWidget from "../components/TurnstileWidget";
 import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
@@ -91,6 +94,8 @@ export default function LoginPage() {
   const normalizedEmail = email.trim().toLowerCase();
   const lockout = getAuthLockoutState(normalizedEmail, Date.now());
   const signUpThrottle = getSignUpThrottleState(Date.now());
+  const passwordResetThrottle = getPasswordResetThrottleState(Date.now());
+  const [honeypot, setHoneypot] = useState("");
   const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
   const {
     enabled: captchaEnabled,
@@ -134,10 +139,10 @@ export default function LoginPage() {
   }, [oauthError]);
 
   useEffect(() => {
-    if (!lockout.isLocked && !signUpThrottle.isThrottled) return undefined;
+    if (!lockout.isLocked && !signUpThrottle.isThrottled && !passwordResetThrottle.isThrottled) return undefined;
     const id = window.setInterval(() => setTick((x) => x + 1), 1000);
     return () => window.clearInterval(id);
-  }, [lockout.isLocked, signUpThrottle.isThrottled]);
+  }, [lockout.isLocked, signUpThrottle.isThrottled, passwordResetThrottle.isThrottled]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return undefined;
@@ -293,8 +298,16 @@ export default function LoginPage() {
       setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
+    if (honeypot.trim()) {
+      setMsg("Sign-up failed.");
+      return;
+    }
     if (signUpThrottle.isThrottled) {
       setMsg(`Too many sign-up attempts. Try again in ${formatLockoutRemaining(signUpThrottle.remainingMs)}.`);
+      return;
+    }
+    if (isDisposableSignupEmail(email.trim())) {
+      setMsg("Please use a work or personal email address (disposable inboxes are not allowed).");
       return;
     }
     const captchaErr = validateCaptcha();
@@ -344,6 +357,10 @@ export default function LoginPage() {
       setMsg("Enter your email address first.");
       return;
     }
+    if (passwordResetThrottle.isThrottled) {
+      setMsg(`Too many reset requests. Try again in ${formatLockoutRemaining(passwordResetThrottle.remainingMs)}.`);
+      return;
+    }
     const captchaErr = validateCaptcha();
     if (captchaErr) {
       setMsg(captchaErr);
@@ -351,6 +368,7 @@ export default function LoginPage() {
     }
     setMsg("");
     setBusy(true);
+    recordPasswordResetAttempt(Date.now());
     trackAuthEvent("password_reset_email_request", { email: normalizedEmail });
     try {
       const redirectTo = new URL("/reset-password", window.location.origin).href;
@@ -788,6 +806,23 @@ export default function LoginPage() {
                   .
                 </span>
               </label>
+              <input
+                type="text"
+                name="company"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  left: "-10000px",
+                  width: 1,
+                  height: 1,
+                  opacity: 0,
+                  pointerEvents: "none",
+                }}
+              />
               {captchaEnabled && (
                 <TurnstileWidget
                   resetKey={turnstileNonce}
@@ -799,6 +834,13 @@ export default function LoginPage() {
                 <InlineAlert
                   type="error"
                   text={`Too many sign-up attempts on this device. Try again in ${formatLockoutRemaining(signUpThrottle.remainingMs)}.`}
+                  style={{ fontSize: 12, marginTop: 12 }}
+                />
+              )}
+              {passwordResetThrottle.isThrottled && (
+                <InlineAlert
+                  type="error"
+                  text={`Too many password reset requests. Try again in ${formatLockoutRemaining(passwordResetThrottle.remainingMs)}.`}
                   style={{ fontSize: 12, marginTop: 12 }}
                 />
               )}
@@ -850,7 +892,12 @@ export default function LoginPage() {
                 </div>
               )}
               <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
-                <button type="button" style={ss.btn} disabled={busy} onClick={sendPasswordReset}>
+                <button
+                  type="button"
+                  style={ss.btn}
+                  disabled={busy || passwordResetThrottle.isThrottled}
+                  onClick={sendPasswordReset}
+                >
                   Forgot password
                 </button>
                 <button type="button" style={ss.btn} disabled={busy} onClick={resendConfirmationEmail}>
@@ -902,8 +949,12 @@ export default function LoginPage() {
                         Enable Google under Supabase → Authentication → Providers, and add this site&apos;s origin plus{" "}
                         <code style={{ fontSize: 10 }}>/login</code> to Redirect URLs.
                       </p>
-                      <p style={{ margin: 0 }}>
+                      <p style={{ margin: "0 0 8px" }}>
                         Password reset emails should use redirect URL <code style={{ fontSize: 10 }}>/reset-password</code>.
+                      </p>
+                      <p style={{ margin: 0 }}>
+                        Turnstile: set <code style={{ fontSize: 10 }}>VITE_TURNSTILE_SITE_KEY</code> on Vercel and enable
+                        captcha in Supabase → Auth → Bot protection. Run <code style={{ fontSize: 10 }}>npm run setup:turnstile:supabase</code>.
                       </p>
                     </div>
                   </details>

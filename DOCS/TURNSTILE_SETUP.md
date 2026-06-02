@@ -50,3 +50,11 @@ Test keys always pass the challenge — fine for dev, **replace in production**.
 1. `npm run dev` → open `/login` → Turnstile widget visible
 2. Create account → no `captcha verification failed` from Supabase
 3. `npm run env:check` → `VITE_TURNSTILE_SITE_KEY` checked
+
+## Also in the app (no extra config)
+
+- Sign-in lockout after repeated failures (browser-local)
+- Sign-up and password-reset throttles per device
+- Honeypot field on registration forms
+- Blocklist of common disposable email domains on sign-up
+- Supabase password policy: min 12 chars + letters/digits (`supabase config push`)

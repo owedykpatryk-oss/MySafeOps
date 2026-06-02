@@ -20,10 +20,14 @@ import { MIN_PASSWORD_LENGTH_SIGNUP } from "../config/authPolicy";
 import { useAuthCaptcha } from "../hooks/useAuthCaptcha";
 import TurnstileWidget from "./TurnstileWidget";
 import {
+  clearAuthFailures,
   formatLockoutRemaining,
+  getAuthLockoutState,
   getSignUpThrottleState,
+  recordAuthFailure,
   recordSignUpAttempt,
 } from "../lib/authLockout";
+import { isDisposableSignupEmail } from "../lib/disposableEmail";
 
 const ss = ms;
 const MIN_PASSWORD_LENGTH = MIN_PASSWORD_LENGTH_SIGNUP;
@@ -234,9 +238,12 @@ export default function CloudAccount() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [acceptLegalTerms, setAcceptLegalTerms] = useState(false);
+  const [honeypot, setHoneypot] = useState("");
   const [mfaForSession, setMfaForSession] = useState(false);
   const r2Enabled = isR2StorageConfigured();
   const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
+  const normalizedEmail = email.trim().toLowerCase();
+  const lockout = getAuthLockoutState(normalizedEmail, Date.now());
   const signUpThrottle = getSignUpThrottleState(Date.now());
   const {
     enabled: captchaEnabled,
@@ -340,6 +347,10 @@ export default function CloudAccount() {
       setMsg("Enter your password first.");
       return;
     }
+    if (lockout.isLocked) {
+      setMsg(`Too many failed attempts. Try again in ${formatLockoutRemaining(lockout.remainingMs)}.`);
+      return;
+    }
     const captchaErr = validateCaptcha();
     if (captchaErr) {
       setMsg(captchaErr);
@@ -355,6 +366,7 @@ export default function CloudAccount() {
       });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_in", entity: "auth", detail: email.trim() });
+      clearAuthFailures(normalizedEmail);
       rememberAuthEmail(email.trim());
       setPassword("");
       resetCaptcha();
@@ -362,7 +374,15 @@ export default function CloudAccount() {
       const maybeEmail = email.trim().toLowerCase();
       const unconfirmed = String(e?.message || "").toLowerCase().includes("email not confirmed");
       if (unconfirmed && maybeEmail) setPendingConfirmationEmail(maybeEmail);
-      setMsg(mapAuthErrorMessage(e, "Sign-in failed"));
+      else recordAuthFailure(normalizedEmail, Date.now());
+      const state = getAuthLockoutState(normalizedEmail, Date.now());
+      if (state.isLocked) {
+        setMsg(`Too many failed attempts. Try again in ${formatLockoutRemaining(state.remainingMs)}.`);
+      } else if (!unconfirmed) {
+        setMsg(`${mapAuthErrorMessage(e, "Sign-in failed")} (${state.attemptsLeft} attempts left before temporary lockout).`);
+      } else {
+        setMsg(mapAuthErrorMessage(e, "Sign-in failed"));
+      }
       resetCaptcha();
     } finally {
       setBusy(false);
@@ -405,8 +425,16 @@ export default function CloudAccount() {
       setMsg(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }
+    if (honeypot.trim()) {
+      setMsg("Sign-up failed.");
+      return;
+    }
     if (signUpThrottle.isThrottled) {
       setMsg(`Too many sign-up attempts. Try again in ${formatLockoutRemaining(signUpThrottle.remainingMs)}.`);
+      return;
+    }
+    if (isDisposableSignupEmail(email.trim())) {
+      setMsg("Please use a work or personal email address (disposable inboxes are not allowed).");
       return;
     }
     const captchaErr = validateCaptcha();
@@ -673,8 +701,32 @@ export default function CloudAccount() {
           .
         </span>
       </label>
+      <input
+        type="text"
+        name="company"
+        value={honeypot}
+        onChange={(e) => setHoneypot(e.target.value)}
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: "-10000px",
+          width: 1,
+          height: 1,
+          opacity: 0,
+          pointerEvents: "none",
+        }}
+      />
       {captchaEnabled && (
         <TurnstileWidget resetKey={turnstileNonce} action="login" onTokenChange={setCaptchaToken} />
+      )}
+      {lockout.isLocked && (
+        <InlineAlert
+          type="error"
+          text={`Temporary lockout active: ${formatLockoutRemaining(lockout.remainingMs)} remaining.`}
+          style={{ fontSize: 12, marginTop: 12 }}
+        />
       )}
       {signUpThrottle.isThrottled && (
         <InlineAlert
@@ -684,7 +736,7 @@ export default function CloudAccount() {
         />
       )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-        <button type="button" style={ss.btnP} disabled={busy} onClick={signIn}>
+        <button type="button" style={ss.btnP} disabled={busy || lockout.isLocked} onClick={signIn}>
           Sign in
         </button>
         <button type="button" style={ss.btn} disabled={busy || !acceptLegalTerms || signUpThrottle.isThrottled} onClick={signUp}>

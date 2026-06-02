@@ -16,6 +16,11 @@ export default defineConfig({
         url: "http://127.0.0.1:4173",
         timeout: 120000,
         reuseExistingServer: true,
+        env: {
+          ...process.env,
+          // E2E must not require Turnstile (local .env.local may set a site key).
+          VITE_TURNSTILE_SITE_KEY: "",
+        },
       },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },

@@ -10,7 +10,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: accelerometer=(), camera=(), geolocation=(self), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), serial=(), bluetooth=(), display-capture=(), interest-cohort=()
   # Trial CSP (report-only): monitor violations before enforcing. Tighten connect-src to known APIs when ready.
-  Content-Security-Policy-Report-Only: default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' https:; object-src 'none'; img-src 'self' data: blob: https:; font-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https: wss:; frame-src 'self' https:; media-src 'self' https:; worker-src 'self' blob:
+  Content-Security-Policy-Report-Only: default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' https:; object-src 'none'; img-src 'self' data: blob: https:; font-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com; connect-src 'self' https: wss:; frame-src 'self' https: https://challenges.cloudflare.com; media-src 'self' https:; worker-src 'self' blob:
 
 # Long cache for fingerprinted assets (Vite build output)
 /assets/*
