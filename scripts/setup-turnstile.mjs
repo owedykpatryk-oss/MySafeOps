@@ -149,12 +149,30 @@ async function main() {
 
   if (runSupabase) {
     const token = process.env.SUPABASE_ACCESS_TOKEN?.trim();
-    if (!token) {
-      console.log("· Supabase API skipped: set SUPABASE_ACCESS_TOKEN in .env.local");
-      console.log("  Create token: https://supabase.com/dashboard/account/tokens");
-      console.log(`  Or manual: https://supabase.com/dashboard/project/${ref}/auth/protection`);
-    } else {
+    let supabaseOk = false;
+    try {
+      execSync(`npx supabase config push --project-ref ${ref} --yes`, {
+        cwd: root,
+        stdio: "pipe",
+        encoding: "utf8",
+      });
+      console.log(`✓ Supabase ${ref}: auth config pushed (Turnstile + production URLs from supabase/config.toml).`);
+      supabaseOk = true;
+    } catch (e) {
+      const out = String(e?.stdout || e?.stderr || e?.message || "");
+      if (/access token|not logged in|unauthorized/i.test(out)) {
+        console.log("· Supabase CLI not authenticated — run: npx supabase login");
+      } else {
+        console.warn(`⚠ supabase config push: ${out.slice(0, 300)}`);
+      }
+    }
+    if (!supabaseOk && token) {
       await patchSupabaseAuth({ ref, token, secret });
+      supabaseOk = true;
+    }
+    if (!supabaseOk) {
+      console.log("  Optional: SUPABASE_ACCESS_TOKEN in .env.local for Management API fallback");
+      console.log(`  Manual: https://supabase.com/dashboard/project/${ref}/auth/protection`);
     }
   }
 

@@ -20,6 +20,7 @@
     "env:check": "node scripts/env-doctor.mjs",
     "env:turnstile": "node scripts/ensure-turnstile-env.mjs",
     "setup:turnstile": "node scripts/setup-turnstile.mjs --vercel",
+    "setup:turnstile:supabase": "node scripts/setup-turnstile.mjs --supabase",
     "setup:turnstile:all": "node scripts/setup-turnstile.mjs --all",
     "d1:secrets": "node scripts/set-d1-wrangler-secrets.mjs",
     "d1:deploy": "npx wrangler@3 deploy --config cloudflare/workers/d1-api/wrangler.toml",
