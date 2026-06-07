@@ -29,3 +29,11 @@ export function trackBlogIndexView() {
 export function trackBlogArticleView(slug) {
   trackEvent("blog_article_view", { slug, location: "blog" });
 }
+
+/**
+ * @param {string} slug Article slug or "blog-index"
+ * @param {string} placement e.g. footer_login, strip_login
+ */
+export function trackBlogCtaClick(slug, placement) {
+  trackEvent("blog_cta_click", { slug, placement, location: "blog" });
+}
