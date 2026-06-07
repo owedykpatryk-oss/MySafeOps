@@ -29,7 +29,7 @@
 - Why most UK safety software charges per worker
 - What happens when worker accounts cost money
 - The MySafeOps model, admins pay, workers don't
-- What free worker accounts unlock
+- What free worker accounts include
 - Common objections and the honest answers
 - FAQ
 
@@ -91,7 +91,7 @@ This isn't a loss leader or a time-limited promotion. Free worker accounts are p
 > MySafeOps gives every construction worker on your site a free account, permanently. They sign permits, acknowledge toolbox talks and complete inductions on their own phone, no licence cost, ever. You pay for admin and supervisor access where the real configuration work happens.
 > [Start free at mysafeops.com →](https://mysafeops.com)
 
-## What free worker accounts unlock
+## What free worker accounts include
 
 When every worker on site has an account, the system starts to function the way it's supposed to.
 
@@ -141,7 +141,7 @@ Yes. Offline capability isn't a premium feature on MySafeOps. Workers can acknow
 **How does pricing work if my site grows from 20 to 200 workers?**
 The worker count doesn't affect pricing. The admin/supervisor tier determines the monthly cost. Growing from 20 to 200 workers doesn't trigger a contract change or a per-seat bill.
 
-![Diverse group of UK construction workers on site in hi-vis](https://mysafeops.com/blog/images/free-safety-app-inline.png)
+![Diverse group of UK construction workers on site in hi-vis](/blog/images/free-safety-app-inline.png "Caption: workers need their own login to acknowledge RAMS and permits, not share a supervisor tablet")
 
 ## Build the evidence trail the workforce can actually build
 

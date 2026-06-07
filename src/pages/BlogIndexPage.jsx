@@ -1,31 +1,52 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import LandingFooter from "../components/landing/LandingFooter";
-import BlogPostsGrid from "../components/landing/BlogPostsGrid";
-import { LANDING_BLOG_POSTS } from "../data/landingBlogPosts";
+import BlogPromoStrip from "../components/blog/BlogPromoStrip";
+import BlogArticleCard from "../components/blog/BlogArticleCard";
+import BlogCategoryFilter from "../components/blog/BlogCategoryFilter";
+import BlogLayout from "../components/blog/BlogLayout";
+import BlogPagination from "../components/blog/BlogPagination";
+import BlogRecentPosts from "../components/blog/BlogRecentPosts";
+import BlogSearch from "../components/blog/BlogSearch";
+import BlogTagFilter from "../components/blog/BlogTagFilter";
+import { getAllBlogTags } from "../lib/blog/getPosts";
+import { createSeoMeta } from "../lib/seo/createSeoMeta";
+import { generateCanonical, getPublicSiteOrigin } from "../lib/seo/generateCanonical";
+import { useBlogDocumentMeta } from "../lib/seo/useBlogDocumentMeta";
+import { getProjectConfig } from "../lib/projects/config";
+import { useBlogFilters } from "../hooks/blog/useBlogFilters";
 import { trackBlogIndexView } from "../utils/analytics";
-import { getPublicSiteOrigin } from "../utils/blogPublicUrl";
-import { useBlogDocumentMeta } from "../utils/blogPageMeta";
-import "../styles/landing.css";
 import { getSupportEmail } from "../config/supportContact";
+import { LANDING_BLOG_POSTS } from "../data/landingBlogPosts";
+import "../styles/landing.css";
 
 const SUPPORT_EMAIL = getSupportEmail();
-const TITLE = "Blog — UK construction safety guides | MySafeOps";
-const DESCRIPTION =
-  "Practical UK construction safety guides for site managers and H&S leads: permits, inductions, toolbox talks, COSHH, and compliance updates.";
 
 export default function BlogIndexPage() {
   const origin = getPublicSiteOrigin();
+  const project = getProjectConfig();
+  const { q, category, tag, page, totalPages, totalCount, posts, setFilter, clearFilters } =
+    useBlogFilters();
+  const allTags = getAllBlogTags();
 
   const defaultOgImage = LANDING_BLOG_POSTS[0]?.image;
-
-  useBlogDocumentMeta({
-    title: TITLE,
-    description: DESCRIPTION,
-    canonicalUrl: `${origin}/blog`,
-    ogType: "website",
+  const seo = createSeoMeta({
+    title: project.blogTitle,
+    description: project.blogDescription,
+    canonicalUrl: generateCanonical("/blog"),
     ogImageUrl: defaultOgImage ? `${origin}${defaultOgImage}` : undefined,
     rssFeedUrl: `${origin}/blog/rss.xml`,
+  });
+
+  useBlogDocumentMeta({
+    title: seo.title,
+    description: seo.description,
+    canonicalUrl: seo.canonicalUrl,
+    ogType: "website",
+    ogImageUrl: seo.ogImageUrl,
+    rssFeedUrl: seo.rssFeedUrl,
+    siteName: seo.siteName,
+    locale: seo.locale,
   });
 
   useEffect(() => {
@@ -37,41 +58,11 @@ export default function BlogIndexPage() {
     return () => document.documentElement.classList.remove("blog-smooth-scroll");
   }, []);
 
-  return (
-    <div className="landing-page blog-index-page">
-      <a href="#blog-main" className="landing-skip-link">
-        Skip to main content
-      </a>
-      <header className="blog-index-header" role="banner">
-        <div className="ctn blog-index-header-inner">
-          <Link to="/" className="logo">
-            <svg viewBox="0 0 44 50" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-              <path
-                d="M2 14C2 10.5 4 8.5 6 7.8L20 2C21.2 1.6 22.8 1.6 24 2L38 7.8C40 8.5 42 10.5 42 14V30C42 42 24 50 22 51C20 50 2 42 2 30V14Z"
-                fill="#0d9488"
-                fillOpacity="0.12"
-                stroke="#0d9488"
-                strokeWidth="2.5"
-              />
-              <path d="M13 26L19 32L31 20" stroke="#f97316" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <div className="lt">
-              <span>My</span>
-              <span>Safe</span>
-              <span>Ops</span>
-            </div>
-          </Link>
-          <nav className="blog-index-nav" aria-label="Blog section">
-            <Link to="/">Home</Link>
-            <span className="blog-index-nav-current" aria-current="page">
-              Blog
-            </span>
-            <Link to="/login">Sign in</Link>
-          </nav>
-        </div>
-      </header>
+  const hasFilters = Boolean(q || category || tag);
 
-      <main id="blog-main" tabIndex={-1}>
+  return (
+    <BlogLayout navCurrent="blog">
+      <div className="blog-index-page blog-index-page--enhanced">
         <section className="landing-blog-section landing-blog-section--page" aria-labelledby="blog-index-heading">
           <div className="ctn">
             <nav className="blog-breadcrumb" aria-label="Breadcrumb">
@@ -90,21 +81,59 @@ export default function BlogIndexPage() {
               </div>
               <h1 id="blog-index-heading">Safety guides &amp; compliance notes</h1>
               <p className="landing-blog-lead">
-                Practical articles for site managers and H&amp;S leads. Open any guide below to read the full article on MySafeOps.
+                Practical articles for site managers and H&amp;S leads. Search, filter by topic, or browse all guides.
               </p>
               <p className="landing-blog-rss-note">
                 <a href="/blog/rss.xml" className="landing-blog-index-link">
                   RSS feed
                 </a>{" "}
-                for updates.
+                ·{" "}
+                <a href="/sitemap.xml" className="landing-blog-index-link">
+                  Sitemap
+                </a>
               </p>
             </div>
-            <BlogPostsGrid variant="page" />
+
+            <BlogPromoStrip />
+
+            <div className="blog-index-toolbar">
+              <BlogSearch
+                value={q}
+                onChange={(v) => setFilter({ q: v })}
+                resultCount={totalCount}
+              />
+              <BlogCategoryFilter active={category} onChange={(v) => setFilter({ category: v })} />
+              <BlogTagFilter tags={allTags} active={tag} onChange={(v) => setFilter({ tag: v })} />
+              {hasFilters ? (
+                <button type="button" className="blog-clear-filters" onClick={clearFilters}>
+                  Clear filters
+                </button>
+              ) : null}
+            </div>
+
+            <div className="blog-index-layout">
+              <div className="blog-index-main">
+                {posts.length === 0 ? (
+                  <p className="blog-empty-state">No articles match your filters.</p>
+                ) : (
+                  <ul className="landing-blog-grid landing-blog-grid--page blog-posts-list">
+                    {posts.map((post, index) => (
+                      <BlogArticleCard key={post.slug} post={post} index={index} />
+                    ))}
+                  </ul>
+                )}
+                <BlogPagination
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={(p) => setFilter({ page: String(p) })}
+                />
+              </div>
+              <BlogRecentPosts />
+            </div>
           </div>
         </section>
-      </main>
-
+      </div>
       <LandingFooter supportEmail={SUPPORT_EMAIL} />
-    </div>
+    </BlogLayout>
   );
 }

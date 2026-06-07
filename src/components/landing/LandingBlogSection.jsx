@@ -1,4 +1,6 @@
+import { Link } from "react-router-dom";
 import BlogPostsGrid from "./BlogPostsGrid";
+import { LANDING_BLOG_POSTS } from "../../data/landingBlogPosts";
 
 export default function LandingBlogSection() {
   return (
@@ -10,14 +12,19 @@ export default function LandingBlogSection() {
           </div>
           <h2 id="landing-blog-heading">From the blog</h2>
           <p className="landing-blog-lead">
-            UK construction safety guides: permits, inductions, toolbox talks, COSHH, and compliance updates.{" "}
-            <a href="/blog" className="landing-blog-index-link">
-              View all articles
-            </a>
+            UK construction safety guides — permits, RAMS, inductions and compliance.{" "}
+            <Link to="/blog" className="landing-blog-index-link">
+              Browse all {LANDING_BLOG_POSTS.length} articles
+            </Link>
             .
           </p>
         </div>
-        <BlogPostsGrid variant="landing" />
+        <BlogPostsGrid variant="landing" featuredOnly limit={4} />
+        <p className="landing-blog-more fu">
+          <Link to="/blog" className="landing-blog-more-link">
+            See all guides →
+          </Link>
+        </p>
       </div>
     </section>
   );

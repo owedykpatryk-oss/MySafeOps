@@ -1,0 +1,63 @@
+---
+description: Human UK construction blog writing — anti-AI voice, visuals, and editorial quality
+alwaysApply: false
+---
+
+# Blog writing — human voice (not AI)
+
+Apply when **writing or rewriting** any MySafeOps blog article (mysafeops.com only — UK construction safety).
+
+## Open like a site manager, not a chatbot
+
+**Good:** Concrete scene — rainy morning, supervisor at the gate, permit still in the cabin, MEWP booked but wind picking up.
+
+**Bad:** "In today's fast-paced construction landscape, work at height remains a crucial consideration…"
+
+First 2 paragraphs: who, where, what went wrong or almost went wrong. No "In this guide we will…"
+
+## Banned (never use)
+
+delve · leverage · streamline · robust · comprehensive · landscape · navigate · game-changer · cutting-edge · seamless · unlock · empower · dive in · harness · pivotal · testament · ever-evolving · furthermore · moreover · utilize · "it's important to note" · "in conclusion" · "when it comes to" · "whether you're a…" · "look no further"
+
+Max **4 em-dashes** per article. Max **2 exclamation marks**.
+
+## UK specificity (required)
+
+Name real instruments: **WAHR 2005**, **HSG47**, **LOLER**, **CDM 2015**, **RIDDOR**, **COSHH**, **HSG250**, **ACOP L101**.
+
+Use UK words: operative, subbie, site cabin, principal contractor, fire watch, banksman, grid line — not "team members" / "stakeholders".
+
+Cite HSE or legislation by name at least once in articles over 1,000 words.
+
+## Structure that reads human
+
+- Mix **short and long sentences**. Not every section needs bullets.
+- **One comparison table** where it helps (RAMS vs permit, paper vs digital).
+- **One mid-article visual** with caption (see below).
+- FAQ answers: direct, 2–4 sentences, like you'd tell a ganger — not essay paragraphs.
+- **3 CTAs max** — blockquote with 💡 or product tie-in, not salesy every section.
+
+## Visuals (every article)
+
+1. **Hero** 1600×900 — `public/blog/images/{slug}-hero.png` — run `npm run blog:prompt -- {slug}`
+2. **Inline visual** — `{slug}-inline.png` — close-up, documentary, **no readable text in image**
+3. Markdown with caption:
+
+```markdown
+![Description](/blog/images/{slug}-inline.png "Caption: what the reader should take away")
+```
+
+Prompt style: editorial documentary, natural light, UK site, worn materials, **not stock handshakes or generic helmets-only**.
+
+## Self-check before publish
+
+```bash
+npm run blog:voice -- {slug}
+npm run verify:blog
+```
+
+Fix all voice FAILs. Rewrite flagged phrases — don't synonym-swap ("utilize" → "use" is fine; "leverage" → "use" is fine).
+
+## MySafeOps mentions
+
+One natural mention: free worker accounts, offline, flat org pricing — tied to the **problem in that section**, not a bullet list of features.

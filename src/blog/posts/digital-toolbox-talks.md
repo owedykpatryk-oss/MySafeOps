@@ -129,7 +129,7 @@ Between 5 and 15 minutes. Shorter and the content doesn't land; longer and the c
 **Can workers complete toolbox talks remotely?**
 They can be delivered remotely, but the supervisor should confirm the worker engaged with the content. Digital platforms that require active acknowledgement (tap to confirm, sign electronically) work better than just emailing a PDF.
 
-![Supervisor recording a toolbox talk attendance on a mobile device](https://mysafeops.com/blog/images/digital-toolbox-talks-inline.png)
+![Supervisor recording a toolbox talk attendance on a mobile device](/blog/images/digital-toolbox-talks-inline.png "Caption: attendance and topic should be searchable when HSE or a client asks what was covered")
 
 ## Run the talks, log the evidence, move on with the day
 

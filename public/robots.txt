@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://mysafeops.com/sitemap.xml
+Sitemap: https://mysafeops.com/sitemap-images.xml

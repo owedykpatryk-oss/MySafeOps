@@ -51,6 +51,19 @@ marked.use({
         return `<h${token.depth} id="${id}">${textHtml}</h${token.depth}>\n`;
       },
     },
+    {
+      name: "image",
+      level: "block",
+      renderer(token) {
+        const alt = String(token.text || "").replace(/"/g, "&quot;");
+        const src = token.href;
+        const caption = token.title ? String(token.title).replace(/"/g, "&quot;") : "";
+        if (caption) {
+          return `<figure class="blog-figure"><img src="${src}" alt="${alt}" loading="lazy" decoding="async" width="960" height="540" /><figcaption>${caption}</figcaption></figure>\n`;
+        }
+        return `<figure class="blog-figure blog-figure--plain"><img src="${src}" alt="${alt}" loading="lazy" decoding="async" width="960" height="540" /></figure>\n`;
+      },
+    },
   ],
 });
 
@@ -62,9 +75,15 @@ export function parseBlogPostHtml(rawMarkdown) {
   resetBlogHeadingSlugs();
   tocBuild = [];
   const prepared = prepareBlogMarkdown(rawMarkdown);
-  const out = marked.parse(prepared, { async: false, gfm: true });
-  const html = typeof out === "string" ? out : String(out);
+  let html = marked.parse(prepared, { async: false, gfm: true });
+  html = typeof html === "string" ? html : String(html);
+  html = enhanceBlogCallouts(html);
   return { html: wrapBlogTables(html), toc: [...tocBuild] };
+}
+
+/** Product / tip blockquotes with leading emoji */
+function enhanceBlogCallouts(html) {
+  return html.replace(/<blockquote>\s*<p>💡/gi, '<blockquote class="blog-callout blog-callout--product"><p>💡');
 }
 
 /**

@@ -117,7 +117,7 @@ Now the platforms.
 
 **Strengths:**
 - Strong UK construction focus with HSE-aligned templates
-- Robust approval workflows and collaboration
+- Strong approval workflows and collaboration
 - Curated template library for RAMS and method statements
 - Suitable for larger H&S teams (10+ users)
 - Established UK presence with construction customers
@@ -159,7 +159,7 @@ Now the platforms.
 
 **Strengths:**
 - Established UK/Ireland market presence
-- Comprehensive modules: permits to work, chemical management, audits, training
+- Full modules: permits to work, chemical management, audits, training
 - Integrated LMS for certification tracking
 - Construction-specific support available
 - Strong reporting dashboards for multi-site operations
@@ -331,7 +331,7 @@ Vendor lock-in disguised as convenience. Every serious platform offers CSV, PDF,
 
 
 
-![Site office desk — permits, RAMS and planning paperwork](https://mysafeops.com/blog/images/best-permit-to-work-software-uk-2026-inline.png)
+![Site office desk, permits, RAMS and planning paperwork](/blog/images/best-permit-to-work-software-uk-2026-inline.png "Caption: shortlist platforms against your permit types and offline needs, not feature lists alone")
 
 ## Frequently asked questions
 

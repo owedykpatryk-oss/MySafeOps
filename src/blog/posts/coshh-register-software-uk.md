@@ -151,7 +151,7 @@ A competent person with sufficient knowledge of the substance, the task and the 
 **Are digital COSHH registers accepted by HSE inspectors?**
 Yes, provided they contain the same information as a paper register and the records can be produced when requested. HSE inspectors increasingly expect digital records on modern UK construction sites.
 
-![Organised chemical storage in a UK construction compound](https://mysafeops.com/blog/images/coshh-register-software-uk-inline.png)
+![Organised chemical storage in a UK construction compound](/blog/images/coshh-register-software-uk-inline.png "Caption: COSHH assessments should link to where substances are stored on site")
 
 ## Controlled substances, controlled process
 

@@ -3,13 +3,18 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import DOMPurify from "dompurify";
 import { getBundledPostMarkdown } from "../blog/loadPostMarkdown";
 import LandingFooter from "../components/landing/LandingFooter";
-import BlogRelatedPosts from "../components/landing/BlogRelatedPosts";
-import { getPostMetaBySlug, isValidBlogSlug } from "../data/landingBlogPosts";
+import BlogAppCta from "../components/blog/BlogAppCta";
+import BlogArticleToc from "../components/blog/BlogArticleToc";
+import BlogLayout from "../components/blog/BlogLayout";
+import BlogRelatedPosts from "../components/blog/BlogRelatedPosts";
+import BlogShareButtons from "../components/blog/BlogShareButtons";
+import { getCategoryBySlug } from "../lib/blog/categories";
+import { getPostMetaBySlug, isValidBlogSlug } from "../lib/blog/getPosts";
+import { createSeoMeta } from "../lib/seo/createSeoMeta";
+import { createSchemaGraph } from "../lib/seo/createSchema";
+import { getBlogPostUrl, getPublicSiteOrigin } from "../lib/seo/generateCanonical";
+import { useBlogDocumentMeta, useBlogJsonLdScripts } from "../lib/seo/useBlogDocumentMeta";
 import { trackBlogArticleView } from "../utils/analytics";
-import { getBlogPostUrl, getPublicSiteOrigin } from "../utils/blogPublicUrl";
-import { getFaqPageJsonLd } from "../data/blogFaqJsonLd";
-import { buildBlogArticleJsonLd, buildBlogBreadcrumbJsonLd } from "../utils/blogArticleJsonLd";
-import { useBlogDocumentMeta, useBlogJsonLdScripts } from "../utils/blogPageMeta";
 import {
   addExternalLinkAttributes,
   addLazyLoadingToBlogImages,
@@ -20,7 +25,6 @@ import { getSupportEmail } from "../config/supportContact";
 
 const SUPPORT_EMAIL = getSupportEmail();
 
-/** Blog HTML is trusted only after markdown parse; strip active content and embedded documents. */
 const BLOG_HTML_SANITIZE = {
   USE_PROFILES: { html: true },
   FORBID_TAGS: ["form", "iframe", "object", "embed", "base", "link", "meta", "style", "input", "textarea", "button", "select"],
@@ -32,9 +36,6 @@ function toOgArticleTime(isoDate) {
   return `${isoDate}T12:00:00.000Z`;
 }
 
-/**
- * Same-origin /blog/* links inside rendered HTML → client-side navigation.
- */
 function useBlogArticleLinkDelegate(articleRef, html) {
   const navigate = useNavigate();
 
@@ -63,30 +64,6 @@ function useBlogArticleLinkDelegate(articleRef, html) {
     root.addEventListener("click", onClick);
     return () => root.removeEventListener("click", onClick);
   }, [articleRef, html, navigate]);
-}
-
-/**
- * @param {{ level: number; text: string; id: string }[]} toc
- */
-function BlogArticleToc({ toc }) {
-  if (toc.length === 0) return null;
-  return (
-    <nav className="blog-article-toc" aria-labelledby="blog-toc-heading">
-      <h2 id="blog-toc-heading" className="blog-article-toc-title">
-        On this page
-      </h2>
-      <ol className="blog-article-toc-list">
-        {toc.map((item) => (
-          <li
-            key={item.id}
-            className={`blog-article-toc-item blog-article-toc-item--h${item.level}`}
-          >
-            <a href={`#${item.id}`}>{item.text}</a>
-          </li>
-        ))}
-      </ol>
-    </nav>
-  );
 }
 
 export default function BlogArticlePage() {
@@ -120,16 +97,32 @@ export default function BlogArticlePage() {
   const metaForHead = meta && slug && !loadError ? meta : null;
   const canonicalUrl = metaForHead && slug ? getBlogPostUrl(slug) : "";
   const articleOgTime = metaForHead ? toOgArticleTime(metaForHead.publishedIso) : undefined;
+
+  const seo = metaForHead
+    ? createSeoMeta({
+        title: `${metaForHead.title} · MySafeOps`,
+        description: metaForHead.excerpt,
+        canonicalUrl,
+        ogImageUrl: metaForHead.image ? `${origin}${metaForHead.image}` : undefined,
+        ogType: "article",
+        rssFeedUrl: `${origin}/blog/rss.xml`,
+        articlePublishedTime: articleOgTime,
+        articleModifiedTime: articleOgTime,
+      })
+    : null;
+
   useBlogDocumentMeta(
     {
-      title: metaForHead ? `${metaForHead.title} · MySafeOps` : "",
-      description: metaForHead?.excerpt ?? "",
-      canonicalUrl,
-      ogImageUrl: metaForHead?.image ? `${origin}${metaForHead.image}` : undefined,
+      title: seo?.title ?? "",
+      description: seo?.description ?? "",
+      canonicalUrl: seo?.canonicalUrl ?? "",
+      ogImageUrl: seo?.ogImageUrl,
       ogType: "article",
-      rssFeedUrl: `${origin}/blog/rss.xml`,
-      articlePublishedTime: articleOgTime,
-      articleModifiedTime: articleOgTime,
+      rssFeedUrl: seo?.rssFeedUrl,
+      articlePublishedTime: seo?.articlePublishedTime,
+      articleModifiedTime: seo?.articleModifiedTime,
+      siteName: seo?.siteName,
+      locale: seo?.locale,
     },
     Boolean(metaForHead),
   );
@@ -140,10 +133,7 @@ export default function BlogArticlePage() {
 
   const jsonLdGraphs = useMemo(() => {
     if (!metaForHead || !slug || loadError) return null;
-    const breadcrumb = buildBlogBreadcrumbJsonLd(slug, metaForHead.title, origin);
-    const article = buildBlogArticleJsonLd(metaForHead, slug, origin);
-    const faq = getFaqPageJsonLd(slug);
-    return faq ? [breadcrumb, article, faq] : [breadcrumb, article];
+    return createSchemaGraph(metaForHead, slug, origin);
   }, [metaForHead, slug, loadError, origin]);
 
   useBlogJsonLdScripts(jsonLdGraphs, Boolean(jsonLdGraphs?.length));
@@ -164,115 +154,80 @@ export default function BlogArticlePage() {
     return <Navigate to="/blog" replace />;
   }
 
+  const category = meta?.category ? getCategoryBySlug(meta.category) : undefined;
+
   if (loadError) {
     return (
-      <div className="landing-page blog-article-page">
-        <header className="blog-index-header" role="banner">
-          <div className="ctn blog-index-header-inner">
-            <Link to="/" className="logo">
-              <svg viewBox="0 0 44 50" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                <path
-                  d="M2 14C2 10.5 4 8.5 6 7.8L20 2C21.2 1.6 22.8 1.6 24 2L38 7.8C40 8.5 42 10.5 42 14V30C42 42 24 50 22 51C20 50 2 42 2 30V14Z"
-                  fill="#0d9488"
-                  fillOpacity="0.12"
-                  stroke="#0d9488"
-                  strokeWidth="2.5"
-                />
-                <path d="M13 26L19 32L31 20" stroke="#f97316" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <div className="lt">
-                <span>My</span>
-                <span>Safe</span>
-                <span>Ops</span>
-              </div>
-            </Link>
-            <nav className="blog-index-nav" aria-label="Article">
-              <Link to="/">Home</Link>
-              <Link to="/blog">All articles</Link>
-              <Link to="/login">Sign in</Link>
-            </nav>
+      <BlogLayout navCurrent="article">
+        <div className="blog-article-page">
+          <div className="blog-article-main">
+            <div className="ctn blog-article-state">
+              <p className="landing-blog-lead">This article could not be loaded.</p>
+              <p>
+                <Link to="/blog">← Back to blog</Link>
+              </p>
+            </div>
           </div>
-        </header>
-        <main className="blog-article-main">
-          <div className="ctn blog-article-state">
-            <p className="landing-blog-lead">This article could not be loaded.</p>
-            <p>
-              <Link to="/blog">← Back to blog</Link>
-            </p>
-          </div>
-        </main>
+        </div>
         <LandingFooter supportEmail={SUPPORT_EMAIL} />
-      </div>
+      </BlogLayout>
     );
   }
 
   return (
-    <div className="landing-page blog-article-page">
-      <a href="#blog-article-main" className="landing-skip-link">
-        Skip to article
-      </a>
-      <header className="blog-index-header" role="banner">
-        <div className="ctn blog-index-header-inner">
-          <Link to="/" className="logo">
-            <svg viewBox="0 0 44 50" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-              <path
-                d="M2 14C2 10.5 4 8.5 6 7.8L20 2C21.2 1.6 22.8 1.6 24 2L38 7.8C40 8.5 42 10.5 42 14V30C42 42 24 50 22 51C20 50 2 42 2 30V14Z"
-                fill="#0d9488"
-                fillOpacity="0.12"
-                stroke="#0d9488"
-                strokeWidth="2.5"
-              />
-              <path d="M13 26L19 32L31 20" stroke="#f97316" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <div className="lt">
-              <span>My</span>
-              <span>Safe</span>
-              <span>Ops</span>
-            </div>
-          </Link>
-          <nav className="blog-index-nav" aria-label="Article">
-            <Link to="/">Home</Link>
-            <Link to="/blog">All articles</Link>
-            <Link to="/login">Sign in</Link>
-          </nav>
+    <BlogLayout navCurrent="article">
+      <div className="blog-article-page">
+        <a href="#blog-article-main" className="landing-skip-link">
+          Skip to article
+        </a>
+        <div id="blog-article-main" tabIndex={-1} className="blog-article-main">
+          <div className="ctn blog-article-inner">
+            <nav className="blog-breadcrumb" aria-label="Breadcrumb">
+              <ol className="blog-breadcrumb-list">
+                <li className="blog-breadcrumb-item">
+                  <Link to="/">Home</Link>
+                </li>
+                <li className="blog-breadcrumb-item">
+                  <Link to="/blog">Blog</Link>
+                </li>
+                {category ? (
+                  <li className="blog-breadcrumb-item">
+                    <Link to={`/blog?category=${category.slug}`}>{category.name}</Link>
+                  </li>
+                ) : null}
+                <li className="blog-breadcrumb-item blog-breadcrumb-item--current" aria-current="page">
+                  {meta?.title}
+                </li>
+              </ol>
+            </nav>
+            <p className="blog-article-kicker">
+              <span>{meta?.dateLabel}</span>
+              <span aria-hidden> · </span>
+              <span>{meta?.readTime}</span>
+              {category ? (
+                <>
+                  <span aria-hidden> · </span>
+                  <Link to={`/blog?category=${category.slug}`}>{category.name}</Link>
+                </>
+              ) : null}
+            </p>
+            <BlogShareButtons title={meta?.title ?? ""} url={canonicalUrl} />
+            <BlogArticleToc toc={toc} />
+            <article
+              ref={articleRef}
+              className="blog-article-prose"
+              aria-label={meta?.title ? `Article: ${meta.title}` : "Article body"}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+            <BlogAppCta slug={slug} category={meta?.category} variant="footer" />
+            <BlogRelatedPosts currentSlug={slug} />
+            <p className="blog-article-back">
+              <Link to="/blog">← All articles</Link>
+            </p>
+          </div>
         </div>
-      </header>
-
-      <main id="blog-article-main" tabIndex={-1} className="blog-article-main">
-        <div className="ctn blog-article-inner">
-          <nav className="blog-breadcrumb" aria-label="Breadcrumb">
-            <ol className="blog-breadcrumb-list">
-              <li className="blog-breadcrumb-item">
-                <Link to="/">Home</Link>
-              </li>
-              <li className="blog-breadcrumb-item">
-                <Link to="/blog">Blog</Link>
-              </li>
-              <li className="blog-breadcrumb-item blog-breadcrumb-item--current" aria-current="page">
-                {meta?.title}
-              </li>
-            </ol>
-          </nav>
-          <p className="blog-article-kicker">
-            <span>{meta?.dateLabel}</span>
-            <span aria-hidden> · </span>
-            <span>{meta?.readTime}</span>
-          </p>
-          <BlogArticleToc toc={toc} />
-          <article
-            ref={articleRef}
-            className="blog-article-prose"
-            aria-label={meta?.title ? `Article: ${meta.title}` : "Article body"}
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
-          <BlogRelatedPosts currentSlug={slug} />
-          <p className="blog-article-back">
-            <Link to="/blog">← All articles</Link>
-          </p>
-        </div>
-      </main>
-
+      </div>
       <LandingFooter supportEmail={SUPPORT_EMAIL} />
-    </div>
+    </BlogLayout>
   );
 }

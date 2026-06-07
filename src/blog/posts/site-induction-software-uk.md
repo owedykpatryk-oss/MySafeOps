@@ -147,7 +147,7 @@ Good practice is to re-induct when site conditions change significantly, major p
 **Can site inductions be delivered remotely?**
 Partial delivery remotely works (policy, rules, general hazards), but site-specific content and the physical tour benefit from in-person delivery. Hybrid inductions, remote pre-briefing, on-site walk-through on day one, are increasingly common on large UK projects.
 
-![Inside a UK construction site cabin during induction and signing-in](https://mysafeops.com/blog/images/site-induction-software-inline.png)
+![Inside a UK construction site cabin during induction and signing-in](/blog/images/site-induction-software-inline.png "Caption: induction records should tie to the operative name and date of first site access")
 
 ## First day on site, first step in the evidence chain
 

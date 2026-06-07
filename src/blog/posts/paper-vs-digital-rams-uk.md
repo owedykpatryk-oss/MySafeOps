@@ -76,9 +76,11 @@ An emergency callout that needs RAMS prep from scratch takes 2-4 hours before wo
 
 **Loaded annual cost: approximately £12,000-£20,000 for a mid-size contractor.**
 
+![Paper RAMS folder beside tablet showing digital sign-off on UK site](/blog/images/paper-vs-digital-rams-uk-inline.png "Caption: compare subscription cost against supervisor hours spent chasing signatures")
+
 ## The honest costs of digital RAMS (platforms compared)
 
-The pricing landscape for UK construction safety software breaks into four tiers.
+The pricing tiers for UK construction safety software break into four bands.
 
 **Tier 1: Free + per-worker** (SafetyCulture, iAuditor)
 - Free plan: up to 10 users, limited features

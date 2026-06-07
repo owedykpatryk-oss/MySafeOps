@@ -141,7 +141,7 @@ They should use whatever system controls the work on your site. If a subbie brin
 **How often should confined space training be refreshed?**
 Every 2-3 years for entrants and standby persons, and whenever the type of confined space work changes. Rescue training should be practised more frequently, at least annually, ideally with live exercises.
 
-![Multi-gas atmospheric monitor for confined space entry](https://mysafeops.com/blog/images/confined-space-permit-uk-inline.png)
+![Multi-gas atmospheric monitor for confined space entry](/blog/images/confined-space-permit-uk-inline.png "Caption: atmospheric test results belong on the permit before anyone enters")
 
 ## Entry permits that make the invisible visible
 

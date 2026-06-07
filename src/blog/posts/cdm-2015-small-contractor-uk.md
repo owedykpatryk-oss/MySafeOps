@@ -128,6 +128,8 @@ Same as the contractor duties above, but with responsibility for everyone, not j
 > MySafeOps handles Construction Phase Plans, RAMS, permits, inductions and workforce records in one UK-focused platform. Worker accounts are free forever, so even your most occasional helper gets a proper induction trail. Mobile-first, built for small contractors who don't have a dedicated H&S department.
 > [Start free at mysafeops.com →](https://mysafeops.com)
 
+![Construction Phase Plan folder and site briefing notes on a small UK job](/blog/images/cdm-2015-small-contractor-uk-inline.png "Caption: a CPP only works if the named site manager can find it on day one")
+
 ## What a Construction Phase Plan actually has to contain
 
 HSE guidance L153 is the definitive reference, but for small contractors the practical content of a CPP breaks down into seven sections.

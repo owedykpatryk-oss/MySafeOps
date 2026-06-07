@@ -1,0 +1,60 @@
+---
+description: Publish MySafeOps blog articles from Cursor — use when user asks for a new blog, next article, or content update
+alwaysApply: false
+---
+
+# MySafeOps blog — publish from Cursor only
+
+**Scope:** Blog content is **MySafeOps only** (`project: "mysafeops"`, mysafeops.com). Do not create LandoraHub or FlowConnect articles unless the user explicitly expands scope.
+
+No CMS admin. When the user asks for a **new blog**, **next article**, or **publish blog about X**, run this pipeline end-to-end.
+
+## Voice & domain
+
+- UK construction H&S: HSE, CDM 2015, RIDDOR, permits, RAMS, COSHH
+- Practical tone for site managers and H&S leads
+- Mention **free worker accounts** and flat org pricing where natural (not spammy)
+- 3 CTAs max per article (intro callout, mid, end — markdown blockquotes or app links)
+
+## Quick commands
+
+| Command | When |
+|---------|------|
+| `npm run blog:new -- --slug=... --title="..." --category=permits --excerpt="..."` | New post skeleton + auto-register |
+| `npm run blog:sync -- {slug}` | DOCS draft → live `src/blog/posts/{slug}.md` |
+| `npm run blog:publish -- {slug}` | verify + sitemap + RSS + distribution + image prompt |
+| `npm run blog:prompt -- {slug}` | Midjourney brief in `DOCS/Blog/prompts/` |
+| `npm run blog:links` | Report weak internal linking |
+| `npm run blog:distribution -- {slug}` | LinkedIn/X/email promo pack |
+
+## New post workflow (agent)
+
+1. `npm run blog:new -- ...` **OR** manually edit all registry files (see below)
+2. Write full article in `DOCS/Blog/Article {N}/{nn}-{slug}.md` (canonical)
+3. Update FAQ in draft + `src/data/blogFaqJsonLd.js` (must match on-page FAQ)
+4. `npm run blog:sync -- {slug}` — sync DOCS → live markdown + **See also** links
+5. Replace hero PNG if placeholder: `public/blog/images/{slug}-hero.png` (use `blog:prompt`)
+6. `npm run blog:publish -- {slug}` — must pass with zero FAILs
+7. Optionally add inbound links from 1–2 older posts (run `blog:links`)
+
+## Files touched (every new post)
+
+1. `DOCS/Blog/Article {N}/{nn}-{slug}.md` — canonical draft (+ Schema appendix OK here)
+2. `src/blog/posts/{slug}.md` — live (no Schema appendix)
+3. `src/data/landingBlogPosts.js` — `RAW_LANDING_BLOG_POSTS` entry
+4. `src/data/blogPostTaxonomy.js` — category, tags, featured
+5. `src/data/blogFaqJsonLd.js` — 3–5 FAQ items
+6. `public/blog/images/{slug}-hero.png`
+
+Categories: `permits` | `rams-compliance` | `site-operations` | `registers` | `product`
+
+## SEO rules (verify:blog enforces)
+
+- Excerpt ~120–160 chars
+- 800+ words in live markdown
+- 2+ internal `/blog/` links per article
+- FAQ JSON-LD matches on-page FAQ
+- No broken internal links
+- readTime in registry ≈ estimated from word count
+
+Do **not** add Payload CMS unless the user explicitly asks.

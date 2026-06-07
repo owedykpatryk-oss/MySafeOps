@@ -5,7 +5,7 @@
     <link>https://mysafeops.com/blog</link>
     <description>Practical articles for site managers and H&amp;S leads: permits, inductions, toolbox talks, COSHH, and compliance.</description>
     <language>en-gb</language>
-    <lastBuildDate>Fri, 24 Apr 2026 10:59:53 GMT</lastBuildDate>
+    <lastBuildDate>Sun, 07 Jun 2026 20:50:41 GMT</lastBuildDate>
     <atom:link href="https://mysafeops.com/blog/rss.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>Permit to Work App UK: What Good Digital PTW Actually Looks Like</title>
@@ -104,6 +104,34 @@
       <guid isPermaLink="true">https://mysafeops.com/blog/paper-vs-digital-rams-uk</guid>
       <pubDate>Wed, 22 Apr 2026 12:00:00 GMT</pubDate>
       <description>Paper RAMS admin time vs digital subscriptions: scenarios for small, mid-size and larger UK contractors, hidden costs, and break-even maths.</description>
+    </item>
+    <item>
+      <title>Height Work Permit UK: Work at Height Regulations 2005 in Practice</title>
+      <link>https://mysafeops.com/blog/height-work-permit-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/height-work-permit-uk</guid>
+      <pubDate>Sun, 07 Jun 2026 12:00:00 GMT</pubDate>
+      <description>When to issue a height work permit, what WAHR expects on UK sites, and how MEWP, scaffolding and fragile roof work fit your PTW system.</description>
+    </item>
+    <item>
+      <title>Excavation Permit UK: What to Check Before Breaking Ground</title>
+      <link>https://mysafeops.com/blog/excavation-permit-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/excavation-permit-uk</guid>
+      <pubDate>Sun, 07 Jun 2026 12:00:00 GMT</pubDate>
+      <description>Utility strikes, Cat &amp; Genny, shoring and handback — what a UK excavation permit must cover before the first dig.</description>
+    </item>
+    <item>
+      <title>Lifting Operations Permit UK: LOLER 1998 in Practice on Site</title>
+      <link>https://mysafeops.com/blog/lifting-operations-permit-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/lifting-operations-permit-uk</guid>
+      <pubDate>Sun, 07 Jun 2026 12:00:00 GMT</pubDate>
+      <description>Lift plans, thorough examination, exclusion zones and appointed person sign-off — how lifting permits work on UK construction sites.</description>
+    </item>
+    <item>
+      <title>Electrical Isolation Permit UK: LOTO and Live Work in Practice</title>
+      <link>https://mysafeops.com/blog/electrical-isolation-permit-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/electrical-isolation-permit-uk</guid>
+      <pubDate>Sun, 07 Jun 2026 12:00:00 GMT</pubDate>
+      <description>Lock-out tag-out, proving dead, and authorised person sign-off — what a UK electrical isolation permit must cover before live work starts.</description>
     </item>
   </channel>
 </rss>

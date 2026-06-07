@@ -12,7 +12,7 @@
 
 # Hot Work Permit UK: A Practical Guide for Construction Sites
 
-*By the MySafeOps team · Last updated 16 April 2026 · 5 min read*
+*By the MySafeOps team · Last updated 7 June 2026 · 6 min read*
 
 > **Key takeaways**
 > - A hot work permit is required any time work introduces heat, flame or sparks into an area that isn't designed for it.
@@ -21,7 +21,7 @@
 > - Digital hot work permits cut paperwork time and keep the close-out check visible until it's actually done.
 > - Most hot work fires start 30 minutes to 4 hours after work has stopped. The permit needs to stay live through that window.
 
-![Welder in full PPE on a UK construction site](https://mysafeops.com/blog/images/hot-work-permit-uk-hero.png)
+![Welder in full PPE on a UK construction site](/blog/images/hot-work-permit-uk-hero.png)
 
 ---
 
@@ -35,11 +35,13 @@
 
 ---
 
-Most construction fires that do serious damage aren't caused by something unexpected. They're caused by grinding, welding, cutting or brazing in an area that wasn't prepared, without someone watching after the work stopped. That's why **a hot work permit** exists, and why UK construction insurers increasingly treat it as non-negotiable.
+15:40. Third floor plant room. The welder is set up, earth clamp on, sparks already catching in the corner of your eye. The supervisor asks for the hot work permit. The pad is in the cabin. The authoriser is on another block. Someone says "we'll do the paperwork after." That is how avoidable construction fires still start in the UK.
 
-The permit isn't difficult to fill in. Getting it to actually control the risk is the harder part.
+Most serious site fires are not mysteries. They are grinding, welding, cutting or brazing in an area that was not prepared, with nobody watching after the work stopped. That is why **a hot work permit** exists, and why insurers treat a permit system as non-negotiable.
 
-Hot work is usually issued under a wider [permit to work app](https://mysafeops.com/blog/permit-to-work-app-uk) or system alongside height, confined space and electrical permits, so it's worth checking the whole workflow, not just the hot-work template.
+The permit is easy to fill in. Getting it to control the risk on the ground is the hard part.
+
+Hot work sits inside a wider [permit to work app](https://mysafeops.com/blog/permit-to-work-app-uk) alongside [height](https://mysafeops.com/blog/height-work-permit-uk), [confined space](https://mysafeops.com/blog/confined-space-permit-uk) and [excavation](https://mysafeops.com/blog/excavation-permit-uk) permits. Fix the hot-work close-out and you fix one of the most common gaps in the whole PTW stack.
 
 ## What counts as hot work on a UK construction site
 
@@ -71,7 +73,9 @@ A proper **hot work permit UK construction teams can rely on** covers six areas:
 
 **Fire watch arrangements.** Named fire watcher, duration, communication method. This is the area that gets skipped most on paper permits and is also the area most often involved when a fire does start.
 
-The HSE provides guidance through HSG168 (Fire Safety in Construction) and industry bodies like FPA publish hot work permit templates. The detail matters, because a generic template filled in vaguely is worse than no permit at all, it creates the illusion of control.
+The HSE provides guidance through HSG168 (Fire Safety in Construction) and industry bodies like FPA publish hot work permit templates. A generic template filled in vaguely is worse than no permit at all: it creates the illusion of control.
+
+![CO2 fire extinguisher mounted for hot work zones](/blog/images/hot-work-permit-uk-inline.png "Caption: extinguisher type and location should be on the permit face, not assumed")
 
 ## The fire watch, where most permits fail
 
@@ -87,9 +91,17 @@ Paper permits struggle with this because the close-out signature happens at the 
 
 ## Paper vs digital hot work permits
 
-Paper hot work permits work. They've worked for decades. The question isn't whether they function. It's whether they function well enough for a modern UK construction site.
+| | Paper permit | Digital permit |
+| --- | --- | --- |
+| **Issue on site** | Pad in cabin; often missing | Form on phone; always available |
+| **Authorisation** | Signature may happen after work starts | Permit inactive until authoriser signs |
+| **Fire watch close-out** | Usually signed when work ends | Separate step after watch period |
+| **Audit six months later** | Folders, carbon copies, gaps | Search by date, location, operative |
+| **Insurance evidence** | Depends on filing discipline | Timestamp + photo trail |
 
-On paper, a hot work permit is a carbon-copy pad in the site cabin. Filled in by hand. Signed by two people. Filed at the end of the day. In theory, retrievable.
+Paper hot work permits work. They have worked for decades. The question is whether they work well enough for a modern UK construction site.
+
+On paper, a hot work permit is a carbon-copy pad in the site cabin. Filled in by hand. Signed by two people. Filed when the shift ends. In theory, retrievable.
 
 In practice:
 - The pad isn't always in the cabin when a permit is needed
@@ -131,9 +143,7 @@ No. The authoriser and the operative should be separate people. The authoriser i
 Generally yes, provided they capture the same information, signatures and evidence as a paper permit. Some insurers may have specific requirements, worth checking the project insurance policy before rolling out a digital system.
 
 **What's the biggest cause of hot work fires in UK construction?**
-Fires that start in concealed areas (wall cavities, void spaces, insulation) after work has finished. The combination of an ember reaching somewhere the operative couldn't see, and the fire watch ending too early, is the most common pattern.
-
-![CO2 fire extinguisher mounted for hot work zones](https://mysafeops.com/blog/images/hot-work-permit-uk-inline.png)
+Fires that start in concealed areas (wall cavities, void spaces, insulation) after work has finished. The combination of an ember reaching somewhere the operative could not see, and the fire watch ending too early, is the most common pattern.
 
 ## Cut fire risk, not corners
 

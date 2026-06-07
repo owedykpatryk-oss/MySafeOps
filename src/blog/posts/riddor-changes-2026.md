@@ -148,10 +148,10 @@ Based on precedent, the earliest any amended RIDDOR regulations would come into 
 **When does the RIDDOR consultation close?**
 The consultation closes on 30 June 2026. Responses received after that date cannot be guaranteed to influence HSE's decision.
 
-**Do I have to respond to the consultation?**
+**Do I have to respond to the RIDDOR consultation?**
 Responding is not mandatory. But HSE specifically encourages duty holders, self-employed workers and those in control of work premises to respond, because the changes affect their operations directly. Not responding means your views don't count towards the final proposals.
 
-**Will the changes apply to construction specifically, or all industries?**
+**Will the RIDDOR changes apply to construction specifically, or all industries?**
 RIDDOR applies across all UK industries, but several of the proposed changes (plant overturning, tunnelling, trench collapse) are especially relevant to construction. Other sectors (manufacturing, healthcare) have their own focus areas in the consultation.
 
 **How many new RIDDOR reports will our site need to submit if the changes pass?**
@@ -160,10 +160,10 @@ Impossible to predict precisely, but the expansion of dangerous occurrence categ
 **Where do I find the full RIDDOR consultation document?**
 Directly at https://consultations.hse.gov.uk/hse/proposals-riddor-2013/. The page includes the consultation document, supporting information and the online response survey.
 
-**Can I respond on behalf of a trade association or industry body?**
+**Can I respond to the RIDDOR consultation on behalf of a trade association?**
 Yes. HSE welcomes responses from individual firms, trade associations, professional bodies, and representative organisations. Industry-wide responses often carry significant weight in consultations.
 
-![Close-up of a weathered site desk with incident-related paperwork](https://mysafeops.com/blog/images/riddor-changes-2026-inline.png)
+![Close-up of a weathered site desk with incident-related paperwork](/blog/images/riddor-changes-2026-inline.png "Caption: RIDDOR records need the facts straight before the 10- or 15-day clock runs")
 
 ## Don't let the window close without a response
 

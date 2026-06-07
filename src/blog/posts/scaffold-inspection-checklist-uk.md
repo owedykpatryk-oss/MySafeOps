@@ -59,7 +59,9 @@ Regulation 12 of Work at Height Regulations 2005 is the key section for scaffold
 - Inspection at suitable intervals, and specifically **not exceeding 7 days** for scaffolds used in construction
 - Results of inspection recorded and kept available on site
 
-The 7-day rule is the one most sites operate against. Every scaffold structure in use needs a weekly inspection, minimum, with the results recorded.
+The 7-day rule is the one most sites operate against. Every scaffold structure in use needs a weekly inspection, minimum, with the results recorded. Where scaffold access overlaps with roof or leading-edge work, tie inspection tags to your [height work permit](/blog/height-work-permit-uk) so edge teams do not use unchecked platforms.
+
+![Scaffold tag and weekly inspection register on UK building site](/blog/images/scaffold-inspection-checklist-uk-inline.png "Caption: the tag colour and register entry must match the same inspection date")
 
 ## Who counts as a competent scaffold inspector
 
@@ -212,7 +214,7 @@ If a scaffold inspection reveals a defect, the action depends on severity.
 
 **Critical defects** (missing fundamental structural elements, visible movement, signs of collapse risk): site clear the area, exclusion zone established, scaffold not approached until structural engineer or scaffold designer has assessed.
 
-For any defect, the record stays in the register. Incidents involving scaffold failure trigger reportable dangerous occurrence status under [RIDDOR 2013](https://mysafeops.com/blog/riddor-changes-2026). The proposed 2026 RIDDOR changes (currently under consultation) would explicitly broaden this to include trench collapse and temporary works failure, strengthening the requirement for comprehensive records.
+For any defect, the record stays in the register. Incidents involving scaffold failure trigger reportable dangerous occurrence status under [RIDDOR 2013](https://mysafeops.com/blog/riddor-changes-2026). The proposed 2026 RIDDOR changes (currently under consultation) would explicitly broaden this to include trench collapse and temporary works failure, strengthening the requirement for full inspection records.
 
 ## Digital vs paper scaffold registers
 
@@ -338,7 +340,7 @@ Scaffold inspection is one of the simpler areas of UK construction compliance to
 - PASMA, Prefabricated Access Suppliers and Manufacturers Association: https://pasma.co.uk/
 - CITB, GD05 Scaffold inspection report: https://www.citb.co.uk/
 
-**See also:** [Permit to work app UK](https://mysafeops.com/blog/permit-to-work-app-uk) · [How to write a RAMS UK](https://mysafeops.com/blog/how-to-write-a-rams-uk) · [RIDDOR changes 2026](https://mysafeops.com/blog/riddor-changes-2026) · [Free safety app for construction workers](https://mysafeops.com/blog/free-safety-app-construction-workers)
+**See also:** [Height work permit UK](/blog/height-work-permit-uk) · [Permit to work app UK](https://mysafeops.com/blog/permit-to-work-app-uk) · [How to write a RAMS UK](https://mysafeops.com/blog/how-to-write-a-rams-uk) · [RIDDOR changes 2026](https://mysafeops.com/blog/riddor-changes-2026)
 
 **Disclaimer:** This article is general guidance for UK construction safety and does not constitute legal advice. Scaffold inspection is a specialist activity and competence requirements vary by scaffold type. Always verify current requirements with HSE publications, NASC guidance, or a qualified health and safety professional.
 

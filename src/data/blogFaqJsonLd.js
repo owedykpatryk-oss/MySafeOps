@@ -362,6 +362,82 @@ export const FAQ_MAIN_ENTITY_BY_SLUG = {
       text: "Keep paper running for in-flight jobs during the transition. Paper records remain valid until archived. Digital records start accumulating from day 1. An audit during transition is usually fine, just slightly more awkward to pull records from both systems.",
     },
   ],
+  "height-work-permit-uk": [
+    {
+      name: "Are work at height permits a legal requirement in the UK?",
+      text: "The Work at Height Regulations 2005 require planning, competence and suitable equipment. A permit is the usual way UK construction sites demonstrate those controls for high-risk height tasks.",
+    },
+    {
+      name: "What's the difference between a RAMS and a height work permit?",
+      text: "RAMS describes how the job should be done. A permit authorises a specific task, place and time when height risk needs an extra control gate beyond the generic method statement.",
+    },
+    {
+      name: "Do I need a permit for a short ladder job?",
+      text: "Low-risk, short-duration ladder use may be covered in RAMS and toolbox talk alone. If the task is non-routine, above 2 m with limited controls, or in a busy area, use a permit.",
+    },
+    {
+      name: "Who should sign a height work permit?",
+      text: "A competent supervisor who understands the method — often the site manager or MEWP/scaffold interface lead. Authorisation must not be a remote box-tick from someone who has not assessed the edge conditions.",
+    },
+  ],
+  "excavation-permit-uk": [
+    {
+      name: "Is an excavation permit required by law in the UK?",
+      text: "CDM 2015 and HSE guidance on underground services require planning and safe systems for ground disturbance. A permit is standard UK practice to demonstrate controls before dig.",
+    },
+    {
+      name: "Who can authorise an excavation permit?",
+      text: "A competent supervisor who understands utility detection, dig methods and temporary works — often the agent, ganger or TW coordinator interface.",
+    },
+    {
+      name: "What if we find an unmarked service?",
+      text: "Stop work, isolate if safe, notify utilities and the principal contractor, update drawings, rescan before restart. Extend or reissue the permit with the new information.",
+    },
+    {
+      name: "Does a permit replace a CAT scan?",
+      text: "No. The permit records that scans and controls happened; it does not substitute for cable avoidance tool use and utility drawings.",
+    },
+  ],
+  "lifting-operations-permit-uk": [
+    {
+      name: "Does LOLER apply to small site hoists and telehandlers?",
+      text: "Yes, where they are lifting equipment under LOLER. Determine whether the task is a lifting operation or material handling — LOLER applies to planned lifting operations.",
+    },
+    {
+      name: "Who can sign a lifting operations permit?",
+      text: "Usually the lift supervisor or site manager acting on the appointed person's plan — someone with lifting competence, not a generic administrator.",
+    },
+    {
+      name: "How often must lifting equipment be thoroughly examined?",
+      text: "Typically every 6 or 12 months depending on equipment type and use, and after exceptional circumstances, as set out in LOLER and your examination scheme.",
+    },
+    {
+      name: "Is a lift plan the same as a permit?",
+      text: "No. The lift plan is the engineering method. The permit authorises execution on a given shift with named plant, people and exclusion zones.",
+    },
+  ],
+  "electrical-isolation-permit-uk": [
+    {
+      name: "Is an electrical isolation permit legally required in the UK?",
+      text: "The Electricity at Work Regulations 1989 do not name a permit, but they require systems of work that prevent danger from electrical equipment. On UK construction sites, an isolation permit or lock-out tag-out record is the usual way to prove isolations, tests and authorisations happened before work started.",
+    },
+    {
+      name: "What is the difference between lock-out and tag-out?",
+      text: "Lock-out physically prevents a device being re-energised, usually with a padlock on the isolator. Tag-out is a warning label without a lock. UK best practice for construction is lock-out with a unique key held by the person in control, plus tags that name who isolated and when.",
+    },
+    {
+      name: "Who can authorise an electrical isolation permit?",
+      text: "A competent authorised person who understands the installation and the method, often a qualified electrician or appointed electrical supervisor. The person doing the work should not be the sole authoriser of their own isolation.",
+    },
+    {
+      name: "How do you prove a circuit is dead before work starts?",
+      text: "Isolate at a clearly identified point, secure with lock and tag, then test with a suitable approved voltage indicator on the equipment to be worked on. Test the tester on a known live source before and after the dead test. Record the result on the permit.",
+    },
+    {
+      name: "Can live electrical work be covered by the same permit?",
+      text: "Live work needs a separate assessment and usually a specific live-work authorisation with tighter controls. Most construction tasks should be done dead. If live work is unavoidable, the permit must name the justification, competence, PPE and emergency response.",
+    },
+  ],
 };
 
 /** @param {string | undefined} slug */

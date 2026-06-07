@@ -129,7 +129,7 @@ No single platform wins for every UK construction firm. Here are the five main a
 
 **Why it's a SafetyCulture alternative:**
 - UK and Ireland presence with local compliance focus
-- Comprehensive modules (permits to work, chemical management, control of work, audits)
+- Full modules (permits to work, chemical management, control of work, audits)
 - Integrated with LMS for training tracking
 - Established UK user base with construction customers
 
@@ -240,7 +240,7 @@ Small firms (under 30 workers) can typically switch inside 2-3 weeks. Mid-size c
 
 
 
-![UK construction site office desk — documents and site paperwork](https://mysafeops.com/blog/images/safetyculture-alternative-uk-inline.png)
+![UK construction site office desk, documents and site paperwork](/blog/images/safetyculture-alternative-uk-inline.png "Caption: compare per-user cost against how many operatives actually need a login")
 
 ## Pick the tool that fits the site, not the brochure
 
