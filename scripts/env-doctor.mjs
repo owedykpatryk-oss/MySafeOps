@@ -18,6 +18,7 @@ function printManualOpsChecklist() {
   console.log("  · Supabase: apply migrations (org RPCs + audit read RPC) for operator accounts.\n");
   console.log("  · Cloudflare: D1 schemas 0001+0002 on remote; wrangler secret put AUDIT_CHAIN_SECRET on d1-api; deploy d1-backup → R2.\n");
   console.log("  · Vercel Production: set VITE_D1_API_URL when org sync is live; redeploy after env changes.\n");
+  console.log("  · Stripe: npm run stripe:seed-prices then npm run stripe:sync-secrets (Supabase Edge STRIPE_PRICE_*).\n");
 }
 
 if (!existsSync(envLocal)) {
@@ -80,6 +81,7 @@ const cliRows = [
   ["STRIPE_PRICE_TEAM", "Optional local: Stripe Price id for Team"],
   ["STRIPE_PRICE_BUSINESS", "Optional local: Stripe Price id for Business"],
   ["STRIPE_PRICE_ENTERPRISE", "Optional local: Stripe Price id for Enterprise"],
+  ["SUPABASE_SERVICE_ROLE_KEY", "Local scripts only (provision-fess-group) — never commit or bundle"],
   ["GOOGLE_OAUTH_CLIENT_ID", "Google provider — configure in Supabase Dashboard"],
   ["GOOGLE_OAUTH_CLIENT_SECRET", "Google provider — Supabase Dashboard only"],
 ];

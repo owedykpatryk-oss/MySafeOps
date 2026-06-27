@@ -112,9 +112,21 @@ async function main() {
   console.log("");
   if (hasIssues) {
     console.log("Billing doctor found issues. See README Stripe setup section.");
+    printStripePriceGuide();
     process.exit(1);
   }
   console.log("Billing doctor passed.");
+  printStripePriceGuide();
+}
+
+function printStripePriceGuide() {
+  console.log("\nStripe GBP monthly (billingPlans.js / seed script):");
+  console.log("  Solo (starter)     £19  → STRIPE_PRICE_STARTER");
+  console.log("  Team               £99  → STRIPE_PRICE_TEAM");
+  console.log("  Business          £249  → STRIPE_PRICE_BUSINESS");
+  console.log("  Enterprise        £499  → STRIPE_PRICE_ENTERPRISE");
+  console.log("  Seed: npm run stripe:seed-prices  |  Sync secrets: npm run stripe:sync-secrets");
+  console.log("  Secrets live in Supabase Edge only (not Vercel).\n");
 }
 
 main().catch((error) => {

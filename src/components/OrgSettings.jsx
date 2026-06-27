@@ -121,12 +121,16 @@ export default function OrgSettings() {
     setBrandingBusy(true);
     try {
       const preset = await buildFessOrgBrandingPreset();
-      setForm((prev) => ({
-        ...prev,
+      const next = {
+        ...loadOrg(),
         ...preset,
-        customFields: prev.customFields || [],
-      }));
+        customFields: form.customFields || [],
+      };
+      saveOrg(next);
+      setForm(next);
       pushAudit({ action: "org_settings_fess_preset", entity: "mysafeops_org_settings", detail: FESS_ORG_SLUG });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } catch (e) {
       alert(e?.message || "Could not load FESS branding preset.");
     } finally {
@@ -178,7 +182,7 @@ export default function OrgSettings() {
                 <a href="https://pl.fessgroup.co.uk/" target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>
                   pl.fessgroup.co.uk
                 </a>
-                , and sector defaults. Click Save after applying.
+                , and sector defaults. Saves immediately to this device.
               </div>
               <button type="button" onClick={applyFessBranding} disabled={brandingBusy} style={ss.btn}>
                 {brandingBusy ? "Loading…" : "Apply FESS Group branding"}

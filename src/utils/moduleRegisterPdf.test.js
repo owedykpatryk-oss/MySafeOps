@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { inferRegisterColumns, exportAllHseRegistersPdf } from "./moduleRegisterPdf";
-import { canExportModulePdf } from "../navigation/moduleCatalogMeta";
+import { canExportModulePdf, MODULE_PDF_REGISTRY } from "../navigation/moduleCatalogMeta";
 
 describe("inferRegisterColumns", () => {
   it("prefers common register fields", () => {
@@ -19,6 +19,12 @@ describe("canExportModulePdf", () => {
   it("covers HSE registers from More grid", () => {
     expect(canExportModulePdf("coshh")).toBe(true);
     expect(canExportModulePdf("settings")).toBe(false);
+  });
+
+  it("every MODULE_PDF_REGISTRY key is exportable", () => {
+    for (const moduleId of Object.keys(MODULE_PDF_REGISTRY)) {
+      expect(canExportModulePdf(moduleId)).toBe(true);
+    }
   });
 });
 
