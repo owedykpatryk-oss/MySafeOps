@@ -1,21 +1,38 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ShieldCheck, Home, HelpCircle, Settings, Search, LogOut } from "lucide-react";
+import { ShieldCheck, Home, HelpCircle, Settings, Search, LogOut, MoreVertical } from "lucide-react";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { getWorkspaceTitle } from "../navigation/appModules";
-
-const teal = "#0d9488";
+import { useOrgBranding } from "../hooks/useOrgBranding";
 
 /**
- * Sticky top bar: current module title, org hint, quick Help/Settings/Home, optional signed-in email.
+ * Sticky top bar: org branding, current module title, quick actions (compact menu on mobile).
  */
 export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHelp, onOpenSettings, onOpenSearch }) {
   const { user, supabase } = useSupabaseAuth();
+  const branding = useOrgBranding();
   const [signingOut, setSigningOut] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
   const cloud = isSupabaseConfigured();
   const title = getWorkspaceTitle(view, navTab);
-  const orgId = typeof localStorage !== "undefined" ? localStorage.getItem("mysafeops_orgId") || "default" : "default";
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   const handleSignOut = async () => {
     if (!supabase || signingOut) return;
@@ -24,6 +41,7 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
       await supabase.auth.signOut();
     } finally {
       setSigningOut(false);
+      setMenuOpen(false);
     }
   };
 
@@ -47,6 +65,17 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
     flexShrink: 0,
   };
 
+  const runMenuAction = (fn) => {
+    setMenuOpen(false);
+    fn?.();
+  };
+
+  const menuItems = [
+    { key: "home", label: "Dashboard", icon: Home, onClick: onGoDashboard },
+    { key: "help", label: "Help", icon: HelpCircle, onClick: onOpenHelp },
+    { key: "settings", label: "Settings", icon: Settings, onClick: onOpenSettings },
+  ];
+
   return (
     <header
       className="app-workspace-header"
@@ -57,116 +86,141 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
-      <div
-        style={{
-          maxWidth: 1100,
-          margin: "0 auto",
-          padding: "10px 1rem",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="app-workspace-header__inner">
         <button
           type="button"
           onClick={onGoDashboard}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            padding: 4,
-            margin: 0,
-            minHeight: 44,
-            textAlign: "left",
-          }}
-          aria-label="Go to dashboard"
+          className="app-workspace-brand"
+          aria-label={`Go to dashboard — ${branding.displayName}`}
         >
           <span
-            className="app-brand-mark"
-            style={{
-              width: 38,
-              height: 38,
-              background: `linear-gradient(145deg, #2dd4bf 0%, ${teal} 48%, #0f766e 100%)`,
-              color: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
+            className="app-brand-mark app-workspace-brand__mark"
+            style={
+              branding.logo
+                ? {
+                    background: "#fff",
+                    border: "1px solid var(--color-border-tertiary,#e2e8f0)",
+                    overflow: "hidden",
+                  }
+                : {
+                    background: branding.badgeGradient,
+                    boxShadow: branding.badgeShadow,
+                  }
+            }
             aria-hidden
           >
-            <ShieldCheck size={20} strokeWidth={2} />
+            {branding.logo ? (
+              <img src={branding.logo} alt="" className="app-workspace-brand__logo" />
+            ) : (
+              <ShieldCheck size={20} strokeWidth={2} color="#fff" />
+            )}
           </span>
-          <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-            <span style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", lineHeight: 1.2 }}>MySafeOps</span>
-            <span style={{ fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.2 }}>
-              Org · {orgId}
+          <span className="app-workspace-brand__text">
+            <span className="app-workspace-brand__org">{branding.displayName}</span>
+            <span className="app-workspace-brand__product">
+              {branding.hasCustomBranding ? "MySafeOps workspace" : "Health & safety workspace"}
             </span>
           </span>
         </button>
 
-        <div style={{ flex: 1, minWidth: 140, minHeight: 44, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-          <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "#0f172a", lineHeight: 1.25 }}>{title}</h1>
-          {navTab === "more" && (
-            <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2 }}>Browse grouped modules below</span>
-          )}
+        <div className="app-workspace-header__title">
+          <h1>{title}</h1>
+          {navTab === "more" ? <span className="app-workspace-header__subtitle">Browse grouped modules below</span> : null}
         </div>
 
-        <div
-          style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto", justifyContent: "flex-end" }}
-          className="workspace-app-bar-actions"
-        >
-          {user?.email && (
-            <span
-              title={user.email}
-              style={{
-                fontSize: 11,
-                color: "var(--color-text-secondary)",
-                maxWidth: 140,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                display: cloud ? "inline" : "none",
-              }}
-            >
+        <div className="app-workspace-header__actions">
+          {user?.email && cloud ? (
+            <span className="app-workspace-header__email" title={user.email}>
               {user.email}
             </span>
-          )}
+          ) : null}
+
           {onOpenSearch ? (
-            <button type="button" className="app-bar-action" style={btn} onClick={onOpenSearch} aria-label="Search workspace" title="Search (Ctrl+K)">
+            <button
+              type="button"
+              className="app-bar-action workspace-app-bar-actions--always"
+              style={btn}
+              onClick={onOpenSearch}
+              aria-label="Search workspace"
+              title="Search (Ctrl+K)"
+            >
               <Search size={16} aria-hidden />
               <span className="workspace-app-bar-btn-label">Search</span>
             </button>
           ) : null}
-          <Link to="/app" className="app-bar-action" style={btn} aria-label="Go to dashboard">
-            <Home size={16} aria-hidden />
-            <span className="workspace-app-bar-btn-label">Dashboard</span>
-          </Link>
-          <button type="button" className="app-bar-action" style={btn} onClick={onOpenHelp} aria-label="Open Help">
-            <HelpCircle size={16} aria-hidden />
-            <span className="workspace-app-bar-btn-label">Help</span>
-          </button>
-          <button type="button" className="app-bar-action" style={btn} onClick={onOpenSettings} aria-label="Open Settings">
-            <Settings size={16} aria-hidden />
-            <span className="workspace-app-bar-btn-label">Settings</span>
-          </button>
-          {cloud && user && (
+
+          <div className="workspace-app-bar-actions--desktop">
+            <Link to="/app" className="app-bar-action" style={btn} aria-label="Go to dashboard">
+              <Home size={16} aria-hidden />
+              <span className="workspace-app-bar-btn-label">Dashboard</span>
+            </Link>
+            <button type="button" className="app-bar-action" style={btn} onClick={onOpenHelp} aria-label="Open Help">
+              <HelpCircle size={16} aria-hidden />
+              <span className="workspace-app-bar-btn-label">Help</span>
+            </button>
+            <button type="button" className="app-bar-action" style={btn} onClick={onOpenSettings} aria-label="Open Settings">
+              <Settings size={16} aria-hidden />
+              <span className="workspace-app-bar-btn-label">Settings</span>
+            </button>
+            {cloud && user ? (
+              <button
+                type="button"
+                className="app-bar-action"
+                style={{ ...btn, borderColor: "#fecaca", color: "#991b1b", opacity: signingOut ? 0.7 : 1 }}
+                onClick={handleSignOut}
+                aria-label="Sign out"
+                disabled={signingOut}
+              >
+                <LogOut size={16} aria-hidden />
+                <span className="workspace-app-bar-btn-label">{signingOut ? "Signing out…" : "Sign out"}</span>
+              </button>
+            ) : null}
+          </div>
+
+          <div className="workspace-app-bar-menu" ref={menuRef}>
             <button
               type="button"
-              className="app-bar-action"
-              style={{ ...btn, borderColor: "#fecaca", color: "#991b1b", opacity: signingOut ? 0.7 : 1 }}
-              onClick={handleSignOut}
-              aria-label="Sign out"
-              disabled={signingOut}
+              className="app-bar-action workspace-app-bar-menu__trigger"
+              style={btn}
+              aria-label="More actions"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              onClick={() => setMenuOpen((o) => !o)}
             >
-              <LogOut size={16} aria-hidden />
-              <span className="workspace-app-bar-btn-label">{signingOut ? "Signing out…" : "Sign out"}</span>
+              <MoreVertical size={18} aria-hidden />
             </button>
-          )}
+            {menuOpen ? (
+              <div className="workspace-app-bar-menu__panel" role="menu">
+                {menuItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="menuitem"
+                      className="workspace-app-bar-menu__item"
+                      onClick={() => runMenuAction(item.onClick)}
+                    >
+                      <Icon size={16} aria-hidden />
+                      {item.label}
+                    </button>
+                  );
+                })}
+                {cloud && user ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="workspace-app-bar-menu__item workspace-app-bar-menu__item--danger"
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                  >
+                    <LogOut size={16} aria-hidden />
+                    {signingOut ? "Signing out…" : "Sign out"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </header>

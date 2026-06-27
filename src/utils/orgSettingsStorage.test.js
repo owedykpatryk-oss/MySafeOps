@@ -40,4 +40,16 @@ describe("orgSettingsStorage", () => {
     expect(payload.hiddenModules).toEqual(["snags"]);
     expect(payload.hiddenFeatures).toEqual(["rams/surveying"]);
   });
+
+  it("pickCloudBrandingPayload includes workspace onboarding fields", () => {
+    const payload = pickCloudBrandingPayload({
+      name: "X",
+      bottomNavModuleId: "permits",
+      industryPackId: "generalContractor",
+      onboardingWizardCompleted: true,
+    });
+    expect(payload.bottomNavModuleId).toBe("permits");
+    expect(payload.industryPackId).toBe("generalContractor");
+    expect(payload.onboardingWizardCompleted).toBe(true);
+  });
 });

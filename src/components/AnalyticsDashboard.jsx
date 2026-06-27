@@ -4,7 +4,8 @@ import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 import { activeAllergenWindows, orgShowsIndustrialMoreModules } from "../utils/industrialSectors";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
-import SiteTodayCard from "./SiteTodayCard";
+import WorkplaceTodayCard from "./WorkplaceTodayCard";
+import { useOrgBranding } from "../hooks/useOrgBranding";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
 import { useApp } from "../context/AppContext";
@@ -66,7 +67,7 @@ const ss = {
 };
 
 // mini bar chart using SVG
-function BarChart({ data, height = 80, color = "#0d9488" }) {
+function BarChart({ data, height = 80, color = "var(--color-accent, #0d9488)" }) {
   if (!data?.length)
     return (
       <div
@@ -84,11 +85,11 @@ function BarChart({ data, height = 80, color = "#0d9488" }) {
     );
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
-    <div style={{ display:"flex", alignItems:"flex-end", gap:2, height, padding:"4px 0" }}>
+    <div className="app-dashboard-bar-chart" style={{ display:"flex", alignItems:"flex-end", gap:2, height, padding:"4px 0" }}>
       {data.map((d,i)=>(
         <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2, height:"100%", justifyContent:"flex-end" }}>
           <div title={`${d.label}: ${d.value}`} style={{ width:"100%", height:`${Math.max(4,(d.value/max)*100)}%`, background:color, borderRadius:"6px 6px 2px 2px", minHeight:d.value>0?4:0, transition:"height .3s", opacity:0.92 }} />
-          <span style={{ fontSize:9, color:"var(--color-text-secondary)", textAlign:"center", lineHeight:1.2 }}>{d.label}</span>
+          <span className="app-dashboard-bar-label">{d.label}</span>
         </div>
       ))}
     </div>
@@ -125,15 +126,15 @@ function DonutChart({ segments, size=100 }) {
   );
 }
 
-function Section({ title, children, action }) {
+function Section({ title, children, action, className = "" }) {
   return (
-    <div style={{ marginBottom: 28 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 14 }}>
-        <div className="app-section-label" style={{ fontSize:12, fontWeight:600, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.08em" }}>{title}</div>
-        {action}
+    <section className={`app-dashboard-section${className ? ` ${className}` : ""}`}>
+      <div className="app-dashboard-section__head">
+        <div className="app-section-label app-dashboard-section__title">{title}</div>
+        {action ? <div className="app-dashboard-section__action">{action}</div> : null}
       </div>
-      {children}
-    </div>
+      <div className="app-dashboard-section__body">{children}</div>
+    </section>
   );
 }
 
@@ -165,6 +166,9 @@ const ROLE_LABEL = { admin: "Organisation admin", supervisor: "Supervisor", oper
 export default function AnalyticsDashboard() {
   const { role, caps, trialStatus, billing, orgId } = useApp();
   const { supabase } = useSupabaseAuth();
+  const branding = useOrgBranding();
+  const heroBadge =
+    branding.logo ? undefined : (branding.displayName || "MO").split(/\s+/).map((w) => w[0]).join("").slice(0, 3).toUpperCase() || "DB";
   const roleLabel = ROLE_LABEL[role] || "Team member";
   const isLead = role === "admin" || role === "supervisor";
 
@@ -752,7 +756,7 @@ export default function AnalyticsDashboard() {
   );
 
   return (
-    <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+    <div className="app-dashboard">
       {orgShowsIndustrialMoreModules() && activeAllergens.length > 0 ? (
         <div
           style={{
@@ -782,68 +786,33 @@ export default function AnalyticsDashboard() {
       ) : null}
       <div ref={dashboardPdfRef}>
       <PageHero
-        badgeText="DB"
+        badgeText={heroBadge}
         title="Dashboard"
         lead={dashboardLead}
         right={
-          <div
-            style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 10, minWidth: 200 }}
-            aria-busy={pdfExporting !== null}
-            aria-live="polite"
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 10px",
-                borderRadius: 10,
-                border: "1px solid var(--color-border-tertiary,#e2e8f0)",
-                background: "var(--color-background-primary,#fff)",
-              }}
-            >
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 8,
-                  border: "1px solid var(--color-border-tertiary,#e5e5e5)",
-                  background: "var(--color-background-secondary,#f7f7f5)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  overflow: "hidden",
-                  flexShrink: 0,
-                }}
-              >
+          <div className="app-dashboard-hero-tools" aria-busy={pdfExporting !== null} aria-live="polite">
+            <div className="app-dashboard-hero-org">
+              <div className="app-dashboard-hero-org__logo">
                 {org.logo ? (
-                  <img src={org.logo} alt={`${orgName} logo`} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                  <img src={org.logo} alt={`${orgName} logo`} />
                 ) : (
-                  <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontWeight: 600 }}>
-                    LOGO
-                  </span>
+                  <span className="app-dashboard-hero-org__logo-fallback">LOGO</span>
                 )}
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>
-                  {orgName}
-                </div>
-                <div style={{ fontSize: 10, color: "var(--color-text-secondary)", marginTop: 2, fontWeight: 600 }}>{roleLabel}</div>
+              <div className="app-dashboard-hero-org__meta">
+                <div className="app-dashboard-hero-org__name">{orgName}</div>
+                <div className="app-dashboard-hero-org__role">{roleLabel}</div>
                 <button
                   type="button"
                   data-no-dashboard-pdf
+                  className="app-dashboard-hero-org__link"
                   onClick={() => openWorkspaceSettings({ tab: "organisation" })}
-                  style={{ ...ms.btn, fontSize: 11, padding: "3px 8px", marginTop: 4 }}
                 >
                   {org.logo ? "Update branding" : "Add logo"}
                 </button>
               </div>
             </div>
-            <div
-              role="group"
-              aria-label="Export dashboard as PDF"
-              style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}
-            >
+            <div role="group" aria-label="Export dashboard as PDF" className="app-dashboard-hero-pdf">
               <button
                 type="button"
                 data-no-dashboard-pdf
@@ -1020,12 +989,248 @@ export default function AnalyticsDashboard() {
         }
       />
 
-      <SiteTodayCard
-        workerCount={workers.length}
+      <WorkplaceTodayCard
         activePermits={permitStats.active}
-        ramsCount={rams.length}
+        permitsNeedAttention={permitStats.expired}
+        openSnags={snagStats.open}
+        snagsInProgress={snagStats.in_progress}
+        expiringCerts={expiringCerts.filter((c) => c.days !== null && c.days <= 15).length}
         todaySignIns={todayInductions}
+        urgentItems={actionNeededItems.slice(0, 3).map((it) => ({
+          key: it.key,
+          text: it.text,
+          viewId: it.viewId,
+          severity: it.severity === "urgent" ? "danger" : it.severity === "warn" ? "warning" : "info",
+        }))}
       />
+
+      {actionNeededItems.length > 0 && (
+        <div
+          className={`app-dashboard-action-strip${actionNeededItems.every((i) => i.severity === "calm") ? " app-dashboard-action-strip--calm" : ""}`}
+        >
+          <div className="app-section-label app-dashboard-action-strip__title">Action needed</div>
+          <ul className="app-dashboard-action-strip__list" aria-live="polite">
+            {actionNeededItems.map((item) => (
+              <li key={item.key} className="app-dashboard-action-strip__item">
+                <span className="app-dashboard-action-strip__text">{item.text}</span>
+                <button type="button" className="app-dashboard-action-strip__btn" onClick={() => openWorkspaceView({ viewId: item.viewId })}>
+                  Open
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <Section title="Overview">
+        <p className="app-dashboard-section__hint">Tap a tile to open the related module.</p>
+        <div className="app-dashboard-metrics-grid">
+          {[
+            { label: "Workers", value: workers.length, sub: "registered", viewId: "workers", tone: "teal" },
+            { label: "Active projects", value: projects.filter((p) => !p.closed).length, sub: "projects", viewId: "workers", tone: "sky" },
+            { label: "RAMS total", value: rams.length, sub: "documents", viewId: "rams", tone: "teal" },
+            { label: "Permits", value: permits.length, sub: `${permitStats.active} active`, viewId: "permits", tone: "amber" },
+            { label: "Open snags", value: snagStats.open, sub: `${snagStats.in_progress} in progress`, viewId: "snags", tone: "rose" },
+            { label: "Hours (month)", value: Math.round(monthHours), sub: `${tsEntries.length} entries`, viewId: "timesheets", tone: "indigo" },
+            { label: "Incidents", value: incidents.length, sub: "total logged", viewId: "incidents", tone: "rose" },
+            { label: "Training expiring", value: trainingExpiring60, sub: "within 60 days", viewId: "training", tone: "amber" },
+            { label: "Hot work active", value: hotWorkActive, sub: `${hotWork.length} total records`, viewId: "hot-work", tone: "amber" },
+            { label: "On site today", value: todayInductions, sub: "sign-ins", viewId: "induction", tone: "sky" },
+          ].map((m) => (
+            <button
+              key={m.label}
+              type="button"
+              className={`app-dashboard-metric app-dashboard-metric--${m.tone}`}
+              aria-label={`Open ${m.label}`}
+              onClick={() => openWorkspaceView({ viewId: m.viewId })}
+            >
+              <span className="app-dashboard-metric__label">{m.label}</span>
+              <span className="app-dashboard-metric__value">{m.value}</span>
+              <span className="app-dashboard-metric__sub">{m.sub}</span>
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      <div className="app-dashboard-analytics-grid">
+        <div className="app-dashboard-card app-dashboard-score-card">
+          <div className="app-dashboard-card__title">Compliance score</div>
+          <div className="app-dashboard-score">
+            <div className="app-dashboard-score__ring" style={{ "--score-pct": complianceScore, "--score-color": complianceColor }}>
+              <span className="app-dashboard-score__value">{complianceScore}</span>
+            </div>
+            <div className="app-dashboard-score__label" style={{ color: complianceColor }}>
+              {complianceScore >= 80 ? "Good standing" : complianceScore >= 60 ? "Needs attention" : "Action required"}
+            </div>
+          </div>
+          <div className="app-dashboard-score__bar">
+            <div className="app-dashboard-score__bar-fill" style={{ width: `${complianceScore}%`, background: complianceColor }} />
+          </div>
+          {complianceIssues.length > 0 ? (
+            <ul className="app-dashboard-score__issues">
+              {complianceIssues.map((issue, i) => (
+                <li key={i}>{issue}</li>
+              ))}
+            </ul>
+          ) : (
+            <div className="app-dashboard-score__ok">No issues detected</div>
+          )}
+        </div>
+
+        <div className="app-dashboard-card">
+          <div className="app-dashboard-card__title">
+            Expiring certifications
+            {expiringCerts.length > 0 ? <span className="app-dashboard-card__count">{expiringCerts.length}</span> : null}
+          </div>
+          {expiringCerts.length === 0 ? (
+            <div className="app-dashboard-empty">
+              {workers.length === 0 ? "No workers added yet." : "No certifications expiring in the next 30 days."}
+            </div>
+          ) : (
+            expiringCerts.slice(0, 5).map((c, i) => (
+              <ExpiryRow key={i} name={c.workerName} role={c.workerRole} certType={c.type || c.name || "Certificate"} expiryDate={c.expiryDate} />
+            ))
+          )}
+          {expiringCerts.length > 5 ? (
+            <div className="app-dashboard-card__more">+{expiringCerts.length - 5} more…</div>
+          ) : null}
+          {expiringCerts.length > 0 ? (
+            <div className="app-dashboard-card__footer">
+              <button type="button" className="app-dashboard-card__btn" onClick={() => openWorkspaceView({ viewId: "workers" })}>
+                Open workers & certifications
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="app-dashboard-charts-grid">
+        <div className="app-dashboard-card">
+          <div className="app-dashboard-card__head">
+            <div className="app-dashboard-card__title">Incidents / near misses</div>
+            <div className="app-dashboard-period-toggle" role="group" aria-label="Incident chart period">
+              <span className="app-dashboard-period-toggle__label">Period</span>
+              {INCIDENT_PERIOD_WEEKS.map((w) => {
+                const active = incidentWeeks === w;
+                return (
+                  <button
+                    key={w}
+                    type="button"
+                    className={`app-pill-toggle app-dashboard-period-toggle__btn${active ? " app-dashboard-period-toggle__btn--active" : ""}`}
+                    onClick={() => setIncidentWeeks(w)}
+                  >
+                    {w} wk
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {incidents.length === 0 ? (
+            <div className="app-dashboard-empty">No incidents logged yet.</div>
+          ) : (
+            <BarChart data={incidentTrend} height={80} color="#E24B4A" />
+          )}
+          <div className="app-dashboard-card__meta">
+            <span>In period: {incidentsInSelectedWeeks} · All time: {incidents.length}</span>
+            <span>Latest week: {incidentTrend[incidentTrend.length - 1]?.value ?? 0}</span>
+            <button type="button" className="app-dashboard-card__btn app-dashboard-card__btn--inline" onClick={() => openWorkspaceView({ viewId: "incidents" })}>
+              Open incidents
+            </button>
+          </div>
+        </div>
+
+        <div className="app-dashboard-card">
+          <div className="app-dashboard-card__title">Hours per project</div>
+          {hoursChartData.length === 0 ? (
+            <div className="app-dashboard-empty">No timesheet data yet.</div>
+          ) : (
+            <BarChart data={hoursChartData} height={80} />
+          )}
+          <div className="app-dashboard-card__meta">
+            <span>Total logged: {Math.round(monthHours)}h this month</span>
+            <button type="button" className="app-dashboard-card__btn app-dashboard-card__btn--inline" onClick={() => openWorkspaceView({ viewId: "timesheets" })}>
+              Open timesheets
+            </button>
+          </div>
+        </div>
+
+        <div className="app-dashboard-card app-dashboard-donut-card">
+          <div className="app-dashboard-card__title">Snag status</div>
+          <div className="app-dashboard-donut-row">
+            <DonutChart
+              segments={[
+                { value: snagStats.open, color: "#E24B4A" },
+                { value: snagStats.in_progress, color: "#EF9F27" },
+                { value: snagStats.closed, color: "#1D9E75" },
+              ]}
+              size={80}
+            />
+            <div className="app-dashboard-legend">
+              {[
+                ["Open", snagStats.open, "#E24B4A"],
+                ["In progress", snagStats.in_progress, "#EF9F27"],
+                ["Closed", snagStats.closed, "#1D9E75"],
+              ].map(([l, v, c]) => (
+                <div key={l} className="app-dashboard-legend__row">
+                  <span className="app-dashboard-legend__dot" style={{ background: c }} />
+                  <span className="app-dashboard-legend__label">{l}</span>
+                  <span className="app-dashboard-legend__value">{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="app-dashboard-card__footer">
+            <button type="button" className="app-dashboard-card__btn" onClick={() => openWorkspaceView({ viewId: "snags" })}>
+              Open snags
+            </button>
+          </div>
+        </div>
+
+        <div className="app-dashboard-card app-dashboard-donut-card">
+          <div className="app-dashboard-card__title">Permit status</div>
+          <div className="app-dashboard-donut-row">
+            <DonutChart
+              segments={[
+                { value: permitStats.active, color: "#1D9E75" },
+                { value: permitStats.draft, color: "#EF9F27" },
+                { value: permitStats.expired, color: "#E24B4A" },
+              ]}
+              size={80}
+            />
+            <div className="app-dashboard-legend">
+              {[
+                ["Active", permitStats.active, "#1D9E75"],
+                ["Draft", permitStats.draft, "#EF9F27"],
+                ["Expired", permitStats.expired, "#E24B4A"],
+              ].map(([l, v, c]) => (
+                <div key={l} className="app-dashboard-legend__row">
+                  <span className="app-dashboard-legend__dot" style={{ background: c }} />
+                  <span className="app-dashboard-legend__label">{l}</span>
+                  <span className="app-dashboard-legend__value">{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="app-dashboard-card__footer">
+            <button type="button" className="app-dashboard-card__btn" onClick={() => openWorkspaceView({ viewId: "permits" })}>
+              Open permits
+            </button>
+          </div>
+        </div>
+
+        <div className="app-dashboard-card">
+          <div className="app-dashboard-card__title">Site sign-ins</div>
+          {inductionData.length === 0 ? (
+            <div className="app-dashboard-empty">No inductions recorded.</div>
+          ) : (
+            <BarChart data={inductionData} height={80} color="#378ADD" />
+          )}
+          <div className="app-dashboard-card__caption">
+            Total: {inductions.length} · Today: {todayInductions}
+          </div>
+        </div>
+      </div>
+      </div>
 
       <Section
         title="Sites & projects today"
@@ -1044,7 +1249,7 @@ export default function AnalyticsDashboard() {
             No projects yet — add sites under <strong>Workers</strong>, then open the map to see everyone in one place.
           </p>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(200px, 100%), 1fr))", gap: 10 }}>
+          <div className="app-dashboard-project-grid">
             {projects
               .filter((p) => !p.closed)
               .slice(0, 8)
@@ -1053,40 +1258,22 @@ export default function AnalyticsDashboard() {
                 const loc = [p.address, p.postcode].filter(Boolean).join(", ");
                 const hasCoords = p.lat != null && p.lng != null && String(p.lat).trim() !== "" && String(p.lng).trim() !== "";
                 return (
-                  <div
-                    key={p.id}
-                    style={{
-                      ...ss.card,
-                      padding: "12px 14px",
-                      border: "1px solid var(--color-border-tertiary,#e2e8f0)",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                    }}
-                  >
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>{p.name || "Untitled project"}</div>
+                  <div key={p.id} className="app-dashboard-project-card">
+                    <div className="app-dashboard-project-card__title">{p.name || "Untitled project"}</div>
                     {loc ? (
-                      <div style={{ fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.4 }}>{loc}</div>
+                      <div className="app-dashboard-project-card__meta">{loc}</div>
                     ) : (
-                      <div style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>No address on file</div>
+                      <div className="app-dashboard-project-card__meta app-dashboard-project-card__meta--muted">No address on file</div>
                     )}
-                    <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
+                    <div className="app-dashboard-project-card__meta">
                       {hrs > 0 ? `${hrs} h logged this period (timesheets)` : "No hours logged yet"}
                       {hasCoords ? " · On map" : ""}
                     </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
-                      <button
-                        type="button"
-                        onClick={() => openWorkspaceView({ viewId: "workers" })}
-                        style={{ ...ms.btn, fontSize: 11, padding: "4px 8px" }}
-                      >
+                    <div className="app-dashboard-project-card__actions">
+                      <button type="button" className="app-dashboard-card__btn" onClick={() => openWorkspaceView({ viewId: "workers" })}>
                         Workers
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => openWorkspaceView({ viewId: "site-map" })}
-                        style={{ ...ms.btn, fontSize: 11, padding: "4px 8px", borderColor: "#0d9488", color: "#0f766e" }}
-                      >
+                      <button type="button" className="app-dashboard-card__btn app-dashboard-card__btn--inline" onClick={() => openWorkspaceView({ viewId: "site-map" })}>
                         Map
                       </button>
                     </div>
@@ -1104,80 +1291,30 @@ export default function AnalyticsDashboard() {
 
       {dashboardReminders.length > 0 ? (
         <Section title="Reminders">
-          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 12 }}>
-            {dashboardReminders.map((r) => {
-              const border =
-                r.tone === "warn"
-                  ? "1px solid rgba(180,83,9,0.35)"
-                  : r.tone === "calm"
-                    ? "1px solid var(--color-border-tertiary,#e2e8f0)"
-                    : "1px solid rgba(13,148,136,0.25)";
-              const bg =
-                r.tone === "warn"
-                  ? "rgba(254,243,199,0.45)"
-                  : r.tone === "calm"
-                    ? "var(--color-background-secondary,#f8fafc)"
-                    : "rgba(13,148,136,0.06)";
-              return (
-                <li
-                  key={r.key}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    flexWrap: "wrap",
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border,
-                    background: bg,
-                  }}
-                >
-                  <span style={{ fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.5, flex: "1 1 220px" }}>{r.text}</span>
-                  <button
-                    type="button"
-                    onClick={r.onCta}
-                    style={{
-                      ...ms.btn,
-                      padding: "6px 12px",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      flexShrink: 0,
-                      borderColor: "#0d9488",
-                      color: "#0f766e",
-                    }}
-                  >
-                    {r.cta}
-                  </button>
-                </li>
-              );
-            })}
+          <ul className="app-dashboard-reminder-list">
+            {dashboardReminders.map((r) => (
+              <li
+                key={r.key}
+                className={`app-dashboard-reminder app-dashboard-reminder--${r.tone === "warn" ? "warn" : r.tone === "calm" ? "calm" : "info"}`}
+              >
+                <span className="app-dashboard-reminder__text">{r.text}</span>
+                <button type="button" className="app-dashboard-reminder__btn" onClick={r.onCta}>
+                  {r.cta}
+                </button>
+              </li>
+            ))}
           </ul>
         </Section>
       ) : null}
 
       <Section title="Shortcuts">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="app-dashboard-shortcuts">
           {shortcutRows.map((row) => (
             <div key={row.title}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-tertiary,#64748b)", marginBottom: 8, letterSpacing: "0.04em" }}>{row.title}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div className="app-dashboard-chip-row__label">{row.title}</div>
+              <div className="app-dashboard-chip-row">
                 {row.items.map((item) => (
-                  <button
-                    key={item.viewId}
-                    type="button"
-                    onClick={() => openWorkspaceView({ viewId: item.viewId })}
-                    style={{
-                      ...ms.btn,
-                      padding: "8px 12px",
-                      fontSize: 12,
-                      minHeight: 0,
-                      borderColor: "#0d9488",
-                      background: "var(--color-accent-muted,#ecfdf5)",
-                      color: "#0f766e",
-                      fontWeight: 600,
-                    }}
-                  >
+                  <button key={item.viewId} type="button" className="app-dashboard-chip" onClick={() => openWorkspaceView({ viewId: item.viewId })}>
                     {item.label}
                   </button>
                 ))}
@@ -1193,34 +1330,19 @@ export default function AnalyticsDashboard() {
       </Section>
 
       {isLead && (
-        <div
-          style={{
-            marginBottom: 24,
-            padding: "12px 14px",
-            borderRadius: 12,
-            border: "1px solid rgba(13,148,136,0.25)",
-            background: "rgba(13,148,136,0.06)",
-            fontSize: 13,
-            lineHeight: 1.55,
-            color: "var(--color-text-primary)",
-          }}
-        >
-          <strong style={{ color: "#0f766e" }}>For managers</strong> — cross-check the{" "}
-          <button type="button" onClick={() => openWorkspaceView({ viewId: "audit" })} style={{ padding: 0, border: "none", background: "none", color: "#0d9488", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}>
+        <div className="app-dashboard-callout">
+          <strong>For managers</strong> — cross-check the{" "}
+          <button type="button" onClick={() => openWorkspaceView({ viewId: "audit" })}>
             Audit log
           </button>{" "}
           after incidents or permit changes, export backups from{" "}
-          <button type="button" onClick={() => openWorkspaceView({ viewId: "backup" })} style={{ padding: 0, border: "none", background: "none", color: "#0d9488", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}>
+          <button type="button" onClick={() => openWorkspaceView({ viewId: "backup" })}>
             Backup
           </button>
           {caps.orgSettings ? (
             <>
               , and keep{" "}
-              <button
-                type="button"
-                onClick={() => openWorkspaceSettings({ tab: "invites" })}
-                style={{ padding: 0, border: "none", background: "none", color: "#0d9488", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}
-              >
+              <button type="button" onClick={() => openWorkspaceSettings({ tab: "invites" })}>
                 invites
               </button>{" "}
               up to date.
@@ -1230,85 +1352,6 @@ export default function AnalyticsDashboard() {
           )}
         </div>
       )}
-
-      {actionNeededItems.length > 0 && (
-        <div
-          className={`app-dashboard-action-strip${actionNeededItems.every((i) => i.severity === "calm") ? " app-dashboard-action-strip--calm" : ""}`}
-          style={{ marginBottom: 24 }}
-        >
-          <div
-            className="app-section-label"
-            style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}
-          >
-            Action needed
-          </div>
-          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 12 }} aria-live="polite">
-            {actionNeededItems.map((item) => (
-              <li
-                key={item.key}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span style={{ fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.5, flex: "1 1 200px" }}>{item.text}</span>
-                <button
-                  type="button"
-                  onClick={() => openWorkspaceView({ viewId: item.viewId })}
-                  style={{
-                    ...ms.btn,
-                    padding: "8px 14px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    flexShrink: 0,
-                    borderColor: "#0d9488",
-                    background: "var(--color-accent-muted,#ccfbf1)",
-                    color: "#0f766e",
-                  }}
-                >
-                  Open
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* top metrics */}
-      <Section title="Overview">
-        <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--color-text-secondary)" }}>Tap a tile to open the related module.</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(130px,100%),1fr))", gap: 10 }}>
-          {[
-            { label: "Workers", value: workers.length, sub: "registered", viewId: "workers" },
-            { label: "Active projects", value: projects.filter((p) => !p.closed).length, sub: "projects", viewId: "workers" },
-            { label: "RAMS total", value: rams.length, sub: "documents", viewId: "rams" },
-            { label: "Permits", value: permits.length, sub: `${permitStats.active} active`, viewId: "permits" },
-            { label: "Open snags", value: snagStats.open, sub: `${snagStats.in_progress} in progress`, viewId: "snags" },
-            { label: "Hours (month)", value: Math.round(monthHours), sub: `${tsEntries.length} entries`, viewId: "timesheets" },
-            { label: "Incidents", value: incidents.length, sub: "total logged", viewId: "incidents" },
-            { label: "Training expiring", value: trainingExpiring60, sub: "within 60 days", viewId: "training" },
-            { label: "Hot work active", value: hotWorkActive, sub: `${hotWork.length} total records`, viewId: "hot-work" },
-            { label: "On site today", value: todayInductions, sub: "sign-ins", viewId: "induction" },
-          ].map((m) => (
-            <button
-              key={m.label}
-              type="button"
-              className="app-dashboard-metric"
-              aria-label={`Open ${m.label}`}
-              onClick={() => openWorkspaceView({ viewId: m.viewId })}
-              style={{ ...ss.metric, ...ss.metricBtn }}
-            >
-              <div style={ss.lbl}>{m.label}</div>
-              <div style={ss.val}>{m.value}</div>
-              <div style={ss.sub}>{m.sub}</div>
-            </button>
-          ))}
-        </div>
-      </Section>
-      </div>
 
       {!onboardingDismissed && (
         <Section
@@ -1354,7 +1397,7 @@ export default function AnalyticsDashboard() {
             )
           }
         >
-          <div className="app-panel-surface" style={{ padding: "12px 14px" }}>
+          <div className="app-panel-surface app-dashboard-checklist-panel">
             <div
               role="progressbar"
               aria-label="Onboarding checklist progress"
@@ -1537,205 +1580,7 @@ export default function AnalyticsDashboard() {
         </Section>
       )}
 
-      {/* compliance + expiring */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(200px,100%),1fr))", gap:16, marginBottom:24 }}>
-        {/* compliance score */}
-        <div className="app-dashboard-card" style={ss.card}>
-          <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:12 }}>Compliance score</div>
-          <div style={{ textAlign:"center", marginBottom:16 }}>
-            <div style={{ fontSize:52, fontWeight:500, color:complianceColor, lineHeight:1 }}>{complianceScore}</div>
-            <div style={{ fontSize:12, color:complianceColor, marginTop:4 }}>{complianceScore>=80?"Good standing":complianceScore>=60?"Needs attention":"Action required"}</div>
-          </div>
-          <div style={{ height:6, background:"var(--color-border-tertiary,#e5e5e5)", borderRadius:3, marginBottom:12 }}>
-            <div style={{ height:6, borderRadius:3, width:`${complianceScore}%`, background:complianceColor, transition:"width .5s" }} />
-          </div>
-          {complianceIssues.length>0 ? (
-            <div>
-              {complianceIssues.map((issue,i)=>(
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"#791F1F", marginBottom:4 }}>
-                  <div style={{ width:6, height:6, borderRadius:"50%", background:"#E24B4A", flexShrink:0 }} />
-                  {issue}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize:12, color:"#27500A", display:"flex", alignItems:"center", gap:6 }}>
-              <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="#27500A" strokeWidth={2}><circle cx={8} cy={8} r={6}/><path d="M5 8l2 2 4-4"/></svg>
-              No issues detected
-            </div>
-          )}
-        </div>
-
-        {/* expiring certs */}
-        <div className="app-dashboard-card" style={ss.card}>
-          <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:12 }}>
-            Expiring certifications
-            {expiringCerts.length>0 && <span style={{ marginLeft:8, padding:"1px 8px", borderRadius:20, fontSize:11, background:"#FCEBEB", color:"#791F1F" }}>{expiringCerts.length}</span>}
-          </div>
-          {expiringCerts.length===0 ? (
-            <div style={{ textAlign:"center", padding:"1.5rem 0", fontSize:13, color:"var(--color-text-secondary)" }}>
-              {workers.length===0 ? "No workers added yet." : "No certifications expiring in the next 30 days."}
-            </div>
-          ) : (
-            expiringCerts.slice(0,5).map((c,i)=>(
-              <ExpiryRow key={i} name={c.workerName} role={c.workerRole} certType={c.type||c.name||"Certificate"} expiryDate={c.expiryDate} />
-            ))
-          )}
-          {expiringCerts.length > 5 && (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 8 }}>+{expiringCerts.length - 5} more…</div>
-          )}
-          {expiringCerts.length > 0 ? (
-            <div style={{ marginTop: 12 }}>
-              <button type="button" onClick={() => openWorkspaceView({ viewId: "workers" })} style={{ ...ms.btn, padding: "6px 12px", fontSize: 12, minHeight: 0 }}>
-                Open workers & certifications
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {/* charts row */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(200px,100%),1fr))", gap:12, marginBottom:24 }}>
-        {/* incident trend */}
-        <div className="app-dashboard-card" style={ss.card}>
-          <div style={{ display:"flex", flexWrap:"wrap", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:4 }}>
-            <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.06em" }}>
-              Incidents / near misses
-            </div>
-            <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }} role="group" aria-label="Incident chart period">
-              <span style={{ fontSize:11, color:"var(--color-text-tertiary,#aaa)" }}>Period</span>
-              {INCIDENT_PERIOD_WEEKS.map((w) => {
-                const active = incidentWeeks === w;
-                return (
-                  <button
-                    key={w}
-                    type="button"
-                    className="app-pill-toggle"
-                    onClick={() => setIncidentWeeks(w)}
-                    style={{
-                      padding:"4px 10px",
-                      fontSize:11,
-                      fontWeight:500,
-                      borderRadius:6,
-                      border:`1px solid ${active ? "var(--color-accent,#0d9488)" : "var(--color-border-tertiary,#e5e5e5)"}`,
-                      background: active ? "rgba(13,148,136,0.12)" : "var(--color-background-primary,#fff)",
-                      color: active ? "var(--color-accent,#0d9488)" : "var(--color-text-secondary)",
-                      cursor:"pointer",
-                    }}
-                  >
-                    {w} wk
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          {incidents.length===0 ? (
-            <div style={{ padding:"1.5rem 0", textAlign:"center", fontSize:12, color:"var(--color-text-secondary)" }}>No incidents logged yet.</div>
-          ) : (
-            <BarChart data={incidentTrend} height={80} color="#E24B4A" />
-          )}
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4 }}>
-            <span>In period: {incidentsInSelectedWeeks} · All time: {incidents.length}</span>
-            <span>Latest week: {incidentTrend[incidentTrend.length - 1]?.value ?? 0}</span>
-            <button type="button" onClick={() => openWorkspaceView({ viewId: "incidents" })} style={{ ...ms.btn, padding: "4px 10px", fontSize: 11, minHeight: 0 }}>
-              Open incidents
-            </button>
-          </div>
-        </div>
-
-        {/* hours per project */}
-        <div className="app-dashboard-card" style={ss.card}>
-          <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>Hours per project</div>
-          {hoursChartData.length===0 ? (
-            <div style={{ padding:"1.5rem 0", textAlign:"center", fontSize:12, color:"var(--color-text-secondary)" }}>No timesheet data yet.</div>
-          ) : (
-            <BarChart data={hoursChartData} height={80} color="#0d9488" />
-          )}
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4 }}>
-            <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Total logged: {Math.round(monthHours)}h this month</span>
-            <button type="button" onClick={() => openWorkspaceView({ viewId: "timesheets" })} style={{ ...ms.btn, padding: "4px 10px", fontSize: 11, minHeight: 0 }}>
-              Open timesheets
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* bottom row */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(180px,100%),1fr))", gap:12, marginBottom:24 }}>
-        {/* snag breakdown */}
-        <div className="app-dashboard-card" style={ss.card}>
-          <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:12 }}>Snag status</div>
-          <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-            <DonutChart segments={[
-              { value:snagStats.open, color:"#E24B4A" },
-              { value:snagStats.in_progress, color:"#EF9F27" },
-              { value:snagStats.closed, color:"#1D9E75" },
-            ]} size={80} />
-            <div>
-              {[["Open",snagStats.open,"#E24B4A"],["In progress",snagStats.in_progress,"#EF9F27"],["Closed",snagStats.closed,"#1D9E75"]].map(([l,v,c])=>(
-                <div key={l} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, fontSize:12 }}>
-                  <div style={{ width:8, height:8, borderRadius:"50%", background:c, flexShrink:0 }} />
-                  <span style={{ color:"var(--color-text-secondary)" }}>{l}</span>
-                  <span style={{ fontWeight:500, marginLeft:"auto" }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <button type="button" onClick={() => openWorkspaceView({ viewId: "snags" })} style={{ ...ms.btn, padding: "4px 10px", fontSize: 11, minHeight: 0 }}>
-              Open snags
-            </button>
-          </div>
-        </div>
-
-        {/* permit breakdown */}
-        <div className="app-dashboard-card" style={ss.card}>
-          <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:12 }}>Permit status</div>
-          <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-            <DonutChart segments={[
-              { value:permitStats.active, color:"#1D9E75" },
-              { value:permitStats.draft, color:"#EF9F27" },
-              { value:permitStats.expired, color:"#E24B4A" },
-            ]} size={80} />
-            <div>
-              {[["Active",permitStats.active,"#1D9E75"],["Draft",permitStats.draft,"#EF9F27"],["Expired",permitStats.expired,"#E24B4A"]].map(([l,v,c])=>(
-                <div key={l} style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4, fontSize:12 }}>
-                  <div style={{ width:8, height:8, borderRadius:"50%", background:c, flexShrink:0 }} />
-                  <span style={{ color:"var(--color-text-secondary)" }}>{l}</span>
-                  <span style={{ fontWeight:500, marginLeft:"auto" }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <button type="button" onClick={() => openWorkspaceView({ viewId: "permits" })} style={{ ...ms.btn, padding: "4px 10px", fontSize: 11, minHeight: 0 }}>
-              Open permits
-            </button>
-          </div>
-        </div>
-
-        {/* site inductions */}
-        <div className="app-dashboard-card" style={ss.card}>
-          <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:8 }}>Site sign-ins</div>
-          {inductionData.length===0 ? (
-            <div style={{ padding:"1rem 0", textAlign:"center", fontSize:12, color:"var(--color-text-secondary)" }}>No inductions recorded.</div>
-          ) : (
-            <BarChart data={inductionData} height={80} color="#378ADD" />
-          )}
-          <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>Total: {inductions.length} · Today: {todayInductions}</div>
-        </div>
-      </div>
-
-      <div
-        className="app-panel-surface app-dashboard-footnote"
-        style={{
-          padding: "14px 18px",
-          fontSize: 12,
-          color: "var(--color-text-secondary)",
-          lineHeight: 1.65,
-          borderLeft: "3px solid var(--color-accent-subtle)",
-        }}
-      >
+      <div className="app-panel-surface app-dashboard-footnote">
         All metrics are calculated live from your organisation&apos;s data. No data is shared between organisations. Dates and short dates follow your browser
         locale — choose United Kingdom in system or browser settings for British (en-GB) formatting.
       </div>

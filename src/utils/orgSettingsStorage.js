@@ -100,6 +100,15 @@ export function pickCloudBrandingPayload(raw) {
   if (Array.isArray(s.hiddenFeatures) && s.hiddenFeatures.length) {
     out.hiddenFeatures = s.hiddenFeatures;
   }
+  if (typeof s.bottomNavModuleId === "string" && s.bottomNavModuleId) {
+    out.bottomNavModuleId = s.bottomNavModuleId;
+  }
+  if (typeof s.industryPackId === "string" && s.industryPackId) {
+    out.industryPackId = s.industryPackId;
+  }
+  if (s.onboardingWizardCompleted) {
+    out.onboardingWizardCompleted = true;
+  }
   return out;
 }
 

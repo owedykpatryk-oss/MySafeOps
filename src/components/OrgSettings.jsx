@@ -168,10 +168,10 @@ export default function OrgSettings() {
         {TABS.map(([t,l])=>(
           <button key={t} onClick={()=>setTab(t)} style={{
             ...ss.btn, borderRadius:"6px 6px 0 0", padding:"6px 14px", fontSize:13,
-            borderBottom:tab===t?"2px solid #0d9488":"2px solid transparent",
+            borderBottom:tab===t?"2px solid var(--color-accent,#0d9488)":"2px solid transparent",
             background:tab===t?"var(--color-background-secondary,#f7f7f5)":"transparent",
             borderLeft:"none", borderRight:"none", borderTop:"none",
-            color:tab===t?"#0d9488":"var(--color-text-secondary)", fontWeight:tab===t?500:400,
+            color:tab===t?"var(--color-accent-hover,#0f766e)":"var(--color-text-secondary)", fontWeight:tab===t?500:400,
           }}>{l}</button>
         ))}
       </div>

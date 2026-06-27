@@ -37,7 +37,7 @@ export default function SettingsCenter({ initialTab = "cloud", checkoutReturn = 
   ];
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto" }}>
+    <div className="app-settings-center" style={{ maxWidth: 760, margin: "0 auto" }}>
       <div style={{ ...ss.card, marginBottom: 16 }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
           Quick actions
@@ -66,8 +66,9 @@ export default function SettingsCenter({ initialTab = "cloud", checkoutReturn = 
           ))}
         </div>
       </div>
-      <div style={{ ...ss.card, marginBottom: 16, padding: "0.9rem" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+
+      <div className="app-settings-layout">
+        <nav className="app-settings-nav app-panel-surface" aria-label="Settings sections">
           {TABS.map((t) => {
             const Icon = t.icon;
             const active = tab === t.id;
@@ -76,35 +77,29 @@ export default function SettingsCenter({ initialTab = "cloud", checkoutReturn = 
                 key={t.id}
                 type="button"
                 onClick={() => setTab(t.id)}
-                className="app-pill-toggle"
-                style={{
-                  ...ss.btn,
-                  padding: "9px 12px",
-                  borderColor: active ? "#0d9488" : "var(--color-border-tertiary,#e2e8f0)",
-                  background: active ? "var(--color-accent-muted,#ccfbf1)" : "#fff",
-                  color: active ? "#0f766e" : "var(--color-text-primary)",
-                  fontWeight: active ? 600 : 500,
-                }}
+                className={`app-settings-nav__btn${active ? " app-settings-nav__btn--active" : ""}`}
               >
-                <Icon size={15} aria-hidden />
+                <Icon size={16} aria-hidden />
                 {t.label}
               </button>
             );
           })}
+        </nav>
+
+        <div className="app-settings-panel">
+          {tab === "cloud" && <CloudAccount />}
+          {tab === "billing" && <BillingLimits checkoutReturn={checkoutReturn} />}
+          {tab === "invites" && <InviteUsers />}
+          {tab === "members" && <OrgMembers />}
+          {tab === "organisation" && <OrgSettings />}
+          {tab === "notifications" && (
+            <div style={{ marginBottom: 24 }}>
+              <NotificationSettings />
+            </div>
+          )}
+          {tab === "developer" && <DeveloperTools />}
         </div>
       </div>
-
-      {tab === "cloud" && <CloudAccount />}
-      {tab === "billing" && <BillingLimits checkoutReturn={checkoutReturn} />}
-      {tab === "invites" && <InviteUsers />}
-      {tab === "members" && <OrgMembers />}
-      {tab === "organisation" && <OrgSettings />}
-      {tab === "notifications" && (
-        <div style={{ marginBottom: 24 }}>
-          <NotificationSettings />
-        </div>
-      )}
-      {tab === "developer" && <DeveloperTools />}
     </div>
   );
 }

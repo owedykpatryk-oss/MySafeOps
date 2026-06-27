@@ -61,7 +61,7 @@ export const ms = {
     display: "block",
     fontSize: 12,
     fontWeight: 600,
-    color: "var(--color-text-secondary)",
+    color: "var(--color-text-secondary,#475569)",
     marginBottom: 6,
     letterSpacing: "0.01em",
   },
@@ -98,7 +98,7 @@ export const ms = {
   },
   pageLead: {
     fontSize: 14,
-    color: "var(--color-text-secondary)",
+    color: "var(--color-text-secondary,#475569)",
     margin: "10px 0 0",
     lineHeight: 1.6,
     maxWidth: 640,

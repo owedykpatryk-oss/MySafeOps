@@ -31,6 +31,7 @@ import { workspaceViewLoaders, workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_I
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useApp } from "../context/AppContext";
 import { isSuperAdminEmail } from "../utils/superAdmin";
+import { useOrgBranding } from "../hooks/useOrgBranding";
 import {
   filterVisibleModuleIds,
   filterVisibleModuleTabs,
@@ -41,6 +42,11 @@ import {
   isModuleVisible,
 } from "../utils/hiddenModules";
 import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
+import {
+  BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
+  resolveBottomNavSlotId,
+} from "../utils/bottomNavShortcut";
+import { isOnboardingWizardComplete } from "../utils/workspaceOnboarding";
 
 const LAST_VIEW_STORAGE_KEY = "mysafeops_last_workspace_view";
 const WORKSPACE_LAYOUT_VIEW_IDS = new Set([...Object.keys(workspaceViewLoaders), "settings"]);
@@ -54,6 +60,7 @@ function isEditableSurfaceTarget(target) {
 }
 
 const LazySettingsCenter = lazy(() => import("../components/SettingsCenter"));
+const LazyWorkspaceOnboarding = lazy(() => import("../components/WorkspaceOnboarding"));
 
 function MoreModuleTile({ tab, active, pinnedIds, sectionTone, onOpen, onTogglePin, onExportPdf, onHide, canHide }) {
   const isPinned = pinnedIds.includes(tab.id);
@@ -217,8 +224,11 @@ const NAV_TABS = [
 export default function MainAppLayout() {
   const { user } = useSupabaseAuth();
   const { caps } = useApp();
+  const orgBranding = useOrgBranding();
   const isSuperadmin = isSuperAdminEmail(user?.email);
   const [hiddenRev, setHiddenRev] = useState(0);
+  const [bottomSlotId, setBottomSlotId] = useState(() => resolveBottomNavSlotId());
+  const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingWizardComplete());
   const hiddenModules = useMemo(() => {
     void hiddenRev;
     return getHiddenModuleIds();
@@ -227,23 +237,40 @@ export default function MainAppLayout() {
 
   useEffect(() => {
     const bump = () => setHiddenRev((r) => r + 1);
+    const bumpSlot = () => setBottomSlotId(resolveBottomNavSlotId());
+    const bumpOnboarding = () => setShowOnboarding(!isOnboardingWizardComplete());
     window.addEventListener(HIDDEN_MODULES_UPDATED_EVENT, bump);
     window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+    window.addEventListener(BOTTOM_NAV_SHORTCUT_UPDATED_EVENT, bumpSlot);
+    window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpSlot);
+    window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpOnboarding);
     return () => {
       window.removeEventListener(HIDDEN_MODULES_UPDATED_EVENT, bump);
       window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+      window.removeEventListener(BOTTOM_NAV_SHORTCUT_UPDATED_EVENT, bumpSlot);
+      window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpSlot);
+      window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpOnboarding);
     };
   }, []);
 
   const bottomNavTabs = useMemo(() => {
-    let tabs = NAV_TABS;
+    let tabs = NAV_TABS.map((t) =>
+      t.id === "bin"
+        ? {
+            ...t,
+            id: bottomSlotId,
+            label: getModuleLabel(bottomSlotId),
+            icon: NAV_ICONS[bottomSlotId] || null,
+          }
+        : t
+    );
     if (isSuperadmin) {
-      const more = NAV_TABS[NAV_TABS.length - 1];
-      const beforeMore = NAV_TABS.slice(0, -1);
+      const more = tabs[tabs.length - 1];
+      const beforeMore = tabs.slice(0, -1);
       tabs = [...beforeMore, { id: "superadmin", label: "Owner", icon: NAV_ICONS.superadmin }, more];
     }
     return tabs.filter((t) => t.id === "more" || isModuleVisible(t.id, visibilityOpts));
-  }, [isSuperadmin, visibilityOpts]);
+  }, [isSuperadmin, visibilityOpts, bottomSlotId]);
   const primaryNavIdSet = useMemo(() => {
     const s = new Set(filterVisibleModuleIds(PRIMARY_BOTTOM_NAV_IDS, visibilityOpts));
     if (isSuperadmin) s.add("superadmin");
@@ -466,10 +493,17 @@ export default function MainAppLayout() {
   }, [allowedModuleIds, primaryNavIdSet, setSearchParams]);
 
   const goMainTab = (id) => {
-    setNavTab(id);
-    if (id !== "more") {
-      setView(id);
+    if (id === "more") {
+      setNavTab("more");
+      return;
     }
+    if (primaryNavIdSet.has(id)) {
+      setNavTab(id);
+      setView(id);
+      return;
+    }
+    setView(id);
+    setNavTab(id === bottomSlotId ? id : "more");
   };
 
   const selectMoreModule = (id) => {
@@ -558,7 +592,10 @@ export default function MainAppLayout() {
   const pinnedTabsFiltered = filterModuleTabsByQuery(pinnedTabsOrdered, moreFilter);
 
   return (
-    <div style={{ position: "relative", minHeight: "100vh", fontFamily: "DM Sans, system-ui, sans-serif" }}>
+    <div
+      className="app-workspace-root"
+      style={{ ...orgBranding.cssVars, position: "relative", minHeight: "100vh", fontFamily: "DM Sans, system-ui, sans-serif" }}
+    >
       <a href="#main-content" className="app-skip-link">
         Skip to main content
       </a>
@@ -583,6 +620,11 @@ export default function MainAppLayout() {
         onNavigate={navigateFromSearch}
         allowSuperadmin={isSuperadmin}
       />
+      {showOnboarding ? (
+        <Suspense fallback={null}>
+          <LazyWorkspaceOnboarding onComplete={() => setShowOnboarding(false)} />
+        </Suspense>
+      ) : null}
       <main id="main-content" tabIndex={-1} className="app-workspace-main">
         <div className="app-module-shell">
           {view === "settings" ? (
@@ -750,8 +792,8 @@ export default function MainAppLayout() {
         }}
       >
         {bottomNavTabs.map((t) => {
-          const Icon = t.icon;
-          const active = navTab === t.id;
+          const Icon = t.icon || getModuleIcon(t.id);
+          const active = navTab === t.id || view === t.id;
           return (
             <button
               key={t.id}
@@ -773,11 +815,11 @@ export default function MainAppLayout() {
                 border: "none",
                 background: "transparent",
                 cursor: "pointer",
-                color: active ? "#0d9488" : "#64748b",
-                fontSize: 10,
+                color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
+                fontSize: 11,
                 fontFamily: "DM Sans, sans-serif",
                 maxWidth: 78,
-                fontWeight: active ? 600 : 500,
+                fontWeight: 600,
               }}
             >
               <Icon size={22} strokeWidth={active ? 2.25 : 1.75} aria-hidden />

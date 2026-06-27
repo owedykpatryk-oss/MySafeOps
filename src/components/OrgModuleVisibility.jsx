@@ -18,6 +18,13 @@ import {
   unhideModule,
 } from "../utils/hiddenModules";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "../utils/orgSettingsStorage";
+import {
+  getBottomNavModuleId,
+  getBottomNavShortcutOptions,
+  setBottomNavModuleId,
+  DEFAULT_BOTTOM_NAV_FALLBACK_ID,
+  BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
+} from "../utils/bottomNavShortcut";
 import { ms } from "../utils/moduleStyles";
 
 const ss = ms;
@@ -29,24 +36,29 @@ export default function OrgModuleVisibility() {
   const [hiddenFeatures, setHiddenFeatures] = useState(() => getHiddenFeatureIds());
   const [showHidden, setShowHidden] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [bottomShortcut, setBottomShortcut] = useState(() => getBottomNavModuleId() || "");
   const canManage = Boolean(caps?.orgSettings);
 
   const refresh = () => {
     setHiddenModules(getHiddenModuleIds());
     setHiddenFeatures(getHiddenFeatureIds());
+    setBottomShortcut(getBottomNavModuleId() || "");
   };
 
   useEffect(() => {
     const onUpdate = () => refresh();
     window.addEventListener(HIDDEN_MODULES_UPDATED_EVENT, onUpdate);
     window.addEventListener("mysafeops-org-settings-updated", onUpdate);
+    window.addEventListener(BOTTOM_NAV_SHORTCUT_UPDATED_EVENT, onUpdate);
     return () => {
       window.removeEventListener(HIDDEN_MODULES_UPDATED_EVENT, onUpdate);
       window.removeEventListener("mysafeops-org-settings-updated", onUpdate);
+      window.removeEventListener(BOTTOM_NAV_SHORTCUT_UPDATED_EVENT, onUpdate);
     };
   }, []);
 
   const sections = useMemo(() => getModuleCatalogSections(), []);
+  const shortcutOptions = useMemo(() => getBottomNavShortcutOptions(), [hiddenModules.length]);
   const hiddenCount = hiddenModules.length + hiddenFeatures.length;
 
   const syncCloud = async (nextRaw) => {
@@ -98,6 +110,32 @@ export default function OrgModuleVisibility() {
         Hide modules you do not use — they stay in your organisation settings and can be restored anytime.
         Hidden items disappear from <strong>More</strong>, search, and the bottom bar (except Settings / Help).
       </p>
+
+      {canManage ? (
+        <div style={{ ...ss.card, marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Bottom bar shortcut</div>
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.5 }}>
+            Replaces the default <strong>{getModuleLabel(DEFAULT_BOTTOM_NAV_FALLBACK_ID)}</strong> slot — one tap to your most-used register.
+          </p>
+          <select
+            value={bottomShortcut}
+            onChange={(e) => {
+              const v = e.target.value;
+              setBottomShortcut(v);
+              setBottomNavModuleId(v || null);
+              void syncCloud(loadOrgSettingsRaw());
+            }}
+            style={{ ...ss.inp, maxWidth: 320 }}
+          >
+            <option value="">{getModuleLabel(DEFAULT_BOTTOM_NAV_FALLBACK_ID)} (default)</option>
+            {shortcutOptions.map((id) => (
+              <option key={id} value={id}>
+                {getModuleLabel(id)}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       {hiddenCount > 0 ? (
         <div
