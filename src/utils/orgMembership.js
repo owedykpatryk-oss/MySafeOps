@@ -1,4 +1,5 @@
 import { pushAudit } from "./auditLog";
+import { syncOrgBrandingFromCloud } from "./orgBrandingCloudSync";
 import { getOrgId, setOrgId } from "./orgStorage";
 
 const MEMBERSHIP_ROLES = new Set(["admin", "supervisor", "operative"]);
@@ -66,6 +67,11 @@ export async function refreshOrgFromSupabase(supabase) {
   if (!row?.org_slug) throw new Error("No organisation returned by ensure_my_org.");
   setOrgId(row.org_slug);
   persistOrgRow(row);
+  try {
+    await syncOrgBrandingFromCloud(supabase, row.org_slug);
+  } catch {
+    /* non-fatal — local branding still works */
+  }
   return row;
 }
 
@@ -80,6 +86,11 @@ export async function ensureUserOrgContext(supabase) {
   setOrgId(row.org_slug);
   clearPendingInvite();
   persistOrgRow(row);
+  try {
+    await syncOrgBrandingFromCloud(supabase, row.org_slug);
+  } catch {
+    /* non-fatal */
+  }
   pushAudit({ action: "org_context_sync", entity: "org", detail: row.org_slug });
   return row;
 }

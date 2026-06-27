@@ -1,6 +1,7 @@
 import { normalizeChecklistItems, normalizeChecklistState } from "./permitChecklistUtils";
 import { permitEndIso } from "./permitRules";
 import { PERMIT_TYPES, checklistStringsForType } from "./permitTypes";
+import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 
 function fmtDateTime(iso) {
   if (!iso) return "—";
@@ -27,7 +28,7 @@ function escapeAttr(s) {
 function loadOrgPrintSettings() {
   let org = {};
   try {
-    org = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+    org = loadOrgSettingsRaw();
   } catch {
     org = {};
   }

@@ -23,6 +23,7 @@ const SUPERADMIN_DB_MIGRATIONS = [
   "20260420200000_superadmin_recent_orgs_paging.sql",
   "20260427120000_superadmin_provision_org_members.sql",
   "20260427120100_ensure_my_org_invite_switch.sql",
+  "20260427140000_org_branding_settings.sql",
 ];
 const ORG_AUDIT_KEY_PREFIX = "mysafeops_audit_";
 

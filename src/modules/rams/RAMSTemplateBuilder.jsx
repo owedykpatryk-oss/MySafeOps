@@ -19,6 +19,7 @@ import { ms } from "../../utils/moduleStyles";
 import { safeHttpUrl } from "../../utils/safeUrl";
 import PageHero from "../../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { trackEvent } from "../../utils/telemetry";
@@ -5635,7 +5636,7 @@ export default function RAMSTemplateBuilder() {
   const buildSitePackMeta = (doc, permitsForProject) => {
     let org = {};
     try {
-      org = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+    org = loadOrgSettingsRaw();
     } catch {
       org = {};
     }

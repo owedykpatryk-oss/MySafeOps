@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import { getOrgSettings } from "../components/OrgSettings";
+import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { loadOrgScoped } from "./orgStorage";
 import { sanitizePdfFileSegment } from "./pdfFileName";
 import { MODULE_PDF_REGISTRY, canExportModulePdf } from "../navigation/moduleCatalogMeta";

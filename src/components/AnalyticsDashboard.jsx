@@ -3,7 +3,7 @@ import { loadOrgScoped as load, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import SiteTodayCard from "./SiteTodayCard";
-import { getOrgSettings } from "./OrgSettings";
+import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";

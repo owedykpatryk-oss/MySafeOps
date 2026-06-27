@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getOrgSettings } from "../components/OrgSettings";
+import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
@@ -124,7 +124,7 @@ function DeadlineAlert({ reportDate, deadlineDays }) {
 }
 
 function RIDDORForm({ report, onSave, onClose }) {
-  const org = (() => { try { return JSON.parse(localStorage.getItem("mysafeops_org_settings")||"{}"); } catch { return {}; } })();
+  const org = getOrgSettings();
   const projects = load("mysafeops_projects",[]);
 
   const blank = {

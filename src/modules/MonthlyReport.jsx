@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { getOrgSettings } from "../components/OrgSettings";
+import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load } from "../utils/orgStorage";

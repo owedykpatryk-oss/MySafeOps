@@ -1,9 +1,9 @@
 /**
  * Industrial / food–pharma sector flags for org-scoped features (FESS-style sites + generic contractors).
- * Stored on `mysafeops_org_settings` as `industrySectors: string[]`.
+ * Stored on org-scoped `mysafeops_org_settings` as `industrySectors: string[]`.
  */
 
-const ORG_KEY = "mysafeops_org_settings";
+import { getOrgSettings } from "./orgSettingsStorage";
 
 export const INDUSTRY_SECTOR_OPTIONS = [
   { id: "construction", label: "Construction (general)" },
@@ -19,16 +19,7 @@ const FOODISH = new Set(["food_beverage", "pet_food", "dairy", "brewing"]);
 
 /** @returns {string[]} */
 export function readIndustrySectorsFromStorage() {
-  try {
-    const raw = localStorage.getItem(ORG_KEY);
-    if (!raw) return ["construction"];
-    const o = JSON.parse(raw);
-    const list = o?.industrySectors;
-    if (!Array.isArray(list) || list.length === 0) return ["construction"];
-    return list.map(String);
-  } catch {
-    return ["construction"];
-  }
+  return getOrgSettings().industrySectors;
 }
 
 export function orgHasFoodIndustrialPack() {

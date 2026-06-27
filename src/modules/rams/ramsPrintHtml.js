@@ -4,6 +4,7 @@
 import { getRiskLevel } from "./ramsAllHazards";
 import { normalizePrintSections, RAMS_SECTION_IDS, documentContentHash } from "./ramsSectionConfig";
 import { renderPermitDocumentHtml } from "../permits/permitDocumentHtml";
+import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 
 const RL = {
   high: { bg: "#FCEBEB", color: "#791F1F" },
@@ -395,7 +396,7 @@ function escHtml(s) {
 function loadOrgPrintSettings() {
   let org = {};
   try {
-    org = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+    org = loadOrgSettingsRaw();
   } catch {
     org = {};
   }

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { ms } from "../../utils/moduleStyles";
 import PageHero from "../../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { getTemplateForType, saveOrgTemplate } from "./permitTemplateCatalog";
 import { evaluatePermitCompliance } from "./permitComplianceChecks";
 import { buildPermitEvidencePack, buildEvidencePackCsv } from "./permitEvidencePack";
@@ -102,7 +103,7 @@ const genAckToken = () => `ack_${Date.now().toString(36)}_${Math.random().toStri
 
 function getOrgLocale() {
   try {
-    const o = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+    const o = loadOrgSettingsRaw();
     if (o.locale && typeof o.locale === "string") return o.locale.trim() || "en-GB";
   } catch {
     /* ignore */
@@ -763,7 +764,7 @@ function PermitForm({
   const workers = load("mysafeops_workers",[]);
   const ramsDocs = load("rams_builder_docs", []);
   const permitPrefs = load(PERMIT_PREFS_KEY, {});
-  const org = (() => { try { return JSON.parse(localStorage.getItem("mysafeops_org_settings")||"{}"); } catch { return {}; } })();
+  const org = (() => { try { return loadOrgSettingsRaw(); } catch { return {}; } })();
   const formDefaults = normalizePermitFormDefaults(orgPermitDefaults);
   const flags = isFeatureEnabled("permits_template_builder_v2");
 
@@ -3594,7 +3595,7 @@ export default function PermitSystem() {
   const { role: appRole = "admin" } = useApp();
   const org = (() => {
     try {
-      return JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+      return loadOrgSettingsRaw();
     } catch {
       return {};
     }
@@ -5402,7 +5403,7 @@ export default function PermitSystem() {
     if (!hasSelectedPermits) return;
     let org = {};
     try {
-      org = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+      org = loadOrgSettingsRaw();
     } catch {
       org = {};
     }
@@ -5581,7 +5582,7 @@ export default function PermitSystem() {
     }
     let org = {};
     try {
-      org = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+      org = loadOrgSettingsRaw();
     } catch {
       org = {};
     }
@@ -5704,7 +5705,7 @@ export default function PermitSystem() {
     if (!actor) {
       let org = {};
       try {
-        org = JSON.parse(localStorage.getItem("mysafeops_org_settings") || "{}");
+        org = loadOrgSettingsRaw();
       } catch {
         org = {};
       }
