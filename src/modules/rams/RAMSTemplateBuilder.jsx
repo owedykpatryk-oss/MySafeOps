@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useDeferredValue } from "react";
 import HAZARD_LIBRARY, { TRADE_CATEGORIES, getByCategory, searchHazards, getRiskLevel } from "./ramsAllHazards";
 import {
   RAMS_PRINT_SECTIONS,
@@ -10,6 +10,7 @@ import {
 import {
   generatePrintHTML,
   computeRamsFingerprint,
+  buildRamsPreviewHtml,
   openRamsDocumentWindow,
   openRamsPrintWindow,
   formatOperativeCertsLine,
@@ -17,7 +18,7 @@ import {
 import { loadEmergencySiteExtras, googleMapsSearchUrl } from "../../utils/emergencySiteExtras";
 import { ms } from "../../utils/moduleStyles";
 import { safeHttpUrl } from "../../utils/safeUrl";
-import PageHero from "../../components/PageHero";
+import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { isFeatureVisible, RAMS_FEATURES } from "../../utils/hiddenModules";
@@ -28,6 +29,7 @@ import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
+import PageHero from "../../components/PageHero";
 import { geocodeAddressNominatim } from "../../utils/geocode";
 import { useToast } from "../../context/ToastContext";
 import { orgHasFoodIndustrialPack, orgHasPharmaPack } from "../../utils/industrialSectors";
@@ -1518,8 +1520,11 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
       ...f,
       siteLat: latStr,
       siteLng: lngStr,
+      nearestHospital: project.nearestHospital || f.nearestHospital,
+      hospitalDirectionsUrl: project.hospitalDirectionsUrl || f.hospitalDirectionsUrl,
+      siteWeatherNote: project.weatherSnapshot || f.siteWeatherNote,
     }));
-    if (String(form.siteWeatherNote || "").trim()) return;
+    if (String(project.weatherSnapshot || "").trim()) return;
     setWeatherLoading(true);
     try {
       const line = await fetchWeatherSummary(latStr, lngStr);
@@ -3370,6 +3375,12 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
 function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSave, onBack }) {
   const [fpCopied, setFpCopied] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
+  const deferredForm = useDeferredValue(form);
+  const deferredRows = useDeferredValue(rows);
+  const previewHtml = useMemo(
+    () => buildRamsPreviewHtml(deferredForm, deferredRows, workers, projects),
+    [deferredForm, deferredRows, workers, projects]
+  );
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
   const projectMap = Object.fromEntries(projects.map(p=>[p.id,p.name]));
   const operatives = (form.operativeIds||[]).map(id=>workerMap[id]).filter(Boolean);
@@ -3577,6 +3588,14 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
       <div style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:12 }}>
         Review your completed RAMS before saving. Use the table of contents to jump within the preview; toggles control what appears in print.
       </div>
+
+      <PrintPreviewFrame
+        html={previewHtml}
+        title="RAMS — A4 print preview"
+        height={400}
+        onPrint={printRAMS}
+        printLabel="Print / save PDF"
+      />
 
       <div
         style={{

@@ -7,6 +7,7 @@ import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 import PageHero from "../components/PageHero";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 
 const INCIDENTS_KEY = "mysafeops_incidents";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -116,27 +117,6 @@ export default function IncidentHotspotMap() {
       .slice(0, 8);
   }, [filtered]);
 
-  const parseProjectBoundary = (project) => {
-    if (Array.isArray(project?.boundaryPoints) && project.boundaryPoints.length >= 3) {
-      const points = project.boundaryPoints
-        .map((p) => {
-          if (Array.isArray(p) && p.length >= 2) return [Number(p[0]), Number(p[1])];
-          if (p && typeof p === "object") return [Number(p.lat), Number(p.lng)];
-          return null;
-        })
-        .filter((x) => x && Number.isFinite(x[0]) && Number.isFinite(x[1]));
-      if (points.length >= 3) return points;
-    }
-    const coords = project?.boundaryGeoJson?.coordinates;
-    if (Array.isArray(coords) && Array.isArray(coords[0])) {
-      const ring = coords[0]
-        .map((p) => (Array.isArray(p) && p.length >= 2 ? [Number(p[1]), Number(p[0])] : null))
-        .filter((x) => x && Number.isFinite(x[0]) && Number.isFinite(x[1]));
-      if (ring.length >= 3) return ring;
-    }
-    return null;
-  };
-
   const focusAll = () => {
     const map = mapRef.current;
     if (!map || filtered.length === 0) return;
@@ -179,7 +159,7 @@ export default function IncidentHotspotMap() {
     boundaryLayer.clearLayers();
     if (showBoundaries) {
       projects.forEach((p) => {
-        const ring = parseProjectBoundary(p);
+        const ring = parseProjectBoundaryRing(p);
         if (!ring) return;
         L.polygon(ring, { color: "#0d9488", weight: 2, fillOpacity: 0.05 }).addTo(boundaryLayer).bindTooltip(String(p.name || "Project"));
       });

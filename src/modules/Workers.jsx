@@ -14,7 +14,13 @@ import {
   getWorkerCertAlerts,
 } from "../utils/certifications";
 import { pushRecycleBinItem } from "../utils/recycleBin";
-import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { openWorkspaceView, setWorkspaceNavTarget, consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { lookupUkPostcode } from "../utils/postcodeLookup";
+import { getNearestHospital } from "../utils/nearestHospital";
+import { fetchWeatherSummary, fetchWeatherForDate } from "../utils/weatherSummary";
+import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDrawingImport";
+import { parseProjectBoundaryRing } from "../utils/projectBoundary";
+import ProjectSitePreviewMap from "../components/ProjectSitePreviewMap";
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -169,6 +175,20 @@ export default function Workers() {
   });
   const workersPg = useRegisterListPaging(50);
   const projectsPg = useRegisterListPaging(50);
+
+  useEffect(() => {
+    const t = consumeWorkspaceNavTarget();
+    if (t?.viewId !== "workers") return;
+    if (t?.action === "createProject") {
+      setModal({ type: "project", data: null });
+      return;
+    }
+    if (t?.action === "editProject" && t?.projectId) {
+      const list = load(PROJECTS_KEY, []);
+      const p = list.find((x) => x.id === t.projectId);
+      if (p) setModal({ type: "project", data: p });
+    }
+  }, []);
 
   const exportWorkersCsv = () => {
     const header = ["Name", "Role", "Phone", "Email", "Certs / notes", "Structured certifications"];
@@ -418,6 +438,36 @@ export default function Workers() {
             <button type="button" style={ss.btn} onClick={() => setModal({ type: "project", data: p })}>
               Edit
             </button>
+            <button
+              type="button"
+              style={ss.btn}
+              onClick={() => {
+                setWorkspaceNavTarget({ viewId: "rams", projectId: p.id });
+                openWorkspaceView({ viewId: "rams" });
+              }}
+            >
+              RAMS
+            </button>
+            <button
+              type="button"
+              style={ss.btn}
+              onClick={() => {
+                setWorkspaceNavTarget({ viewId: "permits", projectId: p.id });
+                openWorkspaceView({ viewId: "permits" });
+              }}
+            >
+              Permit
+            </button>
+            <button
+              type="button"
+              style={ss.btn}
+              onClick={() => {
+                setWorkspaceNavTarget({ viewId: "survey-report", projectId: p.id });
+                openWorkspaceView({ viewId: "survey-report" });
+              }}
+            >
+              Survey
+            </button>
             <button type="button" style={ss.btn} onClick={() => removeProject(p.id)}>
               Remove
             </button>
@@ -646,6 +696,17 @@ function projectFormShape(p) {
       permitDefaults: { requiredPermitTypes: PROJECT_STARTERS[0].defaultPermitFlow },
       healthScore: 0,
       healthMissing: [],
+      nearestHospital: "",
+      hospitalDirectionsUrl: "",
+      weatherSnapshot: "",
+      weatherFetchedAt: "",
+      weatherAtStartSnapshot: "",
+      weatherAtStartDate: "",
+      mapEscapeRoutes: [],
+      boundaryGeoJson: null,
+      boundaryPoints: [],
+      boundarySource: "",
+      boundaryName: "",
     };
   }
   return {
@@ -670,12 +731,87 @@ function ProjectForm({ item, onSave, onClose }) {
   const [form, setForm] = useState(() => projectFormShape(item));
   const [geoBusy, setGeoBusy] = useState(false);
   const [geoMsg, setGeoMsg] = useState("");
+  const [enrichBusy, setEnrichBusy] = useState(false);
+  const [kmlBusy, setKmlBusy] = useState(false);
+  const [forecastBusy, setForecastBusy] = useState(false);
   const [step, setStep] = useState(1);
   const totalSteps = 5;
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const missing = projectMissingItems(form);
   const health = projectHealthScore(form);
   const starterMeta = PROJECT_STARTERS.find((p) => p.id === form.industryStarter) || PROJECT_STARTERS[0];
+  const boundaryRing = parseProjectBoundaryRing(form);
+
+  const importKmlBoundary = async (file) => {
+    if (!file) return;
+    setKmlBusy(true);
+    setGeoMsg("");
+    try {
+      const text = await file.text();
+      const geom = parseKmlGeometry(text);
+      const boundary = boundaryFromKmlGeometry(geom, { sourceName: file.name });
+      if (!boundary) {
+        setGeoMsg("No polygon found in KML — use a closed site boundary.");
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        ...boundary,
+        boundaryImportedAt: new Date().toISOString(),
+        mapEscapeRoutes: (geom.lineStrings || []).map((line, idx) => ({
+          id: `mer_${Date.now()}_${idx}`,
+          name: line.name || `Route ${idx + 1}`,
+          points: line.points.map((p) => ({ lat: p.lat, lng: p.lng })),
+        })),
+      }));
+      const routeNote = geom.lineStrings?.length ? ` · ${geom.lineStrings.length} map route(s)` : "";
+      setGeoMsg(`KML boundary imported (${boundary.boundaryPoints.length} points)${routeNote}.`);
+    } catch (e) {
+      setGeoMsg(e?.message || "KML import failed.");
+    } finally {
+      setKmlBusy(false);
+    }
+  };
+
+  const clearBoundary = () => {
+    setForm((f) => ({
+      ...f,
+      boundaryGeoJson: null,
+      boundaryPoints: [],
+      boundarySource: "",
+      boundaryName: "",
+    }));
+    setGeoMsg("Boundary cleared.");
+  };
+
+  const fetchStartForecast = async () => {
+    const lat = parseFloat(String(form.lat ?? "").trim());
+    const lng = parseFloat(String(form.lng ?? "").trim());
+    const start = String(form.timelineStart || "").trim().slice(0, 10);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      setGeoMsg("Set coordinates first (step 3 — postcode lookup).");
+      return;
+    }
+    if (!start) {
+      setGeoMsg("Set target start date first.");
+      return;
+    }
+    setForecastBusy(true);
+    setGeoMsg("");
+    try {
+      const forecast = await fetchWeatherForDate(lat, lng, start);
+      setForm((f) => ({
+        ...f,
+        weatherAtStartSnapshot: forecast?.text || "",
+        weatherAtStartDate: start,
+      }));
+      setGeoMsg("Start-date forecast saved on project.");
+    } catch (e) {
+      setGeoMsg(e?.message || "Forecast failed.");
+    } finally {
+      setForecastBusy(false);
+    }
+  };
 
   useEffect(() => {
     setForm(projectFormShape(item));
@@ -715,7 +851,10 @@ function ProjectForm({ item, onSave, onClose }) {
       riskRegister: normalizedRiskRegister,
       permitDefaults: {
         ...(form.permitDefaults || {}),
-        requiredPermitTypes: starter.defaultPermitFlow,
+        requiredPermitTypes:
+          Array.isArray(form.permitDefaults?.requiredPermitTypes) && form.permitDefaults.requiredPermitTypes.length
+            ? form.permitDefaults.requiredPermitTypes.map((t) => String(t).trim()).filter(Boolean).slice(0, 12)
+            : starter.defaultPermitFlow,
       },
     };
     const nextMissing = projectMissingItems(draft);
@@ -742,16 +881,78 @@ function ProjectForm({ item, onSave, onClose }) {
     setGeoBusy(true);
     setGeoMsg("");
     try {
+      if (form.postcode?.trim()) {
+        const pc = await lookupUkPostcode(form.postcode);
+        if (pc) {
+          setForm((f) => ({
+            ...f,
+            lat: String(pc.lat),
+            lng: String(pc.lng),
+            postcode: pc.postcode,
+            address: f.address?.trim() ? f.address : [pc.adminDistrict, pc.region].filter(Boolean).join(", "),
+          }));
+          setGeoMsg("Coordinates from UK postcode lookup.");
+          return;
+        }
+      }
       const c = await geocodeAddressNominatim(q);
       if (!c) {
-        setGeoMsg("No coordinates found — try a fuller address.");
+        setGeoMsg("No coordinates found — try a fuller address or UK postcode.");
         return;
       }
       setForm((f) => ({ ...f, lat: String(c.lat), lng: String(c.lng) }));
+      setGeoMsg("Coordinates from address search.");
     } catch (e) {
       setGeoMsg(e?.message || "Geocoding failed.");
     } finally {
       setGeoBusy(false);
+    }
+  };
+
+  const enrichSite = async () => {
+    let lat = parseFloat(String(form.lat ?? "").trim(), 10);
+    let lng = parseFloat(String(form.lng ?? "").trim(), 10);
+    setEnrichBusy(true);
+    setGeoMsg("");
+    try {
+      if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && form.postcode?.trim()) {
+        const pc = await lookupUkPostcode(form.postcode);
+        if (pc) {
+          lat = pc.lat;
+          lng = pc.lng;
+          setForm((f) => ({
+            ...f,
+            lat: String(pc.lat),
+            lng: String(pc.lng),
+            postcode: pc.postcode,
+          }));
+        }
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        setGeoMsg("Set coordinates first (postcode lookup or geocode button).");
+        return;
+      }
+      const [weather, hospital] = await Promise.all([
+        fetchWeatherSummary(lat, lng).catch(() => null),
+        getNearestHospital(lat, lng).catch(() => null),
+      ]);
+      setForm((f) => ({
+        ...f,
+        lat: String(lat),
+        lng: String(lng),
+        weatherSnapshot: weather?.text || f.weatherSnapshot || "",
+        weatherFetchedAt: weather?.fetchedAt || f.weatherFetchedAt || "",
+        nearestHospital: hospital?.summary || f.nearestHospital || "",
+        hospitalDirectionsUrl: hospital?.directions_url || f.hospitalDirectionsUrl || "",
+      }));
+      const bits = [];
+      if (weather) bits.push("weather");
+      if (hospital) bits.push("nearest A&E");
+      setGeoMsg(bits.length ? `Updated: ${bits.join(" + ")}.` : "Could not fetch weather or hospital — try again.");
+    } catch (e) {
+      setGeoMsg(e?.message || "Site enrichment failed.");
+    } finally {
+      setEnrichBusy(false);
     }
   };
 
@@ -822,7 +1023,7 @@ function ProjectForm({ item, onSave, onClose }) {
               autoComplete="postal-code"
             />
             <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginTop: 4, marginBottom: 4 }}>
-              Used by RAMS for hospital lookup, weather, and site coordinates.
+              UK postcode lookup (postcodes.io), then weather + nearest A&E for RAMS and emergency contacts.
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
               <div>
@@ -834,11 +1035,84 @@ function ProjectForm({ item, onSave, onClose }) {
                 <input style={ss.inp} inputMode="decimal" value={form.lng ?? ""} onChange={(e) => set("lng", e.target.value)} placeholder="e.g. -0.12" />
               </div>
             </div>
-            <div style={{ marginTop: 10 }}>
+            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <button type="button" style={ss.btn} disabled={geoBusy} onClick={geocode}>
-                {geoBusy ? "Looking up…" : "Fill lat/lng from postcode / address"}
+                {geoBusy ? "Looking up…" : "Lookup coordinates"}
               </button>
-              {geoMsg && <span style={{ marginLeft: 10, fontSize: 12, color: "#b45309" }}>{geoMsg}</span>}
+              <button type="button" style={ss.btnP} disabled={enrichBusy} onClick={enrichSite}>
+                {enrichBusy ? "Fetching…" : "Weather + nearest A&E"}
+              </button>
+              {geoMsg && <span style={{ fontSize: 12, color: "#b45309" }}>{geoMsg}</span>}
+            </div>
+            {(form.weatherSnapshot || form.nearestHospital) && (
+              <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: "#f0fdfa", border: "0.5px solid #99f6e4", fontSize: 12, lineHeight: 1.45 }}>
+                {form.weatherSnapshot ? <div style={{ marginBottom: 6 }}><strong>Weather:</strong> {form.weatherSnapshot}</div> : null}
+                {form.nearestHospital ? (
+                  <div>
+                    <strong>Nearest A&E:</strong> {form.nearestHospital}
+                    {form.hospitalDirectionsUrl ? (
+                      <>
+                        {" "}
+                        <a href={form.hospitalDirectionsUrl} target="_blank" rel="noreferrer" style={{ color: "#0d9488" }}>
+                          Directions
+                        </a>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--color-border-tertiary,#e2e8f0)" }}>
+              <label style={ss.lbl}>Site boundary (KML)</label>
+              <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginBottom: 8 }}>
+                Import a polygon from survey/GIS — shown on the site map and incident hotspot map.
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                <label style={{ ...ss.btn, cursor: "pointer", margin: 0 }}>
+                  {kmlBusy ? "Importing…" : "Import KML boundary"}
+                  <input
+                    type="file"
+                    accept=".kml,.kmz,application/vnd.google-earth.kml+xml,text/xml"
+                    hidden
+                    disabled={kmlBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) importKmlBoundary(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {boundaryRing ? (
+                  <button type="button" style={ss.btn} onClick={clearBoundary}>
+                    Clear boundary ({boundaryRing.length} pts)
+                  </button>
+                ) : null}
+              </div>
+              {form.boundaryName ? (
+                <div style={{ fontSize: 12, marginTop: 8, color: "var(--color-text-secondary)" }}>
+                  Loaded: {form.boundaryName}
+                  {form.boundarySource ? ` · ${form.boundarySource}` : ""}
+                </div>
+              ) : null}
+              <ProjectSitePreviewMap
+                lat={form.lat}
+                lng={form.lng}
+                boundaryRing={boundaryRing}
+                escapeRoutes={form.mapEscapeRoutes || []}
+                label={form.name || "Site preview"}
+              />
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  style={{ ...ss.btn, fontSize: 12 }}
+                  onClick={() => {
+                    setWorkspaceNavTarget({ viewId: "project-drawings", projectId: form.id });
+                    openWorkspaceView({ viewId: "project-drawings" });
+                  }}
+                >
+                  Open plan markup (PDF / escape routes)
+                </button>
+              </div>
             </div>
           </>
         ) : null}
@@ -855,6 +1129,17 @@ function ProjectForm({ item, onSave, onClose }) {
                 <input type="date" style={ss.inp} value={form.timelineEnd || ""} onChange={(e) => set("timelineEnd", e.target.value)} />
               </div>
             </div>
+            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <button type="button" style={ss.btnP} disabled={forecastBusy} onClick={fetchStartForecast}>
+                {forecastBusy ? "Fetching…" : "Weather forecast for start date"}
+              </button>
+              {geoMsg && step === 4 ? <span style={{ fontSize: 12, color: "#b45309" }}>{geoMsg}</span> : null}
+            </div>
+            {form.weatherAtStartSnapshot ? (
+              <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "#eff6ff", border: "0.5px solid #bfdbfe", fontSize: 12 }}>
+                <strong>Start-date forecast</strong> ({form.weatherAtStartDate || form.timelineStart}): {form.weatherAtStartSnapshot}
+              </div>
+            ) : null}
             <label style={{ ...ss.lbl, marginTop: 10 }}>Risk hints (editable)</label>
             <textarea
               style={{ ...ss.inp, minHeight: 84, resize: "vertical" }}
@@ -879,8 +1164,27 @@ function ProjectForm({ item, onSave, onClose }) {
             <div style={{ fontSize: 13, marginBottom: 8 }}>
               <strong>Starter:</strong> {starterMeta.label}
             </div>
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Default permit flow: {(starterMeta.defaultPermitFlow || []).join(", ")}
+            <label style={{ ...ss.lbl, marginTop: 10 }}>Required permit types (one per line)</label>
+            <textarea
+              style={{ ...ss.inp, minHeight: 72, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
+              value={(form.permitDefaults?.requiredPermitTypes || starterMeta.defaultPermitFlow || []).join("\n")}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  permitDefaults: {
+                    ...(f.permitDefaults || {}),
+                    requiredPermitTypes: e.target.value
+                      .split(/\r?\n/)
+                      .map((x) => x.trim())
+                      .filter(Boolean)
+                      .slice(0, 12),
+                  },
+                }))
+              }
+              placeholder="hot_work&#10;excavation&#10;electrical"
+            />
+            <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginTop: 4 }}>
+              Used by dashboard and Permits to track missing PTWs for this site.
             </div>
             <div style={{ marginTop: 10, fontSize: 12 }}>
               <strong>Missing before go-live:</strong>{" "}

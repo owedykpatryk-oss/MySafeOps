@@ -80,6 +80,7 @@ export const MORE_TABS = [
   { id: "water-hygiene", label: "Water hygiene" },
   { id: "analytics", label: "Analytics" },
   { id: "monthly-report", label: "Monthly report" },
+  { id: "survey-report", label: "Survey report" },
   { id: "waste", label: "Waste register" },
   { id: "templates", label: "Templates" },
   { id: "client-portal", label: "Client portal" },
@@ -174,7 +175,7 @@ export const MORE_SECTIONS = [
   },
   {
     title: "Insights & reports",
-    ids: ["analytics", "monthly-report", "templates"],
+    ids: ["analytics", "monthly-report", "survey-report", "templates"],
   },
   {
     title: "Data & app",

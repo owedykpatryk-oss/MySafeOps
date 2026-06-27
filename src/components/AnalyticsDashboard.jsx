@@ -5,9 +5,22 @@ import { activeAllergenWindows, orgShowsIndustrialMoreModules } from "../utils/i
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import WorkplaceTodayCard from "./WorkplaceTodayCard";
+import ProjectHubCard from "./ProjectHubCard";
+import ProjectCommandCenter from "./ProjectCommandCenter";
 import { useOrgBranding } from "../hooks/useOrgBranding";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
-import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
+import { openWorkspaceSettings, openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import {
+  DASHBOARD_WIDGETS,
+  isWidgetVisible,
+  loadDashboardLayout,
+  saveDashboardLayout,
+  getWidgetOrder,
+  moveWidgetInOrder,
+  reorderWidget,
+  setWidgetVisible,
+} from "../utils/dashboardLayout";
+import { missingRequiredPermits } from "../modules/permits/permitProjectDefaults";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { readAudit, pushAudit } from "../utils/auditLog";
@@ -184,6 +197,15 @@ export default function AnalyticsDashboard() {
   const [pdfExportPhase, setPdfExportPhase] = useState(/** @type {string | null} */ (null));
   const [roleSyncing, setRoleSyncing] = useState(false);
   const [dataRefreshTick, setDataRefreshTick] = useState(0);
+  const [dashLayout, setDashLayout] = useState(() => loadDashboardLayout());
+  const [dashCustomizeOpen, setDashCustomizeOpen] = useState(false);
+  const [dragWidgetId, setDragWidgetId] = useState(null);
+  const showWidget = (id) => isWidgetVisible(dashLayout, id);
+  const widgetOrder = getWidgetOrder(dashLayout);
+  const widgetSortOrder = (id) => {
+    const i = widgetOrder.indexOf(id);
+    return i >= 0 ? i : 999;
+  };
   const progressBadgeRef = useRef(null);
   const dashboardPdfRef = useRef(null);
 
@@ -210,6 +232,7 @@ export default function AnalyticsDashboard() {
   const inductions = useMemo(() => load("induction_entries", []), [dataRefreshTick]);
   const trainingRecords = useMemo(() => load("training_matrix", []), [dataRefreshTick]);
   const hotWork = useMemo(() => load("hot_work_register", []), [dataRefreshTick]);
+  const surveyReports = useMemo(() => load("survey_reports", []), [dataRefreshTick]);
   const allergenWindows = useMemo(() => load("allergen_changeover_windows", []), [dataRefreshTick]);
   const activeAllergens = useMemo(() => activeAllergenWindows(allergenWindows), [allergenWindows]);
 
@@ -411,8 +434,33 @@ export default function AnalyticsDashboard() {
         viewId: "training",
       });
     }
+    const activeProjects = projects.filter((p) => !p.closed);
+    const noCoords = activeProjects.filter(
+      (p) => !(p.lat != null && p.lng != null && String(p.lat).trim() !== "" && String(p.lng).trim() !== "")
+    ).length;
+    if (noCoords > 0) {
+      items.push({
+        key: "projects-no-coords",
+        severity: "med",
+        text: `${noCoords} active project(s) have no map coordinates — add postcode or KML in Workers.`,
+        viewId: "workers",
+      });
+    }
+    const missingPermitProjects = activeProjects.filter((p) => missingRequiredPermits(p, permits).length > 0);
+    if (missingPermitProjects.length > 0) {
+      const names = missingPermitProjects
+        .slice(0, 2)
+        .map((p) => p.name || "Site")
+        .join(", ");
+      items.push({
+        key: "projects-missing-permits",
+        severity: "med",
+        text: `${missingPermitProjects.length} project(s) still need default permits (${names}${missingPermitProjects.length > 2 ? "…" : ""}).`,
+        viewId: "permits",
+      });
+    }
     return items;
-  }, [workers, permits, rams, snags, trainingExpiring60]);
+  }, [workers, permits, rams, snags, trainingExpiring60, projects]);
 
   const hotWorkActive = hotWork.filter((h) => h.status === "active").length;
   const org = getOrgSettings();
@@ -756,7 +804,7 @@ export default function AnalyticsDashboard() {
   );
 
   return (
-    <div className="app-dashboard">
+    <div className="app-dashboard" style={branding.cssVars}>
       {orgShowsIndustrialMoreModules() && activeAllergens.length > 0 ? (
         <div
           style={{
@@ -842,6 +890,14 @@ export default function AnalyticsDashboard() {
                 style={{ ...ms.btn, fontSize: 11, padding: "6px 10px", fontWeight: 600, borderColor: "#0f766e", background: "var(--color-accent-muted,#ecfdf5)", color: "#0f766e" }}
               >
                 {pdfExporting === "print" ? "Preparing…" : "PDF · Print"}
+              </button>
+              <button
+                type="button"
+                data-no-dashboard-pdf
+                onClick={() => setDashCustomizeOpen((v) => !v)}
+                style={{ ...ms.btn, fontSize: 11, padding: "6px 10px", fontWeight: 600 }}
+              >
+                {dashCustomizeOpen ? "Done" : "Customize"}
               </button>
               <button
                 type="button"
@@ -989,6 +1045,114 @@ export default function AnalyticsDashboard() {
         }
       />
 
+      {dashCustomizeOpen ? (
+        <div data-no-dashboard-pdf className="app-dashboard-customize">
+          <div className="app-dashboard-customize__title">Dashboard widgets</div>
+          <div className="app-dashboard-customize__grid">
+            {widgetOrder.map((id, idx) => {
+              const w = DASHBOARD_WIDGETS.find((x) => x.id === id);
+              if (!w) return null;
+              return (
+                <div
+                  key={w.id}
+                  className={`app-dashboard-customize__row${dragWidgetId === w.id ? " app-dashboard-customize__row--drag" : ""}`}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("text/plain", w.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    setDragWidgetId(w.id);
+                  }}
+                  onDragEnd={() => setDragWidgetId(null)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const dragId = e.dataTransfer.getData("text/plain") || dragWidgetId;
+                    if (dragId && dragId !== w.id) {
+                      const next = reorderWidget(dashLayout, dragId, w.id);
+                      setDashLayout(next);
+                      saveDashboardLayout(next);
+                    }
+                    setDragWidgetId(null);
+                  }}
+                >
+                  <span className="app-dashboard-customize__handle" aria-hidden title="Drag to reorder">
+                    ⠿
+                  </span>
+                  <label className="app-dashboard-customize__label">
+                    <input
+                      type="checkbox"
+                      checked={showWidget(w.id)}
+                      onChange={() => {
+                        const next = setWidgetVisible(dashLayout, w.id, !showWidget(w.id));
+                        setDashLayout(next);
+                        saveDashboardLayout(next);
+                      }}
+                      style={{ accentColor: branding.primaryColor }}
+                    />
+                    {w.label}
+                  </label>
+                  <span className="app-dashboard-customize__order">
+                    <button
+                      type="button"
+                      aria-label={`Move ${w.label} up`}
+                      disabled={idx === 0}
+                      onClick={() => {
+                        const next = moveWidgetInOrder(dashLayout, w.id, "up");
+                        setDashLayout(next);
+                        saveDashboardLayout(next);
+                      }}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${w.label} down`}
+                      disabled={idx === widgetOrder.length - 1}
+                      onClick={() => {
+                        const next = moveWidgetInOrder(dashLayout, w.id, "down");
+                        setDashLayout(next);
+                        saveDashboardLayout(next);
+                      }}
+                    >
+                      ↓
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="app-dashboard-ordered" style={{ display: "flex", flexDirection: "column" }}>
+
+      {showWidget("project_command_center") ? (
+        <div style={{ order: widgetSortOrder("project_command_center") }}>
+          <ProjectCommandCenter
+            projects={projects}
+            rams={rams}
+            permits={permits}
+            surveyReports={surveyReports}
+          />
+        </div>
+      ) : null}
+
+      {showWidget("project_hub") ? (
+        <div style={{ order: widgetSortOrder("project_hub") }}>
+        <ProjectHubCard
+          projects={projects}
+          rams={rams}
+          permits={permits}
+          surveyReports={surveyReports}
+        />
+        </div>
+      ) : null}
+
+      {showWidget("workplace_today") ? (
+      <div style={{ order: widgetSortOrder("workplace_today") }}>
       <WorkplaceTodayCard
         activePermits={permitStats.active}
         permitsNeedAttention={permitStats.expired}
@@ -1003,8 +1167,11 @@ export default function AnalyticsDashboard() {
           severity: it.severity === "urgent" ? "danger" : it.severity === "warn" ? "warning" : "info",
         }))}
       />
+      </div>
+      ) : null}
 
-      {actionNeededItems.length > 0 && (
+      {showWidget("action_needed") && actionNeededItems.length > 0 && (
+        <div style={{ order: widgetSortOrder("action_needed") }}>
         <div
           className={`app-dashboard-action-strip${actionNeededItems.every((i) => i.severity === "calm") ? " app-dashboard-action-strip--calm" : ""}`}
         >
@@ -1020,11 +1187,14 @@ export default function AnalyticsDashboard() {
             ))}
           </ul>
         </div>
+        </div>
       )}
 
+      {showWidget("overview_metrics") ? (
+      <div style={{ order: widgetSortOrder("overview_metrics") }}>
       <Section title="Overview">
         <p className="app-dashboard-section__hint">Tap a tile to open the related module.</p>
-        <div className="app-dashboard-metrics-grid">
+        <div className="app-dashboard-metrics-grid app-dashboard-stagger">
           {[
             { label: "Workers", value: workers.length, sub: "registered", viewId: "workers", tone: "teal" },
             { label: "Active projects", value: projects.filter((p) => !p.closed).length, sub: "projects", viewId: "workers", tone: "sky" },
@@ -1051,7 +1221,12 @@ export default function AnalyticsDashboard() {
           ))}
         </div>
       </Section>
+      </div>
+      ) : null}
 
+      {showWidget("charts") || showWidget("compliance") ? (
+      <div style={{ order: widgetSortOrder(showWidget("charts") ? "charts" : "compliance") }}>
+      <>
       <div className="app-dashboard-analytics-grid">
         <div className="app-dashboard-card app-dashboard-score-card">
           <div className="app-dashboard-card__title">Compliance score</div>
@@ -1230,8 +1405,12 @@ export default function AnalyticsDashboard() {
           </div>
         </div>
       </div>
+      </>
       </div>
+      ) : null}
 
+      {showWidget("projects_today") ? (
+      <div style={{ order: widgetSortOrder("projects_today") }}>
       <Section
         title="Sites & projects today"
         action={
@@ -1288,8 +1467,11 @@ export default function AnalyticsDashboard() {
           </p>
         ) : null}
       </Section>
+      </div>
+      ) : null}
 
-      {dashboardReminders.length > 0 ? (
+      {showWidget("reminders") && dashboardReminders.length > 0 ? (
+        <div style={{ order: widgetSortOrder("reminders") }}>
         <Section title="Reminders">
           <ul className="app-dashboard-reminder-list">
             {dashboardReminders.map((r) => (
@@ -1305,8 +1487,11 @@ export default function AnalyticsDashboard() {
             ))}
           </ul>
         </Section>
+        </div>
       ) : null}
 
+      {showWidget("shortcuts") ? (
+      <div style={{ order: widgetSortOrder("shortcuts") }}>
       <Section title="Shortcuts">
         <div className="app-dashboard-shortcuts">
           {shortcutRows.map((row) => (
@@ -1328,32 +1513,11 @@ export default function AnalyticsDashboard() {
           ) : null}
         </div>
       </Section>
+      </div>
+      ) : null}
 
-      {isLead && (
-        <div className="app-dashboard-callout">
-          <strong>For managers</strong> — cross-check the{" "}
-          <button type="button" onClick={() => openWorkspaceView({ viewId: "audit" })}>
-            Audit log
-          </button>{" "}
-          after incidents or permit changes, export backups from{" "}
-          <button type="button" onClick={() => openWorkspaceView({ viewId: "backup" })}>
-            Backup
-          </button>
-          {caps.orgSettings ? (
-            <>
-              , and keep{" "}
-              <button type="button" onClick={() => openWorkspaceSettings({ tab: "invites" })}>
-                invites
-              </button>{" "}
-              up to date.
-            </>
-          ) : (
-            "."
-          )}
-        </div>
-      )}
-
-      {!onboardingDismissed && (
+      {!onboardingDismissed && showWidget("getting_started") ? (
+        <div style={{ order: widgetSortOrder("getting_started") }}>
         <Section
           title="Getting started checklist"
           action={
@@ -1578,7 +1742,35 @@ export default function AnalyticsDashboard() {
             </div>
           </div>
         </Section>
+        </div>
+      ) : null}
+
+      </div>
+
+      {isLead && (
+        <div className="app-dashboard-callout">
+          <strong>For managers</strong> — cross-check the{" "}
+          <button type="button" onClick={() => openWorkspaceView({ viewId: "audit" })}>
+            Audit log
+          </button>{" "}
+          after incidents or permit changes, export backups from{" "}
+          <button type="button" onClick={() => openWorkspaceView({ viewId: "backup" })}>
+            Backup
+          </button>
+          {caps.orgSettings ? (
+            <>
+              , and keep{" "}
+              <button type="button" onClick={() => openWorkspaceSettings({ tab: "invites" })}>
+                invites
+              </button>{" "}
+              up to date.
+            </>
+          ) : (
+            "."
+          )}
+        </div>
       )}
+      </div>
 
       <div className="app-panel-surface app-dashboard-footnote">
         All metrics are calculated live from your organisation&apos;s data. No data is shared between organisations. Dates and short dates follow your browser

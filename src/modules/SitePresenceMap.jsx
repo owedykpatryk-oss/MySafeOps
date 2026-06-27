@@ -10,6 +10,7 @@ import { pushAudit } from "../utils/auditLog";
 import PageHero from "../components/PageHero";
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { presenceFromTodaysBriefing } from "../utils/briefingToPresence";
+import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -178,6 +179,18 @@ export default function SitePresenceMap() {
     plotted.forEach((p) => {
       const lat = Number(p.lat);
       const lng = Number(p.lng);
+      const boundary = parseProjectBoundaryRing(p);
+      if (boundary) {
+        L.polygon(boundary, {
+          color: "#0d9488",
+          weight: 2,
+          fillColor: "#14b8a6",
+          fillOpacity: 0.08,
+        })
+          .addTo(layer)
+          .bindPopup(`<strong>${escapeHtml(p.name || "Project")}</strong><br/>Site boundary`);
+        boundary.forEach(([blat, blng]) => bounds.push([blat, blng]));
+      }
       const here = workers.filter((w) => presence[w.id]?.projectId === p.id);
       const lines = here.map((w) => {
         const pr = presence[w.id];

@@ -58,7 +58,20 @@ import {
   buildPlanOverlayRecord,
   addPlanEmergencyAsset,
   addPlanEscapeRoute,
+  PLAN_UPLOAD_ACCEPT,
+  readPlanUploadFile,
+  planDisplaySrc,
 } from "./permitPlanOverlayRegistry";
+import PlanOverlaySvg, { EmergencyAssetMarkers } from "../../components/plans/PlanOverlaySvg";
+import { rasterizePdfDataUrl } from "../../utils/planPdfRaster";
+import { getPermitStatusMeta } from "../../utils/statusChipMeta";
+import StatusChip from "../../components/StatusChip";
+import EmptyState from "../../components/EmptyState";
+import {
+  buildPermitDraftFromProject,
+  missingRequiredPermits,
+  requiredPermitTypesForProject,
+} from "./permitProjectDefaults";
 import {
   PROJECT_DRAWING_OBJECT_TYPES,
   drawingObjectLabel,
@@ -229,16 +242,6 @@ function collectSlaSignalsForPermit(permit, nowTs) {
     }
   });
   return signals;
-}
-
-function getPermitStatusMeta(derived) {
-  if (derived === "closed") return { label: "Closed", bg: "var(--color-background-secondary,#f7f7f5)", color: "var(--color-text-secondary)", icon: "●" };
-  if (derived === "expired") return { label: "Expired", bg: "#FCEBEB", color: "#791F1F", icon: "!" };
-  if (derived === "draft") return { label: "Draft", bg: "#FAEEDA", color: "#633806", icon: "•" };
-  if (derived === "pending_review") return { label: "In review", bg: "#FAEEDA", color: "#633806", icon: "◔" };
-  if (derived === "suspended") return { label: "Suspended", bg: "#FCEBEB", color: "#791F1F", icon: "⏸" };
-  if (derived === "approved") return { label: "Approved", bg: "#E6F1FB", color: "#0C447C", icon: "✓" };
-  return { label: "Active", bg: "#EAF3DE", color: "#27500A", icon: "▶" };
 }
 
 function permitWorkflowRail(derived) {
@@ -644,9 +647,6 @@ const DEFAULT_WORKFLOW_ROLE_POLICY = {
 };
 const WORKFLOW_STATES = Object.keys(DEFAULT_PERMIT_WORKFLOW_POLICY);
 const WORKFLOW_ROLES = ["admin", "supervisor", "operative"];
-const PLAN_UPLOAD_ACCEPT = "image/png,image/jpeg,image/webp,application/pdf";
-const PLAN_UPLOAD_MIME = new Set(["image/png", "image/jpeg", "image/webp", "application/pdf"]);
-const PLAN_UPLOAD_MAX_BYTES = 2 * 1024 * 1024;
 
 function auditActionLabel(row) {
   if (!row) return "Updated";
@@ -2085,6 +2085,40 @@ function PermitForm({
               <option value="">— Select project —</option>
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+            {form.projectId ? (() => {
+              const project = projects.find((p) => p.id === form.projectId);
+              const required = requiredPermitTypesForProject(project);
+              const missing = missingRequiredPermits(project, allPermits);
+              if (!required.length) return null;
+              return (
+                <div style={{ marginTop: 8, padding: 8, borderRadius: 8, background: "#f8fafc", border: "1px solid #e2e8f0", fontSize: 12 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Project permit flow ({required.length - missing.length}/{required.length} on file)</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {required.map((pt) => {
+                      const done = !missing.includes(pt);
+                      const label = (permitTypes[pt] || permitTypes.general)?.label || pt;
+                      return (
+                        <button
+                          key={pt}
+                          type="button"
+                          style={{
+                            ...ss.btn,
+                            fontSize: 11,
+                            padding: "4px 8px",
+                            borderColor: done ? "#86efac" : "#0d9488",
+                            background: done ? "#f0fdf4" : "#f0fdfa",
+                            color: done ? "#166534" : "#0f766e",
+                          }}
+                          onClick={() => setType(pt)}
+                        >
+                          {done ? "✓ " : "+ "}{label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })() : null}
           </div>
           ) : null}
           {isFieldVisible("issuedTo") ? (
@@ -3016,6 +3050,7 @@ function PermitCard({
   onClose,
   onReopen,
   onDelete,
+  onDuplicate,
   onPreview,
   onPrint,
   onApprove,
@@ -3177,10 +3212,7 @@ function PermitCard({
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
             <span style={{ fontWeight:600, fontSize:headerFontSize, overflowWrap:"anywhere" }}>{def.label}</span>
-            <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:statusMeta.bg, color:statusMeta.color, display:"inline-flex", alignItems:"center", gap:6 }}>
-              <span aria-hidden>{statusMeta.icon}</span>
-              {statusMeta.label}
-            </span>
+            <StatusChip meta={statusMeta} />
             {simopsConflicts.length > 0 && (
               <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:"#FCEBEB", color:"#791F1F" }} title="Overlapping permits at this location">
                 SIMOPS ×{simopsConflicts.length}
@@ -3333,6 +3365,9 @@ function PermitCard({
             </button>
           ) : null}
           <button onClick={()=>onEdit(permit)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>Edit</button>
+          {onDuplicate ? (
+            <button onClick={()=>onDuplicate(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>Duplicate</button>
+          ) : null}
           {(permit.status==="pending_review" || permit.status==="ready_for_review") && (
             <>
               <button type="button" onClick={()=>onApprove?.(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>Approve</button>
@@ -3827,6 +3862,15 @@ export default function PermitSystem() {
       const timer = setTimeout(() => setHighlightPermitId(null), 8000);
       return () => clearTimeout(timer);
     }
+    if (t?.viewId === "permits" && t.projectId) {
+      const projs = load("mysafeops_projects", []);
+      const project = projs.find((p) => p.id === t.projectId);
+      if (project && (t.action === "issueFromDefaults" || t.action === "issue")) {
+        const draft = buildPermitDraftFromProject(project, null, { allPermits: load("permits_v2", []) });
+        setModal({ type: "form", data: draft });
+      }
+      if (project) setPlanProjectId(String(project.id));
+    }
     return undefined;
   }, []);
 
@@ -4130,6 +4174,37 @@ export default function PermitSystem() {
       return existing ? prev.map((x) => (x.id === p.id ? next : x)) : [next, ...prev];
     });
     setModal(null);
+  };
+
+  const duplicatePermit = (source) => {
+    if (!source) return;
+    const copy = normalizeAdvancedPermit(
+      {
+        ...JSON.parse(JSON.stringify(source)),
+        id: genId(),
+        status: "draft",
+        closedAt: undefined,
+        approvedAt: undefined,
+        activatedAt: undefined,
+        suspendedAt: undefined,
+        shareToken: undefined,
+        auditLog: [],
+        versionHistory: [],
+        notificationLog: [],
+        workflow: { state: "draft", history: [] },
+        signatures: [],
+        revalidationLog: [],
+        integrationQueue: [],
+        conflictWarnOverride: null,
+        createdAt: new Date().toISOString(),
+        startDateTime: new Date().toISOString(),
+        endDateTime: new Date(Date.now() + (Number(permitFormDefaults.defaultValidityHours) || 8) * 3600000).toISOString(),
+        notes: source.notes ? `${source.notes}\n\n(Duplicated ${new Date().toLocaleDateString("en-GB")})` : `(Duplicated ${new Date().toLocaleDateString("en-GB")})`,
+      },
+      source.type || "general"
+    );
+    setPermits((prev) => [copy, ...prev]);
+    setModal({ type: "form", data: copy });
   };
 
   const closePermit = (id, lessonsLearned) => {
@@ -5847,34 +5922,29 @@ export default function PermitSystem() {
     trackEvent("permit_incident_action_added", { incidentId });
   };
 
-  const uploadProjectPlan = (projectId, file) =>
-    new Promise((resolve, reject) => {
-      const normalizedType = String(file?.type || "").toLowerCase();
-      if (!PLAN_UPLOAD_MIME.has(normalizedType)) {
-        reject(new Error("Only PNG, JPG, WEBP or PDF plans are supported."));
-        return;
+  const uploadProjectPlan = async (projectId, file) => {
+    try {
+      const raw = await readPlanUploadFile(file);
+      let rasterDataUrl = "";
+      if (String(raw.mimeType).toLowerCase().includes("pdf")) {
+        rasterDataUrl = (await rasterizePdfDataUrl(raw.dataUrl)) || "";
       }
-      if (Number(file?.size || 0) > PLAN_UPLOAD_MAX_BYTES) {
-        reject(new Error("Plan file is too large. Use files up to 2 MB."));
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const rec = buildPlanOverlayRecord({
-          projectId,
-          name: file.name,
-          mimeType: file.type || "application/octet-stream",
-          dataUrl: String(reader.result || ""),
-          uploadedBy: "local-user",
-        });
-        setProjectPlans((prev) => [rec, ...prev].slice(0, 120));
-        setSelectedPlanId(rec.id);
-        trackEvent("permit_plan_uploaded", { projectId, mimeType: rec.mimeType });
-        resolve(rec);
-      };
-      reader.onerror = () => reject(new Error("Could not read file"));
-      reader.readAsDataURL(file);
-    });
+      const rec = buildPlanOverlayRecord({
+        projectId,
+        name: raw.name,
+        mimeType: raw.mimeType,
+        dataUrl: raw.dataUrl,
+        uploadedBy: "local-user",
+        rasterDataUrl,
+      });
+      setProjectPlans((prev) => [rec, ...prev].slice(0, 120));
+      setSelectedPlanId(rec.id);
+      trackEvent("permit_plan_uploaded", { projectId, mimeType: rec.mimeType });
+      return rec;
+    } catch (e) {
+      throw e instanceof Error ? e : new Error("Could not read file");
+    }
+  };
 
   const appendEmergencyAsset = (planId) => {
     const plan = projectPlans.find((p) => p.id === planId);
@@ -6634,51 +6704,23 @@ export default function PermitSystem() {
           const plan = projectPlans.find((p) => p.id === selectedPlanId);
           if (!plan) return <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>Upload JPG/PDF plan and select it to preview.</div>;
           const planPins = incidents.filter((i) => i.planPin?.planId === plan.id);
-          if (String(plan.mimeType || "").toLowerCase().includes("pdf")) {
+          const markSrc = planDisplaySrc(plan);
+          if (!markSrc) {
             return (
-              <div style={{ fontSize:12 }}>
-                <a href={plan.dataUrl} target="_blank" rel="noreferrer">Open PDF plan</a>
-                <div style={{ color:"var(--color-text-secondary)", marginTop:4 }}>
-                  {planPins.length} pinned incident(s) · {(plan.escapeRoutes || []).length} route(s) · {(plan.emergencyAssets || []).length} emergency asset(s).
-                </div>
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                PDF saved. Open in{" "}
+                <a href={plan.dataUrl} target="_blank" rel="noreferrer">
+                  new tab
+                </a>{" "}
+                or use Project drawings for click marking (escape routes, zones).
               </div>
             );
           }
           return (
             <div style={{ position:"relative", border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:8, background:"var(--color-background-secondary,#f7f7f5)" }}>
-              <img src={plan.dataUrl} alt={plan.name} style={{ width:"100%", maxHeight:360, objectFit:"contain", borderRadius:6 }} />
-              <svg
-                width="100%"
-                height="100%"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-                style={{ position:"absolute", inset:8, width:"calc(100% - 16px)", height:"calc(100% - 16px)", pointerEvents:"none" }}
-              >
-                {(plan.escapeRoutes || []).map((r) => (
-                  <g key={r.id}>
-                    <line x1={r.startX} y1={r.startY} x2={r.endX} y2={r.endY} stroke="#0C447C" strokeWidth="0.9" strokeDasharray="1.5 1.2" />
-                    <circle cx={r.endX} cy={r.endY} r="1.2" fill="#0C447C" />
-                  </g>
-                ))}
-              </svg>
-              {(plan.emergencyAssets || []).map((a) => (
-                <div
-                  key={a.id}
-                  title={`${a.kind}${a.label ? ` · ${a.label}` : ""}`}
-                  style={{
-                    position:"absolute",
-                    left:`${a.x}%`,
-                    top:`${a.y}%`,
-                    transform:"translate(-50%,-50%)",
-                    width:12,
-                    height:12,
-                    borderRadius:3,
-                    background:"#14532d",
-                    border:"2px solid #fff",
-                    boxShadow:"0 0 0 1px #14532d",
-                  }}
-                />
-              ))}
+              <img src={markSrc} alt={plan.name} style={{ width:"100%", maxHeight:360, objectFit:"contain", borderRadius:6 }} />
+              <PlanOverlaySvg plan={plan} />
+              <EmergencyAssetMarkers plan={plan} />
               {planPins.map((inc) => (
                 <div
                   key={inc.id}
@@ -6701,6 +6743,7 @@ export default function PermitSystem() {
                 <div>Red dot: incident</div>
                 <div>Green square: emergency asset</div>
                 <div>Blue dashed: escape route</div>
+                <div>Red fill: blocked zone</div>
               </div>
             </div>
           );
@@ -7991,12 +8034,14 @@ export default function PermitSystem() {
       )}
 
       {permits.length===0 ? (
-        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, background:"var(--permit-panel-bg)" }}>
-          <div style={{ fontSize:28, lineHeight:1, marginBottom:10 }}>[]</div>
-          <p style={{ color:"var(--color-text-primary)", fontSize:14, fontWeight:600, margin:"0 0 6px" }}>No permits yet</p>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>Create your first permit to start review, activation, and compliance workflows.</p>
-          <button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnO}>+ Issue first permit</button>
-        </div>
+        <EmptyState
+          icon="📋"
+          title="No permits yet"
+          description="Create your first permit to start review, activation, and compliance workflows."
+          actionLabel="+ Issue first permit"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : listSkeleton && permits.length > 0 ? (
         <div style={{ display:"grid", gap:10, marginBottom:12 }}>
           {[0, 1, 2].map((i) => (
@@ -8005,13 +8050,21 @@ export default function PermitSystem() {
           <style>{`@keyframes permitSkeletonPulse{0%{background-position:100% 0}100%{background-position:0 0}}`}</style>
         </div>
       ) : filtered.length===0 ? (
-        <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, background:"var(--permit-panel-bg)" }}>
-          <p style={{ color:"var(--color-text-primary)", fontSize:14, fontWeight:600, margin:"0 0 6px" }}>No results for current filters</p>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, margin:"0 0 10px" }}>Try clearing status/type filters or adjusting search text.</p>
-          <button type="button" onClick={()=>{setSearch("");setFilterType("");setFilterStatus("");setFilterHandoverDue(false);setFilterBlockedNow(false);}} style={{ ...ss.btn, fontSize:12 }}>
-            Clear filters
-          </button>
-        </div>
+        <EmptyState
+          icon="🔍"
+          title="No results for current filters"
+          description="Try clearing status/type filters or adjusting search text."
+          actionLabel="Clear filters"
+          onAction={() => {
+            setSearch("");
+            setFilterType("");
+            setFilterStatus("");
+            setFilterHandoverDue(false);
+            setFilterBlockedNow(false);
+          }}
+          variant="dashed"
+          compact
+        />
       ) : effectiveViewMode === "wall" ? (
         <PermitLiveWall
           permits={filtered}
@@ -8072,6 +8125,7 @@ export default function PermitSystem() {
               onClose={requestClosePermit}
               onReopen={reopenPermit}
               onDelete={deletePermit}
+              onDuplicate={duplicatePermit}
               onPreview={previewPermit}
               onPrint={exportPermitPdf}
               onApprove={approvePermit}
@@ -8155,6 +8209,7 @@ export default function PermitSystem() {
             onEdit={p=>setModal({type:"form",data:p})}
             onClose={requestClosePermit} onReopen={reopenPermit}
             onDelete={deletePermit}
+            onDuplicate={duplicatePermit}
             onPreview={previewPermit}
             onPrint={exportPermitPdf}
             onApprove={approvePermit}

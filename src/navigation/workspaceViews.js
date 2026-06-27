@@ -58,6 +58,7 @@ export const workspaceViewLoaders = {
   "water-hygiene": () => import("../modules/WaterHygieneLog"),
   analytics: () => import("../components/AnalyticsDashboard"),
   "monthly-report": () => import("../modules/MonthlyReport"),
+  "survey-report": () => import("../modules/surveyReport/SurveyReport"),
   waste: () => import("../modules/WasteRegister"),
   templates: () => import("../modules/DocumentTemplates"),
   // AI generators hidden from More nav until prebuilt packs ship (routes kept for later).

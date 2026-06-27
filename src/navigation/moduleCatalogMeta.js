@@ -83,6 +83,16 @@ export const MODULE_PDF_REGISTRY = {
   "allergen-changeovers": { key: "allergen_changeover_windows", columns: [{ k: "label", l: "Window" }, { k: "fromAllergen", l: "From" }, { k: "toAllergen", l: "To" }, { k: "startAt", l: "Start" }] },
   "gmp-deviations": { key: "gmp_deviation_log", columns: [{ k: "ref", l: "Ref" }, { k: "title", l: "Title" }, { k: "status", l: "Status" }, { k: "openedAt", l: "Opened" }] },
   audit: { key: "mysafeops_audit", columns: [{ k: "at", l: "When" }, { k: "action", l: "Action" }, { k: "entity", l: "Entity" }, { k: "detail", l: "Detail" }] },
+  "survey-report": {
+    key: "survey_reports",
+    columns: [
+      { k: "ref", l: "Ref" },
+      { k: "title", l: "Title" },
+      { k: "status", l: "Status" },
+      { k: "surveyDate", l: "Date" },
+      { k: "surveyor", l: "Surveyor" },
+    ],
+  },
 };
 
 export function canExportModulePdf(moduleId) {

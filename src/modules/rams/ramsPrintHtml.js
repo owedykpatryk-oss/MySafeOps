@@ -1399,6 +1399,22 @@ export function generateRamsProjectPackHTML(form, rows, workers, projects, permi
 }
 
 /**
+ * Build RAMS A4 HTML for iframe preview (same output as print window).
+ */
+export function buildRamsPreviewHtml(form, rows, workers, projects) {
+  const safeForm = form && typeof form === "object" ? form : {};
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const safeWorkers = Array.isArray(workers) ? workers : [];
+  const safeProjects = Array.isArray(projects) ? projects : [];
+  const workerMap = Object.fromEntries(safeWorkers.map((w) => [w.id, w.name]));
+  const operatives = (Array.isArray(safeForm.operativeIds) ? safeForm.operativeIds : []).map((id) => workerMap[id]).filter(Boolean);
+  const projectMap = Object.fromEntries(safeProjects.map((p) => [p.id, p.name]));
+  const pf = normalizePrintSections(safeForm.printSections);
+  const fp = computeRamsFingerprint(safeForm, safeRows);
+  return generatePrintHTML(safeForm, safeRows, operatives, projectMap, pf, fp, safeWorkers);
+}
+
+/**
  * Open RAMS (or RAMS+permits pack) in a new window.
  * @param options.print If true, open the system print dialog (save as PDF from there).
  * @param options.permits Optional permits list (e.g. same projectId as RAMS) to append after RAMS.

@@ -81,6 +81,82 @@ export function parseGeoJsonPoints(text) {
   return out;
 }
 
+function parseCoordTriples(text) {
+  return String(text || "")
+    .trim()
+    .split(/\s+/)
+    .map((tok) => {
+      const parts = tok.split(",").map((x) => parseFloat(x.trim()));
+      if (parts.length < 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1])) return null;
+      return { lng: clampLng(parts[0]), lat: clampLat(parts[1]) };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Parse KML polygons, line strings and points from Placemarks.
+ * @returns {{ polygons: { name: string, ring: { lat: number, lng: number }[] }[], lineStrings: { name: string, points: { lat: number, lng: number }[] }[], points: { name: string, lat: number, lng: number }[] }}
+ */
+export function parseKmlGeometry(xmlText) {
+  const doc = new DOMParser().parseFromString(String(xmlText || ""), "text/xml");
+  if (doc.querySelector("parsererror")) {
+    return { polygons: [], lineStrings: [], points: [] };
+  }
+  const polygons = [];
+  const lineStrings = [];
+  const points = [];
+  const placemarks = doc.getElementsByTagName("Placemark");
+  for (let i = 0; i < placemarks.length; i++) {
+    const pm = placemarks[i];
+    const name = pm.getElementsByTagName("name")[0]?.textContent?.trim() || "";
+    const polygonEl = pm.getElementsByTagName("Polygon")[0];
+    if (polygonEl) {
+      const coordEl = polygonEl.getElementsByTagName("coordinates")[0];
+      const ring = parseCoordTriples(coordEl?.textContent);
+      if (ring.length >= 3) polygons.push({ name, ring });
+      continue;
+    }
+    const lineEl = pm.getElementsByTagName("LineString")[0];
+    if (lineEl) {
+      const coordEl = lineEl.getElementsByTagName("coordinates")[0];
+      const pts = parseCoordTriples(coordEl?.textContent);
+      if (pts.length >= 2) lineStrings.push({ name, points: pts });
+      continue;
+    }
+    const pointEl = pm.getElementsByTagName("Point")[0];
+    if (pointEl) {
+      const coordEl = pointEl.getElementsByTagName("coordinates")[0];
+      const pts = parseCoordTriples(coordEl?.textContent);
+      if (pts[0]) points.push({ name, lat: pts[0].lat, lng: pts[0].lng });
+    }
+  }
+  return { polygons, lineStrings, points };
+}
+
+/**
+ * Build project boundary fields from parsed KML geometry (uses largest polygon).
+ */
+export function boundaryFromKmlGeometry(geom, { sourceName = "KML import" } = {}) {
+  const polys = geom?.polygons || [];
+  if (!polys.length) return null;
+  const primary =
+    polys.reduce((best, p) => (p.ring.length > (best?.ring?.length || 0) ? p : best), polys[0]) || polys[0];
+  const features = polys.map((p, idx) => ({
+    type: "Feature",
+    properties: { name: p.name || `Boundary ${idx + 1}` },
+    geometry: {
+      type: "Polygon",
+      coordinates: [p.ring.map(({ lng, lat }) => [lng, lat])],
+    },
+  }));
+  return {
+    boundaryGeoJson: { type: "FeatureCollection", features },
+    boundaryPoints: primary.ring.map(({ lat, lng }) => ({ lat, lng })),
+    boundarySource: sourceName,
+    boundaryName: primary.name || "Site boundary",
+  };
+}
+
 export function parseGpxPoints(xmlText) {
   const doc = new DOMParser().parseFromString(String(xmlText || ""), "text/xml");
   if (doc.querySelector("parsererror")) return [];

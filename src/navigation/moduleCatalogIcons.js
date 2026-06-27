@@ -110,6 +110,7 @@ export const MODULE_ICONS = {
   "gmp-deviations": Microscope,
   analytics: BarChart3,
   "monthly-report": Calendar,
+  "survey-report": ClipboardList,
   templates: LayoutTemplate,
   "ai-rams": Bot,
   "ai-toolbox": Bot,

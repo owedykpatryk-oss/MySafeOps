@@ -36,6 +36,7 @@ import { isSupabaseConfigured } from "../lib/supabase";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import ProjectDrawingGeoMap from "./ProjectDrawingGeoMap";
 import ProjectDrawingMapCanvas from "./ProjectDrawingMapCanvas";
+import ProjectSitePlanPanel from "./ProjectSitePlanPanel";
 
 const pdeUi = {
   toolWrap: {
@@ -222,7 +223,28 @@ export default function ProjectDrawingEditor() {
     load,
     save: saveOrgScoped,
   });
+  const refreshProjectPlans = useCallback(() => {
+    setProjectPlans(listProjectPlans());
+  }, []);
+
   const [projectPlans, setProjectPlans] = useState(() => listProjectPlans());
+
+  const currentProject = useMemo(
+    () => projects.find((p) => p.id === projectId) || null,
+    [projects, projectId]
+  );
+
+  const updateProjectRecord = useCallback(
+    (updated) => {
+      if (!updated?.id) return;
+      setProjects((prev) => {
+        const next = prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+        saveOrgScoped("mysafeops_projects", next);
+        return next;
+      });
+    },
+    [setProjects]
+  );
   const [rows, setRows] = useState(() => listProjectDrawingObjects());
   const [projectId, setProjectId] = useState("");
   const [planId, setPlanId] = useState("");
@@ -1596,6 +1618,19 @@ export default function ProjectDrawingEditor() {
           </div>
         ) : null}
 
+        {projectId ? (
+          <div style={{ marginTop: 16 }}>
+            <ProjectSitePlanPanel
+              projectId={projectId}
+              project={currentProject}
+              onProjectUpdate={updateProjectRecord}
+              selectedPlanId={planId}
+              onSelectPlanId={setPlanId}
+              onPlansChanged={refreshProjectPlans}
+            />
+          </div>
+        ) : null}
+
         <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", letterSpacing: "0.04em" }}>SURFACE</span>
           <div style={pdeUi.toolWrap} role="tablist" aria-label="Work surface">
@@ -1606,7 +1641,7 @@ export default function ProjectDrawingEditor() {
               disabled={!canUsePlanSurface}
               style={{ ...pdeUi.toolBtn(workSurface === "plan"), opacity: canUsePlanSurface ? 1 : 0.5 }}
               onClick={() => canUsePlanSurface && setWorkSurface("plan")}
-              title={!canUsePlanSurface ? "Upload a plan in Permits first" : "Work on PDF or image overlay"}
+              title={!canUsePlanSurface ? "Upload a plan below (PDF or JPG)" : "Work on PDF or image overlay"}
             >
               Plan (PDF / image)
             </button>
@@ -2115,7 +2150,7 @@ export default function ProjectDrawingEditor() {
             </div>
           ) : !selectedPlan ? (
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Select a project and upload a plan in Permits, or switch to Map (GPS) to work without a drawing.
+              Select a project and upload a plan above, or switch to Map (GPS) to work without a drawing.
             </div>
           ) : String(selectedPlan.mimeType || "").toLowerCase().includes("pdf") ? (
             <div style={{ fontSize: 12 }}>
