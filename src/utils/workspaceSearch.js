@@ -1,6 +1,7 @@
 import { loadOrgScoped as load } from "./orgStorage";
 import { MORE_TABS, NAV_TAB_IDS } from "../navigation/appModules";
 import { PERMIT_TYPES } from "../modules/permits/permitTypes";
+import { getHiddenModuleIds, isModuleVisible } from "./hiddenModules";
 
 function normaliseQ(s) {
   return String(s || "")
@@ -22,6 +23,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
   const recentModuleIds = Array.isArray(options.recentModuleIds) ? options.recentModuleIds.filter(Boolean) : [];
   const pinSet = new Set(pinnedModuleIds);
   const recentSet = new Set(recentModuleIds);
+  const hiddenModules = getHiddenModuleIds();
   const q = normaliseQ(rawQuery);
 
   /** @param {{ viewId: string }} h */
@@ -41,7 +43,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     const out = [];
     for (const id of pinnedModuleIds) {
       const t = byId[id];
-      if (!t || seen.has(id)) continue;
+      if (!t || seen.has(id) || !isModuleVisible(id, { hiddenModules })) continue;
       seen.add(id);
       out.push({
         key: `pin-${id}`,
@@ -54,7 +56,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     for (const id of recentModuleIds) {
       if (seen.has(id) || pinSet.has(id)) continue;
       const t = byId[id];
-      if (!t) continue;
+      if (!t || !isModuleVisible(id, { hiddenModules })) continue;
       seen.add(id);
       out.push({
         key: `recent-${id}`,
@@ -76,6 +78,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     moduleIds.add(t.id);
     const label = (t.label || "").toLowerCase();
     const id = t.id.toLowerCase().replace(/-/g, " ");
+    if (!isModuleVisible(t.id, { hiddenModules })) continue;
     if (label.includes(q) || id.includes(q)) {
       hits.push({
         key: `mod-${t.id}`,
@@ -88,6 +91,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
   }
   for (const t of MORE_TABS) {
     if (moduleIds.has(t.id)) continue;
+    if (!isModuleVisible(t.id, { hiddenModules })) continue;
     const label = (t.label || "").toLowerCase();
     const id = t.id.toLowerCase().replace(/-/g, " ");
     if (label.includes(q) || id.includes(q)) {

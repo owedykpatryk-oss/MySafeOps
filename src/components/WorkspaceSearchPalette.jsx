@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FileText } from "lucide-react";
 import { buildWorkspaceSearchHits } from "../utils/workspaceSearch";
 import { getPinnedModuleIds } from "../utils/pinnedModules";
 import { getRecentModuleIds } from "../utils/recentModules";
+import { getModuleIcon, preloadModuleIcons } from "../navigation/moduleCatalogMeta";
+
+const MODULE_HIT_KINDS = new Set(["Module", "Pinned", "Recent"]);
 
 /**
  * Modal command palette: jump to screens and surface matching records (local data).
@@ -10,6 +14,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
   const [active, setActive] = useState(0);
+  const [iconGen, setIconGen] = useState(0);
 
   const hits = useMemo(() => {
     const rows = buildWorkspaceSearchHits(query, {
@@ -25,6 +30,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
     setQuery("");
     setActive(0);
     const t = requestAnimationFrame(() => inputRef.current?.focus());
+    preloadModuleIcons().then(() => setIconGen((g) => g + 1));
     return () => cancelAnimationFrame(t);
   }, [open]);
 
@@ -153,9 +159,11 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
           ) : (
             hits.map((h, i) => {
               const sel = i === active;
+              const showIcon = MODULE_HIT_KINDS.has(h.kind);
+              const Icon = showIcon ? getModuleIcon(h.viewId) : null;
               return (
                 <button
-                  key={h.key}
+                  key={`${h.key}-${iconGen}`}
                   type="button"
                   onClick={() => go(h)}
                   onMouseEnter={() => setActive(i)}
@@ -174,6 +182,23 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {showIcon ? (
+                      <span
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 8,
+                          background: "var(--color-background-secondary,#f1f5f9)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          color: "#0d9488",
+                        }}
+                      >
+                        {Icon ? <Icon size={15} strokeWidth={2} /> : <FileText size={15} strokeWidth={2} />}
+                      </span>
+                    ) : null}
                     <span
                       style={{
                         fontSize: 10,
@@ -181,7 +206,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
                         textTransform: "uppercase",
                         letterSpacing: "0.04em",
                         color: "var(--color-text-secondary)",
-                        minWidth: 58,
+                        minWidth: showIcon ? 50 : 58,
                       }}
                     >
                       {h.kind}
@@ -189,7 +214,9 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
                     <span style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)" }}>{h.label}</span>
                   </div>
                   {h.subtitle ? (
-                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginLeft: 60 }}>{h.subtitle}</div>
+                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginLeft: showIcon ? 36 : 60 }}>
+                      {h.subtitle}
+                    </div>
                   ) : null}
                 </button>
               );

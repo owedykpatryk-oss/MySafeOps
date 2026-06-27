@@ -24,6 +24,7 @@ const SUPERADMIN_DB_MIGRATIONS = [
   "20260427120000_superadmin_provision_org_members.sql",
   "20260427120100_ensure_my_org_invite_switch.sql",
   "20260427140000_org_branding_settings.sql",
+  "20260427150000_fess_group_membership_guard.sql",
 ];
 const ORG_AUDIT_KEY_PREFIX = "mysafeops_audit_";
 
@@ -990,9 +991,10 @@ export default function SuperAdminPanel() {
       <div style={{ ...ss.card, marginBottom: 16 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>FESS Group — merge accounts</div>
         <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>
-          Creates or updates org slug <code style={{ fontSize: 12 }}>fess-group</code> and attaches{" "}
-          <strong>jack@fessgroup.co.uk</strong> and <strong>maciej@fessgroup.co.uk</strong> as admins (replaces solo workspaces).
-          Requires migration <code style={{ fontSize: 11 }}>20260427120000_superadmin_provision_org_members.sql</code>.
+          Creates or updates org slug <code style={{ fontSize: 12 }}>fess-group</code> and attaches only{" "}
+          <strong>jack@fessgroup.co.uk</strong> and <strong>maciej@fessgroup.co.uk</strong> as admins.
+          No other users can join FESS Group (invites and membership are blocked in the database).
+          Everyone else registers for their own workspace or accepts an invite from another organisation.
         </p>
         <button type="button" onClick={provisionFessGroup} style={ss.btn} disabled={fessProvisionBusy || !isSupabaseConfigured()}>
           {fessProvisionBusy ? "Provisioning…" : "Provision FESS Group org"}

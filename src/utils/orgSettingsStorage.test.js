@@ -30,4 +30,14 @@ describe("orgSettingsStorage", () => {
     expect(payload.name).toBe("X");
     expect(payload.customFields).toBeUndefined();
   });
+
+  it("pickCloudBrandingPayload includes hidden module lists when set", () => {
+    const payload = pickCloudBrandingPayload({
+      name: "X",
+      hiddenModules: ["snags"],
+      hiddenFeatures: ["rams/surveying"],
+    });
+    expect(payload.hiddenModules).toEqual(["snags"]);
+    expect(payload.hiddenFeatures).toEqual(["rams/surveying"]);
+  });
 });

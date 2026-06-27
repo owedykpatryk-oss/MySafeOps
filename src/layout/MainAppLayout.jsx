@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
-import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Shield, Trash2, FileDown } from "lucide-react";
+import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Shield, Trash2, FileDown, EyeOff } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
@@ -29,7 +29,18 @@ import { getSectionTone, getModuleIcon, canExportModulePdf, preloadModuleIcons }
 import { recordRecentModule } from "../utils/recentModules";
 import { workspaceViewLoaders, workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_ID } from "../navigation/workspaceViews";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { useApp } from "../context/AppContext";
 import { isSuperAdminEmail } from "../utils/superAdmin";
+import {
+  filterVisibleModuleIds,
+  filterVisibleModuleTabs,
+  getHiddenModuleIds,
+  getModuleLabel,
+  hideModule,
+  HIDDEN_MODULES_UPDATED_EVENT,
+  isModuleVisible,
+} from "../utils/hiddenModules";
+import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 
 const LAST_VIEW_STORAGE_KEY = "mysafeops_last_workspace_view";
 const WORKSPACE_LAYOUT_VIEW_IDS = new Set([...Object.keys(workspaceViewLoaders), "settings"]);
@@ -44,7 +55,7 @@ function isEditableSurfaceTarget(target) {
 
 const LazySettingsCenter = lazy(() => import("../components/SettingsCenter"));
 
-function MoreModuleTile({ tab, active, pinnedIds, sectionTone, onOpen, onTogglePin, onExportPdf }) {
+function MoreModuleTile({ tab, active, pinnedIds, sectionTone, onOpen, onTogglePin, onExportPdf, onHide, canHide }) {
   const isPinned = pinnedIds.includes(tab.id);
   const Icon = getModuleIcon(tab.id);
   const exportable = canExportModulePdf(tab.id);
@@ -76,6 +87,20 @@ function MoreModuleTile({ tab, active, pinnedIds, sectionTone, onOpen, onToggleP
           <FileDown size={14} strokeWidth={2.2} aria-hidden />
         </button>
       )}
+      {canHide && onHide ? (
+        <button
+          type="button"
+          className="app-more-tile-hide"
+          aria-label={`Hide ${tab.label} from workspace`}
+          title="Hide module (restore in Settings → Organisation → Modules)"
+          onClick={(e) => {
+            e.stopPropagation();
+            onHide(tab.id);
+          }}
+        >
+          <EyeOff size={14} strokeWidth={2.2} aria-hidden />
+        </button>
+      ) : null}
       <button
         type="button"
         className="app-more-tile-pin"
@@ -142,6 +167,9 @@ function getInitialLayoutState() {
     return { navTab: "more", view: "settings", settingsInitialTab: "cloud", checkoutReturn: null };
   }
   if (viewParam && WORKSPACE_LAYOUT_VIEW_IDS.has(viewParam) && viewParam !== "settings") {
+    if (!isModuleVisible(viewParam)) {
+      return { navTab: "dashboard", view: "dashboard", settingsInitialTab: "cloud", checkoutReturn: null };
+    }
     const nav = primaryBottomNavIdSet.has(viewParam) ? viewParam : "more";
     const permitId = qs.get("permitId");
     if (viewParam === "permits" && permitId) {
@@ -152,6 +180,9 @@ function getInitialLayoutState() {
   try {
     const last = sessionStorage.getItem(LAST_VIEW_STORAGE_KEY);
     if (last && WORKSPACE_LAYOUT_VIEW_IDS.has(last) && last !== "settings") {
+      if (!isModuleVisible(last)) {
+        return { navTab: "dashboard", view: "dashboard", settingsInitialTab: "cloud", checkoutReturn: null };
+      }
       const nav = primaryBottomNavIdSet.has(last) ? last : "more";
       return { navTab: nav, view: last, settingsInitialTab: "cloud", checkoutReturn: null };
     }
@@ -185,18 +216,39 @@ const NAV_TABS = [
 
 export default function MainAppLayout() {
   const { user } = useSupabaseAuth();
+  const { caps } = useApp();
   const isSuperadmin = isSuperAdminEmail(user?.email);
+  const [hiddenRev, setHiddenRev] = useState(0);
+  const hiddenModules = useMemo(() => {
+    void hiddenRev;
+    return getHiddenModuleIds();
+  }, [hiddenRev]);
+  const visibilityOpts = useMemo(() => ({ hiddenModules }), [hiddenModules]);
+
+  useEffect(() => {
+    const bump = () => setHiddenRev((r) => r + 1);
+    window.addEventListener(HIDDEN_MODULES_UPDATED_EVENT, bump);
+    window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+    return () => {
+      window.removeEventListener(HIDDEN_MODULES_UPDATED_EVENT, bump);
+      window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+    };
+  }, []);
+
   const bottomNavTabs = useMemo(() => {
-    if (!isSuperadmin) return NAV_TABS;
-    const more = NAV_TABS[NAV_TABS.length - 1];
-    const beforeMore = NAV_TABS.slice(0, -1);
-    return [...beforeMore, { id: "superadmin", label: "Owner", icon: NAV_ICONS.superadmin }, more];
-  }, [isSuperadmin]);
+    let tabs = NAV_TABS;
+    if (isSuperadmin) {
+      const more = NAV_TABS[NAV_TABS.length - 1];
+      const beforeMore = NAV_TABS.slice(0, -1);
+      tabs = [...beforeMore, { id: "superadmin", label: "Owner", icon: NAV_ICONS.superadmin }, more];
+    }
+    return tabs.filter((t) => t.id === "more" || isModuleVisible(t.id, visibilityOpts));
+  }, [isSuperadmin, visibilityOpts]);
   const primaryNavIdSet = useMemo(() => {
-    const s = new Set(PRIMARY_BOTTOM_NAV_IDS);
+    const s = new Set(filterVisibleModuleIds(PRIMARY_BOTTOM_NAV_IDS, visibilityOpts));
     if (isSuperadmin) s.add("superadmin");
     return s;
-  }, [isSuperadmin]);
+  }, [isSuperadmin, visibilityOpts]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [layoutSeed] = useState(() => getInitialLayoutState());
   const [navTab, setNavTab] = useState(layoutSeed.navTab);
@@ -207,10 +259,18 @@ export default function MainAppLayout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => getPinnedModuleIds());
   const [moduleIconGen, setModuleIconGen] = useState(0);
-  const allowedModuleIds = useMemo(
-    () => new Set((isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin")).map((t) => t.id)),
-    [isSuperadmin]
-  );
+  const allowedModuleIds = useMemo(() => {
+    const base = isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin");
+    return new Set(filterVisibleModuleTabs(base, visibilityOpts).map((t) => t.id));
+  }, [isSuperadmin, visibilityOpts]);
+
+  useEffect(() => {
+    if (view === "settings" || view === "help") return;
+    if (!isModuleVisible(view, visibilityOpts)) {
+      setView("dashboard");
+      setNavTab("dashboard");
+    }
+  }, [view, visibilityOpts]);
 
   const openHelpModule = useCallback(() => {
     setNavTab("more");
@@ -422,6 +482,27 @@ export default function MainAppLayout() {
     setPinnedIds(togglePinnedModule(moduleId));
   }, []);
 
+  const handleHideModule = useCallback(
+    (id) => {
+      if (!caps?.orgSettings) return;
+      if (
+        !window.confirm(
+          `Hide "${getModuleLabel(id)}" from More and navigation?\n\nYou can restore it anytime in Settings → Organisation → Modules.`
+        )
+      ) {
+        return;
+      }
+      hideModule(id);
+      if (view === id) {
+        setView("dashboard");
+        setNavTab("dashboard");
+      }
+    },
+    [caps?.orgSettings, view]
+  );
+
+  const canHideModules = Boolean(caps?.orgSettings);
+
   const handleExportModulePdf = useCallback(async (moduleId, label) => {
     try {
       const { exportModuleRegisterPdf } = await import("../utils/moduleRegisterPdf");
@@ -458,17 +539,19 @@ export default function MainAppLayout() {
 
   const MainComponent = workspaceViewComponents[view] || workspaceViewComponents[DEFAULT_WORKSPACE_VIEW_ID];
 
-  const visibleMoreTabs = useMemo(
-    () => (isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin")),
-    [isSuperadmin]
-  );
+  const visibleMoreTabs = useMemo(() => {
+    const base = isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin");
+    return filterVisibleModuleTabs(base, visibilityOpts);
+  }, [isSuperadmin, visibilityOpts]);
   const visibleMoreSections = useMemo(
     () =>
       MORE_SECTIONS.map((section) => ({
         ...section,
-        ids: section.ids.filter((id) => id !== "superadmin" || isSuperadmin),
+        ids: section.ids.filter(
+          (id) => (id !== "superadmin" || isSuperadmin) && isModuleVisible(id, visibilityOpts)
+        ),
       })),
-    [isSuperadmin]
+    [isSuperadmin, visibilityOpts]
   );
   const q = moreFilter.trim().toLowerCase();
   const pinnedTabsOrdered = pinnedIds.map((id) => visibleMoreTabs.find((t) => t.id === id)).filter(Boolean);
@@ -520,7 +603,7 @@ export default function MainAppLayout() {
               More modules
             </div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.45 }}>
-              Pin modules for quick access. Each tile opens the register; use the download icon for an A4 PDF snapshot, or export a whole section below.
+              Pin modules for quick access, or hide ones you do not use (admins: eye icon — restore in Settings → Organisation → Modules). Each tile opens the register; use the download icon for an A4 PDF snapshot, or export a whole section below.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
               <button type="button" className="app-more-section-pdf" onClick={handleExportAllHsePdf}>
@@ -570,6 +653,8 @@ export default function MainAppLayout() {
                       onOpen={selectMoreModule}
                       onTogglePin={handleTogglePin}
                       onExportPdf={handleExportModulePdf}
+                      onHide={handleHideModule}
+                      canHide={canHideModules}
                     />
                   ))}
                 </div>
@@ -632,6 +717,8 @@ export default function MainAppLayout() {
                         onOpen={selectMoreModule}
                         onTogglePin={handleTogglePin}
                         onExportPdf={handleExportModulePdf}
+                        onHide={handleHideModule}
+                        canHide={canHideModules}
                       />
                     ))}
                   </div>

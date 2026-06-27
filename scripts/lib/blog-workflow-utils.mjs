@@ -1,7 +1,7 @@
 /**
  * Shared helpers for blog publish workflow (Node scripts only).
  */
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const WORDS_PER_MINUTE = 220;
@@ -10,7 +10,7 @@ const WORDS_PER_MINUTE = 220;
 export function estimateReadingTimeLabel(md) {
   const words = String(md)
     .replace(/```[\s\S]*?```/g, " ")
-    .replace(/[#>*_\[\]()!|`~-]/g, " ")
+    .replace(/[#>*_[\]()`!|`~-]/g, " ")
     .split(/\s+/)
     .filter(Boolean).length;
   const minutes = Math.max(1, Math.ceil(words / WORDS_PER_MINUTE));
@@ -27,7 +27,7 @@ export function dateLabelFromIso(iso) {
 export function countWords(md) {
   return String(md)
     .replace(/```[\s\S]*?```/g, " ")
-    .replace(/[#>*_\[\]()!|`~-]/g, " ")
+    .replace(/[#>*_[\]()`!|`~-]/g, " ")
     .split(/\s+/)
     .filter(Boolean).length;
 }

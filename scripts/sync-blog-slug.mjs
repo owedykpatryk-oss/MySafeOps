@@ -5,7 +5,7 @@
  *   npm run blog:sync -- height-work-permit-uk
  *   npm run blog:sync -- --slug=height-work-permit-uk
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LANDING_BLOG_POSTS } from "../src/data/landingBlogPosts.js";

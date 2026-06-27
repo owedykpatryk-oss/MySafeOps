@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
@@ -7,9 +7,11 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import { INDUSTRY_SECTOR_OPTIONS } from "../utils/industrialSectors";
-import { getOrgId } from "../utils/orgStorage";
-import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "../utils/orgSettingsStorage";
+import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
+import { loadOrgSettingsRaw, saveOrgSettingsRaw, ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
+import { syncOrgBrandingFromCloud } from "../utils/orgBrandingCloudSync";
 import { buildFessOrgBrandingPreset, FESS_ORG_SLUG } from "../data/fessOrgBrandingPreset";
+import OrgModuleVisibility from "./OrgModuleVisibility";
 
 export { getOrgSettings } from "../utils/orgSettingsStorage";
 
@@ -52,6 +54,27 @@ export default function OrgSettings() {
   const [brandingBusy, setBrandingBusy] = useState(false);
   const logoRef = useRef();
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  useEffect(() => {
+    const refresh = () => setForm(loadOrgSettingsRaw());
+    window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, refresh);
+    window.addEventListener(ORG_CHANGED_EVENT, refresh);
+    return () => {
+      window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, refresh);
+      window.removeEventListener(ORG_CHANGED_EVENT, refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const org = getOrgId();
+    if (!org || org === "default") return;
+    syncOrgBrandingFromCloud(supabase, org)
+      .then((updated) => {
+        if (updated) setForm(loadOrgSettingsRaw());
+      })
+      .catch(() => {});
+  }, [supabase]);
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
@@ -120,7 +143,7 @@ export default function OrgSettings() {
 
   const showFessPreset = getOrgId() === FESS_ORG_SLUG;
 
-  const TABS = [["brand","Branding & logo"],["company","Company info"],["sectors","Sectors"],["pdf","PDF defaults"],["custom","Custom fields"],["access","Access"],["preview","Preview"]];
+  const TABS = [["brand","Branding & logo"],["company","Company info"],["sectors","Sectors"],["modules","Modules & RAMS"],["pdf","PDF defaults"],["custom","Custom fields"],["access","Access"],["preview","Preview"]];
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
@@ -255,6 +278,12 @@ export default function OrgSettings() {
               );
             })}
           </div>
+        </Section>
+      )}
+
+      {tab==="modules" && (
+        <Section title="Workspace modules">
+          <OrgModuleVisibility />
         </Section>
       )}
 

@@ -631,6 +631,7 @@ function projectFormShape(p) {
       name: "",
       site: "",
       address: "",
+      postcode: "",
       lat: "",
       lng: "",
       industryStarter: "general",
@@ -651,6 +652,7 @@ function projectFormShape(p) {
     ...p,
     lat: p.lat != null && p.lat !== "" ? String(p.lat) : "",
     lng: p.lng != null && p.lng !== "" ? String(p.lng) : "",
+    postcode: p.postcode || "",
     industryStarter: p.industryStarter || inferProjectStarter(p),
     owner: p.owner || "",
     hseLead: p.hseLead || "",
@@ -732,9 +734,9 @@ function ProjectForm({ item, onSave, onClose }) {
   };
 
   const geocode = async () => {
-    const q = (form.address || form.site || "").trim();
+    const q = [form.postcode, form.address, form.site].filter(Boolean).join(", ").trim();
     if (!q) {
-      setGeoMsg("Enter address or site first.");
+      setGeoMsg("Enter postcode or address first.");
       return;
     }
     setGeoBusy(true);
@@ -811,6 +813,17 @@ function ProjectForm({ item, onSave, onClose }) {
           <>
             <label style={ss.lbl}>Address</label>
             <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)} />
+            <label style={{ ...ss.lbl, marginTop: 10 }}>Postcode</label>
+            <input
+              style={ss.inp}
+              value={form.postcode || ""}
+              onChange={(e) => set("postcode", e.target.value)}
+              placeholder="e.g. SW1A 1AA"
+              autoComplete="postal-code"
+            />
+            <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginTop: 4, marginBottom: 4 }}>
+              Used by RAMS for hospital lookup, weather, and site coordinates.
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
               <div>
                 <label style={ss.lbl}>Latitude (optional)</label>
@@ -823,7 +836,7 @@ function ProjectForm({ item, onSave, onClose }) {
             </div>
             <div style={{ marginTop: 10 }}>
               <button type="button" style={ss.btn} disabled={geoBusy} onClick={geocode}>
-                {geoBusy ? "Looking up…" : "Fill lat/lng from address"}
+                {geoBusy ? "Looking up…" : "Fill lat/lng from postcode / address"}
               </button>
               {geoMsg && <span style={{ marginLeft: 10, fontSize: 12, color: "#b45309" }}>{geoMsg}</span>}
             </div>

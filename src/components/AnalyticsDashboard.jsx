@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadOrgScoped as load, ORG_CHANGED_EVENT } from "../utils/orgStorage";
+import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
+import { activeAllergenWindows, orgShowsIndustrialMoreModules } from "../utils/industrialSectors";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import SiteTodayCard from "./SiteTodayCard";
@@ -184,9 +186,11 @@ export default function AnalyticsDashboard() {
   useEffect(() => {
     const bump = () => setDataRefreshTick((t) => t + 1);
     window.addEventListener(ORG_CHANGED_EVENT, bump);
+    window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
     window.addEventListener("storage", bump);
     return () => {
       window.removeEventListener(ORG_CHANGED_EVENT, bump);
+      window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
       window.removeEventListener("storage", bump);
     };
   }, []);
@@ -202,6 +206,8 @@ export default function AnalyticsDashboard() {
   const inductions = useMemo(() => load("induction_entries", []), [dataRefreshTick]);
   const trainingRecords = useMemo(() => load("training_matrix", []), [dataRefreshTick]);
   const hotWork = useMemo(() => load("hot_work_register", []), [dataRefreshTick]);
+  const allergenWindows = useMemo(() => load("allergen_changeover_windows", []), [dataRefreshTick]);
+  const activeAllergens = useMemo(() => activeAllergenWindows(allergenWindows), [allergenWindows]);
 
   // compliance score calculation
   const { score: complianceScore, issues: complianceIssues } = useMemo(() => {
@@ -276,17 +282,18 @@ export default function AnalyticsDashboard() {
     return { incidentTrend: trend, incidentsInSelectedWeeks: inPeriod };
   }, [incidents, incidentWeeks]);
 
-  const hoursData = useMemo(() => {
+  const { hoursChartData, hoursByProject } = useMemo(() => {
     const hoursByProject = {};
     tsEntries.forEach((e) => {
       const h = Object.values(e.days || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
       hoursByProject[e.projectId] = (hoursByProject[e.projectId] || 0) + h;
     });
     const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
-    return Object.entries(hoursByProject)
+    const hoursChartData = Object.entries(hoursByProject)
       .map(([id, h]) => ({ label: (projectMap[id] || id || "Unknown").slice(0, 10), value: Math.round(h) }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
+    return { hoursChartData, hoursByProject };
   }, [tsEntries, projects]);
 
   const snagStats = useMemo(
@@ -746,6 +753,33 @@ export default function AnalyticsDashboard() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+      {orgShowsIndustrialMoreModules() && activeAllergens.length > 0 ? (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 16px",
+            borderRadius: 10,
+            border: "1px solid #fbbf24",
+            background: "#fffbeb",
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ color: "#92400e" }}>Active allergen changeover</strong>
+          <span style={{ color: "#78350f" }}>
+            {" "}
+            — {activeAllergens.length} window{activeAllergens.length > 1 ? "s" : ""} in progress. Review controls in{" "}
+          </span>
+          <button
+            type="button"
+            onClick={() => openWorkspaceView({ viewId: "allergen-changeovers" })}
+            style={{ border: "none", background: "none", padding: 0, color: "#0d9488", fontWeight: 600, cursor: "pointer", fontSize: 13 }}
+          >
+            Allergen changeovers
+          </button>
+          <span style={{ color: "#78350f" }}> and reference in RAMS Step 1.</span>
+        </div>
+      ) : null}
       <div ref={dashboardPdfRef}>
       <PageHero
         badgeText="DB"
@@ -1612,10 +1646,10 @@ export default function AnalyticsDashboard() {
         {/* hours per project */}
         <div className="app-dashboard-card" style={ss.card}>
           <div style={{ fontSize:13, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>Hours per project</div>
-          {hoursData.length===0 ? (
+          {hoursChartData.length===0 ? (
             <div style={{ padding:"1.5rem 0", textAlign:"center", fontSize:12, color:"var(--color-text-secondary)" }}>No timesheet data yet.</div>
           ) : (
-            <BarChart data={hoursData} height={80} color="#0d9488" />
+            <BarChart data={hoursChartData} height={80} color="#0d9488" />
           )}
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 4 }}>
             <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Total logged: {Math.round(monthHours)}h this month</span>

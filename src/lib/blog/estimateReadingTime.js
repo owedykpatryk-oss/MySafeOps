@@ -8,7 +8,7 @@ const WORDS_PER_MINUTE = 220;
 export function estimateReadingTime(text) {
   const words = String(text)
     .replace(/```[\s\S]*?```/g, " ")
-    .replace(/[#>*_\[\]()!|`~-]/g, " ")
+    .replace(/[#>*_[\]()`!|`~-]/g, " ")
     .split(/\s+/)
     .filter(Boolean).length;
   const minutes = Math.max(1, Math.ceil(words / WORDS_PER_MINUTE));

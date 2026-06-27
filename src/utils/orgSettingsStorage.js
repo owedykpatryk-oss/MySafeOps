@@ -1,6 +1,7 @@
 import { getOrgId, loadOrgScoped, orgScopedKey, saveOrgScoped } from "./orgStorage";
 
 export const ORG_SETTINGS_BASE_KEY = "mysafeops_org_settings";
+export const ORG_SETTINGS_UPDATED_EVENT = "mysafeops-org-settings-updated";
 const ORG_SETTINGS_UPDATED_AT_KEY = "mysafeops_org_settings_updated_at";
 
 /** @returns {Record<string, unknown>} */
@@ -27,7 +28,7 @@ export function saveOrgSettingsRaw(value, orgId = getOrgId(), updatedAtIso) {
   if (updatedAtIso) {
     localStorage.setItem(`${ORG_SETTINGS_UPDATED_AT_KEY}_${orgId}`, updatedAtIso);
   }
-  window.dispatchEvent(new CustomEvent("mysafeops-org-settings-updated", { detail: { orgId } }));
+  window.dispatchEvent(new CustomEvent(ORG_SETTINGS_UPDATED_EVENT, { detail: { orgId } }));
 }
 
 export function getLocalOrgBrandingUpdatedAt(orgId = getOrgId()) {
@@ -92,6 +93,12 @@ export function pickCloudBrandingPayload(raw) {
   };
   if (Array.isArray(s.customFields) && s.customFields.length) {
     out.customFields = s.customFields;
+  }
+  if (Array.isArray(s.hiddenModules) && s.hiddenModules.length) {
+    out.hiddenModules = s.hiddenModules;
+  }
+  if (Array.isArray(s.hiddenFeatures) && s.hiddenFeatures.length) {
+    out.hiddenFeatures = s.hiddenFeatures;
   }
   return out;
 }

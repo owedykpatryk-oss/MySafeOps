@@ -1,5 +1,22 @@
+import { RAMS_FEATURES } from "../utils/ramsFeatureIds";
+
 /** Default Organisation settings for FESS Group (Settings → Apply preset). */
 export const FESS_ORG_SLUG = "fess-group";
+
+/** Only these accounts may belong to org slug `fess-group`. Everyone else gets a solo org or joins via invite elsewhere. */
+export const FESS_RESERVED_MEMBER_EMAILS = [
+  "jack@fessgroup.co.uk",
+  "maciej@fessgroup.co.uk",
+];
+
+export function isFessOrgSlug(slug) {
+  return String(slug || "").trim().toLowerCase() === FESS_ORG_SLUG;
+}
+
+export function isFessReservedMemberEmail(email) {
+  const e = String(email || "").trim().toLowerCase();
+  return FESS_RESERVED_MEMBER_EMAILS.includes(e);
+}
 
 export const FESS_ORG_BRANDING_BASE = {
   name: "FESS Group",
@@ -17,6 +34,8 @@ export const FESS_ORG_BRANDING_BASE = {
   pdfComplianceLine: "Controlled document. Ensure latest approved revision is in use.",
   defaultLeadEngineer: "",
   industrySectors: ["construction", "food_beverage", "pet_food", "pharma", "petrochem"],
+  /** FESS does not use PAS128 / geodesy packs in RAMS. */
+  hiddenFeatures: [RAMS_FEATURES.SURVEYING],
 };
 
 export const FESS_LOGO_PUBLIC_PATH = "/branding/fess-group-logo.png";

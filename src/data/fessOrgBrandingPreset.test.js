@@ -2,7 +2,10 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
   FESS_ORG_BRANDING_BASE,
   FESS_ORG_SLUG,
+  FESS_RESERVED_MEMBER_EMAILS,
   FESS_LOGO_PUBLIC_PATH,
+  isFessOrgSlug,
+  isFessReservedMemberEmail,
   buildFessOrgBrandingPreset,
 } from "./fessOrgBrandingPreset";
 
@@ -31,6 +34,11 @@ describe("fessOrgBrandingPreset", () => {
 
   it("exports FESS org slug constant", () => {
     expect(FESS_ORG_SLUG).toBe("fess-group");
+    expect(FESS_RESERVED_MEMBER_EMAILS).toEqual(["jack@fessgroup.co.uk", "maciej@fessgroup.co.uk"]);
+    expect(isFessOrgSlug("fess-group")).toBe(true);
+    expect(isFessOrgSlug("acme-ltd")).toBe(false);
+    expect(isFessReservedMemberEmail("jack@fessgroup.co.uk")).toBe(true);
+    expect(isFessReservedMemberEmail("other@example.com")).toBe(false);
   });
 
   it("includes industrial sectors and FESS website", () => {

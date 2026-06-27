@@ -20,6 +20,8 @@ import { safeHttpUrl } from "../../utils/safeUrl";
 import PageHero from "../../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
+import { isFeatureVisible, RAMS_FEATURES } from "../../utils/hiddenModules";
+import { useHiddenModulesRevision } from "../../hooks/useHiddenModulesRevision";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { trackEvent } from "../../utils/telemetry";
@@ -1315,7 +1317,9 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
   const [projectGeoLoading, setProjectGeoLoading] = useState(false);
   const [showHeaderAdvanced, setShowHeaderAdvanced] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
-  const showAllergenSection = orgHasFoodIndustrialPack() || orgHasPharmaPack();
+  useHiddenModulesRevision();
+  const showAllergenSection =
+    (orgHasFoodIndustrialPack() || orgHasPharmaPack()) && isFeatureVisible(RAMS_FEATURES.ALLERGEN);
   const emergencyExtras = useMemo(() => loadEmergencySiteExtras(), []);
   const moreDetailsFilledCount = useMemo(() => {
     const t = (v) => String(v ?? "").trim();
@@ -2202,6 +2206,8 @@ function HazardPicker({
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [quickFilter, setQuickFilter] = useState("all"); // all | favorites | most_used | surveying
+  useHiddenModulesRevision();
+  const showSurveyingRams = isFeatureVisible(RAMS_FEATURES.SURVEYING);
   const [activeSurveyTokens, setActiveSurveyTokens] = useState([]);
   const [packName, setPackName] = useState("");
   const [selectedPackId, setSelectedPackId] = useState("");
@@ -2562,9 +2568,9 @@ function HazardPicker({
 
   return (
     <div>
-      <SurveyingPackSection form={form} onApplySurveyPack={onApplySurveyPack} />
+      {showSurveyingRams ? <SurveyingPackSection form={form} onApplySurveyPack={onApplySurveyPack} /> : null}
 
-      {surveyPackFilter?.active && (surveyPackFilter.tokens || []).length > 0 && (
+      {showSurveyingRams && surveyPackFilter?.active && (surveyPackFilter.tokens || []).length > 0 && (
         <div
           style={{
             marginBottom: 14,
@@ -2911,7 +2917,7 @@ function HazardPicker({
       <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
         {[
           ["all", "All"],
-          ["surveying", "Surveying"],
+          ...(showSurveyingRams ? [["surveying", "Surveying"]] : []),
           ["favorites", "Favorites"],
           ["recent", "Recent"],
           ["most_used", "Most used"],
@@ -3230,7 +3236,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
           const idx = rows.findIndex((x) => x.id === r.id);
           const isOpen = expandAll || editing === r.id;
           return (
-            <div key={r.id} style={{ ...ss.card, marginBottom:8, borderColor:isOpen?"#0d9488":"var(--color-border-tertiary,#e5e5e5)" }}>
+            <div key={r.id} style={{ ...ss.card, marginBottom:8, borderColor:isOpen?"#0d9488":"var(--color-border-tertiary,#e5e5e5)", contentVisibility:"auto", containIntrinsicSize:"0 88px" }}>
               {/* collapsed header */}
               <div
                 style={{ display:"flex", gap:10, alignItems:"flex-start", cursor:"pointer" }}
