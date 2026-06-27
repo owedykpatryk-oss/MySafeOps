@@ -60,6 +60,7 @@ export const workspaceViewLoaders = {
   "monthly-report": () => import("../modules/MonthlyReport"),
   waste: () => import("../modules/WasteRegister"),
   templates: () => import("../modules/DocumentTemplates"),
+  // AI generators hidden from More nav until prebuilt packs ship (routes kept for later).
   "ai-rams": () => import("../modules/AIRamsGenerator"),
   "ai-toolbox": () => import("../modules/ToolboxTalkAI"),
   "ai-photo": () => import("../modules/PhotoHazardAI"),

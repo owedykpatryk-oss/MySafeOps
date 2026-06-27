@@ -38,8 +38,20 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     const sync = () => {
-      setTrialStatus(getTrialStatus());
-      setBilling(getBillingEntitlements());
+      const nextTrial = getTrialStatus();
+      const nextBilling = getBillingEntitlements();
+      setTrialStatus((prev) =>
+        prev?.isActive === nextTrial?.isActive &&
+        prev?.remainingDays === nextTrial?.remainingDays &&
+        prev?.endsAtIso === nextTrial?.endsAtIso
+          ? prev
+          : nextTrial
+      );
+      setBilling((prev) =>
+        prev?.subscriptionStatus === nextBilling?.subscriptionStatus && prev?.paidPlanId === nextBilling?.paidPlanId
+          ? prev
+          : nextBilling
+      );
     };
     const id = window.setInterval(sync, 60_000);
     return () => window.clearInterval(id);

@@ -110,7 +110,7 @@ export default function SitePresenceMap() {
 
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return;
-    const map = L.map(mapElRef.current, { scrollWheelZoom: true }).setView([54.5, -2.5], 6);
+    const map = L.map(mapElRef.current, { scrollWheelZoom: true, maxZoom: 19 }).setView([54.5, -2.5], 6);
     const streetLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,

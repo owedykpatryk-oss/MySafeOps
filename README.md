@@ -82,7 +82,7 @@ Anything prefixed with `VITE_` is **embedded in the browser bundle**. Do not put
 Deploy `send-org-invite` from [`supabase/functions/send-org-invite/`](supabase/functions/send-org-invite/) (`supabase functions deploy send-org-invite`). Set secrets: `RESEND_API_KEY`, `SITE_URL` (your production origin, no trailing slash), optionally `INVITE_FROM_EMAIL` (e.g. `MySafeOps <notifications@yourdomain.com>`), and optionally `SUPPORT_CONTACT_EMAIL` (shown in invite footer; default `support@mysafeops.com`). Without `RESEND_API_KEY`, the function returns success with `skipped: true` and invites still work via the copied link.
 
 **Optional: Stripe subscriptions (Edge Functions)**  
-1. **Products & prices:** either run `npm run stripe:seed-prices` (requires `STRIPE_SECRET_KEY` in `.env.local`; creates GBP monthly Solo £29 / Team £79 / Business £149 / Enterprise £399 and prints `STRIPE_PRICE_*` ids), or create four recurring prices manually in the [Stripe Dashboard](https://dashboard.stripe.com/).  
+1. **Products & prices:** either run `npm run stripe:seed-prices` (requires `STRIPE_SECRET_KEY` in `.env.local`; creates GBP monthly Solo £19 / Team £99 / Business £249 / Enterprise £499 and prints `STRIPE_PRICE_*` ids), or create four recurring prices manually in the [Stripe Dashboard](https://dashboard.stripe.com/).  
 2. Deploy functions: `stripe-checkout`, `stripe-portal`, `stripe-webhook` from [`supabase/functions/`](supabase/functions/) (`supabase functions deploy stripe-checkout`, etc.).  
 3. Set **Supabase secrets** (Dashboard → Edge Functions → Secrets, or `supabase secrets set`):  
    - `STRIPE_SECRET_KEY` — secret API key (`sk_...`)  

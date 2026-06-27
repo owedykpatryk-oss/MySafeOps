@@ -95,7 +95,7 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return undefined;
-    const map = L.map(el, { zoomControl: true });
+    const map = L.map(el, { zoomControl: true, maxZoom: 19 });
     mapRef.current = map;
     layerRef.current = L.markerClusterGroup({ maxClusterRadius: 56, spiderfyOnMaxZoom: true }).addTo(map);
     map.setView([defaultCenter.lat, defaultCenter.lng], defaultZoom);

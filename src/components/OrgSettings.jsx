@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import { INDUSTRY_SECTOR_OPTIONS } from "../utils/industrialSectors";
+import { getOrgId } from "../utils/orgStorage";
+import { buildFessOrgBrandingPreset, FESS_ORG_SLUG } from "../data/fessOrgBrandingPreset";
 
 const ORG_KEY = "mysafeops_org_settings";
 const loadOrg = () => { try { return JSON.parse(localStorage.getItem(ORG_KEY) || "{}"); } catch { return {}; } };
@@ -77,6 +79,7 @@ export default function OrgSettings() {
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState("brand");
   const [roleSyncing, setRoleSyncing] = useState(false);
+  const [brandingBusy, setBrandingBusy] = useState(false);
   const logoRef = useRef();
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -113,6 +116,26 @@ export default function OrgSettings() {
     set("customFields", (form.customFields||[]).filter(f=>f.id!==id));
   };
 
+  const applyFessBranding = async () => {
+    if (!caps.orgSettings || getOrgId() !== FESS_ORG_SLUG) return;
+    setBrandingBusy(true);
+    try {
+      const preset = await buildFessOrgBrandingPreset();
+      setForm((prev) => ({
+        ...prev,
+        ...preset,
+        customFields: prev.customFields || [],
+      }));
+      pushAudit({ action: "org_settings_fess_preset", entity: "mysafeops_org_settings", detail: FESS_ORG_SLUG });
+    } catch (e) {
+      alert(e?.message || "Could not load FESS branding preset.");
+    } finally {
+      setBrandingBusy(false);
+    }
+  };
+
+  const showFessPreset = getOrgId() === FESS_ORG_SLUG;
+
   const TABS = [["brand","Branding & logo"],["company","Company info"],["sectors","Sectors"],["pdf","PDF defaults"],["custom","Custom fields"],["access","Access"],["preview","Preview"]];
 
   return (
@@ -148,6 +171,21 @@ export default function OrgSettings() {
 
       {tab==="brand" && (
         <>
+          {showFessPreset && caps.orgSettings ? (
+            <Section title="FESS Group preset">
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 10, lineHeight: 1.55 }}>
+                Loads the FESS logo, orange brand colour, website{" "}
+                <a href="https://pl.fessgroup.co.uk/" target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>
+                  pl.fessgroup.co.uk
+                </a>
+                , and sector defaults. Click Save after applying.
+              </div>
+              <button type="button" onClick={applyFessBranding} disabled={brandingBusy} style={ss.btn}>
+                {brandingBusy ? "Loading…" : "Apply FESS Group branding"}
+              </button>
+            </Section>
+          ) : null}
+
           <Section title="Logo">
             <div style={{ display:"flex", gap:20, alignItems:"flex-start", flexWrap:"wrap" }}>
               {/* logo preview */}
@@ -207,8 +245,8 @@ export default function OrgSettings() {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {INDUSTRY_SECTOR_OPTIONS.map((opt) => {
-              const set = new Set(form.industrySectors || ["construction"]);
-              const checked = set.has(opt.id);
+              const sectorSet = new Set(form.industrySectors || ["construction"]);
+              const checked = sectorSet.has(opt.id);
               return (
                 <label
                   key={opt.id}

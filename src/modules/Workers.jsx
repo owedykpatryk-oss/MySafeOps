@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { ms } from "../utils/moduleStyles";
 import { geocodeAddressNominatim } from "../utils/geocode";
@@ -166,6 +167,8 @@ export default function Workers() {
     load,
     save,
   });
+  const workersPg = useRegisterListPaging(50);
+  const projectsPg = useRegisterListPaging(50);
 
   const exportWorkersCsv = () => {
     const header = ["Name", "Role", "Phone", "Email", "Certs / notes", "Structured certifications"];
@@ -323,7 +326,12 @@ export default function Workers() {
           Workers ({workers.length})
         </div>
         {workers.length === 0 && <div style={{ color: "var(--color-text-secondary)" }}>No workers yet.</div>}
-        {workers.map((w) => (
+        {workersPg.hasMore(workers) ? (
+          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+            Showing {Math.min(workersPg.cap, workers.length)} of {workers.length}
+          </div>
+        ) : null}
+        {workersPg.visible(workers).map((w) => (
           <div
             key={w.id}
             style={{
@@ -355,6 +363,13 @@ export default function Workers() {
             </button>
           </div>
         ))}
+        {workersPg.hasMore(workers) ? (
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+            <button type="button" style={ss.btn} onClick={workersPg.showMore}>
+              Show more ({workersPg.remaining(workers)} remaining)
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="app-surface-card" style={ss.card}>
@@ -362,7 +377,12 @@ export default function Workers() {
           Projects ({projects.length})
         </div>
         {projects.length === 0 && <div style={{ color: "var(--color-text-secondary)" }}>No projects yet.</div>}
-        {projects.map((p) => (
+        {projectsPg.hasMore(projects) ? (
+          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+            Showing {Math.min(projectsPg.cap, projects.length)} of {projects.length}
+          </div>
+        ) : null}
+        {projectsPg.visible(projects).map((p) => (
           <div
             key={p.id}
             style={{
@@ -403,6 +423,13 @@ export default function Workers() {
             </button>
           </div>
         ))}
+        {projectsPg.hasMore(projects) ? (
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+            <button type="button" style={ss.btn} onClick={projectsPg.showMore}>
+              Show more ({projectsPg.remaining(projects)} remaining)
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

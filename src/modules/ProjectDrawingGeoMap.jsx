@@ -23,7 +23,7 @@ export default function ProjectDrawingGeoMap({ points, selectedIds = [], onSelec
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return undefined;
-    const map = L.map(el, { zoomControl: true });
+    const map = L.map(el, { zoomControl: true, maxZoom: 19 });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,

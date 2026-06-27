@@ -25,6 +25,9 @@ import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
+import { geocodeAddressNominatim } from "../../utils/geocode";
+import { useToast } from "../../context/ToastContext";
+import { orgHasFoodIndustrialPack, orgHasPharmaPack } from "../../utils/industrialSectors";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
@@ -783,6 +786,8 @@ const RAMS_FORM_DEFAULTS = {
   strictRequireHoldPoints: true,
   signatureEvents: [],
   printSections: {},
+  allergenControlsNote: "",
+  allergenChangeoverRef: "",
 };
 
 const RL = {
@@ -1037,6 +1042,242 @@ function findHazardsForSurveyPack(pack) {
   return matched.slice(0, 14);
 }
 
+const SURVEY_PACK_QUICK_PREFIX = {
+  utility_mapping_survey: "PAS128 QLB",
+  topographical_survey: "Topo survey",
+  gpr_survey: "GPR survey",
+  cctv_drainage_survey: "CCTV drainage",
+  jetting_hpwj: "HPWJ jetting",
+  manhole_entry_inspection: "Manhole entry",
+  trial_holes_slit_trenches: "Trial holes",
+  window_sampling_trial_pit: "Trial pit",
+  borehole_gi_drilling: "GI drilling",
+  foundation_exposure_verification: "Foundation verify",
+  soakaway_infiltration_testing: "Soakaway test",
+  vacuum_excavation_services: "Vacuum dig",
+  highway_live_corridor_survey: "Highway survey",
+  utility_revalidation_pre_dig: "Pre-dig reval",
+  drainage_repair_reinstatement_survey: "Drainage survey",
+  rail_public_infrastructure_survey: "Rail survey",
+};
+
+const ROW_SOURCE = {
+  SURVEY_PACK: "survey_pack",
+  LIBRARY: "library",
+  ORG_TEMPLATE: "org_template",
+  HAZARD_PACK: "hazard_pack",
+  MANUAL: "manual",
+};
+
+const ROW_SOURCE_STYLES = {
+  survey_pack: { label: "Survey pack", bg: "#E6F1FB", color: "#0C447C" },
+  library: { label: "Library", bg: "#f1f5f9", color: "#475569" },
+  org_template: { label: "Org template", bg: "#FAEEDA", color: "#633806" },
+  hazard_pack: { label: "Quick pack", bg: "#EAF3DE", color: "#27500A" },
+  manual: { label: "Manual", bg: "#f3e8ff", color: "#6b21a8" },
+};
+
+function RowSourceBadge({ source }) {
+  const key = source || ROW_SOURCE.LIBRARY;
+  const s = ROW_SOURCE_STYLES[key] || ROW_SOURCE_STYLES.library;
+  return (
+    <span
+      style={{ fontSize: 10, padding: "1px 6px", borderRadius: 20, background: s.bg, color: s.color }}
+      title={`Row source: ${s.label}`}
+    >
+      {s.label}
+    </span>
+  );
+}
+
+function inferRowSource(row) {
+  if (row?.rowSource) return row.rowSource;
+  if (row?._orgTemplate || String(row?.sourceId || row?.id || "").startsWith("org_")) return ROW_SOURCE.ORG_TEMPLATE;
+  return ROW_SOURCE.LIBRARY;
+}
+
+function hazardMatchesSurveyTokens(h, tokens) {
+  if (!Array.isArray(tokens) || tokens.length === 0) return true;
+  const hay = `${h.id} ${h.category} ${h.activity} ${h.hazard}`.toLowerCase();
+  return tokens.some((t) => hay.includes(String(t).toLowerCase()));
+}
+
+function buildPackTemplatesFromRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((r) => ({
+    templateId: String(r.sourceId || r.id),
+    category: r.category || "General",
+    activity: r.activity || "",
+    hazard: r.hazard || "",
+    initialRisk: r.initialRisk || { L: 4, S: 4, RF: 16 },
+    revisedRisk: r.revisedRisk || { L: 2, S: 4, RF: 8 },
+    controlMeasures: (r.controlMeasures || []).filter(Boolean),
+    ppeRequired: (r.ppeRequired || []).filter(Boolean),
+    regs: (r.regs || []).filter(Boolean),
+  }));
+}
+
+function buildPackKeywordsFromTemplates(templates) {
+  const text = (templates || [])
+    .map((t) => `${t.category || ""} ${t.activity || ""} ${t.hazard || ""}`)
+    .join(" ")
+    .toLowerCase();
+  const words = text.match(/[a-z0-9]{4,}/g) || [];
+  const stop = new Set([
+    "with", "from", "that", "this", "work", "task", "risk", "site", "activity", "hazard", "general", "using", "where",
+    "after", "before", "under", "into", "over", "near", "method", "control", "controls",
+  ]);
+  const counts = {};
+  words.forEach((w) => {
+    if (stop.has(w)) return;
+    counts[w] = (counts[w] || 0) + 1;
+  });
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([w]) => w);
+}
+
+function buildSurveyQuickPackName(pack, projectName, location) {
+  const prefix = SURVEY_PACK_QUICK_PREFIX[pack?.key] || String(pack?.label || "Survey pack").split(" ")[0];
+  const site = String(projectName || location || "Site").trim().slice(0, 48);
+  return `${prefix} — ${site}`.slice(0, 80);
+}
+
+function stampHazardRow(h, rowSource) {
+  return {
+    ...JSON.parse(JSON.stringify(h)),
+    sourceId: h.id,
+    id: genId(),
+    rowSource,
+    _orgTemplate: !!h._orgTemplate || String(h.id || "").startsWith("org_"),
+  };
+}
+
+/** PAS128 / geodetic surveying packs — applied in Step 2 alongside hazard library picks. */
+function SurveyingPackSection({ form, onApplySurveyPack }) {
+  const [surveyPackKey, setSurveyPackKey] = useState(form.surveyWorkType || "");
+  const [showSurveyAdvanced, setShowSurveyAdvanced] = useState(false);
+  const selectedSurveyPack = useMemo(
+    () => findSurveyPackByKey(surveyPackKey || form.surveyWorkType),
+    [surveyPackKey, form.surveyWorkType]
+  );
+  const selectedSurveyMeta = useMemo(
+    () => surveyPackMetaFor(selectedSurveyPack?.key || ""),
+    [selectedSurveyPack]
+  );
+
+  useEffect(() => {
+    setSurveyPackKey(form.surveyWorkType || "");
+  }, [form.surveyWorkType]);
+
+  return (
+    <section
+      className="app-rams-header-section"
+      style={{ background: "var(--color-background-primary,#fff)", marginBottom: 20 }}
+      aria-labelledby="rams-h-pack"
+    >
+      <h3 id="rams-h-pack" className="app-rams-header-section-title">
+        Hazard pack (surveying / geodesy)
+      </h3>
+      <div style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.45 }}>
+        Optional: apply a PAS128 / surveying pack to pre-fill scope, method addendum, and suggested hazard rows. Individual picks below remain the source of truth for your risk matrix.
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <select
+          value={surveyPackKey}
+          onChange={(e) => setSurveyPackKey(e.target.value)}
+          style={{ ...ss.inp, minWidth: 260 }}
+        >
+          <option value="">— Select surveying pack —</option>
+          {SURVEYING_PACKS.map((p) => (
+            <option key={p.key} value={p.key}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={!surveyPackKey}
+          onClick={() => onApplySurveyPack?.(surveyPackKey)}
+          style={{ ...ss.btnP, opacity: surveyPackKey ? 1 : 0.45, minHeight: 40 }}
+        >
+          Apply pack
+        </button>
+        {!!form.surveyWorkType && (
+          <span style={{ fontSize: 11, color: "#0C447C", background: "#E6F1FB", padding: "2px 8px", borderRadius: 20 }}>
+            Active: {form.surveyWorkTypeLabel || SURVEYING_PACKS.find((p) => p.key === form.surveyWorkType)?.label || form.surveyWorkType}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setShowSurveyAdvanced((v) => !v)}
+          style={{ ...ss.btn, minHeight: 40, fontSize: 12 }}
+        >
+          {showSurveyAdvanced ? "Hide requirements" : "Show requirements"}
+        </button>
+      </div>
+      {selectedSurveyPack && showSurveyAdvanced && (
+        <div
+          style={{
+            marginTop: 10,
+            border: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
+            borderRadius: 8,
+            padding: 10,
+            background: "var(--color-background-secondary,#f7f7f5)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: "var(--color-text-secondary)",
+              marginBottom: 6,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Pack readiness requirements
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Permit dependencies</div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                {(selectedSurveyMeta.permitDependencies || []).map((x) => (
+                  <li key={`pd_${x}`}>{x}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Required competencies</div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                {(selectedSurveyMeta.requiredCerts || []).map((x) => (
+                  <li key={`rc_${x}`}>{x}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Mandatory evidence</div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                {(selectedSurveyMeta.mandatoryEvidence || []).map((x) => (
+                  <li key={`ev_${x}`}>{x}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 10, lineHeight: 1.45 }}>
+            Applying a pack updates document scope and communication fields in Step 1 (via Further details) and adds matching hazard rows here when found in the library.
+          </div>
+        </div>
+      )}
+      {String(form.location || "").toLowerCase().includes("zone") && (
+        <div style={{ marginTop: 8, fontSize: 11, color: "#633806", background: "#FAEEDA", padding: "6px 8px", borderRadius: 6 }}>
+          Hint: This location looks zone-based — confirm pack selection and permit interfaces before finalising hazard rows.
+        </div>
+      )}
+    </section>
+  );
+}
+
 function RiskBadge({ rf }) {
   const lvl = getRiskLevel({ RF: rf });
   const c = RL[lvl];
@@ -1044,7 +1285,7 @@ function RiskBadge({ rf }) {
 }
 
 // ─── Step 1 — Document info ──────────────────────────────────────────────────
-function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack }) {
+function StepInfo({ form, setForm, projects, workers, onNext }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const smartFields = isFeatureEnabled("rams_header_smart_fields");
   const [draftSavedAtLabel, setDraftSavedAtLabel] = useState("");
@@ -1070,12 +1311,11 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
   }, []);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
-  const [surveyPackKey, setSurveyPackKey] = useState(form.surveyWorkType || "");
-  const selectedSurveyPack = useMemo(() => findSurveyPackByKey(surveyPackKey || form.surveyWorkType), [surveyPackKey, form.surveyWorkType]);
-  const selectedSurveyMeta = useMemo(() => surveyPackMetaFor(selectedSurveyPack?.key || ""), [selectedSurveyPack]);
+  const [projectGeoLoading, setProjectGeoLoading] = useState(false);
   const [showHeaderAdvanced, setShowHeaderAdvanced] = useState(false);
-  const [showSurveyAdvanced, setShowSurveyAdvanced] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const showAllergenSection = orgHasFoodIndustrialPack() || orgHasPharmaPack();
+  const emergencyExtras = useMemo(() => loadEmergencySiteExtras(), []);
   const moreDetailsFilledCount = useMemo(() => {
     const t = (v) => String(v ?? "").trim();
     let n = 0;
@@ -1246,11 +1486,51 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
     }
   };
 
+  const applyProjectGeocodeAndWeather = async (project) => {
+    if (!project) return;
+    let lat = project.lat;
+    let lng = project.lng;
+    if ((lat == null || lat === "") || (lng == null || lng === "")) {
+      const q = [project.address, project.site, project.postcode, project.location].filter(Boolean).join(", ");
+      if (!String(q).trim()) return;
+      setProjectGeoLoading(true);
+      try {
+        const coords = await geocodeAddressNominatim(q);
+        if (coords) {
+          lat = coords.lat;
+          lng = coords.lng;
+        }
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setProjectGeoLoading(false);
+      }
+    }
+    if (lat == null || lng == null || lat === "" || lng === "") return;
+    const latStr = String(Number(Number(lat).toFixed(5)));
+    const lngStr = String(Number(Number(lng).toFixed(5)));
+    setForm((f) => ({
+      ...f,
+      siteLat: latStr,
+      siteLng: lngStr,
+    }));
+    if (String(form.siteWeatherNote || "").trim()) return;
+    setWeatherLoading(true);
+    try {
+      const line = await fetchWeatherSummary(latStr, lngStr);
+      setForm((f) => ({ ...f, siteLat: latStr, siteLng: lngStr, siteWeatherNote: line }));
+    } catch (e) {
+      console.warn(e);
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
+
   return (
     <div style={{ display:"flex", flexDirection:"column", minHeight:"min(72vh, 640px)" }}>
       <div style={{ flex:1, minHeight:0 }}>
       <div style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:20, lineHeight:1.5 }}>
-        Work through site, document control, team, hazard pack, then operatives. Use <strong>Further details</strong> for revision notes, client handover, assumptions, and optional site weather / emergency links.
+        Work through site, document control, and team. Use <strong>Further details</strong> for revision notes, client handover, assumptions, and optional site weather / emergency links. Surveying hazard packs are in <strong>Step 2</strong>.
       </div>
       {!smartFields && (
         <div style={{ marginBottom:12, fontSize:12, color:"#633806", background:"#FAEEDA", border:"1px solid #f6d89f", borderRadius:8, padding:"8px 10px" }}>
@@ -1330,6 +1610,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
                 jobRef: f.jobRef || project?.code || project?.projectCode || f.jobRef,
                 title: f.title || (project ? `${project.name} - RAMS` : f.title),
               }));
+              if (project) applyProjectGeocodeAndWeather(project);
             }} style={ss.inp}>
               <option value="">— Select project —</option>
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1349,6 +1630,11 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
               >
                 Undo project autofill
               </button>
+            )}
+            {projectGeoLoading && (
+              <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 6 }}>
+                Looking up project coordinates…
+              </div>
             )}
           </div>
           <div>
@@ -1569,74 +1855,6 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
       </>
       )}
 
-      <section className="app-rams-header-section" style={{ background: "var(--color-background-primary,#fff)" }} aria-labelledby="rams-h-pack">
-        <h3 id="rams-h-pack" className="app-rams-header-section-title">Hazard pack (surveying)</h3>
-        <div style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"0 0 10px", lineHeight:1.45 }}>
-          Optional: apply a surveying pack before Step 2. RAMS hazards stay the source of truth for risk rows.
-        </div>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
-          <select value={surveyPackKey} onChange={(e) => setSurveyPackKey(e.target.value)} style={{ ...ss.inp, minWidth: 260 }}>
-            <option value="">— Select surveying pack —</option>
-            {SURVEYING_PACKS.map((p) => (
-              <option key={p.key} value={p.key}>{p.label}</option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={!surveyPackKey}
-            onClick={() => onApplySurveyPack?.(surveyPackKey)}
-            style={{ ...ss.btnP, opacity: surveyPackKey ? 1 : 0.45, minHeight: 40 }}
-          >
-            Apply pack
-          </button>
-          {!!form.surveyWorkType && (
-            <span style={{ fontSize:11, color:"#0C447C", background:"#E6F1FB", padding:"2px 8px", borderRadius:20 }}>
-              Active: {form.surveyWorkTypeLabel || SURVEYING_PACKS.find((p) => p.key === form.surveyWorkType)?.label || form.surveyWorkType}
-            </span>
-          )}
-          <button type="button" onClick={() => setShowSurveyAdvanced((v) => !v)} style={{ ...ss.btn, minHeight: 40, fontSize:12 }}>
-            {showSurveyAdvanced ? "Hide recommendations" : "Show recommendations"}
-          </button>
-        </div>
-        {selectedSurveyPack && (
-          <div style={{ marginTop:10, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:10, background:"var(--color-background-secondary,#f7f7f5)" }}>
-            <div style={{ fontSize:11, fontWeight:700, color:"var(--color-text-secondary)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.04em" }}>
-              Pack readiness requirements
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:10 }}>
-              <div>
-                <div style={{ fontSize:11, fontWeight:600, marginBottom:4 }}>Permit dependencies</div>
-                <ul style={{ margin:0, paddingLeft:16, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>
-                  {(selectedSurveyMeta.permitDependencies || []).map((x) => <li key={`pd_${x}`}>{x}</li>)}
-                </ul>
-              </div>
-              <div>
-                <div style={{ fontSize:11, fontWeight:600, marginBottom:4 }}>Required competencies</div>
-                <ul style={{ margin:0, paddingLeft:16, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>
-                  {(selectedSurveyMeta.requiredCerts || []).map((x) => <li key={`rc_${x}`}>{x}</li>)}
-                </ul>
-              </div>
-              <div>
-                <div style={{ fontSize:11, fontWeight:600, marginBottom:4 }}>Mandatory evidence</div>
-                <ul style={{ margin:0, paddingLeft:16, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>
-                  {(selectedSurveyMeta.mandatoryEvidence || []).map((x) => <li key={`ev_${x}`}>{x}</li>)}
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-        {showSurveyAdvanced && (
-          <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginTop:10 }}>
-            RAMS remains the primary hazard source. This panel only applies surveying pack wording and suggested rows.
-          </div>
-        )}
-        {String(form.location || "").toLowerCase().includes("zone") && (
-          <div style={{ marginTop:8, fontSize:11, color:"#633806", background:"#FAEEDA", padding:"6px 8px", borderRadius:6 }}>
-            Hint: This location looks zone-based. Verify hazard pack selection and permit interfaces before Step 2.
-          </div>
-        )}
-      </section>
-
       <section className="app-rams-header-section" aria-labelledby="rams-h-ops">
         <h3 id="rams-h-ops" className="app-rams-header-section-title">Operatives on this RAMS</h3>
         <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"0 0 10px", lineHeight:1.45 }}>
@@ -1694,6 +1912,66 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
           </label>
         )}
       </section>
+
+      <div
+        style={{
+          marginBottom: 14,
+          padding: "10px 12px",
+          borderRadius: 8,
+          background: "#E6F1FB",
+          border: "1px solid #cfe3f8",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 10,
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ fontSize: 12, color: "#0C447C", lineHeight: 1.45, flex: 1, minWidth: 220 }}>
+          <strong>Nearest A&amp;E / hospital</strong> — save postcode → hospital under{" "}
+          <strong>Emergency contacts</strong>, then import into this RAMS in one click.
+          {emergencyExtras.nearestHospital ? (
+            <span style={{ display: "block", marginTop: 4, color: "var(--color-text-secondary)" }}>
+              Saved: {emergencyExtras.nearestHospital}
+            </span>
+          ) : null}
+        </div>
+        <button type="button" onClick={importFromEmergency} style={{ ...ss.btnP, fontSize: 12, minHeight: 38 }}>
+          Import from Emergency
+        </button>
+      </div>
+
+      {showAllergenSection && (
+        <section className="app-rams-header-section" style={{ marginBottom: 14 }} aria-labelledby="rams-h-allergen">
+          <h3 id="rams-h-allergen" className="app-rams-header-section-title">
+            Allergen &amp; food-production controls
+          </h3>
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.45 }}>
+            Your organisation includes food / pharma sectors — capture allergen changeover context and hygiene controls for this RAMS.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))", gap: 10 }}>
+            <div>
+              <label style={ss.lbl}>Active allergen changeover (ref / window)</label>
+              <input
+                value={form.allergenChangeoverRef || ""}
+                onChange={(e) => set("allergenChangeoverRef", e.target.value)}
+                placeholder="e.g. Line 3 — nut to dairy changeover 09:00–14:00"
+                style={ss.inp}
+              />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={ss.lbl}>Allergen controls for this work</label>
+              <textarea
+                value={form.allergenControlsNote || ""}
+                onChange={(e) => set("allergenControlsNote", e.target.value)}
+                placeholder="Cross-contamination controls, cleaning verification, PPE, exclusion from production zones…"
+                style={ss.ta}
+                rows={3}
+              />
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="app-rams-more-details-wrap">
         <button
@@ -1888,6 +2166,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onApplySurveyPack 
 
 // ─── Step 2 — Hazard picker ──────────────────────────────────────────────────
 function HazardPicker({
+  form,
   selected,
   selectedRows,
   orgActivities,
@@ -1895,6 +2174,10 @@ function HazardPicker({
   hazardPacks,
   projectId,
   surveyWorkType,
+  surveyPackFilter,
+  onSurveyPackFilterChange,
+  onClearSurveyPackFilter,
+  onApplySurveyPack,
   onToggle,
   onClearSelected,
   onAddAllVisible,
@@ -1917,7 +2200,8 @@ function HazardPicker({
 }) {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
-  const [quickFilter, setQuickFilter] = useState("all"); // all | favorites | most_used
+  const [quickFilter, setQuickFilter] = useState("all"); // all | favorites | most_used | surveying
+  const [activeSurveyTokens, setActiveSurveyTokens] = useState([]);
   const [packName, setPackName] = useState("");
   const [selectedPackId, setSelectedPackId] = useState("");
   const importPackRef = useRef(null);
@@ -1953,7 +2237,25 @@ function HazardPicker({
   const recentSet = new Set(recentIds);
   const sourceAll = useMemo(() => [...orgList, ...HAZARD_LIBRARY], [orgList]);
 
+  useEffect(() => {
+    if (surveyPackFilter?.active && Array.isArray(surveyPackFilter.tokens)) {
+      setActiveSurveyTokens(surveyPackFilter.tokens);
+      setQuickFilter("surveying");
+      setActiveCategory("All");
+      setSearch("");
+    }
+  }, [surveyPackFilter?.active, surveyPackFilter?.packKey]);
+
+  const surveyTokenMatches = useMemo(() => {
+    const tokens = activeSurveyTokens.length > 0 ? activeSurveyTokens : surveyPackFilter?.tokens || [];
+    if (!surveyPackFilter?.active || tokens.length === 0) return null;
+    return sourceAll.filter((h) => hazardMatchesSurveyTokens(h, tokens));
+  }, [surveyPackFilter, activeSurveyTokens, sourceAll]);
+
   const baseResults = useMemo(() => {
+    if (surveyPackFilter?.active && surveyTokenMatches) {
+      return surveyTokenMatches;
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       return sourceAll.filter(
@@ -1966,7 +2268,7 @@ function HazardPicker({
     if (activeCategory === "All") return sourceAll;
     if (activeCategory === ORG_ACTIVITY_CATEGORY) return orgList;
     return [...getByCategory(activeCategory), ...orgList.filter((h) => String(h.category || "") === activeCategory)];
-  }, [search, activeCategory, sourceAll, orgList]);
+  }, [search, activeCategory, sourceAll, orgList, surveyPackFilter, surveyTokenMatches]);
   const results = useMemo(() => {
     let list = [...baseResults];
     if (quickFilter === "favorites") {
@@ -1997,6 +2299,10 @@ function HazardPicker({
     () => results.filter((h) => !selectedIdSet.has(h.id)).length,
     [results, selectedIdSet]
   );
+  const hazardPg = useRegisterListPaging(40);
+  useEffect(() => {
+    hazardPg.reset();
+  }, [search, activeCategory, quickFilter, surveyPackFilter?.active, surveyPackFilter?.packKey, hazardPg.reset]);
   const favoritesNotSelectedCount = useMemo(
     () => sourceAll.filter((h) => favoriteIds.has(h.id) && !selectedIdSet.has(h.id)).length,
     [sourceAll, favoriteIds, selectedIdSet]
@@ -2255,6 +2561,70 @@ function HazardPicker({
 
   return (
     <div>
+      <SurveyingPackSection form={form} onApplySurveyPack={onApplySurveyPack} />
+
+      {surveyPackFilter?.active && (surveyPackFilter.tokens || []).length > 0 && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: "10px 12px",
+            borderRadius: 8,
+            background: "#f0fdf8",
+            border: "1px solid #99f6e4",
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: "#0f766e", fontWeight: 600 }}>
+              Surveying library filter — {surveyPackFilter.packLabel || "PAS128 pack"}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSurveyTokens([]);
+                setQuickFilter("all");
+                onClearSurveyPackFilter?.();
+              }}
+              style={{ ...ss.btn, fontSize: 11, minHeight: 30 }}
+            >
+              Show full library
+            </button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {(surveyPackFilter.tokens || []).map((tok) => {
+              const active = activeSurveyTokens.length === 0 || activeSurveyTokens.includes(tok);
+              return (
+                <button
+                  key={`st_${tok}`}
+                  type="button"
+                  onClick={() => {
+                    setActiveSurveyTokens((prev) => {
+                      const base = prev.length > 0 ? prev : surveyPackFilter.tokens || [];
+                      if (base.includes(tok) && base.length === 1) return surveyPackFilter.tokens || [];
+                      if (base.includes(tok)) return base.filter((t) => t !== tok);
+                      return [...base, tok];
+                    });
+                  }}
+                  style={{
+                    ...ss.btn,
+                    fontSize: 11,
+                    minHeight: 28,
+                    padding: "2px 10px",
+                    background: active ? "#0f766e" : "#fff",
+                    color: active ? "#fff" : "#0f766e",
+                    borderColor: "#0d9488",
+                  }}
+                >
+                  {tok}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 8 }}>
+            Showing {results.length} PAS128-related activit{results.length === 1 ? "y" : "ies"} — tap tokens to narrow further.
+          </div>
+        </div>
+      )}
+
       <div style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:16 }}>
         Select all activities that apply to this job. You can edit each one in the next step.
         <span style={{ marginLeft:8, padding:"2px 10px", borderRadius:20, fontSize:11, fontWeight:500, background:"#E6F1FB", color:"#0C447C" }}>
@@ -2540,6 +2910,7 @@ function HazardPicker({
       <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
         {[
           ["all", "All"],
+          ["surveying", "Surveying"],
           ["favorites", "Favorites"],
           ["recent", "Recent"],
           ["most_used", "Most used"],
@@ -2547,7 +2918,21 @@ function HazardPicker({
           <button
             key={id}
             type="button"
-            onClick={() => setQuickFilter(id)}
+            onClick={() => {
+              setQuickFilter(id);
+              if (id === "surveying" && surveyPackFilter?.tokens?.length) {
+                onSurveyPackFilterChange?.({
+                  active: true,
+                  tokens: surveyPackFilter.tokens,
+                  packKey: surveyPackFilter.packKey,
+                  packLabel: surveyPackFilter.packLabel,
+                });
+                setActiveSurveyTokens(surveyPackFilter.tokens);
+              } else if (id !== "surveying") {
+                onClearSurveyPackFilter?.();
+                setActiveSurveyTokens([]);
+              }
+            }}
             style={{
               ...ss.btn,
               fontSize: 12,
@@ -2586,7 +2971,12 @@ function HazardPicker({
 
       {/* hazard list */}
       <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:20 }}>
-        {results.map(h=>{
+        {hazardPg.hasMore(results) ? (
+          <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+            Showing {Math.min(hazardPg.cap, results.length)} of {results.length} hazards
+          </div>
+        ) : null}
+        {hazardPg.visible(results).map((h) => {
           const sel = selected.some(s=>s.id===h.id);
           const isOrg = !!h._orgTemplate || String(h.id || "").startsWith("org_");
           return (
@@ -2661,6 +3051,13 @@ function HazardPicker({
             </div>
           );
         })}
+        {hazardPg.hasMore(results) ? (
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+            <button type="button" style={ss.btn} onClick={hazardPg.showMore}>
+              Show more ({hazardPg.remaining(results)} remaining)
+            </button>
+          </div>
+        ) : null}
         {results.length===0 && <div style={{ textAlign:"center", padding:"2rem", color:"var(--color-text-secondary)", fontSize:13 }}>No hazards match your search.</div>}
       </div>
 
@@ -2756,6 +3153,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
       const r = prev[idx];
       const copy = JSON.parse(JSON.stringify(r));
       copy.id = genId();
+      copy.rowSource = ROW_SOURCE.MANUAL;
       const arr = [...prev];
       arr.splice(idx + 1, 0, copy);
       return arr;
@@ -2779,6 +3177,9 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
     <div>
       <div style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:12 }}>
         Review and edit each hazard row. Adjust control measures, risk scores and PPE to match your specific job.
+        <span style={{ display: "block", fontSize: 12, color: "var(--color-text-tertiary, #94a3b8)", marginTop: 6 }}>
+          Source badges: <RowSourceBadge source="survey_pack" /> <RowSourceBadge source="hazard_pack" /> <RowSourceBadge source="library" /> <RowSourceBadge source="org_template" /> <RowSourceBadge source="manual" /> — audit before issue.
+        </span>
         <span style={{ display: "block", fontSize: 12, color: "var(--color-text-tertiary, #94a3b8)", marginTop: 6 }}>
           Tip: press <kbd style={{ padding: "1px 6px", borderRadius: 4, border: "1px solid var(--color-border-tertiary)", fontSize: 11 }}>Esc</kbd> to close an open row or exit &quot;expand all&quot;.
         </span>
@@ -2844,6 +3245,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                 <div style={{ flex:1 }}>
                   <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:4 }}>
                     <span style={{ fontSize:10, padding:"1px 6px", borderRadius:20, background:"#E6F1FB", color:"#0C447C" }}>{r.category}</span>
+                    <RowSourceBadge source={inferRowSource(r)} />
                     <RiskBadge rf={r.initialRisk.RF} />
                     <span style={{ fontSize:10, color:"var(--color-text-secondary)" }}>→</span>
                     <RiskBadge rf={r.revisedRisk.RF} />
@@ -4439,6 +4841,7 @@ function snapshotBuilderState(step, form, rows) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function RAMSTemplateBuilder() {
+  const { pushToast } = useToast();
   const [view, setView] = useState("list"); // list | builder
   const [step, setStep] = useState(1);
   const [ramsDocs, setRamsDocs] = useState(()=>load("rams_builder_docs",[]));
@@ -4463,6 +4866,12 @@ export default function RAMSTemplateBuilder() {
   const [form, setForm] = useState({});
   const [selectedHazards, setSelectedHazards] = useState([]);
   const [editedRows, setEditedRows] = useState([]);
+  const [surveyPackFilter, setSurveyPackFilter] = useState({
+    active: false,
+    tokens: [],
+    packKey: "",
+    packLabel: "",
+  });
 
   const builderBaselineRef = useRef("");
 
@@ -4873,7 +5282,7 @@ export default function RAMSTemplateBuilder() {
     setSelectedHazards((prev) => [...prev, ...mapped.map((x) => ({ id: x.id, ...x }))]);
     setEditedRows((rows) => [
       ...rows,
-      ...mapped.map((x) => ({ ...JSON.parse(JSON.stringify(x)), sourceId: x.id, id: genId() })),
+      ...mapped.map((x) => stampHazardRow(x, ROW_SOURCE.HAZARD_PACK)),
     ]);
     setHazardPacks((prev) =>
       prev.map((p) =>
@@ -4915,6 +5324,8 @@ export default function RAMSTemplateBuilder() {
         controlMeasures: (r.controlMeasures || []).filter(Boolean),
         ppeRequired: (r.ppeRequired || []).filter(Boolean),
         regs: (r.regs || []).filter(Boolean),
+        rowSource: inferRowSource(r),
+        _orgTemplate: !!r._orgTemplate || String(r.sourceId || r.id || "").startsWith("org_"),
       }))
       .filter((x) => x.id && !existing.has(x.id));
     if (toAdd.length === 0) {
@@ -4924,7 +5335,7 @@ export default function RAMSTemplateBuilder() {
     setSelectedHazards((prev) => [...prev, ...toAdd.map((x) => ({ id: x.id, ...x }))]);
     setEditedRows((rows) => [
       ...rows,
-      ...toAdd.map((x) => ({ ...JSON.parse(JSON.stringify(x)), sourceId: x.id, id: genId() })),
+      ...toAdd.map((x) => stampHazardRow(x, x.rowSource || ROW_SOURCE.LIBRARY)),
     ]);
     window.alert(`Imported ${toAdd.length} activities from latest RAMS: ${latest.title || latest.documentNo || latest.id}`);
   };
@@ -4937,7 +5348,9 @@ export default function RAMSTemplateBuilder() {
     setSelectedHazards((prev) => [...prev, ...toAdd]);
     setEditedRows((rows) => [
       ...rows,
-      ...toAdd.map((h) => ({ ...JSON.parse(JSON.stringify(h)), sourceId: h.id, id: genId() })),
+      ...toAdd.map((h) =>
+        stampHazardRow(h, h._orgTemplate || String(h.id || "").startsWith("org_") ? ROW_SOURCE.ORG_TEMPLATE : ROW_SOURCE.LIBRARY)
+      ),
     ]);
   };
 
@@ -4948,8 +5361,9 @@ export default function RAMSTemplateBuilder() {
         setEditedRows(rows => rows.filter(r=>(r.sourceId||r.id)!==h.id));
         return prev.filter(s=>s.id!==h.id);
       } else {
-        // add to edited rows with copy of library data
-        const newRow = { ...JSON.parse(JSON.stringify(h)), sourceId:h.id, id:genId() };
+        const rowSource =
+          h._orgTemplate || String(h.id || "").startsWith("org_") ? ROW_SOURCE.ORG_TEMPLATE : ROW_SOURCE.LIBRARY;
+        const newRow = stampHazardRow(h, rowSource);
         setEditedRows(rows=>[...rows, newRow]);
         setHazardPrefs((prev) => {
           const current = Array.isArray(prev?.recentIds) ? prev.recentIds : [];
@@ -4969,6 +5383,7 @@ export default function RAMSTemplateBuilder() {
     const pack = findSurveyPackByKey(packKey);
     if (!pack) return;
     const meta = surveyPackMetaFor(pack.key);
+    const project = projects.find((p) => p.id === form.projectId);
     setForm((prev) => {
       const scoped = String(prev.scope || "").trim();
       const addLine = `Surveying addendum: ${pack.scope}`;
@@ -5002,23 +5417,60 @@ export default function RAMSTemplateBuilder() {
       };
     });
 
+    setSurveyPackFilter({
+      active: true,
+      tokens: pack.hazardTokens || [],
+      packKey: pack.key,
+      packLabel: pack.label,
+    });
+
     const recommended = findHazardsForSurveyPack(pack);
-    if (recommended.length > 0) {
-      const existing = new Set(selectedHazards.map((s) => s.id));
-      const toAdd = recommended.filter((h) => h && !existing.has(h.id));
-      if (toAdd.length > 0) {
-        setSelectedHazards((prev) => [...prev, ...toAdd]);
-        setEditedRows((rows) => [
-          ...rows,
-          ...toAdd.map((h) => ({ ...JSON.parse(JSON.stringify(h)), sourceId: h.id, id: genId() })),
-        ]);
-      }
-      window.alert(`Applied "${pack.label}". Added ${toAdd.length} recommended hazard row(s).`);
-      trackEvent("rams_survey_pack_applied", { pack: pack.key, hazardsAdded: toAdd.length });
-      return;
+    const existing = new Set(selectedHazards.map((s) => s.id));
+    const toAdd = recommended.filter((h) => h && !existing.has(h.id));
+    if (toAdd.length > 0) {
+      setSelectedHazards((prev) => [...prev, ...toAdd]);
+      setEditedRows((rows) => [...rows, ...toAdd.map((h) => stampHazardRow(h, ROW_SOURCE.SURVEY_PACK))]);
     }
-    trackEvent("rams_survey_pack_applied", { pack: pack.key, hazardsAdded: 0 });
-    window.alert(`Applied "${pack.label}". No matching hazard rows were found automatically; you can add hazards manually in Step 2.`);
+
+    const rowsForPack = toAdd.length > 0 ? toAdd : recommended;
+    if (rowsForPack.length > 0) {
+      const templates = buildPackTemplatesFromRows(
+        rowsForPack.map((h) => ({ ...h, sourceId: h.id, id: h.id }))
+      );
+      const packName = buildSurveyQuickPackName(pack, project?.name, form.location);
+      const existingPack = hazardPacks.find((p) => p.name === packName && p.surveyWorkType === pack.key);
+      saveHazardPack({
+        id: existingPack?.id || `pack_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        name: packName,
+        templates,
+        version: existingPack?.version || 1,
+        versionHistory: existingPack?.versionHistory || [],
+        status: HAZARD_PACK_STATUS.CURRENT,
+        projectId: form.projectId || "",
+        surveyWorkType: pack.key,
+        keywords: buildPackKeywordsFromTemplates(templates),
+        isPinned: existingPack?.isPinned || false,
+        appliedCount: Math.max(0, Number(existingPack?.appliedCount || 0)) + 1,
+        lastAppliedAt: new Date().toISOString(),
+        createdAt: existingPack?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      pushToast({
+        type: "success",
+        title: "Survey pack applied",
+        message: existingPack
+          ? `Updated quick pack "${packName}" · library filtered to PAS128 tokens.`
+          : `Saved quick pack "${packName}" · library filtered to PAS128 tokens.`,
+      });
+    } else {
+      pushToast({
+        type: "info",
+        title: "Survey pack applied",
+        message: `Scope updated · library filtered to PAS128 tokens (${(pack.hazardTokens || []).slice(0, 4).join(", ")}…). Pick activities below.`,
+      });
+    }
+
+    trackEvent("rams_survey_pack_applied", { pack: pack.key, hazardsAdded: toAdd.length });
   };
 
   const handleSave = () => {
@@ -5274,6 +5726,11 @@ export default function RAMSTemplateBuilder() {
     };
     newDoc.contentHash = computeRamsFingerprint(newDoc, rows);
     setRamsDocs((prev) => [newDoc, ...prev]);
+    pushToast({
+      type: "success",
+      title: "Duplicated as draft",
+      message: `"${newDoc.title}" — open from the list to edit.`,
+    });
   };
 
   const renameDoc = (doc) => {
@@ -5578,12 +6035,12 @@ export default function RAMSTemplateBuilder() {
             setForm={setForm}
             projects={projects}
             workers={workers}
-            onApplySurveyPack={applySurveyPack}
             onNext={() => setStep(2)}
           />
         )}
         {step===2 && (
           <HazardPicker
+            form={form}
             selected={selectedHazards}
             selectedRows={editedRows}
             orgActivities={orgActivities}
@@ -5591,6 +6048,12 @@ export default function RAMSTemplateBuilder() {
             hazardPacks={hazardPacks}
             projectId={form.projectId}
             surveyWorkType={form.surveyWorkType}
+            surveyPackFilter={surveyPackFilter}
+            onSurveyPackFilterChange={setSurveyPackFilter}
+            onClearSurveyPackFilter={() =>
+              setSurveyPackFilter({ active: false, tokens: [], packKey: "", packLabel: "" })
+            }
+            onApplySurveyPack={applySurveyPack}
             onToggle={toggleHazard}
             onClearSelected={clearHazardSelection}
             onAddAllVisible={addHazardsVisible}

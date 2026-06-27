@@ -1,7 +1,7 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.2.2";
+const SW_VERSION = "mysafeops-v1.2.3";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -60,6 +60,7 @@ self.addEventListener("fetch", (event) => {
         .catch(() =>
           caches.match("/index.html")
             .then(cached => cached || caches.match(OFFLINE_URL))
+            .then(fallback => fallback || new Response("Offline", { status: 503, statusText: "Offline", headers: { "Content-Type": "text/plain" } }))
         )
     );
     return;

@@ -38,17 +38,17 @@ W aplikacji i tabeli porównawczej używane są **te** etykiety i limity (GB = p
 
 | Plan (id) | Nazwa w UI | Cena | Okres | Workers | Projekty | „Chmura” (limit bajtów) |
 |-----------|------------|------|--------|---------|----------|------------------------|
-| `free` | Free | £0 | forever | 5 | 2 | 500 MB |
-| `starter` | Solo | **£29** | miesiąc | 5 | 3 | 2 GB |
-| `team` | Team | **£79** | miesiąc | 20 | 10 | 10 GB |
-| `business` | Business | **£149** | miesiąc | 75 | 40 | 50 GB |
-| `enterprise` | Enterprise | **£399** | miesiąc | 150 | 80 | 200 GB |
+| `free` | Free | £0 | forever | 3 | 10 | 500 MB |
+| `starter` | Solo | **£19** | miesiąc | 5 | 100 | 2 GB |
+| `team` | Team | **£99** | miesiąc | 20 | 500 | 10 GB |
+| `business` | Business | **£249** | miesiąc | 75 | 2,500 | 50 GB |
+| `enterprise` | Enterprise | **£499** | miesiąc | 200 | 10,000 | 200 GB |
 | `enterprise_plus` | Enterprise Plus | Contact us | custom | bez limitu (w praktyce) | bez limitu | bez limitu |
 | `trial` | Trial | £0 | 14 dni | 200 | 50 | 10 GB |
 
 **Stripe:** cztery subskrybowalne plany to `starter` / `team` / `business` / `enterprise` — zmienne Edge: `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_TEAM`, `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_ENTERPRISE`. Seed: `npm run stripe:seed-prices` (README). **`enterprise_plus`** — umowa / ręcznie w DB, nie Checkout w standardowym flow.
 
-**Uwaga:** starsze materiały marketingowe (np. Solo £19, Team £49) **nie** odpowiadają już `billingPlans.js` — przy audycie materiałów użyj tabeli powyżej.
+**Uwaga:** starsze materiały marketingowe (np. Solo £29, Team £79) **nie** odpowiadają już `billingPlans.js` — przy audycie materiałów użyj tabeli powyżej.
 
 ---
 

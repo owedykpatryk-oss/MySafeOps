@@ -324,7 +324,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
           </div>
           <div className="prc">
             <div className="pcard fu">
-              <h3>Free</h3><div className="pr">£0</div><div className="yr">5 workers · 2 projects</div><div className="wf">👷 Try before you buy</div>
+              <h3>Free</h3><div className="pr">£0</div><div className="yr">3 workers · 10 projects</div><div className="wf">👷 Try before you buy</div>
               <ul><li>Core RAMS &amp; permits</li><li>500MB cloud backup cap</li><li>Offline-first</li></ul>
               <Link
                 to="/login"
@@ -336,7 +336,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
               </Link>
             </div>
             <div className="pcard fu">
-              <h3>Solo</h3><div className="pr">£29<span>/mo</span></div><div className="yr">5 workers · 3 projects · 2GB</div><div className="wf">👷 Freelancer / single site</div>
+              <h3>Solo</h3><div className="pr">£19<span>/mo</span></div><div className="yr">5 workers · 100 projects · 2GB</div><div className="wf">👷 Freelancer / single site</div>
               <ul><li>All safety modules</li><li>Cloud backup (when configured)</li><li>Email support</li></ul>
               <Link
                 to="/login"
@@ -348,7 +348,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
               </Link>
             </div>
             <div className="pcard pop fu">
-              <h3>Team</h3><div className="pr">£79<span>/mo</span></div><div className="yr">20 workers · 10 projects · 10GB</div><div className="wf">👷 Small contractor</div>
+              <h3>Team</h3><div className="pr">£99<span>/mo</span></div><div className="yr">20 workers · 500 projects · 10GB</div><div className="wf">👷 Small contractor</div>
               <ul><li>Industrial Sector Pack</li><li>Invites &amp; role management</li><li>Priority support</li><li className="free">Multi-supervisor sites</li></ul>
               <Link
                 to="/login"
@@ -360,7 +360,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
               </Link>
             </div>
             <div className="pcard fu">
-              <h3>Business</h3><div className="pr">£149<span>/mo</span></div><div className="yr">75 workers · 40 projects · 50GB</div><div className="wf">👷 Multi-site governance</div>
+              <h3>Business</h3><div className="pr">£249<span>/mo</span></div><div className="yr">75 workers · 2,500 projects · 50GB</div><div className="wf">👷 Multi-site governance</div>
               <ul><li>Tamper-evident audit log</li><li>Dedicated onboarding</li><li>Higher operational headroom</li></ul>
               <Link
                 to="/login"
@@ -372,7 +372,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
               </Link>
             </div>
             <div className="pcard fu">
-              <h3>Enterprise</h3><div className="pr">£399<span>/mo</span></div><div className="yr">150 workers · 80 projects · 200GB</div><div className="wf">👷 Group operations</div>
+              <h3>Enterprise</h3><div className="pr">£499<span>/mo</span></div><div className="yr">200 workers · 10,000 projects · 200GB</div><div className="wf">👷 Group operations</div>
               <ul><li>Custom subdomain</li><li>Group MI dashboard</li><li>SLA &amp; named support</li></ul>
               <Link
                 to="/login"

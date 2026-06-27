@@ -46,8 +46,18 @@ export function useD1OrgArraySync({
   const d1DebounceRef = useRef(null);
 
   useEffect(() => {
-    save(storageKey, value);
-  }, [storageKey, value, save]);
+    const cacheMs = Math.min(debounceMs, 500);
+    let timer = null;
+    const key = storageKey;
+    const val = value;
+    timer = window.setTimeout(() => save(key, val), cacheMs);
+    return () => {
+      if (timer != null) {
+        window.clearTimeout(timer);
+        save(key, val);
+      }
+    };
+  }, [storageKey, value, save, debounceMs]);
 
   useEffect(() => {
     const onOrgChange = () => {

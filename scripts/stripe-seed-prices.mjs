@@ -20,10 +20,10 @@ config({ path: resolve(__dirname, "../.env.local") });
 config({ path: resolve(__dirname, "../.env") });
 
 const PLANS = [
-  { planId: "starter", productName: "MySafeOps — Solo", amountPence: 2900 },
-  { planId: "team", productName: "MySafeOps — Team", amountPence: 7900 },
-  { planId: "business", productName: "MySafeOps — Business", amountPence: 14900 },
-  { planId: "enterprise", productName: "MySafeOps — Enterprise", amountPence: 39900 },
+  { planId: "starter", productName: "MySafeOps — Solo", amountPence: 1900 },
+  { planId: "team", productName: "MySafeOps — Team", amountPence: 9900 },
+  { planId: "business", productName: "MySafeOps — Business", amountPence: 24900 },
+  { planId: "enterprise", productName: "MySafeOps — Enterprise", amountPence: 49900 },
 ];
 
 const SECRET = process.env.STRIPE_SECRET_KEY?.trim();

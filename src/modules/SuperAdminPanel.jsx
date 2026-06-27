@@ -21,6 +21,8 @@ const SUPERADMIN_DB_MIGRATIONS = [
   "20260420180000_superadmin_platform_stats_extend.sql",
   "20260420190000_superadmin_recent_orgs.sql",
   "20260420200000_superadmin_recent_orgs_paging.sql",
+  "20260427120000_superadmin_provision_org_members.sql",
+  "20260427120100_ensure_my_org_invite_switch.sql",
 ];
 const ORG_AUDIT_KEY_PREFIX = "mysafeops_audit_";
 
@@ -411,6 +413,8 @@ export default function SuperAdminPanel() {
   const [copyHint, setCopyHint] = useState("");
   const copyTimerRef = useRef(null);
   const cloudFetchSeq = useRef(0);
+  const [fessProvisionBusy, setFessProvisionBusy] = useState(false);
+  const [fessProvisionResult, setFessProvisionResult] = useState(null);
   const allowed = isSuperAdminEmail(user?.email);
 
   recentOrgsRef.current = recentOrgs;
@@ -539,6 +543,27 @@ export default function SuperAdminPanel() {
           : null,
     };
     downloadFile(`mysafeops-superadmin-snapshot-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2), "application/json");
+  };
+
+  const provisionFessGroup = async () => {
+    if (!supabase || fessProvisionBusy) return;
+    setFessProvisionBusy(true);
+    setFessProvisionResult(null);
+    try {
+      const { data, error } = await supabase.rpc("superadmin_provision_org_members", {
+        p_org_slug: "fess-group",
+        p_org_name: "FESS Group",
+        p_emails: ["jack@fessgroup.co.uk", "maciej@fessgroup.co.uk"],
+        p_role: "admin",
+      });
+      if (error) throw error;
+      setFessProvisionResult({ ok: true, rows: Array.isArray(data) ? data : [] });
+      fetchCloud();
+    } catch (e) {
+      setFessProvisionResult({ ok: false, message: e?.message || String(e) });
+    } finally {
+      setFessProvisionBusy(false);
+    }
   };
 
   /** Cloud + recent orgs only (no device/localStorage metrics) — for sharing with ops without local browser data. */
@@ -958,6 +983,33 @@ export default function SuperAdminPanel() {
         <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
           Your login has <strong>unlimited</strong> workers / projects / storage in the billing UI. Open{" "}
           <strong>More → Billing &amp; limits</strong> for this organisation; use this dashboard for platform-wide numbers.
+        </p>
+      </div>
+
+      <div style={{ ...ss.card, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>FESS Group — merge accounts</div>
+        <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>
+          Creates or updates org slug <code style={{ fontSize: 12 }}>fess-group</code> and attaches{" "}
+          <strong>jack@fessgroup.co.uk</strong> and <strong>maciej@fessgroup.co.uk</strong> as admins (replaces solo workspaces).
+          Requires migration <code style={{ fontSize: 11 }}>20260427120000_superadmin_provision_org_members.sql</code>.
+        </p>
+        <button type="button" onClick={provisionFessGroup} style={ss.btn} disabled={fessProvisionBusy || !isSupabaseConfigured()}>
+          {fessProvisionBusy ? "Provisioning…" : "Provision FESS Group org"}
+        </button>
+        {fessProvisionResult?.ok ? (
+          <ul style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
+            {(fessProvisionResult.rows || []).map((r) => (
+              <li key={r.out_email || r.out_user_id}>
+                {r.out_email}: <strong>{r.out_action}</strong>
+                {r.out_user_id ? ` (${shortUserId(r.out_user_id)})` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : fessProvisionResult?.message ? (
+          <div style={{ marginTop: 10, fontSize: 13, color: "#A32D2D" }}>{fessProvisionResult.message}</div>
+        ) : null}
+        <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+          After merge: Jack and Maciej sign out/in → Settings → Organisation → <strong>Apply FESS Group branding</strong> → Save.
         </p>
       </div>
 

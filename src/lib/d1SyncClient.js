@@ -188,25 +188,35 @@ export async function d1AppendServerAudit(supabase, orgSlug, row) {
   const org = NS(orgSlug);
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
-  const res = await fetch(`${base}/v1/audit/append`, {
-    method: "POST",
-    headers: {
-      ...h,
-      "X-Org-Slug": org,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: String(row.action || "unknown"),
-      entity: String(row.entity || "unknown"),
-      detail: row.detail != null ? String(row.detail) : undefined,
-      client_row_id: row.id != null ? String(row.id) : undefined,
-      extra: { at: row.at },
-    }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (res.status === 503) return { ok: false, error: "audit_not_configured", ...d1Meta(res, body) };
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
-  return { ok: true, seq: body.seq };
+  const payload = {
+    action: String(row.action || "unknown"),
+    entity: String(row.entity || "unknown"),
+    detail: row.detail != null ? String(row.detail) : undefined,
+    client_row_id: row.id != null ? String(row.id) : undefined,
+    extra: { at: row.at },
+  };
+
+  const maxAttempts = 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(`${base}/v1/audit/append`, {
+      method: "POST",
+      headers: {
+        ...h,
+        "X-Org-Slug": org,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 503) return { ok: false, error: "audit_not_configured", ...d1Meta(res, body) };
+    if (res.ok) return { ok: true, seq: body.seq };
+    if (res.status === 409 && attempt < maxAttempts - 1) {
+      await new Promise((r) => setTimeout(r, 80 * (attempt + 1)));
+      continue;
+    }
+    return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
+  }
+  return { ok: false, error: "concurrent_append_retry" };
 }
 
 /**

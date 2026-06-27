@@ -1,11 +1,26 @@
 import { ms } from "../utils/moduleStyles";
+import RegisterPdfExportButton from "./RegisterPdfExportButton";
+import { useRegisterPdfViewId } from "../context/RegisterPdfExportContext";
+import { canExportModulePdf } from "../navigation/moduleCatalogMeta";
 
 /**
  * Consistent page header (badge, title, lead, optional actions) used across workspace modules.
+ * When `exportModuleId` is omitted, auto-offers PDF export if the active workspace view is a register.
  */
-export default function PageHero({ badgeText, title, lead, right, marginBottom = 24 }) {
+export default function PageHero({ badgeText, title, lead, right, marginBottom = 24, exportModuleId, exportModuleLabel }) {
   const len = badgeText ? String(badgeText).length : 0;
   const badgeFontSize = len > 4 ? 9 : len > 3 ? 10 : 12;
+  const activeViewId = useRegisterPdfViewId();
+  const pdfModuleId = exportModuleId || (canExportModulePdf(activeViewId) ? activeViewId : null);
+  const pdfLabel = exportModuleLabel || (typeof title === "string" ? title : undefined);
+
+  const hasRight = Boolean(pdfModuleId || right);
+  const rightSlot = (
+    <>
+      {pdfModuleId ? <RegisterPdfExportButton moduleId={pdfModuleId} label={pdfLabel} /> : null}
+      {right}
+    </>
+  );
 
   return (
     <div
@@ -55,8 +70,8 @@ export default function PageHero({ badgeText, title, lead, right, marginBottom =
           )
         ) : null}
       </div>
-      {right ? (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", flexShrink: 0 }}>{right}</div>
+      {hasRight ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", flexShrink: 0 }}>{rightSlot}</div>
       ) : null}
     </div>
   );

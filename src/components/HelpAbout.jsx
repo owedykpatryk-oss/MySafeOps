@@ -132,8 +132,8 @@ const MODULE_GROUPS = [
     ],
   },
   {
-    title: "AI & documents",
-    items: ["AI RAMS", "AI toolbox", "AI photo hazard", "Templates", "Documents", "Monthly report"],
+    title: "Reports & documents",
+    items: ["Templates", "Documents", "Monthly report", "Analytics"],
   },
   {
     title: "Data & settings",

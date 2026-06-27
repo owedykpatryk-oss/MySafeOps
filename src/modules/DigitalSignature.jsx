@@ -12,6 +12,20 @@ const fmtDateTime = (iso) => {
   return d.toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
 };
 
+/** Workers from register plus one-off signers stored on the document. */
+function resolveDocSigners(doc, workers) {
+  const fromWorkers = (doc.signerIds || [])
+    .map((id) => workers.find((w) => w.id === id))
+    .filter(Boolean)
+    .map((w) => ({ id: w.id, name: w.name, role: w.role || "Operative" }));
+  const custom = (doc.customSigners || []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    role: s.role || "Operative",
+  }));
+  return [...fromWorkers, ...custom];
+}
+
 const ss = { ...ms, btnPrimary: ms.btnP, label: ms.lbl, input: ms.inp };
 
 function SignatureCanvas({ onCapture, label = "Draw signature here" }) {
@@ -259,11 +273,20 @@ export function SignaturePanel({ docId, docTitle, docType="RAMS", signers=[], on
 
 export default function SignatureManager() {
   const [docs, setDocs] = useState(()=>loadJSON("sig_docs",[]));
-  const [workers] = useState(()=>loadJSON("mysafeops_workers",[]));
+  const [workers, setWorkers] = useState(() => loadJSON("mysafeops_workers", []));
   const [activeDoc, setActiveDoc] = useState(null);
   const [showNew, setShowNew] = useState(false);
-  const [newDoc, setNewDoc] = useState({ title:"", type:"RAMS", signerIds:[] });
+  const [newDoc, setNewDoc] = useState({ title: "", type: "RAMS", signerIds: [], customSigners: [] });
+  const [customSignerName, setCustomSignerName] = useState("");
+  const [customSignerRole, setCustomSignerRole] = useState("");
   const [allSigs, setAllSigs] = useState(()=>loadJSON("signatures",[]));
+
+  const refreshWorkers = useCallback(() => {
+    setWorkers(loadJSON("mysafeops_workers", []));
+  }, []);
+
+  useEffect(() => { refreshWorkers(); }, [refreshWorkers]);
+  useEffect(() => { if (showNew) refreshWorkers(); }, [showNew, refreshWorkers]);
 
   useEffect(()=>{ saveJSON("sig_docs",docs); },[docs]);
   useEffect(()=>{ saveJSON("signatures",allSigs); },[allSigs]);
@@ -273,11 +296,29 @@ export default function SignatureManager() {
 
   const addDoc = () => {
     if (!newDoc.title.trim()) return;
-    const d = { id:genId(), title:newDoc.title.trim(), type:newDoc.type, signerIds:newDoc.signerIds, createdAt:new Date().toISOString() };
+    const d = {
+      id: genId(),
+      title: newDoc.title.trim(),
+      type: newDoc.type,
+      signerIds: newDoc.signerIds,
+      customSigners: newDoc.customSigners || [],
+      createdAt: new Date().toISOString(),
+    };
     setDocs(prev=>[d,...prev]);
-    setNewDoc({ title:"", type:"RAMS", signerIds:[] });
+    setNewDoc({ title: "", type: "RAMS", signerIds: [], customSigners: [] });
+    setCustomSignerName("");
+    setCustomSignerRole("");
     setShowNew(false);
     setActiveDoc(d);
+  };
+
+  const addCustomSigner = () => {
+    const name = customSignerName.trim();
+    if (!name) return;
+    const entry = { id: genId(), name, role: customSignerRole.trim() || "Operative" };
+    setNewDoc((n) => ({ ...n, customSigners: [...(n.customSigners || []), entry] }));
+    setCustomSignerName("");
+    setCustomSignerRole("");
   };
 
   const deleteDoc = (id) => {
@@ -289,7 +330,7 @@ export default function SignatureManager() {
   const sigCount = (docId) => allSigs.filter(s=>s.docId===docId).length;
 
   if (activeDoc) {
-    const signers = workers.filter(w=>activeDoc.signerIds?.includes(w.id));
+    const signers = resolveDocSigners(activeDoc, workers);
     return (
       <div style={{ fontFamily:"DM Sans, system-ui, sans-serif", padding:"1rem 0" }}>
         <button onClick={()=>setActiveDoc(null)} style={{ ...ss.btn, marginBottom:16, fontSize:12 }}>← Back</button>
@@ -326,14 +367,14 @@ export default function SignatureManager() {
               </select>
             </div>
           </div>
-          {workers.length>0 && (
-            <div style={{ marginBottom:14 }}>
-              <label style={ss.label}>Required signers</label>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          {workers.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={ss.label}>Signers from workers register</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {workers.map(w=>{
                   const sel = newDoc.signerIds.includes(w.id);
                   return (
-                    <button key={w.id} onClick={()=>setNewDoc(n=>({ ...n, signerIds:sel?n.signerIds.filter(id=>id!==w.id):[...n.signerIds,w.id] }))}
+                    <button key={w.id} type="button" onClick={()=>setNewDoc(n=>({ ...n, signerIds:sel?n.signerIds.filter(id=>id!==w.id):[...n.signerIds,w.id] }))}
                       style={{ padding:"4px 12px", borderRadius:20, fontSize:12, cursor:"pointer", background:sel?"#0d9488":"var(--color-background-secondary,#f7f7f5)", color:sel?"#E1F5EE":"var(--color-text-primary)", border:sel?"0.5px solid #085041":"0.5px solid var(--color-border-secondary,#ccc)", fontFamily:"DM Sans, sans-serif" }}>
                       {w.name}
                     </button>
@@ -342,7 +383,73 @@ export default function SignatureManager() {
               </div>
             </div>
           )}
-          {workers.length===0 && <p style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:12 }}>Add workers first to assign them as signers.</p>}
+          <div style={{ marginBottom: 14 }}>
+            <label style={ss.label}>Other signers (name not in register)</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
+              <div style={{ flex: "1 1 140px" }}>
+                <input
+                  value={customSignerName}
+                  onChange={(e) => setCustomSignerName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomSigner())}
+                  placeholder="Full name"
+                  style={ss.input}
+                />
+              </div>
+              <div style={{ flex: "1 1 120px" }}>
+                <input
+                  value={customSignerRole}
+                  onChange={(e) => setCustomSignerRole(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomSigner())}
+                  placeholder="Role (optional)"
+                  style={ss.input}
+                />
+              </div>
+              <button type="button" onClick={addCustomSigner} disabled={!customSignerName.trim()} style={{ ...ss.btn, opacity: customSignerName.trim() ? 1 : 0.45 }}>
+                Add signer
+              </button>
+            </div>
+            {(newDoc.customSigners || []).length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {(newDoc.customSigners || []).map((s) => (
+                  <span
+                    key={s.id}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "4px 10px",
+                      borderRadius: 20,
+                      fontSize: 12,
+                      background: "#E6F1FB",
+                      color: "#0C447C",
+                      border: "0.5px solid #9EC5E8",
+                    }}
+                  >
+                    {s.name}
+                    {s.role ? ` · ${s.role}` : ""}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${s.name}`}
+                      onClick={() =>
+                        setNewDoc((n) => ({
+                          ...n,
+                          customSigners: (n.customSigners || []).filter((c) => c.id !== s.id),
+                        }))
+                      }
+                      style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0, fontSize: 14, lineHeight: 1, color: "#0C447C" }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          {workers.length === 0 && (newDoc.customSigners || []).length === 0 && (
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 12 }}>
+              Pick workers above after adding them under <strong>Workers &amp; projects</strong>, or add a one-off signer by name.
+            </p>
+          )}
           <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
             <button onClick={()=>setShowNew(false)} style={ss.btn}>Cancel</button>
             <button onClick={addDoc} disabled={!newDoc.title.trim()} style={{ ...ss.btnPrimary, opacity:newDoc.title.trim()?1:0.4 }}>Create & sign</button>
@@ -359,7 +466,7 @@ export default function SignatureManager() {
 
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
         {docs.map(doc=>{
-          const signers = workers.filter(w=>doc.signerIds?.includes(w.id));
+          const signers = resolveDocSigners(doc, workers);
           const signed = sigCount(doc.id);
           const total = signers.length;
           const pct = total>0?(signed/total)*100:0;

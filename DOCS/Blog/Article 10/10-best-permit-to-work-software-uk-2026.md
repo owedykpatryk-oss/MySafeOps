@@ -243,7 +243,7 @@ This is the part most comparison sites skip. Here's the honest cost for a **real
 - Similar structure to SafetyCulture: **~£10,000-15,000/year** depending on modules
 
 **MySafeOps** (flat organisation subscription — workers included up to tier caps, not priced per seat):
-- Example: **Team ~£79/mo** (~£948/year) for up to 20 workers on that tier; **Business £149/mo** for higher caps — see in-app Billing & limits
+- Example: **Team ~£99/mo** (~£1,188/year) for up to 20 workers and 500 projects; **Business £249/mo** for higher caps — see in-app Billing & limits
 - 50 site workers fit within Business tier limits for field use (verify current plan table)
 
 **The Site Book** (flat-rate £30/month):

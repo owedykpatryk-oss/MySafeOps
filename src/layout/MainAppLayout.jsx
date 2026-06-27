@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
-import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Shield, Trash2 } from "lucide-react";
+import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Shield, Trash2, FileDown } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
@@ -8,6 +8,7 @@ import WorkspaceAppBar from "../components/WorkspaceAppBar";
 import WorkspaceSearchPalette from "../components/WorkspaceSearchPalette";
 import RouteErrorBoundary from "../components/RouteErrorBoundary";
 import { ViewFallback } from "../components/ViewFallback";
+import { RegisterPdfExportProvider } from "../context/RegisterPdfExportContext";
 import { prefetchView } from "../viewPrefetch";
 import {
   setWorkspaceNavTarget,
@@ -24,6 +25,7 @@ import {
   PRIMARY_BOTTOM_NAV_IDS,
 } from "../navigation/appModules";
 import { getPinnedModuleIds, togglePinnedModule } from "../utils/pinnedModules";
+import { getSectionTone, getModuleIcon, canExportModulePdf, preloadModuleIcons } from "../navigation/moduleCatalogMeta";
 import { recordRecentModule } from "../utils/recentModules";
 import { workspaceViewLoaders, workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_ID } from "../navigation/workspaceViews";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
@@ -42,36 +44,38 @@ function isEditableSurfaceTarget(target) {
 
 const LazySettingsCenter = lazy(() => import("../components/SettingsCenter"));
 
-function MoreModuleTile({ tab, active, pinnedIds, onOpen, onTogglePin }) {
+function MoreModuleTile({ tab, active, pinnedIds, sectionTone, onOpen, onTogglePin, onExportPdf }) {
   const isPinned = pinnedIds.includes(tab.id);
+  const Icon = getModuleIcon(tab.id);
+  const exportable = canExportModulePdf(tab.id);
   return (
-    <div className="app-more-tile-wrap">
+    <div className={`app-more-tile-wrap app-more-tile-wrap--${sectionTone || "data"}`}>
       <button
         type="button"
-        className="app-more-tile"
+        className={`app-more-tile app-more-tile--v2${active ? " app-more-tile--active" : ""}`}
         onClick={() => onOpen(tab.id)}
         onMouseEnter={() => prefetchView(tab.id)}
         onFocus={() => prefetchView(tab.id)}
-        style={{
-          padding: "12px 28px 12px 10px",
-          borderRadius: "var(--radius-sm, 10px)",
-          border: "1px solid var(--color-border-tertiary,#e2e8f0)",
-          background: active ? "var(--color-accent-muted,#ccfbf1)" : "var(--color-background-primary)",
-          fontSize: 12,
-          fontWeight: active ? 600 : 500,
-          fontFamily: "DM Sans, sans-serif",
-          cursor: "pointer",
-          textAlign: "center",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          minHeight: 44,
-          width: "100%",
-          color: active ? "var(--color-accent-hover,#0f766e)" : "var(--color-text-primary)",
-          boxShadow: active ? "var(--shadow-sm)" : "none",
-        }}
       >
-        {tab.label}
+        <span className="app-more-tile__icon" aria-hidden>
+          <Icon size={18} strokeWidth={2} />
+        </span>
+        <span className="app-more-tile__label">{tab.label}</span>
       </button>
+      {exportable && (
+        <button
+          type="button"
+          className="app-more-tile-pdf"
+          aria-label={`Export ${tab.label} to PDF`}
+          title="Export register (A4 PDF)"
+          onClick={(e) => {
+            e.stopPropagation();
+            onExportPdf?.(tab.id, tab.label);
+          }}
+        >
+          <FileDown size={14} strokeWidth={2.2} aria-hidden />
+        </button>
+      )}
       <button
         type="button"
         className="app-more-tile-pin"
@@ -202,6 +206,7 @@ export default function MainAppLayout() {
   const [moreFilter, setMoreFilter] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => getPinnedModuleIds());
+  const [moduleIconGen, setModuleIconGen] = useState(0);
   const allowedModuleIds = useMemo(
     () => new Set((isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin")).map((t) => t.id)),
     [isSuperadmin]
@@ -210,6 +215,23 @@ export default function MainAppLayout() {
   const openHelpModule = useCallback(() => {
     setNavTab("more");
     setView("help");
+  }, []);
+
+  useEffect(() => {
+    if (navTab !== "more") return;
+    preloadModuleIcons().then(() => setModuleIconGen((g) => g + 1));
+  }, [navTab]);
+
+  useEffect(() => {
+    const preload = () => {
+      preloadModuleIcons().then(() => setModuleIconGen((g) => g + 1));
+    };
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(preload, { timeout: 5000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(preload, 2500);
+    return () => window.clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -400,6 +422,40 @@ export default function MainAppLayout() {
     setPinnedIds(togglePinnedModule(moduleId));
   }, []);
 
+  const handleExportModulePdf = useCallback(async (moduleId, label) => {
+    try {
+      const { exportModuleRegisterPdf } = await import("../utils/moduleRegisterPdf");
+      const result = exportModuleRegisterPdf(moduleId, { label });
+      if (!result.ok) window.alert("This module does not support quick PDF export yet.");
+    } catch (e) {
+      window.alert(e?.message || "Could not export PDF.");
+    }
+  }, []);
+
+  const handleExportAllHsePdf = useCallback(async () => {
+    try {
+      const { exportAllHseRegistersPdf } = await import("../utils/moduleRegisterPdf");
+      const result = exportAllHseRegistersPdf();
+      if (!result.ok) window.alert("Could not build HSE register pack PDF.");
+    } catch (e) {
+      window.alert(e?.message || "Could not export HSE pack.");
+    }
+  }, []);
+
+  const handleExportSectionPdf = useCallback(async (sectionTitle, tabs) => {
+    const modules = tabs.filter((t) => canExportModulePdf(t.id)).map((t) => ({ id: t.id, label: t.label }));
+    if (modules.length === 0) {
+      window.alert("No registers in this section support PDF export yet.");
+      return;
+    }
+    try {
+      const { exportMoreSectionPdf } = await import("../utils/moduleRegisterPdf");
+      exportMoreSectionPdf({ title: sectionTitle, modules });
+    } catch (e) {
+      window.alert(e?.message || "Could not export section PDF.");
+    }
+  }, []);
+
   const MainComponent = workspaceViewComponents[view] || workspaceViewComponents[DEFAULT_WORKSPACE_VIEW_ID];
 
   const visibleMoreTabs = useMemo(
@@ -450,9 +506,11 @@ export default function MainAppLayout() {
             <SettingsView initialTab={settingsInitialTab} checkoutReturn={billingCheckoutReturn} />
           ) : (
             <RouteErrorBoundary>
-              <Suspense fallback={<ViewFallback />}>
-                <MainComponent />
-              </Suspense>
+              <RegisterPdfExportProvider viewId={view}>
+                <Suspense fallback={<ViewFallback />}>
+                  <MainComponent />
+                </Suspense>
+              </RegisterPdfExportProvider>
             </RouteErrorBoundary>
           )}
         </div>
@@ -462,8 +520,30 @@ export default function MainAppLayout() {
               More modules
             </div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.45 }}>
-              Pin modules for quick access (pin icon). Below, modules are grouped by area — use the filter to find one quickly.
+              Pin modules for quick access. Each tile opens the register; use the download icon for an A4 PDF snapshot, or export a whole section below.
             </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              <button type="button" className="app-more-section-pdf" onClick={handleExportAllHsePdf}>
+                <FileDown size={14} strokeWidth={2.2} aria-hidden />
+                Export all HSE registers (A4)
+              </button>
+              <button
+                type="button"
+                className="app-more-section-pdf"
+                onClick={async () => {
+                  try {
+                    const { exportSiteOperationsRegistersPdf } = await import("../utils/moduleRegisterPdf");
+                    const result = exportSiteOperationsRegistersPdf();
+                    if (!result.ok) window.alert("Could not build site operations pack PDF.");
+                  } catch (e) {
+                    window.alert(e?.message || "Could not export site pack.");
+                  }
+                }}
+              >
+                <FileDown size={14} strokeWidth={2.2} aria-hidden />
+                Export site operations pack
+              </button>
+            </div>
             {pinnedTabsFiltered.length > 0 && (
               <div style={{ marginBottom: 18 }}>
                 <div
@@ -479,21 +559,17 @@ export default function MainAppLayout() {
                 >
                   Pinned shortcuts
                 </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(min(132px, 100%), 1fr))",
-                    gap: 8,
-                  }}
-                >
+                <div className="app-more-grid">
                   {pinnedTabsFiltered.map((t) => (
                     <MoreModuleTile
-                      key={`pin-${t.id}`}
+                      key={`pin-${t.id}-${moduleIconGen}`}
                       tab={t}
                       active={view === t.id}
                       pinnedIds={pinnedIds}
+                      sectionTone="pinned"
                       onOpen={selectMoreModule}
                       onTogglePin={handleTogglePin}
+                      onExportPdf={handleExportModulePdf}
                     />
                   ))}
                 </div>
@@ -524,36 +600,38 @@ export default function MainAppLayout() {
             {visibleMoreSections.map((section) => {
               const tabs = filterModuleTabsByQuery(getMoreTabsForSection(section), q);
               if (tabs.length === 0) return null;
+              const tone = getSectionTone(section.title);
+              const exportableCount = tabs.filter((t) => canExportModulePdf(t.id)).length;
               return (
-                <div key={section.title} style={{ marginBottom: 20 }}>
-                  <div
-                    className="app-section-label"
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: "var(--color-text-secondary)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                      marginBottom: 8,
-                    }}
-                  >
-                    {section.title}
+                <div key={section.title} className={`app-more-section app-more-section--${tone}`} style={{ marginBottom: 22 }}>
+                  <div className="app-more-section-head">
+                    <div className="app-more-section-head__title">
+                      <span className={`app-more-section-accent app-more-section-accent--${tone}`} aria-hidden />
+                      <span>{section.title}</span>
+                      <span className="app-more-section-count">{tabs.length}</span>
+                    </div>
+                    {exportableCount > 0 && (
+                      <button
+                        type="button"
+                        className="app-more-section-pdf"
+                        onClick={() => handleExportSectionPdf(section.title, tabs)}
+                      >
+                        <FileDown size={14} strokeWidth={2.2} aria-hidden />
+                        Export section PDF
+                      </button>
+                    )}
                   </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fill, minmax(min(132px, 100%), 1fr))",
-                      gap: 8,
-                    }}
-                  >
+                  <div className="app-more-grid">
                     {tabs.map((t) => (
                       <MoreModuleTile
-                        key={t.id}
+                        key={`${t.id}-${moduleIconGen}`}
                         tab={t}
                         active={view === t.id}
                         pinnedIds={pinnedIds}
+                        sectionTone={tone}
                         onOpen={selectMoreModule}
                         onTogglePin={handleTogglePin}
+                        onExportPdf={handleExportModulePdf}
                       />
                     ))}
                   </div>

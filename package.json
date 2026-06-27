@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "stripe:seed-prices": "node scripts/stripe-seed-prices.mjs",
+    "provision:fess-group": "node scripts/provision-fess-group.mjs",
     "stripe:retry-webhooks": "node scripts/stripe-retry-webhook-failures.mjs",
     "billing:doctor": "node scripts/billing-doctor.mjs",
     "test:e2e": "playwright test",

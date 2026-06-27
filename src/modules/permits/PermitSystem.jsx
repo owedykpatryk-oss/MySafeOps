@@ -28,6 +28,7 @@ import { workspaceDeepLink } from "../../utils/appDeepLinks";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { getOrgId } from "../../utils/orgStorage";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
+import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { mirrorPermitsToSupabase } from "../../utils/permitSupabaseMirror";
 import {
   logPermitAuditToSupabase,
@@ -3143,6 +3144,8 @@ function PermitCard({
         borderLeft:`3px solid ${def.color}`,
         boxShadow: highlight ? "0 0 0 2px #0d9488, 0 4px 12px rgba(0,0,0,0.08)" : "0 1px 2px rgba(0,0,0,0.05)",
         transition: "box-shadow 0.2s ease, transform 0.2s ease",
+        contentVisibility: "auto",
+        containIntrinsicSize: "0 120px",
       }}
     >
       <div
@@ -3625,6 +3628,7 @@ export default function PermitSystem() {
   const [savedViews, setSavedViews] = useState(() => load(PERMIT_SAVED_VIEWS_KEY, []));
   const [selectedPermitIds, setSelectedPermitIds] = useState({});
   const [viewMode, setViewMode] = useState("list");
+  const listPg = useRegisterListPaging(40);
   const [cardDensity, setCardDensity] = useState("comfort");
   const [listSkeleton, setListSkeleton] = useState(false);
   const [mobileQuickActionsPermitId, setMobileQuickActionsPermitId] = useState("");
@@ -3890,9 +3894,10 @@ export default function PermitSystem() {
 
   useEffect(() => {
     setListSkeleton(true);
+    listPg.reset();
     const t = setTimeout(() => setListSkeleton(false), 140);
     return () => clearTimeout(t);
-  }, [search, filterType, filterStatus, filterHandoverDue, filterBlockedNow, filterBriefingPending, filterRamsMissing, viewMode]);
+  }, [search, filterType, filterStatus, filterHandoverDue, filterBlockedNow, filterBriefingPending, filterRamsMissing, viewMode, listPg.reset]);
 
   useEffect(() => {
     const syncTokenFromUrl = () => {
@@ -4395,30 +4400,32 @@ export default function PermitSystem() {
     });
   };
 
-  const filtered = permits.filter(p=>{
+  const filtered = useMemo(() => {
+    const tick = now;
+    return permits.filter((p) => {
     const endIso = permitEndIso(p);
     const endDate = endIso ? new Date(endIso) : null;
     if (filterType && p.type!==filterType) return false;
-    if (filterStatus==="active" && (p.status!=="active" || !endDate || endDate < now)) return false;
-    if (filterStatus==="expired" && !(p.status==="active" && endDate && endDate < now)) return false;
+    if (filterStatus==="active" && (p.status!=="active" || !endDate || endDate < tick)) return false;
+    if (filterStatus==="expired" && !(p.status==="active" && endDate && endDate < tick)) return false;
     if (filterStatus==="closed" && p.status!=="closed") return false;
     if (filterStatus==="draft" && p.status!=="draft") return false;
     if (filterStatus==="pending_review" && p.status!=="pending_review" && p.status!=="ready_for_review") return false;
     if (filterStatus==="approved" && p.status!=="approved") return false;
     if (filterStatus==="suspended" && p.status!=="suspended") return false;
     if (filterHandoverDue) {
-      const hs = handoverStateForPermit(p, now);
+      const hs = handoverStateForPermit(p, tick);
       if (!(hs.required && hs.missing)) return false;
     }
-    if (filterBlockedNow && !blockedNowForPermit(p, permits, now)) return false;
+    if (filterBlockedNow && !blockedNowForPermit(p, permits, tick)) return false;
     if (filterBriefingPending) {
-      const status = derivePermitStatus(p, now);
+      const status = derivePermitStatus(p, tick);
       if (status !== "active" || !p.startDateTime || p.briefingConfirmedAt) return false;
-      const ageMs = now.getTime() - new Date(p.startDateTime).getTime();
+      const ageMs = tick.getTime() - new Date(p.startDateTime).getTime();
       if (!(ageMs > 20 * 60 * 1000)) return false;
     }
     if (filterRamsMissing) {
-      const status = derivePermitStatus(p, now);
+      const status = derivePermitStatus(p, tick);
       if (status !== "active" || String(p.linkedRamsId || "").trim()) return false;
     }
     if (search) {
@@ -4428,7 +4435,19 @@ export default function PermitSystem() {
       if (!hay.includes(q)) return false;
     }
     return true;
-  });
+    });
+  }, [
+    permits,
+    now,
+    filterType,
+    filterStatus,
+    filterHandoverDue,
+    filterBlockedNow,
+    filterBriefingPending,
+    filterRamsMissing,
+    search,
+    effectivePermitTypes,
+  ]);
   const mobileQuickPermit = permits.find((p) => p.id === mobileQuickActionsPermitId) || null;
   useEffect(() => {
     if (!mobileQuickActionsPermitId) return;
@@ -8102,7 +8121,13 @@ export default function PermitSystem() {
           }}
         />
       ) : (
-        filtered.map(p=>(
+        <>
+          {listPg.hasMore(filtered) ? (
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} permits
+            </div>
+          ) : null}
+          {listPg.visible(filtered).map((p) => (
           <PermitCard key={p.id} permit={p}
             simopsConflicts={simopsMap.get(p.id) || []}
             conflictMatrix={effectiveConflictMatrix}
@@ -8137,7 +8162,15 @@ export default function PermitSystem() {
             onResume={resumePermit}
             onExtendRevalidate={extendAndRevalidatePermit}
           />
-        ))
+          ))}
+          {listPg.hasMore(filtered) ? (
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 8, marginBottom: 8 }}>
+              <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                Show more ({listPg.remaining(filtered)} remaining)
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

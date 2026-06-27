@@ -181,7 +181,7 @@ export default function ToolboxTalkRegister() {
       <PageHero
         badgeText="TT"
         title="Toolbox talks (register)"
-        lead="Manual log of delivered talks. Use AI toolbox in More for draft content."
+        lead="Manual log of toolbox talks delivered on site."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {items.length > 0 && (

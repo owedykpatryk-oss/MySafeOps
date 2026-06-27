@@ -47,7 +47,11 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (!id.includes("node_modules")) return;
+            if (!id.includes("node_modules")) {
+              if (id.includes("/modules/rams/") || id.includes("\\modules\\rams\\")) return "rams";
+              if (id.includes("moduleCatalogIcons")) return "module-icons";
+              return;
+            }
             if (id.includes("@supabase")) return "supabase";
             if (id.includes("lucide-react")) return "lucide";
             if (id.includes("react-router")) return "router";

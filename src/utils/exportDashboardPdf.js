@@ -1,5 +1,8 @@
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import { sanitizePdfFileSegment } from "./pdfFileName";
+
+export { sanitizePdfFileSegment } from "./pdfFileName";
 
 /** @typedef {"draft" | "email" | "print"} DashboardPdfPreset */
 
@@ -40,17 +43,6 @@ const MM = {
 };
 
 const DEFAULT_SUMMARY_ROWS_PER_SECTION = 85;
-
-/** Safe segment for filenames (Windows-friendly). */
-export function sanitizePdfFileSegment(s, maxLen = 44) {
-  return String(s || "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-zA-Z0-9_-]+/g, "")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, maxLen);
-}
 
 /**
  * @param {{ title?: string; items: { label: string; value: string }[] }[]} sections
