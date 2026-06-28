@@ -2201,8 +2201,9 @@ export default function SurveyReport() {
     openWorkspaceView({ viewId: "projects" });
   }, []);
 
-  const handleGeoJsonExport = useCallback((r) => {
+  const handleGeoJsonExport = useCallback(async (r) => {
     try {
+      const { downloadSurveyReportGeoJson } = await import("./surveyReportExport");
       downloadSurveyReportGeoJson(r, geoPhotos);
     } catch (e) {
       alert(e?.message || "GeoJSON export failed.");

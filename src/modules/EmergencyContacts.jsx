@@ -78,8 +78,8 @@ export default function EmergencyContacts() {
 
       <RegisterModuleShell
         moduleId="emergency"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("emergency", items)}
+        smartContext={{ items: rows }}
+        stats={buildRegisterModuleStats("emergency", rows)}
       >
 
 
