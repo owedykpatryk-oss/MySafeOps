@@ -1,0 +1,56 @@
+import { describe, expect, it } from "vitest";
+import {
+  escapeHtml,
+  safeCssColor,
+  safeImageSrc,
+  safeOpaqueToken,
+  sanitizePrintPreviewHtml,
+} from "./htmlEscape.js";
+
+describe("escapeHtml", () => {
+  it("escapes HTML metacharacters", () => {
+    expect(escapeHtml(`<img src=x onerror="alert(1)">`)).toBe(
+      "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"
+    );
+  });
+});
+
+describe("safeCssColor", () => {
+  it("allows hex colours only", () => {
+    expect(safeCssColor("#0d9488")).toBe("#0d9488");
+    expect(safeCssColor("#abc")).toBe("#abc");
+    expect(safeCssColor("red")).toBe("#0d9488");
+    expect(safeCssColor("#0d9488; background:url(javascript:1)")).toBe("#0d9488");
+  });
+});
+
+describe("safeImageSrc", () => {
+  it("blocks javascript: and svg data URLs", () => {
+    expect(safeImageSrc("javascript:alert(1)")).toBeNull();
+    expect(safeImageSrc('data:image/svg+xml,<svg onload="alert(1)"/>')).toBeNull();
+  });
+
+  it("allows https and safe raster data URLs", () => {
+    expect(safeImageSrc("https://example.com/logo.png")).toMatch(/^https:/);
+    expect(safeImageSrc("data:image/png;base64,abcd1234+/=")).toBe("data:image/png;base64,abcd1234+/=");
+  });
+});
+
+describe("safeOpaqueToken", () => {
+  it("accepts share tokens and rejects junk", () => {
+    expect(safeOpaqueToken("r_abc123_def456")).toBe("r_abc123_def456");
+    expect(safeOpaqueToken("ack_abc_def")).toBe("ack_abc_def");
+    expect(safeOpaqueToken("<script>")).toBeNull();
+    expect(safeOpaqueToken("a".repeat(200))).toBeNull();
+  });
+});
+
+describe("sanitizePrintPreviewHtml", () => {
+  it("removes scripts, iframes, and inline handlers", () => {
+    const dirty = `<p>Hi</p><script>alert(1)</script><img src=x onerror="alert(2)">`;
+    const clean = sanitizePrintPreviewHtml(dirty);
+    expect(clean).not.toMatch(/<script/i);
+    expect(clean).not.toMatch(/onerror/i);
+    expect(clean).toContain("Hi");
+  });
+});

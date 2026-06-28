@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import ProtectedAppRoute from "./components/ProtectedAppRoute";
 import { ViewFallback } from "./components/ViewFallback";
+import { safeOpaqueToken } from "./utils/htmlEscape.js";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const BlogIndexPage = lazy(() => import("./pages/BlogIndexPage"));
@@ -38,9 +39,9 @@ function PublicShell({ children }) {
 
 export default function App() {
   const qs = new URLSearchParams(window.location.search);
-  const portal = qs.get("portal");
-  const sub = qs.get("subcontractor");
-  const ramsShare = qs.get("ramsShare");
+  const portal = safeOpaqueToken(qs.get("portal"));
+  const sub = safeOpaqueToken(qs.get("subcontractor"));
+  const ramsShare = safeOpaqueToken(qs.get("ramsShare"));
 
   if (ramsShare) {
     return (

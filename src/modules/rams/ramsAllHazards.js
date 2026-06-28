@@ -1,11 +1,8 @@
 // Merged hazard library: base + extended + pro (108+ hazards; categories include Traffic Management TMP)
-import BASE, {
-  TRADE_CATEGORIES as BASE_TRADE_CATEGORIES,
-  getRiskLevel,
-  RISK_COLORS,
-} from "./ramsHazardLibrary";
+import BASE, { TRADE_CATEGORIES as BASE_TRADE_CATEGORIES } from "./ramsHazardLibrary";
 import EXT, { EXTENDED_CATEGORIES } from "./ramsHazardLibraryExtended";
 import PRO, { PRO_CATEGORIES } from "./ramsHazardLibraryPro";
+import { getRiskLevel, RISK_COLORS } from "./ramsRiskLevel.js";
 
 export const TRADE_CATEGORIES = [
   ...BASE_TRADE_CATEGORIES,

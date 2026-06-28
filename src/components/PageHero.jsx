@@ -1,8 +1,10 @@
+import { lazy, Suspense } from "react";
 import { ms } from "../utils/moduleStyles";
-import RegisterPdfExportButton from "./RegisterPdfExportButton";
 import { useRegisterPdfViewId } from "../context/RegisterPdfExportContext";
 import { canExportModulePdf } from "../navigation/moduleCatalogMeta";
 import { useOrgBranding } from "../hooks/useOrgBranding";
+
+const LazyRegisterPdfExportButton = lazy(() => import("./RegisterPdfExportButton"));
 
 /**
  * Consistent page header (badge, title, lead, optional actions) used across workspace modules.
@@ -19,7 +21,11 @@ export default function PageHero({ badgeText, title, lead, right, marginBottom =
   const hasRight = Boolean(pdfModuleId || right);
   const rightSlot = (
     <>
-      {pdfModuleId ? <RegisterPdfExportButton moduleId={pdfModuleId} label={pdfLabel} /> : null}
+      {pdfModuleId ? (
+        <Suspense fallback={null}>
+          <LazyRegisterPdfExportButton moduleId={pdfModuleId} label={pdfLabel} />
+        </Suspense>
+      ) : null}
       {right}
     </>
   );

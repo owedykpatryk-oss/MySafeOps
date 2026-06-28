@@ -8,6 +8,19 @@ const VALID_WORKSPACE_VIEW_IDS = new Set(Object.keys(workspaceViewLoaders));
 export { WORKSPACE_SETTINGS_TAB_IDS };
 
 export const OPEN_WORKSPACE_VIEW_EVENT = "mysafeops:open-view";
+export const OPEN_WORKSPACE_MORE_EVENT = "mysafeops:open-more";
+
+/**
+ * Open More tab with optional HSE/Site section register filter.
+ * @param {{ sectionTitle?: string, registerFilter?: 'all'|'attention'|'empty'|'active' }} [detail]
+ */
+export function openWorkspaceMoreSection(detail = {}) {
+  try {
+    window.dispatchEvent(new CustomEvent(OPEN_WORKSPACE_MORE_EVENT, { detail: detail || {} }));
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Open a workspace module by id (same as choosing it from the bottom bar or More grid).

@@ -13,8 +13,23 @@ const LOADERS = {
     ]),
 };
 
+const PREFETCH_DELAY_MS = 180;
+const scheduled = new Map();
+
 export function prefetchView(viewId) {
   const fn = LOADERS[viewId];
-  if (!fn) return;
-  Promise.resolve(fn()).catch(() => {});
+  if (!fn || scheduled.has(viewId)) return;
+  const timer = setTimeout(() => {
+    scheduled.delete(viewId);
+    Promise.resolve(fn()).catch(() => {});
+  }, PREFETCH_DELAY_MS);
+  scheduled.set(viewId, timer);
+}
+
+export function cancelPrefetchView(viewId) {
+  const timer = scheduled.get(viewId);
+  if (timer) {
+    clearTimeout(timer);
+    scheduled.delete(viewId);
+  }
 }

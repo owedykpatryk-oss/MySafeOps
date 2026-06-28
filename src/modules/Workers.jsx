@@ -468,6 +468,16 @@ export default function Workers() {
             >
               Survey
             </button>
+            <button
+              type="button"
+              style={ss.btn}
+              onClick={() => {
+                setWorkspaceNavTarget({ viewId: "geo-photos", projectId: p.id, action: "capture" });
+                openWorkspaceView({ viewId: "geo-photos" });
+              }}
+            >
+              Geo
+            </button>
             <button type="button" style={ss.btn} onClick={() => removeProject(p.id)}>
               Remove
             </button>

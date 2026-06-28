@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useDeferredValue } from "react";
-import HAZARD_LIBRARY, { TRADE_CATEGORIES, getByCategory, searchHazards, getRiskLevel } from "./ramsAllHazards";
+import { loadRamsHazardLibrary } from "./ramsHazardLibraryLoader.js";
+import { getRiskLevel } from "./ramsRiskLevel.js";
 import {
   RAMS_PRINT_SECTIONS,
   RAMS_SECTION_IDS,
@@ -8,7 +9,6 @@ import {
   isSectionIncluded,
 } from "./ramsSectionConfig";
 import {
-  generatePrintHTML,
   computeRamsFingerprint,
   buildRamsPreviewHtml,
   openRamsDocumentWindow,
@@ -1037,10 +1037,10 @@ function findSurveyPackByKey(packKey) {
   return SURVEYING_PACKS.find((p) => p.key === packKey) || null;
 }
 
-function findHazardsForSurveyPack(pack) {
-  if (!pack) return [];
+function findHazardsForSurveyPack(pack, hazardLibrary) {
+  if (!pack || !Array.isArray(hazardLibrary)) return [];
   const toks = (pack.hazardTokens || []).map((t) => String(t).toLowerCase());
-  const matched = HAZARD_LIBRARY.filter((h) => {
+  const matched = hazardLibrary.filter((h) => {
     const hay = `${h.id} ${h.category} ${h.activity} ${h.hazard}`.toLowerCase();
     return toks.some((t) => hay.includes(t));
   });
@@ -2142,18 +2142,10 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
       </div>
 
       </div>
-      <div style={{
-        position: "sticky",
-        bottom: 0,
-        marginTop: 16,
-        paddingTop: 12,
-        paddingBottom: 4,
-        background: "var(--color-background-primary,#fff)",
-        borderTop: "1px solid var(--color-border-tertiary,#e5e5e5)",
-        display: "flex",
+      <div
+        className="app-sticky-footer app-sticky-footer--split"
+        style={{
         justifyContent: "flex-end",
-        gap: 8,
-        zIndex: 2,
       }}>
         <button
           type="button"
@@ -2180,6 +2172,10 @@ function HazardPicker({
   selected,
   selectedRows,
   orgActivities,
+  hazardLibrary,
+  tradeCategories,
+  getByCategory,
+  hazardLibraryLoading,
   hazardPrefs,
   hazardPacks,
   projectId,
@@ -2231,6 +2227,9 @@ function HazardPicker({
     revisedS: 4,
   });
   const orgList = Array.isArray(orgActivities) ? orgActivities : [];
+  const library = Array.isArray(hazardLibrary) ? hazardLibrary : [];
+  const categories = Array.isArray(tradeCategories) ? tradeCategories : [];
+  const getByCategorySafe = typeof getByCategory === "function" ? getByCategory : () => [];
   const quickPacks = useMemo(() => {
     const list = Array.isArray(hazardPacks) ? [...hazardPacks] : [];
     return list.sort((a, b) => {
@@ -2247,7 +2246,7 @@ function HazardPicker({
   const usageCounts = hazardPrefs?.usageCounts || {};
   const recentIds = hazardPrefs?.recentIds || [];
   const recentSet = new Set(recentIds);
-  const sourceAll = useMemo(() => [...orgList, ...HAZARD_LIBRARY], [orgList]);
+  const sourceAll = useMemo(() => [...orgList, ...library], [orgList, library]);
 
   useEffect(() => {
     if (surveyPackFilter?.active && Array.isArray(surveyPackFilter.tokens)) {
@@ -2279,8 +2278,8 @@ function HazardPicker({
     }
     if (activeCategory === "All") return sourceAll;
     if (activeCategory === ORG_ACTIVITY_CATEGORY) return orgList;
-    return [...getByCategory(activeCategory), ...orgList.filter((h) => String(h.category || "") === activeCategory)];
-  }, [search, activeCategory, sourceAll, orgList, surveyPackFilter, surveyTokenMatches]);
+    return [...getByCategorySafe(activeCategory), ...orgList.filter((h) => String(h.category || "") === activeCategory)];
+  }, [search, activeCategory, sourceAll, orgList, surveyPackFilter, surveyTokenMatches, getByCategorySafe]);
   const results = useMemo(() => {
     let list = [...baseResults];
     if (quickFilter === "favorites") {
@@ -2296,7 +2295,7 @@ function HazardPicker({
   }, [baseResults, quickFilter, favoriteIds, usageCounts, recentSet, recentIds]);
 
   const categoryCounts = useMemo(() => {
-    const base = Object.fromEntries(TRADE_CATEGORIES.map((c) => [c, getByCategory(c).length]));
+    const base = Object.fromEntries(categories.map((c) => [c, getByCategorySafe(c).length]));
     orgList.forEach((h) => {
       const c = String(h.category || ORG_ACTIVITY_CATEGORY);
       if (c === ORG_ACTIVITY_CATEGORY) return;
@@ -2304,7 +2303,7 @@ function HazardPicker({
     });
     base[ORG_ACTIVITY_CATEGORY] = orgList.length;
     return base;
-  }, [orgList]);
+  }, [orgList, categories, getByCategorySafe]);
 
   const selectedIdSet = useMemo(() => new Set(selected.map((s) => s.id)), [selected]);
   const visibleNotSelectedCount = useMemo(
@@ -2570,6 +2569,15 @@ function HazardPicker({
     reader.onerror = () => window.alert("Could not read packs file.");
     reader.readAsText(file);
   };
+
+  if (hazardLibraryLoading) {
+    return (
+      <div className="app-view-fallback" role="status" aria-live="polite" style={{ padding: "2rem 1rem" }}>
+        <div className="app-route-spinner" aria-hidden />
+        <span className="app-view-fallback-text">Loading hazard library…</span>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -2963,7 +2971,7 @@ function HazardPicker({
       {/* category tabs */}
       {!search && (
         <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:16 }}>
-          {["All", ORG_ACTIVITY_CATEGORY, ...TRADE_CATEGORIES].map(c=>(
+          {["All", ORG_ACTIVITY_CATEGORY, ...categories].map(c=>(
             <button key={c} type="button" onClick={()=>setActiveCategory(c)} style={{
               padding:"4px 10px", borderRadius:20, fontSize:12, cursor:"pointer", fontFamily:"DM Sans,sans-serif",
               background:activeCategory===c?"#0f172a":"var(--color-background-secondary,#f7f7f5)",
@@ -3073,7 +3081,7 @@ function HazardPicker({
         {results.length===0 && <div style={{ textAlign:"center", padding:"2rem", color:"var(--color-text-secondary)", fontSize:13 }}>No hazards match your search.</div>}
       </div>
 
-      <div style={{ display:"flex", justifyContent:"space-between" }}>
+      <div className="app-sticky-footer app-sticky-footer--split">
         <button type="button" onClick={onBack} style={ss.btn}>← Back</button>
         <button type="button" disabled={selected.length===0} onClick={onNext} style={{ ...ss.btnP, opacity:selected.length>0?1:0.4 }}>
           Next — review & edit ({selected.length}) →
@@ -3363,7 +3371,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
         })}
       </div>
 
-      <div style={{ display:"flex", justifyContent:"space-between" }}>
+      <div className="app-sticky-footer app-sticky-footer--split">
         <button type="button" onClick={onBack} style={ss.btn}>← Back</button>
         <button type="button" onClick={onNext} style={ss.btnP}>Next — preview & save →</button>
       </div>
@@ -3995,21 +4003,8 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
       </div>
 
       {/* preview card */}
-      <div style={{ ...ss.card, marginBottom:20, border:"0.5px solid #9FE1CB", maxHeight:"min(75vh, 780px)", overflowY:"auto", scrollBehavior:"smooth" }}>
-        <div
-          style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 4,
-            margin: "-4px -8px 12px",
-            padding: "10px 10px 12px",
-            background: "linear-gradient(180deg, var(--color-background-primary,#fff) 65%, rgba(255,255,255,0.92) 100%)",
-            WebkitBackdropFilter: "blur(8px)",
-            backdropFilter: "blur(8px)",
-            borderBottom: "1px solid var(--color-border-tertiary,#e5e5e5)",
-            borderRadius: "var(--radius-md, 12px) var(--radius-md, 12px) 0 0",
-          }}
-        >
+      <div className="app-rams-preview-scroll" style={{ ...ss.card, marginBottom:20, border:"0.5px solid #9FE1CB", maxHeight:"min(75vh, 780px)", overflowY:"auto", scrollBehavior:"smooth" }}>
+        <div className="app-rams-preview-sticky-head">
           <div style={{ fontSize: 10, fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
             Jump in preview
           </div>
@@ -4546,9 +4541,9 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
         </div>
       </div>
 
-      <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"space-between", gap:8 }}>
+      <div className="app-sticky-footer app-sticky-footer--split">
         <button type="button" onClick={onBack} style={ss.btn}>← Back</button>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+        <div className="app-sticky-footer--actions">
           <button type="button" onClick={printRAMS} style={ss.btn}>
             <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="3" y="1" width="10" height="10" rx="1"/><path d="M1 8h14v6H1z"/><path d="M5 14v-3h6v3"/><circle cx="12" cy="11" r=".5" fill="currentColor"/></svg>
             Print / PDF
@@ -4900,6 +4895,25 @@ export default function RAMSTemplateBuilder() {
   });
 
   const builderBaselineRef = useRef("");
+  const hazardLibRef = useRef(null);
+  const [hazardLibReady, setHazardLibReady] = useState(false);
+
+  useEffect(() => {
+    if (view !== "builder") {
+      setHazardLibReady(false);
+      hazardLibRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    loadRamsHazardLibrary().then((lib) => {
+      if (cancelled) return;
+      hazardLibRef.current = lib;
+      setHazardLibReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view]);
 
   const builderDirty = useMemo(
     () => snapshotBuilderState(step, form, editedRows) !== builderBaselineRef.current,
@@ -5450,7 +5464,7 @@ export default function RAMSTemplateBuilder() {
       packLabel: pack.label,
     });
 
-    const recommended = findHazardsForSurveyPack(pack);
+    const recommended = findHazardsForSurveyPack(pack, hazardLibRef.current?.library);
     const existing = new Set(selectedHazards.map((s) => s.id));
     const toAdd = recommended.filter((h) => h && !existing.has(h.id));
     if (toAdd.length > 0) {
@@ -5923,7 +5937,7 @@ export default function RAMSTemplateBuilder() {
 
   if (view==="list") {
     return (
-      <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+      <div className="app-document-module" style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
         <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="RAMS" />
         <PageHero
           badgeText="RAMS"
@@ -5953,7 +5967,7 @@ export default function RAMSTemplateBuilder() {
   }
 
   return (
-    <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+    <div className="app-document-module" style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="RAMS" />
       {/* header */}
       <div
@@ -6070,6 +6084,10 @@ export default function RAMSTemplateBuilder() {
             selected={selectedHazards}
             selectedRows={editedRows}
             orgActivities={orgActivities}
+            hazardLibrary={hazardLibRef.current?.library || []}
+            tradeCategories={hazardLibRef.current?.tradeCategories || []}
+            getByCategory={hazardLibRef.current?.getByCategory}
+            hazardLibraryLoading={!hazardLibReady}
             hazardPrefs={hazardPrefs}
             hazardPacks={hazardPacks}
             projectId={form.projectId}

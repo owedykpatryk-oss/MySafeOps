@@ -8,14 +8,16 @@ import App from "./App.jsx";
 import { AppProvider } from "./context/AppContext";
 import { SupabaseAuthProvider } from "./context/SupabaseAuthContext";
 import { ToastProvider } from "./context/ToastContext";
-import { initOfflineMode } from "./offline/offlineManager";
-import { initNotificationRuntime } from "./offline/pushNotifications";
-import { initSentryIfConfigured } from "./utils/initSentry.js";
+import { bootSentryIfConfigured } from "./instrument.js";
 
 function scheduleDeferredInit() {
   const run = () => {
-    initOfflineMode().catch(() => {});
-    initNotificationRuntime();
+    import("./offline/offlineManager")
+      .then((m) => m.initOfflineMode())
+      .catch(() => {});
+    import("./offline/pushNotifications")
+      .then((m) => m.initNotificationRuntime())
+      .catch(() => {});
   };
   if (typeof requestIdleCallback === "function") {
     requestIdleCallback(() => run(), { timeout: 4000 });
@@ -23,22 +25,27 @@ function scheduleDeferredInit() {
     setTimeout(run, 0);
   }
 }
-scheduleDeferredInit();
 
-void initSentryIfConfigured();
+function bootstrap() {
+  createRoot(document.getElementById("root")).render(
+    <StrictMode>
+      <AppProvider>
+        <SupabaseAuthProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </SupabaseAuthProvider>
+      </AppProvider>
+    </StrictMode>
+  );
 
-import("./utils/reportWebVitals.js")
-  .then((m) => m.reportWebVitals())
-  .catch(() => {});
+  scheduleDeferredInit();
 
-createRoot(document.getElementById("root")).render(
-  <StrictMode>
-    <AppProvider>
-      <SupabaseAuthProvider>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
-      </SupabaseAuthProvider>
-    </AppProvider>
-  </StrictMode>
-);
+  void bootSentryIfConfigured();
+
+  import("./utils/reportWebVitals.js")
+    .then((m) => m.reportWebVitals())
+    .catch(() => {});
+}
+
+bootstrap();

@@ -45,6 +45,7 @@ import PermitEvidenceImage from "./components/PermitEvidenceImage";
 import { getTypeComplianceMeta } from "./ukComplianceMatrix";
 import { PERMIT_TYPES, checklistStringsForType } from "./permitTypes";
 import { renderPermitDocumentHtml } from "./permitDocumentHtml";
+import { safeOpaqueToken, openPrintWindow } from "../../utils/htmlEscape.js";
 import { buildPermitEmailRecipients, parseManualEmails, sendPermitNotificationEmail, sendPermitNotificationWebPush } from "../../utils/permitNotifications";
 import {
   listPermitIncidents,
@@ -2456,16 +2457,8 @@ function PermitForm({
             </div>
             {signatureDialog ? (
               <div
-                style={{
-                  position:"fixed",
-                  inset:0,
-                  zIndex:80,
-                  background:"rgba(0,0,0,0.45)",
-                  display:"flex",
-                  alignItems:"center",
-                  justifyContent:"center",
-                  padding:16,
-                }}
+                className="app-module-dialog-overlay"
+                style={{ zIndex: 80 }}
                 onMouseDown={(e) => {
                   if (e.target === e.currentTarget) setSignatureDialog(null);
                 }}
@@ -2741,7 +2734,7 @@ function PermitForm({
         )}
 
         {wizardStep < 4 && (
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:16, paddingTop:12, borderTop:"1px solid var(--color-border-tertiary,#e5e5e5)" }}>
+        <div className="app-sticky-footer app-sticky-footer--split">
           <button type="button" style={ss.btn} disabled={wizardStep<=1} onClick={()=>setWizardStep((s)=>Math.max(1,s-1))}>Back</button>
           <div style={{ textAlign:"right" }}>
             {!stepNextEnabled && stepNextHint ? (
@@ -2963,9 +2956,9 @@ function PermitForm({
             ) : null}
           </div>
         )}
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"space-between" }}>
+        <div className="app-sticky-footer app-sticky-footer--split">
           <button type="button" onClick={tryClose} style={ss.btn}>Cancel</button>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+          <div className="app-sticky-footer--actions">
             <button
               type="button"
               onClick={() => {
@@ -3599,7 +3592,7 @@ function PermitCard({
 
 
 function openPermitDocument(permit, { autoPrint = false } = {}) {
-  const win = window.open("","_blank");
+  const win = openPrintWindow();
   if (!win) return;
   win.document.open();
   win.document.write(renderPermitDocumentHtml(permit));
@@ -3693,7 +3686,7 @@ export default function PermitSystem() {
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [ackTokenParam, setAckTokenParam] = useState(() => {
     try {
-      return new URLSearchParams(window.location.search).get("permitAck") || "";
+      return safeOpaqueToken(new URLSearchParams(window.location.search).get("permitAck")) || "";
     } catch {
       return "";
     }
@@ -3947,7 +3940,7 @@ export default function PermitSystem() {
   useEffect(() => {
     const syncTokenFromUrl = () => {
       try {
-        setAckTokenParam(new URLSearchParams(window.location.search).get("permitAck") || "");
+        setAckTokenParam(safeOpaqueToken(new URLSearchParams(window.location.search).get("permitAck")) || "");
       } catch {
         setAckTokenParam("");
       }
@@ -6030,6 +6023,7 @@ export default function PermitSystem() {
 
   return (
     <div
+      className={`app-document-module${isNarrow && mobileQuickPermit ? " app-document-module--raised-bottom" : ""}`}
       style={{
         ...permitThemeVars,
         fontFamily:"DM Sans,system-ui,sans-serif",
@@ -6060,16 +6054,8 @@ export default function PermitSystem() {
 
       {conflictOverrideDialog && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 70,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
+          className="app-module-dialog-overlay"
+          style={{ zIndex: 70 }}
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) closeConflictOverrideDialog(null);
@@ -6143,16 +6129,7 @@ export default function PermitSystem() {
 
       {closePermitDialog && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 60,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
+          className="app-module-dialog-overlay"
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setClosePermitDialog(null);
@@ -6219,16 +6196,8 @@ export default function PermitSystem() {
 
       {handoverDialog && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 62,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
+          className="app-module-dialog-overlay"
+          style={{ zIndex: 62 }}
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setHandoverDialog(null);
@@ -6315,12 +6284,8 @@ export default function PermitSystem() {
 
       {isNarrow && mobileQuickPermit ? (
         <div
+          className="app-fixed-bottom-bar"
           style={{
-            position:"fixed",
-            left:0,
-            right:0,
-            bottom:0,
-            zIndex:65,
             background:"rgba(255,255,255,0.98)",
             borderTop:"1px solid var(--color-border-tertiary,#e5e5e5)",
             boxShadow:"0 -8px 24px rgba(15,23,42,0.16)",
@@ -7660,14 +7625,11 @@ export default function PermitSystem() {
       </div>
 
       <div
-        className="app-panel-surface"
+        className={`app-panel-surface${isNarrow ? "" : " app-permit-bulk-bar"}`}
         style={{
           padding:10,
           borderRadius:10,
           marginBottom:16,
-          position: isNarrow ? "static" : "sticky",
-          bottom: isNarrow ? undefined : 8,
-          zIndex: 12,
           boxShadow: hasSelectedPermits ? "0 8px 24px rgba(15,23,42,0.14)" : "none",
           border: hasSelectedPermits ? "1px solid var(--permit-info-border)" : undefined,
           background: hasSelectedPermits ? "var(--permit-panel-bg)" : undefined,

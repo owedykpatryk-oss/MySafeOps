@@ -17,7 +17,7 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function buildActivityFeed(projectId, { rams = [], permits = [], surveyReports = [] }) {
+function buildActivityFeed(projectId, { rams = [], permits = [], surveyReports = [], geoPhotos = [] }) {
   const items = [];
   const push = (at, kind, text, viewId, action) => {
     if (!at) return;
@@ -32,6 +32,15 @@ function buildActivityFeed(projectId, { rams = [], permits = [], surveyReports =
   surveyReports.filter((s) => s.projectId === projectId).forEach((s) => {
     push(s.updatedAt || s.createdAt, "survey", `Survey: ${s.title || s.ref || "Report"}`, "survey-report", "edit");
   });
+  geoPhotos.filter((g) => g.projectId === projectId).forEach((g) => {
+    push(
+      g.timestampUtc || g.updatedAt || g.createdAt,
+      "geo-photo",
+      `Geo-photo: ${g.notes?.slice(0, 40) || g.type || "site photo"}`,
+      "geo-photos",
+      "view"
+    );
+  });
   return items.sort((a, b) => b.at - a.at).slice(0, 6);
 }
 
@@ -45,6 +54,7 @@ function ProjectCommandCenter({
   rams = [],
   permits = [],
   surveyReports = [],
+  geoPhotos = [],
   style,
 }) {
   const active = useMemo(() => projects.filter((p) => !p.closed), [projects]);
@@ -84,12 +94,16 @@ function ProjectCommandCenter({
     () => (project ? surveyReports.filter((s) => s.projectId === project.id) : []),
     [project, surveyReports]
   );
+  const projectGeoPhotos = useMemo(
+    () => (project ? geoPhotos.filter((g) => g.projectId === project.id) : []),
+    [project, geoPhotos]
+  );
   const activePermits = projectPermits.filter((p) => p.status === "active").length;
 
   const healthPct = Math.max(0, Math.min(100, Number(project?.healthScore) || 0));
   const activity = useMemo(
-    () => (project ? buildActivityFeed(project.id, { rams, permits, surveyReports }) : []),
-    [project, rams, permits, surveyReports]
+    () => (project ? buildActivityFeed(project.id, { rams, permits, surveyReports, geoPhotos }) : []),
+    [project, rams, permits, surveyReports, geoPhotos]
   );
 
   const go = (viewId, action) => {
@@ -152,6 +166,7 @@ function ProjectCommandCenter({
             lng={project?.lng}
             boundaryRing={boundaryRing}
             escapeRoutes={escapeRoutes}
+            geoPhotos={projectGeoPhotos}
             height={200}
             label={project?.name || "Site"}
           />
@@ -169,6 +184,10 @@ function ProjectCommandCenter({
           <div className="app-command-center__stat">
             <span className="app-command-center__stat-val">{projectSurveys.length}</span>
             <span className="app-command-center__stat-lbl">Surveys</span>
+          </div>
+          <div className="app-command-center__stat">
+            <span className="app-command-center__stat-val">{projectGeoPhotos.length}</span>
+            <span className="app-command-center__stat-lbl">Geo-photos</span>
           </div>
           {permitReady.required > 0 ? (
             <div className="app-command-center__stat">
@@ -230,6 +249,9 @@ function ProjectCommandCenter({
         </button>
         <button type="button" onClick={() => go("survey-report")}>
           Survey
+        </button>
+        <button type="button" className="app-command-center__btn--geo" onClick={() => go("geo-photos", "capture")}>
+          Geo-photos
         </button>
         <button type="button" onClick={() => go("site-map")}>
           Site map

@@ -93,6 +93,7 @@ export function addPlanEmergencyAsset(plan, { kind = "muster", x = 50, y = 50, l
   return {
     ...plan,
     emergencyAssets: [...(plan.emergencyAssets || []), next].slice(0, 200),
+    markupUpdatedAt: new Date().toISOString(),
   };
 }
 
@@ -117,6 +118,7 @@ export function addPlanEscapeRoute(plan, { startX = 20, startY = 80, endX = 80, 
   return {
     ...plan,
     escapeRoutes: [...(plan.escapeRoutes || []), next].slice(0, 120),
+    markupUpdatedAt: new Date().toISOString(),
   };
 }
 
@@ -134,11 +136,59 @@ export function addPlanZoneBlock(plan, { x = 10, y = 10, w = 20, h = 20, label =
   return {
     ...plan,
     zoneBlocks: [...(plan.zoneBlocks || []), next].slice(0, 120),
+    markupUpdatedAt: new Date().toISOString(),
   };
 }
 
 export function removePlanItem(plan, collectionKey, itemId) {
   const list = plan[collectionKey];
   if (!Array.isArray(list)) return plan;
-  return { ...plan, [collectionKey]: list.filter((x) => x.id !== itemId) };
+  return { ...plan, [collectionKey]: list.filter((x) => x.id !== itemId), markupUpdatedAt: new Date().toISOString() };
+}
+
+export function touchPlanMarkup(plan) {
+  return { ...plan, markupUpdatedAt: new Date().toISOString(), revision: (Number(plan.revision) || 1) + 0 };
+}
+
+export function updatePlanCollectionItem(plan, collectionKey, itemId, patch) {
+  const list = plan[collectionKey];
+  if (!Array.isArray(list)) return plan;
+  return {
+    ...plan,
+    [collectionKey]: list.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
+    markupUpdatedAt: new Date().toISOString(),
+  };
+}
+
+export function movePlanEmergencyAsset(plan, itemId, x, y) {
+  return updatePlanCollectionItem(plan, "emergencyAssets", itemId, {
+    x: clampPercent(x),
+    y: clampPercent(y),
+  });
+}
+
+export function movePlanZoneBlock(plan, itemId, patch) {
+  const next = { ...patch };
+  if ("x" in next) next.x = clampPercent(next.x);
+  if ("y" in next) next.y = clampPercent(next.y);
+  if ("w" in next) next.w = Math.max(1, Math.min(100, Number(next.w) || 1));
+  if ("h" in next) next.h = Math.max(1, Math.min(100, Number(next.h) || 1));
+  return updatePlanCollectionItem(plan, "zoneBlocks", itemId, next);
+}
+
+export function updatePlanRoutePoints(plan, itemId, points) {
+  const pts = (points || []).map((p) => ({ x: clampPercent(p.x), y: clampPercent(p.y) }));
+  if (pts.length < 2) return plan;
+  const last = pts[pts.length - 1];
+  return updatePlanCollectionItem(plan, "escapeRoutes", itemId, {
+    points: pts,
+    startX: pts[0].x,
+    startY: pts[0].y,
+    endX: last.x,
+    endY: last.y,
+  });
+}
+
+export function renamePlanItem(plan, collectionKey, itemId, label) {
+  return updatePlanCollectionItem(plan, collectionKey, itemId, { label: String(label || "").slice(0, 120) });
 }

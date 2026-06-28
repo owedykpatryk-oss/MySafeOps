@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
+import { syncSentryUser } from "../utils/sentryClient.js";
 import { ensureUserOrgContext } from "../utils/orgMembership";
 
 const Ctx = createContext(null);
@@ -57,6 +58,10 @@ export function SupabaseAuthProvider({ children }) {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    syncSentryUser(session?.user ?? null);
+  }, [session?.user?.id]);
 
   const value = useMemo(
     () => ({

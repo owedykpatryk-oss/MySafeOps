@@ -196,7 +196,7 @@ export async function d1AppendServerAudit(supabase, orgSlug, row) {
     extra: { at: row.at },
   };
 
-  const maxAttempts = 3;
+  const maxAttempts = 5;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const res = await fetch(`${base}/v1/audit/append`, {
       method: "POST",
@@ -211,7 +211,7 @@ export async function d1AppendServerAudit(supabase, orgSlug, row) {
     if (res.status === 503) return { ok: false, error: "audit_not_configured", ...d1Meta(res, body) };
     if (res.ok) return { ok: true, seq: body.seq };
     if (res.status === 409 && attempt < maxAttempts - 1) {
-      await new Promise((r) => setTimeout(r, 80 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, 50 * 2 ** attempt));
       continue;
     }
     return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };

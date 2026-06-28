@@ -19,6 +19,7 @@ export const workspaceViewLoaders = {
   signatures: () => import("../modules/DigitalSignature"),
   timesheets: () => import("../modules/Timesheet"),
   snags: () => import("../modules/SnagRegister"),
+  "geo-photos": () => import("../modules/GeoPhotos"),
   coshh: () => import("../modules/COSHHRegister"),
   inspections: () => import("../modules/InspectionTracker"),
   incidents: () => import("../modules/IncidentNearMiss"),

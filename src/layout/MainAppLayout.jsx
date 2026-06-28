@@ -1,24 +1,26 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense, memo } from "react";
+import "../styles/workspace.css";
 import { useSearchParams } from "react-router-dom";
 import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Shield, Trash2, FileDown, EyeOff } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
-import WorkspaceSearchPalette from "../components/WorkspaceSearchPalette";
 import RouteErrorBoundary from "../components/RouteErrorBoundary";
 import { ViewFallback } from "../components/ViewFallback";
 import { RegisterPdfExportProvider } from "../context/RegisterPdfExportContext";
-import { prefetchView } from "../viewPrefetch";
+import { prefetchView, cancelPrefetchView } from "../viewPrefetch";
 import {
   setWorkspaceNavTarget,
   OPEN_WORKSPACE_SETTINGS_EVENT,
   OPEN_WORKSPACE_VIEW_EVENT,
+  OPEN_WORKSPACE_MORE_EVENT,
   WORKSPACE_SETTINGS_TAB_IDS,
 } from "../utils/workspaceNavContext";
 import {
   MORE_SECTIONS,
   MORE_TABS,
+  NAV_TAB_IDS,
   getMoreTabsForSection,
   filterModuleTabsByQuery,
   primaryBottomNavIdSet,
@@ -47,6 +49,17 @@ import {
   resolveBottomNavSlotId,
 } from "../utils/bottomNavShortcut";
 import { isOnboardingWizardComplete } from "../utils/workspaceOnboarding";
+import {
+  filterTabsByRegisterStat,
+  getRegisterStatsMap,
+  invalidateRegisterStatsCache,
+  HSE_SECTION_TITLE,
+  registerStatMetaLine,
+  sortTabsByRegisterPriority,
+  summarizeSectionStats,
+} from "../utils/moduleRegisterStats";
+import { modulesWithSeedTemplates, seedEmptyRegisters } from "../utils/registerSeedTemplates";
+import { ORG_CHANGED_EVENT } from "../utils/orgStorage";
 
 const LAST_VIEW_STORAGE_KEY = "mysafeops_last_workspace_view";
 const WORKSPACE_LAYOUT_VIEW_IDS = new Set([...Object.keys(workspaceViewLoaders), "settings"]);
@@ -60,25 +73,103 @@ function isEditableSurfaceTarget(target) {
 }
 
 const LazySettingsCenter = lazy(() => import("../components/SettingsCenter"));
+const LazyWorkspaceSearchPalette = lazy(() => import("../components/WorkspaceSearchPalette"));
 const LazyWorkspaceOnboarding = lazy(() => import("../components/WorkspaceOnboarding"));
 
-function MoreModuleTile({ tab, active, pinnedIds, sectionTone, onOpen, onTogglePin, onExportPdf, onHide, canHide }) {
+function MoreSectionInsights({ sectionTitle, tone, tabs, statsMap, filter, onFilterChange, onSeeded }) {
+  if (tone !== "hse" && tone !== "site") return null;
+
+  const ids = tabs.map((t) => t.id);
+  const summary = summarizeSectionStats(statsMap, ids);
+  const scoreColour = summary.healthScore >= 75 ? "#0d9488" : summary.healthScore >= 45 ? "#d97706" : "#dc2626";
+  const emptySeedable = modulesWithSeedTemplates(ids.filter((id) => statsMap[id]?.status === "empty"));
+
+  const chips = [
+    ["all", "All"],
+    ["attention", `Needs attention (${summary.attention})`],
+    ["empty", `Empty (${summary.empty})`],
+    ["active", `Active (${summary.active})`],
+  ];
+
+  const handleSeedEmpty = () => {
+    if (!emptySeedable.length) return;
+    if (!window.confirm(`Add starter template rows to ${emptySeedable.length} empty register(s)?`)) return;
+    const { seeded } = seedEmptyRegisters(emptySeedable);
+    onSeeded?.();
+    if (seeded.length) window.alert(`Seeded ${seeded.length} register(s) with template rows.`);
+  };
+
+  return (
+    <div className={`app-more-section-insights app-more-section-insights--${tone}`}>
+      <div className="app-more-section-insights__score" style={{ borderColor: scoreColour }}>
+        <span className="app-more-section-insights__score-val" style={{ color: scoreColour }}>
+          {summary.healthScore}%
+        </span>
+        <span className="app-more-section-insights__score-label">Health</span>
+      </div>
+      <div className="app-more-section-insights__copy">
+        <strong>{summary.records.toLocaleString()} records</strong> across {summary.tracked} registers
+        {summary.attention > 0 ? (
+          <span className="app-more-section-insights__warn"> · {summary.attention} need attention</span>
+        ) : summary.empty > 0 ? (
+          <span> · {summary.empty} empty</span>
+        ) : null}
+      </div>
+      <div className="app-more-section-insights__chips" role="tablist" aria-label={`Filter ${sectionTitle}`}>
+        {chips.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={filter === key}
+            className={`app-more-section-chip${filter === key ? " app-more-section-chip--active" : ""}`}
+            onClick={() => onFilterChange(key)}
+          >
+            {label}
+          </button>
+        ))}
+        {tone === "hse" && emptySeedable.length > 0 && (
+          <button type="button" className="app-more-section-chip app-more-section-chip--seed" onClick={handleSeedEmpty}>
+            Seed {emptySeedable.length} empty
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const MoreModuleTile = memo(function MoreModuleTile({ tab, active, pinnedIds, sectionTone, stat, onOpen, onTogglePin, onExportPdf, onHide, canHide }) {
   const isPinned = pinnedIds.includes(tab.id);
   const Icon = getModuleIcon(tab.id);
   const exportable = canExportModulePdf(tab.id);
+  const meta = stat ? registerStatMetaLine(stat) : "";
+  const statusClass = stat?.status && stat.status !== "unknown" ? ` app-more-tile-wrap--${stat.status}` : "";
+
   return (
-    <div className={`app-more-tile-wrap app-more-tile-wrap--${sectionTone || "data"}`}>
+    <div className={`app-more-tile-wrap app-more-tile-wrap--${sectionTone || "data"}${statusClass}`}>
       <button
         type="button"
         className={`app-more-tile app-more-tile--v2${active ? " app-more-tile--active" : ""}`}
         onClick={() => onOpen(tab.id)}
         onMouseEnter={() => prefetchView(tab.id)}
+        onMouseLeave={() => cancelPrefetchView(tab.id)}
         onFocus={() => prefetchView(tab.id)}
+        onBlur={() => cancelPrefetchView(tab.id)}
       >
         <span className="app-more-tile__icon" aria-hidden>
-          <Icon size={18} strokeWidth={2} />
+          <Icon size={18} strokeWidth={2.2} />
         </span>
-        <span className="app-more-tile__label">{tab.label}</span>
+        <span className="app-more-tile__body">
+          <span className="app-more-tile__label">{tab.label}</span>
+          {meta ? (
+            <span className={`app-more-tile__meta app-more-tile__meta--${stat?.status || "unknown"}`}>{meta}</span>
+          ) : null}
+        </span>
+        {stat?.count != null && (
+          <span className={`app-more-tile__badge app-more-tile__badge--${stat.status}`} aria-hidden>
+            {stat.count}
+          </span>
+        )}
       </button>
       {exportable && (
         <button
@@ -119,7 +210,7 @@ function MoreModuleTile({ tab, active, pinnedIds, sectionTone, onOpen, onToggleP
       </button>
     </div>
   );
-}
+});
 
 function SettingsView({ initialTab, checkoutReturn }) {
   return (
@@ -211,15 +302,11 @@ const NAV_ICONS = {
 };
 
 /** Base bottom bar (More is last). Platform owner tab is inserted in layout when `isSuperadmin`. */
-const NAV_TABS = [
-  { id: "dashboard", label: "Dashboard", icon: NAV_ICONS.dashboard },
-  { id: "permits", label: "Permits", icon: NAV_ICONS.permits },
-  { id: "rams", label: "RAMS", icon: NAV_ICONS.rams },
-  { id: "workers", label: "Workers", icon: NAV_ICONS.workers },
-  { id: "site-map", label: "Site map", icon: NAV_ICONS["site-map"] },
-  { id: "bin", label: "Bin", icon: NAV_ICONS.bin },
-  { id: "more", label: "More", icon: NAV_ICONS.more },
-];
+const NAV_TABS = NAV_TAB_IDS.map((t) => ({
+  id: t.id,
+  label: t.label,
+  icon: NAV_ICONS[t.id] || NAV_ICONS.more,
+}));
 
 export default function MainAppLayout() {
   const { user } = useSupabaseAuth();
@@ -283,6 +370,9 @@ export default function MainAppLayout() {
   const [settingsInitialTab, setSettingsInitialTab] = useState(layoutSeed.settingsInitialTab);
   const [billingCheckoutReturn, setBillingCheckoutReturn] = useState(layoutSeed.checkoutReturn);
   const [moreFilter, setMoreFilter] = useState("");
+  const [moreSectionFilters, setMoreSectionFilters] = useState({});
+  const [registerStatsTick, setRegisterStatsTick] = useState(0);
+  const [pendingMoreNav, setPendingMoreNav] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => getPinnedModuleIds());
   const [moduleIconGen, setModuleIconGen] = useState(0);
@@ -305,9 +395,34 @@ export default function MainAppLayout() {
   }, []);
 
   useEffect(() => {
-    if (navTab !== "more") return;
-    preloadModuleIcons().then(() => setModuleIconGen((g) => g + 1));
-  }, [navTab]);
+    const bump = () => {
+      invalidateRegisterStatsCache();
+      setRegisterStatsTick((t) => t + 1);
+    };
+    window.addEventListener(ORG_CHANGED_EVENT, bump);
+    return () => window.removeEventListener(ORG_CHANGED_EVENT, bump);
+  }, []);
+
+  useEffect(() => {
+    const onOpenMore = (e) => {
+      const sectionTitle = e.detail?.sectionTitle || HSE_SECTION_TITLE;
+      const registerFilter = e.detail?.registerFilter || "all";
+      setPendingMoreNav({ sectionTitle, registerFilter });
+      setNavTab("more");
+    };
+    window.addEventListener(OPEN_WORKSPACE_MORE_EVENT, onOpenMore);
+    return () => window.removeEventListener(OPEN_WORKSPACE_MORE_EVENT, onOpenMore);
+  }, []);
+
+  useEffect(() => {
+    if (navTab !== "more" || !pendingMoreNav) return;
+    setMoreSectionFilters((prev) => ({ ...prev, [pendingMoreNav.sectionTitle]: pendingMoreNav.registerFilter }));
+    setPendingMoreNav(null);
+    window.requestAnimationFrame(() => {
+      const tone = getSectionTone(pendingMoreNav.sectionTitle);
+      document.querySelector(`.app-more-section--${tone}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [navTab, pendingMoreNav]);
 
   useEffect(() => {
     const preload = () => {
@@ -447,7 +562,7 @@ export default function MainAppLayout() {
     return () => window.removeEventListener("keydown", onKey);
   }, [openHelpModule]);
 
-  const navigateFromSearch = ({ viewId, permitId }) => {
+  const navigateFromSearch = useCallback(({ viewId, permitId }) => {
     if (!primaryNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
     if (viewId === "permits" && permitId) {
       setWorkspaceNavTarget({ viewId: "permits", permitId });
@@ -459,7 +574,7 @@ export default function MainAppLayout() {
       setView(viewId);
       setNavTab("more");
     }
-  };
+  }, [allowedModuleIds, primaryNavIdSet]);
 
   useEffect(() => {
     const sw = navigator.serviceWorker;
@@ -590,6 +705,10 @@ export default function MainAppLayout() {
   const q = moreFilter.trim().toLowerCase();
   const pinnedTabsOrdered = pinnedIds.map((id) => visibleMoreTabs.find((t) => t.id === id)).filter(Boolean);
   const pinnedTabsFiltered = filterModuleTabsByQuery(pinnedTabsOrdered, moreFilter);
+  const registerStatsMap = useMemo(() => {
+    if (navTab !== "more") return {};
+    return getRegisterStatsMap(visibleMoreTabs.map((t) => t.id));
+  }, [navTab, visibleMoreTabs, registerStatsTick]);
 
   return (
     <div
@@ -614,12 +733,16 @@ export default function MainAppLayout() {
         onOpenSettings={() => selectMoreModule("settings")}
         onOpenSearch={() => setSearchOpen(true)}
       />
-      <WorkspaceSearchPalette
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onNavigate={navigateFromSearch}
-        allowSuperadmin={isSuperadmin}
-      />
+      {searchOpen ? (
+        <Suspense fallback={null}>
+          <LazyWorkspaceSearchPalette
+            open={searchOpen}
+            onClose={() => setSearchOpen(false)}
+            onNavigate={navigateFromSearch}
+            allowSuperadmin={isSuperadmin}
+          />
+        </Suspense>
+      ) : null}
       {showOnboarding ? (
         <Suspense fallback={null}>
           <LazyWorkspaceOnboarding onComplete={() => setShowOnboarding(false)} />
@@ -692,6 +815,7 @@ export default function MainAppLayout() {
                       active={view === t.id}
                       pinnedIds={pinnedIds}
                       sectionTone="pinned"
+                      stat={registerStatsMap[t.id]}
                       onOpen={selectMoreModule}
                       onTogglePin={handleTogglePin}
                       onExportPdf={handleExportModulePdf}
@@ -725,29 +849,56 @@ export default function MainAppLayout() {
               }}
             />
             {visibleMoreSections.map((section) => {
-              const tabs = filterModuleTabsByQuery(getMoreTabsForSection(section), q);
-              if (tabs.length === 0) return null;
               const tone = getSectionTone(section.title);
-              const exportableCount = tabs.filter((t) => canExportModulePdf(t.id)).length;
+              const allSectionTabs = filterModuleTabsByQuery(getMoreTabsForSection(section), q);
+              let tabs = allSectionTabs;
+              const sectionFilter = moreSectionFilters[section.title] || "all";
+              if ((tone === "hse" || tone === "site") && sectionFilter !== "all") {
+                tabs = filterTabsByRegisterStat(tabs, registerStatsMap, sectionFilter);
+              }
+              if (tone === "hse" || tone === "site") {
+                tabs = sortTabsByRegisterPriority(tabs, registerStatsMap);
+              }
+              if (allSectionTabs.length === 0) return null;
+              const exportableCount = allSectionTabs.filter((t) => canExportModulePdf(t.id)).length;
               return (
                 <div key={section.title} className={`app-more-section app-more-section--${tone}`} style={{ marginBottom: 22 }}>
                   <div className="app-more-section-head">
                     <div className="app-more-section-head__title">
                       <span className={`app-more-section-accent app-more-section-accent--${tone}`} aria-hidden />
                       <span>{section.title}</span>
-                      <span className="app-more-section-count">{tabs.length}</span>
+                      <span className="app-more-section-count">{allSectionTabs.length}</span>
                     </div>
                     {exportableCount > 0 && (
                       <button
                         type="button"
                         className="app-more-section-pdf"
-                        onClick={() => handleExportSectionPdf(section.title, tabs)}
+                        onClick={() => handleExportSectionPdf(section.title, allSectionTabs)}
                       >
                         <FileDown size={14} strokeWidth={2.2} aria-hidden />
                         Export section PDF
                       </button>
                     )}
                   </div>
+                  <MoreSectionInsights
+                    sectionTitle={section.title}
+                    tone={tone}
+                    tabs={allSectionTabs}
+                    statsMap={registerStatsMap}
+                    filter={sectionFilter}
+                    onFilterChange={(key) =>
+                      setMoreSectionFilters((prev) => ({ ...prev, [section.title]: key }))
+                    }
+                    onSeeded={() => {
+                      invalidateRegisterStatsCache();
+                      setRegisterStatsTick((t) => t + 1);
+                    }}
+                  />
+                  {tabs.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)", padding: "4px 2px 8px" }}>
+                      No registers match this filter.
+                    </div>
+                  ) : (
                   <div className="app-more-grid">
                     {tabs.map((t) => (
                       <MoreModuleTile
@@ -756,6 +907,7 @@ export default function MainAppLayout() {
                         active={view === t.id}
                         pinnedIds={pinnedIds}
                         sectionTone={tone}
+                        stat={registerStatsMap[t.id]}
                         onOpen={selectMoreModule}
                         onTogglePin={handleTogglePin}
                         onExportPdf={handleExportModulePdf}
@@ -764,6 +916,7 @@ export default function MainAppLayout() {
                       />
                     ))}
                   </div>
+                  )}
                 </div>
               );
             })}
@@ -818,12 +971,12 @@ export default function MainAppLayout() {
                 color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
                 fontSize: 11,
                 fontFamily: "DM Sans, sans-serif",
-                maxWidth: 78,
+                maxWidth: t.id === "workers" ? 92 : 78,
                 fontWeight: 600,
               }}
             >
               <Icon size={22} strokeWidth={active ? 2.25 : 1.75} aria-hidden />
-              <span>{t.label}</span>
+              <span className="app-bottom-nav__label">{t.label}</span>
             </button>
           );
         })}

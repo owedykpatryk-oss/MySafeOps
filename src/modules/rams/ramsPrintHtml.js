@@ -1,10 +1,10 @@
 /**
  * Shared RAMS → print HTML + fingerprint (used by builder and public share view).
  */
-import { getRiskLevel } from "./ramsAllHazards";
+import { getRiskLevel } from "./ramsRiskLevel.js";
 import { normalizePrintSections, RAMS_SECTION_IDS, documentContentHash } from "./ramsSectionConfig";
-import { renderPermitDocumentHtml } from "../permits/permitDocumentHtml";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
+import { openPrintWindow, safeCssColor, safeImageSrc, escapeAttr } from "../../utils/htmlEscape.js";
 
 const RL = {
   high: { bg: "#FCEBEB", color: "#791F1F" },
@@ -403,8 +403,8 @@ function loadOrgPrintSettings() {
   return {
     org,
     orgName: String(org.name || "MySafeOps"),
-    primaryColor: String(org.primaryColor || "#0d9488"),
-    accentColor: String(org.accentColor || "#f97316"),
+    primaryColor: safeCssColor(org.primaryColor),
+    accentColor: safeCssColor(org.accentColor, "#f97316"),
     watermarkText: String(org.pdfWatermarkText || "").trim(),
     complianceLine:
       String(org.pdfComplianceLine || "").trim() ||
@@ -471,7 +471,7 @@ function ramsDocumentCss() {
   return `
     @page { size: A4; margin: 12mm; }
     *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;font-size:12px;line-height:1.45;color:#000;margin:0;padding:16px 16px 36px;position:relative}
+    body{font-family:Arial,sans-serif;font-size:12px;line-height:1.45;color:#000;margin:0;padding:16px 16px 52px;position:relative}
     p,li,span,td,th{overflow-wrap:anywhere;word-break:break-word}
     img,svg{max-width:100%;height:auto}
     a{word-break:break-all}
@@ -497,7 +497,7 @@ function ramsDocumentCss() {
       z-index:0;
       text-transform:uppercase;
     }
-    .rams-content{position:relative;z-index:1}
+    .rams-content{position:relative;z-index:1;padding-bottom:28px}
     .cover-page{
       position:relative;
       border:1px solid #dbe2ea;
@@ -542,7 +542,8 @@ function ramsDocumentCss() {
     h1,h2,h3{break-after:avoid-page;page-break-after:avoid}
     .header-table,.cover-page,.pack-site-summary{break-inside:avoid-page;page-break-inside:avoid}
     @media print{
-      body{padding:0 0 14mm 0}
+      body{padding:0 0 16mm 0}
+      .rams-content{padding-bottom:0}
       .cover-page{min-height:248mm;page-break-after:always}
       .pack-rams{page-break-after:always}
       .pack-permit-wrap{page-break-before:always}
@@ -1243,7 +1244,7 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
   const statusLabel = docStatus.replace(/_/g, " ").toUpperCase();
   const orgTheme = loadOrgPrintSettings();
   const orgName = orgTheme.orgName;
-  const logoDataUrl = String(orgTheme.org?.logo || "");
+  const logoSrc = safeImageSrc(orgTheme.org?.logo);
   const badgeColor = orgTheme.primaryColor;
   const badgeBg = `${orgTheme.primaryColor}1A`;
   const watermark =
@@ -1276,8 +1277,8 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
       <div>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${
-            logoDataUrl
-              ? `<img src="${escHtml(logoDataUrl)}" alt="Org logo" style="height:32px;max-width:120px;object-fit:contain"/>`
+            logoSrc
+              ? `<img src="${escapeAttr(logoSrc)}" alt="Org logo" style="height:32px;max-width:120px;object-fit:contain"/>`
               : ""
           }
           <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#475569;font-weight:700;margin-bottom:6px">${escHtml(orgName)}</div>
@@ -1375,7 +1376,8 @@ export function generatePrintHTML(form, rows, operatives, projectMap, printFlags
 }
 
 /** Single HTML document: RAMS plus permit pages (same project). Uses permit module styling. */
-export function generateRamsProjectPackHTML(form, rows, workers, projects, permits, sitePackMeta = null) {
+export async function generateRamsProjectPackHTML(form, rows, workers, projects, permits, sitePackMeta = null) {
+  const { renderPermitDocumentHtml } = await import("../permits/permitDocumentHtml");
   const workerMap = Object.fromEntries(workers.map((w) => [w.id, w.name]));
   const operatives = (form.operativeIds || []).map((id) => workerMap[id]).filter(Boolean);
   const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
@@ -1419,7 +1421,7 @@ export function buildRamsPreviewHtml(form, rows, workers, projects) {
  * @param options.print If true, open the system print dialog (save as PDF from there).
  * @param options.permits Optional permits list (e.g. same projectId as RAMS) to append after RAMS.
  */
-export function openRamsDocumentWindow(form, rows, workers, projects, options = {}) {
+export async function openRamsDocumentWindow(form, rows, workers, projects, options = {}) {
   try {
     const doPrint = options.print === true;
     const permits = options.permits;
@@ -1434,9 +1436,9 @@ export function openRamsDocumentWindow(form, rows, workers, projects, options = 
     const fp = computeRamsFingerprint(safeForm, safeRows);
     const html =
       Array.isArray(permits) && permits.length > 0
-        ? generateRamsProjectPackHTML(safeForm, safeRows, safeWorkers, safeProjects, permits, options.sitePackMeta || null)
+        ? await generateRamsProjectPackHTML(safeForm, safeRows, safeWorkers, safeProjects, permits, options.sitePackMeta || null)
         : generatePrintHTML(safeForm, safeRows, operatives, projectMap, pf, fp, safeWorkers);
-    const win = window.open("", "_blank");
+    const win = openPrintWindow();
     if (!win) {
       window.alert(
         "Could not open a new window — your browser may be blocking pop-ups. Allow pop-ups for this site, then use Preview or Print again."

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { FileDown } from "lucide-react";
 import { ms } from "../utils/moduleStyles";
 import { canExportModulePdf } from "../navigation/moduleCatalogMeta";
-import { exportModuleRegisterPdf } from "../utils/moduleRegisterPdf";
 
 /**
  * A4 register snapshot — same engine as More grid tile export.
@@ -15,6 +14,7 @@ export default function RegisterPdfExportButton({ moduleId, label, compact = fal
     if (busy) return;
     setBusy(true);
     try {
+      const { exportModuleRegisterPdf } = await import("../utils/moduleRegisterPdf");
       const result = exportModuleRegisterPdf(moduleId, { label });
       if (!result.ok) window.alert("Could not export this register to PDF.");
     } catch (e) {

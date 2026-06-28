@@ -84,6 +84,12 @@ export function surveyReportQuality(report) {
   add(!!report.sections?.scope?.trim(), "Scope of works");
   add(!!report.sections?.methodology?.trim(), "Methodology");
   add(!!report.sections?.findings?.trim(), "Findings / results");
+  add(!!report.sections?.executiveSummary?.trim(), "Executive summary");
+  add(!!report.sections?.recommendations?.trim(), "Recommendations");
+  add(
+    (report.utilityRecords?.sourcesConsulted?.length || 0) > 0,
+    "Records review"
+  );
   add(
     (report.limitationKeys?.length || 0) > 0 || !!report.limitationsText?.trim(),
     "Limitations"

@@ -116,6 +116,8 @@ export const ms = {
     overflow: "auto",
     WebkitOverflowScrolling: "touch",
   },
+  /** Full-screen module editor overlay — use with className app-module-overlay */
+  overlayClass: "app-module-overlay",
   toolbar: {
     display: "flex",
     justifyContent: "space-between",
@@ -163,4 +165,5 @@ export const ms = {
     padding: "1.25rem 0",
     fontSize: 14,
   },
+  documentModuleClass: "app-document-module",
 };

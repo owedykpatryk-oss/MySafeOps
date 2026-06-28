@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { loadOrgScoped as load, ORG_CHANGED_EVENT } from "../utils/orgStorage";
+import { loadOrgScoped as load, ORG_CHANGED_EVENT, getOrgId, ORG_ID_KEY } from "../utils/orgStorage";
 import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 import { activeAllergenWindows, orgShowsIndustrialMoreModules } from "../utils/industrialSectors";
 import { ms } from "../utils/moduleStyles";
@@ -9,7 +9,9 @@ import ProjectHubCard from "./ProjectHubCard";
 import ProjectCommandCenter from "./ProjectCommandCenter";
 import { useOrgBranding } from "../hooks/useOrgBranding";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
-import { openWorkspaceSettings, openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { openWorkspaceSettings, openWorkspaceView, openWorkspaceMoreSection, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import HseRegistersCard from "./HseRegistersCard";
+import { buildHseDashboardSummary } from "../utils/moduleRegisterStats";
 import {
   DASHBOARD_WIDGETS,
   isWidgetVisible,
@@ -211,13 +213,18 @@ export default function AnalyticsDashboard() {
 
   useEffect(() => {
     const bump = () => setDataRefreshTick((t) => t + 1);
+    const onStorage = (e) => {
+      const key = e?.key || "";
+      if (!key || (key !== ORG_ID_KEY && !key.endsWith(`_${getOrgId()}`))) return;
+      bump();
+    };
     window.addEventListener(ORG_CHANGED_EVENT, bump);
     window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
-    window.addEventListener("storage", bump);
+    window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener(ORG_CHANGED_EVENT, bump);
       window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
-      window.removeEventListener("storage", bump);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 
@@ -233,6 +240,7 @@ export default function AnalyticsDashboard() {
   const trainingRecords = useMemo(() => load("training_matrix", []), [dataRefreshTick]);
   const hotWork = useMemo(() => load("hot_work_register", []), [dataRefreshTick]);
   const surveyReports = useMemo(() => load("survey_reports", []), [dataRefreshTick]);
+  const geoPhotos = useMemo(() => load("geo_photos", []), [dataRefreshTick]);
   const allergenWindows = useMemo(() => load("allergen_changeover_windows", []), [dataRefreshTick]);
   const activeAllergens = useMemo(() => activeAllergenWindows(allergenWindows), [allergenWindows]);
 
@@ -381,6 +389,8 @@ export default function AnalyticsDashboard() {
     [trainingRecords]
   );
 
+  const hseDashboard = useMemo(() => buildHseDashboardSummary(), [dataRefreshTick]);
+
   const actionNeededItems = useMemo(() => {
     const t = new Date();
     const items = [];
@@ -459,8 +469,25 @@ export default function AnalyticsDashboard() {
         viewId: "permits",
       });
     }
+    if (hseDashboard.summary.attention > 0) {
+      items.push({
+        key: "hse-attention",
+        severity: "med",
+        text: `${hseDashboard.summary.attention} HSE register(s) have overdue items or open actions — review in More.`,
+        openMore: true,
+      });
+    }
+    if (hseDashboard.summary.empty >= 5) {
+      items.push({
+        key: "hse-empty",
+        severity: "calm",
+        text: `${hseDashboard.summary.empty} HSE registers are still empty — use Seed templates in More or the dashboard HSE card.`,
+        openMore: true,
+        registerFilter: "empty",
+      });
+    }
     return items;
-  }, [workers, permits, rams, snags, trainingExpiring60, projects]);
+  }, [workers, permits, rams, snags, trainingExpiring60, projects, hseDashboard]);
 
   const hotWorkActive = hotWork.filter((h) => h.status === "active").length;
   const org = getOrgSettings();
@@ -502,6 +529,10 @@ export default function AnalyticsDashboard() {
           { label: "Snags in progress", value: String(snagStats.in_progress) },
           { label: "Training expiring ≤60 days", value: String(trainingExpiring60) },
           { label: "Incidents logged", value: String(incidents.length) },
+          {
+            label: "Geo-photos (in report / total)",
+            value: `${geoPhotos.filter((g) => g.includeInReport).length} / ${geoPhotos.length}`,
+          },
           { label: "Hot work active / total records", value: `${hotWorkActive} / ${hotWork.length}` },
           { label: "Sign-ins on site today", value: String(todayInductions) },
           { label: "Timesheet hours (this calendar month)", value: String(Math.round(monthHours)) },
@@ -528,6 +559,34 @@ export default function AnalyticsDashboard() {
         })),
       });
     }
+
+    const hse = hseDashboard.summary;
+    const hseItems = [
+      { label: "HSE health score", value: `${hse.healthScore}%` },
+      { label: "Registers tracked", value: String(hse.tracked) },
+      { label: "Empty registers", value: String(hse.empty) },
+      { label: "Active (no attention flag)", value: String(hse.active) },
+      { label: "Registers needing attention", value: String(hse.attention) },
+      { label: "Total register records", value: String(hse.records) },
+    ];
+    hseDashboard.attentionModules.slice(0, 8).forEach((m) => {
+      hseItems.push({
+        label: `${m.label} — attention`,
+        value: `${m.attentionCount} flagged · ${m.count} record${m.count === 1 ? "" : "s"}`,
+      });
+    });
+    if (hseDashboard.emptyModules.length > 0) {
+      const emptyLabels = hseDashboard.emptyModules.map((m) => m.label);
+      hseItems.push({
+        label: "Empty register modules",
+        value:
+          emptyLabels.length <= 8
+            ? emptyLabels.join("; ")
+            : `${emptyLabels.slice(0, 8).join("; ")} (+${emptyLabels.length - 8} more)`,
+      });
+    }
+    sections.push({ title: "HSE register health", items: hseItems });
+
     return sections;
   }, [
     projects,
@@ -550,6 +609,8 @@ export default function AnalyticsDashboard() {
     billing?.subscriptionStatus,
     billing?.paidPlanId,
     trialStatus,
+    hseDashboard,
+    geoPhotos,
   ]);
 
   const checklist = useMemo(
@@ -772,6 +833,7 @@ export default function AnalyticsDashboard() {
             offline ? "Browser reported offline when exporting — figures are still from this device only." : null,
             `UTC export: ${t.toISOString()}`,
             orgId && String(orgId).trim() && String(orgId) !== "default" ? `Organisation: ${orgId}` : null,
+            `HSE register health score: ${hseDashboard.summary.healthScore}% (${hseDashboard.summary.attention} need attention · ${hseDashboard.summary.empty} empty)`,
             "Numbers: device-local aggregates only (not a live cloud replica).",
           ].filter(Boolean),
           coverLogoSrc: pdfCoverLogoSrc,
@@ -800,7 +862,7 @@ export default function AnalyticsDashboard() {
         setPdfExportPhase(null);
       }
     },
-    [orgName, roleLabel, orgId, pdfCoverLogoSrc, pdfSummarySections]
+    [orgName, roleLabel, orgId, pdfCoverLogoSrc, pdfSummarySections, hseDashboard]
   );
 
   return (
@@ -1136,6 +1198,7 @@ export default function AnalyticsDashboard() {
             rams={rams}
             permits={permits}
             surveyReports={surveyReports}
+            geoPhotos={geoPhotos}
           />
         </div>
       ) : null}
@@ -1180,7 +1243,19 @@ export default function AnalyticsDashboard() {
             {actionNeededItems.map((item) => (
               <li key={item.key} className="app-dashboard-action-strip__item">
                 <span className="app-dashboard-action-strip__text">{item.text}</span>
-                <button type="button" className="app-dashboard-action-strip__btn" onClick={() => openWorkspaceView({ viewId: item.viewId })}>
+                <button
+                  type="button"
+                  className="app-dashboard-action-strip__btn"
+                  onClick={() => {
+                    if (item.openMore) {
+                      openWorkspaceMoreSection({
+                        registerFilter: item.registerFilter || "attention",
+                      });
+                    } else {
+                      openWorkspaceView({ viewId: item.viewId });
+                    }
+                  }}
+                >
                   Open
                 </button>
               </li>
@@ -1189,6 +1264,17 @@ export default function AnalyticsDashboard() {
         </div>
         </div>
       )}
+
+      {showWidget("hse_registers") ? (
+        <div style={{ order: widgetSortOrder("hse_registers") }}>
+          <HseRegistersCard
+            summary={hseDashboard.summary}
+            attentionModules={hseDashboard.attentionModules}
+            emptyModules={hseDashboard.emptyModules}
+            onSeeded={() => setDataRefreshTick((t) => t + 1)}
+          />
+        </div>
+      ) : null}
 
       {showWidget("overview_metrics") ? (
       <div style={{ order: widgetSortOrder("overview_metrics") }}>

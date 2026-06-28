@@ -149,7 +149,7 @@ export default function ProjectSitePlanPanel({
         <div>
           <div className="site-plan-panel__title">Site boundary &amp; plan markup</div>
           <div className="site-plan-panel__sub">
-            Import KML site boundary, upload PDF/JPG floor plans, then mark escape routes, blocked zones and emergency assets by clicking on the drawing.
+            Drag zones and escape routes on your floor plan. Assets and blocks auto-save — use Select / move to reposition. Legend builds itself from what you mark.
           </div>
         </div>
       </div>
@@ -230,51 +230,6 @@ export default function ProjectSitePlanPanel({
             compact={compact}
             onPlanChange={(next) => updatePlan(selectedPlan.id, () => next)}
           />
-          {(selectedPlan.escapeRoutes?.length ||
-            selectedPlan.zoneBlocks?.length ||
-            selectedPlan.emergencyAssets?.length) > 0 ? (
-            <div className="site-plan-panel__inventory">
-              <div className="site-plan-panel__inventory-title">Marked on this plan</div>
-              <ul>
-                {(selectedPlan.escapeRoutes || []).map((r) => (
-                  <li key={r.id}>
-                    Route: {r.label || "Unnamed"}
-                    <button
-                      type="button"
-                      className="ghost"
-                      onClick={() => updatePlan(selectedPlan.id, (p) => removePlanItem(p, "escapeRoutes", r.id))}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-                {(selectedPlan.zoneBlocks || []).map((z) => (
-                  <li key={z.id}>
-                    Zone ({z.kind}): {z.label || "Unnamed"}
-                    <button
-                      type="button"
-                      className="ghost"
-                      onClick={() => updatePlan(selectedPlan.id, (p) => removePlanItem(p, "zoneBlocks", z.id))}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-                {(selectedPlan.emergencyAssets || []).map((a) => (
-                  <li key={a.id}>
-                    Asset ({a.kind}): {a.label || "—"}
-                    <button
-                      type="button"
-                      className="ghost"
-                      onClick={() => updatePlan(selectedPlan.id, (p) => removePlanItem(p, "emergencyAssets", a.id))}
-                    >
-                      Remove
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
         </>
       ) : (
         <div className="site-plan-panel__empty-plan">No plan yet — upload a PDF or JPG building drawing to mark escape routes and zones.</div>

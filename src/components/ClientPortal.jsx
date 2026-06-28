@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { ms } from "../utils/moduleStyles";
+import { safeOpaqueToken } from "../utils/htmlEscape.js";
 import PageHero from "./PageHero";
 
 const genId = () => `portal_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
@@ -353,6 +354,14 @@ export default function ClientPortal() {
 
 /** Public read-only view when opened with ?portal=token (same device / org data). */
 export function PublicClientPortalView({ token }) {
+  const safeToken = safeOpaqueToken(token);
+  if (!safeToken) {
+    return (
+      <div style={{ fontFamily: "DM Sans,sans-serif", padding: "3rem 1rem", textAlign: "center" }}>
+        <div style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>Invalid or expired portal link.</div>
+      </div>
+    );
+  }
   const portals = load("client_portals", []);
-  return <PortalView token={token} portals={portals} />;
+  return <PortalView token={safeToken} portals={portals} />;
 }

@@ -1,4 +1,5 @@
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from "web-vitals";
+import { getSentry } from "./sentryClient.js";
 
 function vitalsEndpoint() {
   const u = String(import.meta.env.VITE_WEB_VITALS_URL || "").trim();
@@ -39,6 +40,17 @@ function sendToServer(metric) {
 function vitalsSink(metric) {
   if (import.meta.env.DEV) {
     console.debug("[web-vitals]", metric.name, metric.value, metric.rating || "");
+  }
+  const Sentry = getSentry();
+  if (Sentry?.setMeasurement) {
+    Sentry.setMeasurement(metric.name, metric.value, "millisecond");
+  } else if (Sentry?.addBreadcrumb) {
+    Sentry.addBreadcrumb({
+      category: "web-vitals",
+      level: "info",
+      message: metric.name,
+      data: { value: metric.value, rating: metric.rating, id: metric.id },
+    });
   }
   sendToServer(metric);
 }

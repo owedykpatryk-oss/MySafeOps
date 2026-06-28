@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
+import { safeOpaqueToken } from "../utils/htmlEscape.js";
 import PageHero from "../components/PageHero";
 
 const genId = () => `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -9,8 +10,16 @@ const genId = () => `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}
 const ss = ms;
 
 export function PublicSubcontractorView({ token }) {
+  const safeToken = safeOpaqueToken(token);
+  if (!safeToken) {
+    return (
+      <div style={{ fontFamily: "DM Sans,sans-serif", padding: "3rem 1rem", textAlign: "center" }}>
+        <p style={{ color: "#64748b" }}>Invalid or inactive subcontractor link.</p>
+      </div>
+    );
+  }
   const portals = load("subcontractor_portals", []);
-  const portal = portals.find((p) => p.token === token && p.active);
+  const portal = portals.find((p) => p.token === safeToken && p.active);
   const [company, setCompany] = useState("");
   const [contact, setContact] = useState("");
   const [ramsSummary, setRamsSummary] = useState("");

@@ -1,6 +1,7 @@
 import { openRamsPrintWindow } from "./ramsPrintHtml";
 import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load } from "../../utils/orgStorage";
+import { safeOpaqueToken } from "../../utils/htmlEscape.js";
 
 const ss = { ...ms, btnP: ms.btnP };
 
@@ -8,11 +9,23 @@ const ss = { ...ms, btnP: ms.btnP };
  * Read-only RAMS view opened via ?ramsShare=TOKEN (same browser / localStorage as builder).
  */
 export default function PublicRamsShareView({ token }) {
+  const safeToken = safeOpaqueToken(token);
   const ramsDocs = load("rams_builder_docs", []);
   const workers = load("mysafeops_workers", []);
   const projects = load("mysafeops_projects", []);
 
-  const doc = ramsDocs.find((d) => d.shareToken && d.shareToken === token);
+  if (!safeToken) {
+    return (
+      <div style={{ padding: "2rem 1rem", maxWidth: 480, margin: "0 auto", fontFamily: "DM Sans, system-ui, sans-serif" }}>
+        <h1 style={{ fontSize: 18, fontWeight: 600 }}>Invalid RAMS link</h1>
+        <p style={{ fontSize: 14, color: "var(--color-text-secondary,#64748b)", lineHeight: 1.5 }}>
+          This share link is malformed. Open MySafeOps and use Backup / export instead.
+        </p>
+      </div>
+    );
+  }
+
+  const doc = ramsDocs.find((d) => d.shareToken && d.shareToken === safeToken);
 
   if (!doc) {
     return (

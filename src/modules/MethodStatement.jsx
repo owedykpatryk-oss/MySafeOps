@@ -5,7 +5,7 @@ import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
-import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { escapeHtml, openPrintWindow } from "../utils/htmlEscape.js";
 
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
@@ -468,28 +468,29 @@ function MSForm({ ms, onSave, onClose }) {
 }
 
 function printMS(form, workers, projects) {
+  const he = escapeHtml;
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
-  const projectMap = Object.fromEntries(projects.map(p=>[p.id,p.name]));
   const operatives = (form.operativeIds||[]).map(id=>workerMap[id]).filter(Boolean);
 
   const stepsHTML = (form.steps||[]).map(s=>`
     <tr>
-      <td style="padding:6px 8px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:bold;width:40px">${s.seq}</td>
-      <td style="padding:6px 8px;border:1px solid #ddd;font-size:12px;font-weight:500">${s.title}</td>
-      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px">${s.description||""}</td>
-      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap">${s.responsible||""}</td>
-      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap">${s.duration||""}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:bold;width:40px">${he(s.seq)}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;font-size:12px;font-weight:500">${he(s.title)}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px">${he(s.description||"")}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap">${he(s.responsible||"")}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap">${he(s.duration||"")}</td>
     </tr>`).join("");
 
   const sigRows = operatives.map(n=>`
     <tr style="height:44px">
-      <td style="padding:6px;border:1px solid #ddd;font-size:12px">${n}</td>
+      <td style="padding:6px;border:1px solid #ddd;font-size:12px">${he(n)}</td>
       <td style="border:1px solid #ddd"></td>
       <td style="border:1px solid #ddd"></td>
     </tr>`).join("");
 
-  const win = window.open("","_blank");
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>MS — ${form.title}</title>
+  const win = openPrintWindow();
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>MS — ${he(form.title)}</title>
   <style>body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:0;padding:20px}
   h1{font-size:15px;font-weight:bold;background:#f97316;color:#fff;padding:8px 12px;margin:0 0 12px;text-align:center}
   h2{font-size:12px;font-weight:bold;background:#f5f5f5;padding:5px 8px;margin:12px 0 6px;border-left:3px solid #f97316}
@@ -502,30 +503,30 @@ function printMS(form, workers, projects) {
   </head><body>
   <h1>METHOD STATEMENT — MySafeOps</h1>
   <div class="hgrid">
-    <div class="hcell"><div class="l">Document title</div>${form.title}</div>
-    <div class="hcell"><div class="l">Location</div>${form.location}</div>
-    <div class="hcell"><div class="l">Client</div>${form.client||"—"}</div>
-    <div class="hcell"><div class="l">Job reference</div>${form.jobRef||"—"}</div>
-    <div class="hcell"><div class="l">Date</div>${fmtDate(form.date)}</div>
-    <div class="hcell"><div class="l">Revision</div>${form.revision||"1A"}</div>
-    <div class="hcell"><div class="l">Lead engineer</div>${form.leadEngineer||"—"}</div>
-    <div class="hcell"><div class="l">Prepared by</div>${form.preparedBy||"—"}</div>
-    <div class="hcell"><div class="l">Approved by</div>${form.approvedBy||"—"}</div>
+    <div class="hcell"><div class="l">Document title</div>${he(form.title)}</div>
+    <div class="hcell"><div class="l">Location</div>${he(form.location)}</div>
+    <div class="hcell"><div class="l">Client</div>${he(form.client||"—")}</div>
+    <div class="hcell"><div class="l">Job reference</div>${he(form.jobRef||"—")}</div>
+    <div class="hcell"><div class="l">Date</div>${he(fmtDate(form.date))}</div>
+    <div class="hcell"><div class="l">Revision</div>${he(form.revision||"1A")}</div>
+    <div class="hcell"><div class="l">Lead engineer</div>${he(form.leadEngineer||"—")}</div>
+    <div class="hcell"><div class="l">Prepared by</div>${he(form.preparedBy||"—")}</div>
+    <div class="hcell"><div class="l">Approved by</div>${he(form.approvedBy||"—")}</div>
   </div>
-  ${form.scope?`<h2>Scope of works</h2><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${form.scope}</p>`:""}
-  ${form.restrictions?`<h2>Restrictions</h2><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${form.restrictions}</p>`:""}
+  ${form.scope?`<h2>Scope of works</h2><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(form.scope)}</p>`:""}
+  ${form.restrictions?`<h2>Restrictions</h2><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(form.restrictions)}</p>`:""}
   ${(form.steps||[]).length>0?`<h2>Work sequence</h2>
   <table><thead><tr><th style="width:40px">Step</th><th style="width:20%">Activity</th><th>Description</th><th style="width:15%">Responsible</th><th style="width:12%">Duration</th></tr></thead>
   <tbody>${stepsHTML}</tbody></table>`:""}
-  ${(form.plant||[]).length>0?`<h2>Plant and equipment</h2><p style="font-size:12px">${form.plant.map(p=>`<span class="pill">${p}</span>`).join("")}</p>`:""}
-  ${(form.materials||[]).length>0?`<h2>Key materials</h2><p style="font-size:12px">${form.materials.map(m=>`<span class="pill">${m}</span>`).join("")}</p>`:""}
-  ${(form.ppeRequired||[]).length>0?`<h2>Required PPE</h2><p style="font-size:12px">${form.ppeRequired.map(p=>`<span class="pill">${p}</span>`).join("")}</p>`:""}
-  ${form.emergencyProcedure?`<h2>Emergency procedure</h2><p style="font-size:12px;line-height:1.6">${form.emergencyProcedure}</p>`:""}
-  ${form.wasteDisposal?`<h2>Waste disposal</h2><p style="font-size:12px;line-height:1.6">${form.wasteDisposal}</p>`:""}
+  ${(form.plant||[]).length>0?`<h2>Plant and equipment</h2><p style="font-size:12px">${form.plant.map(p=>`<span class="pill">${he(p)}</span>`).join("")}</p>`:""}
+  ${(form.materials||[]).length>0?`<h2>Key materials</h2><p style="font-size:12px">${form.materials.map(m=>`<span class="pill">${he(m)}</span>`).join("")}</p>`:""}
+  ${(form.ppeRequired||[]).length>0?`<h2>Required PPE</h2><p style="font-size:12px">${form.ppeRequired.map(p=>`<span class="pill">${he(p)}</span>`).join("")}</p>`:""}
+  ${form.emergencyProcedure?`<h2>Emergency procedure</h2><p style="font-size:12px;line-height:1.6">${he(form.emergencyProcedure)}</p>`:""}
+  ${form.wasteDisposal?`<h2>Waste disposal</h2><p style="font-size:12px;line-height:1.6">${he(form.wasteDisposal)}</p>`:""}
   ${operatives.length>0?`<h2>Operative signatures</h2>
   <table><thead><tr><th style="width:35%">Name</th><th style="width:40%">Signature</th><th style="width:25%">Date</th></tr></thead>
   <tbody>${sigRows}</tbody></table>`:""}
-  <p style="font-size:10px;color:#999;margin-top:16px">Generated by MySafeOps · Rev ${form.revision||"1A"} · ${fmtDate(form.date)}</p>
+  <p style="font-size:10px;color:#999;margin-top:16px">Generated by MySafeOps · Rev ${he(form.revision||"1A")} · ${he(fmtDate(form.date))}</p>
   </body></html>`);
   win.document.close();
   win.print();

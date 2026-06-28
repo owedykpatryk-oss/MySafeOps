@@ -5,6 +5,7 @@ import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { escapeHtml, safeImageSrc, openPrintWindow } from "../utils/htmlEscape.js";
 
 const genId = () => `brief_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
@@ -414,19 +415,27 @@ function BriefingCard({ brief, onDelete, onPrint }) {
 
 // ─── Print briefing ───────────────────────────────────────────────────────────
 function printBriefing(brief) {
-  const win = window.open("","_blank");
-  const topicsHTML = (brief.topics||[]).map(t=>`<li>${t}</li>`).join("");
-  const customTopicHTML = brief.customTopics ? `<li><em>${brief.customTopics}</em></li>` : "";
-  const attendeeRows = (brief.attendees||[]).filter(a=>a.present).map(a=>`
+  const win = openPrintWindow();
+  if (!win) return;
+  const he = escapeHtml;
+  const topicsHTML = (brief.topics || []).map((t) => `<li>${he(t)}</li>`).join("");
+  const customTopicHTML = brief.customTopics ? `<li><em>${he(brief.customTopics)}</em></li>` : "";
+  const attendeeRows = (brief.attendees || [])
+    .filter((a) => a.present)
+    .map((a) => {
+      const sigSrc = safeImageSrc(a.sig);
+      return `
     <tr style="height:48px">
-      <td style="padding:6px;border:1px solid #ccc;font-size:12px">${a.name}</td>
-      <td style="padding:6px;border:1px solid #ccc;font-size:11px">${a.role||""}</td>
-      <td style="padding:6px;border:1px solid #ccc">${a.sig?`<img src="${a.sig}" style="height:36px;max-width:140px;object-fit:contain"/>`:""}</td>
-      <td style="padding:6px;border:1px solid #ccc;font-size:11px">${a.sigTime?new Date(a.sigTime).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):""}</td>
-    </tr>`).join("");
+      <td style="padding:6px;border:1px solid #ccc;font-size:12px">${he(a.name)}</td>
+      <td style="padding:6px;border:1px solid #ccc;font-size:11px">${he(a.role || "")}</td>
+      <td style="padding:6px;border:1px solid #ccc">${sigSrc ? `<img src="${he(sigSrc)}" style="height:36px;max-width:140px;object-fit:contain"/>` : ""}</td>
+      <td style="padding:6px;border:1px solid #ccc;font-size:11px">${a.sigTime ? he(new Date(a.sigTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })) : ""}</td>
+    </tr>`;
+    })
+    .join("");
 
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-  <title>Daily Briefing — ${brief.location} — ${brief.date}</title>
+  <title>Daily Briefing — ${he(brief.location)} — ${he(brief.date)}</title>
   <style>
     body{font-family:Arial,sans-serif;font-size:12px;margin:0;padding:20px;color:#000}
     h1{font-size:15px;font-weight:bold;background:#0d9488;color:#fff;padding:8px 12px;margin:0 0 12px}
@@ -441,16 +450,16 @@ function printBriefing(brief) {
   </style></head><body>
   <h1>Daily Safety Briefing Record — MySafeOps</h1>
   <div class="hdr">
-    <div class="hdr-cell"><div class="lbl">Location</div>${brief.location}</div>
-    <div class="hdr-cell"><div class="lbl">Date</div>${fmtDate(brief.date)}</div>
-    <div class="hdr-cell"><div class="lbl">Time</div>${brief.time}</div>
-    <div class="hdr-cell"><div class="lbl">Conducted by</div>${brief.conductedBy||"—"}</div>
+    <div class="hdr-cell"><div class="lbl">Location</div>${he(brief.location)}</div>
+    <div class="hdr-cell"><div class="lbl">Date</div>${he(fmtDate(brief.date))}</div>
+    <div class="hdr-cell"><div class="lbl">Time</div>${he(brief.time)}</div>
+    <div class="hdr-cell"><div class="lbl">Conducted by</div>${he(brief.conductedBy || "—")}</div>
   </div>
-  ${brief.weatherConditions?`<div class="hdr-cell" style="margin-bottom:12px;border:0.5px solid #ccc;padding:6px 8px"><div class="lbl">Weather</div>${brief.weatherConditions}${brief.temperature?` · ${brief.temperature}°C`:""}</div>`:""}
-  ${brief.scopeToday?`<div class="section">Today's scope</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${brief.scopeToday}</p>`:""}
+  ${brief.weatherConditions ? `<div class="hdr-cell" style="margin-bottom:12px;border:0.5px solid #ccc;padding:6px 8px"><div class="lbl">Weather</div>${he(brief.weatherConditions)}${brief.temperature ? ` · ${he(brief.temperature)}°C` : ""}</div>` : ""}
+  ${brief.scopeToday ? `<div class="section">Today's scope</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(brief.scopeToday)}</p>` : ""}
   <div class="section">Topics covered</div>
   <ul style="margin-bottom:12px">${topicsHTML}${customTopicHTML}</ul>
-  ${brief.notes?`<div class="section">Notes / actions</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px;padding:8px;background:#f9f9f9;border:0.5px solid #ccc">${brief.notes}</p>`:""}
+  ${brief.notes ? `<div class="section">Notes / actions</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px;padding:8px;background:#f9f9f9;border:0.5px solid #ccc">${he(brief.notes)}</p>` : ""}
   <div class="section">Attendance &amp; signatures</div>
   <table>
     <thead><tr><th style="width:30%">Name</th><th style="width:20%">Role</th><th style="width:35%">Signature</th><th style="width:15%">Time</th></tr></thead>

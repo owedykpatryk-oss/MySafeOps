@@ -1,5 +1,6 @@
 import { memo } from "react";
 import useDebouncedValue from "../hooks/useDebouncedValue";
+import { sanitizePrintPreviewHtml } from "../utils/htmlEscape.js";
 
 /**
  * A4 print preview in iframe — RAMS, Survey, Permits.
@@ -12,9 +13,11 @@ function PrintPreviewFrame({
   onPrint,
   printLabel = "Open print dialog",
   debounceMs = 450,
+  responsive = true,
 }) {
   const debouncedHtml = useDebouncedValue(html, debounceMs);
   const isPending = html !== debouncedHtml;
+  const safeHtml = sanitizePrintPreviewHtml(debouncedHtml);
 
   if (!html && !debouncedHtml) {
     return (
@@ -24,8 +27,16 @@ function PrintPreviewFrame({
     );
   }
 
+  const previewClass = [
+    "app-print-preview",
+    responsive ? "app-print-preview--responsive" : "",
+    isPending ? "app-print-preview--pending" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={`app-print-preview${isPending ? " app-print-preview--pending" : ""}`}>
+    <div className={previewClass} style={{ "--print-preview-h": `${height}px` }}>
       <div className="app-print-preview__toolbar">
         <span className="app-print-preview__label">
           {title}
@@ -39,9 +50,8 @@ function PrintPreviewFrame({
       </div>
       <iframe
         title={title}
-        srcDoc={debouncedHtml || "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:24px;color:#64748b'>Building preview…</body></html>"}
+        srcDoc={safeHtml || "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:24px;color:#64748b'>Building preview…</body></html>"}
         className="app-print-preview__frame"
-        style={{ height }}
         sandbox="allow-same-origin allow-modals"
         loading="lazy"
       />

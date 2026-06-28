@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 import PermitStepper from "./PermitStepper";
+import ModuleOverlay from "../../../components/ModuleOverlay";
+import PrintPreviewFrame from "../../../components/PrintPreviewFrame";
 
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -57,16 +59,15 @@ export default function PermitBuilder({ title, onClose, step = 1, children, prev
   }, []);
 
   return (
-    <div style={{ minHeight: 700, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", overflowY: "auto" }}>
+    <ModuleOverlay>
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
+        className={`app-module-overlay__panel${wide ? " app-module-overlay__panel--wide" : ""}`}
         style={{
-          width: "100%",
-          maxWidth: wide ? 1120 : 600,
           background: "var(--color-background-primary,#fff)",
           borderRadius: "var(--radius-sm,10px)",
           border: "1px solid var(--color-border-tertiary,#e5e5e5)",
@@ -92,13 +93,17 @@ export default function PermitBuilder({ title, onClose, step = 1, children, prev
         <div style={{ display: wide ? "grid" : "block", gridTemplateColumns: wide ? "minmax(0,1fr) minmax(0,1fr)" : undefined, gap: 16, alignItems: "start" }}>
           <div style={{ minWidth: 0 }}>{children}</div>
           {wide && previewHtml ? (
-            <div style={{ position: "sticky", top: 8, border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, overflow: "hidden", background: "var(--color-background-secondary,#f7f7f5)" }}>
-              <div style={{ fontSize: 11, padding: "6px 10px", fontWeight: 600, color: "var(--color-text-secondary)" }}>Live preview</div>
-              <iframe title="Permit preview" srcDoc={previewHtml} style={{ width: "100%", height: 460, border: 0, background: "#fff", display: "block" }} />
+            <div className="app-doc-preview-sticky">
+              <PrintPreviewFrame
+                html={previewHtml}
+                title="Live permit preview"
+                height={460}
+                responsive
+              />
             </div>
           ) : null}
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }

@@ -24,6 +24,7 @@
     "setup:turnstile": "node scripts/setup-turnstile.mjs --vercel",
     "setup:turnstile:supabase": "node scripts/setup-turnstile.mjs --supabase",
     "setup:turnstile:all": "node scripts/setup-turnstile.mjs --all",
+    "setup:sentry": "node scripts/setup-sentry.mjs",
     "d1:secrets": "node scripts/set-d1-wrangler-secrets.mjs",
     "d1:deploy": "npx wrangler@3 deploy --config cloudflare/workers/d1-api/wrangler.toml",
     "d1:deploy:backup": "npx wrangler@3 deploy --config cloudflare/workers/d1-backup/wrangler.toml",
@@ -69,6 +70,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.59.1",
+    "@sentry/vite-plugin": "^3.6.1",
     "@vitejs/plugin-react": "^4.3.4",
     "dotenv": "^16.4.7",
     "eslint": "^9.39.4",

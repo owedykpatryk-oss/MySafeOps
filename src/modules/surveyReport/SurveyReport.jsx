@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, useDeferredValue } from "react";
+import { useEffect, useMemo, useState, useDeferredValue, useCallback, useRef } from "react";
+import { isAnthropicConfigured } from "../../utils/anthropicClient";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { useApp } from "../../context/AppContext";
@@ -30,10 +31,30 @@ import {
   toggleArray,
 } from "./surveyReportHelpers";
 import { downloadSurveyReportHtml, openSurveyReportPrint, buildSurveyReportHtml } from "./surveyReportPrintHtml";
-import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
+import {
+  applyGeneratedNarratives,
+  attachSitePlanSnapshots,
+  batchCreateDraftReports,
+  buildExecutiveSummaryDraft,
+  buildRecommendationsDraft,
+  buildSurveyTypeDefaults,
+  fetchWeatherIntoReport,
+  generateAiSurveyDraft,
+  mergeSitePlanIntoReport,
+  pickRamsForProject,
+  prefillReportFromProject,
+  projectsMissingReports,
+  runSmartFillAll,
+  smartFillNextSteps,
+  suggestLimitationKeys,
+} from "./surveyReportSmart";
+import { listProjectPlans, plansForProject } from "../permits/permitPlanOverlayRegistry";
+import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
+import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos } from "../../utils/geoPhotoIntegrations";
 import StatusChip from "../../components/StatusChip";
 import EmptyState from "../../components/EmptyState";
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
+import ModuleOverlay from "../../components/ModuleOverlay";
 import { getSurveyStatusMeta } from "../../utils/statusChipMeta";
 
 const STORAGE_KEY = "survey_reports";
@@ -145,9 +166,272 @@ function QualityBar({ report }) {
   );
 }
 
-function ReportEditor({ report, projects, ramsDocs, onSave, onClose, onPrint }) {
+function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = [], onApply, linkedRams, onGoToTab }) {
+  const [open, setOpen] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  const [useAiOnFill, setUseAiOnFill] = useState(false);
+
+  const project = projects.find((p) => p.id === form.projectId);
+  const hasCoords = Boolean(project?.lat && project?.lng);
+  const hasAi = isAnthropicConfigured();
+  const plansWithMarkup = useMemo(
+    () =>
+      (projectPlans || []).filter((p) => {
+        const routes = (p.escapeRoutes || []).length;
+        const zones = (p.zoneBlocks || []).length;
+        const assets = (p.emergencyAssets || []).length;
+        return routes + zones + assets > 0;
+      }),
+    [projectPlans]
+  );
+
+  const nextSteps = useMemo(
+    () => smartFillNextSteps(form, { project, projectPlans: plansWithMarkup, geoPhotos }),
+    [form, project, plansWithMarkup, geoPhotos]
+  );
+  const geoReportCount = useMemo(
+    () => (form.projectId ? countGeoPhotosForReport(geoPhotos, form.projectId) : 0),
+    [geoPhotos, form.projectId]
+  );
+
+  const run = useCallback(
+    async (label, fn) => {
+      setBusy(label);
+      setMsg("");
+      try {
+        const next = await fn();
+        onApply(next);
+        setMsg(`${label} — done`);
+      } catch (e) {
+        setMsg(e?.message || `${label} failed`);
+      } finally {
+        setBusy("");
+      }
+    },
+    [onApply]
+  );
+
+  const assistBtn = (label, disabled, onClick, primary = false) => (
+    <button
+      type="button"
+      style={{
+        ...(primary ? ss.btnP : ss.btn),
+        fontSize: 11,
+        padding: "6px 10px",
+        opacity: disabled ? 0.55 : 1,
+        borderColor: busy === label ? "#0C447C" : undefined,
+      }}
+      disabled={Boolean(busy) || disabled}
+      onClick={() => run(label, onClick)}
+    >
+      {busy === label ? "…" : label}
+    </button>
+  );
+
+  return (
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "12px 14px",
+        borderRadius: 8,
+        border: "0.5px solid #c7d9ec",
+        background: "linear-gradient(180deg, #f0f7ff 0%, #fafcff 100%)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: open ? 10 : 0 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#0C447C" }}>Smart assist</div>
+          <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2 }}>
+            One-click fill, site plan import, weather, templates and optional AI polish.
+          </div>
+        </div>
+        <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 8px" }} onClick={() => setOpen((o) => !o)}>
+          {open ? "Hide" : "Show"}
+        </button>
+      </div>
+      {open && (
+        <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            {assistBtn(
+              "Smart fill all",
+              !project && !form.surveyType,
+              async () =>
+                runSmartFillAll(form, {
+                  project,
+                  ramsDocs,
+                  projectPlans: plansWithMarkup,
+                  linkedRams,
+                  useAi: useAiOnFill,
+                  geoPhotos,
+                }),
+              true
+            )}
+            {hasAi && (
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, cursor: "pointer" }}>
+                <input type="checkbox" checked={useAiOnFill} onChange={(e) => setUseAiOnFill(e.target.checked)} />
+                Include AI polish
+              </label>
+            )}
+            {form.smartFillAt && (
+              <span style={{ fontSize: 10, color: "var(--color-text-secondary)" }}>
+                Last auto-fill: {new Date(form.smartFillAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+              </span>
+            )}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {assistBtn("Prefill project + RAMS", !project, async () => {
+              const rams = pickRamsForProject(ramsDocs, form.projectId) || linkedRams;
+              return prefillReportFromProject(form, project, rams);
+            })}
+            {assistBtn("Fetch weather", !project || !form.surveyDate || !hasCoords, async () =>
+              fetchWeatherIntoReport(form, project)
+            )}
+            {assistBtn("Import site plan", !plansWithMarkup.length, async () => {
+              let next = mergeSitePlanIntoReport(form, plansWithMarkup);
+              next = await attachSitePlanSnapshots(next, plansWithMarkup);
+              return next;
+            })}
+            {assistBtn("Capture plan images", !plansWithMarkup.length, async () =>
+              attachSitePlanSnapshots(form, plansWithMarkup)
+            )}
+            {assistBtn("Apply type template", !form.surveyType, async () => {
+              const defaults = buildSurveyTypeDefaults(form.surveyType, form.pas128Ql);
+              if (!defaults) throw new Error("No template for this survey type.");
+              return {
+                ...form,
+                sections: {
+                  ...form.sections,
+                  scope: form.sections.scope?.trim() ? form.sections.scope : defaults.scope,
+                  methodology: form.sections.methodology?.trim() ? form.sections.methodology : defaults.methodology,
+                  equipmentUsed: form.sections.equipmentUsed?.trim() ? form.sections.equipmentUsed : defaults.equipmentUsed,
+                },
+              };
+            })}
+            {assistBtn("Suggest limitations", false, async () => {
+              const keys = suggestLimitationKeys(form);
+              return {
+                ...form,
+                limitationKeys: keys,
+                limitationsText: buildLimitationsFromKeys(keys, form.limitationsText),
+              };
+            })}
+            {assistBtn("Generate narratives", false, async () => applyGeneratedNarratives(form))}
+            {assistBtn("Import geo-photos", !form.projectId || geoReportCount === 0, async () =>
+              mergeGeoPhotos(form, geoPhotos, { replaceFindingsBlock: true })
+            )}
+            {geoReportCount > 0 && (
+              <button
+                type="button"
+                style={{ ...ss.btn, fontSize: 11, padding: "6px 10px" }}
+                onClick={() => {
+                  setWorkspaceNavTarget({ viewId: "geo-photos", projectId: form.projectId, action: "capture" });
+                  openWorkspaceView({ viewId: "geo-photos" });
+                }}
+              >
+                + Capture geo-photo
+              </button>
+            )}
+            {assistBtn("Draft executive summary", false, async () => {
+              const text = buildExecutiveSummaryDraft(form, {
+                linkedRamsTitle: linkedRams?.title || linkedRams?.documentTitle || "",
+              });
+              if (!text) throw new Error("Add survey type, date and site first.");
+              return {
+                ...form,
+                sections: {
+                  ...form.sections,
+                  executiveSummary: form.sections.executiveSummary?.trim() ? form.sections.executiveSummary : text,
+                },
+              };
+            })}
+            {assistBtn("Draft recommendations", false, async () => {
+              const text = buildRecommendationsDraft(form);
+              return {
+                ...form,
+                sections: {
+                  ...form.sections,
+                  recommendations: form.sections.recommendations?.trim() ? form.sections.recommendations : text,
+                },
+              };
+            })}
+            {assistBtn("AI polish sections", !hasAi, async () => {
+              const draft = await generateAiSurveyDraft(form);
+              return {
+                ...form,
+                sections: {
+                  ...form.sections,
+                  executiveSummary: draft.executiveSummary || form.sections.executiveSummary,
+                  scope: draft.scope || form.sections.scope,
+                  findings: draft.findings || form.sections.findings,
+                  recommendations: draft.recommendations || form.sections.recommendations,
+                },
+              };
+            })}
+          </div>
+          {nextSteps.length > 0 && (
+            <div style={{ marginTop: 10, fontSize: 11 }}>
+              <span style={{ color: "var(--color-text-secondary)", marginRight: 6 }}>Next:</span>
+              {nextSteps.slice(0, 4).map((step) => (
+                <button
+                  key={step.id}
+                  type="button"
+                  style={{
+                    ...ss.btn,
+                    fontSize: 10,
+                    padding: "3px 8px",
+                    marginRight: 4,
+                    marginBottom: 4,
+                  }}
+                  onClick={() => onGoToTab?.(step.tab)}
+                >
+                  {step.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 8 }}>
+            {!project && "Select a project to enable prefill and weather fetch. "}
+            {project && !hasCoords && "Project has no map coordinates — set location on the project for weather. "}
+            {project && !plansWithMarkup.length && "No marked site plans on this project yet (Workers → site plan). "}
+            {!hasAi && "AI polish needs Anthropic key or proxy in settings. "}
+            {msg && (
+              <span style={{ color: msg.includes("failed") || msg.includes("required") ? "#A32D2D" : "#0d9488" }}>{msg}</span>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = [], isNew, onSave, onClose, onPrint }) {
   const [form, setForm] = useState(() => ({ ...report }));
   const [tab, setTab] = useState("details");
+  const [saving, setSaving] = useState(false);
+  const autoFillRan = useRef(false);
+
+  const projectPlansForForm = useMemo(
+    () => (form.projectId ? plansForProject(form.projectId, projectPlans) : []),
+    [form.projectId, projectPlans]
+  );
+
+  useEffect(() => {
+    if (!isNew || autoFillRan.current || !report.projectId) return;
+    autoFillRan.current = true;
+    const project = projects.find((p) => p.id === report.projectId);
+    if (!project) return;
+    const linked = ramsDocs.find((d) => d.id === report.linkedRamsId);
+    runSmartFillAll({ ...report }, {
+      project,
+      ramsDocs,
+      projectPlans: plansForProject(report.projectId, projectPlans),
+      linkedRams: linked,
+      useAi: false,
+    })
+      .then((next) => setForm({ ...next, updatedAt: new Date().toISOString() }))
+      .catch(() => {});
+  }, [isNew, report, projects, ramsDocs, projectPlans]);
 
   const deferredForm = useDeferredValue(form);
 
@@ -261,18 +545,40 @@ function ReportEditor({ report, projects, ramsDocs, onSave, onClose, onPrint }) 
 
   const linkedRams = ramsDocs.find((d) => d.id === form.linkedRamsId);
 
+  const preparePayload = (extra = {}) => ({
+    ...form,
+    ...extra,
+    limitationsText: form.limitationsText || buildLimitationsFromKeys(form.limitationKeys),
+  });
+
+  const handleSave = async (extra = {}) => {
+    setSaving(true);
+    try {
+      let payload = preparePayload(extra);
+      const q = surveyReportQuality(payload);
+      if (q.score < 50 && payload.status !== "final") {
+        const runFill = confirm(`Report is ${q.score}% complete. Run Smart fill before saving?`);
+        if (runFill) {
+          const project = projects.find((p) => p.id === payload.projectId);
+          payload = await runSmartFillAll(payload, {
+            project,
+            ramsDocs,
+            projectPlans: projectPlansForForm,
+            linkedRams,
+            useAi: false,
+          });
+          setForm({ ...payload, updatedAt: new Date().toISOString() });
+        }
+      }
+      onSave(payload);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        background: "rgba(0,0,0,0.45)",
-        overflow: "auto",
-        padding: "1rem",
-      }}
-    >
-      <div style={{ ...ss.card, maxWidth: 760, margin: "0 auto 2rem" }}>
+    <ModuleOverlay>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 760 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ fontWeight: 600, fontSize: 17 }}>{form.ref ? form.ref : "New survey report"}</div>
@@ -289,6 +595,17 @@ function ReportEditor({ report, projects, ramsDocs, onSave, onClose, onPrint }) 
         </div>
 
         <QualityBar report={form} />
+
+        <SmartAssistPanel
+          form={form}
+          projects={projects}
+          ramsDocs={ramsDocs}
+          projectPlans={projectPlansForForm}
+          geoPhotos={geoPhotos}
+          linkedRams={linkedRams}
+          onGoToTab={setTab}
+          onApply={(next) => setForm({ ...next, updatedAt: new Date().toISOString() })}
+        />
 
         <div style={ss.tabRow}>
           {EDITOR_TABS.map((t) => (
@@ -582,11 +899,73 @@ function ReportEditor({ report, projects, ramsDocs, onSave, onClose, onPrint }) 
               onChange={(e) => setSection("recommendations", e.target.value)}
               placeholder="Further works, verification, client actions, residual risks."
             />
+            {(form.sitePlanSnapshots || []).length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={ss.sectionHead}>Site plan images (PDF appendix)</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                  {form.sitePlanSnapshots.map((s) => (
+                    <figure key={s.planId || s.name} style={{ margin: 0, maxWidth: 200 }}>
+                      <img
+                        src={s.dataUrl}
+                        alt={s.name || "Site plan"}
+                        style={{ width: "100%", borderRadius: 6, border: "0.5px solid #e5e7eb" }}
+                      />
+                      <figcaption style={{ fontSize: 10, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                        {s.name || "Site plan"}
+                      </figcaption>
+                    </figure>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 
         {tab === "photos" && (
           <>
+            {form.projectId && countGeoPhotosForReport(geoPhotos, form.projectId) > 0 ? (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  background: "#f0fdfa",
+                  border: "0.5px solid #99f6e4",
+                  fontSize: 13,
+                }}
+              >
+                {countGeoPhotosForReport(geoPhotos, form.projectId)} geo-photo(s) marked for report on this project.
+                {form.geoPhotoImportAt ? (
+                  <span style={{ color: "var(--color-text-secondary)", marginLeft: 6 }}>
+                    Last import: {new Date(form.geoPhotoImportAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+                  </span>
+                ) : null}
+                <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    style={{ ...ss.btnP, fontSize: 12, padding: "6px 12px" }}
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...mergeGeoPhotos(f, geoPhotos, { replaceFindingsBlock: true }),
+                        updatedAt: new Date().toISOString(),
+                      }))
+                    }
+                  >
+                    Import geo-photos
+                  </button>
+                  <button
+                    type="button"
+                    style={{ ...ss.btn, fontSize: 12, padding: "6px 12px" }}
+                    onClick={() => {
+                      setWorkspaceNavTarget({ viewId: "geo-photos", projectId: form.projectId });
+                      openWorkspaceView({ viewId: "geo-photos" });
+                    }}
+                  >
+                    Open geo-photos
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <label style={{ ...ss.btn, display: "inline-block", cursor: "pointer" }}>
               + Add photo
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={addPhoto} />
@@ -635,7 +1014,7 @@ function ReportEditor({ report, projects, ramsDocs, onSave, onClose, onPrint }) 
           />
         )}
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 24, paddingTop: 16, borderTop: "0.5px solid #e5e7eb" }}>
+        <div className="app-sticky-footer app-sticky-footer--actions">
           <button type="button" style={ss.btn} onClick={() => onPrint(form, linkedRams)}>
             Preview / print
           </button>
@@ -645,28 +1024,19 @@ function ReportEditor({ report, projects, ramsDocs, onSave, onClose, onPrint }) 
           <button
             type="button"
             style={ss.btnP}
-            onClick={() => {
-              const payload = {
-                ...form,
-                limitationsText: form.limitationsText || buildLimitationsFromKeys(form.limitationKeys),
-              };
-              onSave(payload);
-            }}
+            disabled={saving}
+            onClick={() => handleSave()}
           >
-            Save report
+            {saving ? "Saving…" : "Save report"}
           </button>
           {form.status !== "final" && (
             <button
               type="button"
               style={{ ...ss.btn, borderColor: "#0d9488", color: "#0d9488" }}
+              disabled={saving}
               onClick={() => {
                 if (!confirm("Mark this report as final? You can still edit later but status will show as issued.")) return;
-                onSave({
-                  ...form,
-                  status: "final",
-                  finalisedAt: new Date().toISOString(),
-                  limitationsText: form.limitationsText || buildLimitationsFromKeys(form.limitationKeys),
-                });
+                handleSave({ status: "final", finalisedAt: new Date().toISOString() });
               }}
             >
               Mark final
@@ -674,7 +1044,7 @@ function ReportEditor({ report, projects, ramsDocs, onSave, onClose, onPrint }) 
           )}
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -682,7 +1052,9 @@ export default function SurveyReport() {
   const { caps } = useApp();
   const [reports, setReports] = useState(() => load(STORAGE_KEY, []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
-  const [ramsDocs, setRamsDocs] = useState(() => load("rams_builder_docs", []));
+  const [ramsDocs] = useState(() => load("rams_builder_docs", []));
+  const [projectPlans] = useState(() => listProjectPlans());
+  const [geoPhotos] = useState(() => load("geo_photos", []));
   const [modal, setModal] = useState(null);
   const [filter, setFilter] = useState("all");
   const listPg = useRegisterListPaging(30);
@@ -692,24 +1064,49 @@ export default function SurveyReport() {
     if (t?.viewId !== "survey-report") return;
     const projs = load("mysafeops_projects", []);
     const existing = load(STORAGE_KEY, []);
+    const geo = load("geo_photos", []);
     const ref = nextSurveyRef(existing);
-    if (t?.projectId) {
+    if (t?.projectId && t?.action === "editWithGeoPhotos") {
       const p = projs.find((x) => x.id === t.projectId);
+      const report = existing.find((r) => r.projectId === t.projectId);
+      if (report) {
+        setModal({
+          type: "edit",
+          isNew: false,
+          data: mergeGeoPhotos(report, geo, { replaceFindingsBlock: true }),
+        });
+        return;
+      }
       if (p) {
+        const rams = load("rams_builder_docs", []);
+        const base = blankSurveyReport({
+          ref,
+          title: `Survey report — ${p.name || ref}`,
+          projectId: p.id,
+        });
+        const ramsDoc = pickRamsForProject(rams, p.id);
         setModal({
           type: "edit",
           isNew: true,
-          data: blankSurveyReport({
-            ref,
-            title: `Survey report — ${p.name || ref}`,
-            projectId: p.id,
-            projectName: p.name || "",
-            client: p.client || "",
-            siteAddress: p.address || "",
-            weather: p.weatherSnapshot
-              ? { ...blankSurveyReport().weather, conditionsNarrative: p.weatherSnapshot }
-              : undefined,
-          }),
+          data: mergeGeoPhotos(prefillReportFromProject(base, p, ramsDoc), geo, { replaceFindingsBlock: true }),
+        });
+        return;
+      }
+    }
+    if (t?.projectId) {
+      const p = projs.find((x) => x.id === t.projectId);
+      if (p) {
+        const rams = load("rams_builder_docs", []);
+        const base = blankSurveyReport({
+          ref,
+          title: `Survey report — ${p.name || ref}`,
+          projectId: p.id,
+        });
+        const ramsDoc = pickRamsForProject(rams, p.id);
+        setModal({
+          type: "edit",
+          isNew: true,
+          data: prefillReportFromProject(base, p, ramsDoc),
         });
         return;
       }
@@ -774,13 +1171,36 @@ export default function SurveyReport() {
       ref,
       title: `${report.title || report.ref || "Survey report"} (copy)`,
       status: "draft",
+      surveyDate: new Date().toISOString().slice(0, 10),
       finalisedAt: null,
+      smartFillAt: null,
+      sitePlanSnapshots: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     setReports((prev) => [copy, ...prev]);
     pushAudit({ action: "survey_report_duplicate", entity: "survey_report", detail: ref });
-    setModal({ type: "edit", data: copy, isNew: false });
+    setModal({ type: "edit", isNew: false, data: copy });
+  };
+
+  const missingProjectCount = useMemo(
+    () => projectsMissingReports(projects, reports).length,
+    [projects, reports]
+  );
+
+  const batchCreateForProjects = () => {
+    if (!missingProjectCount) return;
+    if (!confirm(`Create draft survey reports for ${missingProjectCount} project(s) that have no report yet?`)) return;
+    const { created, reports: next } = batchCreateDraftReports(projects, reports, ramsDocs);
+    setReports(next);
+    pushAudit({
+      action: "survey_report_batch_create",
+      entity: "survey_report",
+      detail: `${created.length} drafts`,
+    });
+    if (created.length === 1) {
+      setModal({ type: "edit", isNew: true, data: created[0] });
+    }
   };
 
   const createNew = () => {
@@ -799,14 +1219,17 @@ export default function SurveyReport() {
   };
 
   return (
-    <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+    <div className="app-document-module" style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="survey reports" />
 
       {modal?.type === "edit" && (
         <ReportEditor
           report={modal.data}
+          isNew={modal.isNew}
           projects={projects}
           ramsDocs={ramsDocs.filter((d) => d.surveyWorkType || d.surveyMethodStatement)}
+          projectPlans={projectPlans}
+          geoPhotos={geoPhotos}
           onSave={(r) => persist(r, modal.isNew)}
           onClose={() => setModal(null)}
           onPrint={(r) => {
@@ -827,7 +1250,7 @@ export default function SurveyReport() {
         }
       />
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         {[
           ["all", "All"],
           ["draft", "Drafts"],
@@ -847,6 +1270,11 @@ export default function SurveyReport() {
             {l}
           </button>
         ))}
+        {missingProjectCount > 0 && (
+          <button type="button" style={{ ...ss.btn, fontSize: 12, marginLeft: "auto" }} onClick={batchCreateForProjects}>
+            Batch: {missingProjectCount} project{missingProjectCount === 1 ? "" : "s"} without report
+          </button>
+        )}
       </div>
 
       {filtered.length === 0 ? (

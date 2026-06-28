@@ -295,62 +295,69 @@ async function handleAuditAppend(request, env, orgSlug, authHeader, c) {
   const createdAt = new Date().toISOString();
   const actorSub = parseJwtSub(authHeader);
 
-  const last = await env.DB.prepare(
-    `SELECT seq, entry_hash FROM org_audit_log WHERE org_slug = ? ORDER BY seq DESC LIMIT 1`
-  )
-    .bind(orgSlug)
-    .first();
-
-  const prevHash = last?.entry_hash || GENESIS_HASH;
-  const nextSeq = (last?.seq ?? 0) + 1;
-
-  const payload = {
-    seq: nextSeq,
-    org_slug: orgSlug,
-    created_at: createdAt,
-    actor_sub: actorSub,
-    action,
-    entity,
-    detail,
-    client_row_id: clientRowId,
-    extra,
-  };
-  const payloadJson = stableStringify(payload);
-  if (payloadJson.length > 32_000) {
-    return json({ error: "payload_too_large" }, 413, c);
-  }
-
-  const macInput = `${prevHash}\n${payloadJson}`;
-  const entryHash = await hmacHex(secret, macInput);
-
-  try {
-    await env.DB.prepare(
-      `INSERT INTO org_audit_log (org_slug, seq, created_at, actor_sub, action, entity, detail, client_row_id, payload_json, prev_hash, entry_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  const maxAttempts = 6;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const last = await env.DB.prepare(
+      `SELECT seq, entry_hash FROM org_audit_log WHERE org_slug = ? ORDER BY seq DESC LIMIT 1`
     )
-      .bind(
-        orgSlug,
-        nextSeq,
-        createdAt,
-        actorSub,
-        action,
-        entity,
-        detail,
-        clientRowId,
-        payloadJson,
-        prevHash,
-        entryHash
-      )
-      .run();
-  } catch (e) {
-    const msg = e?.message || String(e);
-    if (msg.includes("UNIQUE")) {
-      return json({ error: "concurrent_append_retry" }, 409, c);
+      .bind(orgSlug)
+      .first();
+
+    const prevHash = last?.entry_hash || GENESIS_HASH;
+    const nextSeq = (last?.seq ?? 0) + 1;
+
+    const payload = {
+      seq: nextSeq,
+      org_slug: orgSlug,
+      created_at: createdAt,
+      actor_sub: actorSub,
+      action,
+      entity,
+      detail,
+      client_row_id: clientRowId,
+      extra,
+    };
+    const payloadJson = stableStringify(payload);
+    if (payloadJson.length > 32_000) {
+      return json({ error: "payload_too_large" }, 413, c);
     }
-    return json({ error: "write_failed", detail: msg.slice(0, 120) }, 500, c);
+
+    const macInput = `${prevHash}\n${payloadJson}`;
+    const entryHash = await hmacHex(secret, macInput);
+
+    try {
+      await env.DB.prepare(
+        `INSERT INTO org_audit_log (org_slug, seq, created_at, actor_sub, action, entity, detail, client_row_id, payload_json, prev_hash, entry_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          orgSlug,
+          nextSeq,
+          createdAt,
+          actorSub,
+          action,
+          entity,
+          detail,
+          clientRowId,
+          payloadJson,
+          prevHash,
+          entryHash
+        )
+        .run();
+      return json({ ok: true, seq: nextSeq, entry_hash: entryHash, created_at: createdAt }, 200, c);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      if (msg.includes("UNIQUE") && attempt < maxAttempts - 1) {
+        continue;
+      }
+      if (msg.includes("UNIQUE")) {
+        return json({ error: "concurrent_append_retry" }, 409, c);
+      }
+      return json({ error: "write_failed", detail: msg.slice(0, 120) }, 500, c);
+    }
   }
 
-  return json({ ok: true, seq: nextSeq, entry_hash: entryHash, created_at: createdAt }, 200, c);
+  return json({ error: "concurrent_append_retry" }, 409, c);
 }
 
 async function handleAuditList(request, env, orgSlug, c) {

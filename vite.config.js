@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 
 function supabaseDnsPrefetchOriginFromEnv(env) {
   const raw = String(env.VITE_SUPABASE_URL || "").trim();
@@ -14,10 +15,24 @@ function supabaseDnsPrefetchOriginFromEnv(env) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const supabaseDnsOrigin = supabaseDnsPrefetchOriginFromEnv(env);
+  const sentryAuthToken = String(env.SENTRY_AUTH_TOKEN || "").trim();
+  const sentryOrg = String(env.SENTRY_ORG || "").trim();
+  const sentryProject = String(env.SENTRY_PROJECT || "").trim();
+  const sentryUploadEnabled = Boolean(sentryAuthToken && sentryOrg && sentryProject);
 
   return {
     plugins: [
       react(),
+      ...(sentryUploadEnabled
+        ? [
+            sentryVitePlugin({
+              org: sentryOrg,
+              project: sentryProject,
+              authToken: sentryAuthToken,
+              telemetry: false,
+            }),
+          ]
+        : []),
       {
         name: "inject-supabase-resource-hints",
         transformIndexHtml(html) {
@@ -42,14 +57,24 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       target: "es2022",
+      sourcemap: sentryUploadEnabled ? "hidden" : false,
       reportCompressedSize: false,
       modulePreload: { polyfill: false },
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (!id.includes("node_modules")) {
-              if (id.includes("/modules/rams/") || id.includes("\\modules\\rams\\")) return "rams";
-              if (id.includes("moduleCatalogIcons")) return "module-icons";
+            const norm = id.replace(/\\/g, "/");
+            if (!norm.includes("node_modules")) {
+              if (
+                norm.includes("/modules/rams/ramsHazardLibrary") ||
+                norm.includes("/modules/rams/ramsAllHazards") ||
+                norm.includes("/modules/rams/ramsHazardLibraryExtended") ||
+                norm.includes("/modules/rams/ramsHazardLibraryPro")
+              ) {
+                return "rams-hazards";
+              }
+              if (norm.includes("/modules/permits/PermitSystem")) return "permits";
+              if (norm.includes("moduleCatalogIcons")) return "module-icons";
               return;
             }
             if (id.includes("@supabase")) return "supabase";

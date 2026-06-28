@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { escapeHtml, openPrintWindow } from "../utils/htmlEscape.js";
 
 const genId = () => `cdm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
@@ -345,14 +346,21 @@ function CDMForm({ cdm, onSave, onClose }) {
 }
 
 function printCDM(form) {
-  const win = window.open("","_blank");
-  const checked = Object.entries(form.dutyholderChecks||{}).filter(([,v])=>v).length;
-  const cppFilled = CPP_SECTIONS.filter(s=>form.cppSections?.[s.key]?.trim()).length;
+  const win = openPrintWindow();
+  if (!win) return;
+  const he = escapeHtml;
+  const nl2br = (s) => he(String(s || "")).replace(/\n/g, "<br/>");
+  const checked = Object.entries(form.dutyholderChecks || {}).filter(([, v]) => v).length;
+  const cppFilled = CPP_SECTIONS.filter((s) => form.cppSections?.[s.key]?.trim()).length;
   const notifiable = computeNotifiable(form);
-  const cppHTML = CPP_SECTIONS.filter(s=>form.cppSections?.[s.key]?.trim()).map(s=>`
-    <h3 style="font-size:12px;font-weight:bold;color:#0f172a;background:#f5f5f5;padding:4px 8px;margin:12px 0 4px">${s.label}</h3>
-    <p style="font-size:12px;line-height:1.6;margin:0 0 8px">${(form.cppSections[s.key]||"").replace(/\n/g,"<br/>")}</p>`).join("");
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>CDM — ${form.projectTitle}</title>
+  const cppHTML = CPP_SECTIONS.filter((s) => form.cppSections?.[s.key]?.trim())
+    .map(
+      (s) => `
+    <h3 style="font-size:12px;font-weight:bold;color:#0f172a;background:#f5f5f5;padding:4px 8px;margin:12px 0 4px">${he(s.label)}</h3>
+    <p style="font-size:12px;line-height:1.6;margin:0 0 8px">${nl2br(form.cppSections[s.key])}</p>`
+    )
+    .join("");
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>CDM — ${he(form.projectTitle)}</title>
   <style>body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:0;padding:20px}
   h1{font-size:15px;background:#0d9488;color:#fff;padding:8px 12px;margin:0 0 12px}
   h2{font-size:12px;font-weight:bold;background:#f5f5f5;padding:4px 8px;margin:16px 0 6px;border-left:3px solid #0d9488}
@@ -361,14 +369,14 @@ function printCDM(form) {
   @media print{h1,h2{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>
   <h1>CDM 2015 — Construction Phase Plan — MySafeOps</h1>
   <div class="grid">
-    <div class="cell"><div class="l">Project</div>${form.projectTitle||"—"}</div>
-    <div class="cell"><div class="l">Client</div>${form.clientName||"—"}</div>
-    <div class="cell"><div class="l">Site address</div>${form.siteAddress||"—"}</div>
-    <div class="cell"><div class="l">Start date</div>${fmtDate(form.startDate)}</div>
-    <div class="cell"><div class="l">End date</div>${fmtDate(form.endDate)}</div>
-    <div class="cell"><div class="l">Notifiable</div><strong style="color:${notifiable?"#A32D2D":"#27500A"}">${notifiable?"YES — F10 required":"No"}</strong></div>
-    <div class="cell"><div class="l">Principal Designer</div>${form.principalDesignerName||"—"} (${form.principalDesignerCompany||"—"})</div>
-    <div class="cell"><div class="l">Principal Contractor</div>${form.principalContractorName||"—"} (${form.principalContractorCompany||"—"})</div>
+    <div class="cell"><div class="l">Project</div>${he(form.projectTitle || "—")}</div>
+    <div class="cell"><div class="l">Client</div>${he(form.clientName || "—")}</div>
+    <div class="cell"><div class="l">Site address</div>${he(form.siteAddress || "—")}</div>
+    <div class="cell"><div class="l">Start date</div>${he(fmtDate(form.startDate))}</div>
+    <div class="cell"><div class="l">End date</div>${he(fmtDate(form.endDate))}</div>
+    <div class="cell"><div class="l">Notifiable</div><strong style="color:${notifiable ? "#A32D2D" : "#27500A"}">${notifiable ? "YES — F10 required" : "No"}</strong></div>
+    <div class="cell"><div class="l">Principal Designer</div>${he(form.principalDesignerName || "—")} (${he(form.principalDesignerCompany || "—")})</div>
+    <div class="cell"><div class="l">Principal Contractor</div>${he(form.principalContractorName || "—")} (${he(form.principalContractorCompany || "—")})</div>
     <div class="cell"><div class="l">CDM checklist</div>${checked}/10 complete</div>
   </div>
   <h2>Construction Phase Plan</h2>

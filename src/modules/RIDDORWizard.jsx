@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
+import { escapeHtml, safeCssColor, safeImageSrc, openPrintWindow } from "../utils/htmlEscape.js";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
@@ -54,13 +55,17 @@ const DANGEROUS_OCCURRENCES = [
 export function printRiddorF2508(form) {
   const org = getOrgSettings();
   const def = RIDDOR_TYPES[form.riddorType] || {};
-  const win = window.open("", "_blank");
-  const row = (a, b) => `<tr><td style="border:1px solid #333;padding:6px;width:32%;font-weight:600;background:#f5f5f5">${a}</td><td style="border:1px solid #333;padding:6px">${b ?? "—"}</td></tr>`;
+  const win = openPrintWindow();
+  if (!win) return;
+  const he = escapeHtml;
+  const row = (a, b) => `<tr><td style="border:1px solid #333;padding:6px;width:32%;font-weight:600;background:#f5f5f5">${he(a)}</td><td style="border:1px solid #333;padding:6px">${he(b ?? "—")}</td></tr>`;
+  const primary = safeCssColor(org.primaryColor);
+  const logoSrc = safeImageSrc(org.logo);
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>RIDDOR F2508 — draft worksheet</title>
   <style>body{font-family:Arial,sans-serif;font-size:11px;padding:16px;color:#000} h1{font-size:14px} .note{font-size:10px;color:#444;margin-top:12px} @media print{.noPrint{display:none}}</style></head><body>
-  <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid ${org.primaryColor || "#0d9488"};padding-bottom:8px;margin-bottom:12px">
-    ${org.logo ? `<img src="${org.logo}" style="height:40px;max-width:100px;object-fit:contain"/>` : ""}
-    <div><strong>${org.name || "Organisation"}</strong><br/><span style="font-size:10px">RIDDOR report worksheet (F2508-style) — submit via HSE online</span></div>
+  <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid ${primary};padding-bottom:8px;margin-bottom:12px">
+    ${logoSrc ? `<img src="${he(logoSrc)}" style="height:40px;max-width:100px;object-fit:contain"/>` : ""}
+    <div><strong>${he(org.name || "Organisation")}</strong><br/><span style="font-size:10px">RIDDOR report worksheet (F2508-style) — submit via HSE online</span></div>
   </div>
   <h1>Incident / dangerous occurrence — draft record</h1>
   <p class="noPrint" style="background:#FAEEDA;padding:8px;border-radius:6px">This is a local worksheet mirroring F2508 fields. Official reporting: <a href="https://www.hse.gov.uk/riddor/report.htm">hse.gov.uk/riddor/report.htm</a></p>
@@ -90,7 +95,7 @@ export function printRiddorF2508(form) {
     ${row("Reported to HSE", form.reportedToHSE ? "Yes" : "No")}
     ${row("HSE reference", form.hseReportRef)}
   </table>
-  <p class="note">${org.pdfFooter || "MySafeOps"}</p>
+  <p class="note">${he(org.pdfFooter || "MySafeOps")}</p>
   </body></html>`);
   win.document.close();
   win.print();

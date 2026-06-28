@@ -1,5 +1,6 @@
 import { Component } from "react";
 import { getSupportEmail } from "../config/supportContact";
+import { captureSentryException } from "../utils/sentryClient.js";
 
 export default class RouteErrorBoundary extends Component {
   constructor(props) {
@@ -15,13 +16,7 @@ export default class RouteErrorBoundary extends Component {
     if (import.meta.env.DEV) {
       console.error("[RouteErrorBoundary]", error, errorInfo);
     }
-    if (import.meta.env.VITE_SENTRY_DSN?.trim()) {
-      void import("@sentry/react")
-        .then((Sentry) => {
-          Sentry.captureException(error, { extra: { componentStack: errorInfo?.componentStack } });
-        })
-        .catch(() => {});
-    }
+    captureSentryException(error, { extra: { componentStack: errorInfo?.componentStack } });
   }
 
   render() {

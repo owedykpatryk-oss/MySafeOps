@@ -1,4 +1,5 @@
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
+import { openPrintWindow } from "../../utils/htmlEscape.js";
 import {
   buildAccessLimitationsText,
   buildLimitationsFromKeys,
@@ -31,11 +32,6 @@ function section(title, body, id) {
   return `<section class="sr-section" id="${id || ""}"><h2>${esc(title)}</h2>${body}</section>`;
 }
 
-function checklistHtml(items) {
-  if (!items?.length) return "<p><em>None selected.</em></p>";
-  return `<ul class="sr-checklist">${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`;
-}
-
 function pas128Label(key) {
   return PAS128_QUALITY_LEVELS.find((q) => q.key === key)?.label || key;
 }
@@ -43,10 +39,16 @@ function pas128Label(key) {
 function photoGrid(photos) {
   if (!photos?.length) return "";
   const cells = photos
-    .map(
-      (p) =>
-        `<figure class="sr-photo"><img src="${p.dataUrl || p.url || ""}" alt=""/><figcaption>${esc(p.caption || "Site photo")}</figcaption></figure>`
-    )
+    .map((p) => {
+      const meta = [];
+      if (p.geoPhotoId) meta.push("Geo-photo");
+      if (p.latitude != null && p.longitude != null) {
+        meta.push(`${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`);
+      }
+      if (p.bearing != null && !Number.isNaN(Number(p.bearing))) meta.push(`${Math.round(Number(p.bearing))}°`);
+      const cap = [p.caption || "Site photo", meta.length ? `(${meta.join(" · ")})` : ""].filter(Boolean).join(" ");
+      return `<figure class="sr-photo"><img src="${p.dataUrl || p.url || ""}" alt=""/><figcaption>${esc(cap)}</figcaption></figure>`;
+    })
     .join("");
   return section("Photo appendix", `<div class="sr-photo-grid">${cells}</div>`, "photos");
 }
@@ -71,6 +73,23 @@ export function buildSurveyReportHtml(report, extras = {}) {
     report.accessLimitations,
     report.accessLimitationsNotes
   );
+
+  const sitePlanBlock = report.sitePlanSummary?.trim()
+    ? section("Site plan reference", nl2p(report.sitePlanSummary), "site-plan")
+    : "";
+
+  const sitePlanImages = (report.sitePlanSnapshots || []).length
+    ? section(
+        "Site plan markup",
+        `<div class="sr-plan-grid">${(report.sitePlanSnapshots || [])
+          .map(
+            (s) =>
+              `<figure class="sr-plan-figure"><img src="${s.dataUrl || ""}" alt="${esc(s.name || "Site plan")}"/><figcaption>${esc(s.name || "Site plan")}</figcaption></figure>`
+          )
+          .join("")}</div>`,
+        "site-plan-images"
+      )
+    : "";
 
   const metaRows = [
     ["Report ref", report.ref || "—"],
@@ -109,6 +128,8 @@ export function buildSurveyReportHtml(report, extras = {}) {
       ? section("Utility records & drawings review", nl2p(recordsText), "records")
       : "",
     section("Findings & results", nl2p(report.sections?.findings), "findings"),
+    sitePlanBlock,
+    sitePlanImages,
     limitations
       ? section("Limitations", nl2p(limitations), "limitations")
       : "",
@@ -137,7 +158,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     line-height: 1.45;
     color: #111827;
     margin: 0;
-    padding: 0;
+    padding: 0 0 24px;
   }
   .sr-header {
     display: flex;
@@ -147,6 +168,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     border-bottom: 3px solid ${primary};
     padding-bottom: 12px;
     margin-bottom: 18px;
+    flex-wrap: wrap;
   }
   .sr-header img { max-height: 52px; max-width: 140px; object-fit: contain; }
   .sr-org { font-size: 10pt; color: #4b5563; margin-top: 4px; }
@@ -155,6 +177,8 @@ export function buildSurveyReportHtml(report, extras = {}) {
     font-size: 20pt;
     color: ${accent};
     line-height: 1.2;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
   .sr-title-block .sr-sub { font-size: 10pt; color: #6b7280; }
   .sr-badge {
@@ -185,8 +209,6 @@ export function buildSurveyReportHtml(report, extras = {}) {
     vertical-align: top;
   }
   .sr-meta th { width: 34%; background: #f3f4f6; font-weight: 600; }
-  .sr-checklist { margin: 0; padding-left: 20px; }
-  .sr-checklist li { margin-bottom: 4px; }
   .sr-photo-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -201,6 +223,17 @@ export function buildSurveyReportHtml(report, extras = {}) {
     border-radius: 4px;
   }
   .sr-photo figcaption { font-size: 9pt; color: #6b7280; margin-top: 4px; }
+  .sr-plan-grid { display: flex; flex-direction: column; gap: 14px; }
+  .sr-plan-figure { margin: 0; page-break-inside: avoid; }
+  .sr-plan-figure img {
+    width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: #f8fafc;
+  }
+  .sr-plan-figure figcaption { font-size: 9pt; color: #6b7280; margin-top: 4px; }
   .sr-footer {
     margin-top: 24px;
     padding-top: 10px;
@@ -221,6 +254,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     margin-top: 20px;
   }
   @media print {
+    body { padding: 0; }
     .sr-header, .sr-badge, .sr-section h2 { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style>
@@ -252,7 +286,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
 
 export function openSurveyReportPrint(report, extras) {
   const html = buildSurveyReportHtml(report, extras);
-  const win = window.open("", "_blank");
+  const win = openPrintWindow();
   if (!win) return false;
   win.document.write(html);
   win.document.close();
