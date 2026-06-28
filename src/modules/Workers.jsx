@@ -908,7 +908,7 @@ function ProjectForm({ item, onSave, onClose }) {
         setGeoMsg(`Postcode "${postcodeQuery}" not found — check spelling or try a fuller address.`);
         return;
       }
-      const c = await geocodeAddressNominatim(q);
+      const c = await geocodeAddressNominatim(`${q}, United Kingdom`);
       if (!c) {
         setGeoMsg("No coordinates found — try a UK postcode (e.g. KT22 7SH) or fuller address.");
         return;

@@ -5,6 +5,8 @@
  * Results are cached in localStorage to reduce repeat requests (same normalised query, 30-day TTL).
  */
 export const GEOCODE_CACHE_STORAGE_KEY = "mysafeops_geocode_cache";
+/** Required by Nominatim usage policy: https://operations.osmfoundation.org/policies/nominatim/ */
+export const NOMINATIM_USER_AGENT = "MySafeOps/1.0 (UK construction safety; support@mysafeops.com)";
 const CACHE_KEY = GEOCODE_CACHE_STORAGE_KEY;
 const MAX_ENTRIES = 64;
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -56,8 +58,13 @@ export async function geocodeAddressNominatim(address) {
     return { lat: hit.lat, lng: hit.lng };
   }
 
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=gb&q=${encodeURIComponent(q)}`;
+  const res = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": NOMINATIM_USER_AGENT,
+    },
+  });
   if (!res.ok) throw new Error("Geocoding request failed");
   const data = await res.json();
   if (!Array.isArray(data) || !data[0]) return null;

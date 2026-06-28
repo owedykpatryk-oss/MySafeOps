@@ -51,6 +51,20 @@ export default defineConfig(({ mode }) => {
           ]
         : []),
       {
+        name: "dev-legacy-postcode-api",
+        configureServer(server) {
+          server.middlewares.use((req, _res, next) => {
+            if (!req.url || (req.method !== "GET" && req.method !== "HEAD")) return next();
+            const pathOnly = req.url.split("?")[0];
+            const m = pathOnly.match(/^\/api\/postcode\/([^/]+)$/);
+            if (m) {
+              req.url = `/api/postcode?code=${encodeURIComponent(m[1])}${req.url.includes("?") ? "&" + req.url.split("?")[1] : ""}`;
+            }
+            next();
+          });
+        },
+      },
+      {
         name: "dev-health-api",
         configureServer(server) {
           server.middlewares.use("/api/health", (req, res, next) => {

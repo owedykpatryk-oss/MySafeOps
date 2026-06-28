@@ -17,4 +17,14 @@ test.describe("Security posture (public)", () => {
     expect(text).toMatch(/support@mysafeops\.com/i);
     expect(text).toMatch(/Canonical:\s*https:\/\//i);
   });
+
+  test("postcode API accepts query and legacy paths", async ({ request }) => {
+    for (const path of ["/api/postcode?code=KT227SH", "/api/postcode/KT227SH"]) {
+      const res = await request.get(path);
+      expect(res.ok()).toBeTruthy();
+      const json = await res.json();
+      expect(json?.result?.postcode).toMatch(/KT22 7SH/i);
+      expect(typeof json?.result?.latitude).toBe("number");
+    }
+  });
 });

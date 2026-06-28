@@ -3,6 +3,8 @@
  * Adapted from processing-tracker lib/rams/nearestHospital.ts
  */
 
+import { NOMINATIM_USER_AGENT } from "./geocode.js";
+
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
 const SEARCH_RADIUS_M = 25000;
 
@@ -48,7 +50,10 @@ out body;
 
   const res = await fetch(OVERPASS_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": NOMINATIM_USER_AGENT,
+    },
     body: `data=${encodeURIComponent(query)}`,
   });
   if (!res.ok) return null;

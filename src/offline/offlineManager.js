@@ -26,6 +26,14 @@ export async function registerServiceWorker() {
     });
     if (import.meta.env.DEV) console.log("[MySafeOps SW] Registered:", reg.scope);
 
+    const checkForUpdate = () => {
+      reg.update().catch(() => {});
+    };
+    checkForUpdate();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") checkForUpdate();
+    });
+
     // Listen for updates
     reg.addEventListener("updatefound", () => {
       const newWorker = reg.installing;

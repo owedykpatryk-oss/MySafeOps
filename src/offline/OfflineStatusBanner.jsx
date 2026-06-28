@@ -112,7 +112,9 @@ export default function OfflineStatusBanner() {
           <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="#534AB7" strokeWidth={1.5}>
             <circle cx={8} cy={8} r={6}/><path d="M8 5v3M8 11h.01" strokeLinecap="round"/>
           </svg>
-          <span style={{ flex: 1 }}>A new version of MySafeOps is available.</span>
+          <span style={{ flex: 1 }}>
+            A new version of MySafeOps is available. Update now to fix maps, postcode lookup, and module loading.
+          </span>
           <button
             onClick={activateNewServiceWorker}
             style={{
