@@ -1,5 +1,5 @@
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
-import { openPrintWindow } from "../../utils/htmlEscape.js";
+import { openPrintWindow, safeImageSrc, escapeAttr, sanitizePrintPreviewHtml } from "../../utils/htmlEscape.js";
 import {
   buildAccessLimitationsText,
   buildControlAccuracyNarrative,
@@ -37,6 +37,11 @@ function esc(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function imgSrcAttr(raw) {
+  const safe = safeImageSrc(raw);
+  return safe ? escapeAttr(safe) : "";
 }
 
 function nl2p(text) {
@@ -143,11 +148,9 @@ function changesSinceBlock(changes) {
 
 function coverPage(report, org, primary, accent, extras) {
   const dc = report.documentControl || {};
-  const coverPhoto =
-    extras.coverPhotoUrl ||
-    report.photos?.[0]?.dataUrl ||
-    report.photos?.[0]?.url ||
-    "";
+  const coverPhoto = imgSrcAttr(
+    extras.coverPhotoUrl || report.photos?.[0]?.dataUrl || report.photos?.[0]?.url || ""
+  );
   const mapUrl = staticSiteMapUrl(extras.projectLat, extras.projectLng);
   const issueDate = dc.issueDate || report.surveyDate;
   const qlBadge = report.pas128Ql
@@ -159,7 +162,7 @@ function coverPage(report, org, primary, accent, extras) {
 
   return `<div class="sr-cover">
     <div class="sr-cover-top">
-      ${org.logo ? `<img src="${org.logo}" alt="" class="sr-cover-logo"/>` : ""}
+      ${org.logo ? `<img src="${imgSrcAttr(org.logo)}" alt="" class="sr-cover-logo"/>` : ""}
       <div class="sr-cover-org">
         <div class="sr-cover-org-name">${esc(org.name)}</div>
         ${org.pdfHeader ? `<div class="sr-cover-org-sub">${esc(org.pdfHeader)}</div>` : org.address ? `<div class="sr-cover-org-sub">${esc(org.address)}</div>` : ""}
@@ -184,7 +187,7 @@ function coverPage(report, org, primary, accent, extras) {
         ])}
       </div>
       ${coverPhoto ? `<figure class="sr-cover-photo"><img src="${coverPhoto}" alt="Site"/><figcaption>Site overview</figcaption></figure>` : ""}
-      ${mapUrl ? `<figure class="sr-cover-map"><img src="${mapUrl}" alt="Site location map"/><figcaption>Site location (${Number(extras.projectLat).toFixed(5)}, ${Number(extras.projectLng).toFixed(5)})</figcaption></figure>` : ""}
+      ${mapUrl ? `<figure class="sr-cover-map"><img src="${escapeAttr(mapUrl)}" alt="Site location map"/><figcaption>Site location (${Number(extras.projectLat).toFixed(5)}, ${Number(extras.projectLng).toFixed(5)})</figcaption></figure>` : ""}
       ${report.cadImport?.summary?.length ? cadCoverStrip(report.cadImport) : ""}
       ${pas128Summary}
     </div>
@@ -497,6 +500,8 @@ function photoGrid(photos) {
   });
 
   const renderPhoto = (p) => {
+    const src = imgSrcAttr(p.dataUrl || p.url);
+    if (!src) return "";
     const meta = [];
     if (p.geoPhotoId) meta.push("Geo-photo");
     if (p.latitude != null && p.longitude != null) {
@@ -505,7 +510,7 @@ function photoGrid(photos) {
     if (p.bearing != null && !Number.isNaN(Number(p.bearing))) meta.push(`${Math.round(Number(p.bearing))}°`);
     const cap = p.caption || "Site photo";
     const metaStr = meta.length ? ` (${meta.join(" · ")})` : "";
-    return `<figure class="sr-photo"><div class="sr-fig-label">Figure ${p.figureNum}</div><img src="${p.dataUrl || p.url || ""}" alt=""/><figcaption>${esc(cap)}${esc(metaStr)}</figcaption></figure>`;
+    return `<figure class="sr-photo"><div class="sr-fig-label">Figure ${p.figureNum}</div><img src="${src}" alt=""/><figcaption>${esc(cap)}${esc(metaStr)}</figcaption></figure>`;
   };
 
   const groupBlocks = [...grouped.entries()]
@@ -1139,7 +1144,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
 }
 
 export function openSurveyReportPrint(report, extras) {
-  const html = buildSurveyReportHtml(report, extras);
+  const html = sanitizePrintPreviewHtml(buildSurveyReportHtml(report, extras));
   const win = openPrintWindow();
   if (!win) return false;
   win.document.write(html);
@@ -1150,7 +1155,7 @@ export function openSurveyReportPrint(report, extras) {
 }
 
 export function downloadSurveyReportHtml(report, extras) {
-  const html = buildSurveyReportHtml(report, extras);
+  const html = sanitizePrintPreviewHtml(buildSurveyReportHtml(report, extras));
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);

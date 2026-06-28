@@ -1,7 +1,9 @@
 import { describe, expect, it, afterEach } from "vitest";
 import {
   clampAnthropicBody,
+  isSameSiteApiRequest,
   isVercelProduction,
+  parseBoundedJson,
   sanitizeWebVitalsPayload,
   timingSafeEqual,
 } from "./securityUtils.js";
@@ -60,5 +62,30 @@ describe("clampAnthropicBody", () => {
   it("caps max_tokens", () => {
     const out = clampAnthropicBody({ model: "x", messages: [{ role: "user", content: "hi" }], max_tokens: 99999 });
     expect(out.max_tokens).toBe(8192);
+  });
+});
+
+describe("isSameSiteApiRequest", () => {
+  it("allows missing origin and matching host", () => {
+    expect(isSameSiteApiRequest({ headers: { host: "app.example.com" } })).toBe(true);
+    expect(
+      isSameSiteApiRequest({ headers: { origin: "https://app.example.com", host: "app.example.com" } })
+    ).toBe(true);
+  });
+
+  it("rejects cross-origin calls", () => {
+    expect(
+      isSameSiteApiRequest({ headers: { origin: "https://evil.example.com", host: "app.example.com" } })
+    ).toBe(false);
+  });
+});
+
+describe("parseBoundedJson", () => {
+  it("parses valid JSON within limit", () => {
+    expect(parseBoundedJson('{"ok":true}')).toEqual({ value: { ok: true } });
+  });
+
+  it("rejects oversized payloads", () => {
+    expect(parseBoundedJson("x".repeat(100), 50).error).toBe("too_large");
   });
 });

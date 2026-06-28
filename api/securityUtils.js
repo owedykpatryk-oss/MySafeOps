@@ -92,3 +92,28 @@ export function clampAnthropicBody(body) {
   }
   return body;
 }
+
+/** Reject cross-origin browser calls to serverless API routes (CSRF-style abuse). */
+export function isSameSiteApiRequest(req) {
+  const origin = String(req.headers?.origin || "").trim();
+  if (!origin) return true;
+  const host = String(req.headers?.host || "").trim();
+  if (!host) return false;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
+/** Parse upstream JSON with a byte cap — blocks proxy SSRF response bombs. */
+export function parseBoundedJson(text, maxBytes = 65_536) {
+  const raw = String(text ?? "");
+  if (raw.length > maxBytes) return { error: "too_large" };
+  if (!raw.trim()) return { value: null };
+  try {
+    return { value: JSON.parse(raw) };
+  } catch {
+    return { error: "invalid_json" };
+  }
+}

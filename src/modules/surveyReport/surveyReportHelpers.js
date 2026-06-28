@@ -16,8 +16,21 @@ import {
   RECORD_REF_STATUS_OPTIONS,
   blankSurveyReport,
 } from "./surveyReportConstants";
+import { safeImageSrc } from "../../utils/htmlEscape.js";
+import { safeHttpUrl } from "../../utils/safeUrl.js";
 
 const labelOf = (options, key) => options.find((o) => o.key === key)?.label || key;
+
+function sanitizeSurveyPhoto(photo) {
+  if (!photo || typeof photo !== "object") return photo;
+  const dataUrl = safeImageSrc(photo.dataUrl);
+  const url = safeHttpUrl(photo.url);
+  return {
+    ...photo,
+    dataUrl: dataUrl || "",
+    url: url || "",
+  };
+}
 
 /** Merge saved report with defaults for nested fields added in later versions. */
 export function normalizeSurveyReport(report) {
@@ -26,6 +39,7 @@ export function normalizeSurveyReport(report) {
   return {
     ...blank,
     ...report,
+    photos: (report.photos || []).map(sanitizeSurveyPhoto),
     weather: { ...blank.weather, ...(report.weather || {}) },
     utilityRecords: { ...blank.utilityRecords, ...(report.utilityRecords || {}) },
     sections: { ...blank.sections, ...(report.sections || {}) },

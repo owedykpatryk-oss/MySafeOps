@@ -10,6 +10,7 @@ import { copyTextToClipboard } from "../utils/copyToClipboard";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
+import { escapeHtml, escapeAttr, safeImageSrc } from "../utils/htmlEscape.js";
 
 const INCIDENTS_KEY = "mysafeops_incidents";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -52,14 +53,6 @@ function hasGps(i) {
   const lat = Number(i?.gpsLat);
   const lng = Number(i?.gpsLng);
   return Number.isFinite(lat) && Number.isFinite(lng);
-}
-
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 export default function IncidentHotspotMap() {
@@ -170,7 +163,10 @@ export default function IncidentHotspotMap() {
     filtered.forEach((x) => {
       const lat = Number(x.gpsLat);
       const lng = Number(x.gpsLng);
-      const photo = Array.isArray(x.photos) && x.photos[0] ? `<img src="${x.photos[0]}" style="width:96px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;margin-bottom:6px" />` : "";
+      const photoSrc = Array.isArray(x.photos) && x.photos[0] ? safeImageSrc(x.photos[0]) : null;
+      const photo = photoSrc
+        ? `<img src="${escapeAttr(photoSrc)}" style="width:96px;height:70px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb;margin-bottom:6px" />`
+        : "";
       const popup = `
         <div style="font-family:DM Sans,system-ui,sans-serif;font-size:12px;line-height:1.35;max-width:220px">
           ${photo}

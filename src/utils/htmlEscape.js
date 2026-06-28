@@ -51,8 +51,16 @@ export function sanitizePrintPreviewHtml(html) {
   out = out.replace(/<iframe\b[\s\S]*?<\/iframe>/gi, "");
   out = out.replace(/<object\b[\s\S]*?<\/object>/gi, "");
   out = out.replace(/<embed\b[^>]*>/gi, "");
+  out = out.replace(/<base\b[^>]*>/gi, "");
+  out = out.replace(/<link\b[^>]*\brel\s*=\s*["']?(?:import|preload|prefetch)["']?[^>]*>/gi, "");
+  out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
   out = out.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
-  out = out.replace(/\s(href|src|xlink:href)\s*=\s*(["']?)\s*javascript:[^>\s]*/gi, "");
+  out = out.replace(
+    /\s(href|src|xlink:href|formaction|action|poster|data)\s*=\s*(["']?)\s*(javascript|vbscript|data\s*:\s*text\/html)[^>\s]*/gi,
+    ""
+  );
+  out = out.replace(/url\s*\(\s*["']?\s*javascript:/gi, "url(");
+  out = out.replace(/expression\s*\(/gi, "");
   return out;
 }
 

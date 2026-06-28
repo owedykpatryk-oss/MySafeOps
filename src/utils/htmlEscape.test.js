@@ -53,4 +53,11 @@ describe("sanitizePrintPreviewHtml", () => {
     expect(clean).not.toMatch(/onerror/i);
     expect(clean).toContain("Hi");
   });
+
+  it("blocks meta refresh and javascript/data-html URLs", () => {
+    const dirty = `<meta http-equiv="refresh" content="0;url=javascript:alert(1)"><a href="javascript:alert(1)">x</a>`;
+    const clean = sanitizePrintPreviewHtml(dirty);
+    expect(clean).not.toMatch(/refresh/i);
+    expect(clean).not.toMatch(/javascript:/i);
+  });
 });

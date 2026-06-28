@@ -8,6 +8,7 @@
 import {
   API_JSON_HEADERS,
   clampAnthropicBody,
+  isSameSiteApiRequest,
   isVercelProduction,
   normalizeAnthropicVersion,
   readJsonBody,
@@ -42,6 +43,10 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST, OPTIONS");
     return sendJson(res, 405, { error: "method_not_allowed" });
+  }
+
+  if (!isSameSiteApiRequest(req)) {
+    return sendJson(res, 403, { error: "forbidden_origin" });
   }
 
   const shared = String(process.env.AI_PROXY_SHARED_SECRET || "").trim();

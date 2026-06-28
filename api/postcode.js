@@ -3,8 +3,11 @@
  * GET /api/postcode?code=KT227SH — flat route (reliable on Vercel + Vite dev proxy).
  */
 
+import { parseBoundedJson } from "./securityUtils.js";
+
 const UPSTREAM = "https://api.postcodes.io/postcodes";
 const POSTCODE_RE = /^[A-Z]{1,2}\d{1,2}[A-Z]?\d[A-Z]{2}$/i;
+const MAX_UPSTREAM_BYTES = 32_768;
 
 function normaliseCompact(raw) {
   return String(raw || "")
@@ -41,8 +44,12 @@ export default async function handler(req, res) {
       headers: { Accept: "application/json" },
     });
     const text = await upstream.text();
+    const parsed = parseBoundedJson(text, MAX_UPSTREAM_BYTES);
+    if (parsed.error) {
+      return sendJson(res, 502, { error: "Postcode lookup unavailable" });
+    }
     res.writeHead(upstream.status, API_JSON_HEADERS);
-    res.end(text);
+    res.end(JSON.stringify(parsed.value));
   } catch {
     return sendJson(res, 502, { error: "Postcode lookup unavailable" });
   }
