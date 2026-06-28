@@ -96,8 +96,8 @@ describe("lookupUkPostcode", () => {
     });
 
     const result = await lookupUkPostcode("KT227SH");
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(String(fetch.mock.calls[1][0])).toContain("api.postcodes.io");
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(String(fetch.mock.calls[2][0])).toContain("api.postcodes.io");
     expect(result?.postcode).toBe("KT22 7SH");
   });
 });

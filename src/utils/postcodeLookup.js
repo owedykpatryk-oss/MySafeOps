@@ -95,10 +95,14 @@ export async function lookupUkPostcode(postcode) {
 
   const compact = pc.replace(/\s/g, "");
   const proxyUrl = `/api/postcode?code=${encodeURIComponent(compact)}`;
+  const legacyProxyUrl = `/api/postcode/${encodeURIComponent(compact)}`;
   const directUrl = `${UPSTREAM}/${encodeURIComponent(compact)}`;
 
   const fromProxy = await fetchPostcodeJson(proxyUrl).catch(() => null);
   if (fromProxy?.result) return mapPostcodeResult(fromProxy.result, pc);
+
+  const fromLegacyProxy = await fetchPostcodeJson(legacyProxyUrl).catch(() => null);
+  if (fromLegacyProxy?.result) return mapPostcodeResult(fromLegacyProxy.result, pc);
 
   const fromDirect = await fetchPostcodeJson(directUrl).catch(() => null);
   if (fromDirect?.result) return mapPostcodeResult(fromDirect.result, pc);

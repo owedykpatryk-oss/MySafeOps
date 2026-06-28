@@ -1,7 +1,7 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.2.8";
+const SW_VERSION = "mysafeops-v1.3.0";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -107,6 +107,28 @@ self.addEventListener("fetch", (event) => {
 
   // Same-origin API routes — bypass SW (no stale JSON cache)
   if (url.pathname.startsWith("/api/")) {
+    return;
+  }
+
+  // Fingerprinted Vite chunks — network only; never treat SPA HTML as JS/CSS
+  if (url.pathname.startsWith("/assets/")) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          const ct = String(res.headers.get("content-type") || "").toLowerCase();
+          const isAsset =
+            res.ok &&
+            (ct.includes("javascript") || ct.includes("css") || ct.includes("wasm") || ct.includes("json"));
+          if (isAsset) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+          }
+          return res;
+        })
+        .catch(() =>
+          caches.match(request).then((cached) => cached || new Response(null, { status: 504, statusText: "Network unavailable" }))
+        )
+    );
     return;
   }
 

@@ -1,2 +1,4 @@
-# Cloudflare Pages — SPA fallback (React Router)
+# Cloudflare Pages — SPA fallback (React Router). Static files (assets/, blog/, etc.) are served as-is.
+/assets/* 404
+/api/* 404
 /*    /index.html   200
