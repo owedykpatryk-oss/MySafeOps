@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import StatusChip from "../../components/StatusChip";
 import { getSurveyStatusMeta } from "../../utils/statusChipMeta";
 import { surveyReportQuality, surveyStaticMapThumbUrl, surveyTypeLabel } from "./surveyReportHelpers";
@@ -5,7 +6,7 @@ import SurveyProgressRing from "./SurveyProgressRing";
 import { firstIncompleteSurveyTab, surveyOverallTabProgress } from "./surveyReportListUtils";
 import { SURVEY_EDITOR_TABS } from "./surveyReportEditorNav";
 
-export default function SurveyEditorHero({
+function SurveyEditorHero({
   form,
   project,
   onClose,
@@ -13,10 +14,13 @@ export default function SurveyEditorHero({
   livePreviewOpen,
   onToggleLivePreview,
 }) {
-  const quality = surveyReportQuality(form);
-  const steps = surveyOverallTabProgress(form);
-  const nextTab = firstIncompleteSurveyTab(form);
-  const mapUrl = surveyStaticMapThumbUrl(project?.lat, project?.lng);
+  const quality = useMemo(() => surveyReportQuality(form), [form]);
+  const steps = useMemo(() => surveyOverallTabProgress(form), [form]);
+  const nextTab = useMemo(() => firstIncompleteSurveyTab(form), [form]);
+  const mapUrl = useMemo(
+    () => surveyStaticMapThumbUrl(project?.lat, project?.lng),
+    [project?.lat, project?.lng]
+  );
   const readyToFinal = quality.score >= 80 && form.status !== "final";
 
   return (
@@ -96,3 +100,5 @@ export default function SurveyEditorHero({
     </header>
   );
 }
+
+export default memo(SurveyEditorHero);

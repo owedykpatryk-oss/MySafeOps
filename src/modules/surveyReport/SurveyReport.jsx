@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useDeferredValue, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef, memo } from "react";
 import { isAnthropicConfigured } from "../../utils/anthropicClient";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
@@ -34,17 +34,13 @@ import {
   nextSurveyRef,
   normalizeSurveyReport,
   surveyReportQuality,
-  surveyTypeLabel,
-  surveyStaticMapThumbUrl,
   toggleArray,
   finalizeReportRevision,
   buildDuplicateReportPayload,
   compareSurveyReports,
   buildPas128SummaryStats,
 } from "./surveyReportHelpers";
-import { downloadSurveyReportHtml, openSurveyReportPrint, buildSurveyReportHtml } from "./surveyReportPrintHtml";
-import { downloadSurveyReportPdf } from "./surveyReportPdf";
-import { downloadSurveyReportPack, downloadSurveyReportGeoJson } from "./surveyReportExport";
+import { downloadSurveyReportGeoJson } from "./surveyReportExport";
 import {
   applyGeneratedNarratives,
   attachSitePlanSnapshots,
@@ -67,7 +63,6 @@ import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } f
 import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable } from "../../utils/geoPhotoIntegrations";
 import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings } from "../../utils/surveyDxfAnalyzer";
 import CadImportPanel from "./CadImportPanel";
-import StatusChip from "../../components/StatusChip";
 import EmptyState from "../../components/EmptyState";
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import ModuleOverlay from "../../components/ModuleOverlay";
@@ -75,9 +70,11 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import SurveyEditorStepNav from "./SurveyEditorStepNav";
 import SurveyEditorHero from "./SurveyEditorHero";
 import SurveyListStatsBar from "./SurveyListStatsBar";
-import SurveyProgressRing from "./SurveyProgressRing";
 import SurveyRevisionTimeline from "./SurveyRevisionTimeline";
 import SurveyLivePreviewDock from "./SurveyLivePreviewDock";
+import SurveyListRow from "./SurveyListRow";
+import { useSurveyPreviewHtml } from "./useSurveyPreviewHtml";
+import { enrichSurveyListRows, surveyListGroupMeta } from "./surveyReportListRows";
 import { burstSurveyCelebration } from "../../utils/surveyCelebration";
 import {
   groupSurveyReportsByProject,
@@ -88,7 +85,6 @@ import {
   sortSurveyReports,
   summarizeSurveyReportList,
 } from "./surveyReportListUtils";
-import { getSurveyStatusMeta } from "../../utils/statusChipMeta";
 
 const STORAGE_KEY = "survey_reports";
 const SURVEY_DRAFT_KEY = "mysafeops_survey_report_editor_draft";
@@ -585,6 +581,7 @@ function ReportEditor({
   );
   const autoFillRan = useRef(false);
   const draftPromptRan = useRef(false);
+  const lastDraftJsonRef = useRef("");
 
   useEffect(() => {
     if (draftPromptRan.current) return;
@@ -624,14 +621,14 @@ function ReportEditor({
   useEffect(() => {
     const t = setTimeout(() => {
       try {
-        sessionStorage.setItem(
-          SURVEY_DRAFT_KEY,
-          JSON.stringify({ form, savedAt: Date.now(), reportId: form.id })
-        );
+        const payload = JSON.stringify({ form, savedAt: Date.now(), reportId: form.id });
+        if (payload === lastDraftJsonRef.current) return;
+        lastDraftJsonRef.current = payload;
+        sessionStorage.setItem(SURVEY_DRAFT_KEY, payload);
       } catch {
         /* quota */
       }
-    }, 1200);
+    }, 2200);
     return () => clearTimeout(t);
   }, [form]);
 
@@ -658,31 +655,17 @@ function ReportEditor({
       .catch(() => {});
   }, [isNew, report, projects, ramsDocs, projectPlans, permits]);
 
-  const deferredForm = useDeferredValue(form);
-  const deferredFormProject = projects.find((p) => p.id === deferredForm.projectId);
-  const formProject = useMemo(
+  const deferredFormProject = useMemo(
     () => projects.find((p) => p.id === form.projectId),
     [projects, form.projectId]
   );
-
-  const previewHtml = useMemo(() => {
-    try {
-      const linkedRamsPreview = ramsDocs.find((d) => d.id === deferredForm.linkedRamsId);
-      return buildSurveyReportHtml(
-        {
-          ...deferredForm,
-          limitationsText: deferredForm.limitationsText || buildLimitationsFromKeys(deferredForm.limitationKeys),
-        },
-        {
-          ramsTitle: linkedRamsPreview?.title || linkedRamsPreview?.documentNo || "",
-          projectLat: deferredFormProject?.lat,
-          projectLng: deferredFormProject?.lng,
-        }
-      );
-    } catch {
-      return "";
-    }
-  }, [deferredForm, ramsDocs, deferredFormProject]);
+  const formProject = deferredFormProject;
+  const previewActive = livePreviewOpen || tab === "preview";
+  const { html: previewHtml, pending: previewPending } = useSurveyPreviewHtml(form, {
+    active: previewActive,
+    ramsDocs,
+    project: deferredFormProject,
+  });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v, updatedAt: new Date().toISOString() }));
   const setSection = (k, v) =>
@@ -874,6 +857,7 @@ function ReportEditor({
   const handleDownloadPdf = async () => {
     setPdfBusy(true);
     try {
+      const { downloadSurveyReportPdf } = await import("./surveyReportPdf");
       await downloadSurveyReportPdf(form, printExtras);
       pushAudit({ action: "survey_report_pdf", entity: "survey_report", detail: form.ref || form.id });
     } catch (e) {
@@ -1755,7 +1739,7 @@ function ReportEditor({
           ) : (
             <PrintPreviewFrame
               html={previewHtml}
-              title="Survey report — A4 preview"
+              title={`Survey report — A4 preview${previewPending ? " (updating…)" : ""}`}
               height={520}
               onPrint={() => onPrint(form, linkedRams)}
               printLabel="Print / save PDF"
@@ -1906,6 +1890,12 @@ export default function SurveyReport() {
     [filtered, projects]
   );
 
+  const enrichedRows = useMemo(() => enrichSurveyListRows(filtered, projects), [filtered, projects]);
+  const listGroupMeta = useMemo(() => surveyListGroupMeta(groupedReports), [groupedReports]);
+
+  const projectById = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p])), [projects]);
+  const ramsById = useMemo(() => Object.fromEntries(ramsDocs.map((d) => [d.id, d])), [ramsDocs]);
+
   const persist = (report, isNew) => {
     setReports((prev) => {
       const i = prev.findIndex((x) => x.id === report.id);
@@ -1924,7 +1914,7 @@ export default function SurveyReport() {
     setModal(null);
   };
 
-  const duplicateReport = (report, { asRevision = false } = {}) => {
+  const duplicateReport = useCallback((report, { asRevision = false } = {}) => {
     const copy = buildDuplicateReportPayload(report, reports, { asRevision });
     setReports((prev) => [copy, ...prev]);
     pushAudit({
@@ -1933,13 +1923,14 @@ export default function SurveyReport() {
       detail: copy.ref || copy.id,
     });
     setModal({ type: "edit", isNew: false, data: copy });
-  };
+  }, [reports]);
 
-  const downloadPdfForReport = async (report) => {
-    const rams = ramsDocs.find((d) => d.id === report.linkedRamsId);
-    const project = projects.find((p) => p.id === report.projectId);
+  const downloadPdfForReport = useCallback(async (report) => {
+    const rams = ramsById[report.linkedRamsId];
+    const project = projectById[report.projectId];
     setPdfBusyId(report.id);
     try {
+      const { downloadSurveyReportPdf } = await import("./surveyReportPdf");
       await downloadSurveyReportPdf(report, {
         ramsTitle: rams?.title || rams?.documentTitle,
         projectLat: project?.lat,
@@ -1951,13 +1942,14 @@ export default function SurveyReport() {
     } finally {
       setPdfBusyId("");
     }
-  };
+  }, [projectById, ramsById]);
 
-  const exportPackForReport = async (report) => {
-    const rams = ramsDocs.find((d) => d.id === report.linkedRamsId);
-    const project = projects.find((p) => p.id === report.projectId);
+  const exportPackForReport = useCallback(async (report) => {
+    const rams = ramsById[report.linkedRamsId];
+    const project = projectById[report.projectId];
     setPdfBusyId(report.id);
     try {
+      const { downloadSurveyReportPack } = await import("./surveyReportExport");
       await downloadSurveyReportPack(
         report,
         {
@@ -1973,7 +1965,31 @@ export default function SurveyReport() {
     } finally {
       setPdfBusyId("");
     }
-  };
+  }, [geoPhotos, projectById, ramsById]);
+
+  const printReport = useCallback(async (report) => {
+    const rams = ramsById[report.linkedRamsId];
+    const project = projectById[report.projectId];
+    const { openSurveyReportPrint } = await import("./surveyReportPrintHtml");
+    openSurveyReportPrint(report, {
+      ramsTitle: rams?.title || rams?.documentTitle,
+      projectLat: project?.lat,
+      projectLng: project?.lng,
+    });
+    pushAudit({ action: "survey_report_print", entity: "survey_report", detail: report.ref || report.id });
+  }, [projectById, ramsById]);
+
+  const exportHtmlForReport = useCallback(async (report) => {
+    const rams = ramsById[report.linkedRamsId];
+    const project = projectById[report.projectId];
+    const { downloadSurveyReportHtml } = await import("./surveyReportPrintHtml");
+    downloadSurveyReportHtml(report, {
+      ramsTitle: rams?.title || rams?.documentTitle,
+      projectLat: project?.lat,
+      projectLng: project?.lng,
+    });
+    pushAudit({ action: "survey_report_html", entity: "survey_report", detail: report.ref || report.id });
+  }, [projectById, ramsById]);
 
   const missingProjectCount = useMemo(
     () => projectsMissingReports(projects, reports).length,
@@ -2003,6 +2019,45 @@ export default function SurveyReport() {
     });
   };
 
+  const openEditor = useCallback((report, isNew = false) => {
+    setModal({ type: "edit", data: report, isNew });
+  }, []);
+
+  const handleListDelete = useCallback((r) => {
+    setListConfirm({
+      title: "Delete survey report?",
+      message: `${r.ref || r.title || "This report"} will be permanently removed.`,
+      tone: "danger",
+      confirmLabel: "Delete",
+      onConfirm: () => {
+        setReports((p) => p.filter((x) => x.id !== r.id));
+        pushAudit({ action: "survey_report_delete", entity: "survey_report", detail: r.id });
+        setListConfirm(null);
+      },
+    });
+  }, []);
+
+  const handleProjectHub = useCallback((r) => {
+    setWorkspaceNavTarget({
+      viewId: "workers",
+      projectId: r.projectId,
+      action: "viewProjectDashboard",
+    });
+    openWorkspaceView({ viewId: "workers" });
+  }, []);
+
+  const handleGeoJsonExport = useCallback((r) => {
+    try {
+      downloadSurveyReportGeoJson(r, geoPhotos);
+    } catch (e) {
+      alert(e?.message || "GeoJSON export failed.");
+    }
+  }, [geoPhotos]);
+
+  const handleRevision = useCallback((r) => {
+    duplicateReport(r, { asRevision: true });
+  }, [duplicateReport]);
+
   const createNew = () => {
     const ref = nextSurveyRef(reports);
     setModal({
@@ -2010,17 +2065,6 @@ export default function SurveyReport() {
       data: blankSurveyReport({ ref, title: `Survey report ${ref}` }),
       isNew: true,
     });
-  };
-
-  const printReport = (report) => {
-    const rams = ramsDocs.find((d) => d.id === report.linkedRamsId);
-    const project = projects.find((p) => p.id === report.projectId);
-    openSurveyReportPrint(report, {
-      ramsTitle: rams?.title || rams?.documentTitle,
-      projectLat: project?.lat,
-      projectLng: project?.lng,
-    });
-    pushAudit({ action: "survey_report_print", entity: "survey_report", detail: report.ref || report.id });
   };
 
   return (
@@ -2043,15 +2087,7 @@ export default function SurveyReport() {
             const existing = reports.find((x) => x.id === id);
             if (existing) setModal({ type: "edit", data: existing, isNew: false });
           }}
-          onPrint={(r) => {
-            const linked = ramsDocs.find((d) => d.id === r.linkedRamsId);
-            const project = projects.find((p) => p.id === r.projectId);
-            openSurveyReportPrint(r, {
-              ramsTitle: linked?.title || linked?.documentTitle,
-              projectLat: project?.lat,
-              projectLng: project?.lng,
-            });
-          }}
+          onPrint={(r) => printReport(r)}
         />
       )}
 
@@ -2164,157 +2200,33 @@ export default function SurveyReport() {
           )}
           {(() => {
             let lastGroup = null;
-            return listPg.visible(filtered).map((r) => {
-              const q = surveyReportQuality(r);
+            return listPg.visible(enrichedRows).map((row) => {
+              const r = row.report;
               const groupKey = r.projectId || "__none__";
-              const groupLabel =
-                groupedReports.find((g) => (g.projectId || "__none__") === groupKey)?.label || "No project";
+              const meta = listGroupMeta.get(groupKey);
               const showGroupHeader = !projectFilter && groupKey !== lastGroup;
               lastGroup = groupKey;
+              const hasGeo = r.projectId && countGeoPhotosForReport(geoPhotos, r.projectId) > 0;
               return (
-                <div key={r.id}>
-                  {showGroupHeader ? (
-                    <div className="app-survey-list-group__title">
-                      {groupLabel}
-                      <span>{groupedReports.find((g) => (g.projectId || "__none__") === groupKey)?.reports.length || 0}</span>
-                    </div>
-                  ) : null}
-                  <div
-                    className={`app-survey-list-row${r.status === "final" ? " app-survey-list-row--final" : ""}${q.score >= 80 ? " app-survey-list-row--ready" : ""}`}
-                  >
-                    <SurveyProgressRing
-                      value={q.score}
-                      size={48}
-                      stroke={4}
-                      className="app-survey-list-row__ring"
-                      animate={false}
-                    />
-                    {(() => {
-                      const p = projects.find((pr) => pr.id === r.projectId);
-                      const thumb = surveyStaticMapThumbUrl(p?.lat, p?.lng);
-                      return thumb ? (
-                        <div className="app-survey-list-row__map">
-                          <img src={thumb} alt="" loading="lazy" />
-                        </div>
-                      ) : null;
-                    })()}
-                    <div className="app-survey-list-row__body">
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            <strong style={{ fontSize: 15 }}>{r.title || r.ref || "Untitled"}</strong>
-                            <StatusChip meta={getSurveyStatusMeta(r.status)} />
-                            {q.score >= 80 && r.status !== "final" ? (
-                              <span className="app-survey-list-row__ready-pill">Ready to finalise</span>
-                            ) : null}
-                          </div>
-                          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
-                            {r.ref} · {r.surveyDate}
-                            {r.surveyType ? ` · ${surveyTypeLabel(r.surveyType)}` : ""}
-                          </div>
-                          <div className="app-survey-list-row__meter" aria-hidden>
-                            <div className="app-survey-list-row__meter-fill" style={{ width: `${q.score}%` }} />
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-start" }}>
-                        <button type="button" style={ss.btnP} onClick={() => setModal({ type: "edit", data: r, isNew: false })}>
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          style={ss.btn}
-                          disabled={pdfBusyId === r.id}
-                          onClick={() => downloadPdfForReport(r)}
-                        >
-                          {pdfBusyId === r.id ? "PDF…" : "PDF"}
-                        </button>
-                        <button type="button" style={ss.btn} onClick={() => printReport(r)}>
-                          Print
-                        </button>
-                        <button type="button" style={ss.btn} onClick={() => exportPackForReport(r)}>
-                          Pack
-                        </button>
-                        <button type="button" style={ss.btn} onClick={() => duplicateReport(r)}>
-                          Duplicate
-                        </button>
-                        <details className="app-survey-list-more">
-                          <summary style={ss.btn}>More</summary>
-                          <div className="app-survey-list-more__menu">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                downloadSurveyReportHtml(r, {
-                                  ramsTitle: ramsDocs.find((d) => d.id === r.linkedRamsId)?.title,
-                                  projectLat: projects.find((p) => p.id === r.projectId)?.lat,
-                                  projectLng: projects.find((p) => p.id === r.projectId)?.lng,
-                                });
-                                pushAudit({ action: "survey_report_html", entity: "survey_report", detail: r.ref || r.id });
-                              }}
-                            >
-                              HTML export
-                            </button>
-                            {r.projectId && countGeoPhotosForReport(geoPhotos, r.projectId) > 0 ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  try {
-                                    downloadSurveyReportGeoJson(r, geoPhotos);
-                                  } catch (e) {
-                                    alert(e?.message || "GeoJSON export failed.");
-                                  }
-                                }}
-                              >
-                                GeoJSON
-                              </button>
-                            ) : null}
-                            {r.status === "final" ? (
-                              <button type="button" onClick={() => duplicateReport(r, { asRevision: true })}>
-                                New revision
-                              </button>
-                            ) : null}
-                            {r.projectId ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setWorkspaceNavTarget({
-                                    viewId: "workers",
-                                    projectId: r.projectId,
-                                    action: "viewProjectDashboard",
-                                  });
-                                  openWorkspaceView({ viewId: "workers" });
-                                }}
-                              >
-                                Project hub
-                              </button>
-                            ) : null}
-                          </div>
-                        </details>
-                        {caps.deleteRecords && (
-                          <button
-                            type="button"
-                            style={{ ...ss.btn, color: "#A32D2D" }}
-                            onClick={() =>
-                              setListConfirm({
-                                title: "Delete survey report?",
-                                message: `${r.ref || r.title || "This report"} will be permanently removed.`,
-                                tone: "danger",
-                                confirmLabel: "Delete",
-                                onConfirm: () => {
-                                  setReports((p) => p.filter((x) => x.id !== r.id));
-                                  pushAudit({ action: "survey_report_delete", entity: "survey_report", detail: r.id });
-                                  setListConfirm(null);
-                                },
-                              })
-                            }
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    </div>
-                  </div>
-                </div>
+                <SurveyListRow
+                  key={r.id}
+                  enriched={row}
+                  showGroupHeader={showGroupHeader}
+                  groupLabel={meta?.label || "No project"}
+                  groupCount={meta?.count || 0}
+                  caps={caps}
+                  pdfBusy={pdfBusyId === r.id}
+                  onEdit={(rep) => openEditor(rep, false)}
+                  onPdf={downloadPdfForReport}
+                  onPrint={printReport}
+                  onPack={exportPackForReport}
+                  onDuplicate={duplicateReport}
+                  onHtmlExport={exportHtmlForReport}
+                  onGeoJsonExport={hasGeo ? handleGeoJsonExport : null}
+                  onRevision={handleRevision}
+                  onProjectHub={r.projectId ? handleProjectHub : null}
+                  onDelete={handleListDelete}
+                />
               );
             });
           })()}

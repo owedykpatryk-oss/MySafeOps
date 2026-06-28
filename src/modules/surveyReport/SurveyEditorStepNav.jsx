@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import {
   SURVEY_EDITOR_GROUPS,
   SURVEY_EDITOR_TABS,
@@ -5,14 +6,26 @@ import {
 } from "./surveyReportEditorNav";
 import { surveyGroupCompletion, surveyTabIsComplete } from "./surveyReportListUtils";
 
-export default function SurveyEditorStepNav({ tab, report, onTabChange }) {
+function SurveyEditorStepNav({ tab, report, onTabChange }) {
   const activeGroup = surveyEditorGroupForTab(tab);
+
+  const completion = useMemo(() => {
+    const groups = {};
+    for (const g of SURVEY_EDITOR_GROUPS) {
+      groups[g.id] = surveyGroupCompletion(report, g.id);
+    }
+    const tabs = {};
+    for (const t of SURVEY_EDITOR_TABS) {
+      tabs[t.id] = surveyTabIsComplete(report, t.id);
+    }
+    return { groups, tabs };
+  }, [report]);
 
   return (
     <div className="app-survey-editor-nav">
       <div className="app-survey-editor-nav__groups" role="tablist" aria-label="Report sections">
         {SURVEY_EDITOR_GROUPS.map((g) => {
-          const prog = surveyGroupCompletion(report, g.id);
+          const prog = completion.groups[g.id];
           const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
           return (
             <button
@@ -47,7 +60,7 @@ export default function SurveyEditorStepNav({ tab, report, onTabChange }) {
       </div>
       <div className="app-survey-editor-nav__tabs">
         {SURVEY_EDITOR_TABS.filter((t) => t.group === activeGroup).map((t) => {
-          const done = surveyTabIsComplete(report, t.id);
+          const done = completion.tabs[t.id];
           return (
             <button
               key={t.id}
@@ -64,3 +77,5 @@ export default function SurveyEditorStepNav({ tab, report, onTabChange }) {
     </div>
   );
 }
+
+export default memo(SurveyEditorStepNav);
