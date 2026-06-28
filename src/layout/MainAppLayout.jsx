@@ -43,11 +43,7 @@ import {
   HIDDEN_MODULES_UPDATED_EVENT,
   isModuleVisible,
 } from "../utils/hiddenModules";
-import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
-import {
-  BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
-  resolveBottomNavSlotId,
-} from "../utils/bottomNavShortcut";
+import { ORG_SETTINGS_UPDATED_EVENT, loadOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import { isOnboardingWizardComplete } from "../utils/workspaceOnboarding";
 import {
   filterTabsByRegisterStat,
@@ -304,7 +300,7 @@ const NAV_ICONS = {
 /** Base bottom bar (More is last). Platform owner tab is inserted in layout when `isSuperadmin`. */
 const NAV_TABS = NAV_TAB_IDS.map((t) => ({
   id: t.id,
-  label: t.label,
+  label: t.id === "workers" ? "Projects" : t.label,
   icon: NAV_ICONS[t.id] || NAV_ICONS.more,
 }));
 
@@ -321,6 +317,13 @@ export default function MainAppLayout() {
     return getHiddenModuleIds();
   }, [hiddenRev]);
   const visibilityOpts = useMemo(() => ({ hiddenModules }), [hiddenModules]);
+
+  useEffect(() => {
+    const id = loadOrgSettingsRaw().bottomNavModuleId;
+    if (typeof id === "string" && isBottomNavOccupiedId(id)) {
+      setBottomNavModuleId(null);
+    }
+  }, []);
 
   useEffect(() => {
     const bump = () => setHiddenRev((r) => r + 1);
@@ -341,22 +344,31 @@ export default function MainAppLayout() {
   }, []);
 
   const bottomNavTabs = useMemo(() => {
+    const slotId = isBottomNavOccupiedId(bottomSlotId) ? DEFAULT_BOTTOM_NAV_FALLBACK_ID : bottomSlotId;
     let tabs = NAV_TABS.map((t) =>
       t.id === "bin"
         ? {
             ...t,
-            id: bottomSlotId,
-            label: getModuleLabel(bottomSlotId),
-            icon: NAV_ICONS[bottomSlotId] || null,
+            navKey: "bin-slot",
+            id: slotId,
+            label: slotId === "bin" ? "Bin" : getModuleLabel(slotId),
+            icon: NAV_ICONS[slotId] || getModuleIcon(slotId) || NAV_ICONS.bin,
           }
-        : t
+        : { ...t, navKey: t.id }
     );
     if (isSuperadmin) {
       const more = tabs[tabs.length - 1];
       const beforeMore = tabs.slice(0, -1);
-      tabs = [...beforeMore, { id: "superadmin", label: "Owner", icon: NAV_ICONS.superadmin }, more];
+      tabs = [...beforeMore, { id: "superadmin", navKey: "superadmin", label: "Owner", icon: NAV_ICONS.superadmin }, more];
     }
-    return tabs.filter((t) => t.id === "more" || isModuleVisible(t.id, visibilityOpts));
+    const seen = new Set();
+    return tabs.filter((t) => {
+      if (t.id === "more") return isModuleVisible(t.id, visibilityOpts);
+      if (!isModuleVisible(t.id, visibilityOpts)) return false;
+      if (seen.has(t.id)) return false;
+      seen.add(t.id);
+      return true;
+    });
   }, [isSuperadmin, visibilityOpts, bottomSlotId]);
   const primaryNavIdSet = useMemo(() => {
     const s = new Set(filterVisibleModuleIds(PRIMARY_BOTTOM_NAV_IDS, visibilityOpts));
@@ -955,7 +967,7 @@ export default function MainAppLayout() {
           const active = navTab === t.id || view === t.id;
           return (
             <button
-              key={t.id}
+              key={t.navKey || t.id}
               type="button"
               className="app-bottom-nav__btn"
               aria-current={active ? "page" : undefined}
@@ -977,7 +989,7 @@ export default function MainAppLayout() {
                 color: active ? "var(--color-accent)" : "var(--color-text-secondary)",
                 fontSize: 11,
                 fontFamily: "DM Sans, sans-serif",
-                maxWidth: t.id === "workers" ? 92 : 78,
+                maxWidth: 78,
                 fontWeight: 600,
               }}
             >

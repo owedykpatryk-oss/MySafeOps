@@ -392,7 +392,10 @@
 .app-bottom-nav__label {
   line-height: 1.15;
   text-align: center;
-  white-space: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .app-more-tile {

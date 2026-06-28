@@ -25,11 +25,20 @@ describe("bottomNavShortcut", () => {
     expect(isValidBottomNavModuleId("not-a-module")).toBe(false);
   });
 
-  it("persists and reads bottomNavModuleId", () => {
-    setBottomNavModuleId("permits");
-    expect(loadOrgSettingsRaw().bottomNavModuleId).toBe("permits");
-    expect(getBottomNavModuleId()).toBe("permits");
-    expect(resolveBottomNavSlotId()).toBe("permits");
+  it("persists and reads bottomNavModuleId for non-bar modules", () => {
+    setBottomNavModuleId("snags");
+    expect(loadOrgSettingsRaw().bottomNavModuleId).toBe("snags");
+    expect(getBottomNavModuleId()).toBe("snags");
+    expect(resolveBottomNavSlotId()).toBe("snags");
+  });
+
+  it("rejects modules already fixed on the bottom bar", () => {
+    setBottomNavModuleId("workers");
+    expect(loadOrgSettingsRaw().bottomNavModuleId).toBeNull();
+    expect(getBottomNavModuleId()).toBeNull();
+    expect(resolveBottomNavSlotId()).toBe(DEFAULT_BOTTOM_NAV_FALLBACK_ID);
+    expect(getBottomNavShortcutOptions()).not.toContain("workers");
+    expect(getBottomNavShortcutOptions()).not.toContain("site-map");
   });
 
   it("falls back to bin when unset or invalid", () => {
@@ -49,7 +58,7 @@ describe("bottomNavShortcut", () => {
   it("dispatches update event on change", () => {
     const handler = vi.fn();
     window.addEventListener(BOTTOM_NAV_SHORTCUT_UPDATED_EVENT, handler);
-    setBottomNavModuleId("rams");
+    setBottomNavModuleId("coshh");
     expect(handler).toHaveBeenCalledTimes(1);
     window.removeEventListener(BOTTOM_NAV_SHORTCUT_UPDATED_EVENT, handler);
   });
