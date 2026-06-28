@@ -4,6 +4,7 @@ import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { escapeHtml, openPrintWindow } from "../utils/htmlEscape.js";
 

@@ -11,15 +11,6 @@ const ss = ms;
 
 export function PublicSubcontractorView({ token }) {
   const safeToken = safeOpaqueToken(token);
-  if (!safeToken) {
-    return (
-      <div style={{ fontFamily: "DM Sans,sans-serif", padding: "3rem 1rem", textAlign: "center" }}>
-        <p style={{ color: "#64748b" }}>Invalid or inactive subcontractor link.</p>
-      </div>
-    );
-  }
-  const portals = load("subcontractor_portals", []);
-  const portal = portals.find((p) => p.token === safeToken && p.active);
   const [company, setCompany] = useState("");
   const [contact, setContact] = useState("");
   const [ramsSummary, setRamsSummary] = useState("");
@@ -27,7 +18,10 @@ export function PublicSubcontractorView({ token }) {
   const [certData, setCertData] = useState(null);
   const [done, setDone] = useState(false);
 
-  if (!portal) {
+  const portals = load("subcontractor_portals", []);
+  const portal = safeToken ? portals.find((p) => p.token === safeToken && p.active) : null;
+
+  if (!safeToken || !portal) {
     return (
       <div style={{ fontFamily: "DM Sans,sans-serif", padding: "3rem 1rem", textAlign: "center" }}>
         <p style={{ color: "#64748b" }}>Invalid or inactive subcontractor link.</p>
