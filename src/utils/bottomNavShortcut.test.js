@@ -16,7 +16,7 @@ describe("bottomNavShortcut", () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem("mysafeops_orgId", "test-org");
-    saveOrgSettingsRaw({});
+    saveOrgSettingsRaw({ hiddenModules: [], hiddenModulesBootstrapped: true });
   });
 
   it("validates known module ids", () => {
@@ -33,12 +33,12 @@ describe("bottomNavShortcut", () => {
   });
 
   it("rejects modules already fixed on the bottom bar", () => {
-    setBottomNavModuleId("workers");
+    setBottomNavModuleId("projects");
     expect(loadOrgSettingsRaw().bottomNavModuleId).toBeNull();
     expect(getBottomNavModuleId()).toBeNull();
     expect(resolveBottomNavSlotId()).toBe(DEFAULT_BOTTOM_NAV_FALLBACK_ID);
-    expect(getBottomNavShortcutOptions()).not.toContain("workers");
-    expect(getBottomNavShortcutOptions()).not.toContain("site-map");
+    expect(getBottomNavShortcutOptions()).not.toContain("projects");
+    expect(getBottomNavShortcutOptions()).not.toContain("people");
   });
 
   it("falls back to bin when unset or invalid", () => {

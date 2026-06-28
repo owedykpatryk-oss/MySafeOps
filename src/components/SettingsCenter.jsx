@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Building2, Code2, CreditCard, Shield, Users, UserPlus } from "lucide-react";
+import { Bell, Building2, Code2, CreditCard, Shield, Users, UserPlus, Zap } from "lucide-react";
 
 import { ms } from "../utils/moduleStyles";
 import { WORKSPACE_SETTINGS_TABS } from "../config/workspaceSettingsTabs";
@@ -8,6 +8,7 @@ import BillingLimits from "./BillingLimits";
 import InviteUsers from "./InviteUsers";
 import OrgMembers from "./OrgMembers";
 import OrgSettings from "./OrgSettings";
+import OrgAutomationSettings from "./OrgAutomationSettings";
 import NotificationSettings from "../offline/NotificationSettings";
 import DeveloperTools from "./DeveloperTools";
 
@@ -19,6 +20,7 @@ const TAB_ICONS = {
   invites: UserPlus,
   members: Users,
   organisation: Building2,
+  automation: Zap,
   notifications: Bell,
   developer: Code2,
 };
@@ -92,6 +94,7 @@ export default function SettingsCenter({ initialTab = "cloud", checkoutReturn = 
           {tab === "invites" && <InviteUsers />}
           {tab === "members" && <OrgMembers />}
           {tab === "organisation" && <OrgSettings />}
+          {tab === "automation" && <OrgAutomationSettings />}
           {tab === "notifications" && (
             <div style={{ marginBottom: 24 }}>
               <NotificationSettings />

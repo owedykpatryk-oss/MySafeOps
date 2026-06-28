@@ -447,7 +447,7 @@ export default function SignatureManager() {
           </div>
           {workers.length === 0 && (newDoc.customSigners || []).length === 0 && (
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 12 }}>
-              Pick workers above after adding them under <strong>Workers &amp; projects</strong>, or add a one-off signer by name.
+              Pick workers above after adding them under <strong>People</strong>, or add a one-off signer by name.
             </p>
           )}
           <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>

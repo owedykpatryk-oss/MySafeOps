@@ -1,9 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
+import {
+  PROJECT_PLAYBOOKS,
+  applyAndPersistProjectPlaybook,
+  getPlaybook,
+} from "../utils/projectPlaybooks";
 import { isSuperAdminEmail } from "../utils/superAdmin";
 import { billingLimitMessage, checkBillingLimit } from "../utils/billingLimits";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -28,6 +33,13 @@ import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDraw
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 import ProjectSitePreviewMap from "../components/ProjectSitePreviewMap";
 import ProjectDashboard from "../components/ProjectDashboard";
+import {
+  buildProjectActionContext,
+  pickNextActionForProject,
+  openProjectNextAction,
+} from "../utils/projectNextAction";
+import { isAutomationEnabled } from "../utils/orgAutomationRules";
+import { cloneProjectDocuments } from "../utils/documentPropagation";
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -167,7 +179,9 @@ function certSummaryText(worker) {
   return certs.map((c) => `${c.certType}${c.expiryDate ? ` (${c.expiryDate})` : ""}`).join("; ");
 }
 
-export default function Workers() {
+export function WorkersModule({ mode = "all" }) {
+  const showPeople = mode === "all" || mode === "people";
+  const showProjects = mode === "all" || mode === "projects";
   const { trialStatus, billing } = useApp();
   const { user } = useSupabaseAuth();
   const { pushToast } = useToast();
@@ -175,7 +189,9 @@ export default function Workers() {
   const [workers, setWorkers] = useState(() => load(WORKERS_KEY));
   const [projects, setProjects] = useState(() => load(PROJECTS_KEY));
   const [modal, setModal] = useState(null);
+  const [hubProject, setHubProject] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const useInlineHub = mode === "projects";
 
   const { d1Hydrating, d1OutboxPending } = useD1WorkersProjectsSync({
     workers,
@@ -188,25 +204,45 @@ export default function Workers() {
   const workersPg = useRegisterListPaging(50);
   const projectsPg = useRegisterListPaging(50);
 
+  const projectActionCtx = useMemo(
+    () =>
+      buildProjectActionContext({
+        rams: load("rams_builder_docs"),
+        surveys: load("survey_reports"),
+        permits: load("permits_v2"),
+        methodStatements: load("method_statements"),
+      }),
+    [projects]
+  );
+
+  const openProjectHub = (project) => {
+    if (useInlineHub) setHubProject(project);
+    else setModal({ type: "project-dashboard", data: project });
+  };
+
   useEffect(() => {
     const t = consumeWorkspaceNavTarget();
-    if (t?.viewId !== "workers") return;
-    if (t?.action === "createProject") {
+    const viewOk =
+      (mode === "projects" && (t?.viewId === "projects" || t?.viewId === "workers")) ||
+      (mode === "people" && t?.viewId === "people") ||
+      (mode === "all" && t?.viewId === "workers");
+    if (!viewOk) return;
+    if (t?.action === "createProject" && showProjects) {
       setModal({ type: "project", data: null });
       return;
     }
-    if (t?.action === "editProject" && t?.projectId) {
+    if (t?.action === "editProject" && t?.projectId && showProjects) {
       const list = load(PROJECTS_KEY, []);
       const p = list.find((x) => x.id === t.projectId);
       if (p) setModal({ type: "project", data: p });
       return;
     }
-    if (t?.action === "viewProjectDashboard" && t?.projectId) {
+    if (t?.action === "viewProjectDashboard" && t?.projectId && showProjects) {
       const list = load(PROJECTS_KEY, []);
       const p = list.find((x) => x.id === t.projectId);
-      if (p) setModal({ type: "project-dashboard", data: p });
+      if (p) openProjectHub(p);
     }
-  }, []);
+  }, [mode, showProjects, useInlineHub]);
 
   const billingOpts = { trialStatus, billing, isPlatformOwner };
 
@@ -237,6 +273,7 @@ export default function Workers() {
       return next;
     });
     setModal((m) => (m?.type === "project-dashboard" && m.data?.id === updated.id ? { ...m, data: updated } : m));
+    setHubProject((p) => (p?.id === updated.id ? updated : p));
   };
 
   const exportWorkersCsv = () => {
@@ -305,18 +342,41 @@ export default function Workers() {
         return;
       }
     }
+
+    let saved = form;
+    const playbookId = options.applyPlaybook || form.playbookId;
+    const shouldApplyPlaybook =
+      playbookId &&
+      (options.reapplyPlaybook || (isNew && isAutomationEnabled("autoApplyPlaybookOnCreate")));
+    if (shouldApplyPlaybook) {
+      try {
+        const result = applyAndPersistProjectPlaybook(form, playbookId);
+        saved = result.project;
+        if (result.applied && result.summary.length) {
+          pushToast(`Playbook applied: ${result.summary.join(" · ")}`, "success");
+        } else if (options.reapplyPlaybook && !result.applied) {
+          pushToast("All playbook documents already exist for this project.", "info");
+        }
+      } catch (e) {
+        pushToast(e?.message || "Playbook could not be applied.", "warn");
+      }
+    }
+
     setProjects((prev) => {
-      const i = prev.findIndex((x) => x.id === form.id);
+      const i = prev.findIndex((x) => x.id === saved.id);
       if (i >= 0) {
         const next = [...prev];
-        next[i] = form;
+        next[i] = saved;
         return next;
       }
-      return [form, ...prev];
+      return [saved, ...prev];
     });
     setModal(null);
+    if (useInlineHub && isNew) {
+      openProjectHub(saved);
+    }
     if (options.openDrawingEditor) {
-      setWorkspaceNavTarget({ viewId: "project-drawings", projectId: form.id });
+      setWorkspaceNavTarget({ viewId: "project-drawings", projectId: saved.id });
       openWorkspaceView({ viewId: "project-drawings" });
     }
   };
@@ -341,6 +401,7 @@ export default function Workers() {
           }
           return prev.filter((p) => p.id !== id);
         });
+        setHubProject((p) => (p?.id === id ? null : p));
         setConfirm(null);
       },
     });
@@ -350,6 +411,65 @@ export default function Workers() {
     .flatMap((w) => getWorkerCertAlerts(w).map((a) => ({ ...a, worker: w })))
     .sort((a, b) => a.days - b.days);
   const criticalAlerts = certAlerts.filter((a) => a.severity === "expired" || a.severity === "critical");
+
+  const handleApplyPlaybook = (p, playbookId) => {
+    try {
+      const result = applyAndPersistProjectPlaybook(p, playbookId);
+      updateProjectRecord(result.project);
+      if (result.applied) {
+        pushToast(`Playbook applied: ${result.summary.join(" · ")}`, "success");
+      } else {
+        pushToast("All playbook documents already exist.", "info");
+      }
+    } catch (e) {
+      pushToast(e?.message || "Playbook failed.", "warn");
+    }
+  };
+
+  const renderProjectHub = (project, { embedded, onClose }) => (
+    <ProjectDashboard
+      embedded={embedded}
+      project={project}
+      workers={workers}
+      allProjects={projects}
+      onClose={onClose}
+      onEdit={(p) => {
+        if (embedded) setHubProject(null);
+        setModal({ type: "project", data: p });
+      }}
+      onRemove={(id) => {
+        onClose();
+        removeProject(id);
+      }}
+      onUpdateProject={updateProjectRecord}
+      onApplyPlaybook={handleApplyPlaybook}
+      onCloneDocuments={(source, targetId, opts = {}) => {
+        try {
+          const summary = cloneProjectDocuments(source.id, targetId, {
+            includePermits: false,
+            includeGeoPhotos: Boolean(opts.includeGeoPhotos),
+          });
+          const labelMap = {
+            rams: "RAMS",
+            surveys: "surveys",
+            permits: "permits",
+            methodStatements: "method statements",
+            geoPhotos: "geo-photos",
+          };
+          const parts = Object.entries(summary)
+            .filter(([, n]) => n > 0)
+            .map(([k, n]) => `${n} ${labelMap[k] || k}`);
+          if (!parts.length) {
+            pushToast("No documents to copy on the source project.", "info");
+            return;
+          }
+          pushToast(`Copied ${parts.join(", ")} to target project.`, "success");
+        } catch (e) {
+          pushToast(e?.message || "Clone failed.", "warn");
+        }
+      }}
+    />
+  );
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14, color: "var(--color-text-primary)" }}>
@@ -372,19 +492,7 @@ export default function Workers() {
           onClose={() => setModal(null)}
         />
       )}
-      {modal?.type === "project-dashboard" && (
-        <ProjectDashboard
-          project={modal.data}
-          workers={workers}
-          onClose={() => setModal(null)}
-          onEdit={(p) => setModal({ type: "project", data: p })}
-          onRemove={(id) => {
-            setModal(null);
-            removeProject(id);
-          }}
-          onUpdateProject={updateProjectRecord}
-        />
-      )}
+      {modal?.type === "project-dashboard" && !useInlineHub && renderProjectHub(modal.data, { embedded: false, onClose: () => setModal(null) })}
       <ConfirmDialog
         open={Boolean(confirm)}
         title={confirm?.title}
@@ -396,28 +504,47 @@ export default function Workers() {
       />
 
       <PageHero
-        badgeText="WP"
-        title="Workers & projects"
-        lead="People and sites used across RAMS, permits, daily briefings, site map, and registers."
+        badgeText={showProjects && !showPeople ? "PR" : showPeople && !showProjects ? "TM" : "WP"}
+        title={showProjects && !showPeople ? "Projects" : showPeople && !showProjects ? "People" : "Workers & projects"}
+        lead={
+          showProjects && !showPeople
+            ? "Sites and project hubs — open a project for RAMS, permits, surveys, drawings and playbooks."
+            : showPeople && !showProjects
+              ? "Operatives on site — certifications, roles and project assignments."
+              : "People and sites used across RAMS, permits, daily briefings, site map, and registers."
+        }
         right={
           <>
-            <button type="button" style={ss.btnP} onClick={tryAddWorker}>
-              Add worker
-            </button>
-            <button type="button" style={ss.btnO} onClick={tryAddProject}>
-              Add project
-            </button>
-            <button type="button" style={ss.btn} onClick={exportWorkersCsv}>
-              Export CSV
-            </button>
+            {useInlineHub && hubProject ? (
+              <button type="button" style={ss.btn} onClick={() => setHubProject(null)}>
+                ← All projects
+              </button>
+            ) : null}
+            {showPeople && !(useInlineHub && hubProject) ? (
+              <button type="button" style={ss.btnP} onClick={tryAddWorker}>
+                Add person
+              </button>
+            ) : null}
+            {showProjects && !(useInlineHub && hubProject) ? (
+              <button type="button" style={ss.btnO} onClick={tryAddProject}>
+                Add project
+              </button>
+            ) : null}
+            {showPeople && !(useInlineHub && hubProject) ? (
+              <button type="button" style={ss.btn} onClick={exportWorkersCsv}>
+                Export CSV
+              </button>
+            ) : null}
           </>
         }
       />
 
-      <p style={{ color: "var(--color-text-secondary)", fontSize: 12, marginBottom: 20, marginTop: -8 }}>
-        Storage keys: <code style={{ fontSize: 11 }}>{orgScopedKey(WORKERS_KEY)}</code>, <code style={{ fontSize: 11 }}>{orgScopedKey(PROJECTS_KEY)}</code>
-      </p>
+      {useInlineHub && hubProject
+        ? renderProjectHub(hubProject, { embedded: true, onClose: () => setHubProject(null) })
+        : null}
 
+      {!(useInlineHub && hubProject) && showPeople ? (
+      <>
       <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
           <div style={{ fontWeight: 600 }}>Certification alerts</div>
@@ -444,9 +571,9 @@ export default function Workers() {
 
       <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
-          Workers ({workers.length})
+          People ({workers.length})
         </div>
-        {workers.length === 0 && <div style={{ color: "var(--color-text-secondary)" }}>No workers yet.</div>}
+        {workers.length === 0 && <div style={{ color: "var(--color-text-secondary)" }}>No people on the register yet.</div>}
         {workersPg.hasMore(workers) ? (
           <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
             Showing {Math.min(workersPg.cap, workers.length)} of {workers.length}
@@ -492,18 +619,31 @@ export default function Workers() {
           </div>
         ) : null}
       </div>
+      </>
+      ) : null}
 
+      {showProjects && !(useInlineHub && hubProject) ? (
       <div className="app-surface-card" style={ss.card}>
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
           Projects ({projects.length})
         </div>
-        {projects.length === 0 && <div style={{ color: "var(--color-text-secondary)" }}>No projects yet.</div>}
+        {projects.length === 0 ? (
+          <div style={{ color: "var(--color-text-secondary)", fontSize: 13, lineHeight: 1.5 }}>
+            No projects yet. Add a site, pick a playbook on save, then open the project hub for RAMS, survey and PTW drafts.
+          </div>
+        ) : (
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+            Click a project name to open its hub — documents, checklist and quick actions live there.
+          </p>
+        )}
         {projectsPg.hasMore(projects) ? (
           <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
             Showing {Math.min(projectsPg.cap, projects.length)} of {projects.length}
           </div>
         ) : null}
-        {projectsPg.visible(projects).map((p) => (
+        {projectsPg.visible(projects).map((p) => {
+          const nextAction = pickNextActionForProject(p, projectActionCtx);
+          return (
           <div
             key={p.id}
             style={{
@@ -519,7 +659,7 @@ export default function Workers() {
               type="button"
               className="app-project-row-open"
               style={{ flex: "1 1 200px", minWidth: 0, textAlign: "left" }}
-              onClick={() => setModal({ type: "project-dashboard", data: p })}
+              onClick={() => openProjectHub(p)}
             >
               <strong>{p.name || "Unnamed"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{p.site || p.address || ""}</div>
@@ -539,14 +679,33 @@ export default function Workers() {
                     Checklist {p.startupChecklist.filter((x) => x?.status !== "done").length} open
                   </span>
                 ) : null}
+                {nextAction ? (
+                  <span
+                    style={{
+                      ...ss.chip,
+                      fontSize: 11,
+                      background: nextAction.tone === "warn" ? "#FAEEDA" : "#E8F4FC",
+                      color: nextAction.tone === "warn" ? "#633806" : "#1e4976",
+                    }}
+                  >
+                    Next: {nextAction.label}
+                  </span>
+                ) : null}
               </div>
             </button>
-            <button type="button" style={ss.btn} onClick={() => setModal({ type: "project-dashboard", data: p })}>
-              Open
+            {nextAction ? (
+              <button type="button" style={{ ...ss.btn, borderColor: "#0d9488", color: "#0f766e" }} onClick={() => openProjectNextAction(nextAction)}>
+                {nextAction.label}
+              </button>
+            ) : null}
+            <button type="button" style={ss.btn} onClick={() => openProjectHub(p)}>
+              Open hub
             </button>
             <button type="button" style={ss.btn} onClick={() => setModal({ type: "project", data: p })}>
               Edit
             </button>
+            {mode === "all" ? (
+            <>
             <button
               type="button"
               style={ss.btn}
@@ -587,11 +746,14 @@ export default function Workers() {
             >
               Geo
             </button>
+            </>
+            ) : null}
             <button type="button" style={ss.btn} onClick={() => removeProject(p.id)}>
               Remove
             </button>
           </div>
-        ))}
+          );
+        })}
         {projectsPg.hasMore(projects) ? (
           <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
             <button type="button" style={ss.btn} onClick={projectsPg.showMore}>
@@ -600,8 +762,13 @@ export default function Workers() {
           </div>
         ) : null}
       </div>
+      ) : null}
     </div>
   );
+}
+
+export default function Workers() {
+  return <WorkersModule mode="all" />;
 }
 
 function workerFormShape(w) {
@@ -843,6 +1010,7 @@ function projectFormShape(p) {
     riskRegister: Array.isArray(p.riskRegister) ? p.riskRegister.slice(0, 12) : suggestProjectRisks(p),
     startupChecklist: Array.isArray(p.startupChecklist) ? p.startupChecklist.slice(0, 30) : [],
     permitDefaults: p.permitDefaults || { requiredPermitTypes: PROJECT_STARTERS[0].defaultPermitFlow },
+    playbookId: p.playbookId || "general",
   };
 }
 
@@ -988,7 +1156,10 @@ function ProjectForm({ item, onSave, onClose }) {
         Array.isArray(draft.startupChecklist) && draft.startupChecklist.length > 0
           ? draft.startupChecklist.slice(0, 30)
           : buildStartupChecklist(draft),
-    }, options);
+    }, {
+      ...options,
+      applyPlaybook: !item?.id ? draft.playbookId : options.applyPlaybook,
+    });
   };
 
   const geocode = async () => {
@@ -1292,6 +1463,51 @@ function ProjectForm({ item, onSave, onClose }) {
 
         {step === 5 ? (
           <>
+            <label style={{ ...ss.lbl, marginTop: 4 }}>Project playbook</label>
+            <p style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", margin: "0 0 8px" }}>
+              One click on save: creates RAMS, survey, PTW and method statement drafts for this site type.
+            </p>
+            <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+              {PROJECT_PLAYBOOKS.map((pb) => (
+                <label
+                  key={pb.id}
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border:
+                      form.playbookId === pb.id
+                        ? "1px solid #0d9488"
+                        : "1px solid var(--color-border-tertiary,#e5e5e5)",
+                    background: form.playbookId === pb.id ? "#E1F5EE" : "var(--color-background-primary,#fff)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="playbookId"
+                    checked={form.playbookId === pb.id}
+                    onChange={() => {
+                      const playbook = getPlaybook(pb.id);
+                      setForm((f) => ({
+                        ...f,
+                        playbookId: pb.id,
+                        industryStarter: playbook.industryStarter || f.industryStarter,
+                        permitDefaults: {
+                          ...(f.permitDefaults || {}),
+                          requiredPermitTypes: playbook.permitTypes || f.permitDefaults?.requiredPermitTypes,
+                        },
+                      }));
+                    }}
+                  />
+                  <span>
+                    <strong style={{ display: "block", fontSize: 13 }}>{pb.label}</strong>
+                    <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{pb.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
             <div style={{ fontSize: 13, marginBottom: 8 }}>
               <strong>Starter:</strong> {starterMeta.label}
             </div>

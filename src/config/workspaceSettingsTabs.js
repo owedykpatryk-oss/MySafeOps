@@ -8,6 +8,7 @@ export const WORKSPACE_SETTINGS_TABS = [
   { id: "invites", label: "Invites" },
   { id: "members", label: "Members" },
   { id: "organisation", label: "Organisation" },
+  { id: "automation", label: "Automation" },
   { id: "notifications", label: "Notifications" },
   { id: "developer", label: "Developer" },
 ];

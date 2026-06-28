@@ -849,7 +849,7 @@ export default function Timesheet() {
       <PageHero
         badgeText="TS"
         title="Timesheet"
-        lead="Track and approve worker hours per project. Workers and projects are the same lists as elsewhere in the workspace (local keys mysafeops_workers / mysafeops_projects — RAMS, permits, toolbox talks, etc.)."
+        lead="Track and approve hours per project. People and projects are separate modules — open People or Projects from the bottom bar."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button

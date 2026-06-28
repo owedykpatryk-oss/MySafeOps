@@ -8,6 +8,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import PageHero from "../components/PageHero";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { ensureProjectLinked } from "../utils/projectRequiredGate";
 
 const genId = () => `snag_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
@@ -89,7 +90,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
             <input value={form.ref} onChange={e=>set("ref",e.target.value)} placeholder="SN-001" style={ss.inp} />
           </div>
           <div>
-            <label style={ss.lbl}>Project</label>
+            <label style={ss.lbl}>Project *</label>
             <select value={form.projectId} onChange={e=>set("projectId",e.target.value)} style={ss.inp}>
               <option value="">— Select project —</option>
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -154,7 +155,11 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
 
         <div style={{ display:"flex", gap:8, justifyContent:"flex-end", flexWrap:"wrap" }}>
           <button onClick={onClose} style={ss.btn}>Cancel</button>
-          <button disabled={!form.title.trim()} onClick={()=>onSave(form)} style={{ ...ss.btnP, opacity:form.title.trim()?1:0.4 }}>
+          <button
+            disabled={!form.title.trim() || !form.projectId}
+            onClick={() => onSave(form)}
+            style={{ ...ss.btnP, opacity: form.title.trim() && form.projectId ? 1 : 0.4 }}
+          >
             {snag ? "Save changes" : "Add snag"}
           </button>
         </div>
@@ -286,6 +291,7 @@ export default function SnagRegister() {
   }, [filterStatus, filterPriority, filterProject, filterCategory, filterAssigned, search, sort]);
 
   const saveSnag = (snag) => {
+    if (!ensureProjectLinked({ projectId: snag.projectId, projects, moduleLabel: "snag" })) return;
     setSnags(prev => prev.find(s=>s.id===snag.id) ? prev.map(s=>s.id===snag.id?snag:s) : [snag,...prev]);
     setModal(null);
   };

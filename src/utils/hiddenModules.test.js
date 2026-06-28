@@ -18,7 +18,7 @@ describe("hiddenModules", () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem("mysafeops_orgId", "test-org");
-    saveOrgSettingsRaw({});
+    saveOrgSettingsRaw({ hiddenModules: [], hiddenModulesBootstrapped: true });
   });
 
   it("hides and unhides workspace modules", () => {

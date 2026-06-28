@@ -8,6 +8,8 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { escapeHtml, openPrintWindow } from "../utils/htmlEscape.js";
+import { MS_TEMPLATE_DEFS } from "./msStepTemplates";
+import { getMsStepTemplate } from "../utils/msOrgTemplates";
 
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
@@ -33,48 +35,6 @@ const PLANT_SUGGESTIONS = [
   "CAT scanner","Vacuum excavator","Generator","Pressure test pump",
   "Cable drum","Pipe threading machine","Torque wrench set",
 ];
-
-const STEP_TEMPLATES = {
-  mobilisation: [
-    "Arrive on site, sign in and complete site induction",
-    "Undertake site survey and identify any hazards in the work area",
-    "Set up compound/exclusion zone and erect appropriate signage",
-    "Issue permits to work and confirm isolation procedures with site manager",
-    "Brief all operatives on the method statement and RAMS before works commence",
-  ],
-  electrical: [
-    "Isolate electrical supply to work area and apply lock-off device",
-    "Test with approved voltage indicator to confirm circuit is dead (GS38)",
-    "Install warning notices at isolation point",
-    "Carry out work in accordance with BS 7671",
-    "Test installation on completion before re-energising",
-    "Re-energise supply under supervision and confirm correct operation",
-  ],
-  mechanical: [
-    "Confirm isolation of all services (electric, gas, water, steam) to work area",
-    "Apply LOTO (lock-out tag-out) to all energy isolation points",
-    "Drain down pipework and confirm system is pressure-free",
-    "Carry out mechanical works in accordance with design drawings",
-    "Pressure test pipework/system on completion; record test pressure and duration",
-    "Remove LOTO devices and restore services; confirm with site manager",
-  ],
-  height: [
-    "Erect and inspect access equipment (scaffold/MEWP) before use",
-    "Issue MEWP daily check sheet; record any defects",
-    "Brief operatives on exclusion zone and falling object precautions",
-    "Fit harness and connect to anchor point before leaving platform",
-    "Carry out work; lower all tools and materials in controlled manner",
-    "Dismantle access equipment; inspect for damage before storage",
-  ],
-  demobilisation: [
-    "Clear all waste materials and redundant equipment from work area",
-    "Clean work area to at least the same standard as found",
-    "Complete all as-built drawings and test/inspection records",
-    "Obtain sign-off from site manager / client representative",
-    "Return all permits and confirm systems restored to normal operation",
-    "Remove site compound; confirm all consumables correctly disposed",
-  ],
-};
 
 function PillToggle({ options, selected, onChange }) {
   return (
@@ -107,7 +67,7 @@ function StepEditor({ steps, setSteps }) {
 
   const applyTemplate = () => {
     if (!template) return;
-    const tmplSteps = STEP_TEMPLATES[template] || [];
+    const tmplSteps = getMsStepTemplate(template);
     const newSteps = tmplSteps.map((desc, i) => ({
       id: genId(), seq: steps.length + i + 1,
       title: desc.split(" ").slice(0,5).join(" ") + "…",
@@ -136,11 +96,9 @@ function StepEditor({ steps, setSteps }) {
       <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
         <select value={template} onChange={e=>setTemplate(e.target.value)} style={{ ...ss.inp, width:"auto", flex:1 }}>
           <option value="">Load step template…</option>
-          <option value="mobilisation">Mobilisation sequence</option>
-          <option value="electrical">Electrical isolation sequence</option>
-          <option value="mechanical">Mechanical LOTO sequence</option>
-          <option value="height">Work at height sequence</option>
-          <option value="demobilisation">Demobilisation sequence</option>
+          {MS_TEMPLATE_DEFS.map(({ key, label }) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
         </select>
         <button disabled={!template} onClick={applyTemplate} style={{ ...ss.btn, opacity:template?1:0.4 }}>
           Add template steps

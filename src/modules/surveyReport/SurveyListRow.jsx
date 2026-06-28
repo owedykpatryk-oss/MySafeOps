@@ -14,6 +14,9 @@ function SurveyListRow({
   groupCount,
   caps,
   pdfBusy,
+  bulkMode,
+  selected,
+  onToggleSelect,
   onEdit,
   onPdf,
   onPrint,
@@ -39,6 +42,11 @@ function SurveyListRow({
       <div
         className={`app-survey-list-row${enriched.isFinal ? " app-survey-list-row--final" : ""}${enriched.ready ? " app-survey-list-row--ready" : ""}`}
       >
+        {bulkMode ? (
+          <label style={{ display: "flex", alignItems: "center", paddingRight: 4 }}>
+            <input type="checkbox" checked={Boolean(selected)} onChange={() => onToggleSelect?.(r.id)} aria-label={`Select ${r.title || r.ref}`} />
+          </label>
+        ) : null}
         <SurveyProgressRing
           value={enriched.score}
           size={48}

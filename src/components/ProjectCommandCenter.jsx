@@ -123,8 +123,8 @@ function ProjectCommandCenter({
           type="button"
           className="app-command-center__cta"
           onClick={() => {
-            setWorkspaceNavTarget({ viewId: "workers", action: "createProject" });
-            openWorkspaceView({ viewId: "workers" });
+            setWorkspaceNavTarget({ viewId: "projects", action: "createProject" });
+            openWorkspaceView({ viewId: "projects" });
           }}
         >
           + Create first project

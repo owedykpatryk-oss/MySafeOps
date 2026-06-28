@@ -23,6 +23,11 @@ import {
   setWidgetVisible,
 } from "../utils/dashboardLayout";
 import { missingRequiredPermits } from "../modules/permits/permitProjectDefaults";
+import {
+  buildProjectActionContext,
+  listProjectsWithNextActions,
+  openProjectNextAction,
+} from "../utils/projectNextAction";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { readAudit, pushAudit } from "../utils/auditLog";
@@ -240,6 +245,7 @@ export default function AnalyticsDashboard() {
   const trainingRecords = useMemo(() => load("training_matrix", []), [dataRefreshTick]);
   const hotWork = useMemo(() => load("hot_work_register", []), [dataRefreshTick]);
   const surveyReports = useMemo(() => load("survey_reports", []), [dataRefreshTick]);
+  const methodStatements = useMemo(() => load("method_statements", []), [dataRefreshTick]);
   const geoPhotos = useMemo(() => load("geo_photos", []), [dataRefreshTick]);
   const allergenWindows = useMemo(() => load("allergen_changeover_windows", []), [dataRefreshTick]);
   const activeAllergens = useMemo(() => activeAllergenWindows(allergenWindows), [allergenWindows]);
@@ -433,8 +439,8 @@ export default function AnalyticsDashboard() {
       items.push({
         key: "certs-expired",
         severity: "high",
-        text: `${expiredCerts} worker certification(s) have expired — update competencies in Workers.`,
-        viewId: "workers",
+        text: `${expiredCerts} worker certification(s) have expired — update competencies in People.`,
+        viewId: "people",
       });
     }
     const overdueSnags = snags.filter((s) => s.dueDate && s.status === "open" && new Date(s.dueDate) < t).length;
@@ -471,8 +477,8 @@ export default function AnalyticsDashboard() {
       items.push({
         key: "projects-no-coords",
         severity: "med",
-        text: `${noCoords} active project(s) have no map coordinates — add postcode or KML in Workers.`,
-        viewId: "workers",
+        text: `${noCoords} active project(s) have no map coordinates — add postcode or KML in Projects.`,
+        viewId: "projects",
       });
     }
     const missingPermitProjects = activeProjects.filter((p) => missingRequiredPermits(p, permits).length > 0);
@@ -508,6 +514,16 @@ export default function AnalyticsDashboard() {
     return items;
   }, [workers, permits, rams, snags, trainingExpiring60, projects, hseDashboard]);
 
+  const projectsAttention = useMemo(() => {
+    const ctx = buildProjectActionContext({
+      rams,
+      surveys: surveyReports,
+      permits,
+      methodStatements,
+    });
+    return listProjectsWithNextActions(projects, ctx).slice(0, 8);
+  }, [projects, rams, surveyReports, permits, methodStatements]);
+
   const hotWorkActive = hotWork.filter((h) => h.status === "active").length;
   const org = getOrgSettings();
   const orgName = String(org.name || "My Organisation").trim() || "My Organisation";
@@ -538,7 +554,7 @@ export default function AnalyticsDashboard() {
       {
         title: "Headline counts",
         items: [
-          { label: "Workers", value: String(workers.length) },
+          { label: "People", value: String(workers.length) },
           { label: "Active projects", value: String(activeProjects) },
           { label: "RAMS documents", value: String(rams.length) },
           { label: "Permits (total)", value: String(permits.length) },
@@ -643,14 +659,14 @@ export default function AnalyticsDashboard() {
       {
         label: "Add at least one project",
         done: projects.length > 0,
-        next: "Workers → Add project",
-        cta: "workers",
+        next: "Projects → Add project",
+        cta: "projects",
       },
       {
-        label: "Add at least one worker",
+        label: "Add at least one person",
         done: workers.length > 0,
-        next: "Workers → Add worker",
-        cta: "workers",
+        next: "People → Add person",
+        cta: "people",
       },
       { label: "Create first RAMS or permit", done: rams.length > 0 || permits.length > 0, next: "RAMS or Permits tab" },
       {
@@ -764,13 +780,15 @@ export default function AnalyticsDashboard() {
 
   const runChecklistCta = (cta) => {
     if (cta === "organisation") openWorkspaceSettings({ tab: "organisation" });
-    else if (cta === "workers") openWorkspaceView({ viewId: "workers" });
+    else if (cta === "people" || cta === "workers") openWorkspaceView({ viewId: "people" });
+    else if (cta === "projects") openWorkspaceView({ viewId: "projects" });
     else if (cta === "invites") openWorkspaceSettings({ tab: "invites" });
   };
 
   const checklistCtaLabel = (cta) => {
     if (cta === "organisation") return "Open settings";
-    if (cta === "workers") return "Open workers";
+    if (cta === "people" || cta === "workers") return "Open people";
+    if (cta === "projects") return "Open projects";
     if (cta === "invites") return "Open invites";
     return "Open";
   };
@@ -803,7 +821,8 @@ export default function AnalyticsDashboard() {
     const site = [
       { viewId: "permits", label: "Permits" },
       { viewId: "rams", label: "RAMS" },
-      { viewId: "workers", label: "Workers" },
+      { viewId: "people", label: "People" },
+      { viewId: "projects", label: "Projects" },
       { viewId: "timesheets", label: "Timesheets" },
       { viewId: "daily-briefing", label: "Daily briefing" },
     ];
@@ -1284,6 +1303,43 @@ export default function AnalyticsDashboard() {
         </div>
       )}
 
+      {showWidget("projects_attention") && projectsAttention.length > 0 ? (
+        <div style={{ order: widgetSortOrder("projects_attention") }}>
+          <Section
+            title="Projects needing attention"
+            action={
+              <button
+                type="button"
+                onClick={() => openWorkspaceView({ viewId: "projects" })}
+                style={{ ...ms.btn, padding: "6px 12px", fontSize: 12, fontWeight: 600, borderColor: "#0d9488", color: "#0f766e" }}
+              >
+                All projects
+              </button>
+            }
+          >
+            <ul className="app-dashboard-action-strip__list" style={{ margin: 0, padding: 0, listStyle: "none" }}>
+              {projectsAttention.map(({ project, action }) => (
+                <li
+                  key={project.id}
+                  className="app-dashboard-action-strip__item"
+                  style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "8px 0", borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)" }}
+                >
+                  <span style={{ flex: "1 1 160px", fontWeight: 600, fontSize: 13 }}>{project.name || "Untitled project"}</span>
+                  <span style={{ flex: "1 1 200px", fontSize: 12, color: "var(--color-text-secondary)" }}>{action.label}</span>
+                  <button
+                    type="button"
+                    className="app-dashboard-action-strip__btn"
+                    onClick={() => openProjectNextAction(action)}
+                  >
+                    Do this
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Section>
+        </div>
+      ) : null}
+
       {showWidget("hse_registers") ? (
         <div style={{ order: widgetSortOrder("hse_registers") }}>
           <HseRegistersCard
@@ -1301,8 +1357,8 @@ export default function AnalyticsDashboard() {
         <p className="app-dashboard-section__hint">Tap a tile to open the related module.</p>
         <div className="app-dashboard-metrics-grid app-dashboard-stagger">
           {[
-            { label: "Workers", value: workers.length, sub: "registered", viewId: "workers", tone: "teal" },
-            { label: "Active projects", value: projects.filter((p) => !p.closed).length, sub: "projects", viewId: "workers", tone: "sky" },
+            { label: "People", value: workers.length, sub: "registered", viewId: "people", tone: "teal" },
+            { label: "Active projects", value: projects.filter((p) => !p.closed).length, sub: "projects", viewId: "projects", tone: "sky" },
             { label: "RAMS total", value: rams.length, sub: "documents", viewId: "rams", tone: "teal" },
             { label: "Permits", value: permits.length, sub: `${permitStats.active} active`, viewId: "permits", tone: "amber" },
             { label: "Open snags", value: snagStats.open, sub: `${snagStats.in_progress} in progress`, viewId: "snags", tone: "rose" },
@@ -1376,7 +1432,7 @@ export default function AnalyticsDashboard() {
           ) : null}
           {expiringCerts.length > 0 ? (
             <div className="app-dashboard-card__footer">
-              <button type="button" className="app-dashboard-card__btn" onClick={() => openWorkspaceView({ viewId: "workers" })}>
+              <button type="button" className="app-dashboard-card__btn" onClick={() => openWorkspaceView({ viewId: "projects" })}>
                 Open workers & certifications
               </button>
             </div>
@@ -1521,16 +1577,16 @@ export default function AnalyticsDashboard() {
         action={
           <button
             type="button"
-            onClick={() => openWorkspaceView({ viewId: "site-map" })}
+            onClick={() => openWorkspaceView({ viewId: "projects" })}
             style={{ ...ms.btn, padding: "6px 12px", fontSize: 12, fontWeight: 600, borderColor: "#0d9488", color: "#0f766e" }}
           >
-            Open site map
+            Open projects
           </button>
         }
       >
         {projects.length === 0 ? (
           <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-            No projects yet — add sites under <strong>Workers</strong>, then open the map to see everyone in one place.
+            No projects yet — add a site under <strong>Projects</strong>, then open the hub for RAMS, survey and PTW drafts.
           </p>
         ) : (
           <div className="app-dashboard-project-grid">
@@ -1551,14 +1607,21 @@ export default function AnalyticsDashboard() {
                     )}
                     <div className="app-dashboard-project-card__meta">
                       {hrs > 0 ? `${hrs} h logged this period (timesheets)` : "No hours logged yet"}
-                      {hasCoords ? " · On map" : ""}
+                      {hasCoords ? " · Location set" : ""}
                     </div>
                     <div className="app-dashboard-project-card__actions">
-                      <button type="button" className="app-dashboard-card__btn" onClick={() => openWorkspaceView({ viewId: "workers" })}>
-                        Workers
+                      <button
+                        type="button"
+                        className="app-dashboard-card__btn"
+                        onClick={() => {
+                          setWorkspaceNavTarget({ viewId: "projects", projectId: p.id, action: "viewProjectDashboard" });
+                          openWorkspaceView({ viewId: "projects" });
+                        }}
+                      >
+                        Open hub
                       </button>
-                      <button type="button" className="app-dashboard-card__btn app-dashboard-card__btn--inline" onClick={() => openWorkspaceView({ viewId: "site-map" })}>
-                        Map
+                      <button type="button" className="app-dashboard-card__btn app-dashboard-card__btn--inline" onClick={() => openWorkspaceView({ viewId: "projects" })}>
+                        Projects
                       </button>
                     </div>
                   </div>
@@ -1568,7 +1631,7 @@ export default function AnalyticsDashboard() {
         )}
         {projects.filter((p) => !p.closed).length > 8 ? (
           <p style={{ margin: "10px 0 0", fontSize: 11, color: "var(--color-text-secondary)" }}>
-            Showing 8 active projects — open <strong>Site map</strong> for the full list.
+            Showing 8 active projects — open <strong>Projects</strong> for site hubs and linked documents.
           </p>
         ) : null}
       </Section>

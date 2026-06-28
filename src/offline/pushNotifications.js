@@ -4,6 +4,7 @@
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
 import { workspaceDeepLink } from "../utils/appDeepLinks";
+import { staleSurveyReminderDays } from "../utils/orgAutomationRules";
 
 const VAPID_PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "").trim();
 const NOTIF_PREFS_KEY = "mysafeops_notif_prefs";
@@ -350,7 +351,7 @@ export function checkExpiryNotifications(opts = {}) {
             body,
             tag: id,
             requireInteraction: days <= 1,
-            data: { url: workspaceDeepLink("workers") },
+            data: { url: workspaceDeepLink("people") },
             actions: [{ action: "view", title: "View worker" }],
           });
           markSeen(id);
@@ -458,6 +459,54 @@ export function checkExpiryNotifications(opts = {}) {
       }
     });
   });
+
+  // ── Stale survey drafts ──
+  const staleDays = staleSurveyReminderDays();
+  if (staleDays > 0 && isNotificationTypeEnabled("survey_stale")) {
+    const surveys = loadJSON("survey_reports", []);
+    const projects = loadJSON("mysafeops_projects", []);
+    const projectNames = Object.fromEntries(projects.map((p) => [p.id, p.name || "Site"]));
+    const now = Date.now();
+    surveys.forEach((s) => {
+      if (String(s.status || "").toLowerCase() === "final") return;
+      const updated = s.updatedAt || s.createdAt;
+      if (!updated) return;
+      const ageDays = Math.floor((now - new Date(updated).getTime()) / (1000 * 60 * 60 * 24));
+      if (ageDays < staleDays) return;
+      const bucket = Math.floor(ageDays / staleDays);
+      const id = `survey_stale_${s.id}_${bucket}`;
+      if (wasRecentlySeen(id)) return;
+      const site = projectNames[s.projectId] || "project";
+      showLocalNotification("Survey draft idle", {
+        body: `"${s.title || s.ref || "Survey"}" on ${site} has not been updated for ${ageDays} day(s).`,
+        tag: id,
+        data: { url: workspaceDeepLink("survey-report", { reportId: s.id, projectId: s.projectId }) },
+      });
+      markSeen(id);
+    });
+  }
+
+  // ── Weekly workspace digest (Mondays) ──
+  if (isNotificationTypeEnabled("weekly_digest")) {
+    const day = new Date().getDay();
+    if (day === 1) {
+      const weekKey = new Date().toISOString().slice(0, 10);
+      const id = `weekly_digest_${weekKey}`;
+      if (!wasRecentlySeen(id)) {
+        const surveys = loadJSON("survey_reports", []);
+        const projects = loadJSON("mysafeops_projects", []).filter((p) => !p.closed);
+        const draftSurveys = surveys.filter((s) => s.status !== "final").length;
+        const finals = surveys.filter((s) => s.status === "final").length;
+        const activePermits = permits.filter((p) => p.status === "active").length;
+        showLocalNotification("Weekly site summary", {
+          body: `${projects.length} active project(s) · ${activePermits} active PTW · ${draftSurveys} survey draft(s) · ${finals} final survey(s).`,
+          tag: id,
+          data: { url: workspaceDeepLink("dashboard") },
+        });
+        markSeen(id);
+      }
+    }
+  }
 
   // ── RAMS review ──
   if (isNotificationTypeEnabled("rams_review")) ramsDocs.forEach(doc => {

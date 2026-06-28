@@ -196,6 +196,8 @@ export default function NotificationSettings() {
     { key: "permit_expiry",  label: "Permit expiry reminders",         sub: "14, 7 and 1 day before expiry" },
     { key: "permit_briefing",label: "Permit briefing pending alerts",   sub: "Active high-risk permits with missing briefing confirmation" },
     { key: "permit_rams_link",label: "Permit missing RAMS alerts",      sub: "Active permits without linked RAMS document" },
+    { key: "survey_stale",   label: "Stale survey draft alerts",       sub: "When a non-final survey has not been updated (days set in Automation rules)" },
+    { key: "weekly_digest",  label: "Weekly workspace digest",         sub: "Monday summary of projects, PTW and survey counts" },
     { key: "rams_review",    label: "RAMS review due reminders",       sub: "14 days before review date" },
     { key: "equip_inspect",  label: "Equipment inspection reminders",  sub: "14 and 7 days before due date" },
     { key: "timesheet",      label: "Timesheet approval reminders",    sub: "When timesheets are awaiting approval" },

@@ -13,6 +13,7 @@ import GeoPhotoCaptureModal from "../components/geoPhotos/GeoPhotoCaptureModal";
 import GeoPhotoDirectionMap from "../components/geoPhotos/GeoPhotoDirectionMap";
 import { geoPhotoPreset, geoPhotoPresetLabel, GEO_PHOTO_PRESETS } from "../utils/geoPhotoPresets";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { ensureProjectLinked } from "../utils/projectRequiredGate";
 import {
   downloadGeoJson,
   nextGeoPhotoReportOrder,
@@ -263,6 +264,7 @@ export default function GeoPhotos() {
 
   const handleSaveNew = useCallback(
     (row) => {
+      if (!ensureProjectLinked({ projectId: row.projectId, projects: activeProjects, moduleLabel: "geo-photo" })) return;
       const enriched = { ...row };
       if (enriched.includeInReport && enriched.projectId) {
         enriched.reportOrder = nextGeoPhotoReportOrder(photos, enriched.projectId);
@@ -274,7 +276,7 @@ export default function GeoPhotos() {
         module: "geo-photos",
       });
     },
-    [photos]
+    [photos, activeProjects]
   );
 
   const handleUpdate = (row) => {

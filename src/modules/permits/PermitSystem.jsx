@@ -19,6 +19,7 @@ import { buildPermitWarRoomStats, derivePermitStatus, permitEndIso, permitsHeatm
 import { nextLegalReviewDate } from "./permitLegalGovernance";
 import { runPermitQualityGates } from "./permitQualityGates";
 import { isFeatureEnabled } from "../../utils/featureFlags";
+import { projectRamsCheckForPermit } from "../../utils/orgAutomationRules";
 import { trackEvent } from "../../utils/telemetry";
 import PermitBuilder from "./components/PermitBuilder";
 import PermitBoardView from "./components/PermitBoard";
@@ -75,6 +76,7 @@ import {
   missingRequiredPermits,
   requiredPermitTypesForProject,
 } from "./permitProjectDefaults";
+import { projectHasRams } from "../../utils/projectPlaybooks";
 import {
   PROJECT_DRAWING_OBJECT_TYPES,
   drawingObjectLabel,
@@ -4368,14 +4370,17 @@ export default function PermitSystem() {
   }, [now, shiftBoundaryHours]);
   const activationGateForPermit = useCallback((p, allPermits, warnConflictOverride = p?.conflictWarnOverride || null, nowRef = now) => {
     const dependencyResult = evaluatePermitDependencies(p, allPermits, effectiveDependencyRules, { now: nowRef });
+    const pid = String(p?.projectId || "").trim();
+    const projectRamsCheck = projectRamsCheckForPermit(pid, projectHasRams(pid, ramsDocs));
     return evaluatePermitActionGate(p, "activate", {
       complianceResult: complianceForPermitGate(p),
       conflictResult: conflictResultForPermitGate(p, allPermits),
       warnConflictOverride,
       handoverRequirement: handoverRequirementForActivation(p, nowRef),
       dependencyResult,
+      projectRamsCheck,
     });
-  }, [now, complianceForPermitGate, conflictResultForPermitGate, handoverRequirementForActivation, effectiveDependencyRules]);
+  }, [now, complianceForPermitGate, conflictResultForPermitGate, handoverRequirementForActivation, effectiveDependencyRules, ramsDocs]);
   const blockedNowForPermit = useCallback((p, allPermits, nowRef = now) => {
     const status = derivePermitStatus(p, nowRef);
     if (status === "pending_review" || status === "ready_for_review") {
@@ -4425,7 +4430,9 @@ export default function PermitSystem() {
         window.alert(`Workflow policy blocks approve: ${permitCurrentWorkflowState(p)} -> approved.`);
         return prev;
       }
-      const gate = evaluatePermitActionGate(p, "approve", {});
+      const gate = evaluatePermitActionGate(p, "approve", {
+        projectRamsCheck: projectRamsCheckForPermit(p.projectId, projectHasRams(p.projectId, ramsDocs)),
+      });
       if (!gate.allowed) {
         window.alert(gate.message || "Cannot approve this permit.");
         return prev;
@@ -4455,6 +4462,7 @@ export default function PermitSystem() {
         conflictResult,
         warnConflictOverride,
         handoverRequirement: handoverRequirementForActivation(p, new Date()),
+        projectRamsCheck: projectRamsCheckForPermit(p.projectId, projectHasRams(p.projectId, ramsDocs)),
       });
     }
     if (!gate.allowed) {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense, memo, startTransition } from "react";
 import "../styles/workspace.css";
 import { useSearchParams } from "react-router-dom";
-import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Shield, Trash2, FileDown, EyeOff } from "lucide-react";
+import { BarChart2, FileCheck, ClipboardList, Users, Building2, Menu, Pin, Shield, Trash2, FileDown, EyeOff } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
@@ -295,10 +295,10 @@ function getInitialLayoutState() {
 
 const NAV_ICONS = {
   dashboard: BarChart2,
+  projects: Building2,
   permits: FileCheck,
   rams: ClipboardList,
-  workers: Users,
-  "site-map": MapPin,
+  people: Users,
   bin: Trash2,
   superadmin: Shield,
   more: Menu,
@@ -307,7 +307,7 @@ const NAV_ICONS = {
 /** Base bottom bar (More is last). Platform owner tab is inserted in layout when `isSuperadmin`. */
 const NAV_TABS = NAV_TAB_IDS.map((t) => ({
   id: t.id,
-  label: t.id === "workers" ? "Projects" : t.label,
+  label: t.label,
   icon: NAV_ICONS[t.id] || NAV_ICONS.more,
 }));
 

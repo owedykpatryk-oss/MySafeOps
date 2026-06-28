@@ -4732,6 +4732,15 @@
   font-family: "DM Sans", system-ui, sans-serif;
 }
 
+.app-project-dashboard--embedded {
+  width: 100%;
+  max-width: none;
+  margin: 0 0 1.5rem;
+  box-shadow: none;
+  border: 1px solid var(--color-border-tertiary, #e2e8f0);
+  border-radius: 12px;
+}
+
 .app-project-dashboard__header {
   display: flex;
   flex-wrap: wrap;

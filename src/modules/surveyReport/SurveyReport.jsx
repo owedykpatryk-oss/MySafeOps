@@ -40,7 +40,8 @@ import {
   compareSurveyReports,
   buildPas128SummaryStats,
 } from "./surveyReportHelpers";
-import { downloadSurveyReportGeoJson } from "./surveyReportExport";
+import { evaluateSurveyFinalGate, evaluateSurveyExportGate } from "../../utils/surveyCompletenessGates";
+import { defaultProjectIdForCreate, ensureProjectLinked } from "../../utils/projectRequiredGate";
 import {
   applyGeneratedNarratives,
   attachSitePlanSnapshots,
@@ -54,6 +55,7 @@ import {
   pickRamsForProject,
   prefillReportFromProject,
   projectsMissingReports,
+  pullScopeFromRams,
   runSmartFillAll,
   smartFillNextSteps,
   suggestLimitationKeys,
@@ -85,6 +87,11 @@ import {
   sortSurveyReports,
   summarizeSurveyReportList,
 } from "./surveyReportListUtils";
+import {
+  batchAppendFinalSurveysToRams,
+  batchAssignSurveysToProject,
+  persistSurveyAppendixToRams,
+} from "../../utils/documentPropagation";
 
 const STORAGE_KEY = "survey_reports";
 const SURVEY_DRAFT_KEY = "mysafeops_survey_report_editor_draft";
@@ -207,10 +214,21 @@ function openSurveyReportFromNav(t, { projs, existing, geo, rams, setModal }) {
     }
   }
   if (t?.action === "createReport") {
+    const pid = defaultProjectIdForCreate(projs);
+    if (!pid && !projs.length) {
+      setWorkspaceNavTarget({ viewId: "projects", action: "createProject" });
+      openWorkspaceView({ viewId: "projects" });
+      return true;
+    }
+    const base = blankSurveyReport({
+      ref,
+      title: pid ? `Survey report — ${projs.find((x) => x.id === pid)?.name || ref}` : `Survey report ${ref}`,
+      projectId: pid || "",
+    });
     setModal({
       type: "edit",
       isNew: true,
-      data: blankSurveyReport({ ref, title: `Survey report ${ref}` }),
+      data: pid ? prefillReportFromProject(base, projs.find((x) => x.id === pid), pickRamsForProject(rams, pid)) : base,
     });
     return true;
   }
@@ -758,6 +776,34 @@ function ReportEditor({
     }));
   };
 
+  const syncScopeFromRams = () => {
+    const rams = linkedRams || pickRamsForProject(ramsDocs, form.projectId);
+    if (!rams) {
+      window.alert("Link a RAMS document first, or create one from the project hub.");
+      return;
+    }
+    try {
+      const next = pullScopeFromRams(form, rams);
+      setForm({ ...next, updatedAt: new Date().toISOString() });
+    } catch (e) {
+      window.alert(e?.message || "Could not pull scope from RAMS.");
+    }
+  };
+
+  const appendSummaryToRams = () => {
+    if (form.status !== "final") {
+      window.alert("Mark the report final before appending findings to RAMS handover notes.");
+      return;
+    }
+    const allRams = load("rams_builder_docs", []);
+    try {
+      persistSurveyAppendixToRams(form, allRams);
+      window.alert("Survey summary appended to RAMS handover notes — open RAMS to review the client handover appendix.");
+    } catch (e) {
+      window.alert(e?.message || "Could not append to RAMS.");
+    }
+  };
+
   const onRamsLink = (ramsId) => {
     const doc = ramsDocs.find((d) => d.id === ramsId);
     setForm((f) => {
@@ -886,6 +932,16 @@ function ReportEditor({
     try {
       const wasDraft = form.status !== "final";
       let payload = preparePayload(extra);
+
+      if (payload.status === "final") {
+        const finalGate = evaluateSurveyFinalGate(payload);
+        if (!finalGate.allowed) {
+          setSaving(false);
+          window.alert(finalGate.message || "Cannot mark final — complete required items first.");
+          return;
+        }
+      }
+
       const q = surveyReportQuality(payload);
       if (!skipSmartFillPrompt && q.score < 50 && payload.status !== "final") {
         setSaving(false);
@@ -1065,11 +1121,11 @@ function ReportEditor({
                     style={ss.btn}
                     onClick={() => {
                       setWorkspaceNavTarget({
-                        viewId: "workers",
+                        viewId: "projects",
                         projectId: form.projectId,
                         action: "viewProjectDashboard",
                       });
-                      openWorkspaceView({ viewId: "workers" });
+                      openWorkspaceView({ viewId: "projects" });
                     }}
                   >
                     Project hub
@@ -1149,10 +1205,35 @@ function ReportEditor({
                   ))}
                 </select>
                 {linkedRams && (
-                  <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4 }}>
-                    Linked to RAMS: {linkedRams.title || linkedRams.documentTitle}
+                  <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                    <span>Linked to RAMS: {linkedRams.title || linkedRams.documentTitle}</span>
+                    {form.scopeFromRamsAt ? (
+                      <span style={{ color: "#27500A" }}>
+                        Applied scope from RAMS {new Date(form.scopeFromRamsAt).toLocaleString("en-GB")}
+                      </span>
+                    ) : null}
+                    <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32 }} onClick={syncScopeFromRams}>
+                      Sync from RAMS
+                    </button>
+                    {form.status === "final" ? (
+                      <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, borderColor: "#0d9488", color: "#0f766e" }} onClick={appendSummaryToRams}>
+                        Append to RAMS
+                      </button>
+                    ) : null}
                   </div>
                 )}
+                {!linkedRams && form.projectId && ramsDocs.some((d) => d.projectId === form.projectId) ? (
+                  <button
+                    type="button"
+                    style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, marginTop: 6 }}
+                    onClick={() => {
+                      const doc = pickRamsForProject(ramsDocs, form.projectId);
+                      if (doc) onRamsLink(doc.id);
+                    }}
+                  >
+                    Link project RAMS & pull scope
+                  </button>
+                ) : null}
               </div>
             )}
             <div style={{ marginTop: 14 }}>
@@ -1783,17 +1864,22 @@ function ReportEditor({
               type="button"
               style={{ ...ss.btn, borderColor: "#0d9488", color: "#0d9488" }}
               disabled={saving}
-              onClick={() =>
+              onClick={() => {
+                const gate = evaluateSurveyFinalGate(form);
+                if (!gate.allowed) {
+                  window.alert(gate.message || "Complete QA, calibration, sign-off and photos before marking final.");
+                  return;
+                }
                 setConfirmDialog({
                   title: "Mark report as final?",
                   message: "Issue date and sign-off will be set. You can still edit later if needed.",
                   onConfirm: () => {
-                    const finalized = finalizeReportRevision(form);
+                    const finalized = finalizeReportRevision({ ...form, status: "final" });
                     handleSave(finalized, { skipSmartFillPrompt: true });
                     setConfirmDialog(null);
                   },
-                })
-              }
+                });
+              }}
             >
               Mark final
             </button>
@@ -1836,6 +1922,8 @@ export default function SurveyReport() {
   const [listSearch, setListSearch] = useState("");
   const [listSort, setListSort] = useState("newest");
   const [listConfirm, setListConfirm] = useState(null);
+  const [listBulkMode, setListBulkMode] = useState(false);
+  const [selectedReportIds, setSelectedReportIds] = useState(() => new Set());
   const [pdfBusyId, setPdfBusyId] = useState("");
   const listPg = useRegisterListPaging(30);
 
@@ -1878,6 +1966,12 @@ export default function SurveyReport() {
     let rows = reports;
     if (filter === "draft") rows = rows.filter((r) => r.status !== "final");
     if (filter === "final") rows = rows.filter((r) => r.status === "final");
+    if (filter === "ready") {
+      rows = rows.filter((r) => {
+        if (r.status === "final") return false;
+        return surveyReportQuality(r).score >= 80;
+      });
+    }
     if (projectFilter) rows = rows.filter((r) => r.projectId === projectFilter);
     rows = filterSurveyReportsSearch(rows, listSearch);
     return sortSurveyReports(rows, listSort);
@@ -1897,6 +1991,7 @@ export default function SurveyReport() {
   const ramsById = useMemo(() => Object.fromEntries(ramsDocs.map((d) => [d.id, d])), [ramsDocs]);
 
   const persist = (report, isNew) => {
+    if (!ensureProjectLinked({ projectId: report.projectId, projects, moduleLabel: "survey report" })) return;
     setReports((prev) => {
       const i = prev.findIndex((x) => x.id === report.id);
       if (i >= 0) {
@@ -1945,6 +2040,11 @@ export default function SurveyReport() {
   }, [projectById, ramsById]);
 
   const exportPackForReport = useCallback(async (report) => {
+    const exportGate = evaluateSurveyExportGate(report);
+    if (!exportGate.allowed) {
+      alert(exportGate.message || "Export pack is not ready yet.");
+      return;
+    }
     const rams = ramsById[report.linkedRamsId];
     const project = projectById[report.projectId];
     setPdfBusyId(report.id);
@@ -1996,6 +2096,61 @@ export default function SurveyReport() {
     [projects, reports]
   );
 
+  const batchExportFinalPacks = useCallback(async () => {
+    const finals = reports.filter((r) => r.status === "final");
+    const eligible = finals.filter((r) => evaluateSurveyExportGate(r).allowed);
+    if (!eligible.length) {
+      alert("No final reports meet export pack requirements (PAS128 QL, utilities, QA, photos).");
+      return;
+    }
+    if (
+      eligible.length > 3 &&
+      !window.confirm(`Export PDF pack for ${eligible.length} final reports? This may take a minute.`)
+    ) {
+      return;
+    }
+    for (const report of eligible.slice(0, 20)) {
+      await exportPackForReport(report);
+    }
+  }, [reports, exportPackForReport]);
+
+  const toggleReportSelect = useCallback((id) => {
+    setSelectedReportIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const batchAppendToRams = useCallback(() => {
+    const { results } = batchAppendFinalSurveysToRams(reports, ramsDocs);
+    const ok = results.filter((r) => r.ok).length;
+    const skipped = results.filter((r) => !r.ok).length;
+    if (!ok) {
+      window.alert("No final reports could be appended — each needs a RAMS on its project.");
+      return;
+    }
+    window.alert(`Appended ${ok} survey summary(ies) to RAMS.${skipped ? ` ${skipped} skipped (no RAMS).` : ""}`);
+  }, [reports, ramsDocs]);
+
+  const batchAssignSelectedToProject = useCallback(() => {
+    const ids = [...selectedReportIds];
+    if (!ids.length) {
+      window.alert("Select reports first (turn on bulk select).");
+      return;
+    }
+    const targetId = projectFilter || window.prompt("Project ID to assign selected reports to:");
+    if (!targetId) return;
+    if (!projects.some((p) => p.id === targetId)) {
+      window.alert("Project not found.");
+      return;
+    }
+    setReports((prev) => batchAssignSurveysToProject(ids, targetId, prev));
+    setSelectedReportIds(new Set());
+    setListBulkMode(false);
+  }, [selectedReportIds, projectFilter, projects]);
+
   const batchCreateForProjects = () => {
     if (!missingProjectCount) return;
     setListConfirm({
@@ -2039,11 +2194,11 @@ export default function SurveyReport() {
 
   const handleProjectHub = useCallback((r) => {
     setWorkspaceNavTarget({
-      viewId: "workers",
+      viewId: "projects",
       projectId: r.projectId,
       action: "viewProjectDashboard",
     });
-    openWorkspaceView({ viewId: "workers" });
+    openWorkspaceView({ viewId: "projects" });
   }, []);
 
   const handleGeoJsonExport = useCallback((r) => {
@@ -2060,9 +2215,23 @@ export default function SurveyReport() {
 
   const createNew = () => {
     const ref = nextSurveyRef(reports);
+    const pid = defaultProjectIdForCreate(projects);
+    if (!projects.length) {
+      if (window.confirm("Survey reports must be linked to a project. Create a project first?")) {
+        setWorkspaceNavTarget({ viewId: "projects", action: "createProject" });
+        openWorkspaceView({ viewId: "projects" });
+      }
+      return;
+    }
+    const p = projects.find((x) => x.id === pid);
+    const base = blankSurveyReport({
+      ref,
+      title: p ? `Survey report — ${p.name || ref}` : `Survey report ${ref}`,
+      projectId: pid || "",
+    });
     setModal({
       type: "edit",
-      data: blankSurveyReport({ ref, title: `Survey report ${ref}` }),
+      data: pid ? prefillReportFromProject(base, p, pickRamsForProject(ramsDocs, pid)) : base,
       isNew: true,
     });
   };
@@ -2131,6 +2300,7 @@ export default function SurveyReport() {
         {[
           ["all", "All"],
           ["draft", "Drafts"],
+          ["ready", "Ready to finalise"],
           ["final", "Final"],
         ].map(([k, l]) => (
           <button
@@ -2172,6 +2342,31 @@ export default function SurveyReport() {
             Needs work ({listSummary.needsWork})
           </button>
         )}
+        {reports.filter((r) => r.status === "final").length > 0 ? (
+          <>
+          <button type="button" style={{ ...ss.btn, fontSize: 12 }} onClick={() => void batchExportFinalPacks()}>
+            Bulk export finals (PDF pack)
+          </button>
+          <button type="button" style={{ ...ss.btn, fontSize: 12 }} onClick={batchAppendToRams}>
+            Append finals to RAMS
+          </button>
+          </>
+        ) : null}
+        <button
+          type="button"
+          style={{ ...ss.btn, fontSize: 12, ...(listBulkMode ? { background: "#E6F1FB", color: "#0C447C" } : {}) }}
+          onClick={() => {
+            setListBulkMode((v) => !v);
+            setSelectedReportIds(new Set());
+          }}
+        >
+          {listBulkMode ? "Cancel bulk" : "Bulk select"}
+        </button>
+        {listBulkMode && selectedReportIds.size > 0 ? (
+          <button type="button" style={{ ...ss.btn, fontSize: 12, borderColor: "#0d9488", color: "#0f766e" }} onClick={batchAssignSelectedToProject}>
+            Assign {selectedReportIds.size} to project
+          </button>
+        ) : null}
         {missingProjectCount > 0 && (
           <button type="button" style={{ ...ss.btn, fontSize: 12, marginLeft: "auto" }} onClick={batchCreateForProjects}>
             Batch: {missingProjectCount} project{missingProjectCount === 1 ? "" : "s"} without report
@@ -2216,6 +2411,9 @@ export default function SurveyReport() {
                   groupCount={meta?.count || 0}
                   caps={caps}
                   pdfBusy={pdfBusyId === r.id}
+                  bulkMode={listBulkMode}
+                  selected={selectedReportIds.has(r.id)}
+                  onToggleSelect={toggleReportSelect}
                   onEdit={(rep) => openEditor(rep, false)}
                   onPdf={downloadPdfForReport}
                   onPrint={printReport}

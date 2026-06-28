@@ -51,7 +51,7 @@ export default function WorkplaceTodayCard({
             <span className="app-workplace-today__metric-hint">{permitsNeedAttention} need review</span>
           ) : null}
         </button>
-        <button type="button" className="app-workplace-today__metric" onClick={() => openWorkspaceView({ viewId: "workers" })}>
+        <button type="button" className="app-workplace-today__metric" onClick={() => openWorkspaceView({ viewId: "projects" })}>
           <span className="app-workplace-today__metric-value">{expiringCerts}</span>
           <span className="app-workplace-today__metric-label">Certs expiring ≤15d</span>
         </button>

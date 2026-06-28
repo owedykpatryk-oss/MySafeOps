@@ -8,6 +8,7 @@ const STORAGE_KEY = "mysafeops_dashboard_layout_v1";
 export const DASHBOARD_WIDGETS = [
   { id: "workplace_today", label: "Workplace today", default: true },
   { id: "action_needed", label: "Action needed", default: true },
+  { id: "projects_attention", label: "Projects needing attention", default: true },
   { id: "hse_registers", label: "HSE registers health", default: true },
   { id: "project_hub", label: "Project hub", default: true },
   { id: "project_command_center", label: "Project command center", default: true },

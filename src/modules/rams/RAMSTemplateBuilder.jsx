@@ -27,6 +27,7 @@ import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
+import { duplicateRamsToProject, batchDuplicateRamsToProject } from "../../utils/documentPropagation";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
@@ -4610,6 +4611,8 @@ function SavedList({
   onPrint,
   onPrintProjectPack,
   onDuplicate,
+  onDuplicateToProject,
+  onBulkDuplicateToProject,
   onExportJson,
   onExportCompliance,
   onToggleFavorite,
@@ -4620,6 +4623,8 @@ function SavedList({
   const projectMap = Object.fromEntries(projects.map(p=>[p.id,p.name]));
   const [q, setQ] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState({});
   const listPg = useRegisterListPaging(50);
   const favoriteCount = useMemo(() => ramsDocs.filter((d) => !!d.isFavorite).length, [ramsDocs]);
   const importRef = useRef(null);
@@ -4671,6 +4676,28 @@ function SavedList({
     listPg.reset();
   }, [q, favoritesOnly]);
 
+  const selectedDocs = useMemo(
+    () => filtered.filter((d) => selectedIds[d.id]),
+    [filtered, selectedIds]
+  );
+  const selectedCount = selectedDocs.length;
+
+  const toggleSelected = (docId) => {
+    setSelectedIds((prev) => {
+      const next = { ...prev };
+      if (next[docId]) delete next[docId];
+      else next[docId] = true;
+      return next;
+    });
+  };
+
+  const runBulkCopy = () => {
+    if (!selectedCount || !onBulkDuplicateToProject) return;
+    onBulkDuplicateToProject(selectedDocs);
+    setSelectedIds({});
+    setBulkMode(false);
+  };
+
   return (
     <div>
       <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"space-between", alignItems:"center", gap:12, marginBottom:16 }}>
@@ -4696,9 +4723,47 @@ function SavedList({
           <button type="button" onClick={() => importRef.current?.click()} style={ss.btn} title="Restore from a previously exported .json file">
             Import JSON
           </button>
+          {ramsDocs.length > 0 && onBulkDuplicateToProject ? (
+            <button
+              type="button"
+              onClick={() => {
+                setBulkMode((v) => !v);
+                setSelectedIds({});
+              }}
+              style={{ ...ss.btn, fontSize: 12, ...(bulkMode ? { borderColor: "#0d9488", color: "#0f766e" } : {}) }}
+            >
+              {bulkMode ? "Cancel bulk" : "Bulk select"}
+            </button>
+          ) : null}
           <button type="button" onClick={onNew} style={ss.btnO}>+ Build new RAMS</button>
         </div>
       </div>
+
+      {bulkMode && selectedCount > 0 ? (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            alignItems: "center",
+            marginBottom: 12,
+            padding: "10px 12px",
+            borderRadius: 8,
+            background: "#f0fdfa",
+            border: "0.5px solid #99f6e4",
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#0f766e" }}>
+            {selectedCount} selected
+          </span>
+          <button type="button" style={ss.btnP} onClick={runBulkCopy}>
+            Copy selected to project
+          </button>
+          <button type="button" style={ss.btn} onClick={() => setSelectedIds({})}>
+            Clear selection
+          </button>
+        </div>
+      ) : null}
 
       {ramsDocs.length===0 ? (
         <div
@@ -4743,6 +4808,17 @@ function SavedList({
                 containIntrinsicSize: "0 100px",
               }}
             >
+              {bulkMode ? (
+                <label style={{ display: "flex", alignItems: "flex-start", paddingTop: 2, flexShrink: 0, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!selectedIds[doc.id]}
+                    onChange={() => toggleSelected(doc.id)}
+                    aria-label={`Select ${doc.title || "RAMS"}`}
+                    style={{ width: 16, height: 16, marginTop: 2 }}
+                  />
+                </label>
+              ) : null}
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>
                   {doc.isFavorite ? "★ " : ""}{doc.title}
@@ -4798,6 +4874,11 @@ function SavedList({
                   Site Pack
                 </button>
                 <button type="button" onClick={()=>onDuplicate(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Duplicate</button>
+                {onDuplicateToProject ? (
+                  <button type="button" onClick={()=>onDuplicateToProject(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Copy as draft on another project">
+                    To project
+                  </button>
+                ) : null}
                 <button type="button" onClick={()=>onRename(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Quick rename document title">
                   Rename
                 </button>
@@ -5850,6 +5931,46 @@ export default function RAMSTemplateBuilder() {
     });
   };
 
+  const duplicateDocToProject = (doc) => {
+    const targets = projects.filter((p) => p.id !== doc.projectId);
+    if (!targets.length) {
+      pushToast({ type: "warn", title: "No target", message: "Add another project first." });
+      return;
+    }
+    const hint = targets.slice(0, 6).map((p) => `${p.name} → ${p.id}`).join("\n");
+    const targetId = window.prompt(`Copy RAMS to which project? Enter project ID:\n\n${hint}`);
+    if (!targetId?.trim()) return;
+    try {
+      const copy = duplicateRamsToProject(doc, targetId.trim(), projects);
+      pushToast({ type: "success", title: "Copied to project", message: copy.title });
+    } catch (e) {
+      pushToast({ type: "warn", title: "Copy failed", message: e?.message || "Could not copy." });
+    }
+  };
+
+  const bulkDuplicateToProject = (docs) => {
+    const targets = projects.filter((p) => p.id);
+    if (!targets.length) {
+      pushToast({ type: "warn", title: "No target", message: "Add a project first." });
+      return;
+    }
+    const hint = targets.slice(0, 6).map((p) => `${p.name} → ${p.id}`).join("\n");
+    const targetId = window.prompt(
+      `Copy ${docs.length} RAMS document(s) to which project? Enter project ID:\n\n${hint}`
+    );
+    if (!targetId?.trim()) return;
+    try {
+      const copies = batchDuplicateRamsToProject(docs, targetId.trim(), projects);
+      pushToast({
+        type: "success",
+        title: "Copied to project",
+        message: `${copies.length} RAMS document(s) copied as drafts.`,
+      });
+    } catch (e) {
+      pushToast({ type: "warn", title: "Copy failed", message: e?.message || "Could not copy." });
+    }
+  };
+
   const renameDoc = (doc) => {
     const current = String(doc?.title || "").trim();
     const next = prompt("Rename RAMS document title:", current || "RAMS");
@@ -6033,6 +6154,8 @@ export default function RAMSTemplateBuilder() {
           onPrint={printSavedDoc}
           onPrintProjectPack={printProjectPackForDoc}
           onDuplicate={duplicateDoc}
+          onDuplicateToProject={duplicateDocToProject}
+          onBulkDuplicateToProject={bulkDuplicateToProject}
           onExportJson={exportDocJson}
           onExportCompliance={exportComplianceSnapshot}
           onToggleFavorite={toggleFavoriteDoc}

@@ -2,8 +2,8 @@ import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavC
 import { permitReadinessForProject } from "../modules/permits/permitProjectDefaults";
 
 const PIPELINE = [
-  { key: "project", icon: "📍", label: "Project", hint: "Site & postcode", viewId: "workers", action: "viewProjectDashboard" },
-  { key: "intel", icon: "🌦️", label: "Site intel", hint: "Weather & A&E", viewId: "workers", action: "editProject" },
+  { key: "project", icon: "📍", label: "Project", hint: "Site & postcode", viewId: "projects", action: "viewProjectDashboard" },
+  { key: "intel", icon: "🌦️", label: "Site intel", hint: "Weather & A&E", viewId: "projects", action: "editProject" },
   { key: "plans", icon: "🗺️", label: "Plans", hint: "KML & markup", viewId: "project-drawings" },
   { key: "rams", icon: "⚠️", label: "RAMS", hint: "Method & hazards", viewId: "rams" },
   { key: "permit", icon: "📋", label: "Permit", hint: "PTW on site", viewId: "permits", action: "issueFromDefaults" },
@@ -28,20 +28,20 @@ export default function ProjectHubCard({ projects = [], rams = [], permits = [],
   };
 
   const openProject = (projectId, action = "viewProjectDashboard") => {
-    setWorkspaceNavTarget({ viewId: "workers", projectId, action });
-    openWorkspaceView({ viewId: "workers" });
+    setWorkspaceNavTarget({ viewId: "projects", projectId, action });
+    openWorkspaceView({ viewId: "projects" });
   };
 
   const openPipelineStep = (step) => {
     const pid = focusProject?.id;
     if (step.key === "project" && !pid) {
-      setWorkspaceNavTarget({ viewId: "workers", action: "createProject" });
-      openWorkspaceView({ viewId: "workers" });
+      setWorkspaceNavTarget({ viewId: "projects", action: "createProject" });
+      openWorkspaceView({ viewId: "projects" });
       return;
     }
     if (!pid && step.key !== "project") {
-      setWorkspaceNavTarget({ viewId: "workers", action: "createProject" });
-      openWorkspaceView({ viewId: "workers" });
+      setWorkspaceNavTarget({ viewId: "projects", action: "createProject" });
+      openWorkspaceView({ viewId: "projects" });
       return;
     }
     setWorkspaceNavTarget({
@@ -53,8 +53,8 @@ export default function ProjectHubCard({ projects = [], rams = [], permits = [],
   };
 
   const createProject = () => {
-    setWorkspaceNavTarget({ viewId: "workers", action: "createProject" });
-    openWorkspaceView({ viewId: "workers" });
+    setWorkspaceNavTarget({ viewId: "projects", action: "createProject" });
+    openWorkspaceView({ viewId: "projects" });
   };
 
   const pipelineWithCounts = PIPELINE.map((step) => {
@@ -105,7 +105,7 @@ export default function ProjectHubCard({ projects = [], rams = [], permits = [],
             + Create project
           </button>
           <div className="app-project-hub__actions">
-            <button type="button" className="app-project-hub__action" onClick={() => openWorkspaceView({ viewId: "workers" })}>
+            <button type="button" className="app-project-hub__action" onClick={() => openWorkspaceView({ viewId: "projects" })}>
               All projects
             </button>
             <button type="button" className="app-project-hub__action" onClick={() => openWorkspaceView({ viewId: "project-drawings" })}>

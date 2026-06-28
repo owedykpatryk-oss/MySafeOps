@@ -22,7 +22,7 @@ const btn = {
 };
 
 /**
- * Compact “site today” snapshot for the dashboard — jumps to Permits, RAMS, Workers, Site map.
+ * Compact “site today” snapshot for the dashboard — jumps to Permits, RAMS, People, Projects.
  */
 export default function SiteTodayCard({ workerCount, activePermits, ramsCount, todaySignIns }) {
   return (
@@ -59,7 +59,7 @@ export default function SiteTodayCard({ workerCount, activePermits, ramsCount, t
         </div>
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>{workerCount}</div>
-          <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)" }}>Workers</div>
+          <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)" }}>People</div>
         </div>
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>{todaySignIns}</div>
@@ -73,11 +73,11 @@ export default function SiteTodayCard({ workerCount, activePermits, ramsCount, t
         <button type="button" style={btn} onClick={() => openWorkspaceView({ viewId: "rams" })}>
           RAMS
         </button>
-        <button type="button" style={btn} onClick={() => openWorkspaceView({ viewId: "workers" })}>
-          Workers
+        <button type="button" style={btn} onClick={() => openWorkspaceView({ viewId: "people" })}>
+          People
         </button>
-        <button type="button" style={btn} onClick={() => openWorkspaceView({ viewId: "site-map" })}>
-          Site map
+        <button type="button" style={btn} onClick={() => openWorkspaceView({ viewId: "projects" })}>
+          Projects
         </button>
       </div>
     </div>

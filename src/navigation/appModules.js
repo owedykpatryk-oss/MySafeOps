@@ -4,10 +4,10 @@
 
 export const NAV_TAB_IDS = [
   { id: "dashboard", label: "Dashboard" },
+  { id: "projects", label: "Projects" },
   { id: "permits", label: "Permits" },
   { id: "rams", label: "RAMS" },
-  { id: "workers", label: "Workers & projects" },
-  { id: "site-map", label: "Site map" },
+  { id: "people", label: "People" },
   { id: "bin", label: "Bin" },
   { id: "more", label: "More" },
 ];
@@ -32,8 +32,7 @@ export function filterModuleTabsByQuery(tabs, rawQuery) {
 
 /** Flat list for More grid (order within sections below) */
 export const MORE_TABS = [
-  { id: "site-map", label: "Site map" },
-  { id: "project-drawings", label: "Project drawings" },
+  { id: "project-drawings", label: "Drawings" },
   { id: "method-statement", label: "Method statement" },
   { id: "cdm", label: "CDM compliance" },
   { id: "daily-briefing", label: "Daily briefing" },
@@ -115,7 +114,6 @@ export const MORE_SECTIONS = [
   {
     title: "Site operations",
     ids: [
-      "site-map",
       "project-drawings",
       "method-statement",
       "cdm",

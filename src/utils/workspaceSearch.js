@@ -122,10 +122,10 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     if (blob.includes(q)) {
       hits.push({
         key: `w-${w.id}`,
-        kind: "Worker",
-        label: w.name || "Unnamed worker",
-        subtitle: w.email || w.role || "Workers",
-        viewId: "workers",
+        kind: "Person",
+        label: w.name || "Unnamed",
+        subtitle: w.email || w.role || "People",
+        viewId: "people",
       });
     }
   });
@@ -139,7 +139,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
         kind: "Project",
         label: p.name || "Unnamed project",
         subtitle: p.address || "Projects / timesheets",
-        viewId: "workers",
+        viewId: "projects",
         projectId: p.id,
         action: "viewProjectDashboard",
       });

@@ -201,6 +201,23 @@ describe("surveyReportPrintHtml", () => {
     expect(html).toContain("Sign-off");
     expect(html).toContain("staticmap.openstreetmap.de");
   });
+
+  it("pullScopeFromRams copies scope and method from RAMS", async () => {
+    const { pullScopeFromRams } = await import("./surveyReportSmart.js");
+    const report = blankSurveyReport({ sections: { scope: "", methodology: "" } });
+    const rams = {
+      id: "rams_1",
+      surveyWorkType: "utility_mapping_survey",
+      surveyDeliverables: "PAS128 scope text",
+      surveyMethodStatement: "Method steps",
+      title: "Site RAMS",
+    };
+    const next = pullScopeFromRams(report, rams);
+    expect(next.sections.scope).toBe("PAS128 scope text");
+    expect(next.sections.methodology).toBe("Method steps");
+    expect(next.hseRefs.ramsExcerpt).toBe("Site RAMS");
+    expect(next.scopeFromRamsAt).toBeTruthy();
+  });
 });
 
 describe("surveyReportSmart professional prefill", () => {

@@ -37,6 +37,25 @@ describe("evaluatePermitActionGate", () => {
     expect(evaluatePermitActionGate(p, "approve", {}).allowed).toBe(true);
   });
 
+  it("blocks approve and activate when project has no RAMS", () => {
+    const p = {
+      type: "general",
+      status: "pending_review",
+      projectId: "proj_1",
+      signatures: [{ role: "issuer", signedBy: "AP", signedAt: "2026-04-01T10:00:00.000Z", note: "" }],
+    };
+    const opts = { projectRamsCheck: { required: true, hasRams: false } };
+    expect(evaluatePermitActionGate(p, "approve", opts).code).toBe("project_rams_required");
+    const activePermit = { ...signedPermit(), projectId: "proj_1" };
+    expect(
+      evaluatePermitActionGate(activePermit, "activate", {
+        ...opts,
+        complianceResult: { legalReady: true, hardStops: [] },
+        conflictResult: { outcome: "allow" },
+      }).code
+    ).toBe("project_rams_required");
+  });
+
   it("blocks activate when any required signature missing", () => {
     const p = {
       type: "general",

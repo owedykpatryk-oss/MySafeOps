@@ -6,9 +6,12 @@ import { lazy } from "react";
  */
 export const workspaceViewLoaders = {
   dashboard: () => import("../components/AnalyticsDashboard"),
+  projects: () => import("../modules/Projects"),
+  people: () => import("../modules/People"),
   permits: () => import("../modules/permits/PermitSystem"),
   rams: () => import("../modules/rams/RAMSTemplateBuilder"),
-  workers: () => import("../modules/Workers"),
+  /** @deprecated use `projects` — kept for old bookmarks */
+  workers: () => import("../modules/Projects"),
   bin: () => import("../modules/RecycleBin"),
   "site-map": () => import("../modules/SitePresenceMap"),
   "project-drawings": () => import("../modules/ProjectDrawingEditor"),

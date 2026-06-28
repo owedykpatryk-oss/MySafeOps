@@ -40,8 +40,46 @@ function parseHiddenFeatures(raw) {
   return [...new Set(raw.filter((id) => typeof id === "string" && VALID_FEATURE_IDS.has(id)))];
 }
 
+/** Hidden until Assist ships — routes kept for deep links only. */
+export const DEFERRED_MODULE_IDS = new Set(["ai-rams", "ai-toolbox", "ai-photo"]);
+
+/** Slim More menu for typical UK construction / surveying (bootstrap on first load). */
+export const CONSTRUCTION_SLIM_HIDDEN = [
+  "site-map",
+  "enterprise-readiness",
+  "client-acquisition",
+  "sales-enablement",
+  "high-care-access",
+  "cip-signoff",
+  "allergen-changeovers",
+  "gmp-deviations",
+  "incident-map",
+  "client-portal",
+  "subcontractor",
+  "analytics",
+  "monthly-report",
+  "templates",
+  "backup",
+  "audit",
+];
+
+function bootstrapHiddenModulesIfNeeded() {
+  if (typeof window === "undefined") return;
+  const raw = loadOrgSettingsRaw();
+  if (raw.hiddenModulesBootstrapped) return;
+  const merged =
+    raw.hiddenModules !== undefined
+      ? parseHiddenModules(raw.hiddenModules)
+      : [...new Set(CONSTRUCTION_SLIM_HIDDEN)];
+  saveOrgSettingsRaw({
+    ...raw,
+    hiddenModules: merged,
+    hiddenModulesBootstrapped: true,
+  });
+}
+
 export function getHiddenModuleIds() {
-  if (typeof window === "undefined") return [];
+  if (typeof window !== "undefined") bootstrapHiddenModulesIfNeeded();
   return parseHiddenModules(loadOrgSettingsRaw().hiddenModules);
 }
 
@@ -61,6 +99,7 @@ export function getFeatureLabel(featureId) {
 export function isModuleVisible(moduleId, { hiddenModules = getHiddenModuleIds() } = {}) {
   const id = String(moduleId || "");
   if (!id || MODULE_ALWAYS_VISIBLE.has(id)) return true;
+  if (DEFERRED_MODULE_IDS.has(id)) return false;
   return !hiddenModules.includes(id);
 }
 
@@ -126,6 +165,12 @@ function persistHidden(partial) {
 
 /** Quick presets for common org profiles (merge — does not remove existing hides). */
 export const HIDE_PRESETS = {
+  constructionSlim: {
+    label: "Slim More menu (construction)",
+    hint: "Hide site map, sales playbooks, food/pharma registers and duplicate analytics.",
+    hiddenFeatures: [],
+    hiddenModules: CONSTRUCTION_SLIM_HIDDEN,
+  },
   hideSurveyingRams: {
     label: "Hide RAMS surveying packs",
     hint: "For contractors not doing PAS128 / geodesy work.",

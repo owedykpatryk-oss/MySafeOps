@@ -290,10 +290,25 @@ function formatRoles(roles) {
  *   allowUnsignedSignatures?: boolean,
  *   handoverRequirement?: { required?: boolean, missing?: boolean, reason?: string },
  *   dependencyResult?: { required?: boolean, missing?: Array<{ requiresActiveType?: string, reason?: string }> }
+ *   projectRamsCheck?: { required?: boolean, hasRams?: boolean },
  * }} options
  */
 export function evaluatePermitActionGate(permit, action, options = {}) {
+  const projectRamsBlock = () => {
+    const pr = options.projectRamsCheck;
+    if (!pr || pr.required !== true || pr.hasRams === true) return null;
+    const pid = cleanText(permit?.projectId);
+    if (!pid) return null;
+    return {
+      allowed: false,
+      code: "project_rams_required",
+      message: "This project has no RAMS yet. Create RAMS for the site before issuing the permit.",
+    };
+  };
+
   if (action === "approve") {
+    const ramsBlock = projectRamsBlock();
+    if (ramsBlock) return ramsBlock;
     const chain = initSignatureChain(permit?.type, permit?.signatures);
     const issuer = chain.find((s) => s.role === "issuer");
     if (!issuer || !cleanText(issuer.signedAt)) {
@@ -307,6 +322,8 @@ export function evaluatePermitActionGate(permit, action, options = {}) {
     return { allowed: true };
   }
   if (action === "activate") {
+    const ramsBlock = projectRamsBlock();
+    if (ramsBlock) return ramsBlock;
     const unsigned = unsignedSignatureRoles(permit);
     if (unsigned.length && options.allowUnsignedSignatures !== true) {
       return {

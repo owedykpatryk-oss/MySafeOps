@@ -1,4 +1,4 @@
-import { applyHidePreset, HIDE_PRESETS } from "./hiddenModules";
+import { applyHidePreset, clearAllHidden, HIDE_PRESETS } from "./hiddenModules";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 
 /** Workspace profiles for any tenant — applies module visibility + optional sectors. */
@@ -33,13 +33,16 @@ export const INDUSTRY_PACKS = {
 export function applyIndustryPack(packKey) {
   const pack = INDUSTRY_PACKS[packKey];
   if (!pack) return;
-  if (pack.hidePreset && HIDE_PRESETS[pack.hidePreset]) {
+  if (packKey === "showEverything") {
+    clearAllHidden();
+  } else if (pack.hidePreset && HIDE_PRESETS[pack.hidePreset]) {
     applyHidePreset(pack.hidePreset);
   }
   const raw = loadOrgSettingsRaw();
   const next = {
     ...raw,
     industryPackId: packKey,
+    hiddenModulesBootstrapped: true,
   };
   if (Array.isArray(pack.industrySectors) && pack.industrySectors.length) {
     next.industrySectors = pack.industrySectors;

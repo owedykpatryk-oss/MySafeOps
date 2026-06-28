@@ -176,8 +176,13 @@ export default function WorkspaceOnboarding({ onComplete }) {
                 </button>
               </li>
               <li>
-                <button type="button" onClick={() => openWorkspaceView({ viewId: "workers" })}>
-                  Add workers & a project
+                <button type="button" onClick={() => openWorkspaceView({ viewId: "people" })}>
+                  Add people to your team
+                </button>
+              </li>
+              <li>
+                <button type="button" onClick={() => openWorkspaceView({ viewId: "projects" })}>
+                  Add your first project
                 </button>
               </li>
               <li>

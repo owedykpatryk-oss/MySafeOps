@@ -108,7 +108,9 @@ const MODULE_BLURBS = {
   dashboard: "Site today snapshot, onboarding checklist, KPIs, and quick actions.",
   permits: "Permit-to-work, board and timeline views, plan overlay, linked incidents.",
   rams: "RAMS builder, hazard library, PDF export, evidence packs, JSON import.",
-  workers: "Workers, certifications, projects (5-step wizard), CSV export.",
+  workers: "Legacy route — use Projects and People.",
+  projects: "Sites and jobs — 5-step wizard, playbooks, project hub.",
+  people: "Team members, certifications, CSV export.",
   bin: "Recently deleted register rows — restore or remove permanently.",
   "site-map": "Map of project sites, who is on site, boundaries, escape routes.",
   "project-drawings": "Upload plans; click to mark escape routes, zones, and emergency assets.",
@@ -252,8 +254,11 @@ export default function HelpAbout() {
           <button type="button" style={ss.btn} onClick={() => openWorkspaceSettings({ tab: "organisation" })}>
             Organisation
           </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "workers" })}>
-            Workers &amp; projects
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "projects" })}>
+            Projects
+          </button>
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "people" })}>
+            People
           </button>
           <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "permits" })}>
             Permits
@@ -282,10 +287,10 @@ export default function HelpAbout() {
             <strong>Organisation profile</strong> — logo, company details, brand colours, PDF footer lines.
           </li>
           <li style={{ marginBottom: 10 }}>
-            <strong>At least one project</strong> — site or job record (5-step wizard on Workers &amp; projects).
+            <strong>At least one project</strong> — site or job record (5-step wizard on Projects).
           </li>
           <li style={{ marginBottom: 10 }}>
-            <strong>Workers</strong> — people for briefings, RAMS, training, registers.
+            <strong>People</strong> — team members for briefings, RAMS, training, registers.
           </li>
           <li style={{ marginBottom: 10 }}>
             <strong>First RAMS or permit</strong> — document work before it starts on site.
@@ -320,6 +325,7 @@ export default function HelpAbout() {
               {t.id === "invites" && "Send email invites for colleagues to join."}
               {t.id === "members" && "Review roles: admin, supervisor, operative."}
               {t.id === "organisation" && "Branding, company info, PDF defaults, custom fields."}
+              {t.id === "automation" && "Gates for surveys, PTW, project links, and stale-draft reminders."}
               {t.id === "notifications" && "Browser reminders for expiring certs, permits, RAMS reviews."}
               {t.id === "developer" && "API keys and integration hooks (IT only)."}
             </li>
@@ -342,7 +348,7 @@ export default function HelpAbout() {
           New project wizard (5 steps)
         </h2>
         <p style={ss.p}>
-          <strong>Workers &amp; projects → Add project</strong>
+          <strong>Projects → Add project</strong>
         </p>
         <ol style={{ ...ss.ol, listStyle: "decimal" }}>
           <li style={{ marginBottom: 8 }}><strong>Name &amp; client</strong></li>
@@ -354,7 +360,7 @@ export default function HelpAbout() {
           <li style={{ marginBottom: 8 }}><strong>Permits &amp; go-live</strong> — required PTW types, health score, startup checklist.</li>
         </ol>
         <div style={ss.btnRow}>
-          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "workers" })}>
+          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "projects" })}>
             Open wizard
           </button>
         </div>

@@ -109,6 +109,15 @@ export function pickCloudBrandingPayload(raw) {
   if (s.onboardingWizardCompleted) {
     out.onboardingWizardCompleted = true;
   }
+  if (s.automationRules && typeof s.automationRules === "object") {
+    out.automationRules = s.automationRules;
+  }
+  if (s.surveyTypeTemplates && typeof s.surveyTypeTemplates === "object") {
+    out.surveyTypeTemplates = s.surveyTypeTemplates;
+  }
+  if (s.msStepTemplates && typeof s.msStepTemplates === "object") {
+    out.msStepTemplates = s.msStepTemplates;
+  }
   return out;
 }
 

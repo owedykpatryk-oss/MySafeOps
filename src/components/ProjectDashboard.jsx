@@ -8,6 +8,7 @@ import {
   fmtProjectWhen,
   healthTone,
 } from "../utils/projectDashboard";
+import { PROJECT_PLAYBOOKS, getPlaybook, buildMissingDocChecklist } from "../utils/projectPlaybooks";
 
 const EMPTY_ROUTES = [];
 
@@ -54,10 +55,14 @@ function DocRow({ title, meta, badge, onClick }) {
 export default function ProjectDashboard({
   project,
   workers = [],
+  allProjects = [],
+  embedded = false,
   onClose,
   onEdit,
   onRemove,
   onUpdateProject,
+  onApplyPlaybook,
+  onCloneDocuments,
 }) {
   const dash = useMemo(() => collectProjectDashboard(project, workers), [project, workers]);
 
@@ -79,7 +84,7 @@ export default function ProjectDashboard({
     if (!project?.id) return;
     setWorkspaceNavTarget({ viewId, projectId: project.id, action, ...extra });
     openWorkspaceView({ viewId });
-    onClose?.();
+    if (!embedded) onClose?.();
   };
 
   const toggleChecklistItem = (itemId) => {
@@ -89,22 +94,56 @@ export default function ProjectDashboard({
         ? { ...item, status: item.status === "done" ? "todo" : "done" }
         : item
     );
-    onUpdateProject({ ...project, startupChecklist: nextChecklist });
+    const doneCount = nextChecklist.filter((x) => x.status === "done").length;
+    const checklistHealth = nextChecklist.length
+      ? Math.round((doneCount / nextChecklist.length) * 100)
+      : project.healthScore;
+    onUpdateProject({
+      ...project,
+      startupChecklist: nextChecklist,
+      healthScore: Math.max(Number(project.healthScore) || 0, checklistHealth),
+    });
+  };
+
+  const runChecklistAction = (item) => {
+    const actionMap = {
+      create_rams: () => go("rams", "create"),
+      create_survey: () => go("survey-report", "createReport"),
+      create_permit: () => go("permits", "issueFromDefaults"),
+      create_ms: () => go("method-statement", "create"),
+      upload_plan: () => go("project-drawings"),
+    };
+    const fn = actionMap[item.actionType];
+    if (fn) fn();
+  };
+
+  const playbookMeta = project?.playbookId ? getPlaybook(project.playbookId) : null;
+  const missingDocItems = buildMissingDocChecklist(dash);
+  const showApplyPlaybook = missingDocItems.length > 0 && onApplyPlaybook;
+
+  const runCloneDocuments = () => {
+    if (!onCloneDocuments) return;
+    const targets = (allProjects || []).filter((p) => p.id !== project?.id && !p.closed);
+    if (!targets.length) {
+      window.alert("Add another active project to copy documents into.");
+      return;
+    }
+    const hint = targets.slice(0, 8).map((p) => `${p.name} (${p.id})`).join("\n");
+    const targetId = window.prompt(`Copy RAMS, surveys and method statements to which project?\n\n${hint}${targets.length > 8 ? "\n…" : ""}\n\nEnter target project ID:`);
+    if (!targetId?.trim()) return;
+    const includeGeoPhotos = window.confirm(
+      "Also copy geo-photos linked to this project?\n\nOK = yes · Cancel = documents only"
+    );
+    onCloneDocuments(project, targetId.trim(), { includeGeoPhotos });
   };
 
   if (!project) return null;
 
-  return (
-    <div
-      className="app-project-dashboard-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="project-dashboard-title"
-    >
-      <div className="app-project-dashboard">
+  const panel = (
+      <div className={`app-project-dashboard${embedded ? " app-project-dashboard--embedded" : ""}`}>
         <header className="app-project-dashboard__header">
           <div className="app-project-dashboard__header-main">
-            <p className="app-project-dashboard__eyebrow">Project dashboard</p>
+            <p className="app-project-dashboard__eyebrow">{embedded ? "Project hub" : "Project dashboard"}</p>
             <h1 id="project-dashboard-title" className="app-project-dashboard__title">
               {project.name || "Untitled project"}
             </h1>
@@ -122,6 +161,9 @@ export default function ProjectDashboard({
                 </span>
               ) : null}
               {project.closed ? <span className="app-project-dashboard__chip">Closed</span> : null}
+              {playbookMeta ? (
+                <span className="app-project-dashboard__chip">Playbook: {playbookMeta.label}</span>
+              ) : null}
               {dash.permitReady.required > 0 ? (
                 <span
                   className={`app-project-dashboard__chip ${
@@ -142,11 +184,16 @@ export default function ProjectDashboard({
             <button type="button" className="app-project-dashboard__btn" onClick={() => onEdit?.(project)}>
               Edit project
             </button>
+            {onCloneDocuments ? (
+              <button type="button" className="app-project-dashboard__btn" onClick={runCloneDocuments}>
+                Clone docs to project
+              </button>
+            ) : null}
             <button type="button" className="app-project-dashboard__btn app-project-dashboard__btn--danger" onClick={() => onRemove?.(project.id)}>
               Remove
             </button>
             <button type="button" className="app-project-dashboard__btn app-project-dashboard__btn--ghost" onClick={onClose}>
-              Close
+              {embedded ? "Back to list" : "Close"}
             </button>
           </div>
         </header>
@@ -183,7 +230,7 @@ export default function ProjectDashboard({
               </div>
               <div className="app-project-dashboard__stat">
                 <span className="app-project-dashboard__stat-val">{dash.plans.length}</span>
-                <span className="app-project-dashboard__stat-lbl">Plans</span>
+                <span className="app-project-dashboard__stat-lbl">Drawings</span>
               </div>
               <div className="app-project-dashboard__stat">
                 <span className="app-project-dashboard__stat-val">{dash.totals.documents}</span>
@@ -231,11 +278,28 @@ export default function ProjectDashboard({
           <button type="button" onClick={() => go("permits", "issueFromDefaults")}>+ Permit</button>
           <button type="button" onClick={() => go("survey-report", "createReport")}>+ Survey</button>
           <button type="button" onClick={() => go("geo-photos", "capture")}>Geo-photo</button>
-          <button type="button" onClick={() => go("project-drawings")}>Plans</button>
-          <button type="button" onClick={() => go("snags", "create")}>Snags</button>
+          <button type="button" onClick={() => go("project-drawings")}>Drawings</button>
           <button type="button" onClick={() => go("method-statement", "create")}>Method statement</button>
-          <button type="button" onClick={() => go("site-map")}>Site map</button>
+          <button type="button" onClick={() => go("snags", "create")}>Snags</button>
         </div>
+
+        {showApplyPlaybook ? (
+          <div className="app-project-dashboard__alert">
+            <strong>Missing site documents</strong> — apply a playbook to create RAMS, survey, PTW and MS drafts in one step.
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+              {PROJECT_PLAYBOOKS.slice(0, 3).map((pb) => (
+                <button
+                  key={pb.id}
+                  type="button"
+                  className="app-project-dashboard__alert-action"
+                  onClick={() => onApplyPlaybook(project, pb.id)}
+                >
+                  {pb.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {dash.totals.permitsMissingRams > 0 ? (
           <div className="app-project-dashboard__alert app-project-dashboard__alert--warn">
@@ -252,15 +316,29 @@ export default function ProjectDashboard({
             <ul className="app-project-dashboard__checklist-list">
               {checklist.slice(0, 12).map((item) => (
                 <li key={item.id} className={item.status === "done" ? "is-done" : ""}>
-                  <label className="app-project-dashboard__checklist-row">
-                    <input
-                      type="checkbox"
-                      checked={item.status === "done"}
-                      onChange={() => toggleChecklistItem(item.id)}
-                      disabled={!onUpdateProject}
-                    />
-                    <span>{item.text}</span>
-                  </label>
+                  {item.actionType ? (
+                    <div className="app-project-dashboard__checklist-row app-project-dashboard__checklist-row--action">
+                      <input
+                        type="checkbox"
+                        checked={item.status === "done"}
+                        onChange={() => toggleChecklistItem(item.id)}
+                        disabled={!onUpdateProject}
+                      />
+                      <button type="button" className="app-project-dashboard__checklist-action" onClick={() => runChecklistAction(item)}>
+                        {item.text}
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="app-project-dashboard__checklist-row">
+                      <input
+                        type="checkbox"
+                        checked={item.status === "done"}
+                        onChange={() => toggleChecklistItem(item.id)}
+                        disabled={!onUpdateProject}
+                      />
+                      <span>{item.text}</span>
+                    </label>
+                  )}
                 </li>
               ))}
             </ul>
@@ -441,6 +519,18 @@ export default function ProjectDashboard({
           </section>
         ) : null}
       </div>
+  );
+
+  if (embedded) return panel;
+
+  return (
+    <div
+      className="app-project-dashboard-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="project-dashboard-title"
+    >
+      {panel}
     </div>
   );
 }
