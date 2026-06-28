@@ -15,7 +15,7 @@ import {
 } from "../utils/certifications";
 import { pushRecycleBinItem } from "../utils/recycleBin";
 import { openWorkspaceView, setWorkspaceNavTarget, consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
-import { lookupUkPostcode } from "../utils/postcodeLookup";
+import { lookupUkPostcode, resolveUkPostcodeInput } from "../utils/postcodeLookup";
 import { getNearestHospital } from "../utils/nearestHospital";
 import { fetchWeatherSummary, fetchWeatherForDate } from "../utils/weatherSummary";
 import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDrawingImport";
@@ -883,7 +883,8 @@ function ProjectForm({ item, onSave, onClose }) {
   };
 
   const geocode = async () => {
-    const q = [form.postcode, form.address, form.site].filter(Boolean).join(", ").trim();
+    const postcodeQuery = resolveUkPostcodeInput(form.postcode, form.address, form.site);
+    const q = [postcodeQuery || form.postcode, form.address, form.site].filter(Boolean).join(", ").trim();
     if (!q) {
       setGeoMsg("Enter postcode or address first.");
       return;
@@ -891,8 +892,8 @@ function ProjectForm({ item, onSave, onClose }) {
     setGeoBusy(true);
     setGeoMsg("");
     try {
-      if (form.postcode?.trim()) {
-        const pc = await lookupUkPostcode(form.postcode);
+      if (postcodeQuery) {
+        const pc = await lookupUkPostcode(postcodeQuery);
         if (pc) {
           setForm((f) => ({
             ...f,
@@ -904,10 +905,12 @@ function ProjectForm({ item, onSave, onClose }) {
           setGeoMsg("Coordinates from UK postcode lookup.");
           return;
         }
+        setGeoMsg(`Postcode "${postcodeQuery}" not found — check spelling or try a fuller address.`);
+        return;
       }
       const c = await geocodeAddressNominatim(q);
       if (!c) {
-        setGeoMsg("No coordinates found — try a fuller address or UK postcode.");
+        setGeoMsg("No coordinates found — try a UK postcode (e.g. KT22 7SH) or fuller address.");
         return;
       }
       setForm((f) => ({ ...f, lat: String(c.lat), lng: String(c.lng) }));
@@ -922,11 +925,12 @@ function ProjectForm({ item, onSave, onClose }) {
   const enrichSite = async () => {
     let lat = parseFloat(String(form.lat ?? "").trim(), 10);
     let lng = parseFloat(String(form.lng ?? "").trim(), 10);
+    const postcodeQuery = resolveUkPostcodeInput(form.postcode, form.address, form.site);
     setEnrichBusy(true);
     setGeoMsg("");
     try {
-      if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && form.postcode?.trim()) {
-        const pc = await lookupUkPostcode(form.postcode);
+      if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && postcodeQuery) {
+        const pc = await lookupUkPostcode(postcodeQuery);
         if (pc) {
           lat = pc.lat;
           lng = pc.lng;
@@ -939,7 +943,11 @@ function ProjectForm({ item, onSave, onClose }) {
         }
       }
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        setGeoMsg("Set coordinates first (postcode lookup or geocode button).");
+        setGeoMsg(
+          postcodeQuery
+            ? `Postcode "${postcodeQuery}" not found — use Lookup coordinates first.`
+            : "Set coordinates first (postcode lookup or geocode button)."
+        );
         return;
       }
       const [weather, hospital] = await Promise.all([
@@ -1029,7 +1037,11 @@ function ProjectForm({ item, onSave, onClose }) {
               style={ss.inp}
               value={form.postcode || ""}
               onChange={(e) => set("postcode", e.target.value)}
-              placeholder="e.g. SW1A 1AA"
+              onBlur={(e) => {
+                const normalised = resolveUkPostcodeInput(e.target.value);
+                if (normalised && normalised !== form.postcode) set("postcode", normalised);
+              }}
+              placeholder="e.g. KT22 7SH or KT227SH"
               autoComplete="postal-code"
             />
             <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginTop: 4, marginBottom: 4 }}>

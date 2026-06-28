@@ -4,7 +4,14 @@
  */
 
 const UPSTREAM = "https://api.postcodes.io/postcodes";
-const POSTCODE_RE = /^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/i;
+const POSTCODE_RE = /^[A-Z]{1,2}\d{1,2}[A-Z]?\d[A-Z]{2}$/i;
+
+function normaliseCompact(raw) {
+  return String(raw || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
 
 const API_JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -24,7 +31,7 @@ export default async function handler(req, res) {
   }
 
   const raw = String(req.query?.code || req.query?.postcode || "").trim();
-  const compact = raw.replace(/\s/g, "").toUpperCase();
+  const compact = normaliseCompact(raw);
   if (!compact || !POSTCODE_RE.test(compact)) {
     return sendJson(res, 400, { error: "Invalid UK postcode" });
   }
