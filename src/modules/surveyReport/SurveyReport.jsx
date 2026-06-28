@@ -35,6 +35,7 @@ import {
   normalizeSurveyReport,
   surveyReportQuality,
   surveyTypeLabel,
+  surveyStaticMapThumbUrl,
   toggleArray,
   finalizeReportRevision,
   buildDuplicateReportPayload,
@@ -72,6 +73,9 @@ import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import ModuleOverlay from "../../components/ModuleOverlay";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import SurveyEditorStepNav from "./SurveyEditorStepNav";
+import SurveyEditorHero from "./SurveyEditorHero";
+import SurveyListStatsBar from "./SurveyListStatsBar";
+import SurveyProgressRing from "./SurveyProgressRing";
 import {
   groupSurveyReportsByProject,
   adjacentSurveyTab,
@@ -80,7 +84,6 @@ import {
   filterSurveyReportsSearch,
   sortSurveyReports,
   summarizeSurveyReportList,
-  firstIncompleteSurveyTab,
 } from "./surveyReportListUtils";
 import { getSurveyStatusMeta } from "../../utils/statusChipMeta";
 
@@ -144,18 +147,6 @@ const ss = {
     fontFamily: "DM Sans,sans-serif",
   }),
 };
-
-const EDITOR_TABS = [
-  { id: "details", label: "Details" },
-  { id: "scope", label: "Scope & method" },
-  { id: "professional", label: "Professional" },
-  { id: "weather", label: "Weather" },
-  { id: "records", label: "Records review" },
-  { id: "limitations", label: "Limitations" },
-  { id: "findings", label: "Findings" },
-  { id: "photos", label: "Photos" },
-  { id: "preview", label: "Print preview" },
-];
 
 function openSurveyReportFromNav(t, { projs, existing, geo, rams, setModal }) {
   if (t?.reportId) {
@@ -314,38 +305,6 @@ function CheckboxGrid({ options, selected, onToggle }) {
           <span>{o.label}</span>
         </label>
       ))}
-    </div>
-  );
-}
-
-function QualityBar({ report, onGoToTab }) {
-  const q = surveyReportQuality(report);
-  const colour = q.score >= 80 ? "#0d9488" : q.score >= 50 ? "#f59e0b" : "#ea580c";
-  const nextTab = firstIncompleteSurveyTab(report);
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontWeight: 500 }}>Report completeness</span>
-        <span style={{ color: colour, fontWeight: 600 }}>{q.score}%</span>
-      </div>
-      <div style={{ height: 6, background: "#e5e7eb", borderRadius: 3, overflow: "hidden" }}>
-        <div style={{ width: `${q.score}%`, height: "100%", background: colour, transition: "width 0.2s" }} />
-      </div>
-      {q.missing.length > 0 && (
-        <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 6 }}>
-          Still needed: {q.missing.slice(0, 5).join(" · ")}
-          {q.missing.length > 5 ? ` · +${q.missing.length - 5} more` : ""}
-        </div>
-      )}
-      {nextTab && onGoToTab ? (
-        <button
-          type="button"
-          className="app-survey-quality-next"
-          onClick={() => onGoToTab(nextTab)}
-        >
-          Continue: {EDITOR_TABS.find((t) => t.id === nextTab)?.label || nextTab}
-        </button>
-      ) : null}
     </div>
   );
 }
@@ -673,6 +632,10 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
 
   const deferredForm = useDeferredValue(form);
   const deferredFormProject = projects.find((p) => p.id === deferredForm.projectId);
+  const formProject = useMemo(
+    () => projects.find((p) => p.id === form.projectId),
+    [projects, form.projectId]
+  );
 
   const previewHtml = useMemo(() => {
     if (tab !== "preview") return "";
@@ -940,22 +903,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
   return (
     <ModuleOverlay>
       <div className="app-module-overlay__panel app-survey-report-editor" style={{ ...ss.card, maxWidth: 920 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 17 }}>{form.ref ? form.ref : "New survey report"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-              <StatusChip meta={getSurveyStatusMeta(form.status)} size="md" />
-              <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                {form.status === "final" ? "Read-only fields locked on save" : "Complete checklists then print or mark final"}
-              </span>
-            </div>
-          </div>
-          <button type="button" style={{ ...ss.btn, padding: "4px 10px" }} onClick={onClose}>
-            Close
-          </button>
-        </div>
-
-        <QualityBar report={form} onGoToTab={setTab} />
+        <SurveyEditorHero form={form} project={formProject} onClose={onClose} onGoToTab={setTab} />
 
         {(form.changesSincePrevious || []).length > 0 && (
           <div
@@ -993,6 +941,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
 
         <SurveyEditorStepNav tab={tab} report={form} onTabChange={setTab} />
 
+        <div key={tab} className="app-survey-tab-panel">
         {tab === "details" && (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10 }}>
@@ -1715,6 +1664,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
             printLabel="Print / save PDF"
           />
         )}
+        </div>
 
         <div className="app-sticky-footer app-sticky-footer--actions">
           {prevTab ? (
@@ -2003,19 +1953,7 @@ export default function SurveyReport() {
         }
       />
 
-      {reports.length > 0 ? (
-        <div className="app-survey-list-stats">
-          <span>
-            <strong>{listSummary.total}</strong> reports
-          </span>
-          <span>{listSummary.drafts} drafts</span>
-          <span>{listSummary.finals} final</span>
-          <span>Avg {listSummary.avgComplete}% complete</span>
-          {listSummary.needsWork > 0 ? (
-            <span className="app-survey-list-stats__warn">{listSummary.needsWork} need attention</span>
-          ) : null}
-        </div>
-      ) : null}
+      {reports.length > 0 ? <SurveyListStatsBar summary={listSummary} /> : null}
 
       <div className="app-survey-list-toolbar">
         <input
@@ -2117,24 +2055,43 @@ export default function SurveyReport() {
                     </div>
                   ) : null}
                   <div
-                    style={{
-                      ...ss.card,
-                      borderLeft: `4px solid ${r.status === "final" ? "#0d9488" : "#f59e0b"}`,
-                    }}
+                    className={`app-survey-list-row${r.status === "final" ? " app-survey-list-row--final" : ""}${q.score >= 80 ? " app-survey-list-row--ready" : ""}`}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                          <strong style={{ fontSize: 15 }}>{r.title || r.ref || "Untitled"}</strong>
-                          <StatusChip meta={getSurveyStatusMeta(r.status)} />
-                          <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{q.score}% complete</span>
+                    <SurveyProgressRing
+                      value={q.score}
+                      size={48}
+                      stroke={4}
+                      className="app-survey-list-row__ring"
+                      animate={false}
+                    />
+                    {(() => {
+                      const p = projects.find((pr) => pr.id === r.projectId);
+                      const thumb = surveyStaticMapThumbUrl(p?.lat, p?.lng);
+                      return thumb ? (
+                        <div className="app-survey-list-row__map">
+                          <img src={thumb} alt="" loading="lazy" />
                         </div>
-                        <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
-                          {r.ref} · {r.surveyDate}
-                          {r.surveyType ? ` · ${surveyTypeLabel(r.surveyType)}` : ""}
+                      ) : null;
+                    })()}
+                    <div className="app-survey-list-row__body">
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <strong style={{ fontSize: 15 }}>{r.title || r.ref || "Untitled"}</strong>
+                            <StatusChip meta={getSurveyStatusMeta(r.status)} />
+                            {q.score >= 80 && r.status !== "final" ? (
+                              <span className="app-survey-list-row__ready-pill">Ready to finalise</span>
+                            ) : null}
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                            {r.ref} · {r.surveyDate}
+                            {r.surveyType ? ` · ${surveyTypeLabel(r.surveyType)}` : ""}
+                          </div>
+                          <div className="app-survey-list-row__meter" aria-hidden>
+                            <div className="app-survey-list-row__meter-fill" style={{ width: `${q.score}%` }} />
+                          </div>
                         </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-start" }}>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-start" }}>
                         <button type="button" style={ss.btnP} onClick={() => setModal({ type: "edit", data: r, isNew: false })}>
                           Edit
                         </button>
@@ -2229,6 +2186,7 @@ export default function SurveyReport() {
                           </button>
                         )}
                       </div>
+                    </div>
                     </div>
                   </div>
                 </div>

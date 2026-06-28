@@ -5,6 +5,7 @@ import {
   sortSurveyReports,
   summarizeSurveyReportList,
   surveyTabIsComplete,
+  surveyOverallTabProgress,
 } from "./surveyReportListUtils";
 
 describe("surveyReportListUtils", () => {
@@ -44,5 +45,19 @@ describe("surveyReportListUtils", () => {
     });
     expect(surveyTabIsComplete(r, "details")).toBe(true);
     expect(surveyTabIsComplete(blankSurveyReport(), "details")).toBe(false);
+  });
+
+  it("tracks overall tab progress", () => {
+    const r = blankSurveyReport({
+      title: "Test",
+      surveyDate: "2026-04-01",
+      surveyor: "Sam",
+      surveyType: "utility_mapping_survey",
+      siteAddress: "Site 1",
+    });
+    const p = surveyOverallTabProgress(r);
+    expect(p.done).toBeGreaterThan(0);
+    expect(p.total).toBe(9);
+    expect(p.pct).toBeGreaterThan(0);
   });
 });

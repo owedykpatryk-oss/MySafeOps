@@ -13,6 +13,7 @@ export default function SurveyEditorStepNav({ tab, report, onTabChange }) {
       <div className="app-survey-editor-nav__groups" role="tablist" aria-label="Report sections">
         {SURVEY_EDITOR_GROUPS.map((g) => {
           const prog = surveyGroupCompletion(report, g.id);
+          const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
           return (
             <button
               key={g.id}
@@ -26,7 +27,10 @@ export default function SurveyEditorStepNav({ tab, report, onTabChange }) {
               }}
             >
               <span className="app-survey-editor-nav__group-top">
-                <span className="app-survey-editor-nav__group-label">{g.label}</span>
+                <span className="app-survey-editor-nav__group-label">
+                  {prog.complete ? <span className="app-survey-editor-nav__check" aria-hidden>✓</span> : null}
+                  {g.label}
+                </span>
                 <span
                   className={`app-survey-editor-nav__group-badge${prog.complete ? " app-survey-editor-nav__group-badge--done" : ""}`}
                 >
@@ -34,6 +38,9 @@ export default function SurveyEditorStepNav({ tab, report, onTabChange }) {
                 </span>
               </span>
               <span className="app-survey-editor-nav__group-hint">{g.hint}</span>
+              <span className="app-survey-editor-nav__group-meter" aria-hidden>
+                <span className="app-survey-editor-nav__group-meter-fill" style={{ width: `${pct}%` }} />
+              </span>
             </button>
           );
         })}

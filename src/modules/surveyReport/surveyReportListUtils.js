@@ -117,4 +117,10 @@ export function firstIncompleteSurveyTab(report) {
   return SURVEY_EDITOR_TABS.find((t) => !surveyTabIsComplete(report, t.id))?.id || null;
 }
 
+export function surveyOverallTabProgress(report) {
+  const done = SURVEY_EDITOR_TABS.filter((t) => surveyTabIsComplete(report, t.id)).length;
+  const total = SURVEY_EDITOR_TABS.length;
+  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+
 export { SURVEY_EDITOR_GROUPS, surveyEditorGroupForTab };

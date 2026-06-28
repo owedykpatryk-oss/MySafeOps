@@ -165,6 +165,14 @@ export function surveyTypeLabel(key) {
   return labelOf(SURVEY_TYPES, key);
 }
 
+/** Small static map thumbnail for editor hero (OpenStreetMap.de). */
+export function surveyStaticMapThumbUrl(lat, lng) {
+  const la = Number(lat);
+  const lo = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) return "";
+  return `https://staticmap.openstreetmap.de/staticmap.php?center=${la},${lo}&zoom=14&size=96x96&markers=${la},${lo},red-pushpin`;
+}
+
 /** Completeness score 0–100 and list of missing items for quality nudges. */
 export function surveyReportQuality(report) {
   const r = normalizeSurveyReport(report);
