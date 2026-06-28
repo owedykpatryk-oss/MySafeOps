@@ -39,6 +39,7 @@ import {
   finalizeReportRevision,
   buildDuplicateReportPayload,
   compareSurveyReports,
+  buildPas128SummaryStats,
 } from "./surveyReportHelpers";
 import { downloadSurveyReportHtml, openSurveyReportPrint, buildSurveyReportHtml } from "./surveyReportPrintHtml";
 import { downloadSurveyReportPdf } from "./surveyReportPdf";
@@ -71,10 +72,21 @@ import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import ModuleOverlay from "../../components/ModuleOverlay";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import SurveyEditorStepNav from "./SurveyEditorStepNav";
-import { groupSurveyReportsByProject } from "./surveyReportEditorNav";
+import {
+  groupSurveyReportsByProject,
+  adjacentSurveyTab,
+} from "./surveyReportEditorNav";
+import {
+  filterSurveyReportsSearch,
+  sortSurveyReports,
+  summarizeSurveyReportList,
+  firstIncompleteSurveyTab,
+} from "./surveyReportListUtils";
 import { getSurveyStatusMeta } from "../../utils/statusChipMeta";
 
 const STORAGE_KEY = "survey_reports";
+const SURVEY_DRAFT_KEY = "mysafeops_survey_report_editor_draft";
+const SURVEY_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const ss = {
   ...ms,
@@ -306,12 +318,13 @@ function CheckboxGrid({ options, selected, onToggle }) {
   );
 }
 
-function QualityBar({ report }) {
+function QualityBar({ report, onGoToTab }) {
   const q = surveyReportQuality(report);
   const colour = q.score >= 80 ? "#0d9488" : q.score >= 50 ? "#f59e0b" : "#ea580c";
+  const nextTab = firstIncompleteSurveyTab(report);
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontWeight: 500 }}>Report completeness</span>
         <span style={{ color: colour, fontWeight: 600 }}>{q.score}%</span>
       </div>
@@ -320,9 +333,19 @@ function QualityBar({ report }) {
       </div>
       {q.missing.length > 0 && (
         <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 6 }}>
-          Still needed: {q.missing.join(" · ")}
+          Still needed: {q.missing.slice(0, 5).join(" · ")}
+          {q.missing.length > 5 ? ` · +${q.missing.length - 5} more` : ""}
         </div>
       )}
+      {nextTab && onGoToTab ? (
+        <button
+          type="button"
+          className="app-survey-quality-next"
+          onClick={() => onGoToTab(nextTab)}
+        >
+          Continue: {EDITOR_TABS.find((t) => t.id === nextTab)?.label || nextTab}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -583,6 +606,47 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
   const [cadBusy, setCadBusy] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const autoFillRan = useRef(false);
+  const draftPromptRan = useRef(false);
+
+  useEffect(() => {
+    if (draftPromptRan.current) return;
+    draftPromptRan.current = true;
+    try {
+      const raw = sessionStorage.getItem(SURVEY_DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (!draft?.form?.id || draft.form.id !== report.id) return;
+      const age = Date.now() - (draft.savedAt || 0);
+      if (age < 0 || age > SURVEY_DRAFT_MAX_AGE_MS) {
+        sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+        return;
+      }
+      const when = draft.savedAt
+        ? new Date(draft.savedAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })
+        : "recently";
+      if (window.confirm(`Restore unsaved survey report draft from ${when}?`)) {
+        setForm(normalizeSurveyReport(draft.form));
+      } else {
+        sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [report.id]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        sessionStorage.setItem(
+          SURVEY_DRAFT_KEY,
+          JSON.stringify({ form, savedAt: Date.now(), reportId: form.id })
+        );
+      } catch {
+        /* quota */
+      }
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [form]);
 
   const projectPlansForForm = useMemo(
     () => (form.projectId ? plansForProject(form.projectId, projectPlans) : []),
@@ -804,6 +868,9 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
   };
 
   const linkedRams = ramsDocs.find((d) => d.id === form.linkedRamsId);
+  const pas128Stats = useMemo(() => buildPas128SummaryStats(form), [form]);
+  const prevTab = adjacentSurveyTab(tab, "prev");
+  const nextTabNav = adjacentSurveyTab(tab, "next");
 
   const printExtras = useMemo(() => {
     const project = projects.find((p) => p.id === form.projectId);
@@ -860,6 +927,11 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
         }
       }
       onSave(payload);
+      try {
+        sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+      } catch {
+        /* ignore */
+      }
     } finally {
       setSaving(false);
     }
@@ -867,7 +939,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
 
   return (
     <ModuleOverlay>
-      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 760 }}>
+      <div className="app-module-overlay__panel app-survey-report-editor" style={{ ...ss.card, maxWidth: 920 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
           <div>
             <div style={{ fontWeight: 600, fontSize: 17 }}>{form.ref ? form.ref : "New survey report"}</div>
@@ -883,7 +955,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
           </button>
         </div>
 
-        <QualityBar report={form} />
+        <QualityBar report={form} onGoToTab={setTab} />
 
         {(form.changesSincePrevious || []).length > 0 && (
           <div
@@ -919,7 +991,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
           onApply={(next) => setForm({ ...next, updatedAt: new Date().toISOString() })}
         />
 
-        <SurveyEditorStepNav tab={tab} onTabChange={setTab} />
+        <SurveyEditorStepNav tab={tab} report={form} onTabChange={setTab} />
 
         {tab === "details" && (
           <>
@@ -964,6 +1036,61 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
                 <label style={ss.lbl}>Site address</label>
                 <input style={ss.inp} value={form.siteAddress} onChange={(e) => set("siteAddress", e.target.value)} />
               </div>
+              {form.projectId ? (
+                <div className="app-survey-editor-quicklinks" style={{ gridColumn: "1 / -1" }}>
+                  <button
+                    type="button"
+                    style={ss.btn}
+                    onClick={() => {
+                      setWorkspaceNavTarget({
+                        viewId: "workers",
+                        projectId: form.projectId,
+                        action: "viewProjectDashboard",
+                      });
+                      openWorkspaceView({ viewId: "workers" });
+                    }}
+                  >
+                    Project hub
+                  </button>
+                  {linkedRams ? (
+                    <button
+                      type="button"
+                      style={ss.btn}
+                      onClick={() => {
+                        setWorkspaceNavTarget({
+                          viewId: "rams",
+                          ramsId: form.linkedRamsId,
+                          projectId: form.projectId,
+                          action: "edit",
+                        });
+                        openWorkspaceView({ viewId: "rams" });
+                      }}
+                    >
+                      Open RAMS
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    style={ss.btn}
+                    onClick={() => {
+                      setWorkspaceNavTarget({ viewId: "geo-photos", projectId: form.projectId });
+                      openWorkspaceView({ viewId: "geo-photos" });
+                    }}
+                  >
+                    Geo-photos
+                  </button>
+                  <button
+                    type="button"
+                    style={ss.btn}
+                    onClick={() => {
+                      setWorkspaceNavTarget({ viewId: "project-drawings", projectId: form.projectId });
+                      openWorkspaceView({ viewId: "project-drawings" });
+                    }}
+                  >
+                    Plans
+                  </button>
+                </div>
+              ) : null}
               <div>
                 <label style={ss.lbl}>Survey type *</label>
                 <select style={ss.inp} value={form.surveyType} onChange={(e) => set("surveyType", e.target.value)}>
@@ -1402,6 +1529,19 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
 
         {tab === "findings" && (
           <>
+            {pas128Stats ? (
+              <div className="app-survey-pas128-summary">
+                <strong>Utility schedule summary</strong>
+                <span>{pas128Stats.total} utilities</span>
+                <span>{pas128Stats.withDepth} with depth</span>
+                <span>{pas128Stats.withGeoPhoto} geo-linked</span>
+                {Object.entries(pas128Stats.byQl).map(([ql, n]) => (
+                  <span key={ql}>
+                    {ql}: {n}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             <CadImportPanel
               cadImport={form.cadImport}
               utilitiesTable={form.utilitiesTable}
@@ -1577,6 +1717,18 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
         )}
 
         <div className="app-sticky-footer app-sticky-footer--actions">
+          {prevTab ? (
+            <button type="button" style={ss.btn} onClick={() => setTab(prevTab)}>
+              ← Previous
+            </button>
+          ) : (
+            <span />
+          )}
+          {nextTabNav ? (
+            <button type="button" style={ss.btn} onClick={() => setTab(nextTabNav)}>
+              Next →
+            </button>
+          ) : null}
           <button type="button" style={ss.btn} onClick={() => onPrint(form, linkedRams)}>
             Preview / print
           </button>
@@ -1638,9 +1790,15 @@ export default function SurveyReport() {
   const [modal, setModal] = useState(null);
   const [filter, setFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("");
+  const [listSearch, setListSearch] = useState("");
+  const [listSort, setListSort] = useState("newest");
   const [listConfirm, setListConfirm] = useState(null);
   const [pdfBusyId, setPdfBusyId] = useState("");
   const listPg = useRegisterListPaging(30);
+
+  useEffect(() => {
+    listPg.reset();
+  }, [filter, projectFilter, listSearch, listSort]);
 
   useEffect(() => {
     const t = consumeWorkspaceNavTarget();
@@ -1678,8 +1836,11 @@ export default function SurveyReport() {
     if (filter === "draft") rows = rows.filter((r) => r.status !== "final");
     if (filter === "final") rows = rows.filter((r) => r.status === "final");
     if (projectFilter) rows = rows.filter((r) => r.projectId === projectFilter);
-    return rows;
-  }, [reports, filter, projectFilter]);
+    rows = filterSurveyReportsSearch(rows, listSearch);
+    return sortSurveyReports(rows, listSort);
+  }, [reports, filter, projectFilter, listSearch, listSort]);
+
+  const listSummary = useMemo(() => summarizeSurveyReportList(reports), [reports]);
 
   const groupedReports = useMemo(
     () => groupSurveyReportsByProject(filtered, projects),
@@ -1762,17 +1923,25 @@ export default function SurveyReport() {
 
   const batchCreateForProjects = () => {
     if (!missingProjectCount) return;
-    if (!confirm(`Create draft survey reports for ${missingProjectCount} project(s) that have no report yet?`)) return;
-    const { created, reports: next } = batchCreateDraftReports(projects, reports, ramsDocs);
-    setReports(next);
-    pushAudit({
-      action: "survey_report_batch_create",
-      entity: "survey_report",
-      detail: `${created.length} drafts`,
+    setListConfirm({
+      title: "Create draft reports?",
+      message: `Create draft survey reports for ${missingProjectCount} project(s) that have no report yet?`,
+      confirmLabel: "Create drafts",
+      tone: "default",
+      onConfirm: () => {
+        const { created, reports: next } = batchCreateDraftReports(projects, reports, ramsDocs);
+        setReports(next);
+        pushAudit({
+          action: "survey_report_batch_create",
+          entity: "survey_report",
+          detail: `${created.length} drafts`,
+        });
+        if (created.length === 1) {
+          setModal({ type: "edit", isNew: true, data: created[0] });
+        }
+        setListConfirm(null);
+      },
     });
-    if (created.length === 1) {
-      setModal({ type: "edit", isNew: true, data: created[0] });
-    }
   };
 
   const createNew = () => {
@@ -1833,6 +2002,43 @@ export default function SurveyReport() {
           </button>
         }
       />
+
+      {reports.length > 0 ? (
+        <div className="app-survey-list-stats">
+          <span>
+            <strong>{listSummary.total}</strong> reports
+          </span>
+          <span>{listSummary.drafts} drafts</span>
+          <span>{listSummary.finals} final</span>
+          <span>Avg {listSummary.avgComplete}% complete</span>
+          {listSummary.needsWork > 0 ? (
+            <span className="app-survey-list-stats__warn">{listSummary.needsWork} need attention</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="app-survey-list-toolbar">
+        <input
+          type="search"
+          value={listSearch}
+          onChange={(e) => setListSearch(e.target.value)}
+          placeholder="Search title, ref, surveyor, project…"
+          style={{ ...ss.inp, flex: "1 1 200px", minWidth: 180, fontSize: 13 }}
+          aria-label="Search survey reports"
+        />
+        <select
+          value={listSort}
+          onChange={(e) => setListSort(e.target.value)}
+          style={{ ...ss.inp, fontSize: 12, minWidth: 140 }}
+          aria-label="Sort survey reports"
+        >
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="complete">Most complete</option>
+          <option value="incomplete">Least complete</option>
+          <option value="project">By project</option>
+        </select>
+      </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
         {[
@@ -1949,6 +2155,58 @@ export default function SurveyReport() {
                         <button type="button" style={ss.btn} onClick={() => duplicateReport(r)}>
                           Duplicate
                         </button>
+                        <details className="app-survey-list-more">
+                          <summary style={ss.btn}>More</summary>
+                          <div className="app-survey-list-more__menu">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                downloadSurveyReportHtml(r, {
+                                  ramsTitle: ramsDocs.find((d) => d.id === r.linkedRamsId)?.title,
+                                  projectLat: projects.find((p) => p.id === r.projectId)?.lat,
+                                  projectLng: projects.find((p) => p.id === r.projectId)?.lng,
+                                });
+                                pushAudit({ action: "survey_report_html", entity: "survey_report", detail: r.ref || r.id });
+                              }}
+                            >
+                              HTML export
+                            </button>
+                            {r.projectId && countGeoPhotosForReport(geoPhotos, r.projectId) > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  try {
+                                    downloadSurveyReportGeoJson(r, geoPhotos);
+                                  } catch (e) {
+                                    alert(e?.message || "GeoJSON export failed.");
+                                  }
+                                }}
+                              >
+                                GeoJSON
+                              </button>
+                            ) : null}
+                            {r.status === "final" ? (
+                              <button type="button" onClick={() => duplicateReport(r, { asRevision: true })}>
+                                New revision
+                              </button>
+                            ) : null}
+                            {r.projectId ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setWorkspaceNavTarget({
+                                    viewId: "workers",
+                                    projectId: r.projectId,
+                                    action: "viewProjectDashboard",
+                                  });
+                                  openWorkspaceView({ viewId: "workers" });
+                                }}
+                              >
+                                Project hub
+                              </button>
+                            ) : null}
+                          </div>
+                        </details>
                         {caps.deleteRecords && (
                           <button
                             type="button"
@@ -1957,6 +2215,8 @@ export default function SurveyReport() {
                               setListConfirm({
                                 title: "Delete survey report?",
                                 message: `${r.ref || r.title || "This report"} will be permanently removed.`,
+                                tone: "danger",
+                                confirmLabel: "Delete",
                                 onConfirm: () => {
                                   setReports((p) => p.filter((x) => x.id !== r.id));
                                   pushAudit({ action: "survey_report_delete", entity: "survey_report", detail: r.id });
@@ -1988,8 +2248,8 @@ export default function SurveyReport() {
         open={Boolean(listConfirm)}
         title={listConfirm?.title}
         message={listConfirm?.message}
-        tone="danger"
-        confirmLabel="Delete"
+        tone={listConfirm?.tone || "danger"}
+        confirmLabel={listConfirm?.confirmLabel || (listConfirm?.tone === "danger" ? "Delete" : "Confirm")}
         onConfirm={listConfirm?.onConfirm}
         onCancel={() => setListConfirm(null)}
       />

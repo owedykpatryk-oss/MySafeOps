@@ -18,12 +18,22 @@ export const SURVEY_EDITOR_TABS = [
   { id: "preview", label: "Print preview", group: "deliver" },
 ];
 
+export const SURVEY_TAB_ORDER = SURVEY_EDITOR_TABS.map((t) => t.id);
+
 export function surveyEditorGroupForTab(tabId) {
   return SURVEY_EDITOR_TABS.find((t) => t.id === tabId)?.group || SURVEY_EDITOR_GROUPS[0].id;
 }
 
 export function surveyEditorTabsForGroup(groupId) {
   return SURVEY_EDITOR_TABS.filter((t) => t.group === groupId);
+}
+
+export function adjacentSurveyTab(tabId, direction = "next") {
+  const idx = SURVEY_TAB_ORDER.indexOf(tabId);
+  if (idx < 0) return null;
+  const next = idx + (direction === "next" ? 1 : -1);
+  if (next < 0 || next >= SURVEY_TAB_ORDER.length) return null;
+  return SURVEY_TAB_ORDER[next];
 }
 
 /** @param {object} report */
