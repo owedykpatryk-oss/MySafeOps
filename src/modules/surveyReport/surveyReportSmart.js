@@ -17,6 +17,7 @@ import { capturePlanSnapshots } from "../../utils/planSnapshot";
 import {
   countGeoPhotosForReport,
   importGeoPhotosIntoReport,
+  projectGeoPhotosForReport,
 } from "../../utils/geoPhotoIntegrations.js";
 
 const SURVEY_TYPE_TEMPLATES = {
@@ -384,7 +385,20 @@ export function smartFillNextSteps(report, { project, projectPlans = [], geoPhot
   if (report.projectId && countGeoPhotosForReport(geoPhotos, report.projectId) > 0 && !report.geoPhotoImportAt) {
     steps.push({ id: "geo-photos", label: "Import geo-photos into report", tab: "photos" });
   }
+  const utilityGeoCount = projectGeoPhotosForReport(geoPhotos, report.projectId).filter((p) =>
+    ["utility_locator", "trial_pit", "manhole_chamber", "buried_services_warning", "gpr_setup"].includes(p.type)
+  ).length;
+  if (utilityGeoCount > 0 && !(report.utilitiesTable || []).some((r) => r.geoPhotoId)) {
+    steps.push({ id: "utilities-geo", label: "Import utilities from geo-photos", tab: "findings" });
+  }
+  if (!report.cadImport?.summary?.length && report.surveyType === "utility_mapping_survey") {
+    steps.push({ id: "cad", label: "Import utility mapping DXF", tab: "findings" });
+  }
   if (!report.sections?.executiveSummary?.trim()) steps.push({ id: "summary", label: "Draft executive summary", tab: "details" });
+  if (!report.documentControl?.checkedBy?.trim()) steps.push({ id: "doc-control", label: "Document control (checked / approved)", tab: "details" });
+  if (!Object.values(report.qaChecklist || {}).some(Boolean)) steps.push({ id: "qa", label: "Complete QA checklist", tab: "professional" });
+  if (!report.deliverables?.length) steps.push({ id: "deliverables", label: "Add deliverables schedule", tab: "scope" });
+  if (!report.equipmentCalibration?.length) steps.push({ id: "calibration", label: "Equipment calibration records", tab: "professional" });
   return steps;
 }
 
@@ -423,7 +437,7 @@ export function batchCreateDraftReports(projects, reports, ramsDocs = []) {
  * limitations → narratives → executive summary → recommendations → optional AI.
  */
 export async function runSmartFillAll(report, ctx = {}) {
-  const { project, ramsDocs = [], projectPlans = [], linkedRams, useAi = false, geoPhotos = [] } = ctx;
+  const { project, ramsDocs = [], projectPlans = [], linkedRams, useAi = false, geoPhotos = [], permits = [] } = ctx;
   let r = { ...report, sections: { ...report.sections } };
   const rams = pickRamsForProject(ramsDocs, r.projectId) || linkedRams;
 
@@ -487,6 +501,8 @@ export async function runSmartFillAll(report, ctx = {}) {
       recommendations: draft.recommendations || r.sections.recommendations,
     };
   }
+
+  r = prefillProfessionalFields(r, { project, ramsDoc: rams, permits });
 
   r.smartFillAt = new Date().toISOString();
   return r;
@@ -578,7 +594,7 @@ export function prefillReportFromProject(report, project, ramsDoc = null) {
     }
   }
 
-  return next;
+  return prefillProfessionalFields(next, { project, ramsDoc });
 }
 
 /** Fetch live/historical weather for survey date and merge into report weather fields. */
@@ -606,10 +622,147 @@ export async function fetchWeatherIntoReport(report, project) {
     weather: {
       ...report.weather,
       ...mapped,
+      tempC: snap.tempC ?? report.weather?.tempC ?? null,
+      tempMinC: snap.tempMinC ?? report.weather?.tempMinC ?? null,
+      windMph: parseWindFromSnap(snap) ?? report.weather?.windMph ?? null,
+      fetchedAt: snap.fetchedAt || new Date().toISOString(),
       conditionsNarrative: report.weather?.conditionsNarrative?.trim() || narrative,
       equipmentMethodImpact: report.weather?.equipmentMethodImpact?.trim() || impact,
     },
   };
+}
+
+function parseWindFromSnap(snap) {
+  if (snap?.windMph != null && Number.isFinite(Number(snap.windMph))) return Number(snap.windMph);
+  const m = snap?.text?.match(/wind[^~]*~([\d.]+)/i);
+  return m ? parseFloat(m[1]) : null;
+}
+
+/** Default calibration rows by survey type. */
+export function buildDefaultEquipmentCalibration(surveyType) {
+  const mk = (instrument, status = "in_date") => ({
+    id: `eq_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+    instrument,
+    serialNo: "",
+    calibrationDue: "",
+    status,
+  });
+  if (surveyType === "utility_mapping_survey" || surveyType === "eml_cat_survey") {
+    return [mk("RD8000 / cable locator"), mk("CAT & Genny"), mk("GNSS rover")];
+  }
+  if (surveyType === "gpr_survey") {
+    return [mk("GPR system"), mk("GNSS / total station")];
+  }
+  if (surveyType === "topographical_survey" || surveyType === "setting_out") {
+    return [mk("Robotic total station"), mk("GNSS rover")];
+  }
+  if (surveyType === "cctv_drainage_survey") {
+    return [mk("CCTV crawler"), mk("Winch / sonde locator")];
+  }
+  return [mk("Primary survey instrument")];
+}
+
+/** Default deliverables rows by survey type. */
+export function buildDefaultDeliverables(surveyType) {
+  const common = [
+    { id: `del_${Date.now()}_1`, format: "report_pdf", description: "Survey report (PDF)", crs: "OSGB36", status: "Issued with report" },
+  ];
+  if (surveyType === "utility_mapping_survey" || surveyType === "eml_cat_survey" || surveyType === "gpr_survey") {
+    return [
+      ...common,
+      { id: `del_${Date.now()}_2`, format: "pdf_drawing", description: "Utility mark-up drawing", crs: "OSGB36", status: "Issued with report" },
+      { id: `del_${Date.now()}_3`, format: "dwg", description: "CAD drawing (if in brief)", crs: "OSGB36", status: "On request" },
+    ];
+  }
+  if (surveyType === "topographical_survey") {
+    return [
+      ...common,
+      { id: `del_${Date.now()}_2`, format: "pdf_drawing", description: "Topographical survey drawing", crs: "OSGB36", status: "Issued with report" },
+    ];
+  }
+  if (surveyType === "cctv_drainage_survey") {
+    return [
+      ...common,
+      { id: `del_${Date.now()}_2`, format: "cctv_footage", description: "CCTV footage and log", crs: "—", status: "Issued with report" },
+    ];
+  }
+  return common;
+}
+
+/** Pick first active permit ref for a project. */
+export function pickPermitRefForProject(permits, projectId) {
+  if (!projectId || !permits?.length) return "";
+  const active = permits.find(
+    (p) => p.projectId === projectId && (p.status === "active" || p.status === "issued" || p.status === "open")
+  );
+  if (active) return active.permitNo || active.ref || active.id || "";
+  const any = permits.find((p) => p.projectId === projectId);
+  return any?.permitNo || any?.ref || any?.id || "";
+}
+
+/** Prefill document control, deliverables, HSE and control fields. */
+export function prefillProfessionalFields(report, { project, ramsDoc, permits = [] } = {}) {
+  const next = { ...report };
+  const dc = { ...(next.documentControl || {}) };
+  if (!dc.preparedBy?.trim() && next.surveyor?.trim()) dc.preparedBy = next.surveyor;
+  if (!dc.issueDate?.trim() && next.surveyDate) dc.issueDate = next.surveyDate;
+  if (!dc.issueNumber?.trim()) dc.issueNumber = "1";
+  if (!dc.revision?.trim()) dc.revision = "A";
+  next.documentControl = dc;
+
+  const sig = { ...(next.signatures || {}) };
+  if (!sig.surveyorName?.trim() && next.surveyor?.trim()) sig.surveyorName = next.surveyor;
+  if (!sig.surveyorSignedDate?.trim() && next.surveyDate) sig.surveyorSignedDate = next.surveyDate;
+  next.signatures = sig;
+
+  const hse = { ...(next.hseRefs || {}) };
+  if (!hse.permitRef?.trim() && next.projectId) {
+    hse.permitRef = pickPermitRefForProject(permits, next.projectId);
+  }
+  if (!hse.ramsExcerpt?.trim() && ramsDoc?.surveyMethodStatement?.trim()) {
+    const excerpt = ramsDoc.surveyMethodStatement.trim().slice(0, 480);
+    hse.ramsExcerpt = excerpt.length < ramsDoc.surveyMethodStatement.trim().length ? `${excerpt}…` : excerpt;
+  }
+  next.hseRefs = hse;
+
+  const ctrl = { ...(next.controlAccuracy || {}) };
+  if (!ctrl.controlSource?.trim() && (next.surveyType === "utility_mapping_survey" || next.surveyType === "topographical_survey")) {
+    ctrl.controlSource = "GNSS rover / total station tied to project grid or OSGB36 as agreed.";
+  }
+  if (!ctrl.horizontalTolerance?.trim()) {
+    ctrl.horizontalTolerance =
+      next.surveyType === "utility_mapping_survey" ? "±0.05 m relative to survey control (indicative)." : "";
+  }
+  next.controlAccuracy = ctrl;
+
+  if (!next.deliverables?.length && next.surveyType) {
+    next.deliverables = buildDefaultDeliverables(next.surveyType);
+  }
+
+  if (!next.equipmentCalibration?.length && next.surveyType) {
+    next.equipmentCalibration = buildDefaultEquipmentCalibration(next.surveyType);
+  }
+
+  if (!next.revisionHistory?.length) {
+    next.revisionHistory = [
+      {
+        id: `rev_${Date.now()}`,
+        date: dc.issueDate || next.surveyDate || new Date().toISOString().slice(0, 10),
+        revision: dc.revision || "A",
+        author: dc.preparedBy || next.surveyor || "",
+        description: "Initial issue",
+      },
+    ];
+  }
+
+  if (project?.lat && project?.lng && !next.surveyProgramme?.siteAccessNotes?.trim() && project.accessNotes) {
+    next.surveyProgramme = {
+      ...(next.surveyProgramme || {}),
+      siteAccessNotes: project.accessNotes,
+    };
+  }
+
+  return next;
 }
 
 export async function generateAiSurveyDraft(report) {

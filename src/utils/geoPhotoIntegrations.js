@@ -118,7 +118,7 @@ export function buildGeoPhotosFindingsBlock(geoPhotoList) {
  * Merge geo-photos into survey report (photos appendix + findings block).
  * @param {object} report
  * @param {object[]} allGeoPhotos
- * @param {{ replaceFindingsBlock?: boolean }} [opts]
+ * @param {{ replaceFindingsBlock?: boolean, mergeUtilitiesTable?: boolean }} [opts]
  */
 export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
   const projectId = report?.projectId;
@@ -165,9 +165,18 @@ export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
       : `Geo-photo access notes: ${summary}`;
   }
 
+  let utilitiesTable = report.utilitiesTable || [];
+  if (opts.mergeUtilitiesTable !== false) {
+    utilitiesTable = geoPhotosToUtilitiesTable(allGeoPhotos, projectId, {
+      existingRows: utilitiesTable,
+      pas128Ql: report.pas128Ql,
+    });
+  }
+
   return {
     ...report,
     photos: mergedPhotos,
+    utilitiesTable,
     accessLimitationsNotes,
     sections: { ...report.sections, findings },
     geoPhotoImportAt: new Date().toISOString(),
@@ -289,3 +298,84 @@ export function snagDraftFromGeoPhoto(photo) {
 }
 
 export { presetsByGroup };
+
+/** Geo-photo types that map to utility schedule rows in survey reports. */
+export const GEO_PHOTO_UTILITY_TYPES = new Set([
+  "utility_locator",
+  "trial_pit",
+  "manhole_chamber",
+  "buried_services_warning",
+  "gpr_setup",
+]);
+
+const GEO_PHOTO_UTILITY_DEFAULTS = {
+  utility_locator: { utilityType: "other", method: "EML / CAT locate", confidence: "medium" },
+  trial_pit: { utilityType: "other", method: "Trial pit / exposure", confidence: "high" },
+  manhole_chamber: { utilityType: "foul", method: "Chamber inspection", confidence: "high" },
+  buried_services_warning: { utilityType: "other", method: "Surface evidence / warning marker", confidence: "indicative" },
+  gpr_setup: { utilityType: "other", method: "GPR", confidence: "medium" },
+};
+
+/** Try to pull depth from geo-photo notes (e.g. "0.8m", "depth 1.2 m"). */
+export function parseDepthFromNotes(notes) {
+  const t = String(notes || "");
+  const m = t.match(/(?:depth|approx\.?\s*depth|@)\s*[:.]?\s*(\d+(?:\.\d+)?)\s*m\b/i)
+    || t.match(/\b(\d+(?:\.\d+)?)\s*m\b(?:\s*(?:deep|depth|bgl))?/i);
+  return m ? `${m[1]} m` : "";
+}
+
+/**
+ * Build one utility schedule row from a geo-photo (survey & utilities types only).
+ * @param {object} photo
+ * @param {{ pas128Ql?: string }} [opts]
+ */
+export function geoPhotoToUtilityRow(photo, opts = {}) {
+  if (!photo?.type || !GEO_PHOTO_UTILITY_TYPES.has(photo.type)) return null;
+  const defaults = GEO_PHOTO_UTILITY_DEFAULTS[photo.type] || {};
+  const preset = geoPhotoPreset(photo.type);
+  const depth = parseDepthFromNotes(photo.notes);
+  const coords =
+    Number.isFinite(Number(photo.latitude)) && Number.isFinite(Number(photo.longitude))
+      ? `${Number(photo.latitude).toFixed(5)}, ${Number(photo.longitude).toFixed(5)}`
+      : "";
+
+  return {
+    id: `ut_gp_${photo.id}`,
+    geoPhotoId: photo.id,
+    utilityType: defaults.utilityType || "other",
+    depth,
+    method: defaults.method || preset.label,
+    pas128Ql: opts.pas128Ql || "",
+    confidence: defaults.confidence || "medium",
+    notes: [photo.notes?.trim(), coords ? `Location: ${coords}` : "", `Source: geo-photo (${preset.label})`]
+      .filter(Boolean)
+      .join(" · "),
+  };
+}
+
+/**
+ * Build utility table rows from geo-photos marked for report (merge with existing, no duplicates by geoPhotoId).
+ */
+export function geoPhotosToUtilitiesTable(allGeoPhotos, projectId, { existingRows = [], pas128Ql = "" } = {}) {
+  const forReport = projectGeoPhotosForReport(allGeoPhotos, projectId);
+  const existingIds = new Set((existingRows || []).map((r) => r.geoPhotoId).filter(Boolean));
+  const incoming = forReport
+    .map((p) => geoPhotoToUtilityRow(p, { pas128Ql }))
+    .filter(Boolean)
+    .filter((r) => !existingIds.has(r.geoPhotoId));
+
+  return [...(existingRows || []), ...incoming];
+}
+
+/** Static map URL with multiple geo-photo markers (OpenStreetMap.de, max 10 points). */
+export function geoPhotosStaticMapUrl(photos, { width = 520, height = 220, maxMarkers = 10 } = {}) {
+  const pts = (photos || [])
+    .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)))
+    .slice(0, maxMarkers);
+  if (!pts.length) return "";
+  const markers = pts.map((p) => `${Number(p.latitude)},${Number(p.longitude)},red-pushpin`).join("|");
+  const lat = pts.reduce((s, p) => s + Number(p.latitude), 0) / pts.length;
+  const lng = pts.reduce((s, p) => s + Number(p.longitude), 0) / pts.length;
+  const zoom = pts.length === 1 ? 16 : 15;
+  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=${zoom}&size=${width}x${height}&markers=${markers}`;
+}

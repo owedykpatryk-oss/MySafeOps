@@ -9,9 +9,43 @@ import {
   UTILITY_RECORDS_GAPS,
   ACCESS_LIMITATION_TYPES,
   SURVEY_TYPES,
+  QA_CHECKLIST_ITEMS,
+  UTILITY_TYPE_OPTIONS,
+  UTILITY_CONFIDENCE_LEVELS,
+  DELIVERABLE_FORMAT_OPTIONS,
+  RECORD_REF_STATUS_OPTIONS,
+  blankSurveyReport,
 } from "./surveyReportConstants";
 
 const labelOf = (options, key) => options.find((o) => o.key === key)?.label || key;
+
+/** Merge saved report with defaults for nested fields added in later versions. */
+export function normalizeSurveyReport(report) {
+  const blank = blankSurveyReport();
+  if (!report) return blank;
+  return {
+    ...blank,
+    ...report,
+    weather: { ...blank.weather, ...(report.weather || {}) },
+    utilityRecords: { ...blank.utilityRecords, ...(report.utilityRecords || {}) },
+    sections: { ...blank.sections, ...(report.sections || {}) },
+    documentControl: { ...blank.documentControl, ...(report.documentControl || {}) },
+    surveyProgramme: { ...blank.surveyProgramme, ...(report.surveyProgramme || {}) },
+    controlAccuracy: { ...blank.controlAccuracy, ...(report.controlAccuracy || {}) },
+    qaChecklist: { ...blank.qaChecklist, ...(report.qaChecklist || {}) },
+    hseRefs: { ...blank.hseRefs, ...(report.hseRefs || {}) },
+    signatures: { ...blank.signatures, ...(report.signatures || {}) },
+    equipmentCalibration: report.equipmentCalibration || [],
+    deliverables: report.deliverables || [],
+    recordsReferences: report.recordsReferences || [],
+    utilitiesTable: report.utilitiesTable || [],
+    revisionHistory: report.revisionHistory || [],
+    changesSincePrevious: report.changesSincePrevious || [],
+    parentReportId: report.parentReportId || "",
+    parentRevision: report.parentRevision || "",
+    cadImport: report.cadImport || null,
+  };
+}
 
 export function buildLimitationsFromKeys(keys, extraText = "") {
   const sentences = (keys || [])
@@ -28,6 +62,18 @@ export function buildWeatherNarrative(weather) {
   const parts = [];
   const gs = labelOf(GROUND_SURFACE_OPTIONS, weather.groundSurface);
   const rain = labelOf(RAIN_DURING_SURVEY, weather.rainDuringSurvey);
+  if (weather.tempC != null || weather.tempMinC != null) {
+    const temp =
+      weather.tempMinC != null && weather.tempC != null && weather.tempMinC !== weather.tempC
+        ? `${weather.tempMinC}–${weather.tempC}°C`
+        : weather.tempC != null
+          ? `${weather.tempC}°C`
+          : `${weather.tempMinC}°C`;
+    parts.push(`Temperature: ${temp}.`);
+  }
+  if (weather.windMph != null && !Number.isNaN(Number(weather.windMph))) {
+    parts.push(`Wind: up to ~${Number(weather.windMph).toFixed(1)} mph.`);
+  }
   if (weather.groundSurface && weather.groundSurface !== "unknown") parts.push(`Ground surface: ${gs}.`);
   if (weather.rainDuringSurvey && weather.rainDuringSurvey !== "unknown") parts.push(`Rain: ${rain}.`);
   if (weather.phenomena?.length) {
@@ -38,6 +84,54 @@ export function buildWeatherNarrative(weather) {
   }
   if (weather.conditionsNarrative?.trim()) parts.push(weather.conditionsNarrative.trim());
   if (weather.equipmentMethodImpact?.trim()) parts.push(weather.equipmentMethodImpact.trim());
+  return parts.join(" ");
+}
+
+export function buildQaChecklistNarrative(qa) {
+  if (!qa) return "";
+  const lines = QA_CHECKLIST_ITEMS.map(({ key, label }) => {
+    const ok = Boolean(qa[key]);
+    return `${ok ? "Yes" : "No"} — ${label}`;
+  });
+  return lines.join("\n");
+}
+
+export function utilityTypeLabel(key) {
+  return labelOf(UTILITY_TYPE_OPTIONS, key);
+}
+
+export function utilityConfidenceLabel(key) {
+  return labelOf(UTILITY_CONFIDENCE_LEVELS, key);
+}
+
+export function deliverableFormatLabel(key) {
+  return labelOf(DELIVERABLE_FORMAT_OPTIONS, key);
+}
+
+export function recordRefStatusLabel(key) {
+  return labelOf(RECORD_REF_STATUS_OPTIONS, key);
+}
+
+export function buildSurveyProgrammeNarrative(programme) {
+  if (!programme) return "";
+  const parts = [];
+  if (programme.startTime || programme.endTime) {
+    parts.push(`Site attendance: ${programme.startTime || "—"} to ${programme.endTime || "—"}.`);
+  }
+  if (programme.hoursOnSite?.trim()) parts.push(`Hours on site: ${programme.hoursOnSite.trim()}.`);
+  if (programme.personnel?.trim()) parts.push(`Personnel: ${programme.personnel.trim()}.`);
+  if (programme.siteAccessNotes?.trim()) parts.push(programme.siteAccessNotes.trim());
+  return parts.join(" ");
+}
+
+export function buildControlAccuracyNarrative(control) {
+  if (!control) return "";
+  const parts = [];
+  if (control.coordinateSystem?.trim()) parts.push(`Coordinate system: ${control.coordinateSystem.trim()}.`);
+  if (control.controlSource?.trim()) parts.push(`Control source: ${control.controlSource.trim()}.`);
+  if (control.horizontalTolerance?.trim()) parts.push(`Horizontal tolerance: ${control.horizontalTolerance.trim()}.`);
+  if (control.verticalTolerance?.trim()) parts.push(`Vertical tolerance: ${control.verticalTolerance.trim()}.`);
+  if (control.controlPointsNotes?.trim()) parts.push(control.controlPointsNotes.trim());
   return parts.join(" ");
 }
 
@@ -73,32 +167,31 @@ export function surveyTypeLabel(key) {
 
 /** Completeness score 0–100 and list of missing items for quality nudges. */
 export function surveyReportQuality(report) {
+  const r = normalizeSurveyReport(report);
   const checks = [];
   const add = (ok, label) => checks.push({ ok, label });
 
-  add(!!report.title?.trim(), "Report title");
-  add(!!report.surveyDate, "Survey date");
-  add(!!report.surveyor?.trim(), "Surveyor / author");
-  add(!!report.siteAddress?.trim() || !!report.projectName, "Site / project");
-  add(!!report.surveyType, "Survey type");
-  add(!!report.sections?.scope?.trim(), "Scope of works");
-  add(!!report.sections?.methodology?.trim(), "Methodology");
-  add(!!report.sections?.findings?.trim(), "Findings / results");
-  add(!!report.sections?.executiveSummary?.trim(), "Executive summary");
-  add(!!report.sections?.recommendations?.trim(), "Recommendations");
+  add(!!r.title?.trim(), "Report title");
+  add(!!r.surveyDate, "Survey date");
+  add(!!r.surveyor?.trim(), "Surveyor / author");
+  add(!!r.siteAddress?.trim() || !!r.projectName, "Site / project");
+  add(!!r.surveyType, "Survey type");
+  add(!!r.sections?.scope?.trim(), "Scope of works");
+  add(!!r.sections?.methodology?.trim(), "Methodology");
+  add(!!r.sections?.findings?.trim(), "Findings / results");
+  add(!!r.sections?.executiveSummary?.trim(), "Executive summary");
+  add(!!r.sections?.recommendations?.trim(), "Recommendations");
+  add((r.utilityRecords?.sourcesConsulted?.length || 0) > 0, "Records review");
+  add((r.limitationKeys?.length || 0) > 0 || !!r.limitationsText?.trim(), "Limitations");
   add(
-    (report.utilityRecords?.sourcesConsulted?.length || 0) > 0,
-    "Records review"
-  );
-  add(
-    (report.limitationKeys?.length || 0) > 0 || !!report.limitationsText?.trim(),
-    "Limitations"
-  );
-  add(
-    buildWeatherNarrative(report.weather).length > 0 ||
-      report.weather?.conditionsNarrative?.trim(),
+    buildWeatherNarrative(r.weather).length > 0 || r.weather?.conditionsNarrative?.trim(),
     "Weather at site"
   );
+  add(!!r.documentControl?.preparedBy?.trim() || !!r.surveyor?.trim(), "Document control");
+  add((r.utilitiesTable?.length || 0) > 0 || !!r.sections?.findings?.trim(), "Utility schedule or findings");
+  add(Boolean(r.cadImport?.summary?.length) || r.surveyType !== "utility_mapping_survey", "CAD length summary");
+  add(Object.values(r.qaChecklist || {}).some(Boolean), "QA checklist");
+  add((r.equipmentCalibration || []).length > 0, "Equipment calibration");
 
   const passed = checks.filter((c) => c.ok).length;
   const score = Math.round((passed / checks.length) * 100);
@@ -126,4 +219,202 @@ export function toggleArray(arr, key) {
   if (set.has(key)) set.delete(key);
   else set.add(key);
   return [...set];
+}
+
+/** Append revision history entry when report is marked final. */
+export function finalizeReportRevision(report) {
+  const r = normalizeSurveyReport(report);
+  const now = new Date();
+  const isoDate = now.toISOString().slice(0, 10);
+  const dc = {
+    ...r.documentControl,
+    issueDate: r.documentControl.issueDate || r.surveyDate || isoDate,
+  };
+  const history = [...(r.revisionHistory || [])];
+  const entry = {
+    id: `rev_${Date.now()}`,
+    date: isoDate,
+    revision: dc.revision || "A",
+    author: dc.preparedBy || r.surveyor || "",
+    description: "Marked final",
+  };
+  if (!history.some((h) => h.revision === entry.revision && h.description === entry.description)) {
+    history.push(entry);
+  }
+  return {
+    ...r,
+    documentControl: dc,
+    revisionHistory: history,
+    signatures: {
+      ...r.signatures,
+      surveyorName: r.signatures.surveyorName || r.surveyor || dc.preparedBy || "",
+      surveyorSignedDate: r.signatures.surveyorSignedDate || isoDate,
+    },
+    status: "final",
+    finalisedAt: now.toISOString(),
+  };
+}
+
+/** Bump revision letter A→B, Z→AA. */
+export function bumpRevisionLetter(rev = "A") {
+  const s = String(rev || "A").trim().toUpperCase();
+  if (!s) return "B";
+  if (/^\d+$/.test(s)) return String(Number(s) + 1);
+  if (s.length === 1 && s >= "A" && s < "Z") return String.fromCharCode(s.charCodeAt(0) + 1);
+  if (s === "Z") return "AA";
+  const last = s.slice(-1);
+  const head = s.slice(0, -1);
+  if (last < "Z") return head + String.fromCharCode(last.charCodeAt(0) + 1);
+  return s + "A";
+}
+
+/** PAS128 utility schedule stats for cover / summary. */
+export function buildPas128SummaryStats(report) {
+  const rows = report?.utilitiesTable || [];
+  if (!rows.length) return null;
+  const byQl = {};
+  const byConfidence = {};
+  rows.forEach((r) => {
+    const ql = r.pas128Ql || "—";
+    const conf = r.confidence || "—";
+    byQl[ql] = (byQl[ql] || 0) + 1;
+    byConfidence[conf] = (byConfidence[conf] || 0) + 1;
+  });
+  return {
+    total: rows.length,
+    byQl,
+    byConfidence,
+    withDepth: rows.filter((r) => r.depth?.trim()).length,
+    withGeoPhoto: rows.filter((r) => r.geoPhotoId).length,
+  };
+}
+
+export function buildEquipmentCalibrationNarrative(rows) {
+  if (!rows?.length) return "";
+  return rows
+    .map((r) => {
+      const parts = [r.instrument || "Instrument"];
+      if (r.serialNo?.trim()) parts.push(`S/N ${r.serialNo.trim()}`);
+      if (r.calibrationDue) parts.push(`cal. due ${new Date(r.calibrationDue).toLocaleDateString("en-GB")}`);
+      if (r.status === "in_date") parts.push("(in date)");
+      if (r.status === "due_soon") parts.push("(due soon)");
+      if (r.status === "overdue") parts.push("(overdue — verify before use)");
+      return parts.join(" · ");
+    })
+    .join("\n");
+}
+
+const DIFF_FIELDS = [
+  { key: "title", label: "Title" },
+  { key: "surveyDate", label: "Survey date" },
+  { key: "surveyor", label: "Surveyor" },
+  { key: "pas128Ql", label: "PAS128 QL" },
+  { key: "sections.executiveSummary", label: "Executive summary" },
+  { key: "sections.scope", label: "Scope" },
+  { key: "sections.methodology", label: "Methodology" },
+  { key: "sections.findings", label: "Findings" },
+  { key: "sections.recommendations", label: "Recommendations" },
+];
+
+function getPath(obj, path) {
+  return path.split(".").reduce((o, k) => o?.[k], obj);
+}
+
+/** Human-readable diff between two report versions. */
+export function compareSurveyReports(before, after) {
+  const a = normalizeSurveyReport(before);
+  const b = normalizeSurveyReport(after);
+  const changes = [];
+
+  DIFF_FIELDS.forEach(({ key, label }) => {
+    const va = String(getPath(a, key) || "").trim();
+    const vb = String(getPath(b, key) || "").trim();
+    if (va !== vb) changes.push({ field: label, before: va.slice(0, 120), after: vb.slice(0, 120) });
+  });
+
+  const utilBefore = (a.utilitiesTable || []).length;
+  const utilAfter = (b.utilitiesTable || []).length;
+  if (utilBefore !== utilAfter) {
+    changes.push({ field: "Utility schedule", before: `${utilBefore} row(s)`, after: `${utilAfter} row(s)` });
+  }
+
+  const photoBefore = (a.photos || []).length;
+  const photoAfter = (b.photos || []).length;
+  if (photoBefore !== photoAfter) {
+    changes.push({ field: "Photos", before: `${photoBefore}`, after: `${photoAfter}` });
+  }
+
+  if (a.documentControl?.revision !== b.documentControl?.revision) {
+    changes.push({
+      field: "Revision",
+      before: a.documentControl?.revision || "—",
+      after: b.documentControl?.revision || "—",
+    });
+  }
+
+  return changes;
+}
+
+/** Duplicate report payload — plain copy or next revision from a final report. */
+export function buildDuplicateReportPayload(report, existingReports, { asRevision = false } = {}) {
+  const copy = normalizeSurveyReport(JSON.parse(JSON.stringify(report)));
+  const ref = nextSurveyRef(existingReports);
+  const now = new Date().toISOString();
+  const isoDate = now.slice(0, 10);
+
+  copy.id = `sr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  copy.status = "draft";
+  copy.surveyDate = isoDate;
+  copy.finalisedAt = null;
+  copy.smartFillAt = null;
+  copy.sitePlanSnapshots = [];
+  copy.createdAt = now;
+  copy.updatedAt = now;
+  copy.parentReportId = report.id;
+  copy.parentRevision = report.documentControl?.revision || "";
+
+  if (asRevision && report.status === "final") {
+    const prevRev = report.documentControl?.revision || "A";
+    const nextRev = bumpRevisionLetter(prevRev);
+    copy.ref = report.ref || ref;
+    copy.title = report.title || `Survey report ${copy.ref}`;
+    copy.documentControl = {
+      ...copy.documentControl,
+      issueNumber: String(Number(copy.documentControl.issueNumber || 1) + 1),
+      revision: nextRev,
+      issueDate: "",
+    };
+    copy.revisionHistory = [
+      ...(copy.revisionHistory || []),
+      {
+        id: `rev_${Date.now()}`,
+        date: isoDate,
+        revision: nextRev,
+        author: copy.documentControl.preparedBy || copy.surveyor || "",
+        description: `Revision ${nextRev} created from final Rev ${prevRev}`,
+      },
+    ];
+    copy.changesSincePrevious = compareSurveyReports(report, copy);
+  } else {
+    copy.ref = ref;
+    copy.title = `${report.title || report.ref || "Survey report"} (copy)`;
+    copy.documentControl = {
+      ...copy.documentControl,
+      issueNumber: "1",
+      revision: "A",
+      issueDate: "",
+    };
+    copy.revisionHistory = [
+      {
+        id: `rev_${Date.now()}`,
+        date: isoDate,
+        revision: "A",
+        author: copy.documentControl.preparedBy || copy.surveyor || "",
+        description: `Duplicated from ${report.ref || report.id}`,
+      },
+    ];
+    copy.changesSincePrevious = [];
+  }
+
+  return copy;
 }

@@ -82,4 +82,41 @@ describe("geoPhotoIntegrations", () => {
     expect(snag.photos.length).toBe(1);
     expect(snag.sourceGeoPhotoId).toBe("g2");
   });
+
+  it("builds utility rows from survey geo-photos", async () => {
+    const { geoPhotoToUtilityRow, geoPhotosToUtilitiesTable, parseDepthFromNotes } = await import("./geoPhotoIntegrations.js");
+    expect(parseDepthFromNotes("Approx depth 0.8m near MH")).toBe("0.8 m");
+
+    const utilityPhoto = {
+      id: "g4",
+      projectId: "p1",
+      type: "utility_locator",
+      includeInReport: true,
+      notes: "HV cable depth 1.1m",
+      latitude: 51.503,
+      longitude: -0.103,
+    };
+    const row = geoPhotoToUtilityRow(utilityPhoto, { pas128Ql: "B1" });
+    expect(row.method).toContain("EML");
+    expect(row.depth).toBe("1.1 m");
+    expect(row.geoPhotoId).toBe("g4");
+
+    const table = geoPhotosToUtilitiesTable([...photos, utilityPhoto], "p1", { pas128Ql: "B1" });
+    expect(table.some((r) => r.geoPhotoId === "g4")).toBe(true);
+  });
+
+  it("merges utilities table when importing geo-photos", () => {
+    const utilityPhoto = {
+      id: "g4",
+      projectId: "p1",
+      type: "trial_pit",
+      includeInReport: true,
+      notes: "Gas main exposed",
+      photoDataUrl: "data:image/jpeg;base64,xyz",
+    };
+    const report = { projectId: "p1", sections: { findings: "" }, photos: [], utilitiesTable: [] };
+    const next = importGeoPhotosIntoReport(report, [...photos, utilityPhoto]);
+    expect(next.utilitiesTable.length).toBe(1);
+    expect(next.utilitiesTable[0].method).toContain("Trial pit");
+  });
 });

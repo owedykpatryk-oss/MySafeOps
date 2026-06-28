@@ -114,3 +114,108 @@ describe("surveyReportSmart", () => {
     expect(created[0].projectName).toBe("Beta");
   });
 });
+
+describe("surveyReportHelpers extended", () => {
+  it("normalizes legacy reports with new nested fields", async () => {
+    const { normalizeSurveyReport } = await import("./surveyReportHelpers.js");
+    const legacy = { id: "sr_old", title: "Old report", sections: { findings: "Done" } };
+    const next = normalizeSurveyReport(legacy);
+    expect(next.documentControl.issueNumber).toBe("1");
+    expect(next.qaChecklist.catScanBeforeWork).toBe(false);
+    expect(next.deliverables).toEqual([]);
+  });
+
+  it("finalizes report with revision history and sign-off", async () => {
+    const { finalizeReportRevision } = await import("./surveyReportHelpers.js");
+    const report = blankSurveyReport({
+      surveyor: "Alex",
+      surveyDate: "2026-04-01",
+      documentControl: { revision: "A", preparedBy: "Alex" },
+    });
+    const final = finalizeReportRevision(report);
+    expect(final.status).toBe("final");
+    expect(final.signatures.surveyorName).toBe("Alex");
+    expect(final.revisionHistory.some((h) => h.description === "Marked final")).toBe(true);
+  });
+
+  it("bumps revision and builds duplicate payloads", async () => {
+    const { bumpRevisionLetter, buildDuplicateReportPayload, buildPas128SummaryStats } = await import(
+      "./surveyReportHelpers.js"
+    );
+    expect(bumpRevisionLetter("A")).toBe("B");
+    expect(bumpRevisionLetter("Z")).toBe("AA");
+
+    const final = blankSurveyReport({
+      ref: "SR-2026-001",
+      status: "final",
+      documentControl: { revision: "A", issueNumber: "1" },
+      utilitiesTable: [{ utilityType: "gas", depth: "1m", pas128Ql: "B1", confidence: "medium" }],
+    });
+    const stats = buildPas128SummaryStats(final);
+    expect(stats.total).toBe(1);
+
+    const rev = buildDuplicateReportPayload(final, [final], { asRevision: true });
+    expect(rev.documentControl.revision).toBe("B");
+    expect(rev.ref).toBe("SR-2026-001");
+    expect(rev.parentReportId).toBe(final.id);
+  });
+});
+
+describe("surveyReportPrintHtml", () => {
+  it("builds cover page, contents and utility table", async () => {
+    const store = {
+      mysafeops_orgId: "default",
+      mysafeops_org_settings_default: JSON.stringify({ name: "Test Surveys Ltd", primaryColor: "#0d9488" }),
+    };
+    globalThis.localStorage = {
+      getItem: (k) => store[k] ?? null,
+      setItem: (k, v) => {
+        store[k] = v;
+      },
+    };
+    const { buildSurveyReportHtml } = await import("./surveyReportPrintHtml.js");
+    const report = blankSurveyReport({
+      ref: "SR-2026-010",
+      title: "Utility mapping — Test site",
+      surveyType: "utility_mapping_survey",
+      pas128Ql: "B1",
+      surveyDate: "2026-04-15",
+      surveyor: "Alex Surveyor",
+      client: "Test Client",
+      sections: {
+        scope: "Map utilities.",
+        methodology: "EML and GPR.",
+        findings: "HV cable traced along frontage.",
+      },
+      utilitiesTable: [
+        { utilityType: "hv_cable", depth: "0.8 m", method: "EML", pas128Ql: "B1", confidence: "medium", notes: "" },
+      ],
+      documentControl: { issueNumber: "1", revision: "A", preparedBy: "Alex Surveyor" },
+    });
+    const html = buildSurveyReportHtml(report, { projectLat: 51.31, projectLng: -0.12 });
+    expect(html).toContain("sr-cover");
+    expect(html).toContain("Contents");
+    expect(html).toContain("Document control");
+    expect(html).toContain("Findings &amp; results");
+    expect(html).toContain("HV cable");
+    expect(html).toContain("Sign-off");
+    expect(html).toContain("staticmap.openstreetmap.de");
+  });
+});
+
+describe("surveyReportSmart professional prefill", () => {
+  it("builds default deliverables for utility mapping", async () => {
+    const { buildDefaultDeliverables, prefillProfessionalFields } = await import("./surveyReportSmart.js");
+    const rows = buildDefaultDeliverables("utility_mapping_survey");
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows.some((r) => r.format === "pdf_drawing")).toBe(true);
+
+    const report = prefillProfessionalFields(
+      blankSurveyReport({ surveyType: "utility_mapping_survey", surveyor: "Alex", surveyDate: "2026-04-01", projectId: "p1" }),
+      { permits: [{ projectId: "p1", status: "active", permitNo: "PTW-99" }] }
+    );
+    expect(report.documentControl.preparedBy).toBe("Alex");
+    expect(report.hseRefs.permitRef).toBe("PTW-99");
+    expect(report.deliverables.length).toBeGreaterThan(0);
+  });
+});

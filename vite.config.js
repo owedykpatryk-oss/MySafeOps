@@ -21,6 +21,15 @@ export default defineConfig(({ mode }) => {
   const sentryUploadEnabled = Boolean(sentryAuthToken && sentryOrg && sentryProject);
 
   return {
+    server: {
+      proxy: {
+        "/api/postcode": {
+          target: "https://api.postcodes.io",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/postcode\//, "/postcodes/"),
+        },
+      },
+    },
     plugins: [
       react(),
       ...(sentryUploadEnabled

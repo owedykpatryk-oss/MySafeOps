@@ -15,7 +15,8 @@ export async function lookupUkPostcode(postcode) {
   if (!pc) return null;
 
   const compact = pc.replace(/\s/g, "");
-  const url = `https://api.postcodes.io/postcodes/${encodeURIComponent(compact)}`;
+  // Same-origin proxy — avoids CSP connect-src blocks and SW cross-origin fetch issues.
+  const url = `/api/postcode/${encodeURIComponent(compact)}`;
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) return null;
 

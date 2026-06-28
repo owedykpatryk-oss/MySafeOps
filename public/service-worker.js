@@ -1,7 +1,7 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.2.6";
+const SW_VERSION = "mysafeops-v1.2.8";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -95,12 +95,22 @@ self.addEventListener("fetch", (event) => {
           caches.open(CACHE_NAME).then(c => c.put(request, clone));
           return res;
         })
-        .catch(() => caches.match(request))
+        .catch(() => caches.match(request).then((cached) => cached || Response.error()))
     );
     return;
   }
 
-  // Default: network first, cache fallback
+  // Cross-origin requests — do not intercept (CSP + API calls should bypass the SW)
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Same-origin API routes — bypass SW (no stale JSON cache)
+  if (url.pathname.startsWith("/api/")) {
+    return;
+  }
+
+  // Default (same-origin): network first, cache fallback
   event.respondWith(
     fetch(request)
       .then(res => {
@@ -110,7 +120,10 @@ self.addEventListener("fetch", (event) => {
         }
         return res;
       })
-      .catch(() => caches.match(request))
+      .catch(async () => {
+        const cached = await caches.match(request);
+        return cached || new Response(null, { status: 504, statusText: "Network unavailable" });
+      })
   );
 });
 

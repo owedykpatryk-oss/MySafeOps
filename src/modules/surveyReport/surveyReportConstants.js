@@ -157,6 +157,58 @@ export const ACCESS_LIMITATION_TYPES = [
   { key: "depth_limit", label: "Depth / excavation limit" },
 ];
 
+export const UTILITY_CONFIDENCE_LEVELS = [
+  { key: "high", label: "High" },
+  { key: "medium", label: "Medium" },
+  { key: "low", label: "Low" },
+  { key: "indicative", label: "Indicative only" },
+];
+
+export const UTILITY_TYPE_OPTIONS = [
+  { key: "hv_cable", label: "HV cable" },
+  { key: "lv_cable", label: "LV cable" },
+  { key: "gas", label: "Gas main / service" },
+  { key: "water", label: "Water main / service" },
+  { key: "foul", label: "Foul sewer" },
+  { key: "surface", label: "Surface water" },
+  { key: "telecom", label: "Telecom / fibre" },
+  { key: "other", label: "Other / unknown" },
+];
+
+export const DELIVERABLE_FORMAT_OPTIONS = [
+  { key: "pdf_drawing", label: "PDF drawing" },
+  { key: "dwg", label: "DWG / CAD" },
+  { key: "dxf", label: "DXF" },
+  { key: "lcm", label: "LCM / CSV" },
+  { key: "report_pdf", label: "Report PDF" },
+  { key: "cctv_footage", label: "CCTV footage" },
+  { key: "point_cloud", label: "Point cloud" },
+  { key: "other", label: "Other" },
+];
+
+export const RECORD_REF_STATUS_OPTIONS = [
+  { key: "received", label: "Received" },
+  { key: "pending", label: "Pending" },
+  { key: "not_requested", label: "Not requested" },
+  { key: "not_supplied", label: "Not supplied" },
+];
+
+export const EQUIPMENT_CALIBRATION_STATUS = [
+  { key: "in_date", label: "In date" },
+  { key: "due_soon", label: "Due within 30 days" },
+  { key: "overdue", label: "Overdue" },
+  { key: "not_applicable", label: "N/A" },
+];
+
+export const QA_CHECKLIST_ITEMS = [
+  { key: "catScanBeforeWork", label: "CAT scan / utility search before intrusive works" },
+  { key: "controlVerified", label: "Survey control verified against project grid / OS" },
+  { key: "markupReviewedOnSite", label: "Mark-up reviewed on site before demobilisation" },
+  { key: "clientWalkthrough", label: "Client / site walkthrough completed" },
+  { key: "trialHoles", label: "Trial holes / verification undertaken (if in scope)" },
+  { key: "independentCheck", label: "Independent check on critical dimensions / control" },
+];
+
 export const UTILITY_RECORDS_PRESETS = {
   pas128_typical: {
     label: "PAS128 typical pack",
@@ -202,7 +254,60 @@ export function blankSurveyReport(overrides = {}) {
       methodsAffected: [],
       conditionsNarrative: "",
       equipmentMethodImpact: "",
+      tempC: null,
+      tempMinC: null,
+      windMph: null,
+      fetchedAt: null,
     },
+    documentControl: {
+      issueNumber: "1",
+      revision: "A",
+      issueDate: "",
+      preparedBy: "",
+      checkedBy: "",
+      approvedBy: "",
+    },
+    revisionHistory: [],
+    surveyProgramme: {
+      startTime: "",
+      endTime: "",
+      hoursOnSite: "",
+      personnel: "",
+      siteAccessNotes: "",
+    },
+    controlAccuracy: {
+      coordinateSystem: "OSGB36 / British National Grid",
+      controlSource: "",
+      horizontalTolerance: "",
+      verticalTolerance: "",
+      controlPointsNotes: "",
+    },
+    deliverables: [],
+    recordsReferences: [],
+    utilitiesTable: [],
+    qaChecklist: {
+      catScanBeforeWork: false,
+      controlVerified: false,
+      markupReviewedOnSite: false,
+      clientWalkthrough: false,
+      trialHoles: false,
+      independentCheck: false,
+    },
+    hseRefs: {
+      permitRef: "",
+      catScanRef: "",
+      ramsExcerpt: "",
+    },
+    signatures: {
+      surveyorName: "",
+      surveyorSignedDate: "",
+      clientName: "",
+      clientAcceptedDate: "",
+    },
+    equipmentCalibration: [],
+    parentReportId: "",
+    parentRevision: "",
+    changesSincePrevious: [],
     utilityRecords: {
       sourcesConsulted: [],
       outcomes: [],
@@ -226,6 +331,7 @@ export function blankSurveyReport(overrides = {}) {
     linkedRamsId: "",
     sitePlanSummary: "",
     sitePlanSnapshots: [],
+    cadImport: null,
     smartFillAt: null,
     createdAt: now,
     updatedAt: now,

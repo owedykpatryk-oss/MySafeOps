@@ -22,15 +22,27 @@ import {
   UTILITY_RECORDS_PRESETS,
   UTILITY_RECORDS_SOURCES,
   WEATHER_PHENOMENA,
+  QA_CHECKLIST_ITEMS,
+  UTILITY_TYPE_OPTIONS,
+  UTILITY_CONFIDENCE_LEVELS,
+  DELIVERABLE_FORMAT_OPTIONS,
+  RECORD_REF_STATUS_OPTIONS,
+  EQUIPMENT_CALIBRATION_STATUS,
 } from "./surveyReportConstants";
 import {
   buildLimitationsFromKeys,
   nextSurveyRef,
+  normalizeSurveyReport,
   surveyReportQuality,
   surveyTypeLabel,
   toggleArray,
+  finalizeReportRevision,
+  buildDuplicateReportPayload,
+  compareSurveyReports,
 } from "./surveyReportHelpers";
 import { downloadSurveyReportHtml, openSurveyReportPrint, buildSurveyReportHtml } from "./surveyReportPrintHtml";
+import { downloadSurveyReportPdf } from "./surveyReportPdf";
+import { downloadSurveyReportPack, downloadSurveyReportGeoJson } from "./surveyReportExport";
 import {
   applyGeneratedNarratives,
   attachSitePlanSnapshots,
@@ -50,7 +62,9 @@ import {
 } from "./surveyReportSmart";
 import { listProjectPlans, plansForProject } from "../permits/permitPlanOverlayRegistry";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
-import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos } from "../../utils/geoPhotoIntegrations";
+import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable } from "../../utils/geoPhotoIntegrations";
+import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings } from "../../utils/surveyDxfAnalyzer";
+import CadImportPanel from "./CadImportPanel";
 import StatusChip from "../../components/StatusChip";
 import EmptyState from "../../components/EmptyState";
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
@@ -119,6 +133,7 @@ const ss = {
 const EDITOR_TABS = [
   { id: "details", label: "Details" },
   { id: "scope", label: "Scope & method" },
+  { id: "professional", label: "Professional" },
   { id: "weather", label: "Weather" },
   { id: "records", label: "Records review" },
   { id: "limitations", label: "Limitations" },
@@ -126,6 +141,79 @@ const EDITOR_TABS = [
   { id: "photos", label: "Photos" },
   { id: "preview", label: "Print preview" },
 ];
+
+function RowTableEditor({ rows, columns, onChange, emptyLabel, addLabel }) {
+  const updateRow = (idx, key, value) => {
+    onChange(rows.map((r, i) => (i === idx ? { ...r, [key]: value } : r)));
+  };
+  const addRow = () => {
+    const base = { id: `row_${Date.now()}_${Math.random().toString(36).slice(2, 5)}` };
+    columns.forEach((c) => {
+      base[c.key] = c.defaultValue ?? "";
+    });
+    onChange([...(rows || []), base]);
+  };
+  const removeRow = (idx) => onChange(rows.filter((_, i) => i !== idx));
+
+  return (
+    <div>
+      {(rows || []).length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>{emptyLabel}</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+          {(rows || []).map((row, idx) => (
+            <div
+              key={row.id || idx}
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                padding: 10,
+                border: "0.5px solid #e5e7eb",
+                borderRadius: 8,
+                alignItems: "flex-end",
+              }}
+            >
+              {columns.map((col) => (
+                <div key={col.key} style={{ flex: "1 1 140px", minWidth: 120 }}>
+                  <label style={{ ...ss.lbl, fontSize: 10 }}>{col.label}</label>
+                  {col.options ? (
+                    <select
+                      style={ss.inp}
+                      value={row[col.key] || ""}
+                      onChange={(e) => updateRow(idx, col.key, e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {col.options.map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      style={ss.inp}
+                      type={col.type || "text"}
+                      value={row[col.key] || ""}
+                      onChange={(e) => updateRow(idx, col.key, e.target.value)}
+                      placeholder={col.placeholder || ""}
+                    />
+                  )}
+                </div>
+              ))}
+              <button type="button" style={{ ...ss.btn, fontSize: 11, color: "#A32D2D" }} onClick={() => removeRow(idx)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button type="button" style={{ ...ss.btn, fontSize: 11 }} onClick={addRow}>
+        {addLabel}
+      </button>
+    </div>
+  );
+}
 
 function CheckboxGrid({ options, selected, onToggle }) {
   return (
@@ -166,7 +254,7 @@ function QualityBar({ report }) {
   );
 }
 
-function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = [], onApply, linkedRams, onGoToTab }) {
+function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = [], permits = [], onApply, linkedRams, onGoToTab }) {
   const [open, setOpen] = useState(true);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
@@ -264,6 +352,7 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
                   linkedRams,
                   useAi: useAiOnFill,
                   geoPhotos,
+                  permits,
                 }),
               true
             )}
@@ -318,8 +407,16 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
             })}
             {assistBtn("Generate narratives", false, async () => applyGeneratedNarratives(form))}
             {assistBtn("Import geo-photos", !form.projectId || geoReportCount === 0, async () =>
-              mergeGeoPhotos(form, geoPhotos, { replaceFindingsBlock: true })
+              mergeGeoPhotos(form, geoPhotos, { replaceFindingsBlock: true, mergeUtilitiesTable: true })
             )}
+            {assistBtn("Utilities from geo-photos", !form.projectId || geoReportCount === 0, async () => ({
+              ...form,
+              utilitiesTable: geoPhotosToUtilitiesTable(geoPhotos, form.projectId, {
+                existingRows: form.utilitiesTable,
+                pas128Ql: form.pas128Ql,
+              }),
+              updatedAt: new Date().toISOString(),
+            }))}
             {geoReportCount > 0 && (
               <button
                 type="button"
@@ -405,10 +502,12 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
   );
 }
 
-function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = [], isNew, onSave, onClose, onPrint }) {
-  const [form, setForm] = useState(() => ({ ...report }));
+function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = [], permits = [], reports = [], isNew, onSave, onClose, onPrint }) {
+  const [form, setForm] = useState(() => normalizeSurveyReport({ ...report }));
   const [tab, setTab] = useState("details");
   const [saving, setSaving] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [cadBusy, setCadBusy] = useState(false);
   const autoFillRan = useRef(false);
 
   const projectPlansForForm = useMemo(
@@ -428,12 +527,14 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
       projectPlans: plansForProject(report.projectId, projectPlans),
       linkedRams: linked,
       useAi: false,
+      permits,
     })
       .then((next) => setForm({ ...next, updatedAt: new Date().toISOString() }))
       .catch(() => {});
-  }, [isNew, report, projects, ramsDocs, projectPlans]);
+  }, [isNew, report, projects, ramsDocs, projectPlans, permits]);
 
   const deferredForm = useDeferredValue(form);
+  const deferredFormProject = projects.find((p) => p.id === deferredForm.projectId);
 
   const previewHtml = useMemo(() => {
     if (tab !== "preview") return "";
@@ -444,12 +545,16 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
           ...deferredForm,
           limitationsText: deferredForm.limitationsText || buildLimitationsFromKeys(deferredForm.limitationKeys),
         },
-        { ramsTitle: linkedRams?.title || linkedRams?.documentNo || "" }
+        {
+          ramsTitle: linkedRams?.title || linkedRams?.documentNo || "",
+          projectLat: deferredFormProject?.lat,
+          projectLng: deferredFormProject?.lng,
+        }
       );
     } catch {
       return "";
     }
-  }, [tab, deferredForm, ramsDocs]);
+  }, [tab, deferredForm, ramsDocs, deferredFormProject]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v, updatedAt: new Date().toISOString() }));
   const setSection = (k, v) =>
@@ -468,6 +573,42 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
     setForm((f) => ({
       ...f,
       utilityRecords: { ...f.utilityRecords, [k]: v },
+      updatedAt: new Date().toISOString(),
+    }));
+  const setDocControl = (k, v) =>
+    setForm((f) => ({
+      ...f,
+      documentControl: { ...f.documentControl, [k]: v },
+      updatedAt: new Date().toISOString(),
+    }));
+  const setProgramme = (k, v) =>
+    setForm((f) => ({
+      ...f,
+      surveyProgramme: { ...f.surveyProgramme, [k]: v },
+      updatedAt: new Date().toISOString(),
+    }));
+  const setControl = (k, v) =>
+    setForm((f) => ({
+      ...f,
+      controlAccuracy: { ...f.controlAccuracy, [k]: v },
+      updatedAt: new Date().toISOString(),
+    }));
+  const setQa = (k, v) =>
+    setForm((f) => ({
+      ...f,
+      qaChecklist: { ...f.qaChecklist, [k]: v },
+      updatedAt: new Date().toISOString(),
+    }));
+  const setHse = (k, v) =>
+    setForm((f) => ({
+      ...f,
+      hseRefs: { ...f.hseRefs, [k]: v },
+      updatedAt: new Date().toISOString(),
+    }));
+  const setSig = (k, v) =>
+    setForm((f) => ({
+      ...f,
+      signatures: { ...f.signatures, [k]: v },
       updatedAt: new Date().toISOString(),
     }));
 
@@ -543,13 +684,86 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
     e.target.value = "";
   };
 
+  const handleCadUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCadBusy(true);
+    try {
+      const analysis = await readCadFile(file);
+      const gapLabels = (form.utilityRecords?.informationGaps || [])
+        .map((k) => UTILITY_RECORDS_GAPS.find((g) => g.key === k)?.label)
+        .filter(Boolean);
+      const next = mergeCadAnalysisIntoReport(form, analysis, {
+        whatWasNotFound: form.utilityRecords?.whatWasNotFound,
+        recordsGapLabels: gapLabels,
+      });
+      setForm({ ...next, updatedAt: new Date().toISOString() });
+      pushAudit({ action: "survey_report_cad_import", entity: "survey_report", detail: file.name });
+    } catch (err) {
+      alert(err?.message || "CAD import failed.");
+    } finally {
+      setCadBusy(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleCadLayerMappings = (layerMappings) => {
+    if (!form.cadImport?.layerBreakdown?.length) return;
+    const gapLabels = (form.utilityRecords?.informationGaps || [])
+      .map((k) => UTILITY_RECORDS_GAPS.find((g) => g.key === k)?.label)
+      .filter(Boolean);
+    const nextCad = applyCadLayerMappings(form.cadImport, layerMappings, {
+      whatWasNotFound: form.utilityRecords?.whatWasNotFound,
+      recordsGaps: gapLabels,
+    });
+    let findings = String(form.sections?.findings || "").trim();
+    const marker = "=== CAD utility length summary";
+    if (findings.includes(marker)) {
+      findings = findings.replace(new RegExp(`${marker}[\\s\\S]*?(?=\\n===|$)`, "m"), nextCad.narrative).trim();
+    }
+    setForm((f) => ({
+      ...f,
+      cadImport: nextCad,
+      sections: { ...f.sections, findings },
+      updatedAt: new Date().toISOString(),
+    }));
+  };
+
   const linkedRams = ramsDocs.find((d) => d.id === form.linkedRamsId);
 
-  const preparePayload = (extra = {}) => ({
-    ...form,
-    ...extra,
-    limitationsText: form.limitationsText || buildLimitationsFromKeys(form.limitationKeys),
-  });
+  const printExtras = useMemo(() => {
+    const project = projects.find((p) => p.id === form.projectId);
+    return {
+      ramsTitle: linkedRams?.title || linkedRams?.documentNo || "",
+      projectLat: project?.lat,
+      projectLng: project?.lng,
+    };
+  }, [linkedRams, form.projectId, projects]);
+
+  const handleDownloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      await downloadSurveyReportPdf(form, printExtras);
+      pushAudit({ action: "survey_report_pdf", entity: "survey_report", detail: form.ref || form.id });
+    } catch (e) {
+      alert(e?.message || "PDF export failed.");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  const preparePayload = (extra = {}) => {
+    let payload = {
+      ...form,
+      ...extra,
+      limitationsText: form.limitationsText || buildLimitationsFromKeys(form.limitationKeys),
+    };
+    if (payload.parentReportId) {
+      const parent = reports.find((r) => r.id === payload.parentReportId);
+      if (parent) payload.changesSincePrevious = compareSurveyReports(parent, payload);
+    }
+    return payload;
+  };
 
   const handleSave = async (extra = {}) => {
     setSaving(true);
@@ -566,6 +780,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
             projectPlans: projectPlansForForm,
             linkedRams,
             useAi: false,
+            permits,
           });
           setForm({ ...payload, updatedAt: new Date().toISOString() });
         }
@@ -596,12 +811,35 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
 
         <QualityBar report={form} />
 
+        {(form.changesSincePrevious || []).length > 0 && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: "#fffbeb",
+              border: "0.5px solid #fcd34d",
+              fontSize: 12,
+            }}
+          >
+            <strong>Changes since {form.parentRevision ? `Rev ${form.parentRevision}` : "previous issue"}:</strong>
+            <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+              {form.changesSincePrevious.slice(0, 6).map((c, i) => (
+                <li key={i}>
+                  {c.field}: {c.before || "—"} → {c.after || "—"}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <SmartAssistPanel
           form={form}
           projects={projects}
           ramsDocs={ramsDocs}
           projectPlans={projectPlansForForm}
           geoPhotos={geoPhotos}
+          permits={permits}
           linkedRams={linkedRams}
           onGoToTab={setTab}
           onApply={(next) => setForm({ ...next, updatedAt: new Date().toISOString() })}
@@ -709,6 +947,33 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
                 placeholder="Brief overview for the client — what was done and key outcomes."
               />
             </div>
+            <div style={ss.sectionHead}>Document control</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10 }}>
+              <div>
+                <label style={ss.lbl}>Issue no.</label>
+                <input style={ss.inp} value={form.documentControl.issueNumber} onChange={(e) => setDocControl("issueNumber", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Revision</label>
+                <input style={ss.inp} value={form.documentControl.revision} onChange={(e) => setDocControl("revision", e.target.value)} placeholder="A" />
+              </div>
+              <div>
+                <label style={ss.lbl}>Issue date</label>
+                <input type="date" style={ss.inp} value={form.documentControl.issueDate} onChange={(e) => setDocControl("issueDate", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Prepared by</label>
+                <input style={ss.inp} value={form.documentControl.preparedBy} onChange={(e) => setDocControl("preparedBy", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Checked by</label>
+                <input style={ss.inp} value={form.documentControl.checkedBy} onChange={(e) => setDocControl("checkedBy", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Approved by</label>
+                <input style={ss.inp} value={form.documentControl.approvedBy} onChange={(e) => setDocControl("approvedBy", e.target.value)} />
+              </div>
+            </div>
           </>
         )}
 
@@ -742,11 +1007,182 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
               onChange={(e) => setSection("surveyExtent", e.target.value)}
               placeholder="Area covered, grid spacing, boundary references."
             />
+            <div style={ss.sectionHead}>Control & accuracy</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={ss.lbl}>Coordinate system</label>
+                <input style={ss.inp} value={form.controlAccuracy.coordinateSystem} onChange={(e) => setControl("coordinateSystem", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Control source</label>
+                <input style={ss.inp} value={form.controlAccuracy.controlSource} onChange={(e) => setControl("controlSource", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Horizontal tolerance</label>
+                <input style={ss.inp} value={form.controlAccuracy.horizontalTolerance} onChange={(e) => setControl("horizontalTolerance", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Vertical tolerance</label>
+                <input style={ss.inp} value={form.controlAccuracy.verticalTolerance} onChange={(e) => setControl("verticalTolerance", e.target.value)} />
+              </div>
+            </div>
+            <label style={ss.lbl}>Control points / notes</label>
+            <textarea
+              style={{ ...ss.ta, minHeight: 56 }}
+              value={form.controlAccuracy.controlPointsNotes}
+              onChange={(e) => setControl("controlPointsNotes", e.target.value)}
+              placeholder="Control point IDs, residuals, independent checks…"
+            />
+            <div style={ss.sectionHead}>Deliverables schedule</div>
+            <RowTableEditor
+              rows={form.deliverables}
+              onChange={(deliverables) => setForm((f) => ({ ...f, deliverables, updatedAt: new Date().toISOString() }))}
+              emptyLabel="No deliverables listed — Smart fill adds defaults by survey type."
+              addLabel="+ Add deliverable"
+              columns={[
+                { key: "format", label: "Format", options: DELIVERABLE_FORMAT_OPTIONS },
+                { key: "description", label: "Description", placeholder: "Utility mark-up PDF" },
+                { key: "crs", label: "CRS / grid", placeholder: "OSGB36" },
+                { key: "status", label: "Status", placeholder: "Issued with report" },
+              ]}
+            />
+          </>
+        )}
+
+        {tab === "professional" && (
+          <>
+            <div style={ss.sectionHead}>Survey programme</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={ss.lbl}>Start time</label>
+                <input type="time" style={ss.inp} value={form.surveyProgramme.startTime} onChange={(e) => setProgramme("startTime", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>End time</label>
+                <input type="time" style={ss.inp} value={form.surveyProgramme.endTime} onChange={(e) => setProgramme("endTime", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Hours on site</label>
+                <input style={ss.inp} value={form.surveyProgramme.hoursOnSite} onChange={(e) => setProgramme("hoursOnSite", e.target.value)} placeholder="e.g. 6.5" />
+              </div>
+            </div>
+            <label style={ss.lbl}>Personnel on site</label>
+            <input
+              style={{ ...ss.inp, marginBottom: 10 }}
+              value={form.surveyProgramme.personnel}
+              onChange={(e) => setProgramme("personnel", e.target.value)}
+              placeholder="Surveyor, assistant, client rep…"
+            />
+            <label style={ss.lbl}>Site access notes</label>
+            <textarea
+              style={{ ...ss.ta, minHeight: 48, marginBottom: 14 }}
+              value={form.surveyProgramme.siteAccessNotes}
+              onChange={(e) => setProgramme("siteAccessNotes", e.target.value)}
+            />
+            <div style={ss.sectionHead}>QA & verification</div>
+            <CheckboxGrid
+              options={QA_CHECKLIST_ITEMS}
+              selected={Object.entries(form.qaChecklist || {})
+                .filter(([, v]) => v)
+                .map(([k]) => k)}
+              onToggle={(key) => setQa(key, !form.qaChecklist?.[key])}
+            />
+            <div style={ss.sectionHead}>Health & safety cross-reference</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={ss.lbl}>Permit reference</label>
+                <input style={ss.inp} value={form.hseRefs.permitRef} onChange={(e) => setHse("permitRef", e.target.value)} placeholder="Auto-filled from permits if linked" />
+              </div>
+              <div>
+                <label style={ss.lbl}>CAT scan reference</label>
+                <input style={ss.inp} value={form.hseRefs.catScanRef} onChange={(e) => setHse("catScanRef", e.target.value)} />
+              </div>
+            </div>
+            <label style={ss.lbl}>RAMS excerpt (optional)</label>
+            <textarea
+              style={{ ...ss.ta, minHeight: 56, marginBottom: 14 }}
+              value={form.hseRefs.ramsExcerpt}
+              onChange={(e) => setHse("ramsExcerpt", e.target.value)}
+              placeholder="Short method statement excerpt for the PDF."
+            />
+            <div style={ss.sectionHead}>Equipment calibration</div>
+            <RowTableEditor
+              rows={form.equipmentCalibration}
+              onChange={(equipmentCalibration) => setForm((f) => ({ ...f, equipmentCalibration, updatedAt: new Date().toISOString() }))}
+              emptyLabel="No calibration records — Smart fill adds defaults by survey type."
+              addLabel="+ Add instrument"
+              columns={[
+                { key: "instrument", label: "Instrument", placeholder: "RD8000" },
+                { key: "serialNo", label: "Serial no." },
+                { key: "calibrationDue", label: "Cal. due", type: "date" },
+                { key: "status", label: "Status", options: EQUIPMENT_CALIBRATION_STATUS },
+              ]}
+            />
+            <div style={ss.sectionHead}>Revision history</div>
+            <RowTableEditor
+              rows={form.revisionHistory}
+              onChange={(revisionHistory) => setForm((f) => ({ ...f, revisionHistory, updatedAt: new Date().toISOString() }))}
+              emptyLabel="No revision history — initial issue added on Smart fill."
+              addLabel="+ Add revision"
+              columns={[
+                { key: "date", label: "Date", type: "date" },
+                { key: "revision", label: "Rev", placeholder: "B" },
+                { key: "author", label: "Author" },
+                { key: "description", label: "Description", placeholder: "Updated findings" },
+              ]}
+            />
+            <div style={ss.sectionHead}>Sign-off</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10 }}>
+              <div>
+                <label style={ss.lbl}>Surveyor name</label>
+                <input style={ss.inp} value={form.signatures.surveyorName} onChange={(e) => setSig("surveyorName", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Surveyor sign date</label>
+                <input type="date" style={ss.inp} value={form.signatures.surveyorSignedDate} onChange={(e) => setSig("surveyorSignedDate", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Client name (optional)</label>
+                <input style={ss.inp} value={form.signatures.clientName} onChange={(e) => setSig("clientName", e.target.value)} />
+              </div>
+              <div>
+                <label style={ss.lbl}>Client acceptance date</label>
+                <input type="date" style={ss.inp} value={form.signatures.clientAcceptedDate} onChange={(e) => setSig("clientAcceptedDate", e.target.value)} />
+              </div>
+            </div>
           </>
         )}
 
         {tab === "weather" && (
           <>
+            {(form.weather?.tempC != null || form.weather?.windMph != null) && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  background: "#f0f9ff",
+                  border: "0.5px solid #bae6fd",
+                  fontSize: 12,
+                }}
+              >
+                {form.weather.tempC != null && (
+                  <span>
+                    Temperature: {form.weather.tempMinC != null && form.weather.tempMinC !== form.weather.tempC
+                      ? `${form.weather.tempMinC}–${form.weather.tempC}°C`
+                      : `${form.weather.tempC}°C`}
+                  </span>
+                )}
+                {form.weather.windMph != null && (
+                  <span style={{ marginLeft: form.weather.tempC != null ? 12 : 0 }}>Wind: ~{Number(form.weather.windMph).toFixed(1)} mph</span>
+                )}
+                {form.weather.fetchedAt && (
+                  <span style={{ display: "block", marginTop: 4, color: "var(--color-text-secondary)" }}>
+                    Fetched {new Date(form.weather.fetchedAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
+                  </span>
+                )}
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))", gap: 10, marginBottom: 14 }}>
               <div>
                 <label style={ss.lbl}>Ground surface</label>
@@ -841,6 +1277,19 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
               <label style={ss.lbl}>Gap explanation</label>
               <textarea style={{ ...ss.ta, minHeight: 48 }} value={form.utilityRecords.gapExplanation} onChange={(e) => setRecords("gapExplanation", e.target.value)} />
             </div>
+            <div style={ss.sectionHead}>Records references</div>
+            <RowTableEditor
+              rows={form.recordsReferences}
+              onChange={(recordsReferences) => setForm((f) => ({ ...f, recordsReferences, updatedAt: new Date().toISOString() }))}
+              emptyLabel="Add DNO / undertaker reference numbers received."
+              addLabel="+ Add record reference"
+              columns={[
+                { key: "source", label: "Source", placeholder: "UK Power Networks" },
+                { key: "reference", label: "Reference", placeholder: "REF-12345" },
+                { key: "receivedDate", label: "Received", type: "date" },
+                { key: "status", label: "Status", options: RECORD_REF_STATUS_OPTIONS },
+              ]}
+            />
           </>
         )}
 
@@ -885,6 +1334,51 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
 
         {tab === "findings" && (
           <>
+            <CadImportPanel
+              cadImport={form.cadImport}
+              utilitiesTable={form.utilitiesTable}
+              cadBusy={cadBusy}
+              ss={ss}
+              onUpload={handleCadUpload}
+              onLayerMappingsChange={handleCadLayerMappings}
+              onClear={() => setForm((f) => ({ ...f, cadImport: null, updatedAt: new Date().toISOString() }))}
+            />
+            <div style={ss.sectionHead}>Utility schedule (PAS128)</div>
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+              Structured table prints before narrative findings — ideal for utility mapping reports.
+            </p>
+            <RowTableEditor
+              rows={form.utilitiesTable}
+              onChange={(utilitiesTable) => setForm((f) => ({ ...f, utilitiesTable, updatedAt: new Date().toISOString() }))}
+              emptyLabel="No utilities in schedule — add rows, import from geo-photos, or describe in text below."
+              addLabel="+ Add utility"
+              columns={[
+                { key: "utilityType", label: "Utility", options: UTILITY_TYPE_OPTIONS },
+                { key: "depth", label: "Depth", placeholder: "0.8 m" },
+                { key: "method", label: "Method", placeholder: "EML + GPR" },
+                { key: "pas128Ql", label: "PAS128 QL", options: PAS128_QUALITY_LEVELS },
+                { key: "confidence", label: "Confidence", options: UTILITY_CONFIDENCE_LEVELS },
+                { key: "notes", label: "Notes", placeholder: "Near substation" },
+              ]}
+            />
+            {form.projectId && countGeoPhotosForReport(geoPhotos, form.projectId) > 0 && (
+              <button
+                type="button"
+                style={{ ...ss.btn, fontSize: 11, marginBottom: 12 }}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    utilitiesTable: geoPhotosToUtilitiesTable(geoPhotos, f.projectId, {
+                      existingRows: f.utilitiesTable,
+                      pas128Ql: f.pas128Ql,
+                    }),
+                    updatedAt: new Date().toISOString(),
+                  }))
+                }
+              >
+                Import utility rows from geo-photos
+              </button>
+            )}
             <label style={ss.lbl}>Findings & results *</label>
             <textarea
               style={{ ...ss.ta, minHeight: 120 }}
@@ -946,7 +1440,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
                     style={{ ...ss.btnP, fontSize: 12, padding: "6px 12px" }}
                     onClick={() =>
                       setForm((f) => ({
-                        ...mergeGeoPhotos(f, geoPhotos, { replaceFindingsBlock: true }),
+                        ...mergeGeoPhotos(f, geoPhotos, { replaceFindingsBlock: true, mergeUtilitiesTable: true }),
                         updatedAt: new Date().toISOString(),
                       }))
                     }
@@ -1018,6 +1512,9 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
           <button type="button" style={ss.btn} onClick={() => onPrint(form, linkedRams)}>
             Preview / print
           </button>
+          <button type="button" style={ss.btn} disabled={pdfBusy} onClick={handleDownloadPdf}>
+            {pdfBusy ? "PDF…" : "Download PDF"}
+          </button>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
@@ -1035,8 +1532,9 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
               style={{ ...ss.btn, borderColor: "#0d9488", color: "#0d9488" }}
               disabled={saving}
               onClick={() => {
-                if (!confirm("Mark this report as final? You can still edit later but status will show as issued.")) return;
-                handleSave({ status: "final", finalisedAt: new Date().toISOString() });
+                if (!confirm("Mark this report as final? Issue date and sign-off will be set; you can still edit later.")) return;
+                const finalized = finalizeReportRevision(form);
+                handleSave(finalized);
               }}
             >
               Mark final
@@ -1055,8 +1553,10 @@ export default function SurveyReport() {
   const [ramsDocs] = useState(() => load("rams_builder_docs", []));
   const [projectPlans] = useState(() => listProjectPlans());
   const [geoPhotos] = useState(() => load("geo_photos", []));
+  const [permits] = useState(() => load("permits_v2", []));
   const [modal, setModal] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [pdfBusyId, setPdfBusyId] = useState("");
   const listPg = useRegisterListPaging(30);
 
   useEffect(() => {
@@ -1163,24 +1663,55 @@ export default function SurveyReport() {
     setModal(null);
   };
 
-  const duplicateReport = (report) => {
-    const ref = nextSurveyRef(reports);
-    const copy = {
-      ...JSON.parse(JSON.stringify(report)),
-      id: `sr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      ref,
-      title: `${report.title || report.ref || "Survey report"} (copy)`,
-      status: "draft",
-      surveyDate: new Date().toISOString().slice(0, 10),
-      finalisedAt: null,
-      smartFillAt: null,
-      sitePlanSnapshots: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  const duplicateReport = (report, { asRevision = false } = {}) => {
+    const copy = buildDuplicateReportPayload(report, reports, { asRevision });
     setReports((prev) => [copy, ...prev]);
-    pushAudit({ action: "survey_report_duplicate", entity: "survey_report", detail: ref });
+    pushAudit({
+      action: asRevision ? "survey_report_revision" : "survey_report_duplicate",
+      entity: "survey_report",
+      detail: copy.ref || copy.id,
+    });
     setModal({ type: "edit", isNew: false, data: copy });
+  };
+
+  const downloadPdfForReport = async (report) => {
+    const rams = ramsDocs.find((d) => d.id === report.linkedRamsId);
+    const project = projects.find((p) => p.id === report.projectId);
+    setPdfBusyId(report.id);
+    try {
+      await downloadSurveyReportPdf(report, {
+        ramsTitle: rams?.title || rams?.documentTitle,
+        projectLat: project?.lat,
+        projectLng: project?.lng,
+      });
+      pushAudit({ action: "survey_report_pdf", entity: "survey_report", detail: report.ref || report.id });
+    } catch (e) {
+      alert(e?.message || "PDF export failed.");
+    } finally {
+      setPdfBusyId("");
+    }
+  };
+
+  const exportPackForReport = async (report) => {
+    const rams = ramsDocs.find((d) => d.id === report.linkedRamsId);
+    const project = projects.find((p) => p.id === report.projectId);
+    setPdfBusyId(report.id);
+    try {
+      await downloadSurveyReportPack(
+        report,
+        {
+          ramsTitle: rams?.title || rams?.documentTitle,
+          projectLat: project?.lat,
+          projectLng: project?.lng,
+        },
+        geoPhotos
+      );
+      pushAudit({ action: "survey_report_pack", entity: "survey_report", detail: report.ref || report.id });
+    } catch (e) {
+      alert(e?.message || "Export pack failed.");
+    } finally {
+      setPdfBusyId("");
+    }
   };
 
   const missingProjectCount = useMemo(
@@ -1214,7 +1745,12 @@ export default function SurveyReport() {
 
   const printReport = (report) => {
     const rams = ramsDocs.find((d) => d.id === report.linkedRamsId);
-    openSurveyReportPrint(report, { ramsTitle: rams?.title || rams?.documentTitle });
+    const project = projects.find((p) => p.id === report.projectId);
+    openSurveyReportPrint(report, {
+      ramsTitle: rams?.title || rams?.documentTitle,
+      projectLat: project?.lat,
+      projectLng: project?.lng,
+    });
     pushAudit({ action: "survey_report_print", entity: "survey_report", detail: report.ref || report.id });
   };
 
@@ -1230,11 +1766,18 @@ export default function SurveyReport() {
           ramsDocs={ramsDocs.filter((d) => d.surveyWorkType || d.surveyMethodStatement)}
           projectPlans={projectPlans}
           geoPhotos={geoPhotos}
+          permits={permits}
+          reports={reports}
           onSave={(r) => persist(r, modal.isNew)}
           onClose={() => setModal(null)}
           onPrint={(r) => {
             const linked = ramsDocs.find((d) => d.id === r.linkedRamsId);
-            openSurveyReportPrint(r, { ramsTitle: linked?.title || linked?.documentTitle });
+            const project = projects.find((p) => p.id === r.projectId);
+            openSurveyReportPrint(r, {
+              ramsTitle: linked?.title || linked?.documentTitle,
+              projectLat: project?.lat,
+              projectLng: project?.lng,
+            });
           }}
         />
       )}
@@ -1242,7 +1785,7 @@ export default function SurveyReport() {
       <PageHero
         badgeText="SR"
         title="Survey report"
-        lead="PAS128-style field survey reports with weather, records review, limitation checklists and branded print output."
+        lead="PAS128 survey reports — cover page, utility schedule, PDF download, revision control, geo-photo import and branded A4 print."
         right={
           <button type="button" style={ss.btnP} onClick={createNew}>
             + New report
@@ -1332,16 +1875,51 @@ export default function SurveyReport() {
                     <button
                       type="button"
                       style={ss.btn}
+                      disabled={pdfBusyId === r.id}
+                      onClick={() => downloadPdfForReport(r)}
+                    >
+                      {pdfBusyId === r.id ? "PDF…" : "PDF"}
+                    </button>
+                    <button type="button" style={ss.btn} onClick={() => exportPackForReport(r)}>
+                      Pack
+                    </button>
+                    <button
+                      type="button"
+                      style={ss.btn}
                       onClick={() => {
-                        downloadSurveyReportHtml(r);
+                        downloadSurveyReportHtml(r, {
+                          ramsTitle: ramsDocs.find((d) => d.id === r.linkedRamsId)?.title,
+                          projectLat: projects.find((p) => p.id === r.projectId)?.lat,
+                          projectLng: projects.find((p) => p.id === r.projectId)?.lng,
+                        });
                         pushAudit({ action: "survey_report_html", entity: "survey_report", detail: r.ref || r.id });
                       }}
                     >
                       HTML
                     </button>
+                    {r.projectId && countGeoPhotosForReport(geoPhotos, r.projectId) > 0 && (
+                      <button
+                        type="button"
+                        style={ss.btn}
+                        onClick={() => {
+                          try {
+                            downloadSurveyReportGeoJson(r, geoPhotos);
+                          } catch (e) {
+                            alert(e?.message || "GeoJSON export failed.");
+                          }
+                        }}
+                      >
+                        GeoJSON
+                      </button>
+                    )}
                     <button type="button" style={ss.btn} onClick={() => duplicateReport(r)}>
                       Duplicate
                     </button>
+                    {r.status === "final" && (
+                      <button type="button" style={ss.btn} onClick={() => duplicateReport(r, { asRevision: true })}>
+                        New revision
+                      </button>
+                    )}
                     <button type="button" style={ss.btnP} onClick={() => setModal({ type: "edit", data: r, isNew: false })}>
                       Edit
                     </button>
