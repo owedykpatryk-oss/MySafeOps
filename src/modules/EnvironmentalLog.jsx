@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `env_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -137,7 +139,7 @@ export default function EnvironmentalLog() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="environmental log" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-            <PageHero
+            <PageHero exportModuleId="environmental"
         badgeText="ENV"
         title="Environmental log"
         lead="Spills, bund checks, and environmental notes (local only)."
@@ -152,6 +154,13 @@ export default function EnvironmentalLog() {
           </button>
         </div>}
       />
+
+      <RegisterModuleShell
+        moduleId="environmental"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("environmental", items)}
+      >
+
 {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No environmental events logged.</div>
       ) : (
@@ -200,6 +209,7 @@ export default function EnvironmentalLog() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

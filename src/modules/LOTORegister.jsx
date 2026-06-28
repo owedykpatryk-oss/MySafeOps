@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { orgHasFoodIndustrialPack } from "../utils/industrialSectors";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -459,7 +461,7 @@ export default function LOTORegister() {
       {modal?.type === "form" && (
         <DetailModal item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />
       )}
-      <PageHero
+      <PageHero exportModuleId="loto"
         badgeText="LOTO"
         title="LOTO workflow"
         lead="First-class isolation with 4-eyes verification and zero-energy sign-off. Link from hot work when working in food or similar sites."
@@ -481,6 +483,13 @@ export default function LOTORegister() {
           </div>
         }
       />
+
+      <RegisterModuleShell
+        moduleId="loto"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("loto", items)}
+      >
+
 
       {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No LOTO workflows yet.</div>
@@ -532,6 +541,7 @@ export default function LOTORegister() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

@@ -5,6 +5,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 
 const genId = () => `fa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -94,7 +96,7 @@ export default function FirstAidRegister() {
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       {modal?.type === "form" && <Form item={modal.data} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-            <PageHero
+            <PageHero exportModuleId="first-aid"
         badgeText="FA"
         title="First aid"
         lead="Trained personnel and kit locations (HSE-style site cover)."
@@ -109,6 +111,13 @@ export default function FirstAidRegister() {
           </button>
         </div>}
       />
+
+      <RegisterModuleShell
+        moduleId="first-aid"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("first-aid", items)}
+      >
+
 {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No first aiders or kit locations listed.</div>
       ) : (
@@ -158,6 +167,7 @@ export default function FirstAidRegister() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

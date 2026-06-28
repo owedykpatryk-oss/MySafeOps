@@ -4,6 +4,8 @@ import { MapPin, Phone } from "lucide-react";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import {
   loadEmergencySiteExtras,
   saveEmergencySiteExtras,
@@ -68,11 +70,18 @@ export default function EmergencyContacts() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14, color: "var(--color-text-primary)" }}>
-      <PageHero
+      <PageHero exportModuleId="emergency"
         badgeText="999"
         title="Emergency contacts"
         lead="Site-specific numbers alongside national services. Tap phone on mobile where supported. RAMS can import site and hospital details from here."
       />
+
+      <RegisterModuleShell
+        moduleId="emergency"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("emergency", items)}
+      >
+
 
       <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 8, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
@@ -204,6 +213,7 @@ export default function EmergencyContacts() {
           + Add contact
         </button>
       </div>
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

@@ -56,7 +56,7 @@ export default function WorkspaceOnboarding({ onComplete }) {
   };
 
   const applyPackAndNext = async () => {
-    if (canManage && packKey) applyIndustryPack(packKey);
+    if (canManage && packKey) applyIndustryPack(packKey, { seedTemplates: true });
     await syncCloud();
     setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
   };
@@ -87,7 +87,7 @@ export default function WorkspaceOnboarding({ onComplete }) {
               Welcome to MySafeOps
             </h2>
             <p className="app-onboarding-lead">
-              Set up <strong>{branding.displayName}</strong> in under a minute — module layout, quick navigation, and your first tasks.
+              Set up <strong>{branding.displayName}</strong> in under a minute. Your workspace profile controls which modules appear, how Project Hub scores readiness, and which RAMS hazard starter is suggested — you can change it anytime in Settings.
             </p>
             <button type="button" className="app-onboarding-primary" onClick={() => setStepIndex(1)}>
               Get started
@@ -100,7 +100,10 @@ export default function WorkspaceOnboarding({ onComplete }) {
           <>
             <h2 className="app-onboarding-title">Choose your workspace profile</h2>
             <p className="app-onboarding-lead">
-              Pick what matches your work — you can change modules anytime in Settings → Organisation → Modules.
+              Pick the option closest to your trade. This shows relevant registers in More, sets Project Hub gates, and suggests a RAMS starter — nothing is deleted if you switch later.
+            </p>
+            <p className="app-onboarding-note">
+              Starter rows can be added to empty registers on continue. Full guide: Help (<kbd>?</kbd>) → Workspace profiles.
             </p>
             {!canManage ? (
               <p className="app-onboarding-note">Ask an organisation admin to apply a profile, or continue with the default layout.</p>
@@ -170,6 +173,11 @@ export default function WorkspaceOnboarding({ onComplete }) {
             <h2 className="app-onboarding-title">You&apos;re ready</h2>
             <p className="app-onboarding-lead">Your workspace is tailored. Complete these when you have a moment:</p>
             <ul className="app-onboarding-checklist">
+              <li>
+                <button type="button" onClick={() => openWorkspaceView({ viewId: "help" })}>
+                  Read the workspace profile guide (Help)
+                </button>
+              </li>
               <li>
                 <button type="button" onClick={() => openWorkspaceSettings({ tab: "organisation" })}>
                   Add logo & company details

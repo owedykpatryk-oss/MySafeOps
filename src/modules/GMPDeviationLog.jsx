@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const KEY = "gmp_deviation_log";
@@ -146,7 +148,7 @@ export default function GMPDeviationLog() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="GMP deviation log" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-      <PageHero
+      <PageHero exportModuleId="gmp-deviations"
         badgeText="GMP"
         title="GMP deviation log"
         lead="Pharma-style deviation logging for QA traceability (export to CSV for document control)."
@@ -163,6 +165,13 @@ export default function GMPDeviationLog() {
           </div>
         }
       />
+
+      <RegisterModuleShell
+        moduleId="gmp-deviations"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("gmp-deviations", items)}
+      >
+
       {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No deviations logged.</div>
       ) : (
@@ -197,6 +206,7 @@ export default function GMPDeviationLog() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

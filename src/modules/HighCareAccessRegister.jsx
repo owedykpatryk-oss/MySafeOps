@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const KEY = "high_care_access_register";
@@ -191,7 +193,7 @@ export default function HighCareAccessRegister() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="high-care access register" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-      <PageHero
+      <PageHero exportModuleId="high-care-access"
         badgeText="HC"
         title="High-care access"
         lead="Visitor / contractor access to high-care or high-risk zones with hygiene checks and tool reconciliation."
@@ -213,6 +215,13 @@ export default function HighCareAccessRegister() {
           </div>
         }
       />
+
+      <RegisterModuleShell
+        moduleId="high-care-access"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("high-care-access", items)}
+      >
+
       {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No entries yet.</div>
       ) : (
@@ -254,6 +263,7 @@ export default function HighCareAccessRegister() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

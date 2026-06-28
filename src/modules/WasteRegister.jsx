@@ -4,6 +4,8 @@ import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `waste_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -171,7 +173,7 @@ export default function WasteRegister() {
           onClose={() => setModal(null)}
         />
       )}
-      <PageHero
+      <PageHero exportModuleId="waste"
         badgeText="WS"
         title="Waste register"
         lead="Waste transfer notes, duty of care, EWC codes — UK Environment Agency expectations (local record only)."
@@ -188,6 +190,13 @@ export default function WasteRegister() {
           </div>
         }
       />
+
+      <RegisterModuleShell
+        moduleId="waste"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("waste", items)}
+      >
+
       {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No waste transfers recorded.</div>
       ) : (
@@ -230,6 +239,7 @@ export default function WasteRegister() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

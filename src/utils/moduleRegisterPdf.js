@@ -3,6 +3,7 @@ import { loadOrgScoped } from "./orgStorage";
 import { sanitizePdfFileSegment } from "./pdfFileName";
 import { MODULE_PDF_REGISTRY, canExportModulePdf } from "../navigation/moduleCatalogMeta";
 import { MORE_SECTIONS, getMoreTabsForSection } from "../navigation/appModules";
+import { prepareRegisterExport, renderDailyBriefingDetailPages } from "./registerPdfAdapters";
 
 let jsPDFPromise = null;
 async function loadJsPDF() {
@@ -330,8 +331,11 @@ function renderModulesIntoPdf(pdf, { org, rgb, theme, bundleTitle, bundleSubtitl
   modules.forEach((mod, index) => {
     const { rows, cfg } = loadRegisterRows(mod.id);
     if (!cfg) return;
+    const prepared = prepareRegisterExport(mod.id, rows, { summary: true });
+    const tableRows = prepared.mode === "table" ? prepared.rows : rows;
     const columns =
-      Array.isArray(cfg.columns) && cfg.columns.length > 0 ? cfg.columns : inferRegisterColumns(rows);
+      prepared.columns ||
+      (Array.isArray(cfg.columns) && cfg.columns.length > 0 ? cfg.columns : inferRegisterColumns(tableRows));
     if (y > PAGE_H - 62 && index > 0) {
       pdf.addPage();
       y = drawPdfPageHeader(pdf, {
@@ -344,7 +348,7 @@ function renderModulesIntoPdf(pdf, { org, rgb, theme, bundleTitle, bundleSubtitl
       y += 2;
     }
     y = renderRegisterTable(pdf, {
-      rows,
+      rows: tableRows,
       columns,
       sectionTitle: mod.label,
       org,
@@ -373,18 +377,34 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
   const theme = getPdfTheme(org);
   const rgb = hexToRgb(org.primaryColor);
   const label = opts.label || humanizeKey(moduleId);
-  const columns =
-    Array.isArray(cfg.columns) && cfg.columns.length > 0 ? cfg.columns : inferRegisterColumns(rows);
+  const prepared = prepareRegisterExport(moduleId, rows, { summary: opts.summary === true });
 
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
-  let y = drawPdfPageHeader(pdf, {
-    org,
-    title: label,
-    subtitle: org.pdfHeader ? String(org.pdfHeader).slice(0, 90) : "Register export",
-    rgb,
-    theme,
-  });
-  renderRegisterTable(pdf, { rows, columns, sectionTitle: label, org, rgb, theme, startY: y + 2 });
+
+  if (prepared.mode === "detail" && moduleId === "daily-briefing") {
+    renderDailyBriefingDetailPages(pdf, prepared.rows, {
+      drawPdfPageHeader: (doc, meta) => drawPdfPageHeader(doc, meta),
+      renderRegisterTable,
+      org,
+      rgb,
+      theme,
+      label,
+    });
+  } else {
+    const tableRows = prepared.mode === "table" ? prepared.rows : rows;
+    const columns =
+      prepared.columns ||
+      (Array.isArray(cfg.columns) && cfg.columns.length > 0 ? cfg.columns : inferRegisterColumns(tableRows));
+    const y = drawPdfPageHeader(pdf, {
+      org,
+      title: label,
+      subtitle: org.pdfHeader ? String(org.pdfHeader).slice(0, 90) : "Register export",
+      rgb,
+      theme,
+    });
+    renderRegisterTable(pdf, { rows: tableRows, columns, sectionTitle: label, org, rgb, theme, startY: y + 2 });
+  }
+
   finalizePdf(pdf, org, theme);
 
   const slug = sanitizePdfFileSegment(label, 36) || sanitizePdfFileSegment(moduleId, 36) || "register";

@@ -36,6 +36,14 @@ import SimpleFormDialog from "../../components/SimpleFormDialog";
 import { geocodeAddressNominatim } from "../../utils/geocode";
 import { useToast } from "../../context/ToastContext";
 import { orgHasFoodIndustrialPack, orgHasPharmaPack } from "../../utils/industrialSectors";
+import { getIndustryPackLabel } from "../../utils/industryPackProfile";
+import {
+  findTradeStarterByKey,
+  findHazardsForStarterTokens,
+  getOrgRamsStarterKey,
+  getRamsStarterLabel,
+  isSurveyRamsStarterKey,
+} from "../../utils/ramsIndustryStarters";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
@@ -1162,8 +1170,8 @@ function stampHazardRow(h, rowSource) {
 }
 
 /** PAS128 / geodetic surveying packs — applied in Step 2 alongside hazard library picks. */
-function SurveyingPackSection({ form, onApplySurveyPack }) {
-  const [surveyPackKey, setSurveyPackKey] = useState(form.surveyWorkType || "");
+function SurveyingPackSection({ form, onApplySurveyPack, suggestedPackKey = "" }) {
+  const [surveyPackKey, setSurveyPackKey] = useState(form.surveyWorkType || suggestedPackKey || "");
   const [showSurveyAdvanced, setShowSurveyAdvanced] = useState(false);
   const selectedSurveyPack = useMemo(
     () => findSurveyPackByKey(surveyPackKey || form.surveyWorkType),
@@ -1175,8 +1183,8 @@ function SurveyingPackSection({ form, onApplySurveyPack }) {
   );
 
   useEffect(() => {
-    setSurveyPackKey(form.surveyWorkType || "");
-  }, [form.surveyWorkType]);
+    setSurveyPackKey(form.surveyWorkType || suggestedPackKey || "");
+  }, [form.surveyWorkType, suggestedPackKey]);
 
   return (
     <section
@@ -1282,6 +1290,45 @@ function SurveyingPackSection({ form, onApplySurveyPack }) {
           Hint: This location looks zone-based — confirm pack selection and permit interfaces before finalising hazard rows.
         </div>
       )}
+    </section>
+  );
+}
+
+/** Trade starter from workspace profile — electrical, refurb, groundworks, general. */
+function IndustryStarterSection({ orgRamsStarterKey, industryPackLabel, surveyPackFilter, onApplyIndustryStarter }) {
+  if (!orgRamsStarterKey || isSurveyRamsStarterKey(orgRamsStarterKey)) return null;
+  const trade = findTradeStarterByKey(orgRamsStarterKey);
+  if (!trade) return null;
+  const active = surveyPackFilter?.active && surveyPackFilter?.packKey === orgRamsStarterKey;
+  const label = getRamsStarterLabel(orgRamsStarterKey);
+
+  return (
+    <section
+      className="app-rams-header-section"
+      style={{ background: "var(--color-background-primary,#fff)", marginBottom: 16 }}
+      aria-labelledby="rams-industry-starter"
+    >
+      <h3 id="rams-industry-starter" className="app-rams-header-section-title">
+        Workspace profile starter
+      </h3>
+      <div style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.45 }}>
+        Your profile <strong>{industryPackLabel}</strong> suggests the <strong>{label}</strong> hazard starter — pre-fills scope and filters the library. Pick rows below before issue.
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <button
+          type="button"
+          disabled={active}
+          onClick={() => onApplyIndustryStarter?.(orgRamsStarterKey)}
+          style={{ ...ss.btnP, opacity: active ? 0.55 : 1, minHeight: 40 }}
+        >
+          {active ? `${label} starter active` : `Apply ${label} starter`}
+        </button>
+        {active ? (
+          <span style={{ fontSize: 11, color: "#27500A", background: "#EAF3DE", padding: "2px 8px", borderRadius: 20 }}>
+            Library filtered · {trade.hazardTokens.slice(0, 4).join(", ")}…
+          </span>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -1543,8 +1590,13 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
     <div style={{ display:"flex", flexDirection:"column", minHeight:"min(72vh, 640px)" }}>
       <div style={{ flex:1, minHeight:0 }}>
       <div style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:20, lineHeight:1.5 }}>
-        Work through site, document control, and team. Use <strong>Further details</strong> for revision notes, client handover, assumptions, and optional site weather / emergency links. Surveying hazard packs are in <strong>Step 2</strong>.
+        Work through site, document control, and team. Use <strong>Further details</strong> for revision notes, client handover, assumptions, and optional site weather / emergency links. Hazard starters from your workspace profile are in <strong>Step 2</strong>.
       </div>
+      {getOrgRamsStarterKey() ? (
+        <div style={{ marginBottom:12, fontSize:12, color:"#0f766e", background:"#ecfdf5", border:"1px solid #99f6e4", borderRadius:8, padding:"8px 10px" }}>
+          Profile starter: <strong>{getRamsStarterLabel(getOrgRamsStarterKey())}</strong> — apply in Step 2 to pre-fill scope and filter the hazard library.
+        </div>
+      ) : null}
       {!smartFields && (
         <div style={{ marginBottom:12, fontSize:12, color:"#633806", background:"#FAEEDA", border:"1px solid #f6d89f", borderRadius:8, padding:"8px 10px" }}>
           Smart header assists are off. Enable <strong>rams_header_smart_fields</strong> under Settings → Developer if you want presets, chips, and readiness scoring.
@@ -2204,6 +2256,9 @@ function HazardPicker({
   onExportHazardPacks,
   onImportHazardPacks,
   onImportFromLastProject,
+  orgRamsStarterKey,
+  industryPackLabel,
+  onApplyIndustryStarter,
   onNext,
   onBack,
 }) {
@@ -2572,11 +2627,27 @@ function HazardPicker({
     );
   }
 
+  const surveySuggestedKey =
+    orgRamsStarterKey && isSurveyRamsStarterKey(orgRamsStarterKey) ? orgRamsStarterKey : "";
+
   return (
     <div>
-      {showSurveyingRams ? <SurveyingPackSection form={form} onApplySurveyPack={onApplySurveyPack} /> : null}
+      <IndustryStarterSection
+        orgRamsStarterKey={orgRamsStarterKey}
+        industryPackLabel={industryPackLabel}
+        surveyPackFilter={surveyPackFilter}
+        onApplyIndustryStarter={onApplyIndustryStarter}
+      />
 
-      {showSurveyingRams && surveyPackFilter?.active && (surveyPackFilter.tokens || []).length > 0 && (
+      {showSurveyingRams ? (
+        <SurveyingPackSection
+          form={form}
+          onApplySurveyPack={onApplySurveyPack}
+          suggestedPackKey={surveySuggestedKey}
+        />
+      ) : null}
+
+      {surveyPackFilter?.active && (surveyPackFilter.tokens || []).length > 0 && (
         <div
           style={{
             marginBottom: 14,
@@ -2588,7 +2659,7 @@ function HazardPicker({
         >
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <div style={{ fontSize: 12, color: "#0f766e", fontWeight: 600 }}>
-              Surveying library filter — {surveyPackFilter.packLabel || "PAS128 pack"}
+              Starter library filter — {surveyPackFilter.packLabel || "Profile pack"}
             </div>
             <button
               type="button"
@@ -5009,6 +5080,7 @@ export default function RAMSTemplateBuilder() {
     packKey: "",
     packLabel: "",
   });
+  const [orgRamsStarterKey, setOrgRamsStarterKey] = useState(() => getOrgRamsStarterKey());
 
   const builderBaselineRef = useRef("");
   const hazardLibRef = useRef(null);
@@ -5030,6 +5102,16 @@ export default function RAMSTemplateBuilder() {
       cancelled = true;
     };
   }, [view]);
+
+  useEffect(() => {
+    const refreshStarter = () => setOrgRamsStarterKey(getOrgRamsStarterKey());
+    window.addEventListener("mysafeops-org-settings-updated", refreshStarter);
+    window.addEventListener("mysafeops-hidden-modules-updated", refreshStarter);
+    return () => {
+      window.removeEventListener("mysafeops-org-settings-updated", refreshStarter);
+      window.removeEventListener("mysafeops-hidden-modules-updated", refreshStarter);
+    };
+  }, []);
 
   const builderDirty = useMemo(
     () => snapshotBuilderState(step, form, editedRows) !== builderBaselineRef.current,
@@ -5669,6 +5751,58 @@ export default function RAMSTemplateBuilder() {
     }
 
     trackEvent("rams_survey_pack_applied", { pack: pack.key, hazardsAdded: toAdd.length });
+  };
+
+  const applyIndustryStarter = (starterKey) => {
+    if (isSurveyRamsStarterKey(starterKey)) {
+      applySurveyPack(starterKey);
+      return;
+    }
+    const starter = findTradeStarterByKey(starterKey);
+    if (!starter) return;
+
+    setForm((prev) => {
+      const scoped = String(prev.scope || "").trim();
+      const addLine = `Trade addendum: ${starter.scope}`;
+      const mergedScope = scoped
+        ? scoped.includes(starter.scope) || scoped.includes(addLine)
+          ? scoped
+          : `${scoped}\n\n${addLine}`
+        : starter.scope;
+      return {
+        ...prev,
+        title: prev.title?.trim() ? prev.title : `${starter.label} RAMS`,
+        scope: mergedScope,
+        communicationPlan:
+          prev.communicationPlan ||
+          "Brief all operatives, confirm stop-work authority and permit interfaces before start.",
+      };
+    });
+
+    setSurveyPackFilter({
+      active: true,
+      tokens: starter.hazardTokens || [],
+      packKey: starter.key,
+      packLabel: starter.label,
+    });
+
+    const recommended = findHazardsForStarterTokens(starter.hazardTokens, hazardLibRef.current?.library);
+    const existing = new Set(selectedHazards.map((s) => s.id));
+    const toAdd = recommended.filter((h) => h && !existing.has(h.id));
+    if (toAdd.length > 0) {
+      setSelectedHazards((prev) => [...prev, ...toAdd]);
+      setEditedRows((rows) => [...rows, ...toAdd.map((h) => stampHazardRow(h, ROW_SOURCE.HAZARD_PACK))]);
+    }
+
+    pushToast({
+      type: "success",
+      title: "Profile starter applied",
+      message:
+        toAdd.length > 0
+          ? `${starter.label} · ${toAdd.length} hazard row(s) added · library filtered.`
+          : `${starter.label} · scope updated · library filtered — pick activities below.`,
+    });
+    trackEvent("rams_industry_starter_applied", { starter: starter.key, hazardsAdded: toAdd.length });
   };
 
   const handleSave = () => {
@@ -6315,6 +6449,9 @@ export default function RAMSTemplateBuilder() {
             onExportHazardPacks={exportHazardPacks}
             onImportHazardPacks={importHazardPacks}
             onImportFromLastProject={importFromLastProject}
+            orgRamsStarterKey={orgRamsStarterKey}
+            industryPackLabel={getIndustryPackLabel()}
+            onApplyIndustryStarter={applyIndustryStarter}
             onNext={() => setStep(3)}
             onBack={() => setStep(1)}
           />

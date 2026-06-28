@@ -9,7 +9,49 @@ export const PROJECT_DOC_KEYS = {
   geoPhotos: "geo_photos",
   snags: "snags",
   methodStatements: "method_statements",
+  dailyBriefings: "daily_briefings",
+  cdmPacks: "cdm_packs",
+  timesheets: "mysafeops_timesheets",
+  inspections: "inspection_records",
 };
+
+function totalTimesheetHours(days = {}) {
+  return Object.values(days || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+}
+
+function weekStartMonday(offset = 0) {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff + offset * 7);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function summarizeTimesheetsForProject(entries = [], projectId) {
+  const rows = filterByProject(projectId, entries);
+  const weekKey = weekStartMonday(0).toISOString().slice(0, 10);
+  const thisWeek = rows.filter((e) => e.weekKey === weekKey);
+  const hoursThisWeek = thisWeek.reduce((s, e) => s + totalTimesheetHours(e.days), 0);
+  const workersThisWeek = new Set(thisWeek.map((e) => e.workerId).filter(Boolean)).size;
+  return {
+    all: rows,
+    thisWeek,
+    hoursThisWeek,
+    workersThisWeek,
+    weekKey,
+  };
+}
+
+export function hasBriefingTodayForProject(briefings = [], projectId, dateIso = todayIsoDate()) {
+  return (briefings || []).some(
+    (b) => b?.projectId === projectId && String(b.date || "").slice(0, 10) === dateIso
+  );
+}
 
 function ts(row) {
   const raw = row?.updatedAt || row?.createdAt || row?.timestampUtc || row?.markupUpdatedAt || 0;
@@ -42,6 +84,9 @@ export function buildProjectActivityFeed(projectId, data = {}) {
     snags = [],
     methodStatements = [],
     plans = [],
+    dailyBriefings = [],
+    cdmPacks = [],
+    timesheets = [],
   } = data;
   const items = [];
   const push = (row, kind, text, viewId, action, extra = {}) => {
@@ -82,6 +127,30 @@ export function buildProjectActivityFeed(projectId, data = {}) {
   filterByProject(projectId, plans).forEach((p) => {
     push(p, "plan", `Plan: ${p.name || "Drawing"}`, "project-drawings", "view", { planId: p.id });
   });
+  filterByProject(projectId, dailyBriefings).forEach((b) => {
+    push(
+      b,
+      "briefing",
+      `Briefing: ${b.location || b.date || "Site"}`,
+      "daily-briefing",
+      "view",
+      { briefingId: b.id }
+    );
+  });
+  filterByProject(projectId, cdmPacks).forEach((c) => {
+    push(c, "cdm", `CDM: ${c.projectTitle || "Compliance pack"}`, "cdm", "view", { cdmPackId: c.id });
+  });
+  filterByProject(projectId, timesheets).forEach((e) => {
+    const hrs = totalTimesheetHours(e.days);
+    push(
+      e,
+      "timesheet",
+      `Timesheet: ${hrs ? `${hrs}h` : "Entry"}${e.task ? ` — ${String(e.task).slice(0, 32)}` : ""}`,
+      "timesheets",
+      "view",
+      { timesheetEntryId: e.id }
+    );
+  });
 
   return items.sort((a, b) => b.at - a.at).slice(0, 12);
 }
@@ -100,10 +169,21 @@ export function collectProjectDashboard(project, workers = []) {
       snags: [],
       methodStatements: [],
       plans: [],
+      dailyBriefings: [],
+      cdmPacks: [],
+      timesheets: [],
+      inspections: [],
+      timesheetSummary: { hoursThisWeek: 0, workersThisWeek: 0, weekKey: "" },
       team: [],
       permitReady: { required: 0, issued: 0, complete: true },
       activity: [],
-      totals: { documents: 0, openSnags: 0, activePermits: 0, permitsMissingRams: 0 },
+      totals: {
+        documents: 0,
+        openSnags: 0,
+        activePermits: 0,
+        permitsMissingRams: 0,
+        briefingToday: false,
+      },
     };
   }
 
@@ -113,9 +193,15 @@ export function collectProjectDashboard(project, workers = []) {
   const geoPhotos = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.geoPhotos, [])));
   const snags = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.snags, [])));
   const methodStatements = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.methodStatements, [])));
+  const dailyBriefings = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.dailyBriefings, [])));
+  const cdmPacks = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.cdmPacks, [])));
+  const timesheetSummary = summarizeTimesheetsForProject(load(PROJECT_DOC_KEYS.timesheets, []), projectId);
+  const timesheets = sortByRecent(timesheetSummary.all);
+  const inspections = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.inspections, [])));
   const plans = sortByRecent(plansForProject(projectId, listProjectPlans()));
   const team = workersForProject(projectId, workers);
   const permitReady = permitReadinessForProject(project, permits);
+  const briefingToday = hasBriefingTodayForProject(dailyBriefings, projectId);
 
   const activity = buildProjectActivityFeed(projectId, {
     rams,
@@ -125,6 +211,9 @@ export function collectProjectDashboard(project, workers = []) {
     snags,
     methodStatements,
     plans,
+    dailyBriefings,
+    cdmPacks,
+    timesheets,
   });
 
   const openSnags = snags.filter((s) => s.status !== "closed" && s.status !== "resolved").length;
@@ -139,7 +228,11 @@ export function collectProjectDashboard(project, workers = []) {
     geoPhotos.length +
     snags.length +
     methodStatements.length +
-    plans.length;
+    plans.length +
+    dailyBriefings.length +
+    cdmPacks.length +
+    timesheets.length +
+    inspections.length;
 
   return {
     rams,
@@ -149,10 +242,15 @@ export function collectProjectDashboard(project, workers = []) {
     snags,
     methodStatements,
     plans,
+    dailyBriefings,
+    cdmPacks,
+    timesheets,
+    inspections,
+    timesheetSummary,
     team,
     permitReady,
     activity,
-    totals: { documents, openSnags, activePermits, permitsMissingRams },
+    totals: { documents, openSnags, activePermits, permitsMissingRams, briefingToday },
   };
 }
 

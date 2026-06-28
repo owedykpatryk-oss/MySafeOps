@@ -7,6 +7,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const INCIDENTS_KEY = "mysafeops_incidents";
@@ -642,6 +644,8 @@ export default function IncidentNearMiss() {
         badgeText="INC"
         title="Incidents & near miss"
         lead="Site log for events and near misses. Use the RIDDOR module if a reportable incident may apply. Stored only on this device."
+        exportModuleId="incidents"
+        exportModuleLabel="Incident register"
         right={
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {items.length > 0 && (
@@ -659,24 +663,30 @@ export default function IncidentNearMiss() {
         projects={projects}
         onCreate={(f) => persist(f, true)}
       />
-      <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Show:</span>
-        {["all", "near_miss", "incident"].map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setFilter(k)}
-            style={{
-              ...ss.btn,
-              background: filter === k ? "#E1F5EE" : ss.btn.background,
-              borderColor: filter === k ? "#0d9488" : undefined,
-            }}
-          >
-            {k === "all" ? "All" : labelType(k)}
-          </button>
-        ))}
-      </div>
-      {filtered.length === 0 ? (
+      <RegisterModuleShell
+        moduleId="incidents"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("incidents", items)}
+        filters={
+          <div style={{ marginBottom: 0, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Show:</span>
+            {["all", "near_miss", "incident"].map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setFilter(k)}
+                style={{
+                  ...ss.btn,
+                  background: filter === k ? "#E1F5EE" : ss.btn.background,
+                  borderColor: filter === k ? "#0d9488" : undefined,
+                }}
+              >
+                {k === "all" ? "All" : labelType(k)}
+              </button>
+            ))}
+          </div>
+        }
+      >      {filtered.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No records match this filter.</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -766,6 +776,7 @@ export default function IncidentNearMiss() {
           ) : null}
         </div>
       )}
+      </RegisterModuleShell>
     </div>
   );
 }

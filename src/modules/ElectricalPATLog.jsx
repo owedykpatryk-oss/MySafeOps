@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `pat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -141,7 +143,7 @@ export default function ElectricalPATLog() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="electrical / PAT log" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-            <PageHero
+            <PageHero exportModuleId="electrical-pat"
         badgeText="PAT"
         title="Electrical / PAT"
         lead="PAT and electrical inspection records (local only)."
@@ -156,6 +158,13 @@ export default function ElectricalPATLog() {
           </button>
         </div>}
       />
+
+      <RegisterModuleShell
+        moduleId="electrical-pat"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("electrical-pat", items)}
+      >
+
 {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No electrical / PAT records.</div>
       ) : (
@@ -203,6 +212,7 @@ export default function ElectricalPATLog() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

@@ -4,6 +4,8 @@ import { escapeHtml, safeCssColor, safeImageSrc, openPrintWindow } from "../util
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 
 const genId = () => `riddor_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
@@ -457,6 +459,8 @@ export default function RIDDORRegister() {
         badgeText="RID"
         title="RIDDOR register"
         lead="Reporting of Injuries, Diseases and Dangerous Occurrences Regulations 2013. Deadlines and HSE reporting links below."
+        exportModuleId="riddor"
+        exportModuleLabel="RIDDOR register"
         right={
           <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnR}>
             + New RIDDOR report
@@ -464,6 +468,11 @@ export default function RIDDORRegister() {
         }
       />
 
+      <RegisterModuleShell
+        moduleId="riddor"
+        smartContext={{ items: reports, reports }}
+        stats={buildRegisterModuleStats("riddor", reports)}
+      >
       <div style={{ padding:"10px 14px", background:"#E6F1FB", border:"0.5px solid #B5D4F4", borderRadius:8, fontSize:12, color:"#0C447C", marginBottom:20, lineHeight:1.6 }}>
         RIDDOR requires employers to report work-related deaths, specified injuries and over-7-day injuries within 10–15 days. Report at <a href="https://www.hse.gov.uk/riddor/report.htm" target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>hse.gov.uk/riddor/report.htm</a>
       </div>
@@ -503,6 +512,7 @@ export default function RIDDORRegister() {
           })}
         </div>
       )}
+      </RegisterModuleShell>
     </div>
   );
 }

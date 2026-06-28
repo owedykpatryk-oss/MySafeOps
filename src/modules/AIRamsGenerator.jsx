@@ -2,6 +2,8 @@ import { useState } from "react";
 import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { anthropicMessages, isAnthropicConfigured } from "../utils/anthropicClient";
 import { pushAudit } from "../utils/auditLog";
+import { getIndustryPackLabel } from "../utils/industryPackProfile";
+import { getRamsStarterAiHint } from "../utils/ramsIndustryStarters";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 
@@ -44,7 +46,12 @@ export default function AIRamsGenerator() {
     try {
       const text = await anthropicMessages({
         system: SYSTEM,
-        messages: [{ role: "user", content: `Activity / scope:\n${activity.trim()}` }],
+        messages: [
+          {
+            role: "user",
+            content: `${getRamsStarterAiHint()}\nWorkspace profile: ${getIndustryPackLabel()}.\n\nActivity / scope:\n${activity.trim()}`,
+          },
+        ],
         maxTokens: 8192,
       });
       setRaw(text);

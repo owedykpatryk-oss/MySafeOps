@@ -6,6 +6,7 @@ import { useApp } from "../context/AppContext";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
@@ -392,6 +393,8 @@ export default function SnagRegister() {
         badgeText="SN"
         title="Snagging register"
         lead="Track defects, assign to team, monitor resolution. Data stays on this device."
+        exportModuleId="snags"
+        exportModuleLabel="Snagging register"
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {caps.bulkSnag && snags.length > 0 && (
@@ -421,107 +424,110 @@ export default function SnagRegister() {
         }
       />
 
-      {/* summary */}
-      {snags.length>0 && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:8, marginBottom:20 }}>
-          {[
-            { label:"Open", value:stats.open, bg:"#FCEBEB", color:"#791F1F", click:()=>setFilterStatus("open") },
-            { label:"In progress", value:stats.in_progress, bg:"#FAEEDA", color:"#633806", click:()=>setFilterStatus("in_progress") },
-            { label:"Closed", value:stats.closed, bg:"#EAF3DE", color:"#27500A", click:()=>setFilterStatus("closed") },
-            { label:"High priority", value:stats.high, bg:"#FAECE7", color:"#712B13", click:()=>setFilterPriority("high") },
-            { label:"Overdue", value:stats.overdue, bg:"#FAEEDA", color:"#633806", click:()=>{} },
-          ].map(c=>(
-            <div key={c.label} onClick={c.click} style={{ background:c.bg, borderRadius:8, padding:"10px 12px", cursor:"pointer" }}>
-              <div style={{ fontSize:11, color:c.color, marginBottom:2, fontWeight:500 }}>{c.label}</div>
-              <div style={{ fontSize:22, fontWeight:500, color:c.color }}>{c.value}</div>
+      <RegisterModuleShell
+        moduleId="snags"
+        smartContext={{ items: snags }}
+        stats={
+          snags.length > 0
+            ? [
+                { label: "Open", value: stats.open, tone: stats.open ? "warn" : "good" },
+                { label: "High priority", value: stats.high, tone: stats.high ? "warn" : "neutral" },
+                { label: "Overdue", value: stats.overdue, tone: stats.overdue ? "warn" : "good" },
+                { label: "Closed", value: stats.closed, tone: "neutral" },
+              ]
+            : []
+        }
+        filters={
+          snags.length > 0 ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" style={{ ...ss.inp, width: "auto", minWidth: 140, flex: 1 }} />
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+                <option value="">All statuses</option>
+                {Object.entries(STATUSES).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+                <option value="">All priorities</option>
+                {Object.entries(PRIORITIES).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+              <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+                <option value="">All categories</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+              {projects.length > 0 && (
+                <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+                  <option value="">All projects</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              )}
+              {workers.length > 0 && (
+                <select value={filterAssigned} onChange={(e) => setFilterAssigned(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+                  <option value="">All assignees</option>
+                  {workers.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              )}
+              <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="priority">By priority</option>
+                <option value="due">By due date</option>
+              </select>
+              {hasFilters ? (
+                <button type="button" onClick={clearFilters} style={{ ...ss.btn, fontSize: 12 }}>Clear filters</button>
+              ) : null}
             </div>
-          ))}
-        </div>
-      )}
+          ) : null
+        }
+      >
+        {snags.length > 0 ? (
+          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>
+            Showing {filtered.length} of {snags.length} items
+            {listPg.hasMore(filtered) ? ` · displaying ${Math.min(listPg.cap, filtered.length)}` : ""}
+          </div>
+        ) : null}
 
-      {/* filters */}
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{ ...ss.inp, width:"auto", minWidth:140, flex:1 }} />
-        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-          <option value="">All statuses</option>
-          {Object.entries(STATUSES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <select value={filterPriority} onChange={e=>setFilterPriority(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-          <option value="">All priorities</option>
-          {Object.entries(PRIORITIES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <select value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-          <option value="">All categories</option>
-          {CATEGORIES.map(c=><option key={c}>{c}</option>)}
-        </select>
-        {projects.length>0 && (
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-            <option value="">All projects</option>
-            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+        {snags.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "3rem 1rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12 }}>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>No snag items recorded yet.</p>
+            <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>+ Add first snag</button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "2rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, color: "var(--color-text-secondary)", fontSize: 13 }}>
+            No items match your filters.
+          </div>
+        ) : (
+          listPg.visible(filtered).map((s) => (
+            <SnagCard
+              key={s.id}
+              snag={s}
+              workers={workers}
+              onEdit={(sn) => setModal({ type: "form", data: sn })}
+              onDelete={deleteSnag}
+              onStatusChange={statusChange}
+              bulkMode={bulkMode}
+              selected={selected.has(s.id)}
+              onToggleSelect={toggleSelect}
+              canDelete={caps.deleteRecords}
+            />
+          ))
         )}
-        {workers.length>0 && (
-          <select value={filterAssigned} onChange={e=>setFilterAssigned(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-            <option value="">All assignees</option>
-            {workers.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-        )}
-        <select value={sort} onChange={e=>setSort(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="priority">By priority</option>
-          <option value="due">By due date</option>
-        </select>
-        {hasFilters && <button onClick={clearFilters} style={{ ...ss.btn, fontSize:12 }}>Clear filters</button>}
-      </div>
-
-      {/* count */}
-      {snags.length > 0 && (
-        <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 12 }}>
-          Showing {filtered.length} of {snags.length} items
-          {listPg.hasMore(filtered) ? ` · displaying ${Math.min(listPg.cap, filtered.length)}` : ""}
-        </div>
-      )}
-
-      {/* empty */}
-      {snags.length===0 && (
-        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No snag items recorded yet.</p>
-          <button onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ Add first snag</button>
-        </div>
-      )}
-      {snags.length>0 && filtered.length===0 && (
-        <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, color:"var(--color-text-secondary)", fontSize:13 }}>
-          No items match your filters.
-        </div>
-      )}
-
-      {/* list */}
-      {listPg.visible(filtered).map((s) => (
-        <SnagCard
-          key={s.id}
-          snag={s}
-          workers={workers}
-          onEdit={(sn) => setModal({ type: "form", data: sn })}
-          onDelete={deleteSnag}
-          onStatusChange={statusChange}
-          bulkMode={bulkMode}
-          selected={selected.has(s.id)}
-          onToggleSelect={toggleSelect}
-          canDelete={caps.deleteRecords}
-        />
-      ))}
-      {listPg.hasMore(filtered) ? (
-        <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
-          <button type="button" style={ss.btn} onClick={listPg.showMore}>
-            Show more ({listPg.remaining(filtered)} remaining)
-          </button>
-        </div>
-      ) : null}
-
-      <div style={{ marginTop:20, padding:"12px 14px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.6 }}>
-        Auto-numbered references (SN-001, SN-002…). Add photos directly from phone camera. Export full register to CSV. Data isolated per organisation.
-      </div>
+        {listPg.hasMore(filtered) ? (
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+            <button type="button" style={ss.btn} onClick={listPg.showMore}>
+              Show more ({listPg.remaining(filtered)} remaining)
+            </button>
+          </div>
+        ) : null}
+      </RegisterModuleShell>
     </div>
   );
 }

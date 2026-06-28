@@ -4,6 +4,7 @@ import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `insp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -231,6 +232,8 @@ export default function InspectionTracker() {
         badgeText="IN"
         title="Inspection register"
         lead="LOLER, PAT, PUWER, PSSR, EICR, scaffold, ladder, harness and more — due dates and outcomes in one place."
+        exportModuleId="inspections"
+        exportModuleLabel="Inspection register"
         right={
           <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>
             + Add inspection record
@@ -238,86 +241,92 @@ export default function InspectionTracker() {
         }
       />
 
-      {items.length>0 && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:8, marginBottom:20 }}>
-          {[
-            { label:"Overdue", value:stats.overdue, bg:"#FCEBEB", color:"#791F1F", filter:()=>setFilterDue("overdue") },
-            { label:"Due in 30 days", value:stats.due30, bg:"#FAEEDA", color:"#633806", filter:()=>setFilterDue("due30") },
-            { label:"Failed / quarantined", value:stats.fail, bg:"#FCEBEB", color:"#791F1F", filter:()=>setFilterResult("fail") },
-            { label:"Total records", value:stats.total, bg:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-primary)", filter:()=>setFilterDue("all") },
-          ].map(c=>(
-            <div key={c.label} onClick={c.filter} style={{ background:c.bg, borderRadius:8, padding:"10px 12px", cursor:"pointer" }}>
-              <div style={{ fontSize:11, color:c.color, fontWeight:500, marginBottom:2 }}>{c.label}</div>
-              <div style={{ fontSize:22, fontWeight:500, color:c.color }}>{c.value}</div>
+      <RegisterModuleShell
+        moduleId="inspections"
+        smartContext={{ items }}
+        stats={
+          items.length > 0
+            ? [
+                { label: "Overdue", value: stats.overdue, tone: stats.overdue ? "warn" : "good" },
+                { label: "Due in 30 days", value: stats.due30, tone: stats.due30 ? "warn" : "neutral" },
+                { label: "Failed", value: stats.fail, tone: stats.fail ? "warn" : "good" },
+                { label: "Total", value: stats.total, tone: "neutral" },
+              ]
+            : []
+        }
+        filters={
+          items.length > 0 ? (
+            <div style={{ display: "flex", gap: 8, marginBottom: 0, flexWrap: "wrap" }}>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search equipment…" style={{ ...ss.inp, flex: 1, width: "auto", minWidth: 140 }} />
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+                <option value="">All types</option>
+                {Object.entries(INSPECTION_TYPES).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+              <select value={filterDue} onChange={(e) => setFilterDue(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+                <option value="all">All statuses</option>
+                <option value="overdue">Overdue</option>
+                <option value="due30">Due in 30 days</option>
+                <option value="ok">Up to date</option>
+              </select>
+              {(search || filterType || filterResult || filterDue !== "all") ? (
+                <button type="button" onClick={() => { setSearch(""); setFilterType(""); setFilterResult(""); setFilterDue("all"); listPg.reset(); }} style={{ ...ss.btn, fontSize: 12 }}>Clear</button>
+              ) : null}
             </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search equipment…" style={{ ...ss.inp, flex:1, width:"auto", minWidth:140 }} />
-        <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-          <option value="">All types</option>
-          {Object.entries(INSPECTION_TYPES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <select value={filterDue} onChange={e=>setFilterDue(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-          <option value="all">All statuses</option>
-          <option value="overdue">Overdue</option>
-          <option value="due30">Due in 30 days</option>
-          <option value="ok">Up to date</option>
-        </select>
-        {(search||filterType||filterResult||(filterDue!=="all"))&&<button onClick={()=>{setSearch("");setFilterType("");setFilterResult("");setFilterDue("all");listPg.reset();}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
-      </div>
-
-      {items.length===0 ? (
-        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No inspection records yet.</p>
-          <button onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ Add first record</button>
-        </div>
-      ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {listPg.hasMore(filtered) ? (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} records
-            </div>
-          ) : null}
-          {listPg.visible(filtered).map((item) => {
-            const def = INSPECTION_TYPES[item.type]||INSPECTION_TYPES.other;
-            const pill = getStatusPill(item);
-            return (
-              <div key={item.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"center", borderLeft:`3px solid ${def.color}`, contentVisibility:"auto", containIntrinsicSize:"0 72px" }}>
-                {item.photo && <img src={item.photo} alt="inspection" style={{ width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }} />}
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-                    <span style={{ fontWeight:500, fontSize:14 }}>{item.name}</span>
-                    <span style={{ padding:"2px 8px", borderRadius:20, fontSize:10, fontWeight:500, background:def.bg, color:def.color }}>{def.label}</span>
-                    <span style={{ padding:"2px 8px", borderRadius:20, fontSize:10, fontWeight:500, background:pill.bg, color:pill.color }}>{pill.label}</span>
-                  </div>
-                  <div style={{ fontSize:12, color:"var(--color-text-secondary)", display:"flex", gap:12, flexWrap:"wrap" }}>
-                    {item.serialNo && <span>S/N: {item.serialNo}</span>}
-                    {item.location && <span>{item.location}</span>}
-                    {item.inspectedBy && <span>By: {item.inspectedBy}</span>}
-                    {item.certNumber && <span>Cert: {item.certNumber}</span>}
-                    {item.swl && <span>SWL: {item.swl}</span>}
-                    <span>Last: {fmtDate(item.lastInspectionDate)}</span>
-                  </div>
-                </div>
-                <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0 }}>
-                  <button onClick={()=>setModal({type:"form",data:item})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
-                  <button onClick={()=>{ if(confirm("Delete?")) setItems(prev=>prev.filter(x=>x.id!==item.id)); }} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
-                </div>
+          ) : null
+        }
+      >
+        {items.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "3rem 1rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12 }}>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>No inspection records yet.</p>
+            <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>+ Add first record</button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {listPg.hasMore(filtered) ? (
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} records
               </div>
-            );
-          })}
-          {listPg.hasMore(filtered) ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(filtered)} remaining)
-              </button>
-            </div>
-          ) : null}
-        </div>
-      )}
+            ) : null}
+            {listPg.visible(filtered).map((item) => {
+              const def = INSPECTION_TYPES[item.type] || INSPECTION_TYPES.other;
+              const pill = getStatusPill(item);
+              return (
+                <div key={item.id} style={{ ...ss.card, display: "flex", gap: 12, alignItems: "center", borderLeft: `3px solid ${def.color}`, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
+                  {item.photo && <img src={item.photo} alt="inspection" style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, flexShrink: 0, border: "0.5px solid var(--color-border-tertiary,#e5e5e5)" }} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 500, fontSize: 14 }}>{item.name}</span>
+                      <span style={{ padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 500, background: def.bg, color: def.color }}>{def.label}</span>
+                      <span style={{ padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 500, background: pill.bg, color: pill.color }}>{pill.label}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      {item.serialNo && <span>S/N: {item.serialNo}</span>}
+                      {item.location && <span>{item.location}</span>}
+                      {item.inspectedBy && <span>By: {item.inspectedBy}</span>}
+                      {item.certNumber && <span>Cert: {item.certNumber}</span>}
+                      {item.swl && <span>SWL: {item.swl}</span>}
+                      <span>Last: {fmtDate(item.lastInspectionDate)}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flexShrink: 0 }}>
+                    <button type="button" onClick={() => setModal({ type: "form", data: item })} style={{ ...ss.btn, fontSize: 12, padding: "4px 10px" }}>Edit</button>
+                    <button type="button" onClick={() => { if (confirm("Delete?")) setItems((prev) => prev.filter((x) => x.id !== item.id)); }} style={{ ...ss.btn, fontSize: 12, padding: "4px 8px", color: "#A32D2D", borderColor: "#F09595" }}>×</button>
+                  </div>
+                </div>
+              );
+            })}
+            {listPg.hasMore(filtered) ? (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+                <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                  Show more ({listPg.remaining(filtered)} remaining)
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </RegisterModuleShell>
     </div>
   );
 }

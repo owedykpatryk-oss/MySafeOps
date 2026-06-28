@@ -15,10 +15,21 @@ describe("orgIndustryPacks", () => {
   it("defines expected workspace profiles", () => {
     expect(Object.keys(INDUSTRY_PACKS)).toEqual([
       "generalContractor",
+      "electricalContractor",
+      "buildingTrades",
       "surveyingGeodesy",
+      "contractorPlusSurveying",
+      "facilitiesMaintenance",
+      "demolitionStripout",
       "foodPharma",
       "showEverything",
     ]);
+  });
+
+  it("general contractor hides survey-report module", () => {
+    applyIndustryPack("generalContractor");
+    expect(getAppliedIndustryPackId()).toBe("generalContractor");
+    expect(getHiddenModuleIds()).toContain("survey-report");
   });
 
   it("applyIndustryPack stores pack id and sectors", () => {
@@ -39,5 +50,17 @@ describe("orgIndustryPacks", () => {
     expect(getAppliedIndustryPackId()).toBe("showEverything");
     expect(getHiddenModuleIds()).toEqual([]);
     expect(getHiddenFeatureIds()).toEqual([]);
+  });
+
+  it("foodPharma pack unhides hygiene registers", () => {
+    applyIndustryPack("foodPharma");
+    expect(getHiddenModuleIds()).not.toContain("allergen-changeovers");
+    expect(getHiddenModuleIds()).not.toContain("gmp-deviations");
+  });
+
+  it("rejects invalid pack keys", () => {
+    applyIndustryPack("__proto__");
+    applyIndustryPack("not-a-pack");
+    expect(getAppliedIndustryPackId()).toBeNull();
   });
 });

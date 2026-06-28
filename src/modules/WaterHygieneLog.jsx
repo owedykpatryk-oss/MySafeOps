@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `wh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -141,7 +143,7 @@ export default function WaterHygieneLog() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="water hygiene log" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-            <PageHero
+            <PageHero exportModuleId="water-hygiene"
         badgeText="WH"
         title="Water hygiene"
         lead="Outlet temperatures and Legionella-style checks (local only)."
@@ -156,6 +158,13 @@ export default function WaterHygieneLog() {
           </button>
         </div>}
       />
+
+      <RegisterModuleShell
+        moduleId="water-hygiene"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("water-hygiene", items)}
+      >
+
 {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No water hygiene records.</div>
       ) : (
@@ -203,6 +212,7 @@ export default function WaterHygieneLog() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

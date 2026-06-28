@@ -5,6 +5,8 @@ import { ms } from "../utils/moduleStyles";
 import { safeHttpUrl } from "../utils/safeUrl";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `coshh_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -340,6 +342,8 @@ export default function COSHHRegister() {
         badgeText="COS"
         title="COSHH register"
         lead="Control of Substances Hazardous to Health — COSHH Regs 2002. Data stays on this device."
+        exportModuleId="coshh"
+        exportModuleLabel="COSHH register"
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {items.length > 0 && (
@@ -354,66 +358,66 @@ export default function COSHHRegister() {
         }
       />
 
-      {items.length>0 && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:10, marginBottom:20 }}>
-          {[["High risk",stats.high,"#FCEBEB","#791F1F"],["Medium risk",stats.medium,"#FAEEDA","#633806"],["Low risk",stats.low,"#EAF3DE","#27500A"]].map(([l,v,bg,c])=>(
-            <div key={l} style={{ background:bg, borderRadius:8, padding:"10px 14px", cursor:"pointer" }} onClick={()=>setFilterRisk(prev=>prev===l.split(" ")[0].toLowerCase()?"":l.split(" ")[0].toLowerCase())}>
-              <div style={{ fontSize:11, color:c, fontWeight:500, marginBottom:2 }}>{l}</div>
-              <div style={{ fontSize:22, fontWeight:500, color:c }}>{v}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search substance…" style={{ ...ss.inp, width:"auto", flex:1, minWidth:140 }} />
-        <select value={filterRisk} onChange={e=>setFilterRisk(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-          <option value="">All risk levels</option>
-          {Object.entries(RISK_LEVELS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <select value={filterHazard} onChange={e=>setFilterHazard(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-          <option value="">All hazard types</option>
-          {HAZARD_TYPES.map(h=><option key={h}>{h}</option>)}
-        </select>
-        {projects.length>0 && (
-          <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-            <option value="">All projects</option>
-            {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+      <RegisterModuleShell
+        moduleId="coshh"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("coshh", items)}
+        filters={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search substance…" style={{ ...ss.inp, width: "auto", flex: 1, minWidth: 140 }} />
+            <select value={filterRisk} onChange={(e) => setFilterRisk(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+              <option value="">All risk levels</option>
+              {Object.entries(RISK_LEVELS).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+            <select value={filterHazard} onChange={(e) => setFilterHazard(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+              <option value="">All hazard types</option>
+              {HAZARD_TYPES.map((h) => (
+                <option key={h}>{h}</option>
+              ))}
+            </select>
+            {projects.length > 0 && (
+              <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+                <option value="">All projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+            {(filterRisk || filterProject || filterHazard || search) ? (
+              <button type="button" onClick={() => { setFilterRisk(""); setFilterProject(""); setFilterHazard(""); setSearch(""); listPg.reset(); }} style={{ ...ss.btn, fontSize: 12 }}>Clear</button>
+            ) : null}
+          </div>
+        }
+      >
+        {items.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "3rem 1rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12 }}>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>No substances recorded yet.</p>
+            <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>+ Add first substance</button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "2rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, color: "var(--color-text-secondary)", fontSize: 13 }}>No items match your filters.</div>
+        ) : (
+          <>
+            {listPg.hasMore(filtered) ? (
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+                Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} substances
+              </div>
+            ) : null}
+            {listPg.visible(filtered).map((i) => (
+              <SubstanceCard key={i.id} item={i} onEdit={(x) => setModal({ type: "form", data: x })} onDelete={deleteItem} />
+            ))}
+            {listPg.hasMore(filtered) ? (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+                <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                  Show more ({listPg.remaining(filtered)} remaining)
+                </button>
+              </div>
+            ) : null}
+          </>
         )}
-        {(filterRisk||filterProject||filterHazard||search) && <button onClick={()=>{setFilterRisk("");setFilterProject("");setFilterHazard("");setSearch("");listPg.reset();}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
-      </div>
-
-      {items.length===0 ? (
-        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No substances recorded yet.</p>
-          <button onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ Add first substance</button>
-        </div>
-      ) : filtered.length===0 ? (
-        <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, color:"var(--color-text-secondary)", fontSize:13 }}>No items match your filters.</div>
-      ) : (
-        <>
-          {listPg.hasMore(filtered) ? (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
-              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} substances
-            </div>
-          ) : null}
-          {listPg.visible(filtered).map((i) => (
-            <SubstanceCard key={i.id} item={i} onEdit={(x) => setModal({ type: "form", data: x })} onDelete={deleteItem} />
-          ))}
-          {listPg.hasMore(filtered) ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(filtered)} remaining)
-              </button>
-            </div>
-          ) : null}
-        </>
-      )}
-
-      <div style={{ marginTop:20, padding:"12px 14px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.6 }}>
-        COSHH Regulations 2002. Each substance includes hazard classification, PPE requirements, first aid and spill procedures, SDS reference and assessment record. Export full register to CSV.
-      </div>
+      </RegisterModuleShell>
     </div>
   );
 }

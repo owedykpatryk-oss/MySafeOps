@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `tr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -136,7 +138,7 @@ export default function TrainingMatrix() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="training matrix" />
       {modal?.type === "form" && <Form item={modal.data} workers={workers} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-      <PageHero
+      <PageHero exportModuleId="training"
         badgeText="TM"
         title="Training matrix"
         lead="Competence and refresher dates per worker (local only)."
@@ -153,6 +155,13 @@ export default function TrainingMatrix() {
           </div>
         }
       />
+
+      <RegisterModuleShell
+        moduleId="training"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("training", items)}
+      >
+
       {(expired.length > 0 || expiring.length > 0) && (
         <div style={{ ...ss.card, marginBottom: 12, background: expired.length ? "#fef2f2" : "#fffbeb", fontSize: 13 }}>
           {expired.length > 0 && <div style={{ marginBottom: 6 }}>Expired or overdue: {expired.length} record(s).</div>}
@@ -214,6 +223,7 @@ export default function TrainingMatrix() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

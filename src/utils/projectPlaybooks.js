@@ -4,6 +4,7 @@
  */
 
 import { PROJECT_DOC_KEYS } from "./projectDashboard";
+import { isSurveyWorkflowEnabled } from "./projectHubIndustry";
 import { loadOrgScoped as load, saveOrgScoped as save } from "./orgStorage";
 import { blankSurveyReport } from "../modules/surveyReport/surveyReportConstants";
 import {
@@ -70,7 +71,7 @@ export const PROJECT_PLAYBOOKS = [
   {
     id: "groundworks",
     label: "Groundworks / civils",
-    description: "General civils RAMS + topo survey + excavation & lifting PTW",
+    description: "Civils RAMS + excavation & lifting PTW + mobilisation MS",
     industryStarter: "infrastructure",
     surveyType: "topographical_survey",
     ramsSurveyKey: "topographical_survey",
@@ -80,6 +81,32 @@ export const PROJECT_PLAYBOOKS = [
       "Arrange utility scans and trial holes before breaking ground",
       "Define traffic and plant segregation",
       "Prepare adverse weather contingency",
+    ],
+  },
+  {
+    id: "electrical",
+    label: "Electrical / M&E",
+    description: "RAMS + electrical & hot-work PTW + method statement",
+    industryStarter: "maintenance",
+    permitTypes: ["electrical", "hot_work", "general"],
+    msTemplate: "mobilisation",
+    checklistExtras: [
+      "Confirm isolation, lock-off and proving dead before work",
+      "Check test equipment calibration (PAT / insulation)",
+      "Brief fire watch if hot work on or near combustibles",
+    ],
+  },
+  {
+    id: "refurb_build",
+    label: "Building / refurbishment",
+    description: "RAMS + general & hot-work PTW + method statement",
+    industryStarter: "general",
+    permitTypes: ["hot_work", "general", "lifting"],
+    msTemplate: "mobilisation",
+    checklistExtras: [
+      "Confirm client / principal contractor site rules",
+      "Segregate work areas from occupants or public",
+      "Plan waste removal and dust control",
     ],
   },
   {
@@ -98,7 +125,7 @@ export const PROJECT_PLAYBOOKS = [
   {
     id: "general",
     label: "General site pack",
-    description: "Baseline RAMS + optional survey + common permit flow",
+    description: "Baseline RAMS + common PTW + method statement",
     industryStarter: "general",
     surveyType: "",
     permitTypes: ["hot_work", "excavation", "electrical"],
@@ -250,10 +277,12 @@ export function buildMissingDocChecklist(dash) {
     });
   };
   if (!dash?.rams?.length) push("Create RAMS for this site", "create_rams");
-  if (!dash?.surveys?.length) push("Create survey report draft", "create_survey");
+  if (isSurveyWorkflowEnabled() && !dash?.surveys?.length) push("Create survey report draft", "create_survey");
   if (!dash?.permits?.length) push("Issue permit to work (PTW)", "create_permit");
   if (!dash?.methodStatements?.length) push("Create method statement", "create_ms");
   if (!dash?.plans?.length) push("Upload site plan / drawing", "upload_plan");
+  if (!dash?.cdmPacks?.length) push("Create CDM compliance pack", "create_cdm");
+  if (dash?.totals?.briefingToday === false) push("Record today's site briefing", "create_daily_briefing");
   return items;
 }
 

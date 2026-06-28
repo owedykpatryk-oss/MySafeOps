@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `tw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -157,7 +159,7 @@ export default function TemporaryWorksRegister() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="temporary works register" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-            <PageHero
+            <PageHero exportModuleId="temp-works"
         badgeText="TW"
         title="Temporary works"
         lead="TW design checks and inspections (local only)."
@@ -172,6 +174,13 @@ export default function TemporaryWorksRegister() {
           </button>
         </div>}
       />
+
+      <RegisterModuleShell
+        moduleId="temp-works"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("temp-works", items)}
+      >
+
 {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No temporary works records.</div>
       ) : (
@@ -219,6 +228,7 @@ export default function TemporaryWorksRegister() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

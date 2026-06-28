@@ -4,6 +4,8 @@ import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
@@ -568,20 +570,30 @@ export default function MethodStatement() {
         badgeText="MS"
         title="Method statements"
         lead="Step-by-step work sequence with plant, materials, PPE, emergency and waste notes, and operative signatures. Print-ready when you need it."
+        exportModuleId="method-statement"
+        exportModuleLabel="Method statement register"
         right={<button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnO}>+ New method statement</button>}
       />
 
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{ ...ss.inp, flex:1, width:"auto", minWidth:140 }} />
-        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
-          <option value="">All statuses</option>
-          <option value="draft">Draft</option>
-          <option value="approved">Approved</option>
-          <option value="superseded">Superseded</option>
-        </select>
-        {(search||filterStatus)&&<button onClick={()=>{setSearch("");setFilterStatus("");listPg.reset();}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
-      </div>
-
+      <RegisterModuleShell
+        moduleId="method-statement"
+        smartContext={{ items: docs, docs }}
+        stats={buildRegisterModuleStats("method-statement", docs)}
+        filters={
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" style={{ ...ss.inp, flex: 1, width: "auto", minWidth: 140 }} />
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
+              <option value="">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="approved">Approved</option>
+              <option value="superseded">Superseded</option>
+            </select>
+            {(search || filterStatus) ? (
+              <button type="button" onClick={() => { setSearch(""); setFilterStatus(""); listPg.reset(); }} style={{ ...ss.btn, fontSize: 12 }}>Clear</button>
+            ) : null}
+          </div>
+        }
+      >
       {docs.length===0 ? (
         <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
           <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No method statements yet.</p>
@@ -641,6 +653,8 @@ export default function MethodStatement() {
           ) : null}
         </div>
       )}
+
+      </RegisterModuleShell>
 
       <div style={{ marginTop:20, padding:"12px 14px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.6 }}>
         Method statements include: document header, step-by-step work sequence with responsible persons, plant & equipment list, key materials, PPE requirements, emergency procedure, waste disposal and operative signatures. Print-ready A4 PDF in FESS format.

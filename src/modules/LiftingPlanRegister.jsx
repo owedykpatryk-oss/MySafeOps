@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `lift_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -142,7 +144,7 @@ export default function LiftingPlanRegister() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="lifting operations" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-            <PageHero
+            <PageHero exportModuleId="lifting"
         badgeText="LIFT"
         title="Lifting operations"
         lead="Lift plans, equipment, and briefings (local only)."
@@ -157,6 +159,13 @@ export default function LiftingPlanRegister() {
           </button>
         </div>}
       />
+
+      <RegisterModuleShell
+        moduleId="lifting"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("lifting", items)}
+      >
+
 {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No lifting records.</div>
       ) : (
@@ -204,6 +213,7 @@ export default function LiftingPlanRegister() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

@@ -5,6 +5,8 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { pushRecycleBinItem } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const ACTIONS_KEY = "incident_actions_v1";
@@ -390,6 +392,8 @@ export default function IncidentActionTracker() {
         badgeText="CAPA"
         title="Incident Action Tracker"
         lead="Corrective and preventive actions from incidents / near misses, with owners, due dates, and closure evidence."
+        exportModuleId="incident-actions"
+        exportModuleLabel="Incident actions register"
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button type="button" style={ss.btn} onClick={pullSuggestedActions}>
@@ -404,6 +408,12 @@ export default function IncidentActionTracker() {
           </div>
         }
       />
+
+      <RegisterModuleShell
+        moduleId="incident-actions"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("incident-actions", items)}
+      >
 
       {reminders.length > 0 ? (
         <div className="app-panel-surface" style={{ padding: 10, borderRadius: 10, marginBottom: 12, background: "#FFF7ED", border: "1px solid #fed7aa" }}>
@@ -539,6 +549,7 @@ export default function IncidentActionTracker() {
           )}
         </div>
       </div>
+      </RegisterModuleShell>
     </div>
   );
 }

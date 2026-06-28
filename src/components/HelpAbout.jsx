@@ -1,9 +1,17 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import PageHero from "./PageHero";
 import { getSupportEmail } from "../config/supportContact";
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
 import { getDisplayAppVersion } from "../utils/appBuildInfo";
 import { showAdminLoginHints } from "../lib/showAdminLoginHints";
+import { getAppliedIndustryPackId } from "../utils/orgIndustryPacks";
+import { isIndustryPackPreviewActive } from "../utils/industryPackPreview";
+import {
+  WORKSPACE_PROFILE_OVERVIEW,
+  getActiveProfileGuideSummary,
+  listProfileGuideCatalogue,
+} from "../utils/workspaceProfileGuide";
 import { MORE_SECTIONS, getMoreTabsForSection, NAV_TAB_IDS } from "../navigation/appModules";
 import { WORKSPACE_SETTINGS_TABS } from "../config/workspaceSettingsTabs";
 
@@ -212,7 +220,62 @@ function ModuleIndexList({ tabs }) {
   );
 }
 
+function ProfileGuideCatalogue({ activePackId }) {
+  const [openId, setOpenId] = useState(activePackId || null);
+  const catalogue = listProfileGuideCatalogue();
+
+  return (
+    <div className="app-help-profile-catalogue">
+      {catalogue.map((entry) => {
+        const isActive = entry.id === activePackId;
+        const isOpen = openId === entry.id;
+        return (
+          <article
+            key={entry.id}
+            className={`app-help-profile-card${isActive ? " app-help-profile-card--active" : ""}`}
+          >
+            <button
+              type="button"
+              className="app-help-profile-card__head"
+              aria-expanded={isOpen}
+              onClick={() => setOpenId(isOpen ? null : entry.id)}
+            >
+              <span className="app-help-profile-card__title">{entry.label}</span>
+              {isActive ? <span className="app-help-profile-card__badge">Your profile</span> : null}
+              <span className="app-help-profile-card__hint">{entry.hint}</span>
+            </button>
+            {isOpen ? (
+              <div className="app-help-profile-card__body">
+                <p>{entry.tagline}</p>
+                <p>
+                  <strong>Best for:</strong> {entry.whoFor}
+                </p>
+                <p>
+                  <strong>What it adjusts</strong>
+                </p>
+                <ul>
+                  {entry.adjusts.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+                <p>
+                  <strong>Site pack export:</strong> {entry.hubFocus}
+                </p>
+                <p>
+                  <strong>RAMS builder:</strong> {entry.ramsNote}
+                </p>
+              </div>
+            ) : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function HelpAbout() {
+  const activePackId = getAppliedIndustryPackId() || "generalContractor";
+  const profileSummary = getActiveProfileGuideSummary();
   const bottomNavTabs = BOTTOM_NAV_IDS.map((id) => {
     const nav = NAV_TAB_IDS.find((t) => t.id === id);
     return nav || { id, label: id };
@@ -223,7 +286,7 @@ export default function HelpAbout() {
       <PageHero
         badgeText="?"
         title="Help & about"
-        lead="UK construction safety and compliance workspace. Use Search (Ctrl+K) or the full module index below to find any screen. Most data stays on this device until you back up or sync to the cloud."
+        lead="UK construction safety and compliance workspace. Profiles tailor modules and Project Hub to your trade — everything below is in plain English. Use Search (Ctrl+K) or the module index to find any screen."
       />
 
       <div className="app-surface-card" style={ss.card}>
@@ -284,7 +347,14 @@ export default function HelpAbout() {
         </h2>
         <ol style={{ ...ss.ol, listStyle: "decimal" }}>
           <li style={{ marginBottom: 10 }}>
-            <strong>Organisation profile</strong> — logo, company details, brand colours, PDF footer lines.
+            <strong>Workspace profile</strong> — pick your trade under Settings → Organisation (modules, Project Hub, RAMS starter). See the{" "}
+            <button type="button" style={ss.linkBtn} onClick={() => document.getElementById("workspace-profiles")?.scrollIntoView({ behavior: "smooth" })}>
+              profile guide
+            </button>{" "}
+            below.
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Organisation details</strong> — logo, company name, brand colours, PDF footer lines.
           </li>
           <li style={{ marginBottom: 10 }}>
             <strong>At least one project</strong> — site or job record (5-step wizard on Projects).
@@ -324,7 +394,7 @@ export default function HelpAbout() {
               {t.id === "billing" && "Subscription plan, usage limits, Stripe checkout."}
               {t.id === "invites" && "Send email invites for colleagues to join."}
               {t.id === "members" && "Review roles: admin, supervisor, operative."}
-              {t.id === "organisation" && "Branding, company info, PDF defaults, custom fields."}
+              {t.id === "organisation" && "Branding, workspace profile, modules, PDF defaults."}
               {t.id === "automation" && "Gates for surveys, PTW, project links, and stale-draft reminders."}
               {t.id === "notifications" && "Browser reminders for expiring certs, permits, RAMS reviews."}
               {t.id === "developer" && "API keys and integration hooks (IT only)."}
@@ -341,6 +411,104 @@ export default function HelpAbout() {
           Version <strong>{DISPLAY_APP_VERSION}</strong>.
           {SHOW_DEV_HINTS ? <> CI / monitoring: <code style={{ fontSize: 12 }}>.env.example</code>.</> : null}
         </p>
+      </div>
+
+      <div className="app-surface-card" style={ss.card} id="workspace-profiles">
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          {WORKSPACE_PROFILE_OVERVIEW.title}
+        </h2>
+        <p style={ss.p}>{WORKSPACE_PROFILE_OVERVIEW.lead}</p>
+
+        <div className="app-help-profile-active">
+          <p className="app-help-profile-active__label">Your active profile</p>
+          <p className="app-help-profile-active__title">
+            {profileSummary.label}
+            {isIndustryPackPreviewActive() ? " · preview mode" : ""}
+          </p>
+          <p className="app-help-profile-active__tagline">{profileSummary.tagline}</p>
+          <ul className="app-help-profile-meta">
+            <li>Site pack: {profileSummary.sitePackTitle}</li>
+            {profileSummary.ramsStarter ? <li>RAMS starter: {profileSummary.ramsStarter}</li> : null}
+          </ul>
+        </div>
+
+        <p style={ss.p}>{profileSummary.summary}</p>
+        <p style={{ ...ss.p, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Typical workflow for your profile</p>
+        <ol style={ss.ol}>
+          {profileSummary.steps.map((step) => (
+            <li key={step} style={{ marginBottom: 6 }}>
+              {step}
+            </li>
+          ))}
+        </ol>
+
+        <div style={ss.btnRow}>
+          <button type="button" style={ss.btn} onClick={() => openWorkspaceSettings({ tab: "organisation" })}>
+            Change profile
+          </button>
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "projects" })}>
+            Open Project Hub
+          </button>
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "rams" })}>
+            RAMS builder
+          </button>
+        </div>
+
+        <h3 style={ss.h3}>What a profile changes</h3>
+        <ul style={ss.ul}>
+          {WORKSPACE_PROFILE_OVERVIEW.whatItDoes.map((line) => (
+            <li key={line} style={ss.moduleLi}>
+              {line}
+            </li>
+          ))}
+        </ul>
+        <p style={ss.note}>{WORKSPACE_PROFILE_OVERVIEW.whatItDoesNot}</p>
+
+        <h3 style={ss.h3}>{WORKSPACE_PROFILE_OVERVIEW.previewTitle}</h3>
+        <p style={{ ...ss.p, marginBottom: 8 }}>{WORKSPACE_PROFILE_OVERVIEW.previewBody}</p>
+
+        <h3 style={ss.h3}>How to change profile</h3>
+        <ol style={ss.ol}>
+          {WORKSPACE_PROFILE_OVERVIEW.changeSteps.map((step) => (
+            <li key={step} style={{ marginBottom: 6 }}>
+              {step}
+            </li>
+          ))}
+        </ol>
+
+        <h3 style={ss.h3}>Profile catalogue</h3>
+        <p style={{ ...ss.p, marginBottom: 0 }}>
+          Tap a profile to read who it is for, what it adjusts, and which RAMS starter it suggests. Your data is never deleted when you switch.
+        </p>
+        <ProfileGuideCatalogue activePackId={activePackId} />
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Project Hub &amp; readiness
+        </h2>
+        <p style={ss.p}>
+          Each project has a <strong>Project Hub</strong> card driven by your workspace profile. The readiness ring scores CDM, RAMS, briefings, and profile-specific gates (e.g. PAT for electrical, survey QA for geodesy, allergen windows for food).
+        </p>
+        <ul style={ss.ul}>
+          <li>
+            <strong>Next action</strong> — one suggested step on the hub card (issue PTW, close snag, complete survey checklist, etc.).
+          </li>
+          <li>
+            <strong>Playbooks</strong> — pre-built project templates in the new-project wizard; filtered by profile.
+          </li>
+          <li>
+            <strong>Site pack PDF</strong> — export focused on your trade (contractor, electrical, survey, food, demolition, etc.).
+          </li>
+          <li>
+            <strong>More command centre</strong> — industry-aware pulse on open registers relevant to your profile.
+          </li>
+        </ul>
+        <div style={ss.btnRow}>
+          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "projects" })}>
+            Projects
+          </button>
+        </div>
       </div>
 
       <div className="app-surface-card" style={ss.card}>
@@ -381,6 +549,7 @@ export default function HelpAbout() {
         <h3 style={ss.h3}>RAMS</h3>
         <p style={ss.p}>
           Pick hazards from the library or add custom rows; link operatives and project; print branded PDFs; export JSON; import JSON with operative matching; optional evidence pack for audits.
+          Your workspace profile suggests a <strong>hazard starter</strong> in Step 2 — electrical, refurb, groundworks, general, or PAS128 surveying packs — to pre-fill scope and filter the library. Surveying firms also get PAS128 pack dropdowns when the survey module is visible.
         </p>
 
         <h3 style={ss.h3}>Daily briefing → Site map</h3>
@@ -396,6 +565,7 @@ export default function HelpAbout() {
         <h3 style={ss.h3}>Survey report</h3>
         <p style={ss.p}>
           Structured survey / dilapidation reports: scope, weather, records review, findings, geo-photos, utility DXF import, plan snapshots, QA checklist, PDF export.
+          Visible for <strong>Surveying &amp; geodesy</strong>, <strong>Contractor + surveying</strong>, and <strong>Show all modules</strong> profiles — hidden for pure contractor profiles to keep the menu focused.
         </p>
 
         <h3 style={ss.h3}>Geo-photos</h3>
@@ -479,6 +649,7 @@ export default function HelpAbout() {
           What&apos;s new
         </h2>
         <ul style={ss.ul}>
+          <li><strong>Workspace profiles</strong> — nine trade presets; Project Hub, modules, RAMS starters, site pack PDFs.</li>
           <li><strong>Project wizard</strong> — postcode, weather, A&amp;E, KML, permit readiness score.</li>
           <li><strong>Plan markup</strong> — click escape routes on site drawings.</li>
           <li><strong>Survey report</strong> — professional report builder with plans and geo-photos.</li>

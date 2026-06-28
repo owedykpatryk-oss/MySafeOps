@@ -5,6 +5,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const KEY = "allergen_changeover_windows";
@@ -115,7 +117,7 @@ export default function AllergenChangeoverRegister() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="allergen changeovers" />
       {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
-      <PageHero
+      <PageHero exportModuleId="allergen-changeovers"
         badgeText="ALG"
         title="Allergen changeovers"
         lead="Define time windows for automatic in-app awareness banners."
@@ -125,6 +127,13 @@ export default function AllergenChangeoverRegister() {
           </button>
         }
       />
+
+      <RegisterModuleShell
+        moduleId="allergen-changeovers"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("allergen-changeovers", items)}
+      >
+
       {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No windows defined.</div>
       ) : (
@@ -159,6 +168,7 @@ export default function AllergenChangeoverRegister() {
           ))}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

@@ -3,7 +3,9 @@ import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { escapeHtml, safeImageSrc, openPrintWindow } from "../utils/htmlEscape.js";
 
@@ -81,11 +83,13 @@ function SigCanvas({ onCapture, compact }) {
 }
 
 // ─── New briefing form ────────────────────────────────────────────────────────
-function BriefingForm({ onSave, onClose, workers, projects }) {
-
+function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
+  const projectSeed = initial?.projectId ? projects.find((p) => p.id === initial.projectId) : null;
   const [form, setForm] = useState({
     date: today(), time: new Date().toTimeString().slice(0,5),
-    location: "", projectId: "", conductedBy: "",
+    location: initial?.location || [projectSeed?.name, projectSeed?.site].filter(Boolean).join(" — ") || "",
+    projectId: initial?.projectId || "",
+    conductedBy: "",
     weatherConditions: "", temperature: "",
     topics: [], customTopics: "",
     scopeToday: "",
@@ -477,7 +481,9 @@ export default function DailyBriefing() {
   const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [showForm, setShowForm] = useState(false);
+  const [formInitial, setFormInitial] = useState(null);
   const [filterDate, setFilterDate] = useState("");
+  const [filterProject, setFilterProject] = useState("");
   const [search, setSearch] = useState("");
 
   const { d1Hydrating: d1BriefH, d1OutboxPending: d1BriefO } = useD1OrgArraySync({
@@ -499,9 +505,32 @@ export default function DailyBriefing() {
   const d1Hydrating = d1BriefH || d1WpH;
   const d1OutboxPending = d1BriefO || d1WpO;
 
+  useEffect(() => {
+    const t = consumeWorkspaceNavTarget();
+    if (t?.viewId !== "daily-briefing") return;
+    if (t.projectId) setFilterProject(t.projectId);
+    if (t.briefingId) {
+      const brief = load("daily_briefings", []).find((b) => b.id === t.briefingId);
+      if (brief) {
+        setFilterProject(brief.projectId || t.projectId || "");
+        setFilterDate(brief.date || "");
+      }
+      return;
+    }
+    if (t.action === "create") {
+      const p = load("mysafeops_projects", []).find((x) => x.id === t.projectId);
+      setFormInitial({
+        projectId: t.projectId || "",
+        location: [p?.name, p?.site].filter(Boolean).join(" — ") || "",
+      });
+      setShowForm(true);
+    }
+  }, []);
+
   const saveBriefing = (form) => {
     setBriefings(prev=>[{...form, id:genId()},...prev]);
     setShowForm(false);
+    setFormInitial(null);
   };
 
   const deleteBriefing = (id) => { if(confirm("Delete this briefing record?")) setBriefings(prev=>prev.filter(b=>b.id!==id)); };
@@ -510,6 +539,7 @@ export default function DailyBriefing() {
   const totalSigs = briefings.reduce((s,b)=>(b.attendees||[]).filter(a=>a.sig).length+s, 0);
 
   const filtered = briefings.filter(b=>{
+    if (filterProject && b.projectId !== filterProject) return false;
     if (filterDate && b.date!==filterDate) return false;
     if (search && !b.location?.toLowerCase().includes(search.toLowerCase()) && !b.conductedBy?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -519,53 +549,69 @@ export default function DailyBriefing() {
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="briefings and team lists" />
       {showForm && (
-        <BriefingForm workers={workers} projects={projects} onSave={saveBriefing} onClose={() => setShowForm(false)} />
+        <BriefingForm
+          workers={workers}
+          projects={projects}
+          initial={formInitial}
+          onSave={saveBriefing}
+          onClose={() => { setShowForm(false); setFormInitial(null); }}
+        />
       )}
 
       <PageHero
         badgeText="BR"
         title="Daily briefing record"
         lead="Pre-work safety briefing with attendance and signatures."
-        right={<button type="button" onClick={() => setShowForm(true)} style={ss.btnO}>+ New briefing</button>}
+        exportModuleId="daily-briefing"
+        exportModuleLabel="Daily briefing register"
+        right={<button type="button" onClick={() => { setFormInitial(null); setShowForm(true); }} style={ss.btnO}>+ New briefing</button>}
       />
 
-      {briefings.length>0 && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:10, marginBottom:20 }}>
-          {[
-            { label:"Today's briefings", value:todayCount, bg:"#EAF3DE", color:"#27500A" },
-            { label:"Total records", value:briefings.length, bg:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-primary)" },
-            { label:"Total signatures", value:totalSigs, bg:"#E6F1FB", color:"#0C447C" },
-          ].map(c=>(
-            <div key={c.label} style={{ background:c.bg, borderRadius:8, padding:"10px 14px" }}>
-              <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:2 }}>{c.label}</div>
-              <div style={{ fontSize:22, fontWeight:500, color:c.color }}>{c.value}</div>
+      <RegisterModuleShell
+        moduleId="daily-briefing"
+        smartContext={{ briefings, workers, projects }}
+        stats={
+          briefings.length > 0
+            ? [
+                { label: "Today's briefings", value: todayCount, tone: todayCount ? "good" : "warn" },
+                { label: "Total records", value: briefings.length, tone: "neutral" },
+                { label: "Total signatures", value: totalSigs, tone: "neutral" },
+              ]
+            : []
+        }
+        filters={
+          briefings.length > 0 ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search location or conductor…" style={{ ...ss.inp, flex: 1, width: "auto", minWidth: 140 }} />
+              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} style={{ ...ss.inp, width: "auto" }} />
+              {projects.length > 0 ? (
+                <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} style={{ ...ss.inp, width: "auto", minWidth: 140 }}>
+                  <option value="">All projects</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name || p.id}</option>
+                  ))}
+                </select>
+              ) : null}
+              {(search || filterDate || filterProject) ? (
+                <button type="button" onClick={() => { setSearch(""); setFilterDate(""); setFilterProject(""); }} style={{ ...ss.btn, fontSize: 12 }}>Clear</button>
+              ) : null}
             </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search location or conductor…" style={{ ...ss.inp, flex:1, width:"auto", minWidth:140 }} />
-        <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} style={{ ...ss.inp, width:"auto" }} />
-        {(search||filterDate) && <button onClick={()=>{setSearch("");setFilterDate("");}} style={{ ...ss.btn, fontSize:12 }}>Clear</button>}
-      </div>
-
-      {briefings.length===0 ? (
-        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No briefing records yet.</p>
-          <button onClick={()=>setShowForm(true)} style={ss.btnO}>+ Record first briefing</button>
-        </div>
-      ) : filtered.length===0 ? (
-        <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, color:"var(--color-text-secondary)", fontSize:13 }}>
-          No records match filters.
-        </div>
-      ) : (
-        filtered.map(b=><BriefingCard key={b.id} brief={b} onDelete={deleteBriefing} onPrint={printBriefing} />)
-      )}
-
-      <div style={{ marginTop:20, padding:"12px 14px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.6 }}>
-        Each briefing records: date/time, location, weather, scope, topics covered, attendees with finger signatures and timestamps. Print-ready A4 PDF with one click.
-      </div>
+          ) : null
+        }
+      >
+        {briefings.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "3rem 1rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12 }}>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>No briefing records yet.</p>
+            <button type="button" onClick={() => setShowForm(true)} style={ss.btnO}>+ Record first briefing</button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "2rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, color: "var(--color-text-secondary)", fontSize: 13 }}>
+            No records match filters.
+          </div>
+        ) : (
+          filtered.map((b) => <BriefingCard key={b.id} brief={b} onDelete={deleteBriefing} onPrint={printBriefing} />)
+        )}
+      </RegisterModuleShell>
     </div>
   );
 }

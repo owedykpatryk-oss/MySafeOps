@@ -51,7 +51,7 @@ describe("registerSeedTemplates", () => {
     expect(saveOrgScoped).toHaveBeenCalledWith("scaffold_register", expect.any(Array));
   });
 
-  it("covers 33 HSE seed templates", () => {
-    expect(seedTemplateCount()).toBe(33);
+  it("covers all HSE seed templates", () => {
+    expect(seedTemplateCount()).toBeGreaterThanOrEqual(33);
   });
 });

@@ -4,6 +4,7 @@ import {
   collectProjectDashboard,
   filterByProject,
   sortByRecent,
+  summarizeTimesheetsForProject,
 } from "./projectDashboard";
 
 describe("projectDashboard", () => {
@@ -23,7 +24,31 @@ describe("projectDashboard", () => {
       { id: "w1", name: "Bob", projectIds: ["p1"] },
     ]);
     expect(dash.team).toHaveLength(1);
-    expect(dash.totals).toMatchObject({ documents: 0, openSnags: 0, activePermits: 0 });
+    expect(dash.totals).toMatchObject({
+      documents: 0,
+      openSnags: 0,
+      activePermits: 0,
+      briefingToday: false,
+    });
+    expect(dash.dailyBriefings).toEqual([]);
+    expect(dash.cdmPacks).toEqual([]);
+  });
+
+  it("summarises timesheet hours for the current week", () => {
+    const weekKey = new Date();
+    const day = weekKey.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    weekKey.setDate(weekKey.getDate() + diff);
+    weekKey.setHours(0, 0, 0, 0);
+    const summary = summarizeTimesheetsForProject(
+      [
+        { id: "t1", projectId: "p1", weekKey: weekKey.toISOString().slice(0, 10), days: { Mon: 4, Tue: 4 } },
+        { id: "t2", projectId: "p2", weekKey: weekKey.toISOString().slice(0, 10), days: { Mon: 8 } },
+      ],
+      "p1"
+    );
+    expect(summary.hoursThisWeek).toBe(8);
+    expect(summary.all).toHaveLength(1);
   });
 
   it("builds activity feed from document types", () => {

@@ -50,11 +50,12 @@ import {
   getRegisterStatsMap,
   invalidateRegisterStatsCache,
   HSE_SECTION_TITLE,
+  SITE_SECTION_TITLE,
   registerStatMetaLine,
   sortTabsByRegisterPriority,
-  summarizeSectionStats,
 } from "../utils/moduleRegisterStats";
-import { modulesWithSeedTemplates, seedEmptyRegisters } from "../utils/registerSeedTemplates";
+import MoreSectionSpotlight from "../components/MoreSectionSpotlight";
+import MorePanelCommandCentre from "../components/MorePanelCommandCentre";
 import { ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import {
   BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
@@ -79,68 +80,6 @@ const LazySettingsCenter = lazy(() => import("../components/SettingsCenter"));
 const LazyWorkspaceSearchPalette = lazy(() => import("../components/WorkspaceSearchPalette"));
 const LazyWorkspaceOnboarding = lazy(() => import("../components/WorkspaceOnboarding"));
 
-function MoreSectionInsights({ sectionTitle, tone, tabs, statsMap, filter, onFilterChange, onSeeded }) {
-  if (tone !== "hse" && tone !== "site") return null;
-
-  const ids = tabs.map((t) => t.id);
-  const summary = summarizeSectionStats(statsMap, ids);
-  const scoreColour = summary.healthScore >= 75 ? "#0d9488" : summary.healthScore >= 45 ? "#d97706" : "#dc2626";
-  const emptySeedable = modulesWithSeedTemplates(ids.filter((id) => statsMap[id]?.status === "empty"));
-
-  const chips = [
-    ["all", "All"],
-    ["attention", `Needs attention (${summary.attention})`],
-    ["empty", `Empty (${summary.empty})`],
-    ["active", `Active (${summary.active})`],
-  ];
-
-  const handleSeedEmpty = () => {
-    if (!emptySeedable.length) return;
-    if (!window.confirm(`Add starter template rows to ${emptySeedable.length} empty register(s)?`)) return;
-    const { seeded } = seedEmptyRegisters(emptySeedable);
-    onSeeded?.();
-    if (seeded.length) window.alert(`Seeded ${seeded.length} register(s) with template rows.`);
-  };
-
-  return (
-    <div className={`app-more-section-insights app-more-section-insights--${tone}`}>
-      <div className="app-more-section-insights__score" style={{ borderColor: scoreColour }}>
-        <span className="app-more-section-insights__score-val" style={{ color: scoreColour }}>
-          {summary.healthScore}%
-        </span>
-        <span className="app-more-section-insights__score-label">Health</span>
-      </div>
-      <div className="app-more-section-insights__copy">
-        <strong>{summary.records.toLocaleString()} records</strong> across {summary.tracked} registers
-        {summary.attention > 0 ? (
-          <span className="app-more-section-insights__warn"> · {summary.attention} need attention</span>
-        ) : summary.empty > 0 ? (
-          <span> · {summary.empty} empty</span>
-        ) : null}
-      </div>
-      <div className="app-more-section-insights__chips" role="tablist" aria-label={`Filter ${sectionTitle}`}>
-        {chips.map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={filter === key}
-            className={`app-more-section-chip${filter === key ? " app-more-section-chip--active" : ""}`}
-            onClick={() => onFilterChange(key)}
-          >
-            {label}
-          </button>
-        ))}
-        {tone === "hse" && emptySeedable.length > 0 && (
-          <button type="button" className="app-more-section-chip app-more-section-chip--seed" onClick={handleSeedEmpty}>
-            Seed {emptySeedable.length} empty
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 const MoreModuleTile = memo(function MoreModuleTile({ tab, active, pinnedIds, sectionTone, stat, onOpen, onTogglePin, onExportPdf, onHide, canHide }) {
   const isPinned = pinnedIds.includes(tab.id);
   const Icon = getModuleIcon(tab.id);
@@ -159,6 +98,7 @@ const MoreModuleTile = memo(function MoreModuleTile({ tab, active, pinnedIds, se
         onFocus={() => prefetchView(tab.id)}
         onBlur={() => cancelPrefetchView(tab.id)}
       >
+        {stat?.status === "attention" ? <span className="app-more-tile__pulse" aria-hidden /> : null}
         <span className="app-more-tile__icon" aria-hidden>
           <Icon size={18} strokeWidth={2.2} />
         </span>
@@ -756,6 +696,16 @@ export default function MainAppLayout() {
     return getRegisterStatsMap(visibleMoreTabs.map((t) => t.id));
   }, [navTab, visibleMoreTabs, registerStatsTick]);
 
+  const commandCentreSiteTabs = useMemo(() => {
+    const section = visibleMoreSections.find((s) => s.title === SITE_SECTION_TITLE);
+    return section ? filterModuleTabsByQuery(getMoreTabsForSection(section), q) : [];
+  }, [visibleMoreSections, q]);
+
+  const commandCentreHseTabs = useMemo(() => {
+    const section = visibleMoreSections.find((s) => s.title === HSE_SECTION_TITLE);
+    return section ? filterModuleTabsByQuery(getMoreTabsForSection(section), q) : [];
+  }, [visibleMoreSections, q]);
+
   return (
     <div
       className="app-workspace-root"
@@ -810,13 +760,13 @@ export default function MainAppLayout() {
         </div>
         {navTab === "more" && (
           <div className="app-panel-surface app-more-panel" style={{ marginTop: 20, padding: "1.35rem 1.15rem 1.25rem" }}>
-            <div className="app-section-label" style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 10 }}>
-              More modules
-            </div>
-            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.45 }}>
-              Pin modules for quick access, or hide ones you do not use (admins: eye icon — restore in Settings → Organisation → Modules). Each tile opens the register; use the download icon for an A4 PDF snapshot, or export a whole section below.
-            </p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+            <MorePanelCommandCentre
+              siteTabs={commandCentreSiteTabs}
+              hseTabs={commandCentreHseTabs}
+              statsMap={registerStatsMap}
+              onOpenModule={selectMoreModule}
+            />
+            <div className="app-more-panel__exports">
               <button type="button" className="app-more-section-pdf" onClick={handleExportAllHsePdf}>
                 <FileDown size={14} strokeWidth={2.2} aria-hidden />
                 Export all HSE registers (A4)
@@ -838,6 +788,9 @@ export default function MainAppLayout() {
                 Export site operations pack
               </button>
             </div>
+            <p className="app-more-panel__hint">
+              Pin modules for quick access, or hide ones you do not use (admins: eye icon). Download icon on each tile exports that register; section exports bundle multiple registers.
+            </p>
             {pinnedTabsFiltered.length > 0 && (
               <div style={{ marginBottom: 18 }}>
                 <div
@@ -926,7 +879,7 @@ export default function MainAppLayout() {
                       </button>
                     )}
                   </div>
-                  <MoreSectionInsights
+                  <MoreSectionSpotlight
                     sectionTitle={section.title}
                     tone={tone}
                     tabs={allSectionTabs}
@@ -939,6 +892,7 @@ export default function MainAppLayout() {
                       invalidateRegisterStatsCache();
                       setRegisterStatsTick((t) => t + 1);
                     }}
+                    onOpenModule={selectMoreModule}
                   />
                   {tabs.length === 0 ? (
                     <div style={{ fontSize: 12, color: "var(--color-text-secondary)", padding: "4px 2px 8px" }}>

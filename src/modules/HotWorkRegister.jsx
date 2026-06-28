@@ -6,6 +6,8 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { orgHasFoodIndustrialPack } from "../utils/industrialSectors";
 import { getAuthorisedLiveLotoList } from "./LOTORegister";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
@@ -385,7 +387,7 @@ export default function HotWorkRegister() {
       {modal?.type === "form" && (
         <Form item={modal.data} projects={projects} liveLotos={liveLotos} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />
       )}
-      <PageHero
+      <PageHero exportModuleId="hot-work"
         badgeText="HW"
         title="Hot work register"
         lead="Welding, cutting, grinding — with optional food-sector controls and LOTO interlock."
@@ -407,6 +409,13 @@ export default function HotWorkRegister() {
           </div>
         }
       />
+
+      <RegisterModuleShell
+        moduleId="hot-work"
+        smartContext={{ items }}
+        stats={buildRegisterModuleStats("hot-work", items)}
+      >
+
       {items.length === 0 ? (
         <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No hot work records.</div>
       ) : (
@@ -458,6 +467,7 @@ export default function HotWorkRegister() {
           ) : null}
         </div>
       )}
-    </div>
+
+      </RegisterModuleShell>    </div>
   );
 }

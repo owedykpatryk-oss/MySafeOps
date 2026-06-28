@@ -1,7 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
+import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "mysafeops_timesheets";
@@ -653,6 +656,32 @@ export default function Timesheet() {
     setProjects(load(PROJECTS_KEY));
   }, []);
 
+  useEffect(() => {
+    const t = consumeWorkspaceNavTarget();
+    if (t?.viewId !== "timesheets") return;
+    if (t.projectId) setFilterProject(t.projectId);
+    if (t.timesheetEntryId) {
+      const entry = load(STORAGE_KEY).find((e) => e.id === t.timesheetEntryId);
+      if (entry) setModal({ type: "entry", data: entry });
+      return;
+    }
+    if (t.action === "create") {
+      setModal({
+        type: "entry",
+        data: {
+          id: genId(),
+          workerId: "",
+          projectId: t.projectId || "",
+          task: "",
+          days: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 },
+          status: "pending",
+          notes: "",
+          rejectReason: "",
+        },
+      });
+    }
+  }, []);
+
   // persist
   useEffect(() => { save(STORAGE_KEY, entries); }, [entries]);
   useEffect(() => { save(WORKERS_KEY, workers); }, [workers]);
@@ -850,6 +879,8 @@ export default function Timesheet() {
         badgeText="TS"
         title="Timesheet"
         lead="Track and approve hours per project. People and projects are separate modules — open People or Projects from the bottom bar."
+        exportModuleId="timesheets"
+        exportModuleLabel="Timesheet register"
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
@@ -876,6 +907,12 @@ export default function Timesheet() {
           </div>
         }
       />
+
+      <RegisterModuleShell
+        moduleId="timesheets"
+        smartContext={{ entries: weekEntries, weekKey }}
+        stats={buildRegisterModuleStats("timesheets", weekEntries)}
+      >
 
       {/* pending banner */}
       {pendingCount > 0 && (
@@ -1441,6 +1478,8 @@ export default function Timesheet() {
           </div>
         </div>
       )}
+
+      </RegisterModuleShell>
 
       {/* footer note */}
       <p style={{ fontSize:11, color:"var(--color-text-tertiary,#aaa)", marginTop:20, lineHeight:1.5 }}>

@@ -11,3 +11,12 @@ export function markOnboardingComplete() {
     onboardingWizardCompletedAt: new Date().toISOString(),
   });
 }
+
+export function resetOnboardingWizard() {
+  const raw = loadOrgSettingsRaw();
+  saveOrgSettingsRaw({
+    ...raw,
+    onboardingWizardCompleted: false,
+    onboardingWizardCompletedAt: null,
+  });
+}

@@ -4,6 +4,7 @@
 import { loadOrgScoped, getOrgId } from "./orgStorage";
 import { MODULE_PDF_REGISTRY } from "../navigation/moduleCatalogMeta";
 import { MORE_SECTIONS, MORE_TABS } from "../navigation/appModules";
+import { todayIsoDate } from "./projectDashboard";
 
 export const HSE_SECTION_TITLE = "Health, safety & environment";
 export const SITE_SECTION_TITLE = "Site operations";
@@ -101,6 +102,21 @@ export function itemNeedsAttention(item) {
   return false;
 }
 
+/** @type {Record<string, (items: object[]) => { attentionCount: number } | null>} */
+const MODULE_STAT_HANDLERS = {
+  "daily-briefing": (items) => {
+    const today = todayIsoDate();
+    const todayRows = items.filter((b) => String(b.date || "").slice(0, 10) === today);
+    let attentionCount = 0;
+    if (items.length > 0 && todayRows.length === 0) attentionCount += 1;
+    todayRows.forEach((b) => {
+      const present = (b.attendees || []).filter((a) => a.present);
+      if (present.some((a) => !a.sig)) attentionCount += 1;
+    });
+    return { attentionCount };
+  },
+};
+
 /** @returns {{ moduleId: string, count: number|null, attentionCount: number, status: 'empty'|'active'|'attention'|'unknown', lastUpdated: string|null }} */
 export function getModuleRegisterStat(moduleId) {
   const cfg = MODULE_PDF_REGISTRY[moduleId];
@@ -116,8 +132,13 @@ export function getModuleRegisterStat(moduleId) {
   let attentionCount = 0;
   let lastTs = 0;
 
+  const custom = MODULE_STAT_HANDLERS[moduleId]?.(items);
+  if (custom) {
+    attentionCount = custom.attentionCount;
+  }
+
   items.forEach((item) => {
-    if (itemNeedsAttention(item)) attentionCount += 1;
+    if (!custom && itemNeedsAttention(item)) attentionCount += 1;
     lastTs = Math.max(lastTs, itemTimestamp(item));
   });
 

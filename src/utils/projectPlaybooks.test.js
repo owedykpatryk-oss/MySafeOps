@@ -8,6 +8,7 @@ import {
   buildMissingDocChecklist,
   createRamsDraftFromPlaybook,
 } from "./projectPlaybooks";
+import { saveOrgSettingsRaw } from "./orgSettingsStorage";
 
 describe("projectPlaybooks", () => {
   const project = {
@@ -65,6 +66,9 @@ describe("projectPlaybooks", () => {
   });
 
   it("buildMissingDocChecklist lists absent modules", () => {
+    localStorage.clear();
+    localStorage.setItem("mysafeops_orgId", "test-org");
+    saveOrgSettingsRaw({ industryPackId: "surveyingGeodesy" });
     const items = buildMissingDocChecklist({ rams: [], surveys: [], permits: [], methodStatements: [], plans: [] });
     expect(items.some((i) => i.actionType === "create_rams")).toBe(true);
     expect(items.some((i) => i.actionType === "create_survey")).toBe(true);

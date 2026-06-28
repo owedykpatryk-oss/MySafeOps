@@ -7,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `tt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -182,6 +183,8 @@ export default function ToolboxTalkRegister() {
         badgeText="TT"
         title="Toolbox talks (register)"
         lead="Manual log of toolbox talks delivered on site."
+        exportModuleId="toolbox-reg"
+        exportModuleLabel="Toolbox talk register"
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {items.length > 0 && (
@@ -195,53 +198,70 @@ export default function ToolboxTalkRegister() {
           </div>
         }
       />
-      {items.length === 0 ? (
-        <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No toolbox talks logged.</div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.hasMore(items) ? (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Showing {Math.min(listPg.cap, items.length)} of {items.length} talks
-            </div>
-          ) : null}
-          {listPg.visible(items).map((r) => (
-            <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                <div style={{ minWidth: 0 }}>
-                  <strong>{r.topic || "Topic"}</strong> · {r.talkDate}
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.presenter} · {r.attendeeCount ? `${r.attendeeCount} attendees` : ""}</div>
-                </div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
-                  </button>
-                  {caps.deleteRecords && (
-                    <button
-                      type="button"
-                      style={{ ...ss.btn, color: "#A32D2D" }}
-                      onClick={() => {
-                        if (confirm("Delete?")) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
-                          pushAudit({ action: "toolbox_talk_delete", entity: "toolbox", detail: r.id });
-                        }
-                      }}
-                    >
-                      Delete
+      <RegisterModuleShell
+        moduleId="toolbox-reg"
+        smartContext={{ items }}
+        stats={
+          items.length > 0
+            ? [
+                { label: "Talks logged", value: items.length, tone: "neutral" },
+                {
+                  label: "This month",
+                  value: items.filter((r) => String(r.talkDate || "").slice(0, 7) === today().slice(0, 7)).length,
+                  tone: "good",
+                },
+              ]
+            : []
+        }
+      >
+        {items.length === 0 ? (
+          <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No toolbox talks logged.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {listPg.hasMore(items) ? (
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                Showing {Math.min(listPg.cap, items.length)} of {items.length} talks
+              </div>
+            ) : null}
+            {listPg.visible(items).map((r) => (
+              <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <strong>{r.topic || "Topic"}</strong> · {r.talkDate}
+                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.presenter} · {r.attendeeCount ? `${r.attendeeCount} attendees` : ""}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
+                      Edit
                     </button>
-                  )}
+                    {caps.deleteRecords && (
+                      <button
+                        type="button"
+                        style={{ ...ss.btn, color: "#A32D2D" }}
+                        onClick={() => {
+                          if (confirm("Delete?")) {
+                            setItems((p) => p.filter((x) => x.id !== r.id));
+                            pushAudit({ action: "toolbox_talk_delete", entity: "toolbox", detail: r.id });
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-          {listPg.hasMore(items) ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(items)} remaining)
-              </button>
-            </div>
-          ) : null}
-        </div>
-      )}
+            ))}
+            {listPg.hasMore(items) ? (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+                <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                  Show more ({listPg.remaining(items)} remaining)
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </RegisterModuleShell>
     </div>
   );
 }

@@ -1,19 +1,29 @@
 import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { permitReadinessForProject } from "../modules/permits/permitProjectDefaults";
+import { isSurveyWorkflowEnabled } from "../utils/projectHubIndustry";
+import { getIndustryPackLabel } from "../utils/industryPackProfile";
+import { isIndustryPackPreviewActive } from "../utils/industryPackPreview";
 
-const PIPELINE = [
+const BASE_PIPELINE = [
   { key: "project", icon: "📍", label: "Project", hint: "Site & postcode", viewId: "projects", action: "viewProjectDashboard" },
   { key: "intel", icon: "🌦️", label: "Site intel", hint: "Weather & A&E", viewId: "projects", action: "editProject" },
   { key: "plans", icon: "🗺️", label: "Plans", hint: "KML & markup", viewId: "project-drawings" },
   { key: "rams", icon: "⚠️", label: "RAMS", hint: "Method & hazards", viewId: "rams" },
   { key: "permit", icon: "📋", label: "Permit", hint: "PTW on site", viewId: "permits", action: "issueFromDefaults" },
-  { key: "survey", icon: "📐", label: "Survey report", hint: "Client deliverable", viewId: "survey-report" },
 ];
+
+const SURVEY_STEP = { key: "survey", icon: "📐", label: "Survey report", hint: "Client deliverable", viewId: "survey-report" };
+const INSPECTIONS_STEP = { key: "inspections", icon: "✅", label: "Inspections", hint: "Site checks", viewId: "inspections" };
+
+function pipelineForOrg() {
+  return [...BASE_PIPELINE, isSurveyWorkflowEnabled() ? SURVEY_STEP : INSPECTIONS_STEP];
+}
 
 /**
  * Hero “start here” card — project-first workflow with live counts.
  */
 export default function ProjectHubCard({ projects = [], rams = [], permits = [], surveyReports = [], style }) {
+  const PIPELINE = pipelineForOrg();
   const active = projects.filter((p) => !p.closed);
   const recent = active.slice(0, 3);
   const focusProject = recent[0] || active[0] || null;
@@ -25,6 +35,7 @@ export default function ProjectHubCard({ projects = [], rams = [], permits = [],
     rams: rams.length,
     permit: permits.length,
     survey: surveyReports.length,
+    inspections: 0,
   };
 
   const openProject = (projectId, action = "viewProjectDashboard") => {
@@ -66,6 +77,7 @@ export default function ProjectHubCard({ projects = [], rams = [], permits = [],
       const r = permitReadinessForProject(focusProject, permits);
       if (r.required > 0) hint = `${r.issued}/${r.required} for ${focusProject.name || "site"}`;
     }
+    if (step.key === "inspections") hint = "Log site checks";
     return { ...step, count: counts[step.key], hint };
   });
 
@@ -74,13 +86,19 @@ export default function ProjectHubCard({ projects = [], rams = [], permits = [],
       <div className="app-project-hub__glow" aria-hidden />
       <div className="app-project-hub__inner">
         <div className="app-project-hub__main">
-          <p className="app-project-hub__eyebrow">Start here</p>
+          <p className="app-project-hub__eyebrow">
+            Start here ·{" "}
+            <span className={`app-project-hub__profile${isIndustryPackPreviewActive() ? " app-project-hub__profile--preview" : ""}`}>
+              {getIndustryPackLabel()}
+              {isIndustryPackPreviewActive() ? " (preview)" : ""}
+            </span>
+          </p>
           <h2 id="project-hub-title" className="app-project-hub__title">
             Project hub
           </h2>
           <p className="app-project-hub__lead">
             {active.length === 0
-              ? "Create a project first — then KML boundary, plans, RAMS, permits and survey reports attach to that site."
+              ? "Create a project first — then RAMS, permits, briefings and site documents attach to that job."
               : `${active.length} active project${active.length === 1 ? "" : "s"}. Pipeline steps open the latest site (${focusProject?.name || "pick one below"}).`}
           </p>
 
@@ -117,9 +135,15 @@ export default function ProjectHubCard({ projects = [], rams = [], permits = [],
             <button type="button" className="app-project-hub__action" onClick={() => openWorkspaceView({ viewId: "permits" })}>
               Permits
             </button>
-            <button type="button" className="app-project-hub__action" onClick={() => openWorkspaceView({ viewId: "survey-report" })}>
-              Survey
-            </button>
+            {isSurveyWorkflowEnabled() ? (
+              <button type="button" className="app-project-hub__action" onClick={() => openWorkspaceView({ viewId: "survey-report" })}>
+                Survey
+              </button>
+            ) : (
+              <button type="button" className="app-project-hub__action" onClick={() => openWorkspaceView({ viewId: "inspections" })}>
+                Inspections
+              </button>
+            )}
             <button type="button" className="app-project-hub__action" onClick={() => openWorkspaceView({ viewId: "site-map" })}>
               Map
             </button>

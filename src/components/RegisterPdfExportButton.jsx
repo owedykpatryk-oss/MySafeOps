@@ -29,7 +29,7 @@ export default function RegisterPdfExportButton({ moduleId, label, compact = fal
       type="button"
       onClick={run}
       disabled={busy}
-      title="Download register as A4 PDF (org branding)"
+      title={moduleId === "daily-briefing" ? "Download all briefings as detailed A4 PDF with signatures" : "Download register as A4 PDF (org branding)"}
       style={{
         ...ms.btn,
         display: "inline-flex",

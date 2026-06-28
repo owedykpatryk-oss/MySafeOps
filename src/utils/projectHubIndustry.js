@@ -1,0 +1,103 @@
+/**
+ * Industry-aware project hub — survey workflow only for geodesy / PAS128 orgs.
+ */
+
+import { getAppliedIndustryPackId, INDUSTRY_PACKS } from "./orgIndustryPacks";
+import { getIndustryPackPreviewId } from "./industryPackPreview";
+import { isModuleVisible } from "./hiddenModules";
+import { PROJECT_PLAYBOOKS } from "./projectPlaybooks";
+
+function packHasSurveyWorkflow(packId) {
+  if (!packId || !INDUSTRY_PACKS[packId]) return false;
+  return Boolean(INDUSTRY_PACKS[packId].surveyWorkflow);
+}
+
+/** Effective pack — preview (session) overrides saved profile for hub UI only. */
+export function getOrgIndustryPackId() {
+  return getIndustryPackPreviewId() || getAppliedIndustryPackId() || "generalContractor";
+}
+
+/** Survey deliverables (PAS128 reports) — surveying & hybrid orgs only. */
+export function isSurveyWorkflowEnabled() {
+  if (typeof window === "undefined") return false;
+  if (!isModuleVisible("survey-report")) return false;
+  const pack = getOrgIndustryPackId();
+  return packHasSurveyWorkflow(pack) || pack === "showEverything";
+}
+
+export function isSurveyingOrg() {
+  const pack = getOrgIndustryPackId();
+  return pack === "surveyingGeodesy" || pack === "contractorPlusSurveying";
+}
+
+/** Playbooks shown in project create / hub — no PAS128 packs for pure contractors. */
+export function getPlaybooksForOrg() {
+  const pack = getOrgIndustryPackId();
+  if (
+    pack === "surveyingGeodesy" ||
+    pack === "contractorPlusSurveying" ||
+    (pack === "showEverything" && isSurveyWorkflowEnabled())
+  ) {
+    return PROJECT_PLAYBOOKS;
+  }
+  return PROJECT_PLAYBOOKS.filter((pb) => !pb.surveyType);
+}
+
+const FEATURED_BY_PACK = {
+  generalContractor: ["general", "refurb_build", "confined_space", "electrical"],
+  electricalContractor: ["electrical", "general", "confined_space"],
+  buildingTrades: ["refurb_build", "general", "groundworks", "confined_space"],
+  surveyingGeodesy: ["utility_mapping", "groundworks", "general", "confined_space"],
+  contractorPlusSurveying: ["general", "utility_mapping", "refurb_build", "groundworks"],
+  facilitiesMaintenance: ["general", "electrical", "confined_space"],
+  demolitionStripout: ["groundworks", "general", "confined_space"],
+  foodPharma: ["general", "confined_space"],
+  showEverything: ["general", "electrical", "utility_mapping", "groundworks"],
+};
+
+/** Top playbooks for hub alerts and project wizard. */
+export function getFeaturedPlaybooksForOrg(limit = 3) {
+  const allowed = new Set(getPlaybooksForOrg().map((p) => p.id));
+  const order = FEATURED_BY_PACK[getOrgIndustryPackId()] || FEATURED_BY_PACK.generalContractor;
+  const picked = [];
+  for (const id of order) {
+    if (!allowed.has(id)) continue;
+    const pb = PROJECT_PLAYBOOKS.find((p) => p.id === id);
+    if (pb) picked.push(pb);
+    if (picked.length >= limit) break;
+  }
+  if (picked.length < limit) {
+    for (const pb of getPlaybooksForOrg()) {
+      if (picked.some((x) => x.id === pb.id)) continue;
+      picked.push(pb);
+      if (picked.length >= limit) break;
+    }
+  }
+  return picked;
+}
+
+/** Final pipeline step — survey for geodesy, inspections for everyone else. */
+export function getProjectHubTailStep(dash) {
+  if (isSurveyWorkflowEnabled()) {
+    return {
+      key: "survey",
+      icon: "📐",
+      label: "Survey",
+      hint: dash?.surveys?.length ? `${dash.surveys.length} report(s)` : "Client deliverable",
+      status: dash?.surveys?.length ? "done" : "todo",
+      viewId: "survey-report",
+      action: dash?.surveys?.length ? undefined : "createReport",
+    };
+  }
+  const inspectionHint = dash?.inspections?.length
+    ? `${dash.inspections.length} logged`
+    : "Log first inspection";
+  return {
+    key: "inspections",
+    icon: "✅",
+    label: "Inspections",
+    hint: inspectionHint,
+    status: (dash?.inspections?.length || 0) > 0 ? "done" : "todo",
+    viewId: "inspections",
+  };
+}

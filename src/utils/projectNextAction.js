@@ -2,7 +2,9 @@
  * One recommended next step per project — deterministic, no AI.
  */
 
-import { PROJECT_DOC_KEYS, filterByProject } from "./projectDashboard";
+import { PROJECT_DOC_KEYS, hasBriefingTodayForProject, todayIsoDate } from "./projectDashboard";
+import { isSurveyWorkflowEnabled } from "./projectHubIndustry";
+import { pickIndustryProjectNextAction } from "./industryPackProfile";
 import { loadOrgScoped as load } from "./orgStorage";
 import { missingRequiredPermits } from "../modules/permits/permitProjectDefaults";
 import { setWorkspaceNavTarget, openWorkspaceView } from "./workspaceNavContext";
@@ -35,23 +37,38 @@ function groupByProject(rows = []) {
 
 /** Load all docs once for batch next-action scans. */
 export function loadProjectActionContext() {
+  const dailyBriefings = load(PROJECT_DOC_KEYS.dailyBriefings, []);
   return buildProjectActionContext({
     rams: load(PROJECT_DOC_KEYS.rams, []),
     surveys: load(PROJECT_DOC_KEYS.surveys, []),
     permits: load(PROJECT_DOC_KEYS.permits, []),
     methodStatements: load(PROJECT_DOC_KEYS.methodStatements, []),
+    dailyBriefings,
     plans: [],
   });
 }
 
-export function buildProjectActionContext({ rams = [], surveys = [], permits = [], methodStatements = [], plans = [] } = {}) {
+export function buildProjectActionContext({
+  rams = [],
+  surveys = [],
+  permits = [],
+  methodStatements = [],
+  dailyBriefings = [],
+  plans = [],
+  inspections = [],
+  snags = [],
+} = {}) {
   return {
     ramsByProject: groupByProject(rams),
     surveysByProject: groupByProject(surveys),
     permitsByProject: groupByProject(permits),
     methodStatementsByProject: groupByProject(methodStatements),
+    dailyBriefingsByProject: groupByProject(dailyBriefings),
     plansByProject: groupByProject(plans),
+    inspectionsByProject: groupByProject(inspections),
+    snagsByProject: groupByProject(snags),
     allPermits: permits,
+    allDailyBriefings: dailyBriefings,
   };
 }
 
@@ -118,7 +135,21 @@ export function pickNextActionForProject(project, ctx) {
     };
   }
 
-  if (!surveys.length) {
+  const projectBriefings = ctx.dailyBriefingsByProject[pid] || [];
+  if (!hasBriefingTodayForProject(ctx.allDailyBriefings?.length ? ctx.allDailyBriefings : projectBriefings, pid, todayIsoDate())) {
+    return {
+      label: "Record today's briefing",
+      viewId: "daily-briefing",
+      action: "create",
+      projectId: pid,
+      tone: "warn",
+    };
+  }
+
+  const industryAction = pickIndustryProjectNextAction(project, ctx);
+  if (industryAction) return industryAction;
+
+  if (!surveys.length && isSurveyWorkflowEnabled()) {
     return {
       label: "Create survey draft",
       viewId: "survey-report",
@@ -128,9 +159,11 @@ export function pickNextActionForProject(project, ctx) {
     };
   }
 
-  const staleDraft = surveys
-    .filter((s) => s.status !== "final")
-    .sort((a, b) => (daysSince(b.updatedAt || b.createdAt) || 0) - (daysSince(a.updatedAt || a.createdAt) || 0))[0];
+  const staleDraft = isSurveyWorkflowEnabled()
+    ? surveys
+        .filter((s) => s.status !== "final")
+        .sort((a, b) => (daysSince(b.updatedAt || b.createdAt) || 0) - (daysSince(a.updatedAt || a.createdAt) || 0))[0]
+    : null;
   if (staleDraft) {
     const age = daysSince(staleDraft.updatedAt || staleDraft.createdAt);
     if (age != null && age >= STALE_SURVEY_DAYS) {

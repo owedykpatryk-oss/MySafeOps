@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import RegisterModuleShell from "../components/RegisterModuleShell";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { escapeHtml, openPrintWindow } from "../utils/htmlEscape.js";
 
 const genId = () => `cdm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -392,6 +394,52 @@ export default function CDMCompliance() {
 
   useEffect(()=>{ save("cdm_packs",packs); },[packs]);
 
+  useEffect(() => {
+    const t = consumeWorkspaceNavTarget();
+    if (t?.viewId !== "cdm") return;
+    if (t.cdmPackId) {
+      const pack = load("cdm_packs", []).find((p) => p.id === t.cdmPackId);
+      if (pack) setModal({ type: "form", data: pack });
+      return;
+    }
+    if (t.action === "create") {
+      const projects = load("mysafeops_projects", []);
+      const p = projects.find((x) => x.id === t.projectId);
+      setModal({
+        type: "form",
+        data: {
+          id: genId(),
+          projectId: t.projectId || "",
+          projectTitle: p?.name || "",
+          siteAddress: [p?.address, p?.postcode].filter(Boolean).join(", ") || p?.site || "",
+          clientName: "",
+          principalDesignerName: "",
+          principalDesignerCompany: "",
+          principalContractorName: "",
+          principalContractorCompany: "",
+          startDate: p?.timelineStart || "",
+          endDate: p?.timelineEnd || "",
+          estimatedWorkers: "",
+          estimatedPersonDays: "",
+          calendarPhaseDays: "",
+          cdmOrgRole: "contractor",
+          pciSummary: "",
+          hsFileSummary: "",
+          cdm2026Notes: "",
+          notifiable: false,
+          f10Submitted: false,
+          f10Date: "",
+          dutyholderChecks: {},
+          preConstructionInfo: {},
+          cppSections: {},
+          status: "draft",
+          createdAt: new Date().toISOString(),
+          date: today(),
+        },
+      });
+    }
+  }, []);
+
   const savePack = (pack) => {
     setPacks(prev => prev.find(p=>p.id===pack.id) ? prev.map(p=>p.id===pack.id?pack:p) : [pack,...prev]);
     setModal(null);
@@ -405,49 +453,77 @@ export default function CDMCompliance() {
         badgeText="CDM"
         title="CDM 2015 compliance"
         lead="Construction Phase Plan, dutyholder checklist, F10 tracking, and CDM 2026 readiness fields (PCI / H&S File / role)."
+        exportModuleId="cdm"
+        exportModuleLabel="CDM register"
         right={<button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ New CDM pack</button>}
       />
 
-      <div style={{ padding:"10px 14px", background:"#E6F1FB", border:"0.5px solid #B5D4F4", borderRadius:8, fontSize:12, color:"#0C447C", marginBottom:20, lineHeight:1.6 }}>
-        <strong>CDM 2015 applies to all construction projects.</strong> A Construction Phase Plan is required before any construction begins. Projects exceeding 30 working days (with 20+ simultaneous workers) or 500 person-days must be notified to HSE via F10.
-      </div>
+      <RegisterModuleShell
+        moduleId="cdm"
+        smartContext={{ packs }}
+        stats={
+          packs.length > 0
+            ? [
+                {
+                  label: "CDM packs",
+                  value: packs.length,
+                  tone: "neutral",
+                },
+                {
+                  label: "Incomplete checklists",
+                  value: packs.filter((p) => Object.values(p.dutyholderChecks || {}).filter(Boolean).length < 10).length,
+                  tone: packs.some((p) => Object.values(p.dutyholderChecks || {}).filter(Boolean).length < 10) ? "warn" : "good",
+                },
+                {
+                  label: "Notifiable (est.)",
+                  value: packs.filter((p) => computeNotifiable(p)).length,
+                  tone: "neutral",
+                },
+              ]
+            : []
+        }
+      >
+        <div style={{ padding:"10px 14px", background:"#E6F1FB", border:"0.5px solid #B5D4F4", borderRadius:8, fontSize:12, color:"#0C447C", lineHeight:1.6 }}>
+          <strong>CDM 2015 applies to all construction projects.</strong> A Construction Phase Plan is required before any construction begins. Projects exceeding 30 working days (with 20+ simultaneous workers) or 500 person-days must be notified to HSE via F10.
+        </div>
 
-      {packs.length===0 ? (
-        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No CDM packs created yet.</p>
-          <button onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ Create first CDM pack</button>
-        </div>
-      ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {packs.map(pack=>{
-            const notifiable = computeNotifiable(pack);
-            const checked = Object.values(pack.dutyholderChecks||{}).filter(Boolean).length;
-            const cppPct = Math.round((CPP_SECTIONS.filter(s=>pack.cppSections?.[s.key]?.trim()).length/CPP_SECTIONS.length)*100);
-            return (
-              <div key={pack.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"center" }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-                    <span style={{ fontWeight:500, fontSize:14 }}>{pack.projectTitle||"Untitled"}</span>
-                    {notifiable && <span style={{ padding:"1px 8px", borderRadius:20, fontSize:11, fontWeight:500, background:"#FCEBEB", color:"#791F1F" }}>Notifiable</span>}
-                    {notifiable && pack.f10Submitted && <span style={{ padding:"1px 8px", borderRadius:20, fontSize:11, fontWeight:500, background:"#EAF3DE", color:"#27500A" }}>F10 submitted</span>}
+        {packs.length===0 ? (
+          <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
+            <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No CDM packs created yet.</p>
+            <button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ Create first CDM pack</button>
+          </div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {packs.map(pack=>{
+              const notifiable = computeNotifiable(pack);
+              const checked = Object.values(pack.dutyholderChecks||{}).filter(Boolean).length;
+              const cppPct = Math.round((CPP_SECTIONS.filter(s=>pack.cppSections?.[s.key]?.trim()).length/CPP_SECTIONS.length)*100);
+              return (
+                <div key={pack.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"center" }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
+                      <span style={{ fontWeight:500, fontSize:14 }}>{pack.projectTitle||"Untitled"}</span>
+                      {notifiable && <span style={{ padding:"1px 8px", borderRadius:20, fontSize:11, fontWeight:500, background:"#FCEBEB", color:"#791F1F" }}>Notifiable</span>}
+                      {notifiable && pack.f10Submitted && <span style={{ padding:"1px 8px", borderRadius:20, fontSize:11, fontWeight:500, background:"#EAF3DE", color:"#27500A" }}>F10 submitted</span>}
+                    </div>
+                    <div style={{ fontSize:12, color:"var(--color-text-secondary)", display:"flex", gap:12, flexWrap:"wrap" }}>
+                      <span>{pack.clientName||"—"}</span>
+                      <span>Start: {fmtDate(pack.startDate)}</span>
+                      <span>CDM checklist: {checked}/10</span>
+                      <span>CPP: {cppPct}%</span>
+                    </div>
                   </div>
-                  <div style={{ fontSize:12, color:"var(--color-text-secondary)", display:"flex", gap:12, flexWrap:"wrap" }}>
-                    <span>{pack.clientName||"—"}</span>
-                    <span>Start: {fmtDate(pack.startDate)}</span>
-                    <span>CDM checklist: {checked}/10</span>
-                    <span>CPP: {cppPct}%</span>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0 }}>
+                    <button type="button" onClick={()=>printCDM(pack)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print</button>
+                    <button type="button" onClick={()=>setModal({type:"form",data:pack})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
+                    <button type="button" onClick={()=>{ if(confirm("Delete?")) setPacks(p=>p.filter(x=>x.id!==pack.id)); }} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
                   </div>
                 </div>
-                <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0 }}>
-                  <button onClick={()=>printCDM(pack)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print</button>
-                  <button onClick={()=>setModal({type:"form",data:pack})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
-                  <button onClick={()=>{ if(confirm("Delete?")) setPacks(p=>p.filter(x=>x.id!==pack.id)); }} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </RegisterModuleShell>
     </div>
   );
 }

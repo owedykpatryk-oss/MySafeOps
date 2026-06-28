@@ -4,6 +4,7 @@ import {
   pickCloudBrandingPayload,
   saveOrgSettingsRaw,
 } from "./orgSettingsStorage";
+import { isValidIndustryPackId } from "./orgIndustryPacks";
 
 /** @param {Record<string, unknown>} settings */
 export async function resolveBrandingLogoUrl(settings) {
@@ -64,6 +65,9 @@ export async function syncOrgBrandingFromCloud(supabase, orgSlug) {
 export async function pushOrgBrandingToCloud(supabase, rawSettings) {
   if (!supabase) return null;
   let payload = pickCloudBrandingPayload(rawSettings);
+  if (payload.industryPackId && !isValidIndustryPackId(payload.industryPackId)) {
+    delete payload.industryPackId;
+  }
   if (payload.logo && payload.logoUrl && String(payload.logo).length > 120_000) {
     const { logo, ...rest } = payload;
     payload = rest;

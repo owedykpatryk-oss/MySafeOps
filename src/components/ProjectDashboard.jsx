@@ -8,9 +8,50 @@ import {
   fmtProjectWhen,
   healthTone,
 } from "../utils/projectDashboard";
-import { PROJECT_PLAYBOOKS, getPlaybook, buildMissingDocChecklist } from "../utils/projectPlaybooks";
+import { getPlaybook, buildMissingDocChecklist } from "../utils/projectPlaybooks";
+import { buildProjectActionContext, pickNextActionForProject } from "../utils/projectNextAction";
+import { buildProjectHubPulse, printProjectSitePack } from "../utils/projectHubPulse";
+import { getFeaturedPlaybooksForOrg, isSurveyWorkflowEnabled } from "../utils/projectHubIndustry";
+import { getIndustryPackLabel } from "../utils/industryPackProfile";
+import { isIndustryPackPreviewActive } from "../utils/industryPackPreview";
 
 const EMPTY_ROUTES = [];
+
+function ReadinessRing({ pct, tone, size = 104 }) {
+  const r = (size - 10) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c - (Math.max(0, Math.min(100, pct)) / 100) * c;
+  return (
+    <div className="app-project-dashboard__ring-wrap" aria-hidden={false} role="img" aria-label={`Site readiness ${pct} percent`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="app-project-dashboard__ring">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          className="app-project-dashboard__ring-track"
+          strokeWidth="6"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          className={`app-project-dashboard__ring-fill app-project-dashboard__ring-fill--${tone}`}
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={offset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+      <div className="app-project-dashboard__ring-label">
+        <span className="app-project-dashboard__ring-val">{pct}%</span>
+        <span className="app-project-dashboard__ring-cap">ready</span>
+      </div>
+    </div>
+  );
+}
 
 function DocSection({ title, count, emptyHint, children, actionLabel, onAction }) {
   return (
@@ -66,6 +107,26 @@ export default function ProjectDashboard({
 }) {
   const dash = useMemo(() => collectProjectDashboard(project, workers), [project, workers]);
 
+  const hubPulse = useMemo(
+    () => (project ? buildProjectHubPulse(project, dash) : null),
+    [project, dash]
+  );
+
+  const nextAction = useMemo(() => {
+    if (!project?.id) return null;
+    const ctx = buildProjectActionContext({
+      rams: dash.rams,
+      surveys: dash.surveys,
+      permits: dash.permits,
+      methodStatements: dash.methodStatements,
+      dailyBriefings: dash.dailyBriefings,
+      plans: dash.plans,
+      inspections: dash.inspections,
+      snags: dash.snags,
+    });
+    return pickNextActionForProject(project, ctx);
+  }, [project, dash]);
+
   const boundaryRing = useMemo(
     () => (project ? parseProjectBoundaryRing(project) : null),
     [project]
@@ -75,8 +136,8 @@ export default function ProjectDashboard({
     [project?.mapEscapeRoutes]
   );
 
-  const healthPct = Math.max(0, Math.min(100, Number(project?.healthScore) || 0));
-  const tone = healthTone(healthPct);
+  const healthPct = hubPulse?.readiness ?? Math.max(0, Math.min(100, Number(project?.healthScore) || 0));
+  const tone = hubPulse?.tone ?? healthTone(healthPct);
   const checklist = Array.isArray(project?.startupChecklist) ? project.startupChecklist : [];
   const checklistOpen = checklist.filter((x) => x?.status !== "done").length;
 
@@ -112,6 +173,8 @@ export default function ProjectDashboard({
       create_permit: () => go("permits", "issueFromDefaults"),
       create_ms: () => go("method-statement", "create"),
       upload_plan: () => go("project-drawings"),
+      create_daily_briefing: () => go("daily-briefing", "create"),
+      create_cdm: () => go("cdm", "create"),
     };
     const fn = actionMap[item.actionType];
     if (fn) fn();
@@ -120,6 +183,17 @@ export default function ProjectDashboard({
   const playbookMeta = project?.playbookId ? getPlaybook(project.playbookId) : null;
   const missingDocItems = buildMissingDocChecklist(dash);
   const showApplyPlaybook = missingDocItems.length > 0 && onApplyPlaybook;
+  const showSurvey = isSurveyWorkflowEnabled();
+  const featuredPlaybooks = useMemo(() => getFeaturedPlaybooksForOrg(3), []);
+
+  const runNextAction = () => {
+    if (!nextAction) return;
+    go(nextAction.viewId, nextAction.action, {
+      reportId: nextAction.reportId,
+      permitId: nextAction.permitId,
+      ramsId: nextAction.ramsId,
+    });
+  };
 
   const runCloneDocuments = () => {
     if (!onCloneDocuments) return;
@@ -152,9 +226,22 @@ export default function ProjectDashboard({
                 "Add site details in project settings."}
             </p>
             <div className="app-project-dashboard__chips">
-              <span className={`app-project-dashboard__chip app-project-dashboard__chip--${tone}`}>
-                Readiness {healthPct}%
+              <span
+                className={`app-project-dashboard__chip app-project-dashboard__chip--profile${
+                  isIndustryPackPreviewActive() ? " app-project-dashboard__chip--preview" : ""
+                }`}
+              >
+                {getIndustryPackLabel()}
+                {isIndustryPackPreviewActive() ? " · preview" : ""}
               </span>
+              <span className={`app-project-dashboard__chip app-project-dashboard__chip--${tone}`}>
+                Live readiness {healthPct}%
+              </span>
+              {hubPulse ? (
+                <span className="app-project-dashboard__chip">
+                  Pipeline {hubPulse.pipelineDone}/{hubPulse.pipelineTotal}
+                </span>
+              ) : null}
               {project.timelineStart || project.timelineEnd ? (
                 <span className="app-project-dashboard__chip">
                   {project.timelineStart || "—"} → {project.timelineEnd || "—"}
@@ -181,6 +268,16 @@ export default function ProjectDashboard({
             </div>
           </div>
           <div className="app-project-dashboard__header-actions">
+            <button
+              type="button"
+              className="app-project-dashboard__btn app-project-dashboard__btn--accent"
+              onClick={() => printProjectSitePack(project, dash, workers)}
+            >
+              Print site pack
+            </button>
+            <button type="button" className="app-project-dashboard__btn" onClick={() => go("site-map")}>
+              Site map
+            </button>
             <button type="button" className="app-project-dashboard__btn" onClick={() => onEdit?.(project)}>
               Edit project
             </button>
@@ -198,6 +295,80 @@ export default function ProjectDashboard({
           </div>
         </header>
 
+        <section className="app-project-dashboard__spotlight" aria-label="Site status">
+          <div className="app-project-dashboard__spotlight-ring">
+            <ReadinessRing pct={healthPct} tone={tone} />
+            {hubPulse?.briefing ? (
+              <p className="app-project-dashboard__spotlight-brief">
+                Today: <strong>{hubPulse.briefing.signed}</strong> signed · {hubPulse.briefing.present} on briefing
+              </p>
+            ) : (
+              <p className="app-project-dashboard__spotlight-brief app-project-dashboard__spotlight-brief--warn">
+                No briefing recorded today
+              </p>
+            )}
+          </div>
+
+          <div
+            className={`app-project-dashboard__next${nextAction ? ` app-project-dashboard__next--${nextAction.tone || "warn"}` : " app-project-dashboard__next--clear"}`}
+          >
+            {nextAction ? (
+              <>
+                <p className="app-project-dashboard__next-eyebrow">Do this now</p>
+                <p className="app-project-dashboard__next-label">{nextAction.label}</p>
+                <button type="button" className="app-project-dashboard__next-cta" onClick={runNextAction}>
+                  Go →
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="app-project-dashboard__next-eyebrow">Site status</p>
+                <p className="app-project-dashboard__next-label">All key gates clear — keep today&apos;s briefing and PTW live.</p>
+                <button type="button" className="app-project-dashboard__next-cta app-project-dashboard__next-cta--ghost" onClick={() => go("daily-briefing", "create")}>
+                  Log briefing
+                </button>
+              </>
+            )}
+          </div>
+
+          {hubPulse?.pipeline?.length ? (
+            <div className="app-project-dashboard__spotlight-pipeline" role="list" aria-label="Site workflow">
+              {hubPulse.pipeline.map((step, i) => (
+                <div key={step.key} className="app-project-dashboard__spotlight-step-wrap" role="listitem">
+                  {i > 0 ? <span className="app-project-dashboard__spotlight-connector" aria-hidden /> : null}
+                  <button
+                    type="button"
+                    className={`app-project-dashboard__spotlight-step app-project-dashboard__spotlight-step--${step.status}`}
+                    onClick={() => go(step.viewId, step.action)}
+                    title={step.hint}
+                  >
+                    <span className="app-project-dashboard__spotlight-step-icon" aria-hidden>{step.icon}</span>
+                    <span className="app-project-dashboard__spotlight-step-label">{step.label}</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        {hubPulse?.pulse?.length ? (
+          <div className="app-project-dashboard__pulse" role="list" aria-label="Compliance pulse">
+            {hubPulse.pulse.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="listitem"
+                className={`app-project-dashboard__pulse-card app-project-dashboard__pulse-card--${item.status}`}
+                onClick={() => item.viewId && go(item.viewId, item.action)}
+              >
+                <span className="app-project-dashboard__pulse-dot" aria-hidden />
+                <span className="app-project-dashboard__pulse-label">{item.label}</span>
+                <span className="app-project-dashboard__pulse-value">{item.value}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <div className="app-project-dashboard__hero">
           <div className="app-project-dashboard__map">
             <ProjectSitePreviewMap
@@ -211,7 +382,7 @@ export default function ProjectDashboard({
             />
           </div>
           <div className="app-project-dashboard__intel">
-            <div className="app-project-dashboard__stat-grid">
+            <div className="app-project-dashboard__stat-grid app-project-dashboard__stat-grid--compact">
               <div className="app-project-dashboard__stat">
                 <span className="app-project-dashboard__stat-val">{dash.rams.length}</span>
                 <span className="app-project-dashboard__stat-lbl">RAMS</span>
@@ -223,14 +394,6 @@ export default function ProjectDashboard({
               <div className="app-project-dashboard__stat">
                 <span className="app-project-dashboard__stat-val">{dash.surveys.length}</span>
                 <span className="app-project-dashboard__stat-lbl">Surveys</span>
-              </div>
-              <div className="app-project-dashboard__stat">
-                <span className="app-project-dashboard__stat-val">{dash.geoPhotos.length}</span>
-                <span className="app-project-dashboard__stat-lbl">Geo-photos</span>
-              </div>
-              <div className="app-project-dashboard__stat">
-                <span className="app-project-dashboard__stat-val">{dash.plans.length}</span>
-                <span className="app-project-dashboard__stat-lbl">Drawings</span>
               </div>
               <div className="app-project-dashboard__stat">
                 <span className="app-project-dashboard__stat-val">{dash.totals.documents}</span>
@@ -258,25 +421,20 @@ export default function ProjectDashboard({
                 Run site intel in project settings (weather, hospital, start-date forecast).
               </div>
             ) : null}
-            <div className="app-project-dashboard__progress">
-              <div className="app-project-dashboard__progress-labels">
-                <span>Project readiness</span>
-                <span>{healthPct}%</span>
-              </div>
-              <div className="app-project-dashboard__progress-track">
-                <div
-                  className={`app-project-dashboard__progress-fill app-project-dashboard__progress-fill--${tone}`}
-                  style={{ width: `${healthPct}%` }}
-                />
-              </div>
-            </div>
           </div>
         </div>
 
         <div className="app-project-dashboard__quick">
+          <button type="button" onClick={() => go("daily-briefing", "create")}>+ Briefing</button>
           <button type="button" onClick={() => go("rams", "create")}>+ RAMS</button>
           <button type="button" onClick={() => go("permits", "issueFromDefaults")}>+ Permit</button>
-          <button type="button" onClick={() => go("survey-report", "createReport")}>+ Survey</button>
+          {showSurvey ? (
+            <button type="button" onClick={() => go("survey-report", "createReport")}>+ Survey</button>
+          ) : (
+            <button type="button" onClick={() => go("inspections")}>Inspections</button>
+          )}
+          <button type="button" onClick={() => go("cdm", "create")}>+ CDM</button>
+          <button type="button" onClick={() => go("timesheets", "create")}>+ Timesheet</button>
           <button type="button" onClick={() => go("geo-photos", "capture")}>Geo-photo</button>
           <button type="button" onClick={() => go("project-drawings")}>Drawings</button>
           <button type="button" onClick={() => go("method-statement", "create")}>Method statement</button>
@@ -285,9 +443,9 @@ export default function ProjectDashboard({
 
         {showApplyPlaybook ? (
           <div className="app-project-dashboard__alert">
-            <strong>Missing site documents</strong> — apply a playbook to create RAMS, survey, PTW and MS drafts in one step.
+            <strong>Missing site documents</strong> — apply a playbook to create RAMS, PTW and method statement drafts in one step.
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-              {PROJECT_PLAYBOOKS.slice(0, 3).map((pb) => (
+              {featuredPlaybooks.map((pb) => (
                 <button
                   key={pb.id}
                   type="button"
@@ -306,6 +464,15 @@ export default function ProjectDashboard({
             <strong>{dash.totals.permitsMissingRams} active PTW</strong> without linked RAMS — review before handover.
             <button type="button" className="app-project-dashboard__alert-action" onClick={() => go("permits")}>
               Open permits
+            </button>
+          </div>
+        ) : null}
+
+        {!dash.totals.briefingToday ? (
+          <div className="app-project-dashboard__alert app-project-dashboard__alert--warn">
+            <strong>No daily briefing for today</strong> — record attendance and hazards before work starts.
+            <button type="button" className="app-project-dashboard__alert-action" onClick={() => go("daily-briefing", "create")}>
+              Record briefing
             </button>
           </div>
         ) : null}
@@ -367,6 +534,70 @@ export default function ProjectDashboard({
 
         <div className="app-project-dashboard__docs">
           <DocSection
+            title="Daily briefings"
+            count={dash.dailyBriefings.length}
+            emptyHint="No site briefings linked yet — record today's pre-start briefing."
+            actionLabel="+ Today's briefing"
+            onAction={() => go("daily-briefing", "create")}
+          >
+            {dash.dailyBriefings.slice(0, 8).map((b) => (
+              <DocRow
+                key={b.id}
+                title={b.location || "Site briefing"}
+                meta={[b.date, b.conductedBy, `${(b.attendees || []).filter((a) => a.present).length} present`]
+                  .filter(Boolean)
+                  .join(" · ")}
+                badge={b.date === new Date().toISOString().slice(0, 10) ? "today" : ""}
+                onClick={() => go("daily-briefing", "view", { briefingId: b.id })}
+              />
+            ))}
+          </DocSection>
+
+          <DocSection
+            title="CDM compliance"
+            count={dash.cdmPacks.length}
+            emptyHint="No CDM pack yet — add Construction Phase Plan and dutyholder checklist."
+            actionLabel="+ CDM pack"
+            onAction={() => go("cdm", "create")}
+          >
+            {dash.cdmPacks.map((c) => {
+              const checked = Object.values(c.dutyholderChecks || {}).filter(Boolean).length;
+              return (
+                <DocRow
+                  key={c.id}
+                  title={c.projectTitle || "CDM pack"}
+                  meta={[c.clientName, c.startDate ? `Start ${fmtProjectDay(c.startDate)}` : ""]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  badge={checked ? `${checked}/10 checks` : c.status || "draft"}
+                  onClick={() => go("cdm", "view", { cdmPackId: c.id })}
+                />
+              );
+            })}
+          </DocSection>
+
+          <DocSection
+            title="Timesheets"
+            count={dash.timesheets.length}
+            emptyHint="No timesheet entries for this project."
+            actionLabel="+ Log hours"
+            onAction={() => go("timesheets", "create")}
+          >
+            {dash.timesheets.slice(0, 8).map((e) => {
+              const hrs = Object.values(e.days || {}).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+              return (
+                <DocRow
+                  key={e.id}
+                  title={e.task || "Timesheet entry"}
+                  meta={[e.weekKey, `${hrs}h`, e.status].filter(Boolean).join(" · ")}
+                  badge={e.status || "pending"}
+                  onClick={() => go("timesheets", "view", { timesheetEntryId: e.id })}
+                />
+              );
+            })}
+          </DocSection>
+
+          <DocSection
             title="RAMS"
             count={dash.rams.length}
             emptyHint="No RAMS linked yet — create one for this site."
@@ -401,6 +632,7 @@ export default function ProjectDashboard({
             ))}
           </DocSection>
 
+          {showSurvey ? (
           <DocSection
             title="Survey reports"
             count={dash.surveys.length}
@@ -417,6 +649,25 @@ export default function ProjectDashboard({
               />
             ))}
           </DocSection>
+          ) : (
+          <DocSection
+            title="Inspections"
+            count={dash.inspections.length}
+            emptyHint="No inspections logged for this site yet."
+            actionLabel="Open inspections"
+            onAction={() => go("inspections")}
+          >
+            {dash.inspections.slice(0, 8).map((ins) => (
+              <DocRow
+                key={ins.id}
+                title={ins.title || ins.type || "Inspection"}
+                meta={[ins.status, fmtProjectWhen(ins.date || ins.createdAt)].filter(Boolean).join(" · ")}
+                badge={ins.result || ins.status || ""}
+                onClick={() => go("inspections")}
+              />
+            ))}
+          </DocSection>
+          )}
 
           <DocSection
             title="Geo-photos"
@@ -507,6 +758,9 @@ export default function ProjectDashboard({
                         methodStatementId: a.methodStatementId,
                         planId: a.planId,
                         geoPhotoId: a.geoPhotoId,
+                        briefingId: a.briefingId,
+                        cdmPackId: a.cdmPackId,
+                        timesheetEntryId: a.timesheetEntryId,
                       })
                     }
                   >

@@ -14,6 +14,7 @@ import { loadOrgSettingsRaw, saveOrgSettingsRaw, ORG_SETTINGS_UPDATED_EVENT } fr
 import { syncOrgBrandingFromCloud } from "../utils/orgBrandingCloudSync";
 import { buildFessOrgBrandingPreset, FESS_ORG_SLUG } from "../data/fessOrgBrandingPreset";
 import OrgModuleVisibility from "./OrgModuleVisibility";
+import OrgWorkspaceProfile from "./OrgWorkspaceProfile";
 
 export { getOrgSettings } from "../utils/orgSettingsStorage";
 
@@ -286,9 +287,14 @@ export default function OrgSettings() {
       )}
 
       {tab==="modules" && (
-        <Section title="Workspace modules">
-          <OrgModuleVisibility />
-        </Section>
+        <>
+          <Section title="Workspace profile">
+            <OrgWorkspaceProfile />
+          </Section>
+          <Section title="Workspace modules">
+            <OrgModuleVisibility />
+          </Section>
+        </>
       )}
 
       {tab==="company" && (
