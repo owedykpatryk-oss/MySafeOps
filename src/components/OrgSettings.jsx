@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { useToast } from "../context/ToastContext";
+import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
 import { pushOrgBrandingToCloud } from "../utils/orgBrandingCloudSync";
 import { pushAudit } from "../utils/auditLog";
@@ -47,6 +49,8 @@ function Field({ label, hint, children }) {
 export default function OrgSettings() {
   const { role, caps } = useApp();
   const { supabase } = useSupabaseAuth();
+  const { pushToast } = useToast();
+  const showDevHints = showAdminLoginHints();
   const [form, setForm] = useState(() => loadOrgSettingsRaw());
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState("brand");
@@ -419,10 +423,10 @@ export default function OrgSettings() {
       )}
 
       {tab==="access" && (
-        <Section title="Organisation role (Supabase)">
+        <Section title="Your access level">
           <Field
-            label="Your membership role"
-            hint="Stored in org_memberships for your account. Admin: full access including organisation settings. Supervisor: no org settings or backup import. Operative: no deletes or bulk actions."
+            label="Membership role"
+            hint="Admin: full access including organisation settings. Supervisor: no org settings or backup import. Operative: no deletes or bulk actions."
           >
             <div
               style={{
@@ -439,7 +443,9 @@ export default function OrgSettings() {
             </div>
           </Field>
           <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>
-            To change your role, an organisation admin updates membership in <strong>Settings → Invites / Members</strong> (or in Supabase). Your app permissions refresh after the next sync.
+            To change your role, ask an organisation admin to update membership in <strong>Settings → Invites / Members</strong>.
+            Permissions refresh after the next cloud sync.
+            {showDevHints ? " Admins can also edit roles in Supabase directly." : null}
           </p>
           <button
             type="button"
@@ -451,8 +457,9 @@ export default function OrgSettings() {
               try {
                 await refreshOrgFromSupabase(supabase);
                 pushAudit({ action: "membership_role_refresh", entity: "org", detail: "ensure_my_org" });
+                pushToast({ type: "success", message: "Role refreshed from cloud." });
               } catch (err) {
-                alert(err?.message || "Could not refresh organisation from the cloud.");
+                pushToast({ type: "error", message: err?.message || "Could not refresh organisation from the cloud." });
               } finally {
                 setRoleSyncing(false);
               }

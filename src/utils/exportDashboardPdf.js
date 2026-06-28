@@ -1,8 +1,18 @@
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 import { sanitizePdfFileSegment } from "./pdfFileName";
 
 export { sanitizePdfFileSegment } from "./pdfFileName";
+
+/** Lazy-load heavy PDF raster libs (keeps them out of the dashboard chunk until export). */
+let pdfLibsPromise = null;
+async function loadPdfLibs() {
+  if (!pdfLibsPromise) {
+    pdfLibsPromise = Promise.all([
+      import("html2canvas").then((m) => m.default),
+      import("jspdf").then((m) => m.jsPDF),
+    ]).then(([html2canvas, jsPDF]) => ({ html2canvas, jsPDF }));
+  }
+  return pdfLibsPromise;
+}
 
 /** @typedef {"draft" | "email" | "print"} DashboardPdfPreset */
 
@@ -237,7 +247,7 @@ function drawCoverPage(pdf, o) {
  * @param {{ title?: string; items: { label: string; value: string }[] }[]} sections
  * @param {{ noteMm?: number }} [countOpts]
  */
-function countSummaryPages(sections, countOpts = {}) {
+function countSummaryPages(sections, jsPDF, countOpts = {}) {
   const noteMm = typeof countOpts.noteMm === "number" ? countOpts.noteMm : 0;
   const measure = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const pageHeight = measure.internal.pageSize.getHeight();
@@ -398,6 +408,8 @@ export async function exportDashboardToPdf(element, opts = {}) {
     return { fileName: "", pages: 0, format: opts.imageFormat || "jpeg", rasterPages: 0 };
   }
 
+  const { html2canvas, jsPDF } = await loadPdfLibs();
+
   const presetName =
     opts.preset === "print" ? "print" : opts.preset === "email" ? "email" : opts.preset === "draft" ? "draft" : null;
   const preset = presetName ? DASHBOARD_PDF_PRESETS[presetName] : {};
@@ -457,7 +469,7 @@ export async function exportDashboardToPdf(element, opts = {}) {
         : presetName
           ? `Export preset: ${presetName}`
           : undefined;
-  const summaryPageCount = includeSummary ? countSummaryPages(sections, { noteMm: summaryHeaderNote ? 8.5 : 0 }) : 0;
+  const summaryPageCount = includeSummary ? countSummaryPages(sections, jsPDF, { noteMm: summaryHeaderNote ? 8.5 : 0 }) : 0;
   const fileName = opts.fileName || defaultFileName;
   const waitForFontsFlag =
     typeof opts.waitForFonts === "boolean" ? opts.waitForFonts : preset.waitForFonts !== false;

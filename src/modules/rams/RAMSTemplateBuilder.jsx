@@ -30,6 +30,7 @@ import { isFeatureEnabled } from "../../utils/featureFlags";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import PageHero from "../../components/PageHero";
+import SimpleFormDialog from "../../components/SimpleFormDialog";
 import { geocodeAddressNominatim } from "../../utils/geocode";
 import { useToast } from "../../context/ToastContext";
 import { orgHasFoodIndustrialPack, orgHasPharmaPack } from "../../utils/industrialSectors";
@@ -2212,6 +2213,7 @@ function HazardPicker({
   const [activeSurveyTokens, setActiveSurveyTokens] = useState([]);
   const [packName, setPackName] = useState("");
   const [selectedPackId, setSelectedPackId] = useState("");
+  const [packDialog, setPackDialog] = useState(null);
   const importPackRef = useRef(null);
   const [showOrgForm, setShowOrgForm] = useState(false);
   const [orgDraft, setOrgDraft] = useState({
@@ -2461,11 +2463,7 @@ function HazardPicker({
     if (!selectedPackId) return;
     const p = quickPacks.find((x) => x.id === selectedPackId);
     if (!p) return;
-    const nextName = window.prompt("Rename quick pack", p.name || "");
-    if (nextName == null) return;
-    const name = String(nextName || "").trim();
-    if (!name) return;
-    onRenameHazardPack?.(selectedPackId, name);
+    setPackDialog({ mode: "rename", defaultName: p.name || "" });
   };
 
   const deleteSelectedPack = () => {
@@ -2491,14 +2489,7 @@ function HazardPicker({
       window.alert("Select at least one activity before creating a new pack version.");
       return;
     }
-    const note = window.prompt("Version note (optional)", "Adjusted controls for current project context");
-    if (note == null) return;
-    const templates = buildPackTemplates(rows);
-    onCreateHazardPackVersion?.(selectedPackId, templates, String(note || "").trim(), {
-      projectId: projectId || "",
-      surveyWorkType: surveyWorkType || "",
-      keywords: buildPackKeywords(templates),
-    });
+    setPackDialog({ mode: "version" });
   };
 
   const rollbackSelectedPack = () => {
@@ -3087,6 +3078,49 @@ function HazardPicker({
           Next — review & edit ({selected.length}) →
         </button>
       </div>
+
+      {packDialog ? (
+        <SimpleFormDialog
+          open
+          title={packDialog.mode === "rename" ? "Rename quick pack" : "Save new version"}
+          description={
+            packDialog.mode === "rename"
+              ? "Choose a clear name so your team can find this activity bundle quickly."
+              : "Creates a new version from the activities currently selected in the hazard list."
+          }
+          submitLabel={packDialog.mode === "rename" ? "Rename" : "Save version"}
+          fields={
+            packDialog.mode === "rename"
+              ? [{ name: "name", label: "Pack name", type: "text", defaultValue: packDialog.defaultName || "", required: true }]
+              : [
+                  {
+                    name: "note",
+                    label: "Version note (optional)",
+                    type: "textarea",
+                    defaultValue: "Adjusted controls for current project context",
+                    rows: 2,
+                  },
+                ]
+          }
+          onClose={() => setPackDialog(null)}
+          onSubmit={(values) => {
+            if (packDialog.mode === "rename") {
+              const name = String(values.name || "").trim();
+              if (!name) return;
+              onRenameHazardPack?.(selectedPackId, name);
+            } else {
+              const rows = Array.isArray(selectedRows) ? selectedRows : [];
+              const templates = buildPackTemplates(rows);
+              onCreateHazardPackVersion?.(selectedPackId, templates, String(values.note || "").trim(), {
+                projectId: projectId || "",
+                surveyWorkType: surveyWorkType || "",
+                keywords: buildPackKeywords(templates),
+              });
+            }
+            setPackDialog(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

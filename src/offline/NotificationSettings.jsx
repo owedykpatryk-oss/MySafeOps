@@ -225,7 +225,7 @@ export default function NotificationSettings() {
 
         {status.supported && !status.vapidConfigured && (
           <div style={{ padding:"10px 14px", background:"#FFFBEB", borderRadius:8, fontSize:13, color:"#854d0e", marginBottom:12 }}>
-            Background cloud push is not fully configured yet (missing `VITE_VAPID_PUBLIC_KEY` in frontend env). Local reminders still work while the app is open.
+            Background push notifications are not enabled on this site yet. Reminders still work while the app is open.
           </div>
         )}
 

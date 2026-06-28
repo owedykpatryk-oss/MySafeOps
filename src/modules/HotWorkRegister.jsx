@@ -101,10 +101,12 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
     onSave({ ...form, projectName: pm[form.projectId] || "" });
   };
 
-  const markQc = () => {
-    const who = window.prompt("QC / production sign-off — name or initials:");
-    if (!who || !who.trim()) return;
-    set("qcSignedOffBy", who.trim());
+  const stampQcSignoff = () => {
+    const who = String(form.qcSignedOffBy || "").trim();
+    if (!who) {
+      alert("Enter the name or initials of whoever is signing off.");
+      return;
+    }
     set("qcSignedOffAt", Date.now());
   };
 
@@ -264,8 +266,15 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
                 ? `Signed off by ${form.qcSignedOffBy} at ${new Date(form.qcSignedOffAt).toLocaleString()}`
                 : "Not signed off yet."}
             </div>
-            <button type="button" style={{ ...ss.btn, marginTop: 8 }} onClick={markQc}>
-              Record QC sign-off
+            <label style={{ ...ss.lbl, marginTop: 8 }}>QC / production sign-off by</label>
+            <input
+              style={ss.inp}
+              value={form.qcSignedOffBy || ""}
+              onChange={(e) => set("qcSignedOffBy", e.target.value)}
+              placeholder="Name or initials"
+            />
+            <button type="button" style={{ ...ss.btn, marginTop: 8 }} onClick={stampQcSignoff}>
+              Stamp sign-off time
             </button>
           </div>
         )}

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
+import { useToast } from "../context/ToastContext";
+import { copyTextToClipboard } from "../utils/copyToClipboard";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { ms } from "../utils/moduleStyles";
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
@@ -199,6 +201,7 @@ function PortalView({ token, portals }) {
 // ─── Portal manager (internal) ────────────────────────────────────────────────
 export default function ClientPortal() {
   const { caps } = useApp();
+  const { pushToast } = useToast();
   const [portals, setPortals] = useState(()=>load("client_portals",[]));
   const [modal, setModal] = useState(null);
   const [previewToken, setPreviewToken] = useState(null);
@@ -224,6 +227,15 @@ export default function ClientPortal() {
     setPortals(prev=>[p,...prev]);
     setShowCreate(false);
     setNewPortal({ clientName:"", projectId:"", sections:["workers","rams","permits","snags"], expiresAt:"" });
+  };
+
+  const copyPortalLink = async (url) => {
+    const ok = await copyTextToClipboard(url);
+    if (ok) {
+      pushToast({ type: "success", message: "Portal link copied to clipboard." });
+    } else {
+      pushToast({ type: "error", message: "Could not copy — select the link and copy manually." });
+    }
   };
 
   if (previewToken) return (
@@ -324,7 +336,7 @@ export default function ClientPortal() {
                   </div>
                   <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                     <button onClick={()=>setPreviewToken(p.token)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Preview</button>
-                    <button onClick={()=>navigator.clipboard?.writeText(portalUrl).then(()=>alert("Link copied!"))} style={{ ...ss.btnP, fontSize:12, padding:"4px 10px" }}>Copy link</button>
+                    <button onClick={() => void copyPortalLink(portalUrl)} style={{ ...ss.btnP, fontSize:12, padding:"4px 10px" }}>Copy link</button>
                     {caps.clientPortalManage && (
                       <>
                         <button onClick={()=>setPortals(prev=>prev.map(x=>x.id===p.id?{...x,active:!x.active}:x))}

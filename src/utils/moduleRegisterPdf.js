@@ -1,9 +1,14 @@
-import { jsPDF } from "jspdf";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { loadOrgScoped } from "./orgStorage";
 import { sanitizePdfFileSegment } from "./pdfFileName";
 import { MODULE_PDF_REGISTRY, canExportModulePdf } from "../navigation/moduleCatalogMeta";
 import { MORE_SECTIONS, getMoreTabsForSection } from "../navigation/appModules";
+
+let jsPDFPromise = null;
+async function loadJsPDF() {
+  if (!jsPDFPromise) jsPDFPromise = import("jspdf").then((m) => m.jsPDF);
+  return jsPDFPromise;
+}
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -358,7 +363,8 @@ function renderModulesIntoPdf(pdf, { org, rgb, theme, bundleTitle, bundleSubtitl
  * @param {string} moduleId
  * @param {{ label?: string }} [opts]
  */
-export function exportModuleRegisterPdf(moduleId, opts = {}) {
+export async function exportModuleRegisterPdf(moduleId, opts = {}) {
+  const jsPDF = await loadJsPDF();
   const { rows, cfg } = loadRegisterRows(moduleId);
   if (!cfg) {
     return { ok: false, error: "no_pdf_config" };
@@ -391,7 +397,8 @@ export function exportModuleRegisterPdf(moduleId, opts = {}) {
  * Combined A4 PDF for all exportable modules in a More section.
  * @param {{ title: string; modules: { id: string; label: string }[] }} section
  */
-export function exportMoreSectionPdf(section) {
+export async function exportMoreSectionPdf(section) {
+  const jsPDF = await loadJsPDF();
   const modules = (section.modules || []).filter((m) => canExportModulePdf(m.id));
   if (modules.length === 0) {
     return { ok: false, error: "nothing_to_export" };
@@ -418,7 +425,7 @@ export function exportMoreSectionPdf(section) {
 }
 
 /** All Health, safety & environment registers in one A4 PDF bundle. */
-export function exportAllHseRegistersPdf() {
+export async function exportAllHseRegistersPdf() {
   const hseSection = MORE_SECTIONS.find((s) => s.title === HSE_SECTION_TITLE);
   if (!hseSection) return { ok: false, error: "hse_section_missing" };
   const tabs = getMoreTabsForSection(hseSection);
@@ -429,7 +436,7 @@ export function exportAllHseRegistersPdf() {
 }
 
 /** Site operations registers bundle. */
-export function exportSiteOperationsRegistersPdf() {
+export async function exportSiteOperationsRegistersPdf() {
   const section = MORE_SECTIONS.find((s) => s.title === "Site operations");
   if (!section) return { ok: false, error: "section_missing" };
   const tabs = getMoreTabsForSection(section);

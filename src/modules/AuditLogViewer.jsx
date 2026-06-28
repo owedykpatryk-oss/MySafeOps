@@ -92,7 +92,7 @@ export default function AuditLogViewer() {
       <PageHero
         badgeText="LOG"
         title="Audit log"
-        lead="Local ring (max 500) plus D1 server copy for admins and supervisors. Clear removes only the browser list; D1 append-only log stays in the cloud."
+        lead="Local activity log plus optional cloud copy for admins and supervisors. Clear removes only entries stored in this browser."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button type="button" style={ss.btn} onClick={refresh}>
@@ -117,7 +117,7 @@ export default function AuditLogViewer() {
       />
       {!canReadServerAudit && isD1Configured() ? (
         <div style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 10 }}>
-          Server audit (D1): your role is <strong>{role}</strong> — only organisation admins and supervisors can load the cloud audit list. Local entries below still apply.
+          Server audit: your role is <strong>{role}</strong> — only organisation admins and supervisors can load the cloud audit list. Local entries below still apply.
         </div>
       ) : null}
       {serverStatus === "loading" ? (
@@ -127,7 +127,7 @@ export default function AuditLogViewer() {
         <div style={{ color: "#b45309", fontSize: 13, marginBottom: 10 }}>
           Server audit:{" "}
           {String(serverError).includes("Forbidden") || String(serverError).includes("supervisor")
-            ? "You need admin or supervisor role in this organisation to read the D1 audit log."
+            ? "You need admin or supervisor role in this organisation to read the cloud audit log."
             : serverError}
         </div>
       ) : null}

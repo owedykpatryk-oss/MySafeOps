@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
+import { useToast } from "../context/ToastContext";
+import { copyTextToClipboard } from "../utils/copyToClipboard";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
@@ -104,6 +106,7 @@ export function PublicSubcontractorView({ token }) {
 
 export default function SubcontractorPortal() {
   const { caps } = useApp();
+  const { pushToast } = useToast();
   const [portals, setPortals] = useState(() => load("subcontractor_portals", []));
   const [subs, setSubs] = useState(() => load("subcontractor_submissions", []));
   const [show, setShow] = useState(false);
@@ -144,6 +147,14 @@ export default function SubcontractorPortal() {
     setInstr("");
   };
 
+  const copyLink = async (url) => {
+    const ok = await copyTextToClipboard(url);
+    pushToast({
+      type: ok ? "success" : "error",
+      message: ok ? "Link copied to clipboard." : "Could not copy — select the link and copy manually.",
+    });
+  };
+
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <PageHero
@@ -179,7 +190,7 @@ export default function SubcontractorPortal() {
           <div key={p.id} style={{ ...ss.card, marginBottom: 8 }}>
             <div style={{ fontSize: 12, wordBreak: "break-all", marginBottom: 8 }}>{url}</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" style={ss.btnP} onClick={() => navigator.clipboard?.writeText(url)}>
+              <button type="button" style={ss.btnP} onClick={() => void copyLink(url)}>
                 Copy
               </button>
               <button type="button" style={ss.btn} onClick={() => setPortals((x) => x.map((y) => (y.id === p.id ? { ...y, active: !y.active } : y)))}>

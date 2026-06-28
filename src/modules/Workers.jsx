@@ -1033,7 +1033,7 @@ function ProjectForm({ item, onSave, onClose }) {
               autoComplete="postal-code"
             />
             <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginTop: 4, marginBottom: 4 }}>
-              UK postcode lookup (postcodes.io), then weather + nearest A&E for RAMS and emergency contacts.
+              Enter a UK postcode, then use Lookup coordinates. Weather + nearest A&amp;E feeds RAMS and emergency contacts.
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
               <div>

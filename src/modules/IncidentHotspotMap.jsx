@@ -5,6 +5,8 @@ import iconUrl from "leaflet/dist/images/marker-icon.png";
 import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 import PageHero from "../components/PageHero";
+import { useToast } from "../context/ToastContext";
+import { copyTextToClipboard } from "../utils/copyToClipboard";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
@@ -61,6 +63,7 @@ function escapeHtml(s) {
 }
 
 export default function IncidentHotspotMap() {
+  const { pushToast } = useToast();
   const [incidents] = useState(() => load(INCIDENTS_KEY, []));
   const [projects] = useState(() => load(PROJECTS_KEY, []));
   const [actions, setActions] = useState(() => load(ACTIONS_KEY, []));
@@ -186,7 +189,7 @@ export default function IncidentHotspotMap() {
     const sourceId = `hotspot:${hotspot.key}`;
     const exists = (actions || []).some((a) => a.sourceId === sourceId && a.status !== "closed");
     if (exists) {
-      window.alert("Open hotspot action already exists for this location.");
+      pushToast({ type: "info", message: "An open hotspot action already exists for this location." });
       return;
     }
     const title = `Hotspot CAPA: ${hotspot.count} events near ${hotspot.lat.toFixed(4)}, ${hotspot.lng.toFixed(4)}`;
@@ -208,7 +211,7 @@ export default function IncidentHotspotMap() {
     const next = [action, ...(actions || [])];
     setActions(next);
     save(ACTIONS_KEY, next);
-    window.alert("Hotspot action created in Incident Action Tracker.");
+    pushToast({ type: "success", message: "Hotspot action created in Incident Action Tracker." });
   };
 
   return (

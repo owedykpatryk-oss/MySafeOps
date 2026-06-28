@@ -1,12 +1,58 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import LandingFooter from "../components/landing/LandingFooter";
 import { getSupportEmail } from "../config/supportContact";
+import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import "../styles/landing.css";
 
 const SUPPORT_EMAIL = getSupportEmail();
 
+function formatCheckedAt(date) {
+  if (!date) return "";
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function StatusPage() {
   const ext = (import.meta.env.VITE_PUBLIC_STATUS_URL || "").trim();
+  const showAdminHints = showAdminLoginHints();
+  const [health, setHealth] = useState({ state: "checking", checkedAt: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/health", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("unhealthy");
+        const json = await res.json();
+        if (!json?.ok) throw new Error("unhealthy");
+        if (!cancelled) setHealth({ state: "ok", checkedAt: new Date() });
+      })
+      .catch(() => {
+        if (!cancelled) setHealth({ state: "unknown", checkedAt: new Date() });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const statusStyles =
+    health.state === "ok"
+      ? { border: "1px solid #bbf7d0", background: "#f0fdf4", color: "#14532d" }
+      : health.state === "checking"
+        ? { border: "1px solid #e2e8f0", background: "#f8fafc", color: "#334155" }
+        : { border: "1px solid #fde68a", background: "#fffbeb", color: "#78350f" };
+
+  const statusLabel =
+    health.state === "ok"
+      ? "Application API responding"
+      : health.state === "checking"
+        ? "Checking service…"
+        : "Status check unavailable (informational only)";
+
   return (
     <div className="landing-page blog-index-page">
       <header className="blog-index-header" role="banner">
@@ -30,31 +76,39 @@ export default function StatusPage() {
         <p style={{ color: "var(--color-text-secondary, #64748b)", marginBottom: 20 }}>
           {ext ? (
             <>
-              A detailed status page may be available at:{" "}
+              Detailed status:{" "}
               <a href={ext} rel="noopener noreferrer">
                 {ext}
               </a>
             </>
           ) : (
-            "No external status URL is configured (set VITE_PUBLIC_STATUS_URL in the host environment if you use a third-party status page)."
+            "Quick operational signal for customers. For urgent issues, contact support below."
           )}
         </p>
+        {showAdminHints && !ext ? (
+          <p style={{ fontSize: 12, color: "var(--color-text-tertiary, #94a3b8)", marginBottom: 20 }}>
+            Admin: set <code>VITE_PUBLIC_STATUS_URL</code> to link a third-party status page.
+          </p>
+        ) : null}
         <div
           style={{
             padding: "16px 18px",
             borderRadius: 12,
-            border: "1px solid #bbf7d0",
-            background: "#f0fdf4",
-            color: "#14532d",
             fontSize: 15,
             fontWeight: 600,
-            marginBottom: 16,
+            marginBottom: 8,
+            ...statusStyles,
           }}
         >
-          All systems operational (informational)
+          {statusLabel}
         </div>
+        {health.checkedAt ? (
+          <p style={{ fontSize: 12, color: "var(--color-text-tertiary, #94a3b8)", marginBottom: 16 }}>
+            Last checked {formatCheckedAt(health.checkedAt)}
+          </p>
+        ) : null}
         <p style={{ fontSize: 14, lineHeight: 1.6, color: "var(--color-text-secondary, #64748b)" }}>
-          This page is a lightweight signal for customers. It does not replace monitoring or your own incident process. For issues, contact{" "}
+          This page does not replace your own incident process or full monitoring. For issues, contact{" "}
           <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
         </p>
         <p style={{ marginTop: 20 }}>

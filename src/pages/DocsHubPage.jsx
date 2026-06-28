@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import LandingFooter from "../components/landing/LandingFooter";
 import { getSupportEmail } from "../config/supportContact";
 import { getPublicStatusPath } from "../config/publicLinks";
+import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import "../styles/landing.css";
 
 const SUPPORT_EMAIL = getSupportEmail();
@@ -9,6 +10,7 @@ const SUPPORT_EMAIL = getSupportEmail();
 export default function DocsHubPage() {
   const statusUrl = getPublicStatusPath();
   const statusIsExternal = /^https?:\/\//i.test(statusUrl);
+  const showAdminHints = showAdminLoginHints();
 
   return (
     <div className="landing-page blog-index-page">
@@ -39,8 +41,7 @@ export default function DocsHubPage() {
           Documentation & help
         </h1>
         <p style={{ color: "var(--color-text-secondary, #64748b)", lineHeight: 1.6, marginBottom: 24 }}>
-          Quick links for product help. See the project <code>README</code> in the repository for full setup, Supabase, and deployment
-          checklists.
+          Quick links for product help. Signed-in users also have in-app Help (?) with module guides and keyboard shortcuts.
         </p>
         <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 12 }}>
           <li>
@@ -61,8 +62,13 @@ export default function DocsHubPage() {
             )}
             <div style={{ fontSize: 13, color: "var(--color-text-secondary, #64748b)", marginTop: 4 }}>
               {statusIsExternal
-                ? "Set VITE_PUBLIC_STATUS_URL to your public status or incident page."
-                : "Internal status page for quick checks."}
+                ? "Live status updates from our monitoring provider."
+                : "Quick check that MySafeOps services are running normally."}
+              {showAdminHints && statusIsExternal ? (
+                <span style={{ display: "block", fontSize: 11, color: "var(--color-text-tertiary, #94a3b8)", marginTop: 4 }}>
+                  Admin: <code>VITE_PUBLIC_STATUS_URL</code> points to an external status page.
+                </span>
+              ) : null}
             </div>
           </li>
           <li>

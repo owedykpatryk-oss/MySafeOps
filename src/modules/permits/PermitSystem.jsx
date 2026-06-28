@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useToast } from "../../context/ToastContext";
+import { copyTextToClipboard } from "../../utils/copyToClipboard";
 import { ms } from "../../utils/moduleStyles";
 import PageHero from "../../components/PageHero";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
@@ -57,13 +59,13 @@ import {
   listProjectPlans,
   saveProjectPlans,
   buildPlanOverlayRecord,
-  addPlanEmergencyAsset,
-  addPlanEscapeRoute,
   PLAN_UPLOAD_ACCEPT,
   readPlanUploadFile,
-  planDisplaySrc,
+  planIsMarkable,
 } from "./permitPlanOverlayRegistry";
-import PlanOverlaySvg, { EmergencyAssetMarkers } from "../../components/plans/PlanOverlaySvg";
+import PlanMarkupCanvas from "../../components/plans/PlanMarkupCanvas";
+import PermitIncidentReportDialog from "./components/PermitIncidentReportDialog";
+import PermitSimpleFormDialog from "./components/PermitSimpleFormDialog";
 import { rasterizePdfDataUrl } from "../../utils/planPdfRaster";
 import { getPermitStatusMeta } from "../../utils/statusChipMeta";
 import StatusChip from "../../components/StatusChip";
@@ -846,6 +848,11 @@ function PermitForm({
     }, permitType);
   });
   const [evidenceUploadBusy, setEvidenceUploadBusy] = useState(false);
+  const [fieldCaptureOpen, setFieldCaptureOpen] = useState(false);
+  const [fieldCaptureKind, setFieldCaptureKind] = useState("scan_proof");
+  const [fieldCaptureNote, setFieldCaptureNote] = useState("");
+  const [checklistImportOpen, setChecklistImportOpen] = useState(false);
+  const [checklistImportText, setChecklistImportText] = useState("");
   const [prefillNote, setPrefillNote] = useState("");
   const [templateEditMode, setTemplateEditMode] = useState(false);
   const [complianceProfiles, setComplianceProfiles] = useState(() => loadPermitComplianceProfiles());
@@ -1207,16 +1214,18 @@ function PermitForm({
   };
 
   const addFieldCaptureEntry = async () => {
-    const kind = window.prompt(
-      "Field capture type (scan_proof, gas_test, expose_verification, sample_reading, chain_of_custody):",
-      "scan_proof"
-    );
-    if (kind == null) return;
-    const note = window.prompt("Field capture note:", "") || "";
+    setFieldCaptureKind("scan_proof");
+    setFieldCaptureNote("");
+    setFieldCaptureOpen(true);
+  };
+
+  const commitFieldCaptureEntry = async () => {
+    const kind = String(fieldCaptureKind || "scan_proof").slice(0, 40);
+    const note = String(fieldCaptureNote || "").slice(0, 400);
     const entry = {
       id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      kind: String(kind || "entry").slice(0, 40),
-      note: String(note).slice(0, 400),
+      kind,
+      note,
       at: new Date().toISOString(),
       geo: null,
     };
@@ -1245,6 +1254,7 @@ function PermitForm({
         },
       };
     });
+    setFieldCaptureOpen(false);
   };
 
   const updateChecklistItemText = (id, text) => {
@@ -1289,9 +1299,17 @@ function PermitForm({
   };
 
   const importChecklistFromText = () => {
-    const txt = window.prompt("Paste checklist lines (one item per line):", "") || "";
+    setChecklistImportText("");
+    setChecklistImportOpen(true);
+  };
+
+  const commitChecklistImport = () => {
+    const txt = checklistImportText || "";
     const rows = txt.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).slice(0, 40);
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      setChecklistImportOpen(false);
+      return;
+    }
     setForm((f) => {
       const current = Array.isArray(f.checklistItems) ? f.checklistItems : [];
       const merged = [
@@ -1304,6 +1322,7 @@ function PermitForm({
       });
       return { ...f, checklistItems: merged, checklist: nextChecks };
     });
+    setChecklistImportOpen(false);
   };
 
   const rollbackToVersion = (entry) => {
@@ -2455,6 +2474,58 @@ function PermitForm({
                 );
               })}
             </div>
+            {fieldCaptureOpen ? (
+              <div
+                className="app-module-dialog-overlay"
+                style={{ zIndex: 75 }}
+                role="presentation"
+                onMouseDown={(e) => {
+                  if (e.target === e.currentTarget) setFieldCaptureOpen(false);
+                }}
+              >
+                <div role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: 440, background: "#fff", borderRadius: 10, border: "1px solid #e5e5e5", padding: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Field capture entry</div>
+                  <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }}>Type</label>
+                  <select style={{ ...ss.inp, width: "100%", marginBottom: 10 }} value={fieldCaptureKind} onChange={(e) => setFieldCaptureKind(e.target.value)}>
+                    <option value="scan_proof">Scan proof</option>
+                    <option value="gas_test">Gas test</option>
+                    <option value="expose_verification">Expose verification</option>
+                    <option value="sample_reading">Sample reading</option>
+                    <option value="chain_of_custody">Chain of custody</option>
+                  </select>
+                  <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }}>Note</label>
+                  <textarea style={{ ...ss.inp, minHeight: 72, width: "100%", marginBottom: 12 }} value={fieldCaptureNote} onChange={(e) => setFieldCaptureNote(e.target.value)} />
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    <button type="button" style={ss.btn} onClick={() => setFieldCaptureOpen(false)}>Cancel</button>
+                    <button type="button" style={ss.btnO} onClick={() => void commitFieldCaptureEntry()}>Add entry</button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {checklistImportOpen ? (
+              <div
+                className="app-module-dialog-overlay"
+                style={{ zIndex: 75 }}
+                role="presentation"
+                onMouseDown={(e) => {
+                  if (e.target === e.currentTarget) setChecklistImportOpen(false);
+                }}
+              >
+                <div role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: 440, background: "#fff", borderRadius: 10, border: "1px solid #e5e5e5", padding: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Import checklist lines</div>
+                  <textarea
+                    style={{ ...ss.inp, minHeight: 120, width: "100%", marginBottom: 12 }}
+                    value={checklistImportText}
+                    onChange={(e) => setChecklistImportText(e.target.value)}
+                    placeholder="One checklist item per line"
+                  />
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                    <button type="button" style={ss.btn} onClick={() => setChecklistImportOpen(false)}>Cancel</button>
+                    <button type="button" style={ss.btnO} onClick={commitChecklistImport}>Import</button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {signatureDialog ? (
               <div
                 className="app-module-dialog-overlay"
@@ -3621,6 +3692,7 @@ function exportPermitPdf(permit) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PermitSystem() {
   const { role: appRole = "admin" } = useApp();
+  const { pushToast } = useToast();
   const org = (() => {
     try {
       return loadOrgSettingsRaw();
@@ -3696,6 +3768,9 @@ export default function PermitSystem() {
   const [closePermitDialog, setClosePermitDialog] = useState(null);
   const [conflictOverrideDialog, setConflictOverrideDialog] = useState(null);
   const [handoverDialog, setHandoverDialog] = useState(null);
+  const [incidentDialog, setIncidentDialog] = useState(null);
+  const [simpleFormDialog, setSimpleFormDialog] = useState(null);
+  const pendingSavePermitRef = useRef(null);
   const conflictOverrideResolverRef = useRef(null);
   const [conflictMatrixOverrides, setConflictMatrixOverrides] = useState(() => {
     const raw = load(PERMIT_CONFLICT_MATRIX_OVERRIDES_KEY, {});
@@ -4134,7 +4209,7 @@ export default function PermitSystem() {
     };
   }, [permits]);
 
-  const savePermit = (p) => {
+  const finishSavePermit = (p, versionReason = "") => {
     setPermits((prev) => {
       const existing = prev.find((x) => x.id === p.id);
       const normalized = normalizeAdvancedPermit(p, p.type || existing?.type || "hot_work");
@@ -4143,12 +4218,7 @@ export default function PermitSystem() {
       if (existing) {
         const history = Array.isArray(existing.versionHistory) ? existing.versionHistory : [];
         if (hasMaterialPermitChanges(existing, next)) {
-          const reason =
-            window.prompt(
-              "Version note (why changed) — optional:",
-              ""
-            ) || "";
-          const versionEntry = createPermitVersionEntry(existing, next, permitActorLabel, reason);
+          const versionEntry = createPermitVersionEntry(existing, next, permitActorLabel, versionReason || "");
           if (versionEntry) {
             next = {
               ...next,
@@ -4167,6 +4237,27 @@ export default function PermitSystem() {
       return existing ? prev.map((x) => (x.id === p.id ? next : x)) : [next, ...prev];
     });
     setModal(null);
+  };
+
+  const savePermit = (p) => {
+    const existing = permits.find((x) => x.id === p.id);
+    const normalized = normalizeAdvancedPermit(p, p.type || existing?.type || "hot_work");
+    if (existing && hasMaterialPermitChanges(existing, normalized)) {
+      pendingSavePermitRef.current = p;
+      setSimpleFormDialog({
+        title: "Version note",
+        description: "This permit changed in a meaningful way. Add an optional note for the audit trail.",
+        submitLabel: "Save permit",
+        fields: [{ name: "reason", label: "Change note (optional)", type: "textarea", defaultValue: "", rows: 3 }],
+        submit: (values) => {
+          finishSavePermit(pendingSavePermitRef.current, values.reason || "");
+          pendingSavePermitRef.current = null;
+          setSimpleFormDialog(null);
+        },
+      });
+      return;
+    }
+    finishSavePermit(p, "");
   };
 
   const duplicatePermit = (source) => {
@@ -4431,25 +4522,45 @@ export default function PermitSystem() {
       })
     );
   };
-  const extendAndRevalidatePermit = (id) =>
-    setPermits((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const nextEnd = window.prompt("New end date/time (ISO):", p.endDateTime || "");
-        if (!nextEnd) return p;
-        const baseline = buildRevalidationSnapshot(p);
-        const next = { ...p, endDateTime: nextEnd, status: "active", revalidatedAt: new Date().toISOString() };
-        const nextSnap = buildRevalidationSnapshot(next);
-        const delta = diffRevalidationSnapshot(baseline, nextSnap);
-        const withDelta = {
-          ...next,
-          revalidationLog: [{ at: new Date().toISOString(), delta, baseline, next: nextSnap }, ...(p.revalidationLog || [])].slice(0, 80),
-        };
-        const withLog = { ...withDelta, auditLog: appendPermitAuditEntry(p, withDelta) };
-        void logPermitAuditToSupabase(p, withLog, getOrgId());
-        return withLog;
-      })
-    );
+  const extendAndRevalidatePermit = (id) => {
+    const p = permits.find((x) => x.id === id);
+    if (!p) return;
+    setSimpleFormDialog({
+      title: "Extend permit validity",
+      description: `${(effectivePermitTypes[p.type] || effectivePermitTypes.general).label}${p.location ? ` · ${p.location}` : ""}`,
+      submitLabel: "Extend & revalidate",
+      fields: [
+        {
+          name: "end",
+          label: "New end date & time",
+          type: "datetime-local",
+          defaultValue: toLocalInput(p.endDateTime || ""),
+          required: true,
+        },
+      ],
+      submit: (values) => {
+        const nextEnd = String(values.end || "").trim();
+        if (!nextEnd) return;
+        setPermits((prev) =>
+          prev.map((row) => {
+            if (row.id !== id) return row;
+            const baseline = buildRevalidationSnapshot(row);
+            const next = { ...row, endDateTime: nextEnd, status: "active", revalidatedAt: new Date().toISOString() };
+            const nextSnap = buildRevalidationSnapshot(next);
+            const delta = diffRevalidationSnapshot(baseline, nextSnap);
+            const withDelta = {
+              ...next,
+              revalidationLog: [{ at: new Date().toISOString(), delta, baseline, next: nextSnap }, ...(row.revalidationLog || [])].slice(0, 80),
+            };
+            const withLog = { ...withDelta, auditLog: appendPermitAuditEntry(row, withDelta) };
+            void logPermitAuditToSupabase(row, withLog, getOrgId());
+            return withLog;
+          })
+        );
+        setSimpleFormDialog(null);
+      },
+    });
+  };
   const deletePermit = (id) => {
     if (!confirm("Delete this permit?")) return;
     setPermits((prev) => {
@@ -5379,38 +5490,54 @@ export default function PermitSystem() {
 
   const bulkSetIssuerSelected = () => {
     if (!hasSelectedPermits) return;
-    const issuer = window.prompt("Set issued-by for selected permits:", "") || "";
-    const clean = issuer.trim();
-    if (!clean) return;
-    setPermits((prev) =>
-      prev.map((p) => {
-        if (!selectedPermitIds[p.id]) return p;
-        const next = { ...p, issuedBy: clean };
-        const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
-        void logPermitAuditToSupabase(p, withLog, getOrgId());
-        return withLog;
-      })
-    );
-    clearPermitSelection();
+    setSimpleFormDialog({
+      title: "Set issued-by",
+      description: `${selectedPermits.length} selected permit(s)`,
+      submitLabel: "Apply",
+      fields: [{ name: "issuer", label: "Issued by", defaultValue: "", required: true }],
+      submit: (values) => {
+        const clean = String(values.issuer || "").trim();
+        if (!clean) return;
+        setPermits((prev) =>
+          prev.map((p) => {
+            if (!selectedPermitIds[p.id]) return p;
+            const next = { ...p, issuedBy: clean };
+            const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+            void logPermitAuditToSupabase(p, withLog, getOrgId());
+            return withLog;
+          })
+        );
+        clearPermitSelection();
+        setSimpleFormDialog(null);
+      },
+    });
   };
 
   const bulkTagSelected = () => {
     if (!hasSelectedPermits) return;
-    const tag = window.prompt("Add tag to selected permits:", "") || "";
-    const clean = tag.trim();
-    if (!clean) return;
-    setPermits((prev) =>
-      prev.map((p) => {
-        if (!selectedPermitIds[p.id]) return p;
-        const tags = Array.isArray(p.tags) ? p.tags : [];
-        if (tags.includes(clean)) return p;
-        const next = { ...p, tags: [clean, ...tags].slice(0, 20) };
-        const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
-        void logPermitAuditToSupabase(p, withLog, getOrgId());
-        return withLog;
-      })
-    );
-    clearPermitSelection();
+    setSimpleFormDialog({
+      title: "Add tag",
+      description: `${selectedPermits.length} selected permit(s)`,
+      submitLabel: "Add tag",
+      fields: [{ name: "tag", label: "Tag", defaultValue: "", required: true }],
+      submit: (values) => {
+        const clean = String(values.tag || "").trim();
+        if (!clean) return;
+        setPermits((prev) =>
+          prev.map((p) => {
+            if (!selectedPermitIds[p.id]) return p;
+            const tags = Array.isArray(p.tags) ? p.tags : [];
+            if (tags.includes(clean)) return p;
+            const next = { ...p, tags: [clean, ...tags].slice(0, 20) };
+            const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+            void logPermitAuditToSupabase(p, withLog, getOrgId());
+            return withLog;
+          })
+        );
+        clearPermitSelection();
+        setSimpleFormDialog(null);
+      },
+    });
   };
 
   const bulkDeleteSelected = () => {
@@ -5520,27 +5647,33 @@ export default function PermitSystem() {
 
   const saveCurrentView = () => {
     const suggested = `View ${savedViews.length + 1}`;
-    const name = window.prompt("Saved view name:", suggested);
-    if (name == null) return;
-    const clean = String(name).trim();
-    if (!clean) return;
-    const id = `view_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const next = {
-      id,
-      name: clean.slice(0, 64),
-      filterType,
-      filterStatus,
-      filterHandoverDue,
-      filterBlockedNow,
-      filterBriefingPending,
-      filterRamsMissing,
-      cardDensity,
-      permitThemeMode,
-      search,
-      viewMode: availableViewModes.includes(viewMode) ? viewMode : "list",
-    };
-    setSavedViews((prev) => [next, ...prev.filter((v) => v.name.toLowerCase() !== next.name.toLowerCase())].slice(0, 12));
-    trackEvent("permit_saved_view_created", { name: next.name });
+    setSimpleFormDialog({
+      title: "Save current view",
+      submitLabel: "Save view",
+      fields: [{ name: "name", label: "View name", defaultValue: suggested, required: true }],
+      submit: (values) => {
+        const clean = String(values.name || "").trim();
+        if (!clean) return;
+        const id = `view_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const next = {
+          id,
+          name: clean.slice(0, 64),
+          filterType,
+          filterStatus,
+          filterHandoverDue,
+          filterBlockedNow,
+          filterBriefingPending,
+          filterRamsMissing,
+          cardDensity,
+          permitThemeMode,
+          search,
+          viewMode: availableViewModes.includes(viewMode) ? viewMode : "list",
+        };
+        setSavedViews((prev) => [next, ...prev.filter((v) => v.name.toLowerCase() !== next.name.toLowerCase())].slice(0, 12));
+        trackEvent("permit_saved_view_created", { name: next.name });
+        setSimpleFormDialog(null);
+      },
+    });
   };
 
   const applySavedView = (view) => {
@@ -5628,114 +5761,128 @@ export default function PermitSystem() {
 
   const notifyPermitTeam = async (permit) => {
     if (!permitNotifyEnabled) return;
-    const channel = String(window.prompt("Delivery channel (email/slack/teams/whatsapp):", "email") || "email")
-      .trim()
-      .toLowerCase();
-    if (channel !== "email") {
-      const queued = {
-        at: new Date().toISOString(),
-        channel: ["slack", "teams", "whatsapp"].includes(channel) ? channel : "email",
-        status: "queued",
-        recipientCount: 0,
-        note: "Channel integration queued (observability + retry center).",
-      };
-      setPermits((prev) => prev.map((p) => (p.id === permit.id ? { ...p, notificationLog: [...(p.notificationLog || []), queued] } : p)));
-      trackEvent("permit_notification_queued_channel", { permitId: permit.id, channel: queued.channel });
-      window.alert(`Saved ${queued.channel} notification request to delivery log (integration queue).`);
-      return;
-    }
-    if (!supabase) {
-      window.alert("Cloud notifications require signed-in Supabase account.");
-      return;
-    }
-    let org = {};
-    try {
-      org = loadOrgSettingsRaw();
-    } catch {
-      org = {};
-    }
     const autoRecipients = buildPermitEmailRecipients(permit, workers);
-    let recipients = autoRecipients;
-    if (recipients.length === 0) {
-      const manual = window.prompt("No worker emails matched this permit. Enter recipient emails (comma-separated):", "");
-      recipients = parseManualEmails(manual || "");
-    } else {
-      const manual = window.prompt(
-        `Recipients (edit if needed, comma-separated):`,
-        autoRecipients.join(", ")
-      );
-      if (manual == null) return;
-      recipients = parseManualEmails(manual);
-    }
-    if (recipients.length === 0) {
-      window.alert("No valid recipient emails.");
-      return;
-    }
-    const message = window.prompt("Optional message to include in email:", "") || "";
-    const linkedRams =
-      permit.linkedRamsId && Array.isArray(ramsDocs)
-        ? ramsDocs.find((d) => d.id === permit.linkedRamsId)
-        : null;
-    try {
-      const res = await sendPermitNotificationEmail({
-        permit,
-        recipients,
-        orgName: org?.name || "MySafeOps",
-        message,
-        ramsDoc: linkedRams || null,
-      });
-      const pushRes = await sendPermitNotificationWebPush({
-        permit,
-        orgSlug: getOrgId(),
-        title: `${org?.name || "MySafeOps"} · Permit update`,
-        body: `${(permit.type || "permit").replace(/_/g, " ")} at ${permit.location || "site"} status: ${permit.status || "updated"}.`,
-        url: workspaceDeepLink("permits", { permitId: permit.id }),
-        tag: `permit_notify_${permit.id}`,
-      }).catch(() => null);
-      const entry = {
-        at: new Date().toISOString(),
-        channel,
-        status: "sent",
-        recipientCount: Number(res?.recipientCount || recipients.length),
-        note: `${linkedRams ? "includes RAMS reference" : ""}${pushRes?.ok ? `${linkedRams ? " · " : ""}web push ${Number(pushRes?.sent || 0)} endpoint(s)` : ""}`.trim(),
-      };
-      setPermits((prev) =>
-        prev.map((p) => (p.id === permit.id ? { ...p, notificationLog: [...(p.notificationLog || []), entry] } : p))
-      );
-      trackEvent("permit_notification_sent", {
-        permitId: permit.id,
-        channel,
-        recipients: entry.recipientCount,
-      });
-      window.alert(`Email sent to ${entry.recipientCount} recipient(s).`);
-    } catch (err) {
-      const msg = String(err?.message || err || "Notification failed");
-      setPermits((prev) =>
-        prev.map((p) =>
-          p.id === permit.id
-            ? {
-                ...p,
-                notificationLog: [
-                  ...(p.notificationLog || []),
-                  {
-                    at: new Date().toISOString(),
-                    channel,
-                    status: "failed",
-                    recipientCount: recipients.length,
-                    note: msg.slice(0, 180),
-                  },
-                ],
-              }
-            : p
-        )
-      );
-      window.alert(msg.toLowerCase().includes("failed to send a request to the edge function")
-        ? "Notification function is not deployed yet (send-permit-notification)."
-        : msg);
-    }
+    setSimpleFormDialog({
+      title: "Notify permit team",
+      description: `${(effectivePermitTypes[permit.type] || effectivePermitTypes.general).label}${permit.location ? ` · ${permit.location}` : ""}`,
+      submitLabel: "Send notification",
+      maxWidth: 520,
+      fields: [
+        {
+          name: "channel",
+          label: "Channel",
+          type: "select",
+          defaultValue: "email",
+          options: [
+            { value: "email", label: "Email" },
+            { value: "slack", label: "Slack (queued)" },
+            { value: "teams", label: "Teams (queued)" },
+            { value: "whatsapp", label: "WhatsApp (queued)" },
+          ],
+        },
+        {
+          name: "recipients",
+          label: "Recipients (comma-separated emails)",
+          type: "textarea",
+          defaultValue: autoRecipients.join(", "),
+          rows: 2,
+        },
+        { name: "message", label: "Optional message", type: "textarea", defaultValue: "", rows: 3 },
+      ],
+      submit: async (values) => {
+        setSimpleFormDialog(null);
+        const channel = String(values.channel || "email").trim().toLowerCase();
+        if (channel !== "email") {
+          const queued = {
+            at: new Date().toISOString(),
+            channel: ["slack", "teams", "whatsapp"].includes(channel) ? channel : "email",
+            status: "queued",
+            recipientCount: 0,
+            note: "Channel integration queued (observability + retry center).",
+          };
+          setPermits((prev) => prev.map((p) => (p.id === permit.id ? { ...p, notificationLog: [...(p.notificationLog || []), queued] } : p)));
+          trackEvent("permit_notification_queued_channel", { permitId: permit.id, channel: queued.channel });
+          window.alert(`Saved ${queued.channel} notification request to delivery log (integration queue).`);
+          return;
+        }
+        if (!supabase) {
+          window.alert("Cloud notifications require a signed-in cloud account.");
+          return;
+        }
+        let org = {};
+        try {
+          org = loadOrgSettingsRaw();
+        } catch {
+          org = {};
+        }
+        const recipients = parseManualEmails(values.recipients || "");
+        if (recipients.length === 0) {
+          window.alert("No valid recipient emails.");
+          return;
+        }
+        const message = String(values.message || "");
+        const linkedRams =
+          permit.linkedRamsId && Array.isArray(ramsDocs) ? ramsDocs.find((d) => d.id === permit.linkedRamsId) : null;
+        try {
+          const res = await sendPermitNotificationEmail({
+            permit,
+            recipients,
+            orgName: org?.name || "MySafeOps",
+            message,
+            ramsDoc: linkedRams || null,
+          });
+          const pushRes = await sendPermitNotificationWebPush({
+            permit,
+            orgSlug: getOrgId(),
+            title: `${org?.name || "MySafeOps"} · Permit update`,
+            body: `${(permit.type || "permit").replace(/_/g, " ")} at ${permit.location || "site"} status: ${permit.status || "updated"}.`,
+            url: workspaceDeepLink("permits", { permitId: permit.id }),
+            tag: `permit_notify_${permit.id}`,
+          }).catch(() => null);
+          const entry = {
+            at: new Date().toISOString(),
+            channel,
+            status: "sent",
+            recipientCount: Number(res?.recipientCount || recipients.length),
+            note: `${linkedRams ? "includes RAMS reference" : ""}${pushRes?.ok ? `${linkedRams ? " · " : ""}web push ${Number(pushRes?.sent || 0)} endpoint(s)` : ""}`.trim(),
+          };
+          setPermits((prev) =>
+            prev.map((p) => (p.id === permit.id ? { ...p, notificationLog: [...(p.notificationLog || []), entry] } : p))
+          );
+          trackEvent("permit_notification_sent", { permitId: permit.id, channel, recipients: entry.recipientCount });
+          window.alert(`Email sent to ${entry.recipientCount} recipient(s).`);
+        } catch (err) {
+          const msg = String(err?.message || err || "Notification failed");
+          setPermits((prev) =>
+            prev.map((p) =>
+              p.id === permit.id
+                ? {
+                    ...p,
+                    notificationLog: [
+                      ...(p.notificationLog || []),
+                      {
+                        at: new Date().toISOString(),
+                        channel,
+                        status: "failed",
+                        recipientCount: recipients.length,
+                        note: msg.slice(0, 180),
+                      },
+                    ],
+                  }
+                : p
+            )
+          );
+          window.alert(
+            msg.toLowerCase().includes("failed to send a request to the edge function")
+              ? "Notification function is not deployed yet (send-permit-notification)."
+              : msg
+          );
+        }
+      },
+    });
   };
 
-  const sharePermitAckLink = (permit) => {
+  const sharePermitAckLink = async (permit) => {
     if (!permit) return;
     let token = String(permit.ackToken || "");
     setPermits((prev) =>
@@ -5752,10 +5899,12 @@ export default function PermitSystem() {
     const targetToken = token || permit.ackToken;
     if (!targetToken) return;
     const url = `${window.location.origin}${window.location.pathname}?view=permits&permitAck=${encodeURIComponent(targetToken)}`;
-    navigator.clipboard?.writeText(url).then(
-      () => window.alert("Read/Sign link copied."),
-      () => window.alert(url)
-    );
+    const ok = await copyTextToClipboard(url);
+    if (ok) {
+      pushToast({ type: "success", message: "Read/sign link copied to clipboard." });
+    } else {
+      pushToast({ type: "info", message: url, title: "Copy this link manually" });
+    }
   };
 
   const acknowledgePermit = async (permit) => {
@@ -5779,26 +5928,36 @@ export default function PermitSystem() {
       }
       actor = String(org.defaultLeadEngineer || "").trim();
     }
-    const by = window.prompt("Acknowledge as:", actor || "");
-    if (by == null) return;
-    const cleanBy = String(by).trim();
-    if (!cleanBy) return;
-    const note = window.prompt("Optional acknowledgement note:", "") || "";
-    const entry = {
-      at: new Date().toISOString(),
-      by: cleanBy,
-      note: String(note).slice(0, 200),
-    };
-    setPermits((prev) =>
-      prev.map((p) => {
-        if (p.id !== permit.id) return p;
-        const next = { ...p, acknowledgements: [...(p.acknowledgements || []), entry] };
-        const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
-        void logPermitAuditToSupabase(p, withLog, getOrgId());
-        return withLog;
-      })
-    );
-    trackEvent("permit_acknowledged", { permitId: permit.id });
+    setSimpleFormDialog({
+      title: "Acknowledge permit",
+      description: "Record that you have read and understood this permit before work starts.",
+      submitLabel: "Acknowledge",
+      fields: [
+        { name: "by", label: "Acknowledge as", type: "text", defaultValue: actor || "", required: true },
+        { name: "note", label: "Optional note", type: "textarea", defaultValue: "", rows: 2 },
+      ],
+      submit: (values) => {
+        setSimpleFormDialog(null);
+        const cleanBy = String(values.by || "").trim();
+        if (!cleanBy) return;
+        const note = String(values.note || "").slice(0, 200);
+        const entry = {
+          at: new Date().toISOString(),
+          by: cleanBy,
+          note,
+        };
+        setPermits((prev) =>
+          prev.map((p) => {
+            if (p.id !== permit.id) return p;
+            const next = { ...p, acknowledgements: [...(p.acknowledgements || []), entry] };
+            const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
+            void logPermitAuditToSupabase(p, withLog, getOrgId());
+            return withLog;
+          })
+        );
+        trackEvent("permit_acknowledged", { permitId: permit.id });
+      },
+    });
   };
 
   const acknowledgeFromPortalLink = () => {
@@ -5848,42 +6007,19 @@ export default function PermitSystem() {
     trackEvent("permit_briefing_confirmed", { permitId });
   };
 
-  const reportPermitIncident = async (permit) => {
+  const reportPermitIncident = (permit) => {
     if (!isFeatureEnabled("permits_incident_traceability_v1")) return;
-    const title = window.prompt("Incident title:", "Site incident");
-    if (title == null) return;
-    const severity = window.prompt(
-      "Severity (near_miss, minor, major, environmental, utility_strike, confined_space, property_damage):",
-      "near_miss"
-    );
-    if (severity == null) return;
-    const summary = window.prompt("Incident summary:", "") || "";
-    const mediaCsv = window.prompt("Optional media URLs (comma-separated photo/video/voice):", "") || "";
-    const media = mediaCsv
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean)
-      .slice(0, 12)
-      .map((url) => ({ type: "link", url }));
-    const projectPlanList = projectPlans.filter((p) => p.projectId === permit.projectId);
-    let planPin = null;
-    if (projectPlanList.length > 0) {
-      const chosenPlanId = window.prompt(
-        `Optional plan ID for map pin (${projectPlanList.map((p) => p.id).join(", ")}):`,
-        projectPlanList[0].id
-      );
-      if (chosenPlanId) {
-        const px = Number(window.prompt("Pin X (0-100 % across plan):", "50"));
-        const py = Number(window.prompt("Pin Y (0-100 % down plan):", "50"));
-        if (Number.isFinite(px) && Number.isFinite(py)) {
-          planPin = { planId: chosenPlanId, x: Math.max(0, Math.min(100, px)), y: Math.max(0, Math.min(100, py)) };
-        }
-      }
-    }
+    setIncidentDialog(permit);
+  };
+
+  const commitIncidentReport = async (permit, payload) => {
+    if (!permit || !payload) return;
     let actor = "unknown";
     if (supabase) {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         actor = user?.email || user?.id || actor;
       } catch {
         actor = "unknown";
@@ -5892,27 +6028,43 @@ export default function PermitSystem() {
     const incident = createPermitIncident({
       permit,
       linkedRamsId: permit.linkedRamsId || "",
-      title,
-      severity,
-      summary,
-      media,
-      planPin,
+      title: payload.title,
+      severity: payload.severity,
+      summary: payload.summary,
+      media: payload.media,
+      planPin: payload.planPin,
       createdBy: actor,
     });
     setIncidents((prev) => [incident, ...prev].slice(0, 500));
     trackEvent("permit_incident_created", { permitId: permit.id, severity: incident.severity });
+    setIncidentDialog(null);
     window.alert("Incident logged and linked to permit.");
   };
 
   const addCorrectiveActionToIncident = (incidentId) => {
     const incident = incidents.find((i) => i.id === incidentId);
     if (!incident) return;
-    const owner = window.prompt("Corrective action owner:", "") || "";
-    const dueAt = window.prompt("Due date/time (ISO or YYYY-MM-DD):", new Date(Date.now() + 2 * 24 * 3600000).toISOString().slice(0, 10)) || "";
-    const note = window.prompt("Corrective action note:", "") || "";
-    const next = addCorrectiveAction(incident, { owner, dueAt, note });
-    setIncidents((prev) => prev.map((x) => (x.id === incidentId ? next : x)));
-    trackEvent("permit_incident_action_added", { incidentId });
+    const defaultDue = new Date(Date.now() + 2 * 24 * 3600000).toISOString().slice(0, 10);
+    setSimpleFormDialog({
+      title: "Corrective action",
+      description: incident.title ? `Follow-up for: ${incident.title}` : "Add a corrective action for this incident.",
+      submitLabel: "Add action",
+      fields: [
+        { name: "owner", label: "Owner", type: "text", defaultValue: "", required: true },
+        { name: "dueAt", label: "Due date", type: "date", defaultValue: defaultDue },
+        { name: "note", label: "Note", type: "textarea", defaultValue: "", rows: 3 },
+      ],
+      submit: (values) => {
+        setSimpleFormDialog(null);
+        const next = addCorrectiveAction(incident, {
+          owner: String(values.owner || "").trim(),
+          dueAt: values.dueAt || "",
+          note: String(values.note || "").trim(),
+        });
+        setIncidents((prev) => prev.map((x) => (x.id === incidentId ? next : x)));
+        trackEvent("permit_incident_action_added", { incidentId });
+      },
+    });
   };
 
   const uploadProjectPlan = async (projectId, file) => {
@@ -5937,32 +6089,6 @@ export default function PermitSystem() {
     } catch (e) {
       throw e instanceof Error ? e : new Error("Could not read file");
     }
-  };
-
-  const appendEmergencyAsset = (planId) => {
-    const plan = projectPlans.find((p) => p.id === planId);
-    if (!plan) return;
-    const kind = window.prompt("Emergency asset kind (extinguisher, first_aid, muster, shutoff):", "muster");
-    if (kind == null) return;
-    const label = window.prompt("Asset label (optional):", "") || "";
-    const x = Number(window.prompt("Asset X (0-100 %):", "50"));
-    const y = Number(window.prompt("Asset Y (0-100 %):", "50"));
-    const next = addPlanEmergencyAsset(plan, { kind, x, y, label });
-    setProjectPlans((prev) => prev.map((p) => (p.id === planId ? next : p)));
-    trackEvent("permit_plan_emergency_asset_added", { planId, kind: next.emergencyAssets?.[next.emergencyAssets.length - 1]?.kind || "asset" });
-  };
-
-  const appendEscapeRoute = (planId) => {
-    const plan = projectPlans.find((p) => p.id === planId);
-    if (!plan) return;
-    const label = window.prompt("Escape route label:", "Primary route") || "";
-    const startX = Number(window.prompt("Route start X (0-100 %):", "20"));
-    const startY = Number(window.prompt("Route start Y (0-100 %):", "80"));
-    const endX = Number(window.prompt("Route end X (0-100 %):", "80"));
-    const endY = Number(window.prompt("Route end Y (0-100 %):", "20"));
-    const next = addPlanEscapeRoute(plan, { startX, startY, endX, endY, label });
-    setProjectPlans((prev) => prev.map((p) => (p.id === planId ? next : p)));
-    trackEvent("permit_plan_escape_route_added", { planId });
   };
 
   const exportSlaDigest = () => {
@@ -6281,6 +6407,29 @@ export default function PermitSystem() {
           </div>
         </div>
       )}
+
+      {simpleFormDialog ? (
+        <PermitSimpleFormDialog
+          open={Boolean(simpleFormDialog)}
+          title={simpleFormDialog.title}
+          description={simpleFormDialog.description}
+          submitLabel={simpleFormDialog.submitLabel}
+          fields={simpleFormDialog.fields || []}
+          maxWidth={simpleFormDialog.maxWidth}
+          onClose={() => setSimpleFormDialog(null)}
+          onSubmit={(values) => simpleFormDialog.submit?.(values)}
+        />
+      ) : null}
+
+      {incidentDialog ? (
+        <PermitIncidentReportDialog
+          open={Boolean(incidentDialog)}
+          permit={incidentDialog}
+          projectPlans={projectPlans}
+          onClose={() => setIncidentDialog(null)}
+          onSubmit={(payload) => void commitIncidentReport(incidentDialog, payload)}
+        />
+      ) : null}
 
       {isNarrow && mobileQuickPermit ? (
         <div
@@ -6645,72 +6794,53 @@ export default function PermitSystem() {
               .filter((p) => !planProjectId || p.projectId === planProjectId)
               .slice(0, 80)
               .map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {!planIsMarkable(p) ? " (PDF — re-upload as PNG/JPG for click marking)" : ""}
+                </option>
               ))}
           </select>
-          <button
-            type="button"
-            disabled={!selectedPlanId}
-            onClick={() => appendEmergencyAsset(selectedPlanId)}
-            style={{ ...ss.btn, fontSize:12, opacity: selectedPlanId ? 1 : 0.45 }}
-          >
-            Add emergency asset
-          </button>
-          <button
-            type="button"
-            disabled={!selectedPlanId}
-            onClick={() => appendEscapeRoute(selectedPlanId)}
-            style={{ ...ss.btn, fontSize:12, opacity: selectedPlanId ? 1 : 0.45 }}
-          >
-            Add escape route
-          </button>
         </div>
         {(() => {
           const plan = projectPlans.find((p) => p.id === selectedPlanId);
-          if (!plan) return <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>Upload JPG/PDF plan and select it to preview.</div>;
-          const planPins = incidents.filter((i) => i.planPin?.planId === plan.id);
-          const markSrc = planDisplaySrc(plan);
-          if (!markSrc) {
+          if (!plan) {
             return (
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                PDF saved. Open in{" "}
-                <a href={plan.dataUrl} target="_blank" rel="noreferrer">
-                  new tab
-                </a>{" "}
-                or use Project drawings for click marking (escape routes, zones).
+              <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>
+                Upload a JPG or PNG site plan, then mark escape routes, zones and emergency assets directly on the drawing.
               </div>
             );
           }
+          const planPins = incidents.filter((i) => i.planPin?.planId === plan.id);
+          const incidentOverlay = planPins.map((inc) => (
+            <div
+              key={inc.id}
+              title={`${inc.title || "Incident"} (${inc.severity || "incident"})`}
+              style={{
+                position:"absolute",
+                left:`${inc.planPin?.x || 0}%`,
+                top:`${inc.planPin?.y || 0}%`,
+                transform:"translate(-50%,-50%)",
+                width:14,
+                height:14,
+                borderRadius:"50%",
+                background:"#A32D2D",
+                border:"2px solid #fff",
+                boxShadow:"0 0 0 1px #A32D2D",
+                pointerEvents:"none",
+                zIndex:4,
+              }}
+            />
+          ));
           return (
-            <div style={{ position:"relative", border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:8, background:"var(--color-background-secondary,#f7f7f5)" }}>
-              <img src={markSrc} alt={plan.name} style={{ width:"100%", maxHeight:360, objectFit:"contain", borderRadius:6 }} />
-              <PlanOverlaySvg plan={plan} />
-              <EmergencyAssetMarkers plan={plan} />
-              {planPins.map((inc) => (
-                <div
-                  key={inc.id}
-                  title={`${inc.title || "Incident"} (${inc.severity || "incident"})`}
-                  style={{
-                    position:"absolute",
-                    left:`${inc.planPin?.x || 0}%`,
-                    top:`${inc.planPin?.y || 0}%`,
-                    transform:"translate(-50%,-50%)",
-                    width:14,
-                    height:14,
-                    borderRadius:"50%",
-                    background:"#A32D2D",
-                    border:"2px solid #fff",
-                    boxShadow:"0 0 0 1px #A32D2D",
-                  }}
-                />
-              ))}
-              <div style={{ position:"absolute", right:12, bottom:12, fontSize:10, background:"rgba(255,255,255,0.9)", border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:6, padding:"4px 6px" }}>
-                <div>Red dot: incident</div>
-                <div>Green square: emergency asset</div>
-                <div>Blue dashed: escape route</div>
-                <div>Red fill: blocked zone</div>
-              </div>
-            </div>
+            <PlanMarkupCanvas
+              plan={plan}
+              compact
+              extraOverlay={incidentOverlay.length ? incidentOverlay : null}
+              onPlanChange={(next) => {
+                setProjectPlans((prev) => prev.map((p) => (p.id === plan.id ? next : p)));
+                trackEvent("permit_plan_markup_updated", { planId: plan.id });
+              }}
+            />
           );
         })()}
       </div>

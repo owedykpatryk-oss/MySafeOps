@@ -25,6 +25,13 @@ function sendToServer(metric) {
     path,
   });
   try {
+    if (
+      typeof navigator !== "undefined" &&
+      typeof navigator.sendBeacon === "function" &&
+      navigator.sendBeacon(url, new Blob([body], { type: "application/json" }))
+    ) {
+      return;
+    }
     fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

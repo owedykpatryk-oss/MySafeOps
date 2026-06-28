@@ -2,8 +2,18 @@
  * Vercel Node serverless: forwards Anthropic Messages API using server-only ANTHROPIC_API_KEY.
  * Client: set VITE_ANTHROPIC_PROXY_URL=/api/anthropic-messages (see .env.example).
  *
- * Vercel: ANTHROPIC_API_KEY (required). Optional AI_PROXY_SHARED_SECRET + matching VITE_AI_PROXY_SECRET in the client.
+ * Production: ANTHROPIC_API_KEY + AI_PROXY_SHARED_SECRET (required) + matching VITE_AI_PROXY_SECRET in the client.
  */
+
+import {
+  API_JSON_HEADERS,
+  clampAnthropicBody,
+  isVercelProduction,
+  normalizeAnthropicVersion,
+  readJsonBody,
+  sendJson,
+  timingSafeEqual,
+} from "./securityUtils.js";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MAX_JSON_BYTES = 512_000;
@@ -18,48 +28,13 @@ function pickAnthropicBody(obj) {
   return out;
 }
 
-const API_JSON_HEADERS = {
-  "Content-Type": "application/json; charset=utf-8",
-  "X-Content-Type-Options": "nosniff",
-  "Cache-Control": "no-store",
-};
-
-function sendJson(res, status, obj) {
-  const body = JSON.stringify(obj);
-  res.writeHead(status, API_JSON_HEADERS);
-  res.end(body);
-}
-
-async function readJsonBody(req) {
-  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
-    return req.body;
-  }
-  const chunks = [];
-  let total = 0;
-  for await (const chunk of req) {
-    total += chunk.length;
-    if (total > MAX_JSON_BYTES) {
-      return { __body_too_large: true };
-    }
-    chunks.push(chunk);
-  }
-  const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw.trim()) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, anthropic-version, x-mysafeops-ai-secret",
       "Access-Control-Max-Age": "86400",
-      "X-Content-Type-Options": "nosniff",
-      "Cache-Control": "no-store",
+      ...API_JSON_HEADERS,
     });
     return res.end();
   }
@@ -70,9 +45,12 @@ export default async function handler(req, res) {
   }
 
   const shared = String(process.env.AI_PROXY_SHARED_SECRET || "").trim();
+  if (isVercelProduction() && !shared) {
+    return sendJson(res, 503, { error: "ai_proxy_secret_required" });
+  }
   if (shared) {
     const got = String(req.headers["x-mysafeops-ai-secret"] || "").trim();
-    if (got !== shared) {
+    if (!timingSafeEqual(shared, got)) {
       return sendJson(res, 401, { error: "unauthorized" });
     }
   }
@@ -82,7 +60,7 @@ export default async function handler(req, res) {
     return sendJson(res, 503, { error: "anthropic_not_configured" });
   }
 
-  const parsed = await readJsonBody(req);
+  const parsed = await readJsonBody(req, MAX_JSON_BYTES);
   if (parsed?.__body_too_large) {
     return sendJson(res, 413, { error: "payload_too_large" });
   }
@@ -90,12 +68,12 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { error: "invalid_json" });
   }
 
-  const body = pickAnthropicBody(parsed);
-  if (!body.model || !Array.isArray(body.messages)) {
+  const body = clampAnthropicBody(pickAnthropicBody(parsed));
+  if (!body) {
     return sendJson(res, 400, { error: "invalid_body" });
   }
 
-  const anthropicVersion = String(req.headers["anthropic-version"] || "2023-06-01");
+  const anthropicVersion = normalizeAnthropicVersion(req.headers["anthropic-version"]);
 
   let upstream;
   try {
@@ -116,8 +94,7 @@ export default async function handler(req, res) {
   const ct = upstream.headers.get("content-type") || "application/json";
   res.writeHead(upstream.status, {
     "Content-Type": ct,
-    "X-Content-Type-Options": "nosniff",
-    "Cache-Control": "no-store",
+    ...API_JSON_HEADERS,
   });
   return res.end(text);
 }

@@ -3,6 +3,17 @@
  * Header: X-Upload-Token must match secret UPLOAD_TOKEN
  */
 
+function timingSafeEqual(expected, received) {
+  const a = String(expected ?? "");
+  const b = String(received ?? "");
+  if (a.length !== b.length) return false;
+  let out = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    out |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return out === 0;
+}
+
 function json(body, status = 200, extra = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -16,12 +27,21 @@ function corsHeaders(request, env) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const allow = allowed.length === 0 ? "*" : allowed.includes(origin) ? origin : allowed[0] || "*";
+  if (!origin || allowed.length === 0) {
+    return {
+      ...(origin ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {}),
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, X-Upload-Token",
+      "Access-Control-Max-Age": "86400",
+    };
+  }
+  const allow = allowed.includes(origin) ? origin : null;
   return {
-    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Origin": allow || "null",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Upload-Token",
     "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
   };
 }
 
@@ -43,7 +63,7 @@ export default {
     }
 
     const token = request.headers.get("X-Upload-Token") || "";
-    if (!env.UPLOAD_TOKEN || token !== env.UPLOAD_TOKEN) {
+    if (!env.UPLOAD_TOKEN || !timingSafeEqual(env.UPLOAD_TOKEN, token)) {
       return json({ error: "Unauthorized" }, 401, c);
     }
 
@@ -64,6 +84,9 @@ export default {
       key = `uploads/${crypto.randomUUID()}-${file.name || "blob"}`;
     }
     key = key.replace(/^\/+/, "").slice(0, 900);
+    if (!/^[\w./-]+$/.test(key) || key.includes("..")) {
+      return json({ error: "Invalid key" }, 400, c);
+    }
 
     await env.BUCKET.put(key, file.stream(), {
       httpMetadata: { contentType: file.type || "application/octet-stream" },

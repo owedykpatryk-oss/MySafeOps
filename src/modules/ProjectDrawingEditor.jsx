@@ -271,6 +271,7 @@ export default function ProjectDrawingEditor() {
   const [r2Busy, setR2Busy] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [toast, setToast] = useState(null);
+  const [copyFallbackText, setCopyFallbackText] = useState("");
   const [showPdeOnboarding, setShowPdeOnboarding] = useState(() => {
     try {
       return !sessionStorage.getItem("pde_onboarding_v1");
@@ -389,8 +390,8 @@ export default function ProjectDrawingEditor() {
       await navigator.clipboard.writeText(blob);
       setToast("Copied coordinates to clipboard");
     } catch {
-      window.prompt("Copy:", blob);
-      setToast("Copy the text from the dialog");
+      setCopyFallbackText(blob);
+      setToast("Select all and copy the text below");
     }
   }, []);
 
@@ -1675,7 +1676,7 @@ export default function ProjectDrawingEditor() {
                   style={{ ...ss.btn, ...pdeUi.btnCompact }}
                   onClick={() => uploadMapPngToR2()}
                   disabled={!projectId || r2Busy}
-                  title="Save capture to Cloudflare R2 (same list as Documents)"
+                  title="Save capture to cloud library (same list as Documents)"
                 >
                   {r2Busy ? "Uploading…" : "Upload PNG to cloud"}
                 </button>
@@ -2783,6 +2784,77 @@ export default function ProjectDrawingEditor() {
       {toast ? (
         <div role="status" aria-live="polite" style={pdeUi.toast}>
           {toast}
+        </div>
+      ) : null}
+
+      {copyFallbackText ? (
+        <div
+          className="app-module-dialog-overlay"
+          role="presentation"
+          style={{ zIndex: 70 }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setCopyFallbackText("");
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pde-copy-fallback-title"
+            style={{
+              width: "100%",
+              maxWidth: 560,
+              maxHeight: "88vh",
+              overflowY: "auto",
+              background: "var(--color-background-primary,#fff)",
+              borderRadius: 10,
+              border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+              boxShadow: "var(--shadow-sm)",
+              padding: 16,
+            }}
+          >
+            <div id="pde-copy-fallback-title" style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>
+              Copy coordinates
+            </div>
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.45 }}>
+              Clipboard access was blocked. Select all (Ctrl+A) and copy (Ctrl+C), or use the button below.
+            </p>
+            <textarea
+              readOnly
+              value={copyFallbackText}
+              style={{
+                width: "100%",
+                minHeight: 160,
+                boxSizing: "border-box",
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 11,
+                padding: 10,
+                borderRadius: 8,
+                border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+                resize: "vertical",
+              }}
+              onFocus={(e) => e.target.select()}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <button type="button" style={ss.btn} onClick={() => setCopyFallbackText("")}>
+                Close
+              </button>
+              <button
+                type="button"
+                style={ss.btnO}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(copyFallbackText);
+                    setCopyFallbackText("");
+                    setToast("Copied coordinates to clipboard");
+                  } catch {
+                    setToast("Use Ctrl+C on the selected text");
+                  }
+                }}
+              >
+                Copy again
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

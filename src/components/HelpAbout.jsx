@@ -3,8 +3,12 @@ import PageHero from "./PageHero";
 import { getSupportEmail } from "../config/supportContact";
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
 import { getDisplayAppVersion } from "../utils/appBuildInfo";
+import { showAdminLoginHints } from "../lib/showAdminLoginHints";
+import { MORE_SECTIONS, getMoreTabsForSection, NAV_TAB_IDS } from "../navigation/appModules";
+import { WORKSPACE_SETTINGS_TABS } from "../config/workspaceSettingsTabs";
 
 const DISPLAY_APP_VERSION = getDisplayAppVersion();
+const SHOW_DEV_HINTS = showAdminLoginHints();
 
 const ss = {
   card: {
@@ -18,6 +22,16 @@ const ss = {
   p: { fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.55, margin: "0 0 12px" },
   ul: { fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.6, paddingLeft: 20, margin: 0 },
   a: { color: "#0d9488" },
+  linkBtn: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    font: "inherit",
+    color: "#0d9488",
+    fontWeight: 600,
+    cursor: "pointer",
+    textAlign: "left",
+  },
   btn: {
     display: "inline-flex",
     alignItems: "center",
@@ -84,368 +98,469 @@ const ss = {
     fontFamily: "ui-monospace, monospace",
   },
   btnRow: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12, alignItems: "center" },
+  moduleLi: { marginBottom: 6 },
 };
 
 const SUPPORT_EMAIL = getSupportEmail();
 
-const MODULE_GROUPS = [
-  {
-    title: "Core",
-    items: ["Dashboard", "Permits", "RAMS", "Workers", "Site map", "Method statement", "CDM", "Daily briefing"],
-  },
-  {
-    title: "People & site",
-    items: ["QR induction", "Signatures", "Timesheets", "Snags", "Visitor log", "Training matrix", "Subcontractor portal", "Client portal"],
-  },
-  {
-    title: "Health, safety & environment",
-    items: [
-      "COSHH",
-      "Inspections",
-      "Incidents & near miss",
-      "RIDDOR",
-      "Emergency contacts",
-      "PPE register",
-      "Plant & equipment",
-      "Fire safety log",
-      "Hot work register",
-      "First aid",
-      "Lone working",
-      "Environmental log",
-      "Waste register",
-      "Safety observations",
-      "Ladder inspections",
-      "MEWP log",
-      "Gate book",
-      "Asbestos register",
-      "Confined space log",
-      "LOTO register",
-      "Electrical / PAT",
-      "Lifting operations",
-      "DSEAR register",
-      "Noise & vibration (noise + HAV)",
-      "Scaffold inspections",
-      "Excavations / permit to dig",
-      "Temporary works register",
-      "Welfare checks",
-      "Water hygiene (Legionella-style outlets)",
-    ],
-  },
-  {
-    title: "Reports & documents",
-    items: ["Templates", "Documents", "Monthly report", "Analytics"],
-  },
-  {
-    title: "Data & settings",
-    items: ["Analytics", "Toolbox talks register", "Backup", "Audit log", "Settings (org, roles, notifications, Supabase)", "Documents → optional R2 cloud upload"],
-  },
-];
+/** One-line purpose for every workspace screen (used in the full module index). */
+const MODULE_BLURBS = {
+  dashboard: "Site today snapshot, onboarding checklist, KPIs, and quick actions.",
+  permits: "Permit-to-work, board and timeline views, plan overlay, linked incidents.",
+  rams: "RAMS builder, hazard library, PDF export, evidence packs, JSON import.",
+  workers: "Workers, certifications, projects (5-step wizard), CSV export.",
+  bin: "Recently deleted register rows — restore or remove permanently.",
+  "site-map": "Map of project sites, who is on site, boundaries, escape routes.",
+  "project-drawings": "Upload plans; click to mark escape routes, zones, and emergency assets.",
+  "method-statement": "Standalone method statements linked to projects.",
+  cdm: "CDM duty-holder checklist and project compliance records.",
+  "daily-briefing": "Daily site briefing, attendance, hazards — feeds site map presence.",
+  induction: "QR-based site induction and sign-on records.",
+  signatures: "Capture digital signatures on documents.",
+  timesheets: "Worker hours by project.",
+  snags: "Snag list with photos, status, and project link.",
+  "geo-photos": "GPS-tagged site photos for surveys and utility records.",
+  coshh: "COSHH / substance register and assessments.",
+  inspections: "Scheduled and ad-hoc inspection tracker.",
+  incidents: "Incidents and near-miss log.",
+  "incident-actions": "Corrective and preventive actions from incidents.",
+  "incident-map": "Heatmap of incident locations on site boundaries.",
+  riddor: "RIDDOR decision support and record keeping (HSE reporting is your responsibility).",
+  emergency: "Emergency contact list for sites and projects.",
+  ppe: "PPE issue and inspection register.",
+  plant: "Plant and equipment register with checks.",
+  fire: "Fire safety inspections, drills, and equipment log.",
+  "hot-work": "Hot work permit register and QC sign-off.",
+  training: "Training matrix — who holds which competencies.",
+  visitors: "Visitor sign-in log.",
+  "toolbox-reg": "Toolbox talk attendance register.",
+  "first-aid": "First aiders and kit locations.",
+  "lone-working": "Lone working log and check-ins.",
+  environmental: "Environmental incidents and controls log.",
+  observations: "Safety observations and close-out.",
+  ladders: "Ladder inspection register.",
+  mewp: "MEWP inspection and use log.",
+  gate: "Gate book — deliveries and site traffic.",
+  asbestos: "Asbestos register and survey references.",
+  "confined-space": "Confined space entry log.",
+  loto: "Lock-out tag-out register.",
+  "electrical-pat": "Electrical equipment and PAT records.",
+  lifting: "Lifting plans and equipment register.",
+  dsear: "DSEAR / ATEX hazardous area register.",
+  "high-care-access": "High-care / hygiene area access log (food manufacturing).",
+  "cip-signoff": "CIP cleaning sign-off register.",
+  "allergen-changeovers": "Allergen changeover records between production runs.",
+  "gmp-deviations": "GMP deviation log.",
+  noise: "Noise and hand-arm vibration exposure records.",
+  scaffold: "Scaffold inspection register.",
+  excavation: "Excavation and permit-to-dig log.",
+  "temp-works": "Temporary works design and checks register.",
+  welfare: "Welfare facility checks on site.",
+  "water-hygiene": "Water hygiene / Legionella-style outlet log.",
+  analytics: "Charts and compliance metrics across modules.",
+  "monthly-report": "Monthly H&S summary report builder.",
+  "survey-report": "Professional survey reports — scope, findings, plans, geo-photos, PDF export.",
+  waste: "Waste transfer and consignment notes register.",
+  templates: "Reusable document templates for exports.",
+  "client-portal": "Generate read-only client portal links.",
+  "client-acquisition": "Sales playbook for winning new construction clients.",
+  "sales-enablement": "Collateral and talk tracks for demos.",
+  "enterprise-readiness": "Checklist for larger multi-site rollouts.",
+  subcontractor: "Subcontractor portal tokens and scoped access.",
+  documents: "Local folder browser; optional cloud file upload.",
+  backup: "JSON export, import, and cloud backup.",
+  audit: "Who changed what — local log plus optional cloud copy.",
+  superadmin: "Platform owner dashboard (restricted).",
+  help: "This page.",
+  "ai-rams": "AI-assisted RAMS draft generator (when enabled).",
+  "ai-toolbox": "AI toolbox talk drafts (when enabled).",
+  "ai-photo": "AI hazard hints from site photos (when enabled).",
+};
+
+const BOTTOM_NAV_IDS = NAV_TAB_IDS.filter((t) => t.id !== "more").map((t) => t.id);
+
+function ModuleLink({ viewId, label }) {
+  if (viewId === "help") return <strong>{label}</strong>;
+  if (viewId === "settings") {
+    return (
+      <button type="button" style={ss.linkBtn} onClick={() => openWorkspaceSettings({ tab: "organisation" })}>
+        {label}
+      </button>
+    );
+  }
+  return (
+    <button type="button" style={ss.linkBtn} onClick={() => openWorkspaceView({ viewId })}>
+      {label}
+    </button>
+  );
+}
+
+function ModuleIndexList({ tabs }) {
+  return (
+    <ul style={ss.ul}>
+      {tabs.map((t) => (
+        <li key={t.id} style={ss.moduleLi}>
+          <ModuleLink viewId={t.id} label={t.label} />
+          {MODULE_BLURBS[t.id] ? (
+            <span style={{ color: "var(--color-text-secondary)" }}> — {MODULE_BLURBS[t.id]}</span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default function HelpAbout() {
+  const bottomNavTabs = BOTTOM_NAV_IDS.map((id) => {
+    const nav = NAV_TAB_IDS.find((t) => t.id === id);
+    return nav || { id, label: id };
+  });
+
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14, maxWidth: 800, color: "var(--color-text-primary)" }}>
       <PageHero
         badgeText="?"
         title="Help & about"
-        lead="UK-oriented construction safety and compliance workspace. Data stays in this browser unless you use optional Supabase backup (Settings) or R2 uploads from Documents."
+        lead="UK construction safety and compliance workspace. Use Search (Ctrl+K) or the full module index below to find any screen. Most data stays on this device until you back up or sync to the cloud."
       />
+
       <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Get started — overview
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Find anything fast
         </h2>
-        <p style={ss.p}>
-          Work through these in order. The app keeps most data in <strong>this browser</strong> (per organisation) unless you enable optional cloud backup in Settings.
-        </p>
-        <ol style={{ ...ss.ol, listStyle: "decimal" }}>
-          <li style={{ marginBottom: 10 }}>
-            <strong>Organisation profile</strong> — logo, legal name, contact details, brand colours, PDF footer/compliance lines so exports look like your company.
+        <ul style={ss.ul}>
+          <li>
+            <strong>Search</strong> — top bar, <kbd style={ss.kbd}>Ctrl</kbd>+<kbd style={ss.kbd}>K</kbd>, or <kbd style={ss.kbd}>/</kbd> — jump to a module or find workers, projects, RAMS, permits, snags.
           </li>
-          <li style={{ marginBottom: 10 }}>
-            <strong>At least one project</strong> — a site or job record used when you pick “project” in RAMS, permits, CDM, timesheets, site map, client portal, and more.
+          <li>
+            <strong>More</strong> — filter the module grid; pin tiles for shortcuts.
           </li>
-          <li style={{ marginBottom: 10 }}>
-            <strong>Workers</strong> — people you attach to briefings, RAMS, training, and registers (see Workers module).
+          <li>
+            <strong>Module index</strong> — complete list with one-line descriptions further down this page; names are clickable.
           </li>
-          <li style={{ marginBottom: 10 }}>
-            <strong>First RAMS or permit</strong> — use the <strong>RAMS</strong> or <strong>Permits</strong> tab when you are ready to document work.
+          <li>
+            <strong>Help</strong> — press <kbd style={ss.kbd}>?</kbd> from anywhere (when not typing in a field).
           </li>
-          <li style={{ marginBottom: 10 }}>
-            <strong>Team access</strong> — optional: <strong>Settings → Invites</strong> or <strong>Members</strong> for colleagues (when your plan supports it).
-          </li>
-        </ol>
+        </ul>
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Quick links
+        </h2>
         <div style={ss.btnRow}>
           <button type="button" style={ss.btn} onClick={() => openWorkspaceSettings({ tab: "organisation" })}>
-            Open Organisation settings
+            Organisation
           </button>
           <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "workers" })}>
-            Open Workers &amp; projects
-          </button>
-        </div>
-        <p style={{ ...ss.p, marginBottom: 0, marginTop: 14, fontSize: 12 }}>
-          <strong>Deep links (UK English UI)</strong> — signed-in workspace: <code style={{ fontSize: 11 }}>/app?view=permits</code>,{" "}
-          <code style={{ fontSize: 11 }}>/app?view=workers</code>, <code style={{ fontSize: 11 }}>/app?view=settings</code>. Optional permit focus:{" "}
-          <code style={{ fontSize: 11 }}>/app?view=permits&amp;permitId=…</code>. Settings tab: <code style={{ fontSize: 11 }}>?settingsTab=organisation</code> or{" "}
-          <code style={{ fontSize: 11 }}>?settingsTab=invites</code> (any tab id). The address bar updates as you move around so you can bookmark or share a link.
-        </p>
-      </div>
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Release status
-        </h2>
-        <p style={{ ...ss.p, marginBottom: 0 }}>
-          The open-source tree runs automated <strong>tests and production builds in CI</strong> (GitHub Actions) on each push. Optional error monitoring (e.g. Sentry) can be wired via
-          environment variables documented in <code style={{ fontSize: 12 }}>.env.example</code>. The <strong>Dashboard</strong> includes a &quot;Site today&quot; snapshot and onboarding checklist
-          for a quick sense of permits, RAMS, workers, and site sign-ins in this browser.
-        </p>
-      </div>
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Organisation profile (Settings)
-        </h2>
-        <p style={ss.p}>
-          Path: bottom bar <strong>More</strong> → <strong>Settings</strong> → <strong>Organisation</strong>. Inside Organisation, use the sub-tabs along the top of the form:
-        </p>
-        <ul style={ss.ul}>
-          <li>
-            <strong>Branding &amp; logo</strong> — upload a logo (keep under the stated size limit). Set <strong>primary</strong> and <strong>accent</strong> colours used across the UI and many PDFs.
-          </li>
-          <li>
-            <strong>Company info</strong> — trading or legal name, address, phone, email, website, company / VAT numbers where you need them on documents.
-          </li>
-          <li>
-            <strong>PDF defaults</strong> — footer line, optional header, watermark text, theme, version prefix, and compliance line (e.g. “controlled document” wording).
-          </li>
-          <li>
-            <strong>Custom fields</strong> — extra key/value lines that can surface on exports where the module supports them.
-          </li>
-          <li>
-            <strong>Access</strong> — who may edit organisation settings (administrators).
-          </li>
-          <li>
-            <strong>Preview</strong> — sanity-check how branding and PDF options read before you print or share.
-          </li>
-        </ul>
-        <p style={ss.p}>
-          Also fill <strong>locale</strong> (date formats), <strong>default lead engineer</strong>, <strong>safety policy</strong>, and <strong>emergency contact</strong> where shown — permits and site-facing screens can reuse them.
-        </p>
-        <p style={ss.note}>
-          Save changes with the save control on the Organisation screen. Only users with organisation-settings permission can edit.
-        </p>
-        <button type="button" style={ss.btn} onClick={() => openWorkspaceSettings({ tab: "organisation" })}>
-          Open Organisation settings
-        </button>
-      </div>
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Create a project (step by step)
-        </h2>
-        <p style={ss.p}>
-          In MySafeOps, a <strong>project</strong> is a site, contract, or job record. It is <strong>not</strong> created inside Settings — it lives on the <strong>Workers &amp; projects</strong> screen.
-        </p>
-        <h3 style={ss.h3First}>1. Open Workers &amp; projects</h3>
-        <p style={ss.p}>
-          Tap <strong>Workers</strong> in the bottom navigation (people icon). The page title is <strong>Workers &amp; projects</strong>. You will see a list of workers and a separate list of projects below (scroll if needed).
-        </p>
-        <h3 style={ss.h3}>2. Start the project form</h3>
-        <p style={ss.p}>
-          Use the orange <strong>Add project</strong> button in the page header (next to <strong>Add worker</strong>). A modal opens titled <strong>New project</strong> (or <strong>Edit project</strong> when changing an existing one).
-        </p>
-        <h3 style={ss.h3}>3. Fill in every field</h3>
-        <ul style={ss.ul}>
-          <li>
-            <strong>Project name</strong> — short label you will see in dropdowns (e.g. “Warehouse fit-out — Acme Ltd”).
-          </li>
-          <li>
-            <strong>Site / client</strong> — optional but useful for distinguishing jobs (client name or site nickname).
-          </li>
-          <li>
-            <strong>Address</strong> — full site address. Used for geocoding and for modules that show location text.
-          </li>
-          <li>
-            <strong>Latitude / Longitude</strong> — optional decimal degrees. If empty, use <strong>Fill lat/lng from address</strong> to query OpenStreetMap Nominatim from the address or site line. Coordinates power the <strong>Site map</strong> module (pins and presence).
-          </li>
-        </ul>
-        <h3 style={ss.h3}>4. Save</h3>
-        <p style={ss.p}>
-          Tap <strong>Save</strong> in the modal. The project is stored with your organisation&apos;s data in the browser. You can edit or remove a project later from the same list.
-        </p>
-        <h3 style={ss.h3}>Where projects are used</h3>
-        <p style={ss.p}>
-          After you have at least one project, you can attach it in places such as: <strong>RAMS</strong> (job selection), <strong>Permits</strong>, <strong>CDM compliance</strong> (link to MySafeOps project), <strong>timesheets</strong>, <strong>daily briefing</strong>, <strong>site map</strong>, <strong>client portal</strong> scope, <strong>snags</strong>, and other registers that ask for a project — always pick the same record for consistency.
-        </p>
-        <p style={ss.note}>
-          If you need many sites, create one project per site or per major phase; name them so your team recognises them in dropdowns.
-        </p>
-        <div style={ss.btnRow}>
-          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "workers" })}>
-            Open Workers &amp; projects
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "site-map" })}>
-            Open Site map
-          </button>
-        </div>
-      </div>
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Workers, RAMS, permits, and team
-        </h2>
-        <h3 style={ss.h3First}>Workers</h3>
-        <p style={ss.p}>
-          On the same <strong>Workers &amp; projects</strong> screen, use <strong>Add worker</strong> to capture name, role, contact details, and certifications. Workers appear in induction, RAMS operative lists, training matrix, and exports. Use <strong>Export CSV</strong> if you need a spreadsheet snapshot.
-        </p>
-        <h3 style={ss.h3}>RAMS and permits</h3>
-        <p style={ss.p}>
-          Open <strong>RAMS</strong> from the bottom bar to build or import method statements and packs; choose the <strong>project</strong> and link <strong>workers</strong> where the builder asks for them. Open <strong>Permits</strong> to raise permits to work, isolation certificates, and related records — again, select the same project for traceability.
-        </p>
-        <h3 style={ss.h3}>Invites and members</h3>
-        <p style={ss.p}>
-          Go to <strong>More</strong> → <strong>Settings</strong> → <strong>Invites</strong> to send join links, or <strong>Members</strong> to review who belongs to the organisation. Availability depends on your subscription and Supabase configuration.
-        </p>
-        <div style={ss.btnRow}>
-          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "workers" })}>
             Workers &amp; projects
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "rams" })}>
-            RAMS
           </button>
           <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "permits" })}>
             Permits
           </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceSettings({ tab: "invites" })}>
-            Invites
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "rams" })}>
+            RAMS
+          </button>
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "dashboard" })}>
+            Dashboard
+          </button>
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "backup" })}>
+            Backup
+          </button>
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceSettings({ tab: "notifications" })}>
+            Notifications
           </button>
         </div>
       </div>
 
       <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Navigation and search
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Get started
         </h2>
+        <ol style={{ ...ss.ol, listStyle: "decimal" }}>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Organisation profile</strong> — logo, company details, brand colours, PDF footer lines.
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>At least one project</strong> — site or job record (5-step wizard on Workers &amp; projects).
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Workers</strong> — people for briefings, RAMS, training, registers.
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>First RAMS or permit</strong> — document work before it starts on site.
+          </li>
+          <li style={{ marginBottom: 10 }}>
+            <strong>Team access</strong> — Settings → Invites / Members when your plan includes seats.
+          </li>
+        </ol>
+        {SHOW_DEV_HINTS ? (
+          <p style={{ ...ss.p, marginBottom: 0, fontSize: 12 }}>
+            Deep links: <code style={{ fontSize: 11 }}>/app?view=permits</code>, <code style={{ fontSize: 11 }}>?settingsTab=billing</code>, etc.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Settings centre
+        </h2>
+        <p style={ss.p}>
+          <strong>More → Settings</strong>. Tabs:
+        </p>
         <ul style={ss.ul}>
-          <li>
-            <strong>Bottom bar</strong> — <strong>Dashboard</strong>, <strong>Permits</strong>, <strong>RAMS</strong>, <strong>Workers</strong>, <strong>Site map</strong>, and <strong>More</strong> for every other module.
-          </li>
-          <li>
-            <strong>More</strong> — grouped grid; use the filter box to find a module by name. Use the <strong>pin</strong> on a tile to save <strong>pinned shortcuts</strong> at the top of More and in Search when the box is empty. <strong>Settings</strong> and <strong>Help</strong> live here too.
-          </li>
-          <li>
-            <strong>Search</strong> — top bar, or <kbd style={ss.kbd}>Ctrl</kbd>+<kbd style={ss.kbd}>K</kbd> / <kbd style={ss.kbd}>Cmd</kbd>+<kbd style={ss.kbd}>K</kbd> (works everywhere), or <kbd style={ss.kbd}>/</kbd> when not typing in a field — jump to a screen or search workers, projects, RAMS, permits, snags (local data). Empty search lists <strong>pinned</strong> shortcuts, then <strong>recently opened</strong> modules (last five).
-          </li>
-          <li>
-            <strong>Help</strong> — press <kbd style={ss.kbd}>?</kbd> when a text field is not focused to open this page from anywhere in the app.
-          </li>
+          {WORKSPACE_SETTINGS_TABS.filter((t) => t.id !== "developer" || SHOW_DEV_HINTS).map((t) => (
+            <li key={t.id} style={ss.moduleLi}>
+              <button type="button" style={ss.linkBtn} onClick={() => openWorkspaceSettings({ tab: t.id })}>
+                {t.label}
+              </button>
+              {" — "}
+              {t.id === "cloud" && "Sign in, switch organisation, link cloud account."}
+              {t.id === "billing" && "Subscription plan, usage limits, Stripe checkout."}
+              {t.id === "invites" && "Send email invites for colleagues to join."}
+              {t.id === "members" && "Review roles: admin, supervisor, operative."}
+              {t.id === "organisation" && "Branding, company info, PDF defaults, custom fields."}
+              {t.id === "notifications" && "Browser reminders for expiring certs, permits, RAMS reviews."}
+              {t.id === "developer" && "API keys and integration hooks (IT only)."}
+            </li>
+          ))}
         </ul>
       </div>
+
       <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          About this app
+        </h2>
+        <p style={{ ...ss.p, marginBottom: 0 }}>
+          Version <strong>{DISPLAY_APP_VERSION}</strong>.
+          {SHOW_DEV_HINTS ? <> CI / monitoring: <code style={{ fontSize: 12 }}>.env.example</code>.</> : null}
+        </p>
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          New project wizard (5 steps)
+        </h2>
+        <p style={ss.p}>
+          <strong>Workers &amp; projects → Add project</strong>
+        </p>
+        <ol style={{ ...ss.ol, listStyle: "decimal" }}>
+          <li style={{ marginBottom: 8 }}><strong>Name &amp; client</strong></li>
+          <li style={{ marginBottom: 8 }}><strong>Team &amp; industry</strong> — starter preset and site roles.</li>
+          <li style={{ marginBottom: 8 }}>
+            <strong>Location</strong> — postcode → <strong>Lookup coordinates</strong> → map; <strong>Weather + nearest A&amp;E</strong>; optional KML boundary and plan markup.
+          </li>
+          <li style={{ marginBottom: 8 }}><strong>Timeline &amp; risks</strong> — dates and start-date weather forecast.</li>
+          <li style={{ marginBottom: 8 }}><strong>Permits &amp; go-live</strong> — required PTW types, health score, startup checklist.</li>
+        </ol>
+        <div style={ss.btnRow}>
+          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "workers" })}>
+            Open wizard
+          </button>
+        </div>
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Key workflows
+        </h2>
+
+        <h3 style={ss.h3First}>Permits</h3>
+        <p style={ss.p}>
+          List, board, and timeline views; live wall for the gate; conflict checks between permit types; evidence photos; handover between shifts.
+          Upload a site plan under <strong>Project plan overlay &amp; safety map</strong> — click escape routes and emergency assets (same tools as Project drawings).
+          <strong> Report incident</strong> on a permit card links to the incident register.
+        </p>
+
+        <h3 style={ss.h3}>RAMS</h3>
+        <p style={ss.p}>
+          Pick hazards from the library or add custom rows; link operatives and project; print branded PDFs; export JSON; import JSON with operative matching; optional evidence pack for audits.
+        </p>
+
+        <h3 style={ss.h3}>Daily briefing → Site map</h3>
+        <p style={ss.p}>
+          Record who attended the briefing and which project they are on. Site map can <strong>Apply from today&apos;s briefing</strong> to show presence pins.
+        </p>
+
+        <h3 style={ss.h3}>Incidents</h3>
+        <p style={ss.p}>
+          Log in <strong>Incidents</strong> → track actions in <strong>Incident actions</strong> → view clusters on <strong>Incident map</strong> → use <strong>RIDDOR</strong> wizard for reportability decisions (you still submit to HSE where required).
+        </p>
+
+        <h3 style={ss.h3}>Survey report</h3>
+        <p style={ss.p}>
+          Structured survey / dilapidation reports: scope, weather, records review, findings, geo-photos, utility DXF import, plan snapshots, QA checklist, PDF export.
+        </p>
+
+        <h3 style={ss.h3}>Geo-photos</h3>
+        <p style={ss.p}>
+          Capture or import photos with GPS coordinates — pull into survey reports or utility mapping workflows.
+        </p>
+
+        <h3 style={ss.h3}>HSE registers</h3>
+        <p style={ss.p}>
+          COSHH, ladders, MEWP, hot work, confined space, LOTO, scaffold, excavations, and the rest follow the same pattern: add rows, attach to projects where asked, export or print from each module.
+        </p>
+
+        <h3 style={ss.h3}>Food &amp; pharma (optional)</h3>
+        <p style={ss.p}>
+          High-care access, CIP sign-off, allergen changeovers, and GMP deviations — for hygiene-critical manufacturing sites.
+        </p>
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Roles &amp; permissions
+        </h2>
+        <ul style={ss.ul}>
+          <li><strong>Admin</strong> — full access, backup import, billing, invites, organisation settings.</li>
+          <li><strong>Supervisor</strong> — operational access; can read cloud audit log when enabled.</li>
+          <li><strong>Operative</strong> — day-to-day registers and permits; no backup restore or admin settings.</li>
+        </ul>
+        <p style={ss.note}>Roles are set per organisation under Settings → Members.</p>
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Backup, bin &amp; audit
+        </h2>
+        <ul style={ss.ul}>
+          <li><strong>Backup</strong> — download JSON; replace or merge; optional cloud upload when signed in.</li>
+          <li><strong>Bin</strong> — bottom bar; restore recently deleted register rows before they are purged.</li>
+          <li><strong>Audit log</strong> — local history of changes; cloud copy for admins/supervisors when enabled.</li>
+        </ul>
+        <div style={ss.btnRow}>
+          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "backup" })}>
+            Backup
+          </button>
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "bin" })}>
+            Bin
+          </button>
+          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "audit" })}>
+            Audit log
+          </button>
+        </div>
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Client &amp; subcontractor portals
+        </h2>
+        <p style={ss.p}>
+          <strong>Client portal</strong> — read-only compliance snapshot for a client (permits, RAMS status, open snags). Create tokens in that module.
+          <strong> Subcontractor portal</strong> — scoped access for supply chain partners.
+        </p>
+        {SHOW_DEV_HINTS ? (
+          <p style={{ ...ss.p, marginBottom: 0, fontSize: 12 }}>
+            URL: <code style={{ fontSize: 11 }}>?portal=TOKEN</code> or <code style={{ fontSize: 11 }}>?subcontractor=TOKEN</code>
+          </p>
+        ) : null}
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Keyboard shortcuts
+        </h2>
+        <ul style={ss.ul}>
+          <li><kbd style={ss.kbd}>Ctrl</kbd>+<kbd style={ss.kbd}>K</kbd> / <kbd style={ss.kbd}>Cmd</kbd>+<kbd style={ss.kbd}>K</kbd> — Search</li>
+          <li><kbd style={ss.kbd}>/</kbd> — Search (when not in an input)</li>
+          <li><kbd style={ss.kbd}>?</kbd> — Open Help</li>
+        </ul>
+      </div>
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           What&apos;s new
         </h2>
-        <p style={ss.p}>Recent additions worth knowing about:</p>
         <ul style={ss.ul}>
-          <li>
-            <strong>Pinned &amp; recent</strong> — Pin modules from <strong>More</strong>; they appear at the top of More and first in <strong>Search</strong> when you open it without typing. The same list then shows your <strong>last five opened</strong> screens (excluding duplicates already pinned).
-          </li>
-          <li>
-            <strong>Search</strong> — Top bar <strong>Search</strong> or <kbd>Ctrl+K</kbd> / <kbd>Cmd+K</kbd>: jump to any screen and find workers, projects, RAMS, permits, snags (local data).
-          </li>
-          <li>
-            <strong>Site map</strong> — Leaflet map of project sites, who is where, and geocoding with a 30-day local cache.{" "}
-            <strong>Apply from today&apos;s briefing</strong> fills presence from the latest same-day briefing (signed + present workers, project on the briefing).
-          </li>
-          <li>
-            <strong>Backup</strong> — JSON import validates structure; very large cloud uploads prompt before sending; cloud restore checks payload shape.
-          </li>
-          <li>
-            <strong>Google sign-in</strong> — Optional OAuth (PKCE) with Supabase when configured; see README and Settings.
-          </li>
-          <li>
-            <strong>RAMS import</strong> — JSON import with operative matching by ID, email, exact name, or multi-word name (with export metadata when present).
-          </li>
-          <li>
-            <strong>RAMS share link</strong> — Read-only view in the same browser profile; full cross-device sharing needs sync (see product docs).
-          </li>
+          <li><strong>Project wizard</strong> — postcode, weather, A&amp;E, KML, permit readiness score.</li>
+          <li><strong>Plan markup</strong> — click escape routes on site drawings.</li>
+          <li><strong>Survey report</strong> — professional report builder with plans and geo-photos.</li>
+          <li><strong>Pinned &amp; recent</strong> modules in Search and More.</li>
         </ul>
-        <p style={{ ...ss.p, marginBottom: 0 }}>
-          <strong>Version</strong> {DISPLAY_APP_VERSION}
-          {" · "}
-          <Link to="/" style={ss.a}>
-            Home / marketing page
-          </Link>
-        </p>
       </div>
+
       <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Module index
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Complete module index
         </h2>
-        <p style={ss.p}>Everything below is available from the bottom navigation or the More grid.</p>
-        {MODULE_GROUPS.map((g) => (
-          <div key={g.title} style={{ marginBottom: 16 }}>
-            <div className="app-section-label" style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, textTransform: "none", letterSpacing: "normal" }}>
-              {g.title}
-            </div>
-            <ul style={ss.ul}>
-              {g.items.map((x) => (
-                <li key={x}>{x}</li>
-              ))}
-            </ul>
+        <p style={ss.p}>Synced with the More menu. Click a name to open that screen.</p>
+
+        <h3 style={ss.h3First}>Bottom navigation</h3>
+        <ModuleIndexList tabs={bottomNavTabs} />
+
+        {MORE_SECTIONS.map((section) => (
+          <div key={section.title} style={{ marginTop: 16 }}>
+            <h3 style={ss.h3}>{section.title}</h3>
+            <ModuleIndexList tabs={getMoreTabsForSection(section)} />
           </div>
         ))}
+
+        {SHOW_DEV_HINTS ? (
+          <div style={{ marginTop: 16 }}>
+            <h3 style={ss.h3}>AI tools (when configured)</h3>
+            <ModuleIndexList
+              tabs={[
+                { id: "ai-rams", label: "AI RAMS generator" },
+                { id: "ai-toolbox", label: "AI toolbox talk" },
+                { id: "ai-photo", label: "AI photo hazard" },
+              ]}
+            />
+          </div>
+        ) : null}
       </div>
+
+      {SHOW_DEV_HINTS ? (
+        <>
+          <div className="app-surface-card" style={ss.card}>
+            <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+              Production hardening (Vercel)
+            </h2>
+            <p style={{ ...ss.p, marginBottom: 0 }}>
+              CSP and cache in <code style={{ fontSize: 12 }}>vercel.json</code>; Anthropic proxy at <code style={{ fontSize: 12 }}>/api/anthropic-messages</code>; see <code style={{ fontSize: 12 }}>.env.example</code>.
+            </p>
+          </div>
+          <div className="app-surface-card" style={ss.card}>
+            <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+              Developer setup
+            </h2>
+            <p style={{ ...ss.p, marginBottom: 0 }}>
+              README.md, <code style={{ fontSize: 12 }}>.env.local</code>, DOCS/architecture-current.md, DOCS/PRODUCT_SCOPE.md.
+            </p>
+          </div>
+        </>
+      ) : null}
+
       <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Production hardening (Vercel)
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Help &amp; contact
         </h2>
-        <p style={ss.p}>
-          Deployed builds can use a <strong>Content-Security-Policy</strong> and short HTML cache (see <code style={{ fontSize: 12 }}>vercel.json</code>
-          ). Anthropic calls can go through <code style={{ fontSize: 12 }}>/api/anthropic-messages</code> with <code style={{ fontSize: 12 }}>ANTHROPIC_API_KEY</code> on the server — set{" "}
-          <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_PROXY_URL</code> in the client env. Optional <code style={{ fontSize: 12 }}>VITE_WEB_VITALS_URL</code> (default{" "}
-          <code style={{ fontSize: 12 }}>/api/web-vitals</code>) posts Core Web Vitals for server logs. Details: <code style={{ fontSize: 12 }}>.env.example</code>.
-        </p>
-      </div>
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Developer setup
-        </h2>
-        <p style={ss.p}>
-          Running from source? See <strong>README.md</strong> in the project root for <code style={{ fontSize: 12 }}>npm install</code>,{" "}
-          <code style={{ fontSize: 12 }}>.env.local</code>, optional Supabase migration, and security notes on <code style={{ fontSize: 12 }}>VITE_*</code> variables.
-        </p>
         <p style={{ ...ss.p, marginBottom: 0 }}>
-          Architecture overview: <strong>DOCS/architecture-current.md</strong>. Prototype vs shipped features: <strong>DOCS/PRODUCT_SCOPE.md</strong>.
-        </p>
-      </div>
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Public links
-        </h2>
-        <p style={ss.p}>
-          Client read-only view: append <code style={{ fontSize: 12 }}>?portal=TOKEN</code> to the app URL. Subcontractor view:{" "}
-          <code style={{ fontSize: 12 }}>?subcontractor=TOKEN</code>. Configure tokens in the respective modules.
-        </p>
-      </div>
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
-          Help & contact
-        </h2>
-        <p style={{ ...ss.p, marginBottom: 0 }}>
-          For support, onboarding, or sales questions email{" "}
+          Email{" "}
           <a href={`mailto:${SUPPORT_EMAIL}`} style={ss.a}>
             {SUPPORT_EMAIL}
           </a>
-          .
+          {" · "}
+          <Link to="/privacy" style={ss.a}>
+            Privacy policy
+          </Link>
+          {" · "}
+          <Link to="/docs" style={ss.a}>
+            Docs hub
+          </Link>
+          {" · "}
+          <Link to="/" style={ss.a}>
+            Home page
+          </Link>
         </p>
       </div>
+
       <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, display: "flex", alignItems: "center", textTransform: "none", letterSpacing: "normal" }}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           Disclaimer
         </h2>
         <p style={{ ...ss.p, marginBottom: 0 }}>
-          This app supports record-keeping and does not replace legal advice, competent person judgement, or official reporting (e.g. RIDDOR to HSE). Always verify
-          requirements for your project and jurisdiction.
+          Record-keeping support only — not legal advice. Verify RIDDOR, CDM, and site-specific requirements with competent persons and official guidance.
         </p>
       </div>
     </div>

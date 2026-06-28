@@ -11,7 +11,7 @@ import { useOrgBranding } from "../hooks/useOrgBranding";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { openWorkspaceSettings, openWorkspaceView, openWorkspaceMoreSection, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import HseRegistersCard from "./HseRegistersCard";
-import { buildHseDashboardSummary } from "../utils/moduleRegisterStats";
+import { buildHseDashboardSummary, emptyHseDashboardSummary } from "../utils/moduleRegisterStats";
 import {
   DASHBOARD_WIDGETS,
   isWidgetVisible,
@@ -389,7 +389,26 @@ export default function AnalyticsDashboard() {
     [trainingRecords]
   );
 
-  const hseDashboard = useMemo(() => buildHseDashboardSummary(), [dataRefreshTick]);
+  const [hseDashboard, setHseDashboard] = useState(() => emptyHseDashboardSummary());
+
+  useEffect(() => {
+    let cancelled = false;
+    const compute = () => {
+      if (!cancelled) setHseDashboard(buildHseDashboardSummary());
+    };
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(compute, { timeout: 2500 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(id);
+      };
+    }
+    const t = window.setTimeout(compute, 32);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [dataRefreshTick]);
 
   const actionNeededItems = useMemo(() => {
     const t = new Date();

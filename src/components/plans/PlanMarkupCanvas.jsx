@@ -43,7 +43,7 @@ function collectionKey(type) {
   return "emergencyAssets";
 }
 
-export default function PlanMarkupCanvas({ plan, onPlanChange, compact = false }) {
+export default function PlanMarkupCanvas({ plan, onPlanChange, compact = false, extraOverlay = null }) {
   const surfaceRef = useRef(null);
   const undoStack = useRef([]);
   const [tool, setTool] = useState("select");
@@ -449,6 +449,7 @@ export default function PlanMarkupCanvas({ plan, onPlanChange, compact = false }
             selected={selected}
             onAssetPointerDown={onAssetPointerDown}
           />
+          {extraOverlay}
         </div>
         <PlanMarkupLegend plan={plan} compact={compact} />
       </div>

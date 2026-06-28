@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { anthropicMessages, isAnthropicConfigured } from "../utils/anthropicClient";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
@@ -70,6 +71,7 @@ export default function AIRamsGenerator() {
   };
 
   const hasKey = isAnthropicConfigured();
+  const showDevHints = showAdminLoginHints();
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
@@ -77,15 +79,21 @@ export default function AIRamsGenerator() {
         badgeText="AI"
         title="AI RAMS generator"
         lead={
-          <>
-            Uses Anthropic Claude. Local dev: <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_API_KEY</code> in <code style={{ fontSize: 12 }}>.env</code>. Production:{" "}
-            <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_PROXY_URL=/api/anthropic-messages</code> plus server{" "}
-            <code style={{ fontSize: 12 }}>ANTHROPIC_API_KEY</code> on Vercel.
-          </>
+          showDevHints ? (
+            <>
+              Uses Anthropic Claude. Local dev: <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_API_KEY</code> in <code style={{ fontSize: 12 }}>.env</code>. Production:{" "}
+              <code style={{ fontSize: 12 }}>VITE_ANTHROPIC_PROXY_URL=/api/anthropic-messages</code> plus server{" "}
+              <code style={{ fontSize: 12 }}>ANTHROPIC_API_KEY</code> on Vercel.
+            </>
+          ) : (
+            "Draft RAMS content from a plain-language description of the work. Your organisation admin enables the AI service."
+          )
         }
       />
       {!hasKey && (
-        <div style={{ ...ss.card, background: "#FAEEDA", color: "#633806", marginBottom: 16 }}>No API key configured.</div>
+        <div style={{ ...ss.card, background: "#FAEEDA", color: "#633806", marginBottom: 16 }}>
+          {showDevHints ? "No API key configured." : "AI RAMS is not enabled for this site yet. Contact your administrator."}
+        </div>
       )}
       <div style={ss.card}>
         <label style={{ display: "block", fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Describe the work</label>

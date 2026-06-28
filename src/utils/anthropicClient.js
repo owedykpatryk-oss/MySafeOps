@@ -33,6 +33,9 @@ export function isAnthropicConfigured() {
 function resolveAnthropicMessagesUrl() {
   const proxy = String(import.meta.env.VITE_ANTHROPIC_PROXY_URL || "").trim();
   if (!proxy) return "https://api.anthropic.com/v1/messages";
+  if (import.meta.env.PROD && (proxy.startsWith("http://") || proxy.startsWith("https://"))) {
+    throw new Error("External AI proxy URLs are disabled in production. Use a same-origin path such as /api/anthropic-messages.");
+  }
   if (proxy.startsWith("http://") || proxy.startsWith("https://")) return proxy.replace(/\/$/, "");
   const path = proxy.startsWith("/") ? proxy : `/${proxy}`;
   if (typeof window !== "undefined" && window.location?.origin) {
@@ -43,6 +46,11 @@ function resolveAnthropicMessagesUrl() {
 
 async function postAnthropicMessagesBody(body) {
   const useProxy = isAnthropicProxyConfigured();
+  if (import.meta.env.PROD && !useProxy && getAnthropicKey()) {
+    throw new Error(
+      "Direct Anthropic API keys are disabled in production. Set VITE_ANTHROPIC_PROXY_URL=/api/anthropic-messages and configure server secrets."
+    );
+  }
   const url = resolveAnthropicMessagesUrl();
 
   const headers = {

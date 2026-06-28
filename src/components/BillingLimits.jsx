@@ -17,6 +17,7 @@ import {
 } from "../lib/billingPlans";
 import { trackBillingError, trackBillingEvent } from "../lib/billingTelemetry";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
+import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "./InlineAlert";
 import PageHero from "./PageHero";
@@ -78,6 +79,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const { user } = useSupabaseAuth();
   const { pushToast } = useToast();
   const isPlatformOwner = isSuperAdminEmail(user?.email);
+  const showDevHints = showAdminLoginHints() || isPlatformOwner;
   const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner });
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -242,15 +244,17 @@ export default function BillingLimits({ checkoutReturn = null }) {
       return;
     }
     if (stripeFnStatus === "missing") {
-      const msg =
-        "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-checkout).";
+      const msg = showDevHints
+        ? "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-checkout)."
+        : "Online subscriptions are not set up on this site yet. Contact support to upgrade.";
       setActionError(msg);
       pushToast({ type: "error", message: msg });
       return;
     }
     if (stripeFnStatus === "misconfigured") {
-      const msg =
-        "stripe-checkout is deployed but not configured. Add STRIPE_SECRET_KEY, STRIPE_PRICE_* and SITE_URL in Supabase Edge Function secrets.";
+      const msg = showDevHints
+        ? "stripe-checkout is deployed but not configured. Add STRIPE_SECRET_KEY, STRIPE_PRICE_* and SITE_URL in Supabase Edge Function secrets."
+        : "Billing is temporarily unavailable. Contact support if this persists.";
       setActionError(msg);
       pushToast({ type: "error", message: msg });
       return;
@@ -275,7 +279,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
         : (lower.includes("failed to send a request to the edge function") ||
             lower.includes("timed out") ||
             lower.includes("network"))
-          ? "Could not reach Supabase Edge Function. Deploy stripe-checkout/stripe-portal on this project and verify network access."
+          ? showDevHints
+            ? "Could not reach Supabase Edge Function. Deploy stripe-checkout/stripe-portal on this project and verify network access."
+            : "Could not reach the billing service. Try again or contact support."
           : raw;
       setActionError(msg);
       pushToast({ type: "error", message: msg });
@@ -293,15 +299,17 @@ export default function BillingLimits({ checkoutReturn = null }) {
     }
     const portalState = stripeFnHealth["stripe-portal"] || "unknown";
     if (portalState === "missing") {
-      const msg =
-        "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-portal).";
+      const msg = showDevHints
+        ? "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-portal)."
+        : "Billing portal is not available on this site yet. Contact support for invoice or plan changes.";
       setActionError(msg);
       pushToast({ type: "error", message: msg });
       return;
     }
     if (portalState === "misconfigured") {
-      const msg =
-        "stripe-portal is deployed but not configured. Add STRIPE_SECRET_KEY and SITE_URL in Supabase Edge Function secrets.";
+      const msg = showDevHints
+        ? "stripe-portal is deployed but not configured. Add STRIPE_SECRET_KEY and SITE_URL in Supabase Edge Function secrets."
+        : "Billing portal is temporarily unavailable. Contact support if this persists.";
       setActionError(msg);
       pushToast({ type: "error", message: msg });
       return;
@@ -326,7 +334,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
         : (lower.includes("failed to send a request to the edge function") ||
             lower.includes("timed out") ||
             lower.includes("network"))
-          ? "Could not reach Supabase Edge Function. Deploy stripe-checkout/stripe-portal on this project and verify network access."
+          ? showDevHints
+            ? "Could not reach Supabase Edge Function. Deploy stripe-checkout/stripe-portal on this project and verify network access."
+            : "Could not reach the billing service. Try again or contact support."
           : raw;
       setActionError(msg);
       pushToast({ type: "error", message: msg });
@@ -388,7 +398,11 @@ export default function BillingLimits({ checkoutReturn = null }) {
         <div style={{ marginBottom: 12 }}>
           <InlineAlert
             type="warn"
-            text="Stripe billing functions are missing on this Supabase project. Deploy: stripe-checkout, stripe-portal, stripe-webhook."
+            text={
+              showDevHints
+                ? "Stripe billing functions are missing on this Supabase project. Deploy: stripe-checkout, stripe-portal, stripe-webhook."
+                : "Online billing is not configured yet. You can still use the app within your current plan limits."
+            }
           />
         </div>
       )}
@@ -396,7 +410,11 @@ export default function BillingLimits({ checkoutReturn = null }) {
         <div style={{ marginBottom: 12 }}>
           <InlineAlert
             type="warn"
-            text="stripe-checkout is deployed but not configured. Set STRIPE_SECRET_KEY, STRIPE_PRICE_STARTER/TEAM/BUSINESS/ENTERPRISE and SITE_URL in Supabase Edge Function secrets."
+            text={
+              showDevHints
+                ? "stripe-checkout is deployed but not configured. Set STRIPE_SECRET_KEY, STRIPE_PRICE_STARTER/TEAM/BUSINESS/ENTERPRISE and SITE_URL in Supabase Edge Function secrets."
+                : "Billing setup is incomplete. Subscribe buttons may not work until an administrator finishes configuration."
+            }
           />
         </div>
       )}
@@ -404,7 +422,11 @@ export default function BillingLimits({ checkoutReturn = null }) {
         <div style={{ marginBottom: 12 }}>
           <InlineAlert
             type="info"
-            text="Could not verify Edge Functions from this browser. You can still try Subscribe — if it fails, deploy stripe-checkout / stripe-portal on your Supabase project or check ad-blockers and network."
+            text={
+              showDevHints
+                ? "Could not verify Edge Functions from this browser. You can still try Subscribe — if it fails, deploy stripe-checkout / stripe-portal on your Supabase project or check ad-blockers and network."
+                : "Could not verify billing from this browser. You can still try Subscribe, or contact support if checkout fails."
+            }
           />
         </div>
       )}
@@ -414,12 +436,16 @@ export default function BillingLimits({ checkoutReturn = null }) {
           <div style={{ marginBottom: 12 }}>
             <InlineAlert
               type="warn"
-              text={`Stripe webhook has ${stripeFnDiagnostics["stripe-webhook"]?.pendingFailures} pending failure(s). Run npm run stripe:retry-webhooks and review function logs.`}
+              text={
+                isPlatformOwner
+                  ? `Stripe webhook has ${stripeFnDiagnostics["stripe-webhook"]?.pendingFailures} pending failure(s). Run npm run stripe:retry-webhooks and review function logs.`
+                  : `Stripe webhook has ${stripeFnDiagnostics["stripe-webhook"]?.pendingFailures} pending failure(s). Contact platform support if billing updates look wrong.`
+              }
             />
           </div>
         )}
 
-      {cloudOk && isAdmin && (
+      {cloudOk && isAdmin && showDevHints && (
         <div style={{ ...ss.card, marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Billing health</div>
           <div style={{ display: "grid", gap: 8 }}>
@@ -516,7 +542,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
               {portalLoading ? "Opening…" : "Manage billing (portal)"}
             </button>
             <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
-              Uses Supabase Edge Functions with your Stripe secret keys — not exposed to the browser. Configure Price IDs and webhook in the README.
+              {showDevHints
+                ? "Uses Supabase Edge Functions with your Stripe secret keys — not exposed to the browser. Configure Price IDs and webhook in the README."
+                : "Secure checkout and billing portal powered by Stripe."}
             </p>
           </div>
         )}
@@ -534,7 +562,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
       </div>
 
       <div style={{ ...ss.card, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 10 }}>Usage vs limits ({orgId})</div>
+        <div style={{ fontWeight: 600, marginBottom: 10 }}>Usage vs limits</div>
         <div style={{ display: "grid", gap: 10 }}>
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>

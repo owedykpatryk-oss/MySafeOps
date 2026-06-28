@@ -1,6 +1,6 @@
 /**
  * Vercel serverless proxy for UK postcode lookup (postcodes.io).
- * Same-origin `/api/postcode/*` avoids CSP connect-src issues in the browser.
+ * GET /api/postcode?code=KT227SH — flat route (reliable on Vercel + Vite dev proxy).
  */
 
 const UPSTREAM = "https://api.postcodes.io/postcodes";
@@ -9,25 +9,24 @@ const POSTCODE_RE = /^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/i;
 const API_JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
   "X-Content-Type-Options": "nosniff",
+  "Cross-Origin-Resource-Policy": "same-site",
   "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
 };
 
 function sendJson(res, status, obj) {
-  res.writeHead(status, API_JSON_HEADERS);
+  res.writeHead(status, { ...API_JSON_HEADERS, "Cache-Control": "no-store" });
   res.end(JSON.stringify(obj));
 }
 
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "HEAD") {
-    sendJson(res, 405, { error: "Method not allowed" });
-    return;
+    return sendJson(res, 405, { error: "Method not allowed" });
   }
 
-  const raw = String(req.query?.postcode || "").trim();
+  const raw = String(req.query?.code || req.query?.postcode || "").trim();
   const compact = raw.replace(/\s/g, "").toUpperCase();
   if (!compact || !POSTCODE_RE.test(compact)) {
-    sendJson(res, 400, { error: "Invalid UK postcode" });
-    return;
+    return sendJson(res, 400, { error: "Invalid UK postcode" });
   }
 
   try {
@@ -38,6 +37,6 @@ export default async function handler(req, res) {
     res.writeHead(upstream.status, API_JSON_HEADERS);
     res.end(text);
   } catch {
-    sendJson(res, 502, { error: "Postcode lookup unavailable" });
+    return sendJson(res, 502, { error: "Postcode lookup unavailable" });
   }
 }

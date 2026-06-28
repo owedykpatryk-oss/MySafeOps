@@ -32,6 +32,7 @@ export default function BackupExport() {
   const fileRef = useRef(null);
 
   const cloudEnabled = isSupabaseConfigured() && supabase;
+  const d1Enabled = isD1Configured();
   const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner: isSuperAdminEmail(user?.email) });
 
   useEffect(() => {
@@ -162,7 +163,7 @@ export default function BackupExport() {
   const pushToD1 = async () => {
     if (!cloudEnabled || !user || !caps.backupImport) return;
     if (!isD1Configured()) {
-      setMsg("D1 is not configured (set VITE_D1_API_URL and redeploy).");
+      setMsg("Cloud sync is not available in this build.");
       return;
     }
     if (!orgId || orgId === "default") {
@@ -234,12 +235,12 @@ export default function BackupExport() {
       <PageHero
         badgeText="BU"
         title="Backup & restore"
-        lead="Export all organisation-scoped data and global settings to JSON. With Supabase, upload or download the same bundle after signing in under Settings."
+        lead="Export all organisation-scoped data and global settings to JSON. Sign in under Settings to sync backups to the cloud."
       />
       {cloudEnabled && (
         <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
           <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 10, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
-            Cloud backup (Supabase)
+            Cloud backup
           </div>
           {!user ? (
             <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>
@@ -278,26 +279,22 @@ export default function BackupExport() {
           )}
         </div>
       )}
-      {cloudEnabled && caps.backupImport && (
+      {cloudEnabled && caps.backupImport && d1Enabled && (
         <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
           <div
             className="app-section-label"
             style={{ fontWeight: 600, marginBottom: 10, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}
           >
-            D1 (Cloudflare Workers)
+            Cloud sync (D1)
           </div>
           <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5, margin: "0 0 12px", maxWidth: 640 }}>
-            When <code style={{ fontSize: 11 }}>VITE_D1_API_URL</code> is set, push the same JSON arrays as a desktop export (keys listed in{" "}
-            <code style={{ fontSize: 11 }}>src/lib/d1ImportNamespaces.js</code>) to org KV in D1 — useful after a site export or a new device.
-            CLI alternative: <code style={{ fontSize: 11 }}>npm run d1:import-backup</code>.
+            Push register data from this device to your organisation&apos;s cloud database — useful after a JSON export or when setting up a new device.
           </p>
           {!user ? (
-            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>Sign in to push registers to D1.</p>
-          ) : !isD1Configured() ? (
-            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>D1 Worker URL is not configured for this build.</p>
+            <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: 0 }}>Sign in to push registers to the cloud.</p>
           ) : (
             <button type="button" style={ss.btnP} disabled={d1Busy || cloudBusy} onClick={pushToD1}>
-              {d1Busy ? "Pushing…" : "Push current data to D1"}
+              {d1Busy ? "Pushing…" : "Push current data to cloud"}
             </button>
           )}
         </div>

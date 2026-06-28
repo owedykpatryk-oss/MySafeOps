@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { isLocalWorkspaceOnly, hasPersistedSupabaseSession } from "../lib/authPrefs";
+import { isSupabaseConfigured } from "../lib/supabase";
 import { ORG_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
 import { getBillingEntitlements, getTrialStatus } from "../utils/orgMembership";
 
@@ -15,16 +17,31 @@ function readMembershipRoleForCurrentOrg() {
   }
 }
 
+/** Least privilege for signed-in cloud users; admin for offline / local-only workspaces. */
+function defaultMembershipRole() {
+  try {
+    if (!isSupabaseConfigured() || isLocalWorkspaceOnly()) return "admin";
+    if (!hasPersistedSupabaseSession()) return "admin";
+  } catch {
+    /* ignore */
+  }
+  return "operative";
+}
+
+function resolveMembershipRole() {
+  return readMembershipRoleForCurrentOrg() || defaultMembershipRole();
+}
+
 export function AppProvider({ children }) {
   const [orgId, setOrgIdState] = useState(() => getOrgId());
   const rk = `mysafeops_role_${orgId}`;
 
-  const [role, setRoleState] = useState(() => readMembershipRoleForCurrentOrg() || "admin");
+  const [role, setRoleState] = useState(() => resolveMembershipRole());
   const [trialStatus, setTrialStatus] = useState(() => getTrialStatus());
   const [billing, setBilling] = useState(() => getBillingEntitlements());
 
   useEffect(() => {
-    setRoleState(readMembershipRoleForCurrentOrg() || "admin");
+    setRoleState(resolveMembershipRole());
   }, [rk]);
 
   useEffect(() => {
@@ -63,6 +80,7 @@ export function AppProvider({ children }) {
       setBilling(getBillingEntitlements());
       const next = readMembershipRoleForCurrentOrg();
       if (next) setRoleState(next);
+      else setRoleState(defaultMembershipRole());
     };
     window.addEventListener("mysafeops-org-updated", onOrgUpdated);
     return () => window.removeEventListener("mysafeops-org-updated", onOrgUpdated);
@@ -70,6 +88,8 @@ export function AppProvider({ children }) {
 
   const setRole = useCallback((r) => {
     if (!ROLES.includes(r)) return;
+    // Role changes must come from cloud membership sync (persistOrgRow), not client self-elevation.
+    if (isSupabaseConfigured() && !isLocalWorkspaceOnly()) return;
     setRoleState(r);
     try {
       localStorage.setItem(`mysafeops_role_${getOrgId()}`, r);
@@ -87,7 +107,7 @@ export function AppProvider({ children }) {
       bulkSnag: role !== "operative",
       subcontractorManage: role !== "operative",
       clientPortalManage: role !== "operative",
-      roleManage: true,
+      roleManage: role === "admin" && (!isSupabaseConfigured() || isLocalWorkspaceOnly()),
     }),
     [role]
   );

@@ -15,7 +15,7 @@ export default function RegisterPdfExportButton({ moduleId, label, compact = fal
     setBusy(true);
     try {
       const { exportModuleRegisterPdf } = await import("../utils/moduleRegisterPdf");
-      const result = exportModuleRegisterPdf(moduleId, { label });
+      const result = await exportModuleRegisterPdf(moduleId, { label });
       if (!result.ok) window.alert("Could not export this register to PDF.");
     } catch (e) {
       window.alert(e?.message || "PDF export failed.");

@@ -6,7 +6,7 @@ import { safeHttpUrl } from "../utils/safeUrl";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
-import { getOrgId, loadOrgScoped, saveOrgScoped, orgScopedKey } from "../utils/orgStorage";
+import { getOrgId, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import PageHero from "../components/PageHero";
 
@@ -130,7 +130,7 @@ export default function DocumentLibrary() {
         });
         pushAudit({ action: "r2_upload", entity: "document", detail: result.key });
       }
-      setR2Msg(`${fl.length} file(s) uploaded to Cloudflare R2.`);
+      setR2Msg(`${fl.length} file(s) uploaded to cloud storage.`);
     } catch (err) {
       setR2Msg(err.message || "Upload failed");
     } finally {
@@ -139,7 +139,7 @@ export default function DocumentLibrary() {
   };
 
   const removeR2Row = (id) => {
-    if (!confirm("Remove this entry from the list? (The object may still exist in R2.)")) return;
+    if (!confirm("Remove this entry from the list? The file may still exist in cloud storage.")) return;
     setR2Uploads((prev) => {
       const next = prev.filter((x) => x.id !== id);
       saveR2Uploads(next);
@@ -175,18 +175,18 @@ export default function DocumentLibrary() {
         <PageHero
           badgeText="DOC"
           title="Document library"
-          lead="The local folder view needs the File System Access API (Chrome or Edge 86+). R2 upload may still work below."
+          lead="The local folder view needs the File System Access API (Chrome or Edge 86+). Cloud upload may still work below."
         />
         <div style={ss.card}>
           <p style={{ margin: 0 }}>The local folder view needs the File System Access API (Chrome or Edge 86+). It is not available in this browser.</p>
         </div>
         {r2Enabled && (
           <div style={{ ...ss.card, marginTop: 16 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Cloudflare R2 upload</div>
-            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>You can still upload files to R2 from this browser.</p>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Cloud upload</div>
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>You can still upload files to cloud storage from this browser.</p>
             <input ref={r2InputRef} type="file" multiple style={{ display: "none" }} onChange={onR2Files} />
             <button type="button" style={ss.btnP} disabled={r2Busy} onClick={() => r2InputRef.current?.click()}>
-              {r2Busy ? "Uploading…" : "Upload to R2"}
+              {r2Busy ? "Uploading…" : "Upload to cloud"}
             </button>
             {r2Msg && <p style={{ marginTop: 10, fontSize: 13 }}>{r2Msg}</p>}
             {r2Uploads.length > 0 && (
@@ -239,12 +239,7 @@ export default function DocumentLibrary() {
       <PageHero
         badgeText="DOC"
         title="Document library"
-        lead={
-          <>
-            Local folder view: files stay on your device unless you use cloud upload below. Tags and notes use key{" "}
-            <code style={{ fontSize: 12 }}>{orgScopedKey(DOC_META_KEY)}</code>.
-          </>
-        }
+        lead="Browse files on this device and optionally upload copies to cloud storage. Tags and notes are saved per organisation."
         right={
           <button type="button" style={ss.btnP} onClick={pickFolder}>
             {dirName ? "Change folder" : "Choose folder"}
@@ -253,15 +248,13 @@ export default function DocumentLibrary() {
       />
       {r2Enabled && (
         <div style={{ ...ss.card, marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Cloudflare R2 upload</div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Cloud upload</div>
           <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.5 }}>
-            Objects are stored in your R2 bucket via the upload Worker. Configure <code style={{ fontSize: 11 }}>VITE_STORAGE_API_URL</code> and{" "}
-            <code style={{ fontSize: 11 }}>VITE_STORAGE_UPLOAD_TOKEN</code> in <code style={{ fontSize: 11 }}>.env.local</code>. Optional public links:{" "}
-            <code style={{ fontSize: 11 }}>VITE_R2_PUBLIC_BASE_URL</code>.
+            Upload file copies to your organisation&apos;s cloud storage. Files stay linked here after upload.
           </p>
           <input ref={r2InputRef} type="file" multiple style={{ display: "none" }} onChange={onR2Files} />
           <button type="button" style={ss.btnP} disabled={r2Busy} onClick={() => r2InputRef.current?.click()}>
-            {r2Busy ? "Uploading…" : "Upload to R2"}
+            {r2Busy ? "Uploading…" : "Upload to cloud"}
           </button>
           {r2Msg && <p style={{ marginTop: 10, fontSize: 13 }}>{r2Msg}</p>}
           {r2Uploads.length > 0 && (

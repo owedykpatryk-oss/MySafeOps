@@ -23,6 +23,18 @@ export function getModuleLabel(moduleId) {
   return LABEL_BY_ID[moduleId] || moduleId;
 }
 
+/** Placeholder before idle HSE stats scan on the dashboard. */
+export function emptyHseDashboardSummary() {
+  const moduleIds = getHseModuleIds();
+  return {
+    summary: { healthScore: 0, records: 0, tracked: 0, empty: 0, active: 0, attention: 0 },
+    statsMap: {},
+    attentionModules: [],
+    emptyModules: [],
+    moduleIds,
+  };
+}
+
 /** Dashboard-ready HSE summary with attention module list. */
 export function buildHseDashboardSummary() {
   const ids = getHseModuleIds();
@@ -98,6 +110,9 @@ export function getModuleRegisterStat(moduleId) {
 
   const data = loadOrgScoped(cfg.key, []);
   const items = Array.isArray(data) ? data : [];
+  if (items.length === 0) {
+    return { moduleId, count: 0, attentionCount: 0, status: "empty", lastUpdated: null };
+  }
   let attentionCount = 0;
   let lastTs = 0;
 

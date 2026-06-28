@@ -26,7 +26,15 @@ export default defineConfig(({ mode }) => {
         "/api/postcode": {
           target: "https://api.postcodes.io",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/postcode\//, "/postcodes/"),
+          rewrite: (path) => {
+            const q = path.indexOf("?");
+            const search = q >= 0 ? path.slice(q + 1) : "";
+            const code = String(new URLSearchParams(search).get("code") || "")
+              .replace(/\s/g, "")
+              .toUpperCase();
+            if (!code) return "/postcodes/invalid";
+            return `/postcodes/${encodeURIComponent(code)}`;
+          },
         },
       },
     },
@@ -42,6 +50,22 @@ export default defineConfig(({ mode }) => {
             }),
           ]
         : []),
+      {
+        name: "dev-health-api",
+        configureServer(server) {
+          server.middlewares.use("/api/health", (req, res, next) => {
+            if (req.method !== "GET" && req.method !== "HEAD") return next();
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.setHeader("Cache-Control", "no-store");
+            res.statusCode = 200;
+            if (req.method === "HEAD") {
+              res.end();
+              return;
+            }
+            res.end(JSON.stringify({ ok: true, ts: Date.now() }));
+          });
+        },
+      },
       {
         name: "inject-supabase-resource-hints",
         transformIndexHtml(html) {
@@ -62,7 +86,7 @@ export default defineConfig(({ mode }) => {
     ],
     test: {
       environment: "node",
-      include: ["src/**/*.test.{js,jsx}"],
+      include: ["src/**/*.test.{js,jsx}", "api/**/*.test.js"],
     },
     build: {
       target: "es2022",
@@ -90,6 +114,9 @@ export default defineConfig(({ mode }) => {
             if (id.includes("lucide-react")) return "lucide";
             if (id.includes("react-router")) return "router";
             if (id.includes("leaflet")) return "leaflet";
+            if (id.includes("pdfjs-dist") || id.includes("pdf.worker")) return "pdfjs";
+            if (id.includes("dompurify")) return "dompurify";
+            if (norm.includes("/modules/surveyReport/")) return "survey-report";
             if (id.includes("html2canvas") || id.includes("jspdf")) return "print-export";
             if (
               id.includes("/react/") ||

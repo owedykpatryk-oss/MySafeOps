@@ -2,41 +2,9 @@
  * Vercel serverless: accepts Web Vitals metric JSON; logs one line (Vercel → Functions → Logs).
  */
 
+import { API_JSON_HEADERS, readJsonBody, sanitizeWebVitalsPayload, sendJson } from "./securityUtils.js";
+
 const MAX_JSON_BYTES = 12_000;
-
-const API_RES_HEADERS = {
-  "Content-Type": "application/json; charset=utf-8",
-  "X-Content-Type-Options": "nosniff",
-  "Cache-Control": "no-store",
-};
-
-function sendJson(res, status, obj) {
-  const body = JSON.stringify(obj);
-  res.writeHead(status, API_RES_HEADERS);
-  res.end(body);
-}
-
-async function readJsonBody(req) {
-  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
-    return req.body;
-  }
-  const chunks = [];
-  let total = 0;
-  for await (const chunk of req) {
-    total += chunk.length;
-    if (total > MAX_JSON_BYTES) {
-      return { __body_too_large: true };
-    }
-    chunks.push(chunk);
-  }
-  const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw.trim()) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -44,7 +12,12 @@ export default async function handler(req, res) {
     return sendJson(res, 405, { error: "method_not_allowed" });
   }
 
-  const parsed = await readJsonBody(req);
+  const contentType = String(req.headers["content-type"] || "").toLowerCase();
+  if (contentType && !contentType.includes("application/json") && !contentType.includes("text/plain")) {
+    return sendJson(res, 415, { error: "unsupported_media_type" });
+  }
+
+  const parsed = await readJsonBody(req, MAX_JSON_BYTES);
   if (parsed?.__body_too_large) {
     return sendJson(res, 413, { error: "payload_too_large" });
   }
@@ -52,16 +25,14 @@ export default async function handler(req, res) {
     return sendJson(res, 400, { error: "invalid_json" });
   }
 
-  const name = String(parsed.name || parsed.metric || "unknown");
-  const value = typeof parsed.value === "number" ? parsed.value : parsed.delta;
-  const id = String(parsed.id || "");
-  const path = String(parsed.path || "").slice(0, 512);
-  const pathSuffix = path ? ` path=${path}` : "";
-  console.log(`[web-vitals] ${name} value=${value} id=${id}${pathSuffix}`);
+  const metric = sanitizeWebVitalsPayload(parsed);
+  if (!metric) {
+    return sendJson(res, 400, { error: "invalid_metric" });
+  }
 
-  res.writeHead(204, {
-    "X-Content-Type-Options": "nosniff",
-    "Cache-Control": "no-store",
-  });
+  const pathSuffix = metric.path ? ` path=${metric.path}` : "";
+  console.log(`[web-vitals] ${metric.name} value=${metric.value} id=${metric.id}${pathSuffix}`);
+
+  res.writeHead(204, API_JSON_HEADERS);
   return res.end();
 }

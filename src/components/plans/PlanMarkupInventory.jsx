@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { assetKindMeta, zoneKindMeta, PLAN_ROUTE_STYLE } from "../../utils/planMarkupMeta";
 
 function itemCollection(type) {
@@ -28,6 +29,7 @@ function SwatchMini({ type, kind }) {
 }
 
 export default function PlanMarkupInventory({ plan, selected, onSelect, onRemove, onRename }) {
+  const [editing, setEditing] = useState(null);
   const routes = plan?.escapeRoutes || [];
   const zones = plan?.zoneBlocks || [];
   const assets = plan?.emergencyAssets || [];
@@ -59,6 +61,13 @@ export default function PlanMarkupInventory({ plan, selected, onSelect, onRemove
     })),
   ];
 
+  const commitRename = () => {
+    if (!editing || !onRename) return;
+    const label = String(editing.value || "").trim();
+    if (label) onRename(itemCollection(editing.type), editing.id, label);
+    setEditing(null);
+  };
+
   return (
     <div className="plan-markup-inventory">
       <div className="plan-markup-inventory__head">
@@ -68,24 +77,47 @@ export default function PlanMarkupInventory({ plan, selected, onSelect, onRemove
       <div className="plan-markup-inventory__grid">
         {cards.map((c) => {
           const active = selected?.type === c.type && selected?.id === c.id;
+          const isEditing = editing?.type === c.type && editing?.id === c.id;
           return (
             <div
               key={`${c.type}-${c.id}`}
               className={`plan-inv-card${active ? " plan-inv-card--active" : ""}`}
               role="button"
               tabIndex={0}
-              onClick={() => onSelect?.({ type: c.type, id: c.id })}
+              onClick={() => {
+                if (isEditing) return;
+                onSelect?.({ type: c.type, id: c.id });
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
+                  if (isEditing) return;
                   onSelect?.({ type: c.type, id: c.id });
                 }
               }}
             >
               <SwatchMini type={c.type} kind={c.kind} />
               <div className="plan-inv-card__body">
-                <div className="plan-inv-card__title">{c.title}</div>
-                <div className="plan-inv-card__sub">{c.sub}</div>
+                {isEditing ? (
+                  <input
+                    className="plan-inv-card__rename-input"
+                    value={editing.value}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setEditing((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") commitRename();
+                      if (e.key === "Escape") setEditing(null);
+                    }}
+                    onBlur={commitRename}
+                  />
+                ) : (
+                  <>
+                    <div className="plan-inv-card__title">{c.title}</div>
+                    <div className="plan-inv-card__sub">{c.sub}</div>
+                  </>
+                )}
               </div>
               <div className="plan-inv-card__actions">
                 {onRename ? (
@@ -93,12 +125,10 @@ export default function PlanMarkupInventory({ plan, selected, onSelect, onRemove
                     type="button"
                     className="ghost"
                     title="Rename"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={(e) => {
                       e.stopPropagation();
-                      const next = window.prompt("Label", c.title);
-                      if (next != null && next.trim()) {
-                        onRename(itemCollection(c.type), c.id, next.trim());
-                      }
+                      setEditing({ type: c.type, id: c.id, value: c.title });
                     }}
                   >
                     ✎

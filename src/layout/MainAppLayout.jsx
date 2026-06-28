@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense, memo } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense, memo, startTransition } from "react";
 import "../styles/workspace.css";
 import { useSearchParams } from "react-router-dom";
 import { BarChart2, FileCheck, ClipboardList, Users, MapPin, Menu, Pin, Shield, Trash2, FileDown, EyeOff } from "lucide-react";
@@ -567,13 +567,15 @@ export default function MainAppLayout() {
     if (viewId === "permits" && permitId) {
       setWorkspaceNavTarget({ viewId: "permits", permitId });
     }
-    if (primaryNavIdSet.has(viewId)) {
-      setNavTab(viewId);
-      setView(viewId);
-    } else {
-      setView(viewId);
-      setNavTab("more");
-    }
+    startTransition(() => {
+      if (primaryNavIdSet.has(viewId)) {
+        setNavTab(viewId);
+        setView(viewId);
+      } else {
+        setView(viewId);
+        setNavTab("more");
+      }
+    });
   }, [allowedModuleIds, primaryNavIdSet]);
 
   useEffect(() => {
@@ -609,22 +611,26 @@ export default function MainAppLayout() {
 
   const goMainTab = (id) => {
     if (id === "more") {
-      setNavTab("more");
+      startTransition(() => setNavTab("more"));
       return;
     }
-    if (primaryNavIdSet.has(id)) {
-      setNavTab(id);
+    startTransition(() => {
+      if (primaryNavIdSet.has(id)) {
+        setNavTab(id);
+        setView(id);
+        return;
+      }
       setView(id);
-      return;
-    }
-    setView(id);
-    setNavTab(id === bottomSlotId ? id : "more");
+      setNavTab(id === bottomSlotId ? id : "more");
+    });
   };
 
   const selectMoreModule = (id) => {
     if (!allowedModuleIds.has(id)) return;
-    setView(id);
-    setNavTab("more");
+    startTransition(() => {
+      setView(id);
+      setNavTab("more");
+    });
   };
 
   const handleTogglePin = useCallback((moduleId) => {
@@ -655,7 +661,7 @@ export default function MainAppLayout() {
   const handleExportModulePdf = useCallback(async (moduleId, label) => {
     try {
       const { exportModuleRegisterPdf } = await import("../utils/moduleRegisterPdf");
-      const result = exportModuleRegisterPdf(moduleId, { label });
+      const result = await exportModuleRegisterPdf(moduleId, { label });
       if (!result.ok) window.alert("This module does not support quick PDF export yet.");
     } catch (e) {
       window.alert(e?.message || "Could not export PDF.");
@@ -665,7 +671,7 @@ export default function MainAppLayout() {
   const handleExportAllHsePdf = useCallback(async () => {
     try {
       const { exportAllHseRegistersPdf } = await import("../utils/moduleRegisterPdf");
-      const result = exportAllHseRegistersPdf();
+      const result = await exportAllHseRegistersPdf();
       if (!result.ok) window.alert("Could not build HSE register pack PDF.");
     } catch (e) {
       window.alert(e?.message || "Could not export HSE pack.");
@@ -680,7 +686,7 @@ export default function MainAppLayout() {
     }
     try {
       const { exportMoreSectionPdf } = await import("../utils/moduleRegisterPdf");
-      exportMoreSectionPdf({ title: sectionTitle, modules });
+      await exportMoreSectionPdf({ title: sectionTitle, modules });
     } catch (e) {
       window.alert(e?.message || "Could not export section PDF.");
     }
@@ -781,7 +787,7 @@ export default function MainAppLayout() {
                 onClick={async () => {
                   try {
                     const { exportSiteOperationsRegistersPdf } = await import("../utils/moduleRegisterPdf");
-                    const result = exportSiteOperationsRegistersPdf();
+                    const result = await exportSiteOperationsRegistersPdf();
                     if (!result.ok) window.alert("Could not build site operations pack PDF.");
                   } catch (e) {
                     window.alert(e?.message || "Could not export site pack.");

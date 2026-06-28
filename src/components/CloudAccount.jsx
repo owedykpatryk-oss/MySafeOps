@@ -303,20 +303,30 @@ export default function CloudAccount() {
           title="Cloud account"
           lead={
             r2Enabled
-              ? "Supabase auth/backup is not configured here. Cloudflare R2 uploads are available in Documents."
-              : "Cloud services are not configured for this environment."
+              ? SHOW_ADMIN_LOGIN_HINTS
+                ? "Supabase auth/backup is not configured here. Cloud uploads are available in Documents."
+                : "Account sign-in is not set up on this site. Cloud uploads are still available in Documents."
+              : SHOW_ADMIN_LOGIN_HINTS
+                ? "Cloud services are not configured for this environment."
+                : "Cloud sign-in is not set up on this site yet."
           }
         />
         <div style={{ ...ss.card, marginBottom: 24, fontSize: 13, color: "var(--color-text-secondary)" }}>
           {r2Enabled ? (
-            <>
-              Cloudflare R2 storage is active for document uploads. To enable account sign-in and JSON cloud backup,
-              configure Supabase credentials for this environment.
-            </>
-          ) : (
+            SHOW_ADMIN_LOGIN_HINTS ? (
+              <>
+                Cloud storage is active for document uploads. To enable account sign-in and JSON cloud backup,
+                configure Supabase credentials for this environment.
+              </>
+            ) : (
+              <>File uploads to cloud storage work in Documents. Ask your administrator to enable account sign-in and backup.</>
+            )
+          ) : SHOW_ADMIN_LOGIN_HINTS ? (
             <>
               Configure Supabase to enable sign-in and cloud backup. You can still use local data and local backup/export.
             </>
+          ) : (
+            <>You can still use local data and Backup &amp; export. Contact your administrator to enable cloud sign-in.</>
           )}
         </div>
       </>
@@ -329,7 +339,13 @@ export default function CloudAccount() {
         <PageHero
           badgeText="☁"
           title="Cloud account"
-          lead={r2Enabled ? "Connecting to Supabase… (Cloudflare R2 uploads available in Documents)" : "Connecting to Supabase…"}
+          lead={
+            r2Enabled
+              ? SHOW_ADMIN_LOGIN_HINTS
+                ? "Connecting to Supabase… (cloud uploads available in Documents)"
+                : "Connecting to your cloud account…"
+              : "Connecting to your cloud account…"
+          }
         />
         <div style={{ ...ss.card, marginBottom: 24, fontSize: 13, color: "var(--color-text-secondary)" }}>
           Connecting to cloud account…
