@@ -2,7 +2,7 @@ import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavC
 import { permitReadinessForProject } from "../modules/permits/permitProjectDefaults";
 
 const PIPELINE = [
-  { key: "project", icon: "📍", label: "Project", hint: "Site & postcode", viewId: "workers", action: "createProject" },
+  { key: "project", icon: "📍", label: "Project", hint: "Site & postcode", viewId: "workers", action: "viewProjectDashboard" },
   { key: "intel", icon: "🌦️", label: "Site intel", hint: "Weather & A&E", viewId: "workers", action: "editProject" },
   { key: "plans", icon: "🗺️", label: "Plans", hint: "KML & markup", viewId: "project-drawings" },
   { key: "rams", icon: "⚠️", label: "RAMS", hint: "Method & hazards", viewId: "rams" },
@@ -27,7 +27,7 @@ export default function ProjectHubCard({ projects = [], rams = [], permits = [],
     survey: surveyReports.length,
   };
 
-  const openProject = (projectId, action = "editProject") => {
+  const openProject = (projectId, action = "viewProjectDashboard") => {
     setWorkspaceNavTarget({ viewId: "workers", projectId, action });
     openWorkspaceView({ viewId: "workers" });
   };

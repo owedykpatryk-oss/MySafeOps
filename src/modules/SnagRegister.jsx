@@ -7,6 +7,7 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 
 const genId = () => `snag_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
@@ -262,6 +263,23 @@ export default function SnagRegister() {
   });
   const d1Hydrating = d1SnagsH || d1WpH;
   const d1OutboxPending = d1SnagsO || d1WpO;
+
+  useEffect(() => {
+    const t = consumeWorkspaceNavTarget();
+    if (t?.viewId !== "snags") return;
+    if (t.projectId) setFilterProject(t.projectId);
+    if (t.snagId) {
+      const snag = load("snags", []).find((s) => s.id === t.snagId);
+      if (snag) setModal({ type: "form", data: snag });
+      return;
+    }
+    if (t.action === "create") {
+      setModal({
+        type: "form",
+        data: { id: genId(), title: "", description: "", category: "Electrical", priority: "medium", status: "open", projectId: t.projectId || "", location: "", assignedTo: "", dueDate: "", photos: [], createdAt: new Date().toISOString(), ref: "" },
+      });
+    }
+  }, []);
 
   useEffect(() => {
     listPg.reset();

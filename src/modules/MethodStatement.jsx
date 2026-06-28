@@ -6,6 +6,7 @@ import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { escapeHtml, openPrintWindow } from "../utils/htmlEscape.js";
 
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -559,6 +560,22 @@ export default function MethodStatement() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const listPg = useRegisterListPaging(50);
+
+  useEffect(() => {
+    const t = consumeWorkspaceNavTarget();
+    if (t?.viewId !== "method-statement") return;
+    if (t.methodStatementId) {
+      const doc = load("method_statements", []).find((d) => d.id === t.methodStatementId);
+      if (doc) setModal({ type: "form", data: doc });
+      return;
+    }
+    if (t.action === "create") {
+      setModal({
+        type: "form",
+        data: { id: genId(), title: "", location: "", projectId: t.projectId || "", status: "draft", date: today(), revision: "1A" },
+      });
+    }
+  }, []);
 
   useEffect(() => {
     listPg.reset();

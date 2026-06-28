@@ -56,6 +56,13 @@ import {
 } from "../utils/moduleRegisterStats";
 import { modulesWithSeedTemplates, seedEmptyRegisters } from "../utils/registerSeedTemplates";
 import { ORG_CHANGED_EVENT } from "../utils/orgStorage";
+import {
+  BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
+  DEFAULT_BOTTOM_NAV_FALLBACK_ID,
+  isBottomNavOccupiedId,
+  resolveBottomNavSlotId,
+  setBottomNavModuleId,
+} from "../utils/bottomNavShortcut";
 
 const LAST_VIEW_STORAGE_KEY = "mysafeops_last_workspace_view";
 const WORKSPACE_LAYOUT_VIEW_IDS = new Set([...Object.keys(workspaceViewLoaders), "settings"]);
@@ -574,11 +581,32 @@ export default function MainAppLayout() {
     return () => window.removeEventListener("keydown", onKey);
   }, [openHelpModule]);
 
-  const navigateFromSearch = useCallback(({ viewId, permitId }) => {
+  const navigateFromSearch = useCallback((hit) => {
+    const {
+      viewId,
+      permitId,
+      projectId,
+      action,
+      ramsId,
+      reportId,
+      snagId,
+      methodStatementId,
+      geoPhotoId,
+      planId,
+    } = hit || {};
+    if (!viewId) return;
     if (!primaryNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
-    if (viewId === "permits" && permitId) {
-      setWorkspaceNavTarget({ viewId: "permits", permitId });
-    }
+    const target = { viewId };
+    if (permitId) target.permitId = permitId;
+    if (projectId) target.projectId = projectId;
+    if (action) target.action = action;
+    if (ramsId) target.ramsId = ramsId;
+    if (reportId) target.reportId = reportId;
+    if (snagId) target.snagId = snagId;
+    if (methodStatementId) target.methodStatementId = methodStatementId;
+    if (geoPhotoId) target.geoPhotoId = geoPhotoId;
+    if (planId) target.planId = planId;
+    setWorkspaceNavTarget(target);
     startTransition(() => {
       if (primaryNavIdSet.has(viewId)) {
         setNavTab(viewId);

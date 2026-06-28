@@ -69,6 +69,9 @@ import StatusChip from "../../components/StatusChip";
 import EmptyState from "../../components/EmptyState";
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import ModuleOverlay from "../../components/ModuleOverlay";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import SurveyEditorStepNav from "./SurveyEditorStepNav";
+import { groupSurveyReportsByProject } from "./surveyReportEditorNav";
 import { getSurveyStatusMeta } from "../../utils/statusChipMeta";
 
 const STORAGE_KEY = "survey_reports";
@@ -141,6 +144,76 @@ const EDITOR_TABS = [
   { id: "photos", label: "Photos" },
   { id: "preview", label: "Print preview" },
 ];
+
+function openSurveyReportFromNav(t, { projs, existing, geo, rams, setModal }) {
+  if (t?.reportId) {
+    const report = existing.find((r) => r.id === t.reportId);
+    if (report) {
+      setModal({ type: "edit", isNew: false, data: report });
+      return true;
+    }
+  }
+  const ref = nextSurveyRef(existing);
+  if (t?.projectId && t?.action === "editWithGeoPhotos") {
+    const p = projs.find((x) => x.id === t.projectId);
+    const report = existing.find((r) => r.projectId === t.projectId);
+    if (report) {
+      setModal({
+        type: "edit",
+        isNew: false,
+        data: mergeGeoPhotos(report, geo, { replaceFindingsBlock: true }),
+      });
+      return true;
+    }
+    if (p) {
+      const ramsDoc = pickRamsForProject(rams, p.id);
+      const base = blankSurveyReport({
+        ref,
+        title: `Survey report — ${p.name || ref}`,
+        projectId: p.id,
+      });
+      setModal({
+        type: "edit",
+        isNew: true,
+        data: mergeGeoPhotos(prefillReportFromProject(base, p, ramsDoc), geo, { replaceFindingsBlock: true }),
+      });
+      return true;
+    }
+  }
+  if (t?.projectId && t?.action !== "createReport") {
+    const existingForProject = existing.find((r) => r.projectId === t.projectId);
+    if (existingForProject) {
+      setModal({ type: "edit", isNew: false, data: existingForProject });
+      return true;
+    }
+  }
+  if (t?.projectId) {
+    const p = projs.find((x) => x.id === t.projectId);
+    if (p) {
+      const ramsDoc = pickRamsForProject(rams, p.id);
+      const base = blankSurveyReport({
+        ref,
+        title: `Survey report — ${p.name || ref}`,
+        projectId: p.id,
+      });
+      setModal({
+        type: "edit",
+        isNew: true,
+        data: prefillReportFromProject(base, p, ramsDoc),
+      });
+      return true;
+    }
+  }
+  if (t?.action === "createReport") {
+    setModal({
+      type: "edit",
+      isNew: true,
+      data: blankSurveyReport({ ref, title: `Survey report ${ref}` }),
+    });
+    return true;
+  }
+  return false;
+}
 
 function RowTableEditor({ rows, columns, onChange, emptyLabel, addLabel }) {
   const updateRow = (idx, key, value) => {
@@ -508,6 +581,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
   const [saving, setSaving] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [cadBusy, setCadBusy] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const autoFillRan = useRef(false);
 
   const projectPlansForForm = useMemo(
@@ -771,7 +845,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
       let payload = preparePayload(extra);
       const q = surveyReportQuality(payload);
       if (q.score < 50 && payload.status !== "final") {
-        const runFill = confirm(`Report is ${q.score}% complete. Run Smart fill before saving?`);
+        const runFill = window.confirm(`Report is ${q.score}% complete. Run Smart fill before saving?`);
         if (runFill) {
           const project = projects.find((p) => p.id === payload.projectId);
           payload = await runSmartFillAll(payload, {
@@ -845,13 +919,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
           onApply={(next) => setForm({ ...next, updatedAt: new Date().toISOString() })}
         />
 
-        <div style={ss.tabRow}>
-          {EDITOR_TABS.map((t) => (
-            <button key={t.id} type="button" style={ss.tab(tab === t.id)} onClick={() => setTab(t.id)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <SurveyEditorStepNav tab={tab} onTabChange={setTab} />
 
         {tab === "details" && (
           <>
@@ -1531,16 +1599,29 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
               type="button"
               style={{ ...ss.btn, borderColor: "#0d9488", color: "#0d9488" }}
               disabled={saving}
-              onClick={() => {
-                if (!confirm("Mark this report as final? Issue date and sign-off will be set; you can still edit later.")) return;
-                const finalized = finalizeReportRevision(form);
-                handleSave(finalized);
-              }}
+              onClick={() =>
+                setConfirmDialog({
+                  title: "Mark report as final?",
+                  message: "Issue date and sign-off will be set. You can still edit later if needed.",
+                  onConfirm: () => {
+                    const finalized = finalizeReportRevision(form);
+                    handleSave(finalized);
+                    setConfirmDialog(null);
+                  },
+                })
+              }
             >
               Mark final
             </button>
           )}
         </div>
+        <ConfirmDialog
+          open={Boolean(confirmDialog)}
+          title={confirmDialog?.title}
+          message={confirmDialog?.message}
+          onConfirm={confirmDialog?.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
       </div>
     </ModuleOverlay>
   );
@@ -1556,68 +1637,21 @@ export default function SurveyReport() {
   const [permits] = useState(() => load("permits_v2", []));
   const [modal, setModal] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [listConfirm, setListConfirm] = useState(null);
   const [pdfBusyId, setPdfBusyId] = useState("");
   const listPg = useRegisterListPaging(30);
 
   useEffect(() => {
     const t = consumeWorkspaceNavTarget();
     if (t?.viewId !== "survey-report") return;
-    const projs = load("mysafeops_projects", []);
-    const existing = load(STORAGE_KEY, []);
-    const geo = load("geo_photos", []);
-    const ref = nextSurveyRef(existing);
-    if (t?.projectId && t?.action === "editWithGeoPhotos") {
-      const p = projs.find((x) => x.id === t.projectId);
-      const report = existing.find((r) => r.projectId === t.projectId);
-      if (report) {
-        setModal({
-          type: "edit",
-          isNew: false,
-          data: mergeGeoPhotos(report, geo, { replaceFindingsBlock: true }),
-        });
-        return;
-      }
-      if (p) {
-        const rams = load("rams_builder_docs", []);
-        const base = blankSurveyReport({
-          ref,
-          title: `Survey report — ${p.name || ref}`,
-          projectId: p.id,
-        });
-        const ramsDoc = pickRamsForProject(rams, p.id);
-        setModal({
-          type: "edit",
-          isNew: true,
-          data: mergeGeoPhotos(prefillReportFromProject(base, p, ramsDoc), geo, { replaceFindingsBlock: true }),
-        });
-        return;
-      }
-    }
-    if (t?.projectId) {
-      const p = projs.find((x) => x.id === t.projectId);
-      if (p) {
-        const rams = load("rams_builder_docs", []);
-        const base = blankSurveyReport({
-          ref,
-          title: `Survey report — ${p.name || ref}`,
-          projectId: p.id,
-        });
-        const ramsDoc = pickRamsForProject(rams, p.id);
-        setModal({
-          type: "edit",
-          isNew: true,
-          data: prefillReportFromProject(base, p, ramsDoc),
-        });
-        return;
-      }
-    }
-    if (t?.action === "createReport") {
-      setModal({
-        type: "edit",
-        isNew: true,
-        data: blankSurveyReport({ ref, title: `Survey report ${ref}` }),
-      });
-    }
+    openSurveyReportFromNav(t, {
+      projs: load("mysafeops_projects", []),
+      existing: load(STORAGE_KEY, []),
+      geo: load("geo_photos", []),
+      rams: load("rams_builder_docs", []),
+      setModal,
+    });
   }, []);
 
   const { d1Hydrating: d1RepH, d1OutboxPending: d1RepO } = useD1OrgArraySync({
@@ -1640,10 +1674,17 @@ export default function SurveyReport() {
   const d1OutboxPending = d1RepO || d1ProjO;
 
   const filtered = useMemo(() => {
-    if (filter === "draft") return reports.filter((r) => r.status !== "final");
-    if (filter === "final") return reports.filter((r) => r.status === "final");
-    return reports;
-  }, [reports, filter]);
+    let rows = reports;
+    if (filter === "draft") rows = rows.filter((r) => r.status !== "final");
+    if (filter === "final") rows = rows.filter((r) => r.status === "final");
+    if (projectFilter) rows = rows.filter((r) => r.projectId === projectFilter);
+    return rows;
+  }, [reports, filter, projectFilter]);
+
+  const groupedReports = useMemo(
+    () => groupSurveyReportsByProject(filtered, projects),
+    [filtered, projects]
+  );
 
   const persist = (report, isNew) => {
     setReports((prev) => {
@@ -1813,6 +1854,19 @@ export default function SurveyReport() {
             {l}
           </button>
         ))}
+        <select
+          value={projectFilter}
+          onChange={(e) => setProjectFilter(e.target.value)}
+          style={{ ...ss.inp, fontSize: 12, minWidth: 160, marginLeft: 4 }}
+          aria-label="Filter by project"
+        >
+          <option value="">All projects</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name || "Untitled"}
+            </option>
+          ))}
+        </select>
         {missingProjectCount > 0 && (
           <button type="button" style={{ ...ss.btn, fontSize: 12, marginLeft: "auto" }} onClick={batchCreateForProjects}>
             Batch: {missingProjectCount} project{missingProjectCount === 1 ? "" : "s"} without report
@@ -1839,109 +1893,88 @@ export default function SurveyReport() {
               Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length}
             </div>
           )}
-          {listPg.visible(filtered).map((r) => {
-            const q = surveyReportQuality(r);
-            return (
-              <div
-                key={r.id}
-                style={{
-                  ...ss.card,
-                  borderLeft: `4px solid ${r.status === "final" ? "#0d9488" : "#f59e0b"}`,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <strong style={{ fontSize: 15 }}>{r.title || r.ref || "Untitled"}</strong>
-                      <StatusChip meta={getSurveyStatusMeta(r.status)} />
-                      <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{q.score}% complete</span>
+          {(() => {
+            let lastGroup = null;
+            return listPg.visible(filtered).map((r) => {
+              const q = surveyReportQuality(r);
+              const groupKey = r.projectId || "__none__";
+              const groupLabel =
+                groupedReports.find((g) => (g.projectId || "__none__") === groupKey)?.label || "No project";
+              const showGroupHeader = !projectFilter && groupKey !== lastGroup;
+              lastGroup = groupKey;
+              return (
+                <div key={r.id}>
+                  {showGroupHeader ? (
+                    <div className="app-survey-list-group__title">
+                      {groupLabel}
+                      <span>{groupedReports.find((g) => (g.projectId || "__none__") === groupKey)?.reports.length || 0}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
-                      {r.ref} · {r.surveyDate}
-                      {r.projectName ? ` · ${r.projectName}` : ""}
-                      {r.surveyType ? ` · ${surveyTypeLabel(r.surveyType)}` : ""}
-                    </div>
-                    {r.sections?.findings && (
-                      <div style={{ fontSize: 13, marginTop: 8, color: "var(--color-text-primary)", lineHeight: 1.45 }}>
-                        {r.sections.findings.slice(0, 140)}
-                        {r.sections.findings.length > 140 ? "…" : ""}
+                  ) : null}
+                  <div
+                    style={{
+                      ...ss.card,
+                      borderLeft: `4px solid ${r.status === "final" ? "#0d9488" : "#f59e0b"}`,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <strong style={{ fontSize: 15 }}>{r.title || r.ref || "Untitled"}</strong>
+                          <StatusChip meta={getSurveyStatusMeta(r.status)} />
+                          <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{q.score}% complete</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                          {r.ref} · {r.surveyDate}
+                          {r.surveyType ? ` · ${surveyTypeLabel(r.surveyType)}` : ""}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-start" }}>
-                    <button type="button" style={ss.btn} onClick={() => printReport(r)}>
-                      Print
-                    </button>
-                    <button
-                      type="button"
-                      style={ss.btn}
-                      disabled={pdfBusyId === r.id}
-                      onClick={() => downloadPdfForReport(r)}
-                    >
-                      {pdfBusyId === r.id ? "PDF…" : "PDF"}
-                    </button>
-                    <button type="button" style={ss.btn} onClick={() => exportPackForReport(r)}>
-                      Pack
-                    </button>
-                    <button
-                      type="button"
-                      style={ss.btn}
-                      onClick={() => {
-                        downloadSurveyReportHtml(r, {
-                          ramsTitle: ramsDocs.find((d) => d.id === r.linkedRamsId)?.title,
-                          projectLat: projects.find((p) => p.id === r.projectId)?.lat,
-                          projectLng: projects.find((p) => p.id === r.projectId)?.lng,
-                        });
-                        pushAudit({ action: "survey_report_html", entity: "survey_report", detail: r.ref || r.id });
-                      }}
-                    >
-                      HTML
-                    </button>
-                    {r.projectId && countGeoPhotosForReport(geoPhotos, r.projectId) > 0 && (
-                      <button
-                        type="button"
-                        style={ss.btn}
-                        onClick={() => {
-                          try {
-                            downloadSurveyReportGeoJson(r, geoPhotos);
-                          } catch (e) {
-                            alert(e?.message || "GeoJSON export failed.");
-                          }
-                        }}
-                      >
-                        GeoJSON
-                      </button>
-                    )}
-                    <button type="button" style={ss.btn} onClick={() => duplicateReport(r)}>
-                      Duplicate
-                    </button>
-                    {r.status === "final" && (
-                      <button type="button" style={ss.btn} onClick={() => duplicateReport(r, { asRevision: true })}>
-                        New revision
-                      </button>
-                    )}
-                    <button type="button" style={ss.btnP} onClick={() => setModal({ type: "edit", data: r, isNew: false })}>
-                      Edit
-                    </button>
-                    {caps.deleteRecords && (
-                      <button
-                        type="button"
-                        style={{ ...ss.btn, color: "#A32D2D" }}
-                        onClick={() => {
-                          if (confirm("Delete this survey report?")) {
-                            setReports((p) => p.filter((x) => x.id !== r.id));
-                            pushAudit({ action: "survey_report_delete", entity: "survey_report", detail: r.id });
-                          }
-                        }}
-                      >
-                        Delete
-                      </button>
-                    )}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-start" }}>
+                        <button type="button" style={ss.btnP} onClick={() => setModal({ type: "edit", data: r, isNew: false })}>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          style={ss.btn}
+                          disabled={pdfBusyId === r.id}
+                          onClick={() => downloadPdfForReport(r)}
+                        >
+                          {pdfBusyId === r.id ? "PDF…" : "PDF"}
+                        </button>
+                        <button type="button" style={ss.btn} onClick={() => printReport(r)}>
+                          Print
+                        </button>
+                        <button type="button" style={ss.btn} onClick={() => exportPackForReport(r)}>
+                          Pack
+                        </button>
+                        <button type="button" style={ss.btn} onClick={() => duplicateReport(r)}>
+                          Duplicate
+                        </button>
+                        {caps.deleteRecords && (
+                          <button
+                            type="button"
+                            style={{ ...ss.btn, color: "#A32D2D" }}
+                            onClick={() =>
+                              setListConfirm({
+                                title: "Delete survey report?",
+                                message: `${r.ref || r.title || "This report"} will be permanently removed.`,
+                                onConfirm: () => {
+                                  setReports((p) => p.filter((x) => x.id !== r.id));
+                                  pushAudit({ action: "survey_report_delete", entity: "survey_report", detail: r.id });
+                                  setListConfirm(null);
+                                },
+                              })
+                            }
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
           {listPg.hasMore(filtered) && (
             <div style={{ display: "flex", justifyContent: "center" }}>
               <button type="button" style={ss.btn} onClick={listPg.showMore}>
@@ -1951,6 +1984,15 @@ export default function SurveyReport() {
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(listConfirm)}
+        title={listConfirm?.title}
+        message={listConfirm?.message}
+        tone="danger"
+        confirmLabel="Delete"
+        onConfirm={listConfirm?.onConfirm}
+        onCancel={() => setListConfirm(null)}
+      />
     </div>
   );
 }

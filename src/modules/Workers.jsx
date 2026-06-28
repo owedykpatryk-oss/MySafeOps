@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
+import { useApp } from "../context/AppContext";
+import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { useToast } from "../context/ToastContext";
+import { isSuperAdminEmail } from "../utils/superAdmin";
+import { billingLimitMessage, checkBillingLimit } from "../utils/billingLimits";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { ms } from "../utils/moduleStyles";
 import { geocodeAddressNominatim } from "../utils/geocode";
 import PageHero from "../components/PageHero";
@@ -21,6 +27,7 @@ import { fetchWeatherSummary, fetchWeatherForDate } from "../utils/weatherSummar
 import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDrawingImport";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 import ProjectSitePreviewMap from "../components/ProjectSitePreviewMap";
+import ProjectDashboard from "../components/ProjectDashboard";
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -161,9 +168,14 @@ function certSummaryText(worker) {
 }
 
 export default function Workers() {
+  const { trialStatus, billing } = useApp();
+  const { user } = useSupabaseAuth();
+  const { pushToast } = useToast();
+  const isPlatformOwner = isSuperAdminEmail(user?.email);
   const [workers, setWorkers] = useState(() => load(WORKERS_KEY));
   const [projects, setProjects] = useState(() => load(PROJECTS_KEY));
   const [modal, setModal] = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   const { d1Hydrating, d1OutboxPending } = useD1WorkersProjectsSync({
     workers,
@@ -187,8 +199,45 @@ export default function Workers() {
       const list = load(PROJECTS_KEY, []);
       const p = list.find((x) => x.id === t.projectId);
       if (p) setModal({ type: "project", data: p });
+      return;
+    }
+    if (t?.action === "viewProjectDashboard" && t?.projectId) {
+      const list = load(PROJECTS_KEY, []);
+      const p = list.find((x) => x.id === t.projectId);
+      if (p) setModal({ type: "project-dashboard", data: p });
     }
   }, []);
+
+  const billingOpts = { trialStatus, billing, isPlatformOwner };
+
+  const tryAddWorker = () => {
+    const gate = checkBillingLimit("workers", billingOpts);
+    if (!gate.ok) {
+      pushToast(billingLimitMessage(gate), "warn");
+      return;
+    }
+    setModal({ type: "worker", data: null });
+  };
+
+  const tryAddProject = () => {
+    const gate = checkBillingLimit("projects", billingOpts);
+    if (!gate.ok) {
+      pushToast(billingLimitMessage(gate), "warn");
+      return;
+    }
+    setModal({ type: "project", data: null });
+  };
+
+  const updateProjectRecord = (updated) => {
+    setProjects((prev) => {
+      const i = prev.findIndex((p) => p.id === updated.id);
+      if (i < 0) return prev;
+      const next = [...prev];
+      next[i] = updated;
+      return next;
+    });
+    setModal((m) => (m?.type === "project-dashboard" && m.data?.id === updated.id ? { ...m, data: updated } : m));
+  };
 
   const exportWorkersCsv = () => {
     const header = ["Name", "Role", "Phone", "Email", "Certs / notes", "Structured certifications"];
@@ -202,6 +251,14 @@ export default function Workers() {
   };
 
   const saveWorker = (form) => {
+    const isNew = !workers.some((w) => w.id === form.id);
+    if (isNew) {
+      const gate = checkBillingLimit("workers", billingOpts);
+      if (!gate.ok) {
+        pushToast(billingLimitMessage(gate), "warn");
+        return;
+      }
+    }
     setWorkers((prev) => {
       const i = prev.findIndex((x) => x.id === form.id);
       if (i >= 0) {
@@ -215,24 +272,39 @@ export default function Workers() {
   };
 
   const removeWorker = (id) => {
-    if (!confirm("Remove this worker?")) return;
-    setWorkers((prev) => {
-      const victim = prev.find((w) => w.id === id);
-      if (victim) {
-        pushRecycleBinItem({
-          moduleId: "workers",
-          moduleLabel: "Workers",
-          itemType: "worker",
-          itemLabel: victim.name || victim.id,
-          sourceKey: WORKERS_KEY,
-          payload: victim,
+    setConfirm({
+      title: "Remove worker?",
+      message: "This worker will be moved to the recycle bin.",
+      tone: "danger",
+      onConfirm: () => {
+        setWorkers((prev) => {
+          const victim = prev.find((w) => w.id === id);
+          if (victim) {
+            pushRecycleBinItem({
+              moduleId: "workers",
+              moduleLabel: "Workers",
+              itemType: "worker",
+              itemLabel: victim.name || victim.id,
+              sourceKey: WORKERS_KEY,
+              payload: victim,
+            });
+          }
+          return prev.filter((w) => w.id !== id);
         });
-      }
-      return prev.filter((w) => w.id !== id);
+        setConfirm(null);
+      },
     });
   };
 
   const saveProject = (form, options = {}) => {
+    const isNew = !projects.some((p) => p.id === form.id);
+    if (isNew) {
+      const gate = checkBillingLimit("projects", billingOpts);
+      if (!gate.ok) {
+        pushToast(billingLimitMessage(gate), "warn");
+        return;
+      }
+    }
     setProjects((prev) => {
       const i = prev.findIndex((x) => x.id === form.id);
       if (i >= 0) {
@@ -250,20 +322,27 @@ export default function Workers() {
   };
 
   const removeProject = (id) => {
-    if (!confirm("Remove this project?")) return;
-    setProjects((prev) => {
-      const victim = prev.find((p) => p.id === id);
-      if (victim) {
-        pushRecycleBinItem({
-          moduleId: "workers",
-          moduleLabel: "Workers",
-          itemType: "project",
-          itemLabel: victim.name || victim.id,
-          sourceKey: PROJECTS_KEY,
-          payload: victim,
+    setConfirm({
+      title: "Remove project?",
+      message: "Linked documents stay in their modules; the project record goes to the recycle bin.",
+      tone: "danger",
+      onConfirm: () => {
+        setProjects((prev) => {
+          const victim = prev.find((p) => p.id === id);
+          if (victim) {
+            pushRecycleBinItem({
+              moduleId: "workers",
+              moduleLabel: "Workers",
+              itemType: "project",
+              itemLabel: victim.name || victim.id,
+              sourceKey: PROJECTS_KEY,
+              payload: victim,
+            });
+          }
+          return prev.filter((p) => p.id !== id);
         });
-      }
-      return prev.filter((p) => p.id !== id);
+        setConfirm(null);
+      },
     });
   };
 
@@ -293,6 +372,28 @@ export default function Workers() {
           onClose={() => setModal(null)}
         />
       )}
+      {modal?.type === "project-dashboard" && (
+        <ProjectDashboard
+          project={modal.data}
+          workers={workers}
+          onClose={() => setModal(null)}
+          onEdit={(p) => setModal({ type: "project", data: p })}
+          onRemove={(id) => {
+            setModal(null);
+            removeProject(id);
+          }}
+          onUpdateProject={updateProjectRecord}
+        />
+      )}
+      <ConfirmDialog
+        open={Boolean(confirm)}
+        title={confirm?.title}
+        message={confirm?.message}
+        tone={confirm?.tone}
+        confirmLabel={confirm?.tone === "danger" ? "Remove" : "Confirm"}
+        onConfirm={confirm?.onConfirm}
+        onCancel={() => setConfirm(null)}
+      />
 
       <PageHero
         badgeText="WP"
@@ -300,10 +401,10 @@ export default function Workers() {
         lead="People and sites used across RAMS, permits, daily briefings, site map, and registers."
         right={
           <>
-            <button type="button" style={ss.btnP} onClick={() => setModal({ type: "worker", data: null })}>
+            <button type="button" style={ss.btnP} onClick={tryAddWorker}>
               Add worker
             </button>
-            <button type="button" style={ss.btnO} onClick={() => setModal({ type: "project", data: null })}>
+            <button type="button" style={ss.btnO} onClick={tryAddProject}>
               Add project
             </button>
             <button type="button" style={ss.btn} onClick={exportWorkersCsv}>
@@ -414,7 +515,12 @@ export default function Workers() {
               borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
             }}
           >
-            <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+            <button
+              type="button"
+              className="app-project-row-open"
+              style={{ flex: "1 1 200px", minWidth: 0, textAlign: "left" }}
+              onClick={() => setModal({ type: "project-dashboard", data: p })}
+            >
               <strong>{p.name || "Unnamed"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{p.site || p.address || ""}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
@@ -434,7 +540,10 @@ export default function Workers() {
                   </span>
                 ) : null}
               </div>
-            </div>
+            </button>
+            <button type="button" style={ss.btn} onClick={() => setModal({ type: "project-dashboard", data: p })}>
+              Open
+            </button>
             <button type="button" style={ss.btn} onClick={() => setModal({ type: "project", data: p })}>
               Edit
             </button>

@@ -3918,6 +3918,11 @@ export default function PermitSystem() {
       if (pid) t = { viewId: "permits", permitId: pid };
     }
     if (t?.viewId === "permits" && t.permitId) {
+      const allPermits = load("permits_v2", []);
+      const permit = allPermits.find((p) => p.id === t.permitId);
+      if (permit && (t.action === "view" || t.action === "edit")) {
+        setModal({ type: "form", data: permit });
+      }
       setHighlightPermitId(t.permitId);
       setFilterStatus("");
       setFilterHandoverDue(false);

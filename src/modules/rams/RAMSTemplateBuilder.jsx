@@ -28,6 +28,7 @@ import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
+import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import PageHero from "../../components/PageHero";
 import SimpleFormDialog from "../../components/SimpleFormDialog";
@@ -4989,7 +4990,7 @@ export default function RAMSTemplateBuilder() {
   useEffect(()=>{ save(RAMS_HAZARD_PREFS_KEY, hazardPrefs); },[hazardPrefs]);
   useEffect(()=>{ save(RAMS_HAZARD_PACKS_KEY, hazardPacks); },[hazardPacks]);
 
-  const startNew = () => {
+  const startNew = (opts = {}) => {
     let formInit = {
       ...RAMS_FORM_DEFAULTS,
       date: today(),
@@ -5082,6 +5083,16 @@ export default function RAMSTemplateBuilder() {
       }
     }
 
+    if (opts?.projectId) {
+      const p = projects.find((x) => x.id === opts.projectId);
+      formInit = {
+        ...formInit,
+        projectId: opts.projectId,
+        projectName: p?.name || formInit.projectName || "",
+        location: formInit.location || p?.address || p?.site || "",
+      };
+    }
+
     setForm(formInit);
     setSelectedHazards(selInit);
     setEditedRows(rowsInit);
@@ -5109,6 +5120,38 @@ export default function RAMSTemplateBuilder() {
     builderBaselineRef.current = snapshotBuilderState(3, mergedForm, rows);
     setView("builder");
   };
+
+  const navHandledRef = useRef(false);
+  useEffect(() => {
+    if (navHandledRef.current) return;
+    navHandledRef.current = true;
+    const t = consumeWorkspaceNavTarget();
+    if (t?.viewId !== "rams") return;
+
+    const docs = load("rams_builder_docs", []);
+    if (t.ramsId) {
+      const doc = docs.find((d) => d.id === t.ramsId);
+      if (doc) startEdit(doc);
+      return;
+    }
+    if (!t.projectId) return;
+
+    if (t.action === "create") {
+      startNew({ projectId: t.projectId });
+      return;
+    }
+
+    const projectDocs = docs.filter((d) => d.projectId === t.projectId);
+    if (projectDocs.length && t.action !== "create") {
+      const sorted = [...projectDocs].sort(
+        (a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
+      );
+      startEdit(sorted[0]);
+      return;
+    }
+
+    startNew({ projectId: t.projectId });
+  }, []);
 
   const goToList = () => {
     if (builderDirty && !window.confirm("Leave RAMS builder? Unsaved changes will be lost.")) return;

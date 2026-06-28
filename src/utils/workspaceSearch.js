@@ -140,6 +140,8 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
         label: p.name || "Unnamed project",
         subtitle: p.address || "Projects / timesheets",
         viewId: "workers",
+        projectId: p.id,
+        action: "viewProjectDashboard",
       });
     }
   });
@@ -154,6 +156,9 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
         label: r.title || "Untitled RAMS",
         subtitle: [r.jobRef, r.location].filter(Boolean).join(" · ") || "RAMS builder",
         viewId: "rams",
+        ramsId: r.id,
+        projectId: r.projectId || undefined,
+        action: "edit",
       });
     }
   });
@@ -187,11 +192,48 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
         label: s.title || s.description?.slice(0, 60) || "Snag",
         subtitle: s.siteName || s.location || "Snags",
         viewId: "snags",
+        snagId: s.id,
+        projectId: s.projectId || undefined,
+        action: "view",
       });
     }
   });
 
-  const kindOrder = { Open: 0, Worker: 1, Project: 2, RAMS: 3, Permit: 4, Snag: 5 };
+  const surveys = load("survey_reports", []);
+  surveys.forEach((r) => {
+    const blob = [r.title, r.ref, r.projectName, r.surveyor, r.siteAddress].filter(Boolean).join(" ").toLowerCase();
+    if (blob.includes(q)) {
+      hits.push({
+        key: `sr-${r.id}`,
+        kind: "Survey",
+        label: r.title || r.ref || "Survey report",
+        subtitle: [r.ref, r.projectName].filter(Boolean).join(" · ") || "Survey report",
+        viewId: "survey-report",
+        reportId: r.id,
+        projectId: r.projectId || undefined,
+        action: "edit",
+      });
+    }
+  });
+
+  const geoPhotos = load("geo_photos", []);
+  geoPhotos.forEach((g) => {
+    const blob = [g.notes, g.type, g.projectName, g.capturedBy].filter(Boolean).join(" ").toLowerCase();
+    if (blob.includes(q)) {
+      hits.push({
+        key: `gp-${g.id}`,
+        kind: "Geo-photo",
+        label: String(g.notes || g.type || "Geo-photo").slice(0, 64),
+        subtitle: g.projectName || "Geo-photos",
+        viewId: "geo-photos",
+        geoPhotoId: g.id,
+        projectId: g.projectId || undefined,
+        action: "view",
+      });
+    }
+  });
+
+  const kindOrder = { Open: 0, Worker: 1, Project: 2, RAMS: 3, Permit: 4, Snag: 5, Survey: 6, "Geo-photo": 7 };
   hits.sort((a, b) => {
     const pa = pinRecentPriority(a);
     const pb = pinRecentPriority(b);
