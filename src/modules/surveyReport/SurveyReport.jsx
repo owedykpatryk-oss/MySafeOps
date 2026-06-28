@@ -76,6 +76,9 @@ import SurveyEditorStepNav from "./SurveyEditorStepNav";
 import SurveyEditorHero from "./SurveyEditorHero";
 import SurveyListStatsBar from "./SurveyListStatsBar";
 import SurveyProgressRing from "./SurveyProgressRing";
+import SurveyRevisionTimeline from "./SurveyRevisionTimeline";
+import SurveyLivePreviewDock from "./SurveyLivePreviewDock";
+import { burstSurveyCelebration } from "../../utils/surveyCelebration";
 import {
   groupSurveyReportsByProject,
   adjacentSurveyTab,
@@ -557,13 +560,29 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
   );
 }
 
-function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = [], permits = [], reports = [], isNew, onSave, onClose, onPrint }) {
+function ReportEditor({
+  report,
+  projects,
+  ramsDocs,
+  projectPlans,
+  geoPhotos = [],
+  permits = [],
+  reports = [],
+  isNew,
+  onSave,
+  onClose,
+  onPrint,
+  onOpenReport,
+}) {
   const [form, setForm] = useState(() => normalizeSurveyReport({ ...report }));
   const [tab, setTab] = useState("details");
   const [saving, setSaving] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [cadBusy, setCadBusy] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
+  const [livePreviewOpen, setLivePreviewOpen] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1100px)").matches
+  );
   const autoFillRan = useRef(false);
   const draftPromptRan = useRef(false);
 
@@ -583,11 +602,20 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
       const when = draft.savedAt
         ? new Date(draft.savedAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })
         : "recently";
-      if (window.confirm(`Restore unsaved survey report draft from ${when}?`)) {
-        setForm(normalizeSurveyReport(draft.form));
-      } else {
-        sessionStorage.removeItem(SURVEY_DRAFT_KEY);
-      }
+      setConfirmDialog({
+        title: "Restore unsaved draft?",
+        message: `Changes from ${when} were found for this report.`,
+        confirmLabel: "Restore",
+        cancelLabel: "Discard",
+        onConfirm: () => {
+          setForm(normalizeSurveyReport(draft.form));
+          setConfirmDialog(null);
+        },
+        onCancel: () => {
+          sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+          setConfirmDialog(null);
+        },
+      });
     } catch {
       /* ignore */
     }
@@ -638,16 +666,15 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
   );
 
   const previewHtml = useMemo(() => {
-    if (tab !== "preview") return "";
     try {
-      const linkedRams = ramsDocs.find((d) => d.id === deferredForm.linkedRamsId);
+      const linkedRamsPreview = ramsDocs.find((d) => d.id === deferredForm.linkedRamsId);
       return buildSurveyReportHtml(
         {
           ...deferredForm,
           limitationsText: deferredForm.limitationsText || buildLimitationsFromKeys(deferredForm.limitationKeys),
         },
         {
-          ramsTitle: linkedRams?.title || linkedRams?.documentNo || "",
+          ramsTitle: linkedRamsPreview?.title || linkedRamsPreview?.documentNo || "",
           projectLat: deferredFormProject?.lat,
           projectLng: deferredFormProject?.lng,
         }
@@ -655,7 +682,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
     } catch {
       return "";
     }
-  }, [tab, deferredForm, ramsDocs, deferredFormProject]);
+  }, [deferredForm, ramsDocs, deferredFormProject]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v, updatedAt: new Date().toISOString() }));
   const setSection = (k, v) =>
@@ -869,27 +896,66 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
     return payload;
   };
 
-  const handleSave = async (extra = {}) => {
+  const handleSave = async (extra = {}, opts = {}) => {
+    const skipSmartFillPrompt = opts.skipSmartFillPrompt === true;
     setSaving(true);
     try {
+      const wasDraft = form.status !== "final";
       let payload = preparePayload(extra);
       const q = surveyReportQuality(payload);
-      if (q.score < 50 && payload.status !== "final") {
-        const runFill = window.confirm(`Report is ${q.score}% complete. Run Smart fill before saving?`);
-        if (runFill) {
-          const project = projects.find((p) => p.id === payload.projectId);
-          payload = await runSmartFillAll(payload, {
-            project,
-            ramsDocs,
-            projectPlans: projectPlansForForm,
-            linkedRams,
-            useAi: false,
-            permits,
-          });
-          setForm({ ...payload, updatedAt: new Date().toISOString() });
-        }
+      if (!skipSmartFillPrompt && q.score < 50 && payload.status !== "final") {
+        setSaving(false);
+        setConfirmDialog({
+          title: "Report less than 50% complete",
+          message: `Currently ${q.score}%. Run Smart fill to auto-complete missing sections before saving?`,
+          confirmLabel: "Smart fill & save",
+          cancelLabel: "Save as-is",
+          onConfirm: () => {
+            setConfirmDialog(null);
+            (async () => {
+              setSaving(true);
+              try {
+                let p = preparePayload(extra);
+                const project = projects.find((x) => x.id === p.projectId);
+                p = await runSmartFillAll(p, {
+                  project,
+                  ramsDocs,
+                  projectPlans: projectPlansForForm,
+                  linkedRams,
+                  useAi: false,
+                  permits,
+                });
+                setForm({ ...p, updatedAt: new Date().toISOString() });
+                onSave(p);
+                try {
+                  sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+                } catch {
+                  /* ignore */
+                }
+              } finally {
+                setSaving(false);
+              }
+            })();
+          },
+          onCancel: () => {
+            setConfirmDialog(null);
+            setSaving(true);
+            try {
+              onSave(payload);
+              try {
+                sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+              } catch {
+                /* ignore */
+              }
+            } finally {
+              setSaving(false);
+            }
+          },
+        });
+        return;
       }
       onSave(payload);
+      if (wasDraft && payload.status === "final") burstSurveyCelebration();
       try {
         sessionStorage.removeItem(SURVEY_DRAFT_KEY);
       } catch {
@@ -900,32 +966,53 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
     }
   };
 
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const tag = e.target?.tagName?.toLowerCase();
+      const typing =
+        tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable;
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        handleSaveRef.current({}, {});
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setLivePreviewOpen((open) => !open);
+      }
+      if (!typing && e.altKey && e.key === "ArrowRight") {
+        e.preventDefault();
+        const n = adjacentSurveyTab(tab, "next");
+        if (n) setTab(n);
+      }
+      if (!typing && e.altKey && e.key === "ArrowLeft") {
+        e.preventDefault();
+        const p = adjacentSurveyTab(tab, "prev");
+        if (p) setTab(p);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [tab]);
+
   return (
     <ModuleOverlay>
-      <div className="app-module-overlay__panel app-survey-report-editor" style={{ ...ss.card, maxWidth: 920 }}>
-        <SurveyEditorHero form={form} project={formProject} onClose={onClose} onGoToTab={setTab} />
+      <div
+        className={`app-module-overlay__panel app-survey-report-editor${livePreviewOpen ? " app-survey-report-editor--split" : ""}`}
+        style={{ ...ss.card, maxWidth: livePreviewOpen ? 1280 : 920 }}
+      >
+        <SurveyEditorHero
+          form={form}
+          project={formProject}
+          onClose={onClose}
+          onGoToTab={setTab}
+          livePreviewOpen={livePreviewOpen}
+          onToggleLivePreview={setLivePreviewOpen}
+        />
 
-        {(form.changesSincePrevious || []).length > 0 && (
-          <div
-            style={{
-              marginBottom: 12,
-              padding: "10px 12px",
-              borderRadius: 8,
-              background: "#fffbeb",
-              border: "0.5px solid #fcd34d",
-              fontSize: 12,
-            }}
-          >
-            <strong>Changes since {form.parentRevision ? `Rev ${form.parentRevision}` : "previous issue"}:</strong>
-            <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
-              {form.changesSincePrevious.slice(0, 6).map((c, i) => (
-                <li key={i}>
-                  {c.field}: {c.before || "—"} → {c.after || "—"}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <SurveyRevisionTimeline report={form} allReports={reports} onOpenReport={onOpenReport} />
 
         <SmartAssistPanel
           form={form}
@@ -941,6 +1028,8 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
 
         <SurveyEditorStepNav tab={tab} report={form} onTabChange={setTab} />
 
+        <div className={`app-survey-editor-layout${livePreviewOpen ? " app-survey-editor-layout--split" : ""}`}>
+          <div className="app-survey-editor-layout__main">
         <div key={tab} className="app-survey-tab-panel">
         {tab === "details" && (
           <>
@@ -1656,17 +1745,26 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
         )}
 
         {tab === "preview" && (
-          <PrintPreviewFrame
-            html={previewHtml}
-            title="Survey report — A4 preview"
-            height={520}
-            onPrint={() => onPrint(form, linkedRams)}
-            printLabel="Print / save PDF"
-          />
+          livePreviewOpen ? (
+            <div className="app-survey-preview-hint">
+              <p>Live preview is docked on the right.</p>
+              <button type="button" style={ss.btn} onClick={() => setLivePreviewOpen(false)}>
+                Show full-width preview here
+              </button>
+            </div>
+          ) : (
+            <PrintPreviewFrame
+              html={previewHtml}
+              title="Survey report — A4 preview"
+              height={520}
+              onPrint={() => onPrint(form, linkedRams)}
+              printLabel="Print / save PDF"
+            />
+          )
         )}
         </div>
 
-        <div className="app-sticky-footer app-sticky-footer--actions">
+        <div className="app-sticky-footer app-sticky-footer--actions app-survey-editor-shortcuts" title="Ctrl+S save · Alt+←/→ tabs · Ctrl+Shift+P preview">
           {prevTab ? (
             <button type="button" style={ss.btn} onClick={() => setTab(prevTab)}>
               ← Previous
@@ -1707,7 +1805,7 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
                   message: "Issue date and sign-off will be set. You can still edit later if needed.",
                   onConfirm: () => {
                     const finalized = finalizeReportRevision(form);
-                    handleSave(finalized);
+                    handleSave(finalized, { skipSmartFillPrompt: true });
                     setConfirmDialog(null);
                   },
                 })
@@ -1717,12 +1815,23 @@ function ReportEditor({ report, projects, ramsDocs, projectPlans, geoPhotos = []
             </button>
           )}
         </div>
+          </div>
+          <SurveyLivePreviewDock
+            open={livePreviewOpen}
+            onToggle={setLivePreviewOpen}
+            html={previewHtml}
+            onPrint={() => onPrint(form, linkedRams)}
+            height={520}
+          />
+        </div>
         <ConfirmDialog
           open={Boolean(confirmDialog)}
           title={confirmDialog?.title}
           message={confirmDialog?.message}
+          confirmLabel={confirmDialog?.confirmLabel || "Confirm"}
+          cancelLabel={confirmDialog?.cancelLabel || "Cancel"}
           onConfirm={confirmDialog?.onConfirm}
-          onCancel={() => setConfirmDialog(null)}
+          onCancel={confirmDialog?.onCancel || (() => setConfirmDialog(null))}
         />
       </div>
     </ModuleOverlay>
@@ -1930,6 +2039,10 @@ export default function SurveyReport() {
           reports={reports}
           onSave={(r) => persist(r, modal.isNew)}
           onClose={() => setModal(null)}
+          onOpenReport={(id) => {
+            const existing = reports.find((x) => x.id === id);
+            if (existing) setModal({ type: "edit", data: existing, isNew: false });
+          }}
           onPrint={(r) => {
             const linked = ramsDocs.find((d) => d.id === r.linkedRamsId);
             const project = projects.find((p) => p.id === r.projectId);
@@ -2011,6 +2124,18 @@ export default function SurveyReport() {
             </option>
           ))}
         </select>
+        {listSummary.needsWork > 0 && (
+          <button
+            type="button"
+            style={{ ...ss.btn, fontSize: 12, borderColor: "#fcd34d", background: "#fffbeb" }}
+            onClick={() => {
+              setFilter("draft");
+              setListSort("incomplete");
+            }}
+          >
+            Needs work ({listSummary.needsWork})
+          </button>
+        )}
         {missingProjectCount > 0 && (
           <button type="button" style={{ ...ss.btn, fontSize: 12, marginLeft: "auto" }} onClick={batchCreateForProjects}>
             Batch: {missingProjectCount} project{missingProjectCount === 1 ? "" : "s"} without report

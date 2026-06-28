@@ -5,7 +5,14 @@ import SurveyProgressRing from "./SurveyProgressRing";
 import { firstIncompleteSurveyTab, surveyOverallTabProgress } from "./surveyReportListUtils";
 import { SURVEY_EDITOR_TABS } from "./surveyReportEditorNav";
 
-export default function SurveyEditorHero({ form, project, onClose, onGoToTab }) {
+export default function SurveyEditorHero({
+  form,
+  project,
+  onClose,
+  onGoToTab,
+  livePreviewOpen,
+  onToggleLivePreview,
+}) {
   const quality = surveyReportQuality(form);
   const steps = surveyOverallTabProgress(form);
   const nextTab = firstIncompleteSurveyTab(form);
@@ -70,6 +77,15 @@ export default function SurveyEditorHero({ form, project, onClose, onGoToTab }) 
         {nextTab && onGoToTab ? (
           <button type="button" className="app-survey-quality-next" onClick={() => onGoToTab(nextTab)}>
             Continue: {SURVEY_EDITOR_TABS.find((t) => t.id === nextTab)?.label || nextTab}
+          </button>
+        ) : null}
+        {onToggleLivePreview ? (
+          <button
+            type="button"
+            className={`app-survey-live-preview-toggle${livePreviewOpen ? " app-survey-live-preview-toggle--on" : ""}`}
+            onClick={() => onToggleLivePreview(!livePreviewOpen)}
+          >
+            {livePreviewOpen ? "Hide live preview" : "Show live preview"}
           </button>
         ) : null}
       </div>
