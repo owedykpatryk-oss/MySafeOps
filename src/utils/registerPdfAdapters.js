@@ -1,6 +1,8 @@
 /**
  * Per-module PDF export adapters — flatten nested registers & full-detail exports.
  */
+import { geoPhotoPresetLabel } from "./geoPhotoPresets";
+import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
 
 const he = (s) =>
   String(s ?? "")
@@ -55,6 +57,82 @@ export function flattenCdmPackRow(pack) {
   };
 }
 
+const RIDDOR_TYPE_LABELS = {
+  fatality: "Death / fatality",
+  specified: "Specified injury",
+  over7day: "Over-7-day incapacitation",
+  dangerous_occurrence: "Dangerous occurrence",
+  gas_incident: "Gas incident",
+  disease: "Occupational disease",
+  public_injury: "Public injury (non-fatal)",
+};
+
+export function flattenRiddorRow(row) {
+  return {
+    type: RIDDOR_TYPE_LABELS[row?.riddorType] || row?.riddorType || "—",
+    incidentDate: row?.incidentDate || "—",
+    location: row?.location || "—",
+    status: row?.status || "—",
+    reportedToHSE: row?.reportedToHSE ? "Yes" : "No",
+  };
+}
+
+export function flattenObservationRow(row) {
+  return {
+    date: row?.obsDate || "—",
+    polarity: row?.polarity === "positive" ? "Positive" : "At risk",
+    project: row?.projectName || "—",
+    detail: String(row?.detail || "").slice(0, 120) || "—",
+    observer: row?.observer || "—",
+    action: String(row?.actionTaken || "").slice(0, 80) || "—",
+  };
+}
+
+function formatCoords(photo) {
+  const lat = Number(photo?.latitude);
+  const lng = Number(photo?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "—";
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
+export function flattenGeoPhotoRow(photo) {
+  return {
+    type: geoPhotoPresetLabel(photo?.type),
+    project: photo?.projectName || "—",
+    captured: photo?.timestampUtc
+      ? new Date(photo.timestampUtc).toLocaleString("en-GB", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "—",
+    coordinates: formatCoords(photo),
+    bearing:
+      photo?.bearing != null && !Number.isNaN(Number(photo.bearing)) ? `${Math.round(Number(photo.bearing))}°` : "—",
+    inReport: photo?.includeInReport ? "Yes" : "No",
+    notes: String(photo?.notes || "").slice(0, 100) || "—",
+  };
+}
+
+function geoPhotoImageFormat(url) {
+  const s = String(url || "").toLowerCase();
+  if (s.includes("image/jpeg") || s.includes("image/jpg") || s.includes(".jpg") || s.includes(".jpeg")) return "JPEG";
+  if (s.includes("image/webp")) return "WEBP";
+  return "PNG";
+}
+
+function tryAddGeoPhotoImage(pdf, url, x, y, w, h) {
+  if (!url || !String(url).startsWith("data:image")) return false;
+  try {
+    pdf.addImage(String(url), geoPhotoImageFormat(url), x, y, w, h, undefined, "FAST");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** @type {Record<string, { flatten?: (rows: object[]) => object[]; columns: { k: string; l: string }[]; detailExport?: boolean }>} */
 export const REGISTER_PDF_ADAPTERS = {
   "daily-briefing": {
@@ -88,6 +166,38 @@ export const REGISTER_PDF_ADAPTERS = {
       { k: "startDate", l: "Start" },
       { k: "cdmChecks", l: "CDM checks" },
       { k: "status", l: "Status" },
+    ],
+  },
+  riddor: {
+    flatten: (rows) => (rows || []).map(flattenRiddorRow),
+    columns: [
+      { k: "type", l: "Type" },
+      { k: "incidentDate", l: "Incident date" },
+      { k: "location", l: "Location" },
+      { k: "status", l: "Status" },
+      { k: "reportedToHSE", l: "Reported to HSE" },
+    ],
+  },
+  observations: {
+    flatten: (rows) => (rows || []).map(flattenObservationRow),
+    columns: [
+      { k: "date", l: "Date" },
+      { k: "polarity", l: "Type" },
+      { k: "project", l: "Project" },
+      { k: "detail", l: "Observation" },
+      { k: "observer", l: "Observer" },
+    ],
+  },
+  "geo-photos": {
+    detailExport: true,
+    flatten: (rows) => (rows || []).map(flattenGeoPhotoRow),
+    columns: [
+      { k: "type", l: "Type" },
+      { k: "project", l: "Project" },
+      { k: "captured", l: "Captured" },
+      { k: "coordinates", l: "Coordinates" },
+      { k: "bearing", l: "Bearing" },
+      { k: "inReport", l: "In report" },
     ],
   },
 };
@@ -257,6 +367,91 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
       pdf.setFontSize(8);
       pdf.setTextColor(120, 120, 120);
       pdf.text("No attendees marked present.", startX, y + 3);
+    }
+  });
+}
+
+/**
+ * Geo-photo gallery PDF — up to two photos per A4 page with image, GPS and bearing.
+ * @param {import("jspdf").jsPDF} pdf
+ */
+export function renderGeoPhotoDetailPages(pdf, photos, helpers) {
+  const { drawPdfPageHeader, renderRegisterTable, org, rgb, theme, label } = helpers;
+  const rows = photos || [];
+
+  if (!rows.length) {
+    let y = drawPdfPageHeader(pdf, {
+      org,
+      title: label,
+      subtitle: "No geo-photos in this export",
+      rgb,
+      theme,
+    });
+    renderRegisterTable(pdf, {
+      rows: [],
+      columns: REGISTER_PDF_ADAPTERS["geo-photos"].columns,
+      sectionTitle: label,
+      org,
+      rgb,
+      theme,
+      startY: y + 2,
+    });
+    return;
+  }
+
+  rows.forEach((photo, index) => {
+    if (index > 0) pdf.addPage();
+    const preset = geoPhotoPresetLabel(photo.type);
+    let y = drawPdfPageHeader(pdf, {
+      org,
+      title: "Geo-photo",
+      subtitle: `${photo.projectName || "Site"} · ${preset}`,
+      rgb,
+      theme,
+    });
+    y += 4;
+
+    const imgUrl = geoPhotoDisplayUrl(photo);
+    const imgW = 186;
+    const imgH = 105;
+    if (imgUrl) {
+      const added = tryAddGeoPhotoImage(pdf, imgUrl, 12, y, imgW, imgH);
+      if (!added) {
+        pdf.setFont("helvetica", "italic");
+        pdf.setFontSize(9);
+        pdf.setTextColor(120, 120, 120);
+        pdf.text("Image could not be embedded (use on-device capture or synced URL).", 12, y + 8);
+      }
+      y += imgH + 6;
+    }
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(9);
+    pdf.setTextColor(51, 65, 85);
+    const meta = [
+      `Captured: ${photo.timestampUtc ? new Date(photo.timestampUtc).toLocaleString("en-GB") : "—"}`,
+      photo.capturedBy ? `By: ${photo.capturedBy}` : "",
+      `Coordinates: ${formatCoords(photo)}`,
+      photo.bearing != null && !Number.isNaN(Number(photo.bearing))
+        ? `Bearing: ${Math.round(Number(photo.bearing))}°`
+        : "",
+      photo.includeInReport ? "Included in survey report pack" : "",
+    ].filter(Boolean);
+    meta.forEach((line) => {
+      pdf.text(line, 12, y);
+      y += 4.5;
+    });
+
+    if (photo.notes?.trim()) {
+      y += 2;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      pdf.text("NOTES", 12, y);
+      y += 4;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8.5);
+      const noteLines = pdf.splitTextToSize(String(photo.notes).trim(), 186);
+      pdf.text(noteLines, 12, y);
     }
   });
 }

@@ -5,6 +5,7 @@ import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -185,7 +186,16 @@ export default function SafetyObservations() {
                       type="button"
                       style={{ ...ss.btn, color: "#A32D2D" }}
                       onClick={() => {
-                        if (confirm("Delete?")) {
+                        if (
+                          softDeleteToRecycleBin({
+                            moduleId: "observations",
+                            moduleLabel: "Safety observations",
+                            itemType: "observation",
+                            itemLabel: String(r.detail || r.location || r.id).slice(0, 80),
+                            sourceKey: "safety_observations",
+                            payload: r,
+                          })
+                        ) {
                           setItems((p) => p.filter((x) => x.id !== r.id));
                           pushAudit({ action: "observation_delete", entity: "observation", detail: r.id });
                         }

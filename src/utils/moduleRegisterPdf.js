@@ -3,7 +3,7 @@ import { loadOrgScoped } from "./orgStorage";
 import { sanitizePdfFileSegment } from "./pdfFileName";
 import { MODULE_PDF_REGISTRY, canExportModulePdf } from "../navigation/moduleCatalogMeta";
 import { MORE_SECTIONS, getMoreTabsForSection } from "../navigation/appModules";
-import { prepareRegisterExport, renderDailyBriefingDetailPages } from "./registerPdfAdapters";
+import { prepareRegisterExport, renderDailyBriefingDetailPages, renderGeoPhotoDetailPages } from "./registerPdfAdapters";
 
 let jsPDFPromise = null;
 async function loadJsPDF() {
@@ -52,6 +52,7 @@ function humanizeKey(key) {
 
 function formatCell(value) {
   if (value == null || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value))
     return value.map((x) => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(", ").slice(0, 160);
   if (typeof value === "object") return JSON.stringify(value).slice(0, 120);
@@ -365,24 +366,36 @@ function renderModulesIntoPdf(pdf, { org, rgb, theme, bundleTitle, bundleSubtitl
 /**
  * Export one module register to A4 PDF.
  * @param {string} moduleId
- * @param {{ label?: string }} [opts]
+ * @param {{ label?: string; summary?: boolean; rowsOverride?: object[]; filterNote?: string | null }} [opts]
  */
 export async function exportModuleRegisterPdf(moduleId, opts = {}) {
   const jsPDF = await loadJsPDF();
-  const { rows, cfg } = loadRegisterRows(moduleId);
+  const { rows: storedRows, cfg } = loadRegisterRows(moduleId);
   if (!cfg) {
     return { ok: false, error: "no_pdf_config" };
   }
+  const rows = Array.isArray(opts.rowsOverride) ? opts.rowsOverride : storedRows;
   const org = getOrgSettings();
   const theme = getPdfTheme(org);
   const rgb = hexToRgb(org.primaryColor);
   const label = opts.label || humanizeKey(moduleId);
   const prepared = prepareRegisterExport(moduleId, rows, { summary: opts.summary === true });
+  const filterSuffix = opts.filterNote ? ` · ${opts.filterNote}` : rows.length !== storedRows.length ? ` · ${rows.length} of ${storedRows.length} shown` : "";
+  const baseSubtitle = org.pdfHeader ? String(org.pdfHeader).slice(0, 90) : "Register export";
 
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
 
   if (prepared.mode === "detail" && moduleId === "daily-briefing") {
     renderDailyBriefingDetailPages(pdf, prepared.rows, {
+      drawPdfPageHeader: (doc, meta) => drawPdfPageHeader(doc, meta),
+      renderRegisterTable,
+      org,
+      rgb,
+      theme,
+      label,
+    });
+  } else if (prepared.mode === "detail" && moduleId === "geo-photos") {
+    renderGeoPhotoDetailPages(pdf, prepared.rows, {
       drawPdfPageHeader: (doc, meta) => drawPdfPageHeader(doc, meta),
       renderRegisterTable,
       org,
@@ -398,7 +411,7 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
     const y = drawPdfPageHeader(pdf, {
       org,
       title: label,
-      subtitle: org.pdfHeader ? String(org.pdfHeader).slice(0, 90) : "Register export",
+      subtitle: `${baseSubtitle}${filterSuffix}`.slice(0, 120),
       rgb,
       theme,
     });

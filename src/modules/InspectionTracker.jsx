@@ -3,6 +3,7 @@ import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
@@ -244,6 +245,7 @@ export default function InspectionTracker() {
       <RegisterModuleShell
         moduleId="inspections"
         smartContext={{ items }}
+        pdfExportRows={filtered}
         stats={
           items.length > 0
             ? [
@@ -312,7 +314,16 @@ export default function InspectionTracker() {
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flexShrink: 0 }}>
                     <button type="button" onClick={() => setModal({ type: "form", data: item })} style={{ ...ss.btn, fontSize: 12, padding: "4px 10px" }}>Edit</button>
-                    <button type="button" onClick={() => { if (confirm("Delete?")) setItems((prev) => prev.filter((x) => x.id !== item.id)); }} style={{ ...ss.btn, fontSize: 12, padding: "4px 8px", color: "#A32D2D", borderColor: "#F09595" }}>×</button>
+                    <button type="button" onClick={() => {
+                      if (softDeleteToRecycleBin({
+                        moduleId: "inspections",
+                        moduleLabel: "Inspection tracker",
+                        itemType: "inspection",
+                        itemLabel: item.name || item.serialNo || item.id,
+                        sourceKey: "inspection_records",
+                        payload: item,
+                      })) setItems((prev) => prev.filter((x) => x.id !== item.id));
+                    }} style={{ ...ss.btn, fontSize: 12, padding: "4px 8px", color: "#A32D2D", borderColor: "#F09595" }}>×</button>
                   </div>
                 </div>
               );

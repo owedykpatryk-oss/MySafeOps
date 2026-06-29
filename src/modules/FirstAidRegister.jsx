@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -145,7 +146,16 @@ export default function FirstAidRegister() {
                       type="button"
                       style={{ ...ss.btn, color: "#A32D2D" }}
                       onClick={() => {
-                        if (confirm("Delete?")) {
+                        if (
+                          softDeleteToRecycleBin({
+                            moduleId: "first-aid",
+                            moduleLabel: "First aid register",
+                            itemType: "first_aider",
+                            itemLabel: r.name || r.qualification || r.id,
+                            sourceKey: "first_aid_register",
+                            payload: r,
+                          })
+                        ) {
                           setItems((p) => p.filter((x) => x.id !== r.id));
                           pushAudit({ action: "first_aid_delete", entity: "first_aid", detail: r.id });
                         }

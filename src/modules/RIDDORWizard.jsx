@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { escapeHtml, safeCssColor, safeImageSrc, openPrintWindow } from "../utils/htmlEscape.js";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -432,6 +434,7 @@ function RIDDORForm({ report, onSave, onClose }) {
 export default function RIDDORRegister() {
   const [reports, setReports] = useState(()=>load("riddor_reports",[]));
   const [modal, setModal] = useState(null);
+  const listPg = useRegisterListPaging(40);
 
   useEffect(()=>{ save("riddor_reports",reports); },[reports]);
 
@@ -471,6 +474,7 @@ export default function RIDDORRegister() {
       <RegisterModuleShell
         moduleId="riddor"
         smartContext={{ items: reports, reports }}
+        pdfExportRows={reports}
         stats={buildRegisterModuleStats("riddor", reports)}
       >
       <div style={{ padding:"10px 14px", background:"#E6F1FB", border:"0.5px solid #B5D4F4", borderRadius:8, fontSize:12, color:"#0C447C", marginBottom:20, lineHeight:1.6 }}>
@@ -484,7 +488,7 @@ export default function RIDDORRegister() {
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {reports.map(r=>{
+          {listPg.visible(reports).map(r=>{
             const def = RIDDOR_TYPES[r.riddorType]||{};
             const status = getDeadlineStatus(r);
             return (
@@ -505,11 +509,25 @@ export default function RIDDORRegister() {
                 <div style={{ display:"flex", gap:6, flexShrink:0, flexWrap:"wrap" }}>
                   <button type="button" onClick={()=>printRiddorF2508(r)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print F2508</button>
                   <button onClick={()=>setModal({type:"form",data:r})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
-                  <button onClick={()=>{ if(confirm("Delete?")) setReports(prev=>prev.filter(x=>x.id!==r.id)); }} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
+                  <button onClick={()=>{
+                    if (softDeleteToRecycleBin({
+                      moduleId: "riddor",
+                      moduleLabel: "RIDDOR",
+                      itemType: "riddor_report",
+                      itemLabel: (RIDDOR_TYPES[r.riddorType]?.label) || r.injuredName || r.id,
+                      sourceKey: "riddor_reports",
+                      payload: r,
+                    })) setReports(prev=>prev.filter(x=>x.id!==r.id));
+                  }} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
                 </div>
               </div>
             );
           })}
+          {listPg.hasMore(reports) ? (
+            <button type="button" style={ss.btn} onClick={listPg.showMore}>
+              Show more ({listPg.remaining(reports)} remaining)
+            </button>
+          ) : null}
         </div>
       )}
       </RegisterModuleShell>

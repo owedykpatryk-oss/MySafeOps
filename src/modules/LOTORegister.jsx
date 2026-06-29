@@ -5,6 +5,7 @@ import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -519,7 +520,17 @@ export default function LOTORegister() {
                       type="button"
                       style={{ ...ss.btn, color: "#A32D2D" }}
                       onClick={() => {
-                        if (confirm("Delete this LOTO workflow?")) {
+                        if (
+                          softDeleteToRecycleBin({
+                            moduleId: "loto",
+                            moduleLabel: "LOTO register",
+                            itemType: "loto_workflow",
+                            itemLabel: r.equipmentName || r.equipmentTag || r.id,
+                            sourceKey: STORAGE_KEY,
+                            payload: r,
+                            confirmMessage: "Delete this LOTO workflow? It moves to Recycle Bin for 7 days.",
+                          })
+                        ) {
                           setItems((p) => p.filter((x) => x.id !== r.id));
                           pushAudit({ action: "loto_workflow_delete", entity: "loto", detail: r.id });
                         }

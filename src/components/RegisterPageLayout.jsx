@@ -1,5 +1,6 @@
 import PageHero from "./PageHero";
 import RegisterModuleShell from "./RegisterModuleShell";
+import RegisterEmptyState from "./RegisterEmptyState";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 
 /**
@@ -17,6 +18,8 @@ export default function RegisterPageLayout({
   filters,
   right,
   exportModuleLabel,
+  exportRows = null,
+  exportFilterNote = null,
   before,
   children,
   emptyMessage,
@@ -38,23 +41,20 @@ export default function RegisterPageLayout({
         exportModuleLabel={exportModuleLabel || (typeof title === "string" ? title : undefined)}
         right={right}
       />
-      <RegisterModuleShell moduleId={moduleId} smartContext={ctx} stats={computedStats} filters={filters}>
+      <RegisterModuleShell
+        moduleId={moduleId}
+        smartContext={ctx}
+        stats={computedStats}
+        filters={filters}
+        pdfExportRows={exportRows}
+        pdfExportNote={exportFilterNote}
+      >
         {!list.length && emptyMessage ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "3rem 1rem",
-              border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)",
-              borderRadius: 12,
-            }}
-          >
-            <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>{emptyMessage}</p>
-            {emptyActionLabel && onEmptyAction ? (
-              <button type="button" onClick={onEmptyAction} style={{ padding: "10px 14px", borderRadius: 6, border: "0.5px solid #085041", background: "#0d9488", color: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", minHeight: 44 }}>
-                {emptyActionLabel}
-              </button>
-            ) : null}
-          </div>
+          <RegisterEmptyState
+            title={emptyMessage}
+            primaryAction={onEmptyAction}
+            primaryLabel={emptyActionLabel}
+          />
         ) : (
           children
         )}

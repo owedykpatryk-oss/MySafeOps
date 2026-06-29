@@ -10,7 +10,7 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
-import { pushRecycleBinItem } from "../utils/recycleBin";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 
 const genId = () => `snag_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (iso) => {
@@ -581,17 +581,19 @@ export default function SnagRegister() {
   };
   const deleteSnag = (id) => {
     if (!caps.deleteRecords) return;
-    if (!confirm("Delete this snag item?")) return;
     const victim = snags.find((s) => s.id === id);
-    if (victim) {
-      pushRecycleBinItem({
+    if (!victim) return;
+    if (
+      !softDeleteToRecycleBin({
         moduleId: "snags",
         moduleLabel: "Snags",
         itemType: "snag",
         itemLabel: victim.ref || victim.title || victim.id,
         sourceKey: "snags",
         payload: victim,
-      });
+      })
+    ) {
+      return;
     }
     setSnags((prev) => prev.filter((s) => s.id !== id));
     setModal(null);
@@ -814,6 +816,7 @@ export default function SnagRegister() {
       <RegisterModuleShell
         moduleId="snags"
         smartContext={{ items: snags }}
+        pdfExportRows={filtered}
         stats={
           snags.length > 0
             ? [

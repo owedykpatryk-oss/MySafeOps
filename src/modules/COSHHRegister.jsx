@@ -361,6 +361,7 @@ export default function COSHHRegister() {
       <RegisterModuleShell
         moduleId="coshh"
         smartContext={{ items }}
+        pdfExportRows={filtered}
         stats={buildRegisterModuleStats("coshh", items)}
         filters={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

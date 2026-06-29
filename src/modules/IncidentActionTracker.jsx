@@ -412,6 +412,7 @@ export default function IncidentActionTracker() {
       <RegisterModuleShell
         moduleId="incident-actions"
         smartContext={{ items }}
+        pdfExportRows={filtered}
         stats={buildRegisterModuleStats("incident-actions", items)}
       >
 

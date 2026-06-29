@@ -77,6 +77,26 @@ export function pushRecycleBinItem({
   return entry;
 }
 
+const DEFAULT_SOFT_DELETE_MSG = "Delete this record? It moves to Recycle Bin for 7 days.";
+
+/**
+ * Confirm dialog + queue payload for 7-day restore. Returns true when the caller should remove from live storage.
+ */
+export function softDeleteToRecycleBin({
+  confirmMessage = DEFAULT_SOFT_DELETE_MSG,
+  moduleId,
+  moduleLabel,
+  itemType = "item",
+  itemLabel,
+  sourceKey,
+  payload,
+}) {
+  if (!payload || typeof payload !== "object") return false;
+  if (!window.confirm(confirmMessage)) return false;
+  pushRecycleBinItem({ moduleId, moduleLabel, itemType, itemLabel, sourceKey, payload });
+  return true;
+}
+
 export function deleteRecycleBinEntry(entryId) {
   const current = readCleanBin();
   const next = current.filter((x) => x.id !== entryId);

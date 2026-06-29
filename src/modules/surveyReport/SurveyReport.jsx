@@ -2274,6 +2274,7 @@ export default function SurveyReport() {
         badgeText="SR"
         title="Survey report"
         lead="PAS128 survey reports — cover page, utility schedule, PDF download, revision control, geo-photo import and branded A4 print."
+        suppressRegisterPdf
         right={
           <button type="button" style={ss.btnP} onClick={createNew}>
             + New report

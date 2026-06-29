@@ -8,6 +8,7 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { escapeHtml, openPrintWindow } from "../utils/htmlEscape.js";
 import { MS_TEMPLATE_DEFS } from "./msStepTemplates";
@@ -546,7 +547,24 @@ export default function MethodStatement() {
     setModal(null);
   };
 
-  const deleteDoc = (id) => { if(confirm("Delete this method statement?")) setDocs(prev=>prev.filter(d=>d.id!==id)); };
+  const deleteDoc = (id) => {
+    const doc = docs.find((d) => d.id === id);
+    if (!doc) return;
+    if (
+      !softDeleteToRecycleBin({
+        moduleId: "method-statement",
+        moduleLabel: "Method statements",
+        itemType: "method_statement",
+        itemLabel: doc.title || doc.id,
+        sourceKey: "method_statements",
+        payload: doc,
+        confirmMessage: "Delete this method statement? It moves to Recycle Bin for 7 days.",
+      })
+    ) {
+      return;
+    }
+    setDocs((prev) => prev.filter((d) => d.id !== id));
+  };
 
   const filtered = useMemo(
     () =>
@@ -578,6 +596,7 @@ export default function MethodStatement() {
       <RegisterModuleShell
         moduleId="method-statement"
         smartContext={{ items: docs, docs }}
+        pdfExportRows={filtered}
         stats={buildRegisterModuleStats("method-statement", docs)}
         filters={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

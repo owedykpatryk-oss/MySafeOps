@@ -26,6 +26,10 @@ describe("canExportModulePdf", () => {
       expect(canExportModulePdf(moduleId)).toBe(true);
     }
   });
+
+  it("includes geo-photos register", () => {
+    expect(MODULE_PDF_REGISTRY["geo-photos"]?.key).toBe("geo_photos");
+  });
 });
 
 describe("exportAllHseRegistersPdf", () => {

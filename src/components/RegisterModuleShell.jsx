@@ -1,5 +1,6 @@
 import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { getRegisterSmartTips } from "../utils/registerModuleSmart";
+import { useRegisterPdfExportOverride } from "../context/RegisterPdfExportContext";
 
 /**
  * Shared layout for More register modules — stats, smart tips, filters, content.
@@ -9,8 +10,11 @@ export default function RegisterModuleShell({
   smartContext = {},
   stats = [],
   filters = null,
+  pdfExportRows = null,
+  pdfExportNote = null,
   children,
 }) {
+  useRegisterPdfExportOverride(moduleId, pdfExportRows, pdfExportNote);
   const tips = moduleId ? getRegisterSmartTips(moduleId, smartContext) : [];
 
   const runTip = (tip) => {

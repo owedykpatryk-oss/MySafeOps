@@ -5,6 +5,7 @@ import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -187,7 +188,16 @@ export default function PlantEquipmentRegister() {
                       type="button"
                       style={{ ...ss.btn, color: "#A32D2D" }}
                       onClick={() => {
-                        if (confirm("Delete?")) {
+                        if (
+                          softDeleteToRecycleBin({
+                            moduleId: "plant",
+                            moduleLabel: "Plant & equipment",
+                            itemType: "plant_record",
+                            itemLabel: r.assetRef || r.description || r.id,
+                            sourceKey: "plant_register",
+                            payload: r,
+                          })
+                        ) {
                           setItems((p) => p.filter((x) => x.id !== r.id));
                           pushAudit({ action: "plant_delete", entity: "plant", detail: r.id });
                         }

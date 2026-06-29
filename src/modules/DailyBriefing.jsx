@@ -6,6 +6,7 @@ import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { escapeHtml, safeImageSrc, openPrintWindow } from "../utils/htmlEscape.js";
@@ -957,7 +958,21 @@ export default function DailyBriefing() {
   };
 
   const deleteBriefing = (id) => {
-    if (confirm("Delete this briefing record?")) setBriefings((prev) => prev.filter((b) => b.id !== id));
+    const brief = briefings.find((b) => b.id === id);
+    if (!brief) return;
+    if (
+      !softDeleteToRecycleBin({
+        moduleId: "daily-briefing",
+        moduleLabel: "Daily briefing",
+        itemType: "briefing",
+        itemLabel: `${brief.location || "Site"} · ${brief.date || ""}`.trim(),
+        sourceKey: "daily_briefings",
+        payload: brief,
+      })
+    ) {
+      return;
+    }
+    setBriefings((prev) => prev.filter((b) => b.id !== id));
   };
 
   const todayCount = briefings.filter((b) => b.date === today()).length;
@@ -1025,6 +1040,7 @@ export default function DailyBriefing() {
       <RegisterModuleShell
         moduleId="daily-briefing"
         smartContext={{ briefings, workers, projects }}
+        pdfExportRows={filtered}
         stats={
           briefings.length > 0
             ? [

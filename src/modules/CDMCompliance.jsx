@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -392,6 +393,7 @@ function printCDM(form) {
 export default function CDMCompliance() {
   const [packs, setPacks] = useState(()=>load("cdm_packs",[]));
   const [modal, setModal] = useState(null);
+  const listPg = useRegisterListPaging(40);
 
   useEffect(()=>{ save("cdm_packs",packs); },[packs]);
 
@@ -495,7 +497,7 @@ export default function CDMCompliance() {
           </div>
         ) : (
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {packs.map(pack=>{
+            {listPg.visible(packs).map(pack=>{
               const notifiable = computeNotifiable(pack);
               const checked = Object.values(pack.dutyholderChecks||{}).filter(Boolean).length;
               const cppPct = Math.round((CPP_SECTIONS.filter(s=>pack.cppSections?.[s.key]?.trim()).length/CPP_SECTIONS.length)*100);
@@ -539,6 +541,11 @@ export default function CDMCompliance() {
                 </div>
               );
             })}
+            {listPg.hasMore(packs) ? (
+              <button type="button" style={ss.btn} onClick={listPg.showMore}>
+                Show more ({listPg.remaining(packs)} remaining)
+              </button>
+            ) : null}
           </div>
         )}
       </RegisterModuleShell>

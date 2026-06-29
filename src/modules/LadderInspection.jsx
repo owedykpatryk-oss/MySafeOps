@@ -5,6 +5,7 @@ import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -194,7 +195,16 @@ export default function LadderInspection() {
                       type="button"
                       style={{ ...ss.btn, color: "#A32D2D" }}
                       onClick={() => {
-                        if (confirm("Delete?")) {
+                        if (
+                          softDeleteToRecycleBin({
+                            moduleId: "ladders",
+                            moduleLabel: "Ladder inspections",
+                            itemType: "ladder_inspection",
+                            itemLabel: r.ladderRef || r.location || r.id,
+                            sourceKey: "ladder_inspections",
+                            payload: r,
+                          })
+                        ) {
                           setItems((p) => p.filter((x) => x.id !== r.id));
                           pushAudit({ action: "ladder_delete", entity: "ladder", detail: r.id });
                         }

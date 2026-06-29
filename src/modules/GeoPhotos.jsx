@@ -18,6 +18,7 @@ import { ensureProjectLinked } from "../utils/projectRequiredGate";
 import { isSurveyWorkflowEnabled } from "../utils/projectHubIndustry";
 import { buildGeoPhotoMobilisationChecklist, geoPhotoGroupCoverage } from "../utils/geoPhotoMobilisation";
 import { geoPhotoDisplayUrl } from "../utils/geoPhotoMedia";
+import { useRegisterPdfExportOverride } from "../context/RegisterPdfExportContext";
 import {
   downloadGeoJson,
   nextGeoPhotoReportOrder,
@@ -331,6 +332,9 @@ export default function GeoPhotos() {
         (a, b) => new Date(b.timestampUtc || b.createdAt).getTime() - new Date(a.timestampUtc || a.createdAt).getTime()
       );
   }, [safePhotos, filterProject, filterReport, filterType, query]);
+
+  const pdfExportNote = hasActiveFilters ? `Filtered view · ${filtered.length} photo(s)` : null;
+  useRegisterPdfExportOverride("geo-photos", filtered, pdfExportNote);
 
   const reportPack = useMemo(
     () => (filterProject ? projectGeoPhotosForReport(safePhotos, filterProject) : []),

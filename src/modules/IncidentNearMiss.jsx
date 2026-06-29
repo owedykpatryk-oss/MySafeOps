@@ -667,6 +667,7 @@ export default function IncidentNearMiss() {
       <RegisterModuleShell
         moduleId="incidents"
         smartContext={{ items }}
+        pdfExportRows={filtered}
         stats={buildRegisterModuleStats("incidents", items)}
         filters={
           <div style={{ marginBottom: 0, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

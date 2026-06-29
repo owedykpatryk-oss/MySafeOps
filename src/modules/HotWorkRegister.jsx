@@ -5,6 +5,7 @@ import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -445,7 +446,16 @@ export default function HotWorkRegister() {
                       type="button"
                       style={{ ...ss.btn, color: "#A32D2D" }}
                       onClick={() => {
-                        if (confirm("Delete?")) {
+                        if (
+                          softDeleteToRecycleBin({
+                            moduleId: "hot-work",
+                            moduleLabel: "Hot work register",
+                            itemType: "hot_work",
+                            itemLabel: r.permitRef || r.location || r.id,
+                            sourceKey: "hot_work_register",
+                            payload: r,
+                          })
+                        ) {
                           setItems((p) => p.filter((x) => x.id !== r.id));
                           pushAudit({ action: "hot_work_delete", entity: "hot_work", detail: r.id });
                         }
