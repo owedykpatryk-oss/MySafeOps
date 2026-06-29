@@ -1,3 +1,5 @@
+import { dataUrlToArrayBuffer } from "./dataUrlBlob";
+
 /**
  * Rasterize first page of a PDF data URL for plan markup (optional pdfjs-dist).
  * @returns {Promise<string|null>} PNG data URL or null if unavailable
@@ -12,8 +14,7 @@ export async function rasterizePdfDataUrl(dataUrl, { maxWidth = 2400 } = {}) {
         import.meta.url
       ).toString();
     }
-    const resp = await fetch(dataUrl);
-    const buf = await resp.arrayBuffer();
+    const buf = await dataUrlToArrayBuffer(dataUrl);
     const doc = await pdfjs.getDocument({ data: buf }).promise;
     const page = await doc.getPage(1);
     const viewport = page.getViewport({ scale: 1 });

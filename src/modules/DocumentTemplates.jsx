@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 
 const genId = () => `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -43,6 +44,26 @@ export default function DocumentTemplates() {
     setTemplates((p) => [{ id: genId(), name: name.trim(), type, payload, createdAt: new Date().toISOString() }, ...p]);
     setName("");
     pushAudit({ action: "template_save", entity: type, detail: name.trim() });
+  };
+
+  const deleteTemplate = (id) => {
+    const victim = templates.find((x) => x.id === id);
+    if (!victim) return;
+    if (
+      !softDeleteToRecycleBin({
+        confirmMessage: "Delete template? It moves to Recycle Bin for 7 days.",
+        moduleId: "document-templates",
+        moduleLabel: "Document templates",
+        itemType: "document_template",
+        itemLabel: victim.name || id,
+        sourceKey: "document_templates",
+        payload: victim,
+      })
+    ) {
+      return;
+    }
+    setTemplates((p) => p.filter((x) => x.id !== id));
+    pushAudit({ action: "template_delete", entity: victim.type, detail: victim.name });
   };
 
   const cloneToLive = (t) => {
@@ -111,13 +132,7 @@ export default function DocumentTemplates() {
               <button type="button" style={ss.btnP} onClick={() => cloneToLive(t)}>
                 Clone to new draft
               </button>
-              <button
-                type="button"
-                style={ss.btn}
-                onClick={() => {
-                  if (confirm("Delete template?")) setTemplates((p) => p.filter((x) => x.id !== t.id));
-                }}
-              >
+              <button type="button" style={ss.btn} onClick={() => deleteTemplate(t.id)}>
                 Delete
               </button>
             </div>

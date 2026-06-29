@@ -13,6 +13,7 @@ import {
   googleMapsDirectionsUrl,
 } from "../utils/emergencySiteExtras";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 
 const genRowId = () => `ec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
@@ -63,7 +64,21 @@ export default function EmergencyContacts() {
   };
 
   const removeRow = (id) => {
-    if (!confirm("Remove this contact line?")) return;
+    const victim = rows.find((x) => x.id === id);
+    if (!victim) return;
+    if (
+      !softDeleteToRecycleBin({
+        confirmMessage: "Remove this contact line? It moves to Recycle Bin for 7 days.",
+        moduleId: "emergency",
+        moduleLabel: "Emergency contacts",
+        itemType: "emergency_contact",
+        itemLabel: victim.label || victim.phone || id,
+        sourceKey: "emergency_contacts",
+        payload: victim,
+      })
+    ) {
+      return;
+    }
     setRows((r) => r.filter((x) => x.id !== id));
     pushAudit({ action: "emergency_contacts_remove", entity: "contacts", detail: id });
   };
@@ -80,6 +95,7 @@ export default function EmergencyContacts() {
         moduleId="emergency"
         smartContext={{ items: rows }}
         stats={buildRegisterModuleStats("emergency", rows)}
+        pdfExportRows={rows}
       >
 
 

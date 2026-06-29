@@ -2,6 +2,7 @@
  * Geo-photo image storage — prefer R2 when configured; keep JPEG data URL as offline fallback.
  */
 import { uploadFileToR2Storage, isR2StorageConfigured } from "../lib/r2Storage";
+import { dataUrlToBlob } from "./dataUrlBlob";
 import { getOrgId } from "./orgStorage";
 
 /** URL for thumbnails / survey import (R2 public URL or embedded data). */
@@ -21,8 +22,7 @@ export async function uploadGeoPhotoToR2(dataUrl, opts = {}) {
   if (!orgId || orgId === "default") return null;
 
   try {
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
+    const blob = dataUrlToBlob(dataUrl);
     const safeProject = String(opts.projectId || "unassigned")
       .replace(/[^a-zA-Z0-9_-]/g, "_")
       .slice(0, 48);

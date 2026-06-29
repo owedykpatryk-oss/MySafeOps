@@ -6,7 +6,7 @@ import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
-import { pushRecycleBinItem } from "../utils/recycleBin";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import GeoPhotosMap from "../components/geoPhotos/GeoPhotosMap";
@@ -423,17 +423,20 @@ export default function GeoPhotos() {
   };
 
   const handleDelete = (id) => {
-    if (!window.confirm("Delete this geo-photo?")) return;
     const victim = safePhotos.find((p) => p.id === id);
-    if (victim) {
-      pushRecycleBinItem({
+    if (!victim) return;
+    if (
+      !softDeleteToRecycleBin({
+        confirmMessage: "Delete this geo-photo? It moves to Recycle Bin for 7 days.",
         moduleId: "geo-photos",
         moduleLabel: "Geo-photos",
         itemType: "geo_photo",
         itemLabel: geoPhotoPresetLabel(victim.type),
         sourceKey: STORAGE_KEY,
         payload: victim,
-      });
+      })
+    ) {
+      return;
     }
     setPhotos((prev) => asPhotoArray(prev).filter((p) => p.id !== id));
     setDetail(null);
