@@ -315,7 +315,7 @@ export default function BackupExport() {
           .
         </p>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5, margin: "0 0 12px", maxWidth: 580 }}>
-          <strong>Device-only modules</strong> (CDM packs, timesheets, fire safety, first aid, QR induction, and others) are included in this
+          <strong>Some modules stay on this device only</strong> (emergency contacts, QR induction, document templates, audit log) and are included in this
           JSON backup but do not sync to cloud D1 until enabled. Restore this file to recover them on another browser.
         </p>
         <label

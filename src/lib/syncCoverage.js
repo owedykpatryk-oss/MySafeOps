@@ -48,6 +48,10 @@ export const D1_LIVE_SYNC_NAMESPACES = [
   "loto_register",
   "survey_reports",
   "geo_photos",
+  "fire_safety_log",
+  "first_aid_register",
+  "cdm_packs",
+  "mysafeops_timesheets",
 ];
 
 /**
@@ -55,10 +59,6 @@ export const D1_LIVE_SYNC_NAMESPACES = [
  * Shown in Settings / docs so teams know backup JSON is the source of truth for these.
  */
 export const LOCAL_ONLY_STORAGE_KEYS = [
-  "cdm_packs",
-  "mysafeops_timesheets",
-  "fire_safety_log",
-  "first_aid_register",
   "emergency_contacts",
   "qr_induction_log",
   "digital_signatures",

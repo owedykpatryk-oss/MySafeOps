@@ -14,10 +14,13 @@ describe("syncCoverage", () => {
     }
   });
 
-  it("documents known local-only keys", () => {
-    expect(LOCAL_ONLY_STORAGE_KEYS).toContain("cdm_packs");
-    expect(LOCAL_ONLY_STORAGE_KEYS).toContain("fire_safety_log");
+  it("documents known local-only keys and newly synced registers", () => {
+    expect(LOCAL_ONLY_STORAGE_KEYS).toContain("emergency_contacts");
+    expect(LOCAL_ONLY_STORAGE_KEYS).not.toContain("cdm_packs");
     expect(D1_LIVE_SYNC_NAMESPACES).toContain("geo_photos");
     expect(D1_LIVE_SYNC_NAMESPACES).toContain("survey_reports");
+    expect(D1_LIVE_SYNC_NAMESPACES).toContain("fire_safety_log");
+    expect(D1_LIVE_SYNC_NAMESPACES).toContain("cdm_packs");
+    expect(D1_LIVE_SYNC_NAMESPACES).toContain("mysafeops_timesheets");
   });
 });

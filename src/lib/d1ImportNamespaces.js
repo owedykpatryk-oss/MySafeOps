@@ -45,4 +45,8 @@ export const D1_BACKUP_PUSH_NAMESPACES = new Set([
   "loto_register",
   "survey_reports",
   "geo_photos",
+  "fire_safety_log",
+  "first_aid_register",
+  "cdm_packs",
+  "mysafeops_timesheets",
 ]);

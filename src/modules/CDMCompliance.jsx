@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
-import { pushRecycleBinItem } from "../utils/recycleBin";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { escapeHtml, openPrintWindow } from "../utils/htmlEscape.js";
 
 const genId = () => `cdm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -394,8 +396,14 @@ export default function CDMCompliance() {
   const [packs, setPacks] = useState(()=>load("cdm_packs",[]));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(40);
-
-  useEffect(()=>{ save("cdm_packs",packs); },[packs]);
+  const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
+    storageKey: "cdm_packs",
+    namespace: "cdm_packs",
+    value: packs,
+    setValue: setPacks,
+    load,
+    save,
+  });
 
   useEffect(() => {
     const t = consumeWorkspaceNavTarget();
@@ -461,6 +469,8 @@ export default function CDMCompliance() {
         right={<button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnP}>+ New CDM pack</button>}
       />
 
+      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+
       <RegisterModuleShell
         moduleId="cdm"
         smartContext={{ packs }}
@@ -522,15 +532,19 @@ export default function CDMCompliance() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (!confirm("Delete this CDM pack? It moves to Recycle Bin for 7 days.")) return;
-                        pushRecycleBinItem({
-                          moduleId: "cdm",
-                          moduleLabel: "CDM compliance",
-                          itemType: "cdm_pack",
-                          itemLabel: pack.projectName || pack.id,
-                          sourceKey: "cdm_packs",
-                          payload: pack,
-                        });
+                        if (
+                          !softDeleteToRecycleBin({
+                            moduleId: "cdm",
+                            moduleLabel: "CDM compliance",
+                            itemType: "cdm_pack",
+                            itemLabel: pack.projectTitle || pack.projectName || pack.id,
+                            sourceKey: "cdm_packs",
+                            payload: pack,
+                            confirmMessage: "Delete this CDM pack? It moves to Recycle Bin for 7 days.",
+                          })
+                        ) {
+                          return;
+                        }
                         setPacks((p) => p.filter((x) => x.id !== pack.id));
                       }}
                       style={{ ...ss.btn, fontSize: 12, padding: "4px 8px", color: "#A32D2D", borderColor: "#F09595" }}

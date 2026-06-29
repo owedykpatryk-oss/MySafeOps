@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
@@ -8,6 +9,7 @@ import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `fire_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -74,10 +76,14 @@ export default function FireSafetyLog() {
   const [items, setItems] = useState(() => load("fire_safety_log", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
-
-  useEffect(() => {
-    save("fire_safety_log", items);
-  }, [items]);
+  const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
+    storageKey: "fire_safety_log",
+    namespace: "fire_safety_log",
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
 
   const exportCsv = () => {
     const h = ["Date", "Type", "Location", "OK", "Checked by", "Notes"];
@@ -110,7 +116,7 @@ export default function FireSafetyLog() {
             <PageHero exportModuleId="fire"
         badgeText="FIRE"
         title="Fire safety log"
-        lead="Drills, extinguishers, alarms, and fire marshal records (local only)."
+        lead="Drills, extinguishers, alarms, and fire marshal records — synced to your org cloud when D1 is enabled."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {items.length > 0 && (
             <button type="button" style={ss.btn} onClick={exportCsv}>
@@ -122,6 +128,8 @@ export default function FireSafetyLog() {
           </button>
         </div>}
       />
+
+      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
 
       <RegisterModuleShell
         moduleId="fire"

@@ -1,10 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "mysafeops_timesheets";
@@ -649,12 +652,24 @@ export default function Timesheet() {
   const [sortAsc, setSortAsc] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // load
-  useEffect(() => {
-    setEntries(load(STORAGE_KEY));
-    setWorkers(load(WORKERS_KEY));
-    setProjects(load(PROJECTS_KEY));
-  }, []);
+  const { d1Hydrating: d1EntriesH, d1OutboxPending: d1EntriesO } = useD1OrgArraySync({
+    storageKey: STORAGE_KEY,
+    namespace: STORAGE_KEY,
+    value: entries,
+    setValue: setEntries,
+    load,
+    save,
+  });
+  const { d1Hydrating: d1WpH, d1OutboxPending: d1WpO } = useD1WorkersProjectsSync({
+    workers,
+    setWorkers,
+    projects,
+    setProjects,
+    load,
+    save,
+  });
+  const d1Hydrating = d1EntriesH || d1WpH;
+  const d1OutboxPending = d1EntriesO || d1WpO;
 
   useEffect(() => {
     const t = consumeWorkspaceNavTarget();
@@ -681,11 +696,6 @@ export default function Timesheet() {
       });
     }
   }, []);
-
-  // persist
-  useEffect(() => { save(STORAGE_KEY, entries); }, [entries]);
-  useEffect(() => { save(WORKERS_KEY, workers); }, [workers]);
-  useEffect(() => { save(PROJECTS_KEY, projects); }, [projects]);
 
   const weekStart = getWeekStart(weekOffset);
   const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
@@ -908,9 +918,12 @@ export default function Timesheet() {
         }
       />
 
+      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
+
       <RegisterModuleShell
         moduleId="timesheets"
         smartContext={{ entries: weekEntries, weekKey }}
+        pdfExportRows={filtered}
         stats={buildRegisterModuleStats("timesheets", weekEntries)}
       >
 

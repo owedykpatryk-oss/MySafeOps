@@ -118,7 +118,8 @@ function openDB() {
   });
 }
 
-// Queue an action to sync when back online
+// Queue an action to sync when back online (legacy — prefer D1 outbox in useD1OrgArraySync)
+/** @deprecated Unused; pending cloud writes use `d1SyncOutbox`. Kept for service-worker compatibility. */
 export async function queueOfflineAction(action) {
   try {
     const db = await openDB();

@@ -3,6 +3,7 @@ import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -221,7 +222,18 @@ export default function WasteRegister() {
                     type="button"
                     style={{ ...ss.btn, color: "#A32D2D" }}
                     onClick={() => {
-                      if (confirm("Delete this record?")) setItems((p) => p.filter((x) => x.id !== w.id));
+                      if (
+                        softDeleteToRecycleBin({
+                          moduleId: "waste",
+                          moduleLabel: "Waste register",
+                          itemType: "waste_transfer",
+                          itemLabel: w.wtnRef || w.description || w.id,
+                          sourceKey: "waste_register",
+                          payload: w,
+                        })
+                      ) {
+                        setItems((p) => p.filter((x) => x.id !== w.id));
+                      }
                     }}
                   >
                     Delete

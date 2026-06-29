@@ -2,17 +2,14 @@
 // Drop <OfflineStatusBanner /> anywhere in your App layout (e.g. top of main content)
 
 import { useState, useEffect } from "react";
-import { activateNewServiceWorker, getOfflineQueueCount } from "./offlineManager";
+import { activateNewServiceWorker } from "./offlineManager";
 import { getOrgId } from "../utils/orgStorage";
 import { d1OutboxCountForOrg } from "../lib/d1SyncOutbox";
 import { isD1Configured } from "../lib/d1SyncClient";
 
 async function getCloudPendingCount() {
-  const [offlineQueue, d1Queue] = await Promise.all([
-    getOfflineQueueCount(),
-    isD1Configured() ? d1OutboxCountForOrg(getOrgId()) : Promise.resolve(0),
-  ]);
-  return offlineQueue + d1Queue;
+  if (!isD1Configured()) return 0;
+  return d1OutboxCountForOrg(getOrgId());
 }
 
 export default function OfflineStatusBanner() {

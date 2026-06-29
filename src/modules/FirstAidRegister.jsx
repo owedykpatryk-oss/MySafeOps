@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
@@ -8,6 +9,7 @@ import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `fa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -64,10 +66,14 @@ export default function FirstAidRegister() {
   const [items, setItems] = useState(() => load("first_aid_register", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
-
-  useEffect(() => {
-    save("first_aid_register", items);
-  }, [items]);
+  const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
+    storageKey: "first_aid_register",
+    namespace: "first_aid_register",
+    value: items,
+    setValue: setItems,
+    load,
+    save,
+  });
 
   const exportCsv = () => {
     const h = ["Name", "Qualification", "Cert expiry", "Phone", "Kit location", "Notes"];
@@ -112,6 +118,8 @@ export default function FirstAidRegister() {
           </button>
         </div>}
       />
+
+      <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
 
       <RegisterModuleShell
         moduleId="first-aid"
