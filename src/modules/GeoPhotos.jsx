@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -6,6 +6,7 @@ import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { pushRecycleBinItem } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import GeoPhotosMap from "../components/geoPhotos/GeoPhotosMap";
@@ -14,6 +15,9 @@ import GeoPhotoDirectionMap from "../components/geoPhotos/GeoPhotoDirectionMap";
 import { geoPhotoPreset, geoPhotoPresetLabel, GEO_PHOTO_PRESETS } from "../utils/geoPhotoPresets";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
+import { isSurveyWorkflowEnabled } from "../utils/projectHubIndustry";
+import { buildGeoPhotoMobilisationChecklist, geoPhotoGroupCoverage } from "../utils/geoPhotoMobilisation";
+import { geoPhotoDisplayUrl } from "../utils/geoPhotoMedia";
 import {
   downloadGeoJson,
   nextGeoPhotoReportOrder,
@@ -25,6 +29,62 @@ import {
 
 const STORAGE_KEY = "geo_photos";
 const LIST_PAGE = 48;
+
+function asPhotoArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function GeoPhotoMobilisationPanel({ checklist, groupCoverage, onCapture, onPushSurvey }) {
+  if (!checklist) return null;
+  return (
+    <div className="geo-photos-mobilisation">
+      <div className="geo-photos-mobilisation__head">
+        <h3 className="geo-photos-mobilisation__title">Mobilisation checklist</h3>
+        <span className="geo-photos-mobilisation__score">{checklist.pct}%</span>
+      </div>
+      <p className="geo-photos-mobilisation__lead">
+        Field coverage before survey issue — {checklist.doneCount}/{checklist.total} complete.
+      </p>
+      <ul className="geo-photos-mobilisation__list">
+        {checklist.checks.map((item) => (
+          <li
+            key={item.id}
+            className={`geo-photos-mobilisation__row ${item.done ? "geo-photos-mobilisation__row--done" : ""}`}
+          >
+            <span className="geo-photos-mobilisation__tick" aria-hidden>
+              {item.done ? "✓" : "○"}
+            </span>
+            <span className="geo-photos-mobilisation__label">{item.label}</span>
+            {item.id === "report_pack" && item.target != null ? (
+              <span className="geo-photos-mobilisation__meta">
+                {item.count ?? 0}/{item.target}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {groupCoverage.length > 0 ? (
+        <div className="geo-photos-mobilisation__groups">
+          {groupCoverage.map(({ group, count }) => (
+            <span key={group} className="geo-photos-mobilisation__group-pill">
+              {group} · {count}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="geo-photo-capture__actions" style={{ marginTop: 12 }}>
+        <button type="button" style={{ ...ms.btnP, fontSize: 12, padding: "6px 12px" }} onClick={onCapture}>
+          + Capture geo-photo
+        </button>
+        {checklist.reportCount > 0 ? (
+          <button type="button" style={{ ...ms.btn, fontSize: 12, padding: "6px 12px" }} onClick={onPushSurvey}>
+            Push to survey
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function fmtWhen(iso) {
   if (!iso) return "—";
@@ -106,8 +166,8 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
             Close
           </button>
         </div>
-        {photo.photoDataUrl ? (
-          <img src={photo.photoDataUrl} alt="" className="geo-photo-modal__preview" />
+        {geoPhotoDisplayUrl(photo) ? (
+          <img src={geoPhotoDisplayUrl(photo)} alt="" className="geo-photo-modal__preview" />
         ) : null}
         <div className="geo-photos-card__map" style={{ marginBottom: 12 }}>
           <GeoPhotoDirectionMap
@@ -126,9 +186,17 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
         </p>
         <label className="geo-photos-toolbar__field" style={{ marginBottom: 12 }}>
           Notes
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} style={{ ...ms.inp, resize: "vertical" }} />
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            style={{ ...ms.inp, resize: "vertical" }}
+          />
         </label>
-        <label className={`geo-photos-card__report ${includeInReport ? "geo-photos-card__report--on" : ""}`} style={{ marginBottom: 12 }}>
+        <label
+          className={`geo-photos-card__report ${includeInReport ? "geo-photos-card__report--on" : ""}`}
+          style={{ marginBottom: 12 }}
+        >
           <input type="checkbox" checked={includeInReport} onChange={(e) => setIncludeInReport(e.target.checked)} />
           Include in report
         </label>
@@ -180,9 +248,10 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
 
 export default function GeoPhotos() {
   const { orgName } = useApp();
-  const [photos, setPhotos] = useState(() => load(STORAGE_KEY, []));
-  const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
-  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
+  const pendingGeoPhotoIdRef = useRef(null);
+  const [photos, setPhotos] = useState(() => asPhotoArray(load(STORAGE_KEY, [])));
+  const [workers, setWorkers] = useState(() => asPhotoArray(load("mysafeops_workers", [])));
+  const [projects, setProjects] = useState(() => asPhotoArray(load("mysafeops_projects", [])));
   const [filterProject, setFilterProject] = useState("");
   const [filterReport, setFilterReport] = useState("all");
   const [filterType, setFilterType] = useState("");
@@ -196,33 +265,59 @@ export default function GeoPhotos() {
     storageKey: STORAGE_KEY,
     namespace: "geo_photos",
     value: photos,
-    setValue: setPhotos,
-    load,
+    setValue: (next) => setPhotos(asPhotoArray(next)),
+    load: (key, fallback) => asPhotoArray(load(key, fallback)),
     save,
   });
 
   useD1WorkersProjectsSync({
     workers,
-    setWorkers,
+    setWorkers: (next) => setWorkers(asPhotoArray(next)),
     projects,
-    setProjects,
-    load,
+    setProjects: (next) => setProjects(asPhotoArray(next)),
+    load: (key, fallback) => asPhotoArray(load(key, fallback)),
     save,
   });
 
   useEffect(() => {
     const nav = consumeWorkspaceNavTarget();
-    if (nav?.viewId === "geo-photos") {
-      if (nav.projectId) setFilterProject(nav.projectId);
-      if (nav.action === "capture") setCaptureOpen(true);
-    }
+    if (nav?.viewId !== "geo-photos") return;
+    if (nav.projectId) setFilterProject(nav.projectId);
+    if (nav.action === "capture") setCaptureOpen(true);
+    if (nav.geoPhotoId) pendingGeoPhotoIdRef.current = nav.geoPhotoId;
   }, []);
 
-  const activeProjects = useMemo(() => projects.filter((p) => !p.closed), [projects]);
+  useEffect(() => {
+    const targetId = pendingGeoPhotoIdRef.current;
+    if (!targetId) return;
+    const photo = photos.find((p) => p.id === targetId);
+    if (photo) {
+      setDetail(photo);
+      if (photo.projectId) setFilterProject(photo.projectId);
+      pendingGeoPhotoIdRef.current = null;
+    }
+  }, [photos]);
+
+  const safePhotos = useMemo(() => asPhotoArray(photos), [photos]);
+  const activeProjects = useMemo(() => asPhotoArray(projects).filter((p) => !p.closed), [projects]);
+  const selectedProject = useMemo(
+    () => activeProjects.find((p) => p.id === filterProject) || null,
+    [activeProjects, filterProject]
+  );
+  const surveyPack = isSurveyWorkflowEnabled();
+
+  const hasActiveFilters = Boolean(filterProject || filterReport !== "all" || filterType || query.trim());
+
+  const clearFilters = () => {
+    setFilterProject("");
+    setFilterReport("all");
+    setFilterType("");
+    setQuery("");
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return photos
+    return safePhotos
       .filter((p) => {
         if (filterProject && p.projectId !== filterProject) return false;
         if (filterReport === "report" && !p.includeInReport) return false;
@@ -232,15 +327,31 @@ export default function GeoPhotos() {
         const hay = [p.notes, p.projectName, geoPhotoPresetLabel(p.type), p.capturedBy].join(" ").toLowerCase();
         return hay.includes(q);
       })
-      .sort((a, b) => new Date(b.timestampUtc || b.createdAt).getTime() - new Date(a.timestampUtc || a.createdAt).getTime());
-  }, [photos, filterProject, filterReport, filterType, query]);
+      .sort(
+        (a, b) => new Date(b.timestampUtc || b.createdAt).getTime() - new Date(a.timestampUtc || a.createdAt).getTime()
+      );
+  }, [safePhotos, filterProject, filterReport, filterType, query]);
 
   const reportPack = useMemo(
-    () => (filterProject ? projectGeoPhotosForReport(photos, filterProject) : []),
-    [photos, filterProject]
+    () => (filterProject ? projectGeoPhotosForReport(safePhotos, filterProject) : []),
+    [safePhotos, filterProject]
   );
 
-  const { pageItems, page, pageCount, setPage, total } = useRegisterListPaging(filtered, LIST_PAGE);
+  const mobilisation = useMemo(
+    () => (filterProject ? buildGeoPhotoMobilisationChecklist(safePhotos, filterProject, { surveyPack }) : null),
+    [safePhotos, filterProject, surveyPack]
+  );
+
+  const groupCoverage = useMemo(
+    () => (filterProject ? geoPhotoGroupCoverage(safePhotos, filterProject) : []),
+    [safePhotos, filterProject]
+  );
+
+  const listPg = useRegisterListPaging(LIST_PAGE);
+
+  useEffect(() => {
+    listPg.reset();
+  }, [filterProject, filterReport, filterType, query]);
 
   const reportCount = useMemo(() => filtered.filter((p) => p.includeInReport).length, [filtered]);
 
@@ -256,38 +367,71 @@ export default function GeoPhotos() {
   const bulkSetReport = (include) => {
     if (selectedIds.size === 0) return;
     const now = new Date().toISOString();
-    setPhotos((prev) =>
-      prev.map((p) => (selectedIds.has(p.id) ? { ...p, includeInReport: include, updatedAt: now } : p))
-    );
+    setPhotos((prev) => {
+      const list = asPhotoArray(prev);
+      const nextOrderByProject = {};
+      const takeOrder = (projectId) => {
+        if (!nextOrderByProject[projectId]) {
+          nextOrderByProject[projectId] = nextGeoPhotoReportOrder(list, projectId);
+        }
+        const order = nextOrderByProject[projectId];
+        nextOrderByProject[projectId] = order + 1;
+        return order;
+      };
+      return list.map((p) => {
+        if (!selectedIds.has(p.id)) return p;
+        if (!include) {
+          return { ...p, includeInReport: false, reportOrder: null, updatedAt: now };
+        }
+        return {
+          ...p,
+          includeInReport: true,
+          reportOrder: p.projectId ? takeOrder(p.projectId) : p.reportOrder,
+          updatedAt: now,
+        };
+      });
+    });
     setSelectedIds(new Set());
   };
 
   const handleSaveNew = useCallback(
     (row) => {
-      if (!ensureProjectLinked({ projectId: row.projectId, projects: activeProjects, moduleLabel: "geo-photo" })) return;
+      if (!ensureProjectLinked({ projectId: row.projectId, projects: activeProjects, moduleLabel: "geo-photo" }))
+        return;
       const enriched = { ...row };
       if (enriched.includeInReport && enriched.projectId) {
-        enriched.reportOrder = nextGeoPhotoReportOrder(photos, enriched.projectId);
+        enriched.reportOrder = nextGeoPhotoReportOrder(safePhotos, enriched.projectId);
       }
-      setPhotos((prev) => [enriched, ...prev]);
+      setPhotos((prev) => [enriched, ...asPhotoArray(prev)]);
       pushAudit({
         action: "geo_photo_create",
         detail: `${geoPhotoPresetLabel(enriched.type)} — ${enriched.projectName || "no project"}`,
         module: "geo-photos",
       });
     },
-    [photos, activeProjects]
+    [safePhotos, activeProjects]
   );
 
   const handleUpdate = (row) => {
-    setPhotos((prev) => prev.map((p) => (p.id === row.id ? row : p)));
+    setPhotos((prev) => asPhotoArray(prev).map((p) => (p.id === row.id ? row : p)));
     setDetail(null);
     pushAudit({ action: "geo_photo_update", detail: row.id, module: "geo-photos" });
   };
 
   const handleDelete = (id) => {
     if (!window.confirm("Delete this geo-photo?")) return;
-    setPhotos((prev) => prev.filter((p) => p.id !== id));
+    const victim = safePhotos.find((p) => p.id === id);
+    if (victim) {
+      pushRecycleBinItem({
+        moduleId: "geo-photos",
+        moduleLabel: "Geo-photos",
+        itemType: "geo_photo",
+        itemLabel: geoPhotoPresetLabel(victim.type),
+        sourceKey: STORAGE_KEY,
+        payload: victim,
+      });
+    }
+    setPhotos((prev) => asPhotoArray(prev).filter((p) => p.id !== id));
     setDetail(null);
     pushAudit({ action: "geo_photo_delete", detail: id, module: "geo-photos" });
   };
@@ -299,15 +443,21 @@ export default function GeoPhotos() {
   };
 
   const createSnagFromPhoto = (photo) => {
-    const snags = load("snags", []);
+    const snags = asPhotoArray(load("snags", []));
     const draft = snagDraftFromGeoPhoto(photo);
     const counter = load("snag_counter", 1) || 1;
     draft.ref = `SN-${String(counter).padStart(3, "0")}`;
     save("snag_counter", counter + 1);
     save("snags", [draft, ...snags]);
     pushAudit({ action: "snag_from_geo_photo", detail: draft.ref, module: "geo-photos" });
-    window.alert(`Snag ${draft.ref} created. Open Snags to edit.`);
     setDetail(null);
+    setWorkspaceNavTarget({
+      viewId: "snags",
+      projectId: photo.projectId || "",
+      snagId: draft.id,
+      action: "view",
+    });
+    openWorkspaceView({ viewId: "snags" });
   };
 
   const moveReportPhoto = (photoId, direction) => {
@@ -332,7 +482,12 @@ export default function GeoPhotos() {
                 Push to survey
               </button>
             ) : null}
-            <button type="button" className="geo-photos-hero-capture" style={ms.btnP} onClick={() => setCaptureOpen(true)}>
+            <button
+              type="button"
+              className="geo-photos-hero-capture"
+              style={ms.btnP}
+              onClick={() => setCaptureOpen(true)}
+            >
               + Add geo-photo
             </button>
           </div>
@@ -381,14 +536,49 @@ export default function GeoPhotos() {
           Satellite map
         </label>
         <div className="geo-photos-toolbar__actions">
+          {hasActiveFilters ? (
+            <button type="button" style={ms.btn} onClick={clearFilters}>
+              Clear filters
+            </button>
+          ) : null}
           <button type="button" style={ms.btn} onClick={() => exportCsv(filtered)} disabled={filtered.length === 0}>
             Export CSV
           </button>
-          <button type="button" style={ms.btn} onClick={() => downloadGeoJson(filtered)} disabled={filtered.length === 0}>
+          <button
+            type="button"
+            style={ms.btn}
+            onClick={() => downloadGeoJson(filtered)}
+            disabled={filtered.length === 0}
+          >
             Export GeoJSON
           </button>
         </div>
       </div>
+
+      {filterProject && mobilisation ? (
+        <GeoPhotoMobilisationPanel
+          checklist={mobilisation}
+          groupCoverage={groupCoverage}
+          onCapture={() => setCaptureOpen(true)}
+          onPushSurvey={() => pushToSurvey(filterProject)}
+        />
+      ) : null}
+
+      {filterProject && reportPack.length > 0 ? (
+        <div className="geo-photos-survey-banner">
+          <span className="geo-photos-survey-banner__text">
+            {reportPack.length} geo-photo{reportPack.length === 1 ? "" : "s"} ready for survey report
+            {selectedProject?.name ? ` · ${selectedProject.name}` : ""}
+          </span>
+          <button
+            type="button"
+            style={{ ...ms.btnP, fontSize: 12, padding: "6px 14px" }}
+            onClick={() => pushToSurvey(filterProject)}
+          >
+            Import in survey
+          </button>
+        </div>
+      ) : null}
 
       {filterProject && reportPack.length > 0 ? (
         <div className="geo-photos-report-pack">
@@ -398,20 +588,26 @@ export default function GeoPhotos() {
               <button type="button" style={{ ...ms.btn, fontSize: 12, padding: "6px 12px" }} onClick={syncReportOrder}>
                 Renumber
               </button>
-              <button type="button" style={{ ...ms.btnP, fontSize: 12, padding: "6px 12px" }} onClick={() => pushToSurvey(filterProject)}>
+              <button
+                type="button"
+                style={{ ...ms.btnP, fontSize: 12, padding: "6px 12px" }}
+                onClick={() => pushToSurvey(filterProject)}
+              >
                 Import in survey
               </button>
             </div>
           </div>
-          <p className="geo-photos-report-pack__lead">Order for PDF appendix — arrows change sequence of “In report” photos.</p>
+          <p className="geo-photos-report-pack__lead">
+            Order for PDF appendix — arrows change sequence of “In report” photos.
+          </p>
           <ul className="geo-photos-report-pack__list">
             {reportPack.map((p, idx) => {
               const preset = geoPhotoPreset(p.type);
               return (
                 <li key={p.id} className="geo-photos-report-pack__row">
                   <span className="geo-photos-report-pack__order">#{p.reportOrder ?? idx + 1}</span>
-                  {p.photoDataUrl ? (
-                    <img src={p.photoDataUrl} alt="" className="geo-photos-report-pack__thumb" />
+                  {geoPhotoDisplayUrl(p) ? (
+                    <img src={geoPhotoDisplayUrl(p)} alt="" className="geo-photos-report-pack__thumb" />
                   ) : (
                     <span style={{ fontSize: 22 }}>{preset.icon}</span>
                   )}
@@ -419,7 +615,12 @@ export default function GeoPhotos() {
                     <strong>{preset.label}</strong>
                     {p.notes ? ` — ${p.notes.slice(0, 50)}` : ""}
                   </span>
-                  <button type="button" style={{ ...ms.btn, padding: "4px 10px", fontSize: 12 }} disabled={idx === 0} onClick={() => moveReportPhoto(p.id, "up")}>
+                  <button
+                    type="button"
+                    style={{ ...ms.btn, padding: "4px 10px", fontSize: 12 }}
+                    disabled={idx === 0}
+                    onClick={() => moveReportPhoto(p.id, "up")}
+                  >
                     ↑
                   </button>
                   <button
@@ -439,7 +640,8 @@ export default function GeoPhotos() {
 
       <div className="geo-photos-stats">
         <span className="geo-photos-stats__pill">
-          {total} photo{total === 1 ? "" : "s"}
+          {filtered.length} photo{filtered.length === 1 ? "" : "s"}
+          {safePhotos.length !== filtered.length ? ` · ${safePhotos.length} total` : ""}
         </span>
         {reportCount > 0 ? (
           <span className="geo-photos-stats__pill geo-photos-stats__pill--report">{reportCount} in report</span>
@@ -468,7 +670,7 @@ export default function GeoPhotos() {
           <span className="geo-photos-map-wrap__hint">Tap marker for details</span>
           <GeoPhotosMap photos={filtered} height={320} satellite={satellite} onPhotoClick={setDetail} />
         </div>
-      ) : (
+      ) : safePhotos.length === 0 ? (
         <div className="geo-photos-empty">
           <div className="geo-photos-empty__icon" aria-hidden>
             📍
@@ -481,21 +683,37 @@ export default function GeoPhotos() {
             + First geo-photo
           </button>
         </div>
+      ) : (
+        <div className="geo-photos-empty">
+          <div className="geo-photos-empty__icon" aria-hidden>
+            🔍
+          </div>
+          <h3 className="geo-photos-empty__title">No photos match your filters</h3>
+          <p className="geo-photos-empty__lead">
+            {safePhotos.length} geo-photo{safePhotos.length === 1 ? "" : "s"} in this org — try clearing filters or
+            choosing another project.
+          </p>
+          <button type="button" style={ms.btn} onClick={clearFilters}>
+            Clear filters
+          </button>
+        </div>
       )}
 
       <div className="geo-photos-grid">
-        {pageItems.map((photo) => {
+        {listPg.visible(filtered).map((photo) => {
           const preset = geoPhotoPreset(photo.type);
           const selected = selectedIds.has(photo.id);
           return (
-            <article
-              key={photo.id}
-              className="geo-photos-card"
-              style={{ "--gp-accent": preset.color }}
-            >
-              <div className="geo-photos-card__media" onClick={() => setDetail(photo)} onKeyDown={(e) => e.key === "Enter" && setDetail(photo)} role="button" tabIndex={0}>
-                {photo.photoDataUrl ? (
-                  <img src={photo.photoDataUrl} alt="" loading="lazy" />
+            <article key={photo.id} className="geo-photos-card" style={{ "--gp-accent": preset.color }}>
+              <div
+                className="geo-photos-card__media"
+                onClick={() => setDetail(photo)}
+                onKeyDown={(e) => e.key === "Enter" && setDetail(photo)}
+                role="button"
+                tabIndex={0}
+              >
+                {geoPhotoDisplayUrl(photo) ? (
+                  <img src={geoPhotoDisplayUrl(photo)} alt="" loading="lazy" />
                 ) : (
                   <div className="geo-photos-card__placeholder">{preset.icon}</div>
                 )}
@@ -503,7 +721,9 @@ export default function GeoPhotos() {
                   <input type="checkbox" checked={selected} onChange={() => toggleSelect(photo.id)} />
                   Select
                 </label>
-                <span className="geo-photos-card__type">{preset.icon} {preset.label}</span>
+                <span className="geo-photos-card__type">
+                  {preset.icon} {preset.label}
+                </span>
                 {photo.bearing != null && !Number.isNaN(Number(photo.bearing)) ? (
                   <span className="geo-photos-card__bearing">{Math.round(Number(photo.bearing))}°</span>
                 ) : null}
@@ -520,9 +740,19 @@ export default function GeoPhotos() {
                       checked={!!photo.includeInReport}
                       onChange={(e) =>
                         setPhotos((prev) =>
-                          prev.map((p) =>
+                          asPhotoArray(prev).map((p) =>
                             p.id === photo.id
-                              ? { ...p, includeInReport: e.target.checked, updatedAt: new Date().toISOString() }
+                              ? {
+                                  ...p,
+                                  includeInReport: e.target.checked,
+                                  reportOrder:
+                                    e.target.checked && p.projectId
+                                      ? (p.reportOrder ?? nextGeoPhotoReportOrder(asPhotoArray(prev), p.projectId))
+                                      : e.target.checked
+                                        ? p.reportOrder
+                                        : null,
+                                  updatedAt: new Date().toISOString(),
+                                }
                               : p
                           )
                         )
@@ -549,16 +779,10 @@ export default function GeoPhotos() {
         })}
       </div>
 
-      {pageCount > 1 ? (
+      {listPg.hasMore(filtered) ? (
         <div className="geo-photos-pager">
-          <button type="button" style={ms.btn} disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            Previous
-          </button>
-          <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-            Page {page} / {pageCount}
-          </span>
-          <button type="button" style={ms.btn} disabled={page >= pageCount} onClick={() => setPage(page + 1)}>
-            Next
+          <button type="button" style={ms.btn} onClick={listPg.showMore}>
+            Show more ({listPg.remaining(filtered)} remaining)
           </button>
         </div>
       ) : null}

@@ -62,6 +62,7 @@ import {
 } from "./surveyReportSmart";
 import { listProjectPlans, plansForProject } from "../permits/permitPlanOverlayRegistry";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
+import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable } from "../../utils/geoPhotoIntegrations";
 import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings } from "../../utils/surveyDxfAnalyzer";
 import CadImportPanel from "./CadImportPanel";
@@ -2181,10 +2182,18 @@ export default function SurveyReport() {
   const handleListDelete = useCallback((r) => {
     setListConfirm({
       title: "Delete survey report?",
-      message: `${r.ref || r.title || "This report"} will be permanently removed.`,
+      message: `${r.ref || r.title || "This report"} moves to Recycle Bin for ${7} days.`,
       tone: "danger",
       confirmLabel: "Delete",
       onConfirm: () => {
+        pushRecycleBinItem({
+          moduleId: "survey-report",
+          moduleLabel: "Survey reports",
+          itemType: "survey_report",
+          itemLabel: r.ref || r.title || r.id,
+          sourceKey: STORAGE_KEY,
+          payload: r,
+        });
         setReports((p) => p.filter((x) => x.id !== r.id));
         pushAudit({ action: "survey_report_delete", entity: "survey_report", detail: r.id });
         setListConfirm(null);

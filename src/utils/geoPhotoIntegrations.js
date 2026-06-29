@@ -2,6 +2,7 @@
  * Geo-photo integrations — survey report, exports, project matching, snags.
  */
 import { geoPhotoPreset, geoPhotoPresetLabel, presetsByGroup } from "./geoPhotoPresets";
+import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
 
 export const GEO_PHOTOS_FINDINGS_MARKER = "=== Geo-photos (field capture) ===";
 
@@ -12,8 +13,7 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
   const a2 = (Number(lat2) * Math.PI) / 180;
   const dLat = a2 - a1;
   const dLng = ((Number(lng2) - Number(lng1)) * Math.PI) / 180;
-  const x =
-    Math.sin(dLat / 2) ** 2 + Math.cos(a1) * Math.cos(a2) * Math.sin(dLng / 2) ** 2;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a1) * Math.cos(a2) * Math.sin(dLng / 2) ** 2;
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(x)));
 }
 
@@ -77,11 +77,11 @@ export function geoPhotoCaption(photo) {
 
 export function geoPhotosToSurveyPhotos(geoPhotos) {
   return (geoPhotos || [])
-    .filter((p) => p.photoDataUrl)
+    .filter((p) => geoPhotoDisplayUrl(p))
     .map((p) => ({
       id: `sr_gp_${p.id}`,
       geoPhotoId: p.id,
-      dataUrl: p.photoDataUrl,
+      dataUrl: geoPhotoDisplayUrl(p),
       caption: geoPhotoCaption(p),
       latitude: p.latitude,
       longitude: p.longitude,
@@ -104,8 +104,9 @@ export function buildGeoPhotosFindingsBlock(geoPhotoList) {
     const preset = geoPhotoPreset(p.type);
     const coords =
       Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude))
-        ? ` (${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}`
-            + (p.bearing != null ? `, ${Math.round(Number(p.bearing))}°` : "") + ")"
+        ? ` (${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}` +
+          (p.bearing != null ? `, ${Math.round(Number(p.bearing))}°` : "") +
+          ")"
         : "";
     const note = p.notes?.trim() ? `: ${p.notes.trim()}` : "";
     return `${i + 1}. ${preset.label}${note}${coords}`;
@@ -130,9 +131,7 @@ export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
   const incoming = geoPhotosToSurveyPhotos(forReport);
   const existing = Array.isArray(report.photos) ? report.photos : [];
   const existingGeoIds = new Set(existing.map((p) => p.geoPhotoId).filter(Boolean));
-  const mergedPhotos = [
-    ...existing.filter((p) => !p.geoPhotoId || forReport.some((g) => g.id === p.geoPhotoId)),
-  ];
+  const mergedPhotos = [...existing.filter((p) => !p.geoPhotoId || forReport.some((g) => g.id === p.geoPhotoId))];
   incoming.forEach((ph) => {
     if (existingGeoIds.has(ph.geoPhotoId)) {
       const idx = mergedPhotos.findIndex((x) => x.geoPhotoId === ph.geoPhotoId);
@@ -214,9 +213,7 @@ export function normalizeGeoPhotoReportOrders(photos, projectId) {
   const ordered = projectGeoPhotosForReport(photos, projectId);
   const orderMap = Object.fromEntries(ordered.map((p, i) => [p.id, i + 1]));
   return photos.map((p) =>
-    p.projectId === projectId && p.includeInReport && orderMap[p.id] != null
-      ? { ...p, reportOrder: orderMap[p.id] }
-      : p
+    p.projectId === projectId && p.includeInReport && orderMap[p.id] != null ? { ...p, reportOrder: orderMap[p.id] } : p
   );
 }
 
@@ -312,15 +309,20 @@ const GEO_PHOTO_UTILITY_DEFAULTS = {
   utility_locator: { utilityType: "other", method: "EML / CAT locate", confidence: "medium" },
   trial_pit: { utilityType: "other", method: "Trial pit / exposure", confidence: "high" },
   manhole_chamber: { utilityType: "foul", method: "Chamber inspection", confidence: "high" },
-  buried_services_warning: { utilityType: "other", method: "Surface evidence / warning marker", confidence: "indicative" },
+  buried_services_warning: {
+    utilityType: "other",
+    method: "Surface evidence / warning marker",
+    confidence: "indicative",
+  },
   gpr_setup: { utilityType: "other", method: "GPR", confidence: "medium" },
 };
 
 /** Try to pull depth from geo-photo notes (e.g. "0.8m", "depth 1.2 m"). */
 export function parseDepthFromNotes(notes) {
   const t = String(notes || "");
-  const m = t.match(/(?:depth|approx\.?\s*depth|@)\s*[:.]?\s*(\d+(?:\.\d+)?)\s*m\b/i)
-    || t.match(/\b(\d+(?:\.\d+)?)\s*m\b(?:\s*(?:deep|depth|bgl))?/i);
+  const m =
+    t.match(/(?:depth|approx\.?\s*depth|@)\s*[:.]?\s*(\d+(?:\.\d+)?)\s*m\b/i) ||
+    t.match(/\b(\d+(?:\.\d+)?)\s*m\b(?:\s*(?:deep|depth|bgl))?/i);
   return m ? `${m[1]} m` : "";
 }
 

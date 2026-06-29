@@ -72,6 +72,7 @@ describe("projectPlaybooks", () => {
     const items = buildMissingDocChecklist({ rams: [], surveys: [], permits: [], methodStatements: [], plans: [] });
     expect(items.some((i) => i.actionType === "create_rams")).toBe(true);
     expect(items.some((i) => i.actionType === "create_survey")).toBe(true);
+    expect(items.some((i) => i.actionType === "capture_geo_photos")).toBe(true);
   });
 
   it("projectHasRams detects linked RAMS", () => {

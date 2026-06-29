@@ -567,12 +567,30 @@ export default function MainAppLayout() {
         const u = new URL(event.data.url, window.location.origin);
         if (u.pathname !== "/app") return;
         const viewId = u.searchParams.get("view");
-        const permitId = u.searchParams.get("permitId");
         if (!viewId || !WORKSPACE_LAYOUT_VIEW_IDS.has(viewId)) return;
-        if (viewId === "permits" && permitId) {
-          setWorkspaceNavTarget({ viewId: "permits", permitId });
-        }
         if (!primaryNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
+
+        const target = { viewId };
+        const navKeys = [
+          "permitId",
+          "projectId",
+          "action",
+          "ramsId",
+          "reportId",
+          "snagId",
+          "methodStatementId",
+          "geoPhotoId",
+          "planId",
+          "briefingId",
+          "cdmPackId",
+          "timesheetEntryId",
+        ];
+        navKeys.forEach((key) => {
+          const v = u.searchParams.get(key);
+          if (v) target[key] = v;
+        });
+        setWorkspaceNavTarget(target);
+
         if (primaryNavIdSet.has(viewId)) {
           setNavTab(viewId);
           setView(viewId);

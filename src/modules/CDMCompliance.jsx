@@ -4,6 +4,7 @@ import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { pushRecycleBinItem } from "../utils/recycleBin";
 import { escapeHtml, openPrintWindow } from "../utils/htmlEscape.js";
 
 const genId = () => `cdm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -516,7 +517,24 @@ export default function CDMCompliance() {
                   <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0 }}>
                     <button type="button" onClick={()=>printCDM(pack)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print</button>
                     <button type="button" onClick={()=>setModal({type:"form",data:pack})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
-                    <button type="button" onClick={()=>{ if(confirm("Delete?")) setPacks(p=>p.filter(x=>x.id!==pack.id)); }} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!confirm("Delete this CDM pack? It moves to Recycle Bin for 7 days.")) return;
+                        pushRecycleBinItem({
+                          moduleId: "cdm",
+                          moduleLabel: "CDM compliance",
+                          itemType: "cdm_pack",
+                          itemLabel: pack.projectName || pack.id,
+                          sourceKey: "cdm_packs",
+                          payload: pack,
+                        });
+                        setPacks((p) => p.filter((x) => x.id !== pack.id));
+                      }}
+                      style={{ ...ss.btn, fontSize: 12, padding: "4px 8px", color: "#A32D2D", borderColor: "#F09595" }}
+                    >
+                      ×
+                    </button>
                   </div>
                 </div>
               );

@@ -4,12 +4,15 @@ import GeoPhotoDirectionMap from "./GeoPhotoDirectionMap";
 import { presetsByGroup, geoPhotoPreset } from "../../utils/geoPhotoPresets";
 import {
   blankGeoPhoto,
+  compassNeedsUserGesture,
   compressImageFile,
   flipBearing180,
   normalizeBearing,
+  requestCompassPermission,
   requestDeviceLocation,
   watchCompassBearing,
 } from "../../utils/geoPhotoUtils";
+import { uploadGeoPhotoToR2 } from "../../utils/geoPhotoMedia";
 import { findNearestProject } from "../../utils/geoPhotoIntegrations";
 
 const LAST_PRESET_KEY = "mysafeops_geo_photo_last_preset";
@@ -53,6 +56,7 @@ export default function GeoPhotoCaptureModal({
   const [capturedBy, setCapturedBy] = useState("");
   const [autoProjectHint, setAutoProjectHint] = useState("");
   const fileRef = useRef(null);
+  const compassCleanupRef = useRef(null);
 
   const effectiveBearing = manualBearing ?? compassBearing;
   const preset = geoPhotoPreset(type);
@@ -81,9 +85,28 @@ export default function GeoPhotoCaptureModal({
   }, [open, reset]);
 
   useEffect(() => {
-    if (!open || step !== "location") return undefined;
-    return watchCompassBearing((b) => setCompassBearing(b));
+    if (!open || step !== "location") {
+      compassCleanupRef.current?.();
+      compassCleanupRef.current = null;
+      return undefined;
+    }
+    if (compassNeedsUserGesture()) return undefined;
+    compassCleanupRef.current = watchCompassBearing((b) => setCompassBearing(b));
+    return () => {
+      compassCleanupRef.current?.();
+      compassCleanupRef.current = null;
+    };
   }, [open, step]);
+
+  const enableCompass = async () => {
+    const ok = await requestCompassPermission();
+    if (!ok) {
+      setGpsError("Compass permission denied — enter bearing manually or use Flip 180°.");
+      return;
+    }
+    compassCleanupRef.current?.();
+    compassCleanupRef.current = watchCompassBearing((b) => setCompassBearing(b), { autoRequestPermission: false });
+  };
 
   useEffect(() => {
     if (open && initialProjectId) setProjectId(initialProjectId);
@@ -135,7 +158,7 @@ export default function GeoPhotoCaptureModal({
     }
   };
 
-  const handleSave = (takeAnother = false) => {
+  const handleSave = async (takeAnother = false) => {
     const proj = projects.find((p) => p.id === projectId);
     const row = blankGeoPhoto({
       projectId: projectId || "",
@@ -151,6 +174,14 @@ export default function GeoPhotoCaptureModal({
       capturedBy: capturedBy.trim(),
       timestampUtc: new Date().toISOString(),
     });
+    if (photoDataUrl) {
+      const uploaded = await uploadGeoPhotoToR2(photoDataUrl, { projectId, photoId: row.id });
+      if (uploaded?.photoPublicUrl) {
+        row.photoStorageKey = uploaded.photoStorageKey;
+        row.photoPublicUrl = uploaded.photoPublicUrl;
+        row.photoDataUrl = "";
+      }
+    }
     try {
       localStorage.setItem(LAST_PRESET_KEY, type);
     } catch {
@@ -173,7 +204,12 @@ export default function GeoPhotoCaptureModal({
   const stepIdx = STEPS.indexOf(step);
 
   return (
-    <div className="geo-photo-capture-backdrop" role="dialog" aria-modal="true" aria-labelledby="geo-photo-capture-title">
+    <div
+      className="geo-photo-capture-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="geo-photo-capture-title"
+    >
       <div className="geo-photo-capture">
         <div className="geo-photo-modal__head">
           <div>
@@ -209,7 +245,14 @@ export default function GeoPhotoCaptureModal({
                 Take or choose photo
               </button>
             )}
-            <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={onPickPhoto} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={onPickPhoto}
+            />
             {photoDataUrl ? (
               <div className="geo-photo-capture__actions">
                 <button type="button" style={ms.btn} onClick={() => fileRef.current?.click()}>
@@ -254,7 +297,12 @@ export default function GeoPhotoCaptureModal({
               <button type="button" style={ms.btn} onClick={() => setStep("photo")}>
                 Back
               </button>
-              <button type="button" style={ms.btnP} disabled={latitude == null || longitude == null} onClick={() => setStep("details")}>
+              <button
+                type="button"
+                style={ms.btnP}
+                disabled={latitude == null || longitude == null}
+                onClick={() => setStep("details")}
+              >
                 Next — details
               </button>
             </div>
@@ -279,7 +327,16 @@ export default function GeoPhotoCaptureModal({
                 <button type="button" style={ms.btn} onClick={() => setManualBearing(compassBearing)}>
                   Use compass
                 </button>
-                <button type="button" style={ms.btn} onClick={() => setManualBearing(flipBearing180(effectiveBearing ?? 0))}>
+                {compassNeedsUserGesture() && compassBearing == null ? (
+                  <button type="button" style={ms.btnP} onClick={enableCompass}>
+                    Enable compass (iOS)
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  style={ms.btn}
+                  onClick={() => setManualBearing(flipBearing180(effectiveBearing ?? 0))}
+                >
                   Flip 180°
                 </button>
               </div>
@@ -306,7 +363,9 @@ export default function GeoPhotoCaptureModal({
               </div>
             </div>
 
-            {autoProjectHint ? <p className="geo-photo-capture__hint geo-photo-capture__hint--ok">{autoProjectHint}</p> : null}
+            {autoProjectHint ? (
+              <p className="geo-photo-capture__hint geo-photo-capture__hint--ok">{autoProjectHint}</p>
+            ) : null}
             <label className="geo-photos-toolbar__field">
               Project
               <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={ms.inp}>
@@ -346,7 +405,10 @@ export default function GeoPhotoCaptureModal({
               Captured by (optional)
               <input value={capturedBy} onChange={(e) => setCapturedBy(e.target.value)} style={ms.inp} />
             </label>
-            <label className={`geo-photos-card__report ${includeInReport ? "geo-photos-card__report--on" : ""}`} style={{ marginBottom: 16 }}>
+            <label
+              className={`geo-photos-card__report ${includeInReport ? "geo-photos-card__report--on" : ""}`}
+              style={{ marginBottom: 16 }}
+            >
               <input type="checkbox" checked={includeInReport} onChange={(e) => setIncludeInReport(e.target.checked)} />
               Include in report
             </label>

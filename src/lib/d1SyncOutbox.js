@@ -113,6 +113,24 @@ export async function d1OutboxHasPending(orgSlug, namespace, d1DataKey) {
   return row != null;
 }
 
+/** Count all pending D1 PUT rows for an org (any namespace). */
+export async function d1OutboxCountForOrg(orgSlug) {
+  if (!orgSlug || orgSlug === "default") return 0;
+  try {
+    const db = await openDb();
+    const rows = await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error || new Error("idb_get_all_failed"));
+    });
+    db.close();
+    return rows.filter((r) => r.orgSlug === orgSlug).length;
+  } catch {
+    return 0;
+  }
+}
+
 const transientHttp = (e) => /^http_(502|503|504|429)$/.test(String(e || ""));
 
 /**

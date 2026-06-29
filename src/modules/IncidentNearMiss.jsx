@@ -10,6 +10,7 @@ import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { pushRecycleBinItem } from "../utils/recycleBin";
 
 const INCIDENTS_KEY = "mysafeops_incidents";
 const LEGACY_INCIDENT_KEY = "incident_register";
@@ -754,10 +755,17 @@ export default function IncidentNearMiss() {
                       type="button"
                       style={{ ...ss.btn, color: "#A32D2D" }}
                       onClick={() => {
-                        if (confirm("Delete this record?")) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
-                          pushAudit({ action: "incident_delete", entity: "incident", detail: r.id });
-                        }
+                        if (!confirm("Delete this record? It moves to Recycle Bin for 7 days.")) return;
+                        pushRecycleBinItem({
+                          moduleId: "incidents",
+                          moduleLabel: "Incidents",
+                          itemType: "incident",
+                          itemLabel: r.ref || r.title || r.id,
+                          sourceKey: INCIDENTS_KEY,
+                          payload: r,
+                        });
+                        setItems((p) => p.filter((x) => x.id !== r.id));
+                        pushAudit({ action: "incident_delete", entity: "incident", detail: r.id });
                       }}
                     >
                       Delete

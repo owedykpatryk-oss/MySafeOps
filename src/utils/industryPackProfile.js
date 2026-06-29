@@ -10,7 +10,7 @@ import { loadOrgScoped } from "./orgStorage";
 import { todayIsoDate } from "./projectDashboard";
 import { evaluateSurveyFinalGate } from "./surveyCompletenessGates";
 
-/** @typedef {{ pat: object[], hotWork: object[], gmp: object[], allergen: object[], surveys: object[], geoPhotos: object[], loto: object[], highCare: object[], inspections: object[] }} IndustryRegisterSnapshot */
+/** @typedef {{ pat: object[], hotWork: object[], gmp: object[], allergen: object[], surveys: object[], geoPhotos: object[], loto: object[], highCare: object[], inspections: object[], fireSafety: object[], firstAid: object[], cdm: object[], timesheets: object[] }} IndustryRegisterSnapshot */
 
 /** Load org registers once per pulse/command-centre pass (avoids repeated localStorage reads). */
 export function createIndustryRegisterSnapshot() {
@@ -24,6 +24,10 @@ export function createIndustryRegisterSnapshot() {
     loto: loadOrgScoped("loto_register", []),
     highCare: loadOrgScoped("high_care_access_register", []),
     inspections: loadOrgScoped("inspection_records", []),
+    fireSafety: loadOrgScoped("fire_safety_log", []),
+    firstAid: loadOrgScoped("first_aid_register", []),
+    cdm: loadOrgScoped("cdm_packs", []),
+    timesheets: loadOrgScoped("mysafeops_timesheets", []),
   };
 }
 
@@ -76,39 +80,83 @@ export const INDUSTRY_SITE_PACKS = {
 export const PACK_WORKFLOW_HELP = {
   generalContractor: {
     summary: "CDM → RAMS → PTW → daily briefing → inspections. Snags tracked before handover.",
-    steps: ["Create project with general or groundworks playbook", "Issue PTW before start", "Log daily briefing every shift", "Close snags before practical completion"],
+    steps: [
+      "Create project with general or groundworks playbook",
+      "Issue PTW before start",
+      "Log daily briefing every shift",
+      "Close snags before practical completion",
+    ],
   },
   electricalContractor: {
     summary: "Electrical RAMS, hot work, PAT/LOTO and inspection evidence on every job.",
-    steps: ["Apply electrical playbook on new projects", "Log PAT and LOTO before energisation", "Record hot work with fire watch", "Log inspections before energising circuits"],
+    steps: [
+      "Apply electrical playbook on new projects",
+      "Log PAT and LOTO before energisation",
+      "Record hot work with fire watch",
+      "Log inspections before energising circuits",
+    ],
   },
   buildingTrades: {
     summary: "Refurb workflow — snagging, inspections and briefings drive readiness.",
-    steps: ["Use refurb playbook for fit-out jobs", "Log snags during walk-rounds", "Keep daily briefing live on multi-day refurb", "Export site pack for client handover"],
+    steps: [
+      "Use refurb playbook for fit-out jobs",
+      "Log snags during walk-rounds",
+      "Keep daily briefing live on multi-day refurb",
+      "Export site pack for client handover",
+    ],
   },
   surveyingGeodesy: {
     summary: "Mobilisation MS → RAMS surveying pack → PAS128 survey deliverable.",
-    steps: ["Create project with utility mapping playbook", "Complete mobilisation method statement", "Draft survey with QA checklist and calibration", "Finalise PAS128 report before client issue"],
+    steps: [
+      "Create project with utility mapping playbook",
+      "Complete mobilisation method statement",
+      "Draft survey with QA checklist and calibration",
+      "Finalise PAS128 report before client issue",
+    ],
   },
   contractorPlusSurveying: {
     summary: "Mostly contractor HSE — survey module for occasional PAS128 jobs.",
-    steps: ["Default to general/refurb playbooks for site work", "Switch to utility mapping playbook for survey jobs", "Keep inspections on construction; survey for deliverables", "Apply profile once — no need for Show all modules"],
+    steps: [
+      "Default to general/refurb playbooks for site work",
+      "Switch to utility mapping playbook for survey jobs",
+      "Keep inspections on construction; survey for deliverables",
+      "Apply profile once — no need for Show all modules",
+    ],
   },
   facilitiesMaintenance: {
     summary: "PPM inspections and PAT — lighter CDM/survey emphasis.",
-    steps: ["Log PPM inspections on schedule", "Keep PAT register current", "Use plant register for hired equipment", "Briefing + PTW for intrusive maintenance"],
+    steps: [
+      "Log PPM inspections on schedule",
+      "Keep PAT register current",
+      "Use plant register for hired equipment",
+      "Briefing + PTW for intrusive maintenance",
+    ],
   },
   demolitionStripout: {
     summary: "Demolition HSE — excavation, temp works, gate book and asbestos.",
-    steps: ["Groundworks/demolition playbook on new sites", "Log excavation and temp works before start", "Gate book for deliveries", "Asbestos register before intrusive work"],
+    steps: [
+      "Groundworks/demolition playbook on new sites",
+      "Log excavation and temp works before start",
+      "Gate book for deliveries",
+      "Asbestos register before intrusive work",
+    ],
   },
   foodPharma: {
     summary: "Hygiene-critical workflow — allergen windows, GMP and high-care access.",
-    steps: ["Schedule allergen changeover windows before runs", "Close GMP deviations before release", "High-care access sign-off for contractors", "Daily briefing in production areas"],
+    steps: [
+      "Schedule allergen changeover windows before runs",
+      "Close GMP deviations before release",
+      "High-care access sign-off for contractors",
+      "Daily briefing in production areas",
+    ],
   },
   showEverything: {
     summary: "Full module library — trim in Settings when you know your stack.",
-    steps: ["Pick modules to hide under Organisation → Modules", "Choose a narrower profile when ready", "Use Project Hub playbooks to standardise new jobs"],
+    steps: [
+      "Pick modules to hide under Organisation → Modules",
+      "Choose a narrower profile when ready",
+      "Use Project Hub playbooks to standardise new jobs",
+    ],
   },
 };
 
@@ -194,8 +242,7 @@ export function previewPackSwitch(fromId, toId) {
   const changes = [];
 
   const surveyAfter = toId === "surveyingGeodesy" || toId === "showEverything";
-  const surveyBefore =
-    fromId === "surveyingGeodesy" || fromId === "showEverything";
+  const surveyBefore = fromId === "surveyingGeodesy" || fromId === "showEverything";
   if (surveyAfter !== surveyBefore) {
     changes.push(
       surveyAfter
@@ -241,7 +288,8 @@ export function previewPackSwitch(fromId, toId) {
 
   return {
     changes: [...new Set(changes)],
-    pipelineLabel: surveyAfter && toId !== "showEverything" ? "Survey" : surveyAfter ? "Survey (if module visible)" : "Inspections",
+    pipelineLabel:
+      surveyAfter && toId !== "showEverything" ? "Survey" : surveyAfter ? "Survey (if module visible)" : "Inspections",
     label: to.label,
     highlights: getPackHighlights(toId),
   };
@@ -295,9 +343,7 @@ function surveyCompletenessOk(surveys = []) {
 }
 
 function pas128SurveyOk(surveys = []) {
-  const pas = surveys.find(
-    (s) => s.surveyType === "utility_mapping_survey" || s.surveyType === "eml_cat_survey"
-  );
+  const pas = surveys.find((s) => s.surveyType === "utility_mapping_survey" || s.surveyType === "eml_cat_survey");
   if (!pas) return surveys.some((s) => s.status === "final");
   return Boolean(String(pas.pas128Ql || "").trim()) && (pas.utilitiesTable || []).length > 0;
 }
@@ -310,9 +356,7 @@ function activeAllergenWindows(windows, today) {
 }
 
 function surveysMissingCalibration(surveys) {
-  return (surveys || []).filter(
-    (s) => s.status !== "final" && !(s.equipmentCalibration || []).length
-  );
+  return (surveys || []).filter((s) => s.status !== "final" && !(s.equipmentCalibration || []).length);
 }
 
 /**
@@ -328,9 +372,7 @@ export function applyIndustryReadinessGates(gates, project, dash, packId = getOr
 
   switch (packId) {
     case "electricalContractor": {
-      const hotWork = projectRows(reg.hotWork, pid).filter(
-        (r) => String(r.status || "active") !== "closed"
-      );
+      const hotWork = projectRows(reg.hotWork, pid).filter((r) => String(r.status || "active") !== "closed");
       const hasHotPermit = (dash?.permits || []).some(
         (p) => p.status === "active" && String(p.type || "").includes("hot")
       );
@@ -346,9 +388,7 @@ export function applyIndustryReadinessGates(gates, project, dash, packId = getOr
       });
       patchGate(gates, "rams", { max: 15, ok: (dash?.rams?.length || 0) > 0 });
       if (isModuleVisible("electrical-pat")) {
-        const patOk =
-          projectRows(reg.pat, pid).length > 0 ||
-          (reg.pat.length > 0 && projectInspections.length > 0);
+        const patOk = projectRows(reg.pat, pid).length > 0 || (reg.pat.length > 0 && projectInspections.length > 0);
         stealGatePoints(gates, "intel", {
           key: "pat",
           label: "PAT / electrical",
@@ -414,9 +454,7 @@ export function applyIndustryReadinessGates(gates, project, dash, packId = getOr
         ok: allergenOk,
       });
       if (isModuleVisible("gmp-deviations")) {
-        const gmpClear = !reg.gmp.some(
-          (r) => String(r.status || "open").toLowerCase() !== "closed"
-        );
+        const gmpClear = !reg.gmp.some((r) => String(r.status || "open").toLowerCase() !== "closed");
         stealGatePoints(gates, "cdm", {
           key: "gmp",
           label: "GMP deviations clear",
@@ -454,7 +492,9 @@ export function applyIndustryReadinessGates(gates, project, dash, packId = getOr
         key: "excavation",
         label: "Excavation / temp works",
         max: 5,
-        ok: isModuleVisible("excavation") ? reg.inspections.length > 0 || (dash?.permits?.length || 0) > 0 : (dash?.permits?.length || 0) > 0,
+        ok: isModuleVisible("excavation")
+          ? reg.inspections.length > 0 || (dash?.permits?.length || 0) > 0
+          : (dash?.permits?.length || 0) > 0,
       });
       break;
     }
@@ -551,11 +591,7 @@ export function buildIndustryCompliancePulse(dash, packId = getOrgIndustryPackId
     items.push({
       id: "survey-draft",
       label: "Survey completeness",
-      value: !surveys.length
-        ? "None started"
-        : complete
-          ? "QA complete"
-          : `${drafts || surveys.length} need work`,
+      value: !surveys.length ? "None started" : complete ? "QA complete" : `${drafts || surveys.length} need work`,
       status: !surveys.length ? "todo" : complete ? "done" : "warn",
       viewId: "survey-report",
       action: "createReport",
@@ -615,9 +651,7 @@ export function pickIndustryMoreNextAction(packId = getOrgIndustryPackId(), regi
 
   if (packId === "electricalContractor") {
     if (isModuleVisible("electrical-pat")) {
-      const overdue = reg.pat.filter(
-        (r) => r.nextTestDue && String(r.nextTestDue).slice(0, 10) < today
-      );
+      const overdue = reg.pat.filter((r) => r.nextTestDue && String(r.nextTestDue).slice(0, 10) < today);
       if (overdue.length) {
         return {
           viewId: "electrical-pat",
@@ -717,9 +751,7 @@ export function pickIndustryMoreNextAction(packId = getOrgIndustryPackId(), regi
   }
 
   if (packId === "generalContractor" || packId === "buildingTrades") {
-    const openSnags = loadOrgScoped("snags", []).filter(
-      (s) => s.status !== "closed" && s.status !== "resolved"
-    );
+    const openSnags = loadOrgScoped("snags", []).filter((s) => s.status !== "closed" && s.status !== "resolved");
     if (openSnags.length > 5) {
       return {
         viewId: "snags",
@@ -851,7 +883,10 @@ export function getIndustrySitePackRows(packId = getOrgIndustryPackId(), registe
       break;
     case "surveyingGeodesy":
       rows.push({ label: "Survey reports", value: String(dash?.surveys?.length || 0) });
-      rows.push({ label: "Survey drafts", value: String((dash?.surveys || []).filter((s) => s.status !== "final").length) });
+      rows.push({
+        label: "Survey drafts",
+        value: String((dash?.surveys || []).filter((s) => s.status !== "final").length),
+      });
       rows.push({ label: "Drawings / plans", value: String(dash?.plans?.length || 0) });
       rows.push({ label: "Geo photos", value: String(reg.geoPhotos.length) });
       break;
@@ -913,9 +948,7 @@ export function buildIndustrySitePackFocusHtml(packId, dash, registers, escapeFn
     "Allergen changeovers": reg.allergen.length,
     "GMP deviations": reg.gmp.length,
     "High-care access": reg.highCare.length,
-    "Inspections or survey": isSurveyWorkflowEnabled()
-      ? dash?.surveys?.length || 0
-      : dash?.inspections?.length || 0,
+    "Inspections or survey": isSurveyWorkflowEnabled() ? dash?.surveys?.length || 0 : dash?.inspections?.length || 0,
     "Linked documents": dash?.totals?.documents || 0,
     PTW: dash?.permits?.length || 0,
   };

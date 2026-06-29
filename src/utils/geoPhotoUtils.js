@@ -76,7 +76,27 @@ export function requestDeviceLocation() {
 }
 
 /** Attach DeviceOrientation listener; returns cleanup. */
-export function watchCompassBearing(onBearing) {
+export async function requestCompassPermission() {
+  if (typeof window === "undefined" || typeof DeviceOrientationEvent === "undefined") return false;
+  if (typeof DeviceOrientationEvent.requestPermission !== "function") return true;
+  try {
+    const state = await DeviceOrientationEvent.requestPermission();
+    return state === "granted";
+  } catch {
+    return false;
+  }
+}
+
+export function compassNeedsUserGesture() {
+  return (
+    typeof window !== "undefined" &&
+    typeof DeviceOrientationEvent !== "undefined" &&
+    typeof DeviceOrientationEvent.requestPermission === "function"
+  );
+}
+
+/** Attach DeviceOrientation listener; returns cleanup. */
+export function watchCompassBearing(onBearing, { autoRequestPermission = true } = {}) {
   if (typeof window === "undefined") return () => {};
 
   const handler = (e) => {
@@ -86,7 +106,10 @@ export function watchCompassBearing(onBearing) {
 
   const attach = () => window.addEventListener("deviceorientation", handler, true);
 
-  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+  if (compassNeedsUserGesture()) {
+    if (!autoRequestPermission) {
+      return () => window.removeEventListener("deviceorientation", handler, true);
+    }
     DeviceOrientationEvent.requestPermission()
       .then((state) => {
         if (state === "granted") attach();

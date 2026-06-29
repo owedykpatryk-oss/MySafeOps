@@ -16,10 +16,7 @@ import {
 import { nextSurveyRef } from "../modules/surveyReport/surveyReportHelpers";
 import { buildPermitDraftFromProject } from "../modules/permits/permitProjectDefaults";
 import { checklistStringsForType } from "../modules/permits/permitTypes";
-import {
-  createDefaultChecklistItems,
-  normalizeChecklistState,
-} from "../modules/permits/permitChecklistUtils";
+import { createDefaultChecklistItems, normalizeChecklistState } from "../modules/permits/permitChecklistUtils";
 import { getTemplateForType } from "../modules/permits/permitTemplateCatalog";
 import { PERMIT_TYPES } from "../modules/permits/permitTypes";
 import { getMsStepTemplate } from "./msOrgTemplates";
@@ -44,7 +41,8 @@ const SURVEY_PACK = {
   },
   topographical_survey: {
     label: "Topographical land survey",
-    scope: "Topographical survey to capture levels, boundaries, structures and site features with agreed survey control and QA checks.",
+    scope:
+      "Topographical survey to capture levels, boundaries, structures and site features with agreed survey control and QA checks.",
     method:
       "1. Set control points and verify datum/benchmark before data capture.\n\n2. Establish safe working routes around plant movement and public interfaces.\n\n3. Capture topo features with calibrated survey equipment.\n\n4. Perform repeat checks and closure checks to validate accuracy.\n\n5. Securely store field data and produce checked outputs for issue.",
   },
@@ -66,6 +64,7 @@ export const PROJECT_PLAYBOOKS = [
       "Confirm utility records received and reviewed",
       "Plan trial holes and safe dig zones",
       "Brief team on PAS128 quality level and deliverables",
+      "Capture site entrance, access route and hazard geo-photos before mobilisation",
     ],
   },
   {
@@ -283,6 +282,9 @@ export function buildMissingDocChecklist(dash) {
   if (!dash?.plans?.length) push("Upload site plan / drawing", "upload_plan");
   if (!dash?.cdmPacks?.length) push("Create CDM compliance pack", "create_cdm");
   if (dash?.totals?.briefingToday === false) push("Record today's site briefing", "create_daily_briefing");
+  if (isSurveyWorkflowEnabled() && !dash?.geoPhotos?.length) {
+    push("Capture mobilisation geo-photos", "capture_geo_photos");
+  }
   return items;
 }
 
@@ -375,10 +377,10 @@ export function applyProjectPlaybook(project, playbookId, existing = {}) {
         ? playbook.permitTypes
         : project.permitDefaults?.requiredPermitTypes,
     },
-    startupChecklist: mergeChecklist(
-      project.startupChecklist?.length ? project.startupChecklist : [],
-      [...playbookChecklistItems(playbook), ...buildMissingDocChecklist(dashLike)]
-    ),
+    startupChecklist: mergeChecklist(project.startupChecklist?.length ? project.startupChecklist : [], [
+      ...playbookChecklistItems(playbook),
+      ...buildMissingDocChecklist(dashLike),
+    ]),
   };
 
   const applied = summary.length > 0;
