@@ -29,4 +29,20 @@ describe("surveyReportPrintHtml security", () => {
     const html = buildSurveyReportHtml(report, {});
     expect(html).toContain("data:image/png;base64,abcd1234+/=");
   });
+
+  it("blocks unsafe site plan snapshot sources from exported HTML", () => {
+    const report = blankSurveyReport({
+      title: "Test",
+      sitePlanSnapshots: [
+        {
+          planId: "pl_1",
+          name: "Plan",
+          dataUrl: '"><script>alert(1)</script><img src="',
+        },
+      ],
+    });
+    const html = buildSurveyReportHtml(report, {});
+    expect(html).not.toMatch(/<script/i);
+    expect(html).not.toContain('"><script>');
+  });
 });

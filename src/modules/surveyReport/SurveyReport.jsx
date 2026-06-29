@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef, memo } from "react";
-import { isAnthropicConfigured } from "../../utils/anthropicClient";
+import { isAnthropicConfigured, checkAnthropicProxyReady } from "../../utils/anthropicClient";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { useApp } from "../../context/AppContext";
@@ -332,10 +332,26 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const [useAiOnFill, setUseAiOnFill] = useState(false);
+  const [proxyReady, setProxyReady] = useState(null);
 
   const project = projects.find((p) => p.id === form.projectId);
   const hasCoords = Boolean(project?.lat && project?.lng);
-  const hasAi = isAnthropicConfigured();
+  const clientAiConfigured = isAnthropicConfigured();
+  const hasAi = clientAiConfigured && proxyReady !== false;
+
+  useEffect(() => {
+    if (!clientAiConfigured) {
+      setProxyReady(null);
+      return undefined;
+    }
+    let cancelled = false;
+    checkAnthropicProxyReady().then((ok) => {
+      if (!cancelled) setProxyReady(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientAiConfigured]);
   const plansWithMarkup = useMemo(
     () =>
       (projectPlans || []).filter((p) => {
@@ -564,7 +580,12 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
             {!project && "Select a project to enable prefill and weather fetch. "}
             {project && !hasCoords && "Project has no map coordinates — set location on the project for weather. "}
             {project && !plansWithMarkup.length && "No marked site plans on this project yet (Workers → site plan). "}
-            {!hasAi && "AI polish needs Anthropic key or proxy in settings. "}
+            {!hasAi && clientAiConfigured && proxyReady === false && (
+              <span style={{ fontSize: 11, color: "#A32D2D" }}>
+                AI proxy is not ready on the server — check Vercel env (ANTHROPIC_API_KEY, AI_PROXY_SHARED_SECRET, VITE_AI_PROXY_SECRET).{" "}
+              </span>
+            )}
+            {!hasAi && !clientAiConfigured && "AI polish needs Anthropic key or proxy in settings. "}
             {msg && (
               <span style={{ color: msg.includes("failed") || msg.includes("required") ? "#A32D2D" : "#0d9488" }}>{msg}</span>
             )}

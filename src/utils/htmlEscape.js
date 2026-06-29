@@ -47,10 +47,22 @@ export function safeOpaqueToken(raw, { maxLen = 128 } = {}) {
 /** Strip active content from print-preview HTML before iframe srcDoc. */
 export function sanitizePrintPreviewHtml(html) {
   let out = String(html || "");
+  for (let i = 0; i < 4; i += 1) {
+    const prev = out;
+    out = stripPrintPreviewActiveContent(out);
+    if (out === prev) break;
+  }
+  return out;
+}
+
+function stripPrintPreviewActiveContent(out) {
   out = out.replace(/<script\b[\s\S]*?<\/script>/gi, "");
+  out = out.replace(/<script\b[^>]*\/>/gi, "");
+  out = out.replace(/<script\b[^>]*>/gi, "");
+  out = out.replace(/<\/script>/gi, "");
   out = out.replace(/<iframe\b[\s\S]*?<\/iframe>/gi, "");
   out = out.replace(/<object\b[\s\S]*?<\/object>/gi, "");
-  out = out.replace(/<embed\b[^>]*>/gi, "");
+  out = out.replace(/<embed\b[^>]*\/?>/gi, "");
   out = out.replace(/<base\b[^>]*>/gi, "");
   out = out.replace(/<link\b[^>]*\brel\s*=\s*["']?(?:import|preload|prefetch)["']?[^>]*>/gi, "");
   out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");

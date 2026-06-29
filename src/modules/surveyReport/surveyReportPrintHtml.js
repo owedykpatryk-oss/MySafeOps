@@ -674,7 +674,11 @@ export function buildSurveyReportHtml(report, extras = {}) {
     const planBody = `<div class="sr-plan-grid">${(r.sitePlanSnapshots || [])
       .map(
         (s) =>
-          `<figure class="sr-plan-figure"><img src="${s.dataUrl || ""}" alt="${esc(s.name || "Site plan")}"/><figcaption>${esc(s.name || "Site plan")}</figcaption></figure>`
+          (() => {
+            const src = imgSrcAttr(s.dataUrl);
+            if (!src) return "";
+            return `<figure class="sr-plan-figure"><img src="${src}" alt="${esc(s.name || "Site plan")}"/><figcaption>${esc(s.name || "Site plan")}</figcaption></figure>`;
+          })()
       )
       .join("")}</div>`;
     pushSection("Site plan markup", "site-plan-images", planBody);

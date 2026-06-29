@@ -60,4 +60,12 @@ describe("sanitizePrintPreviewHtml", () => {
     expect(clean).not.toMatch(/refresh/i);
     expect(clean).not.toMatch(/javascript:/i);
   });
+
+  it("removes unclosed and self-closing script tags", () => {
+    const dirty = `<p>Ok</p><script src="https://evil.test/x.js"><script/>`;
+    const clean = sanitizePrintPreviewHtml(dirty);
+    expect(clean).not.toMatch(/<script/i);
+    expect(clean).not.toMatch(/<\/script/i);
+    expect(clean).toContain("Ok");
+  });
 });

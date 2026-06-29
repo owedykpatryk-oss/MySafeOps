@@ -29,7 +29,27 @@ function pickAnthropicBody(obj) {
   return out;
 }
 
+function anthropicProxyHealth() {
+  const apiKey = Boolean(String(process.env.ANTHROPIC_API_KEY || "").trim());
+  const shared = Boolean(String(process.env.AI_PROXY_SHARED_SECRET || "").trim());
+  const production = isVercelProduction();
+  if (!apiKey) {
+    return { ok: false, configured: false, reason: "anthropic_not_configured" };
+  }
+  if (production && !shared) {
+    return { ok: false, configured: false, reason: "ai_proxy_secret_required" };
+  }
+  return { ok: true, configured: true, reason: null };
+}
+
 export default async function handler(req, res) {
+  if (req.method === "GET" || req.method === "HEAD") {
+    const health = anthropicProxyHealth();
+    res.writeHead(health.ok ? 200 : 503, API_JSON_HEADERS);
+    if (req.method === "HEAD") return res.end();
+    return res.end(JSON.stringify(health));
+  }
+
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
       "Access-Control-Allow-Methods": "POST, OPTIONS",
