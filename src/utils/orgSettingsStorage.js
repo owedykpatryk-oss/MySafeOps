@@ -118,6 +118,9 @@ export function pickCloudBrandingPayload(raw) {
   if (s.msStepTemplates && typeof s.msStepTemplates === "object") {
     out.msStepTemplates = s.msStepTemplates;
   }
+  if (Array.isArray(s.customWorkspaceProfiles) && s.customWorkspaceProfiles.length) {
+    out.customWorkspaceProfiles = s.customWorkspaceProfiles;
+  }
   return out;
 }
 

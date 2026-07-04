@@ -40,22 +40,39 @@ export const AUTOMATION_RULE_DEFS = [
   },
 ];
 
+export const REMINDER_RULE_DEFS = [
+  {
+    id: "dailyBriefingReminder",
+    label: "Daily briefing reminder",
+    hint: "Notify on weekdays from 10:00 when no briefing has been recorded today.",
+    default: true,
+  },
+  {
+    id: "monthlyReportReminder",
+    label: "Monthly HSE report reminder",
+    hint: "Notify when no monthly report exists for the current calendar month.",
+    default: true,
+  },
+];
+
 export const DEFAULT_ORG_AUTOMATION_RULES = {
   requireProjectLink: true,
   surveyFinalGate: true,
   surveyExportGate: true,
   ptwRequiresProjectRams: true,
   autoApplyPlaybookOnCreate: true,
+  dailyBriefingReminder: true,
+  monthlyReportReminder: true,
   /** 0 = off; otherwise remind when draft surveys are idle this many days */
   staleSurveyReminderDays: 14,
 };
 
-const RULE_IDS = new Set(AUTOMATION_RULE_DEFS.map((d) => d.id));
+const RULE_IDS = new Set([...AUTOMATION_RULE_DEFS, ...REMINDER_RULE_DEFS].map((d) => d.id));
 
 export function normalizeOrgAutomationRules(raw) {
   const base = { ...DEFAULT_ORG_AUTOMATION_RULES };
   if (!raw || typeof raw !== "object") return base;
-  for (const def of AUTOMATION_RULE_DEFS) {
+  for (const def of [...AUTOMATION_RULE_DEFS, ...REMINDER_RULE_DEFS]) {
     if (typeof raw[def.id] === "boolean") base[def.id] = raw[def.id];
   }
   const days = Number(raw.staleSurveyReminderDays);

@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 
 import { bearingToEnd } from "../utils/geoPhotoUtils";
 import { geoPhotoPreset } from "../utils/geoPhotoPresets";
+import { asStorageArray } from "../utils/orgStorage";
 
 const EMPTY_ROUTES = [];
 const EMPTY_GEO = [];
@@ -19,7 +20,8 @@ function boundsKey(lat, lng, boundaryRing, escapeRoutes, geoPhotos) {
         .join("|")
     )
     .join("~");
-  const geo = (geoPhotos || [])
+  const geo = asStorageArray(geoPhotos)
+    .filter(Boolean)
     .map((g) => `${g.id}:${Number(g.latitude).toFixed(5)},${Number(g.longitude).toFixed(5)}:${g.bearing ?? ""}`)
     .join(";");
   return `${lat ?? ""}|${lng ?? ""}|${ring}|${routes}|${geo}`;
@@ -113,7 +115,8 @@ function ProjectSitePreviewMap({
       }
     });
 
-    (geoPhotos || []).forEach((photo) => {
+    asStorageArray(geoPhotos).forEach((photo) => {
+      if (!photo || typeof photo !== "object") return;
       const plat = Number(photo.latitude);
       const plng = Number(photo.longitude);
       if (!Number.isFinite(plat) || !Number.isFinite(plng)) return;

@@ -8,13 +8,14 @@ import "../styles/landing.css";
 import LandingTopSection from "../components/landing/LandingTopSection";
 import LandingContentSections from "../components/landing/LandingContentSections";
 import LandingFooter from "../components/landing/LandingFooter";
+import LandingMobileChrome from "../components/landing/LandingMobileChrome";
 import { BILLING_PLANS } from "../lib/billingPlans";
 import { useLandingHomeDocumentMeta } from "../utils/landingPageMeta";
 
 const SUPPORT_EMAIL = getSupportEmail();
-const LANDING_TITLE = "MySafeOps — RAMS, permits & site safety for UK construction";
+const LANDING_TITLE = "MySafeOps — RAMS, permits & site safety for UK construction & surveying";
 const LANDING_DESCRIPTION =
-  "RAMS builder, permits to work, inspections, worker competency, and 40+ registers — browser-first for UK construction teams. Flat organisation pricing (not per seat). Optional cloud sign-in and backup.";
+  "RAMS quick packs, permits to work, PAS128 survey workflows, geo evidence and 40+ registers — browser-first for UK construction, utilities and surveying teams. Flat organisation pricing. 14-day full evaluation.";
 
 export default function LandingPage() {
   const cloud = isSupabaseConfigured();
@@ -35,11 +36,24 @@ export default function LandingPage() {
     return scheduleIdleLoginPrefetch();
   }, [cloud, ready, user]);
 
-  /** Warm blog route chunks so first click from the marketing page loads quickly. */
+  /** Warm blog route chunks when idle — skip on save-data connections. */
   useEffect(() => {
-    void import("./BlogIndexPage.jsx");
-    void import("./BlogArticlePage.jsx");
-    void import("./SecurityPosturePage.jsx");
+    const conn = typeof navigator !== "undefined" ? navigator.connection : null;
+    if (conn?.saveData) return undefined;
+
+    const warm = () => {
+      void import("./BlogIndexPage.jsx");
+      void import("./BlogArticlePage.jsx");
+      void import("./SecurityPosturePage.jsx");
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(warm, { timeout: 5000 });
+      return () => window.cancelIdleCallback(id);
+    }
+
+    const t = window.setTimeout(warm, 2500);
+    return () => window.clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -221,6 +235,7 @@ export default function LandingPage() {
         />
         <LandingFooter supportEmail={SUPPORT_EMAIL} />
       </main>
+      <LandingMobileChrome />
     </div>
   );
 }

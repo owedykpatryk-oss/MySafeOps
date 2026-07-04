@@ -1,7 +1,8 @@
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { loadOrgScoped } from "./orgStorage";
 import { sanitizePdfFileSegment } from "./pdfFileName";
-import { MODULE_PDF_REGISTRY, canExportModulePdf } from "../navigation/moduleCatalogMeta";
+import { MODULE_PDF_REGISTRY, canExportModulePdf, getModulePdfConfig } from "../navigation/moduleCatalogMeta";
+import { getModuleTilePresentation } from "./moduleTileIntelligence";
 import { MORE_SECTIONS, getMoreTabsForSection } from "../navigation/appModules";
 import { prepareRegisterExport, renderDailyBriefingDetailPages, renderGeoPhotoDetailPages } from "./registerPdfAdapters";
 
@@ -89,11 +90,59 @@ export function inferRegisterColumns(rows, maxCols = 5) {
 }
 
 function loadRegisterRows(moduleId) {
-  const cfg = MODULE_PDF_REGISTRY[moduleId];
-  if (!cfg?.key) return { rows: [], cfg: null };
+  const cfg = getModulePdfConfig(moduleId);
+  if (!cfg) return { rows: [], cfg: null };
+  if (cfg.overview || !cfg.key) return { rows: [], cfg: { ...cfg, overview: true } };
   const raw = loadOrgScoped(cfg.key, []);
   const rows = Array.isArray(raw) ? raw : [];
   return { rows, cfg };
+}
+
+function renderModuleOverviewPage(pdf, moduleId, label, org, rgb, theme) {
+  const pres = getModuleTilePresentation(moduleId, { count: 0, status: "empty" });
+  let y = drawPdfPageHeader(pdf, {
+    org,
+    title: label,
+    subtitle: "Premium module guide · MySafeOps",
+    rgb,
+    theme,
+  });
+  y += 6;
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(10);
+  pdf.setTextColor(...rgb);
+  pdf.text("Smart suggestion", MARGIN, y);
+  y += 5;
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(51, 65, 85);
+  const smartLines = pdf.splitTextToSize(
+    pres.smartText || "Open this module in MySafeOps to capture live compliance evidence on site.",
+    PAGE_W - MARGIN * 2
+  );
+  pdf.text(smartLines, MARGIN, y);
+  y += smartLines.length * 4.2 + 8;
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(10);
+  pdf.setTextColor(...rgb);
+  pdf.text("Pre-built quick start", MARGIN, y);
+  y += 5;
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9.5);
+  pdf.setTextColor(15, 23, 42);
+  pdf.text(String(pres.prebuild?.label || "Use Quick start on the More tile."), MARGIN, y);
+  y += 10;
+
+  pdf.setDrawColor(...rgb);
+  pdf.setLineWidth(0.3);
+  pdf.roundedRect(MARGIN, y, PAGE_W - MARGIN * 2, 28, 3, 3, "S");
+  pdf.setFontSize(8);
+  pdf.setTextColor(100, 116, 139);
+  pdf.text("Exported from your organisation workspace. For live registers with records,", MARGIN + 4, y + 8);
+  pdf.text("use Premium PDF on the module tile after adding entries.", MARGIN + 4, y + 13);
+  pdf.text(`Generated ${new Date().toLocaleString("en-GB")}`, MARGIN + 4, y + 22);
+  return y + 36;
 }
 
 function hexToRgb(hex) {
@@ -379,11 +428,20 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
   const theme = getPdfTheme(org);
   const rgb = hexToRgb(org.primaryColor);
   const label = opts.label || humanizeKey(moduleId);
+  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+
+  if (cfg.overview && rows.length === 0) {
+    renderModuleOverviewPage(pdf, moduleId, label, org, rgb, theme);
+    finalizePdf(pdf, org, theme);
+    const slug = sanitizePdfFileSegment(label, 36) || sanitizePdfFileSegment(moduleId, 36) || "module";
+    const fileName = buildFileName(org, slug);
+    pdf.save(fileName);
+    return { ok: true, fileName, rows: 0, overview: true };
+  }
+
   const prepared = prepareRegisterExport(moduleId, rows, { summary: opts.summary === true });
   const filterSuffix = opts.filterNote ? ` · ${opts.filterNote}` : rows.length !== storedRows.length ? ` · ${rows.length} of ${storedRows.length} shown` : "";
   const baseSubtitle = org.pdfHeader ? String(org.pdfHeader).slice(0, 90) : "Register export";
-
-  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
 
   if (prepared.mode === "detail" && moduleId === "daily-briefing") {
     renderDailyBriefingDetailPages(pdf, prepared.rows, {

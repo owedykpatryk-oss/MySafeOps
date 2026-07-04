@@ -1,19 +1,30 @@
 import { describe, it, expect } from "vitest";
-import { planPercentToLatLngAffine, solvePlanAffineFromControlPoints } from "./projectDrawingAffine";
+import { planPercentToLatLngAffine, latLngToPlanPercentAffine, solvePlanAffineFromControlPoints } from "./projectDrawingAffine";
 
 describe("projectDrawingAffine", () => {
+  const controls = [
+    { px: 0, py: 0, lat: 51.5, lng: -0.1 },
+    { px: 100, py: 0, lat: 51.5, lng: -0.08 },
+    { px: 0, py: 100, lat: 51.52, lng: -0.1 },
+  ];
+
   it("solvePlanAffineFromControlPoints maps corners and center", () => {
-    const aff = solvePlanAffineFromControlPoints([
-      { px: 0, py: 0, lat: 51.5, lng: -0.1 },
-      { px: 100, py: 0, lat: 51.51, lng: -0.09 },
-      { px: 0, py: 100, lat: 51.49, lng: -0.11 },
-    ]);
+    const aff = solvePlanAffineFromControlPoints(controls);
     expect(aff).not.toBeNull();
     const c = planPercentToLatLngAffine(50, 50, aff);
     expect(c.lat).toBeGreaterThan(51.48);
     expect(c.lat).toBeLessThan(51.52);
     expect(c.lng).toBeGreaterThan(-0.12);
     expect(c.lng).toBeLessThan(-0.08);
+  });
+
+  it("latLngToPlanPercentAffine inverts forward transform", () => {
+    const aff = solvePlanAffineFromControlPoints(controls);
+    const fwd = planPercentToLatLngAffine(35, 62, aff);
+    const inv = latLngToPlanPercentAffine(fwd.lat, fwd.lng, aff);
+    expect(inv).not.toBeNull();
+    expect(inv.px).toBeCloseTo(35, 1);
+    expect(inv.py).toBeCloseTo(62, 1);
   });
 
   it("returns null for collinear control points", () => {

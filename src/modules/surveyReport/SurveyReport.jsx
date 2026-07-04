@@ -23,6 +23,8 @@ import {
   UTILITY_RECORDS_SOURCES,
   WEATHER_PHENOMENA,
   QA_CHECKLIST_ITEMS,
+  GI_QA_CHECKLIST_ITEMS,
+  GI_METHOD_OPTIONS,
   UTILITY_TYPE_OPTIONS,
   UTILITY_CONFIDENCE_LEVELS,
   DELIVERABLE_FORMAT_OPTIONS,
@@ -63,7 +65,7 @@ import {
 import { listProjectPlans, plansForProject } from "../permits/permitPlanOverlayRegistry";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
-import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable } from "../../utils/geoPhotoIntegrations";
+import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable, geoPhotosToGiLocationsTable } from "../../utils/geoPhotoIntegrations";
 import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings } from "../../utils/surveyDxfAnalyzer";
 import CadImportPanel from "./CadImportPanel";
 import EmptyState from "../../components/EmptyState";
@@ -910,6 +912,11 @@ function ReportEditor({
 
   const linkedRams = ramsDocs.find((d) => d.id === form.linkedRamsId);
   const pas128Stats = useMemo(() => buildPas128SummaryStats(form), [form]);
+  const isGiReport = form.surveyType === "site_investigation_campaign";
+  const qaChecklistOptions = useMemo(
+    () => (isGiReport ? [...QA_CHECKLIST_ITEMS, ...GI_QA_CHECKLIST_ITEMS] : QA_CHECKLIST_ITEMS),
+    [isGiReport]
+  );
   const prevTab = adjacentSurveyTab(tab, "prev");
   const nextTabNav = adjacentSurveyTab(tab, "next");
 
@@ -1401,7 +1408,7 @@ function ReportEditor({
             />
             <div style={ss.sectionHead}>QA & verification</div>
             <CheckboxGrid
-              options={QA_CHECKLIST_ITEMS}
+              options={qaChecklistOptions}
               selected={Object.entries(form.qaChecklist || {})
                 .filter(([, v]) => v)
                 .map(([k]) => k)}
@@ -1676,6 +1683,43 @@ function ReportEditor({
               onLayerMappingsChange={handleCadLayerMappings}
               onClear={() => setForm((f) => ({ ...f, cadImport: null, updatedAt: new Date().toISOString() }))}
             />
+            {isGiReport ? (
+              <>
+                <div style={ss.sectionHead}>GI location schedule</div>
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+                  Structured table for trial pits, boreholes, DCP points and samples — links to geo-photo figures in the PDF.
+                </p>
+                <RowTableEditor
+                  rows={form.giLocationsTable || []}
+                  onChange={(giLocationsTable) => setForm((f) => ({ ...f, giLocationsTable, updatedAt: new Date().toISOString() }))}
+                  emptyLabel="No GI locations — add rows, import from geo-photos, or describe in findings below."
+                  addLabel="+ Add GI location"
+                  columns={[
+                    { key: "locationId", label: "Location ID", placeholder: "BH01" },
+                    { key: "method", label: "Method", options: GI_METHOD_OPTIONS },
+                    { key: "depth", label: "Depth", placeholder: "12.5 m" },
+                    { key: "notes", label: "Notes", placeholder: "Made ground to 1.2 m" },
+                  ]}
+                />
+                {form.projectId && countGeoPhotosForReport(geoPhotos, form.projectId) > 0 && (
+                  <button
+                    type="button"
+                    style={{ ...ss.btn, fontSize: 11, marginBottom: 12 }}
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        giLocationsTable: geoPhotosToGiLocationsTable(geoPhotos, f.projectId, {
+                          existingRows: f.giLocationsTable,
+                        }),
+                        updatedAt: new Date().toISOString(),
+                      }))
+                    }
+                  >
+                    Import GI locations from geo-photos
+                  </button>
+                )}
+              </>
+            ) : null}
             <div style={ss.sectionHead}>Utility schedule (PAS128)</div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
               Structured table prints before narrative findings — ideal for utility mapping reports.
@@ -1936,7 +1980,7 @@ export default function SurveyReport() {
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [ramsDocs] = useState(() => load("rams_builder_docs", []));
   const [projectPlans] = useState(() => listProjectPlans());
-  const [geoPhotos] = useState(() => load("geo_photos", []));
+  const [geoPhotos, setGeoPhotos] = useState(() => load("geo_photos", []));
   const [permits] = useState(() => load("permits_v2", []));
   const [modal, setModal] = useState(null);
   const [filter, setFilter] = useState("all");
@@ -1981,8 +2025,16 @@ export default function SurveyReport() {
     load,
     save,
   });
-  const d1Hydrating = d1RepH || d1ProjH;
-  const d1OutboxPending = d1RepO || d1ProjO;
+  const { d1Hydrating: d1GeoH, d1OutboxPending: d1GeoO } = useD1OrgArraySync({
+    storageKey: "geo_photos",
+    namespace: "geo_photos",
+    value: geoPhotos,
+    setValue: setGeoPhotos,
+    load,
+    save,
+  });
+  const d1Hydrating = d1RepH || d1ProjH || d1GeoH;
+  const d1OutboxPending = d1RepO || d1ProjO || d1GeoO;
 
   const filtered = useMemo(() => {
     let rows = reports;
@@ -2240,6 +2292,42 @@ export default function SurveyReport() {
     }
   }, [geoPhotos]);
 
+  const handleKmlExport = useCallback(async (r) => {
+    try {
+      const { downloadSurveyReportKml } = await import("./surveyReportExport");
+      downloadSurveyReportKml(r, geoPhotos);
+    } catch (e) {
+      alert(e?.message || "KML export failed.");
+    }
+  }, [geoPhotos]);
+
+  const handleKmzExport = useCallback(async (r) => {
+    try {
+      const { downloadSurveyReportKmz } = await import("./surveyReportExport");
+      await downloadSurveyReportKmz(r, geoPhotos);
+    } catch (e) {
+      alert(e?.message || "KMZ export failed.");
+    }
+  }, [geoPhotos]);
+
+  const handleGpxExport = useCallback(async (r) => {
+    try {
+      const { downloadSurveyReportGpx } = await import("./surveyReportExport");
+      downloadSurveyReportGpx(r, geoPhotos);
+    } catch (e) {
+      alert(e?.message || "GPX export failed.");
+    }
+  }, [geoPhotos]);
+
+  const handleCadPackExport = useCallback(async (r) => {
+    try {
+      const { downloadSurveyReportCadPack } = await import("./surveyReportExport");
+      await downloadSurveyReportCadPack(r, geoPhotos);
+    } catch (e) {
+      alert(e?.message || "CAD pack export failed.");
+    }
+  }, [geoPhotos]);
+
   const handleRevision = useCallback((r) => {
     duplicateReport(r, { asRevision: true });
   }, [duplicateReport]);
@@ -2453,6 +2541,10 @@ export default function SurveyReport() {
                   onDuplicate={duplicateReport}
                   onHtmlExport={exportHtmlForReport}
                   onGeoJsonExport={hasGeo ? handleGeoJsonExport : null}
+                  onKmlExport={hasGeo ? handleKmlExport : null}
+                  onKmzExport={hasGeo ? handleKmzExport : null}
+                  onGpxExport={hasGeo ? handleGpxExport : null}
+                  onCadPackExport={hasGeo ? handleCadPackExport : null}
                   onRevision={handleRevision}
                   onProjectHub={r.projectId ? handleProjectHub : null}
                   onDelete={handleListDelete}

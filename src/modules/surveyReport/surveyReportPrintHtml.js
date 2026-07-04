@@ -1,5 +1,5 @@
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
-import { openPrintWindow, safeImageSrc, escapeAttr, sanitizePrintPreviewHtml } from "../../utils/htmlEscape.js";
+import { openPrintWindow, safeImageSrc, escapeAttr, sanitizePrintPreviewHtml, writePrintWindowDocument } from "../../utils/htmlEscape.js";
 import {
   buildAccessLimitationsText,
   buildControlAccuracyNarrative,
@@ -18,9 +18,13 @@ import {
   utilityTypeLabel,
   surveyReportQuality,
 } from "./surveyReportHelpers";
-import { PAS128_QUALITY_LEVELS, QA_CHECKLIST_ITEMS } from "./surveyReportConstants";
+import {
+  PAS128_QUALITY_LEVELS,
+  QA_CHECKLIST_ITEMS,
+  GI_QA_CHECKLIST_ITEMS,
+} from "./surveyReportConstants";
 import { geoPhotoPreset, GEO_PHOTO_GROUP_ORDER } from "../../utils/geoPhotoPresets";
-import { geoPhotosStaticMapUrl } from "../../utils/geoPhotoIntegrations";
+import { geoPhotosStaticMapUrl, geoPhotosStaticMapCaption } from "../../utils/geoPhotoIntegrations";
 import { formatLengthM } from "../../utils/surveyDxfAnalyzer";
 import {
   buildCadFieldComparison,
@@ -431,6 +435,17 @@ function utilitiesTableBlock(rows, photoIndexByGeoId = {}) {
   );
 }
 
+function giLocationsTableBlock(rows, photoIndexByGeoId = {}) {
+  if (!rows?.length) return "";
+  return dataTable(
+    ["Location ID", "Method", "Depth", "Figure", "Notes"],
+    rows.map((r) => {
+      const fig = r.geoPhotoId && photoIndexByGeoId[r.geoPhotoId] ? `Fig. ${photoIndexByGeoId[r.geoPhotoId]}` : "";
+      return [r.locationId || "", r.method || "", r.depth || "", fig, r.notes || ""];
+    })
+  );
+}
+
 function deliverablesBlock(rows) {
   if (!rows?.length) return "";
   return dataTable(
@@ -457,9 +472,11 @@ function recordsReferencesBlock(rows) {
   );
 }
 
-function qaChecklistBlock(qa) {
+function qaChecklistBlock(qa, surveyType = "") {
   if (!qa) return "";
-  const rows = QA_CHECKLIST_ITEMS.map(({ key, label }) => [label, qa[key] ? "Yes" : "No"]);
+  const items =
+    surveyType === "site_investigation_campaign" ? [...QA_CHECKLIST_ITEMS, ...GI_QA_CHECKLIST_ITEMS] : QA_CHECKLIST_ITEMS;
+  const rows = items.map(({ key, label }) => [label, qa[key] ? "Yes" : "No"]);
   return dataTable(["Check", "Result"], rows);
 }
 
@@ -523,8 +540,9 @@ function photoGrid(photos) {
 
   const geoPhotos = photos.filter((p) => p.geoPhotoId && p.latitude != null);
   const mapUrl = geoPhotos.length >= 2 ? geoPhotosStaticMapUrl(geoPhotos) : "";
+  const mapNote = geoPhotosStaticMapCaption(geoPhotos);
   const mapBlock = mapUrl
-    ? `<figure class="sr-cover-map sr-photo-map"><img src="${mapUrl}" alt="Geo-photo locations"/><figcaption>Geo-photo locations (${geoPhotos.length} points)</figcaption></figure>`
+    ? `<figure class="sr-cover-map sr-photo-map"><img src="${mapUrl}" alt="Geo-photo locations"/><figcaption>Geo-photo locations (${geoPhotos.length} points)${mapNote ? ` — ${esc(mapNote)}` : ""}</figcaption></figure>`
     : "";
 
   const html = `${mapBlock}${groupBlocks}`;
@@ -652,7 +670,10 @@ export function buildSurveyReportHtml(report, extras = {}) {
   const photoIndexByGeoId = photoBundle.indexByGeoId || {};
 
   let findingsBody = "";
-  if (r.utilitiesTable?.length) {
+  if (r.giLocationsTable?.length) {
+    findingsBody += giLocationsTableBlock(r.giLocationsTable, photoIndexByGeoId);
+    findingsBody += `<div class="sr-narrative">${nl2p(r.sections?.findings)}</div>`;
+  } else if (r.utilitiesTable?.length) {
     findingsBody += utilitiesTableBlock(r.utilitiesTable, photoIndexByGeoId);
     findingsBody += `<div class="sr-narrative">${nl2p(r.sections?.findings)}</div>`;
   } else {
@@ -702,7 +723,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
   }
 
   if (qaText) {
-    pushSection("QA & verification", "qa", qaChecklistBlock(r.qaChecklist));
+    pushSection("QA & verification", "qa", qaChecklistBlock(r.qaChecklist, r.surveyType));
   }
 
   if (hseParts.length) {
@@ -1148,13 +1169,14 @@ export function buildSurveyReportHtml(report, extras = {}) {
 }
 
 export function openSurveyReportPrint(report, extras) {
-  const html = sanitizePrintPreviewHtml(buildSurveyReportHtml(report, extras));
+  void (async () => {
+  const html = buildSurveyReportHtml(report, extras);
   const win = openPrintWindow();
-  if (!win) return false;
-  win.document.write(html);
-  win.document.close();
+  if (!win) return;
+  await writePrintWindowDocument(win, html);
   win.focus();
   setTimeout(() => win.print(), 400);
+  })();
   return true;
 }
 

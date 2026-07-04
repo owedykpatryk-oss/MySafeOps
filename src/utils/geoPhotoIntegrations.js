@@ -3,6 +3,12 @@
  */
 import { geoPhotoPreset, geoPhotoPresetLabel, presetsByGroup } from "./geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
+import {
+  GEO_PHOTO_GI_TYPES,
+  resolvedGiDepth,
+  resolvedGiLocationId,
+  permitHasSiteEvidence,
+} from "./geoPhotoFields";
 
 export const GEO_PHOTOS_FINDINGS_MARKER = "=== Geo-photos (field capture) ===";
 
@@ -62,6 +68,12 @@ export function countGeoPhotosForReport(geoPhotos, projectId) {
 export function geoPhotoCaption(photo) {
   const preset = geoPhotoPreset(photo.type);
   const parts = [preset.label];
+  const loc = resolvedGiLocationId(photo);
+  if (loc) parts.push(loc);
+  const depth = resolvedGiDepth(photo);
+  if (depth) parts.push(depth);
+  const sample = String(photo.sampleRef || "").trim();
+  if (sample) parts.push(`sample ${sample}`);
   if (photo.notes?.trim()) parts.push(photo.notes.trim());
   const lat = Number(photo.latitude);
   const lng = Number(photo.longitude);
@@ -102,6 +114,9 @@ export function buildGeoPhotosFindingsBlock(geoPhotoList) {
 
   const lines = list.map((p, i) => {
     const preset = geoPhotoPreset(p.type);
+    const loc = resolvedGiLocationId(p);
+    const depth = resolvedGiDepth(p);
+    const giBits = [loc, depth].filter(Boolean).join(", ");
     const coords =
       Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude))
         ? ` (${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}` +
@@ -109,7 +124,8 @@ export function buildGeoPhotosFindingsBlock(geoPhotoList) {
           ")"
         : "";
     const note = p.notes?.trim() ? `: ${p.notes.trim()}` : "";
-    return `${i + 1}. ${preset.label}${note}${coords}`;
+    const prefix = giBits ? `${preset.label} [${giBits}]` : preset.label;
+    return `${i + 1}. ${prefix}${note}${coords}`;
   });
 
   return `${GEO_PHOTOS_FINDINGS_MARKER}\n${lines.join("\n")}`;
@@ -172,10 +188,18 @@ export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
     });
   }
 
+  let giLocationsTable = report.giLocationsTable || [];
+  if (opts.mergeGiLocationsTable !== false && report.surveyType === "site_investigation_campaign") {
+    giLocationsTable = geoPhotosToGiLocationsTable(allGeoPhotos, projectId, {
+      existingRows: giLocationsTable,
+    });
+  }
+
   return {
     ...report,
     photos: mergedPhotos,
     utilitiesTable,
+    giLocationsTable,
     accessLimitationsNotes,
     sections: { ...report.sections, findings },
     geoPhotoImportAt: new Date().toISOString(),
@@ -294,7 +318,7 @@ export function snagDraftFromGeoPhoto(photo) {
   };
 }
 
-export { presetsByGroup };
+export { GEO_PHOTO_GI_TYPES, permitHasSiteEvidence };
 
 /** Geo-photo types that map to utility schedule rows in survey reports. */
 export const GEO_PHOTO_UTILITY_TYPES = new Set([
@@ -335,7 +359,8 @@ export function geoPhotoToUtilityRow(photo, opts = {}) {
   if (!photo?.type || !GEO_PHOTO_UTILITY_TYPES.has(photo.type)) return null;
   const defaults = GEO_PHOTO_UTILITY_DEFAULTS[photo.type] || {};
   const preset = geoPhotoPreset(photo.type);
-  const depth = parseDepthFromNotes(photo.notes);
+  const depth = resolvedGiDepth(photo) || parseDepthFromNotes(photo.notes);
+  const loc = resolvedGiLocationId(photo);
   const coords =
     Number.isFinite(Number(photo.latitude)) && Number.isFinite(Number(photo.longitude))
       ? `${Number(photo.latitude).toFixed(5)}, ${Number(photo.longitude).toFixed(5)}`
@@ -349,35 +374,190 @@ export function geoPhotoToUtilityRow(photo, opts = {}) {
     method: defaults.method || preset.label,
     pas128Ql: opts.pas128Ql || "",
     confidence: defaults.confidence || "medium",
+    notes: [loc ? `ID: ${loc}` : "", photo.notes?.trim(), coords ? `Location: ${coords}` : "", `Source: geo-photo (${preset.label})`]
+      .filter(Boolean)
+      .join(" · "),
+  };
+}
+
+/** Replace geo-photo-derived rows; keep manual rows without geoPhotoId. */
+export function upsertGeoPhotoDerivedRows(existingRows = [], incomingRows = []) {
+  const manual = (existingRows || []).filter((r) => !r.geoPhotoId);
+  return [...manual, ...(incomingRows || [])];
+}
+
+/**
+ * Build utility table rows from geo-photos marked for report (upsert by geoPhotoId).
+ */
+export function geoPhotosToUtilitiesTable(allGeoPhotos, projectId, { existingRows = [], pas128Ql = "" } = {}) {
+  const forReport = projectGeoPhotosForReport(allGeoPhotos, projectId);
+  const incoming = forReport
+    .map((p) => geoPhotoToUtilityRow(p, { pas128Ql }))
+    .filter(Boolean);
+
+  return upsertGeoPhotoDerivedRows(existingRows, incoming);
+}
+
+const GEO_PHOTO_GI_DEFAULTS = {
+  trial_pit: { method: "Trial pit", locationIdPrefix: "TP" },
+  borehole_location: { method: "Borehole", locationIdPrefix: "BH" },
+  window_sampling: { method: "Window sampling", locationIdPrefix: "WS" },
+  dcp_probe: { method: "DCP / dynamic probe", locationIdPrefix: "DCP" },
+  hand_auger_point: { method: "Hand auger", locationIdPrefix: "HA" },
+  sample_custody: { method: "Sample recovery", locationIdPrefix: "S" },
+  borehole_cap: { method: "Borehole abandonment", locationIdPrefix: "BH" },
+  piezometer_install: { method: "Piezometer / standpipe", locationIdPrefix: "PZ" },
+};
+
+export { parseLocationIdFromNotes } from "./geoPhotoFields";
+
+/**
+ * Build one GI location row from a geo-photo (ground investigation types only).
+ * @param {object} photo
+ */
+export function geoPhotoToGiLocationRow(photo) {
+  if (!photo?.type || !GEO_PHOTO_GI_TYPES.has(photo.type)) return null;
+  const defaults = GEO_PHOTO_GI_DEFAULTS[photo.type] || {};
+  const preset = geoPhotoPreset(photo.type);
+  const depth = resolvedGiDepth(photo);
+  const locationId =
+    resolvedGiLocationId(photo) ||
+    `${defaults.locationIdPrefix || "GI"}-${String(photo.id || "").slice(-4).toUpperCase()}`;
+  const coords =
+    Number.isFinite(Number(photo.latitude)) && Number.isFinite(Number(photo.longitude))
+      ? `${Number(photo.latitude).toFixed(5)}, ${Number(photo.longitude).toFixed(5)}`
+      : "";
+
+  return {
+    id: `gi_gp_${photo.id}`,
+    geoPhotoId: photo.id,
+    locationId,
+    method: defaults.method || preset.label,
+    depth,
     notes: [photo.notes?.trim(), coords ? `Location: ${coords}` : "", `Source: geo-photo (${preset.label})`]
       .filter(Boolean)
       .join(" · "),
   };
 }
 
-/**
- * Build utility table rows from geo-photos marked for report (merge with existing, no duplicates by geoPhotoId).
- */
-export function geoPhotosToUtilitiesTable(allGeoPhotos, projectId, { existingRows = [], pas128Ql = "" } = {}) {
+/** Build GI location table rows from geo-photos marked for report (upsert by geoPhotoId). */
+export function geoPhotosToGiLocationsTable(allGeoPhotos, projectId, { existingRows = [] } = {}) {
   const forReport = projectGeoPhotosForReport(allGeoPhotos, projectId);
-  const existingIds = new Set((existingRows || []).map((r) => r.geoPhotoId).filter(Boolean));
   const incoming = forReport
-    .map((p) => geoPhotoToUtilityRow(p, { pas128Ql }))
-    .filter(Boolean)
-    .filter((r) => !existingIds.has(r.geoPhotoId));
+    .map((p) => geoPhotoToGiLocationRow(p))
+    .filter(Boolean);
 
-  return [...(existingRows || []), ...incoming];
+  return upsertGeoPhotoDerivedRows(existingRows, incoming);
 }
 
-/** Static map URL with multiple geo-photo markers (OpenStreetMap.de, max 10 points). */
-export function geoPhotosStaticMapUrl(photos, { width = 520, height = 220, maxMarkers = 10 } = {}) {
+/** Static map URL with multiple geo-photo markers (OpenStreetMap.de). */
+export function geoPhotosStaticMapUrl(photos, { width = 520, height = 220, maxMarkers = 25 } = {}) {
   const pts = (photos || [])
-    .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)))
-    .slice(0, maxMarkers);
-  if (!pts.length) return "";
-  const markers = pts.map((p) => `${Number(p.latitude)},${Number(p.longitude)},red-pushpin`).join("|");
-  const lat = pts.reduce((s, p) => s + Number(p.latitude), 0) / pts.length;
-  const lng = pts.reduce((s, p) => s + Number(p.longitude), 0) / pts.length;
-  const zoom = pts.length === 1 ? 16 : 15;
+    .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)));
+  const capped = pts.slice(0, maxMarkers);
+  if (!capped.length) return "";
+  const markers = capped.map((p) => `${Number(p.latitude)},${Number(p.longitude)},red-pushpin`).join("|");
+  const lat = capped.reduce((s, p) => s + Number(p.latitude), 0) / capped.length;
+  const lng = capped.reduce((s, p) => s + Number(p.longitude), 0) / capped.length;
+  const zoom = capped.length === 1 ? 16 : pts.length > 8 ? 14 : 15;
   return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=${zoom}&size=${width}x${height}&markers=${markers}`;
+}
+
+export function geoPhotosStaticMapCaption(photos, maxMarkers = 25) {
+  const total = (photos || []).filter(
+    (p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude))
+  ).length;
+  if (total <= maxMarkers) return "";
+  return `Map shows ${maxMarkers} of ${total} GPS-tagged geo-photos.`;
+}
+
+/** Build permit evidence patch from a geo-photo. */
+export function applyGeoPhotoToPermitEvidence(photo) {
+  const url = geoPhotoDisplayUrl(photo);
+  if (!url) return null;
+  const caption = geoPhotoCaption(photo);
+  return {
+    evidencePhotoUrl: url,
+    evidencePhotoStoragePath: "",
+    evidenceGeoPhotoId: photo.id,
+    evidenceNotesAppend: `Geo-photo evidence: ${caption}`,
+  };
+}
+
+/** Merge geo-photo into permit record (immutable). */
+export function linkGeoPhotoToPermit(permit, photo) {
+  const patch = applyGeoPhotoToPermitEvidence(photo);
+  if (!patch) return permit;
+  const notes = String(permit?.evidenceNotes || "").trim();
+  const append = patch.evidenceNotesAppend;
+  return {
+    ...permit,
+    evidencePhotoUrl: patch.evidencePhotoUrl,
+    evidencePhotoStoragePath: "",
+    evidenceGeoPhotoId: photo.id,
+    evidenceNotes: notes ? `${notes}\n${append}` : append,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Persist permit evidence link after geo-photo save (org-scoped storage).
+ * @param {object} photo — must include linkedPermitId when captured from PTW
+ * @param {{ load?: Function, save?: Function }} [storage]
+ */
+export function persistPermitEvidenceFromGeoPhoto(photo, storage = {}) {
+  const permitId = photo?.linkedPermitId;
+  if (!permitId) return false;
+  const loadFn = storage.load;
+  const saveFn = storage.save;
+  if (typeof loadFn !== "function" || typeof saveFn !== "function") return false;
+  const permits = loadFn("permits_v2", []);
+  const idx = permits.findIndex((p) => p.id === permitId);
+  if (idx < 0) return false;
+  const next = [...permits];
+  next[idx] = linkGeoPhotoToPermit(next[idx], photo);
+  saveFn("permits_v2", next);
+  return true;
+}
+
+/** Set linkedPermitId on geo-photo when picked as permit evidence. */
+export function persistGeoPhotoLinkedPermit(photoId, permitId, storage = {}) {
+  const loadFn = storage.load;
+  const saveFn = storage.save;
+  if (!photoId || !permitId || typeof loadFn !== "function" || typeof saveFn !== "function") return false;
+  const photos = loadFn("geo_photos", []);
+  const idx = photos.findIndex((p) => p.id === photoId);
+  if (idx < 0) return false;
+  const next = [...photos];
+  next[idx] = { ...next[idx], linkedPermitId: permitId, updatedAt: new Date().toISOString() };
+  saveFn("geo_photos", next);
+  return true;
+}
+
+/** Pick geo-photo as permit evidence — updates permit form state and persists photo link. */
+export function pickGeoPhotoAsPermitEvidence(permit, photo, storage = {}) {
+  if (permit?.id && photo?.id) persistGeoPhotoLinkedPermit(photo.id, permit.id, storage);
+  return linkGeoPhotoToPermit(permit, photo);
+}
+
+/** Clear permit evidence when geo-photo with active link is deleted. */
+export function clearPermitEvidenceForGeoPhoto(photo, storage = {}) {
+  const permitId = photo?.linkedPermitId;
+  if (!permitId) return false;
+  const loadFn = storage.load;
+  const saveFn = storage.save;
+  if (typeof loadFn !== "function" || typeof saveFn !== "function") return false;
+  const permits = loadFn("permits_v2", []);
+  const idx = permits.findIndex((p) => p.id === permitId && p.evidenceGeoPhotoId === photo.id);
+  if (idx < 0) return false;
+  const next = [...permits];
+  next[idx] = {
+    ...next[idx],
+    evidenceGeoPhotoId: "",
+    evidencePhotoUrl: "",
+    evidencePhotoStoragePath: "",
+    updatedAt: new Date().toISOString(),
+  };
+  saveFn("permits_v2", next);
+  return true;
 }

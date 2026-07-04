@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import ProjectSitePreviewMap from "./ProjectSitePreviewMap";
 import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { suggestedGeoPhotoPresetForPlaybook } from "../utils/geoPhotoFields";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 import { permitReadinessForProject } from "../modules/permits/permitProjectDefaults";
 
@@ -105,6 +106,13 @@ function ProjectCommandCenter({
     () => (project ? buildActivityFeed(project.id, { rams, permits, surveyReports, geoPhotos }) : []),
     [project, rams, permits, surveyReports, geoPhotos]
   );
+
+  const goGeoCapture = () => {
+    if (!project?.id) return;
+    const preset = suggestedGeoPhotoPresetForPlaybook(project.playbookId);
+    setWorkspaceNavTarget({ viewId: "geo-photos", projectId: project.id, action: "capture", geoPhotoPreset: preset });
+    openWorkspaceView({ viewId: "geo-photos" });
+  };
 
   const go = (viewId, action) => {
     if (!project?.id) return;
@@ -250,7 +258,7 @@ function ProjectCommandCenter({
         <button type="button" onClick={() => go("survey-report")}>
           Survey
         </button>
-        <button type="button" className="app-command-center__btn--geo" onClick={() => go("geo-photos", "capture")}>
+        <button type="button" className="app-command-center__btn--geo" onClick={goGeoCapture}>
           Geo-photos
         </button>
         <button type="button" onClick={() => go("site-map")}>

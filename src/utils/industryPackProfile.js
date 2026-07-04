@@ -2,32 +2,41 @@
  * Industry pack profile — readiness gates, More pulse, site pack, and switch preview.
  */
 
-import { INDUSTRY_PACKS } from "./orgIndustryPacks";
+import { INDUSTRY_PACKS, getWorkspacePack, getWorkspacePackLabel } from "./orgIndustryPacks";
+import { getCustomWorkspaceProfile, resolveProfileBehaviorPackId, visibleModulesForProfile } from "./customWorkspaceProfiles";
 import { getOrgIndustryPackId, isSurveyWorkflowEnabled } from "./projectHubIndustry";
 import { getRamsStarterLabel } from "./ramsIndustryStarters";
 import { isModuleVisible } from "./hiddenModules";
-import { loadOrgScoped } from "./orgStorage";
+import { loadOrgScoped, asStorageArray } from "./orgStorage";
 import { todayIsoDate } from "./projectDashboard";
 import { evaluateSurveyFinalGate } from "./surveyCompletenessGates";
+
+/** Surveying profiles share survey workflow behaviour (built-in or custom with surveyWorkflow). */
+export function isSurveyGeospatialPackId(packId) {
+  if (packId === "surveyingGeodesy") return true;
+  const custom = getCustomWorkspaceProfile(packId);
+  return Boolean(custom?.surveyWorkflow);
+}
 
 /** @typedef {{ pat: object[], hotWork: object[], gmp: object[], allergen: object[], surveys: object[], geoPhotos: object[], loto: object[], highCare: object[], inspections: object[], fireSafety: object[], firstAid: object[], cdm: object[], timesheets: object[] }} IndustryRegisterSnapshot */
 
 /** Load org registers once per pulse/command-centre pass (avoids repeated localStorage reads). */
 export function createIndustryRegisterSnapshot() {
+  const loadList = (key) => loadOrgScoped(key, []);
   return {
-    pat: loadOrgScoped("electrical_pat_log", []),
-    hotWork: loadOrgScoped("hot_work_register", []),
-    gmp: loadOrgScoped("gmp_deviation_log", []),
-    allergen: loadOrgScoped("allergen_changeover_windows", []),
-    surveys: loadOrgScoped("survey_reports", []),
-    geoPhotos: loadOrgScoped("geo_photos", []),
-    loto: loadOrgScoped("loto_register", []),
-    highCare: loadOrgScoped("high_care_access_register", []),
-    inspections: loadOrgScoped("inspection_records", []),
-    fireSafety: loadOrgScoped("fire_safety_log", []),
-    firstAid: loadOrgScoped("first_aid_register", []),
-    cdm: loadOrgScoped("cdm_packs", []),
-    timesheets: loadOrgScoped("mysafeops_timesheets", []),
+    pat: loadList("electrical_pat_log"),
+    hotWork: loadList("hot_work_register"),
+    gmp: loadList("gmp_deviation_log"),
+    allergen: loadList("allergen_changeover_windows"),
+    surveys: loadList("survey_reports"),
+    geoPhotos: loadList("geo_photos"),
+    loto: loadList("loto_register"),
+    highCare: loadList("high_care_access_register"),
+    inspections: loadList("inspection_records"),
+    fireSafety: loadList("fire_safety_log"),
+    firstAid: loadList("first_aid_register"),
+    cdm: loadList("cdm_packs"),
+    timesheets: loadList("mysafeops_timesheets"),
   };
 }
 
@@ -52,7 +61,14 @@ export const INDUSTRY_SITE_PACKS = {
   },
   surveyingGeodesy: {
     title: "Survey & geodesy site pack",
-    focus: ["Survey reports", "PAS128 deliverables", "Method statements", "RAMS (surveying)", "Drawings", "Geo photos"],
+    focus: [
+      "Survey reports",
+      "PAS128 / AS5488 deliverables",
+      "Aerial LiDAR & laser scan",
+      "Method statements",
+      "RAMS (surveying)",
+      "Geo photos",
+    ],
   },
   foodPharma: {
     title: "Food / pharma hygiene site pack",
@@ -106,12 +122,12 @@ export const PACK_WORKFLOW_HELP = {
     ],
   },
   surveyingGeodesy: {
-    summary: "Mobilisation MS → RAMS surveying pack → PAS128 survey deliverable.",
+    summary: "Mobilisation MS → geospatial RAMS pack → PAS128/AS5488 survey deliverable.",
     steps: [
       "Create project with utility mapping playbook",
-      "Complete mobilisation method statement",
+      "Seed geospatial quick packs (utility, aerial, marine, rail)",
       "Draft survey with QA checklist and calibration",
-      "Finalise PAS128 report before client issue",
+      "Finalise survey report before client issue",
     ],
   },
   contractorPlusSurveying: {
@@ -162,7 +178,19 @@ export const PACK_WORKFLOW_HELP = {
 
 /** @param {string} [packId] */
 export function getPackWorkflowHelp(packId = getOrgIndustryPackId()) {
-  return PACK_WORKFLOW_HELP[packId] || PACK_WORKFLOW_HELP.generalContractor;
+  if (PACK_WORKFLOW_HELP[packId]) return PACK_WORKFLOW_HELP[packId];
+  const custom = getCustomWorkspaceProfile(packId);
+  if (custom) {
+    return {
+      summary: custom.hint,
+      steps: [
+        "Custom profile — modules tuned for your organisation only",
+        "Apply profile to update More grid and Project Hub",
+        "Trim individual modules in Settings if needed",
+      ],
+    };
+  }
+  return PACK_WORKFLOW_HELP.generalContractor;
 }
 
 const PACK_HIGHLIGHTS = {
@@ -183,7 +211,7 @@ const PACK_HIGHLIGHTS = {
   ],
   surveyingGeodesy: [
     "Survey completeness & PAS128 in readiness gates",
-    "Survey gate weighted higher — mobilisation MS tracked",
+    "Geospatial quick packs (utility, aerial, marine, rail)",
     "Survey site pack with geo photos and drawings",
   ],
   foodPharma: [
@@ -215,7 +243,7 @@ const PACK_HIGHLIGHTS = {
 
 /** @param {string} [packId] */
 export function getIndustryPackLabel(packId = getOrgIndustryPackId()) {
-  return INDUSTRY_PACKS[packId]?.label || INDUSTRY_PACKS.generalContractor.label;
+  return getWorkspacePackLabel(packId) || INDUSTRY_PACKS.generalContractor.label;
 }
 
 /** @param {string} [packId] */
@@ -225,7 +253,17 @@ export function getIndustrySitePackTitle(packId = getOrgIndustryPackId()) {
 
 /** @param {string} packId */
 export function getPackHighlights(packId) {
-  return PACK_HIGHLIGHTS[packId] || PACK_HIGHLIGHTS.generalContractor;
+  if (PACK_HIGHLIGHTS[packId]) return PACK_HIGHLIGHTS[packId];
+  const custom = getCustomWorkspaceProfile(packId);
+  if (custom) {
+    const baseLabel = INDUSTRY_PACKS[custom.basedOn || "generalContractor"]?.label || "General";
+    return [
+      `Custom profile based on ${baseLabel}`,
+      custom.surveyWorkflow ? "Survey workflow and PAS128/geospatial packs" : "Construction-first Project Hub",
+      `${visibleModulesForProfile(custom).length} modules visible in More`,
+    ];
+  }
+  return PACK_HIGHLIGHTS.generalContractor;
 }
 
 /**
@@ -235,14 +273,14 @@ export function getPackHighlights(packId) {
  */
 export function previewPackSwitch(fromId, toId) {
   if (!toId || fromId === toId) return { changes: [], pipelineLabel: null };
-  const to = INDUSTRY_PACKS[toId];
+  const to = getWorkspacePack(toId) || INDUSTRY_PACKS.generalContractor;
   if (!to) return { changes: [], pipelineLabel: null };
 
   /** @type {string[]} */
   const changes = [];
 
-  const surveyAfter = toId === "surveyingGeodesy" || toId === "showEverything";
-  const surveyBefore = fromId === "surveyingGeodesy" || fromId === "showEverything";
+  const surveyAfter = isSurveyGeospatialPackId(toId) || toId === "showEverything";
+  const surveyBefore = isSurveyGeospatialPackId(fromId) || fromId === "showEverything";
   if (surveyAfter !== surveyBefore) {
     changes.push(
       surveyAfter
@@ -251,8 +289,8 @@ export function previewPackSwitch(fromId, toId) {
     );
   }
 
-  if (toId === "surveyingGeodesy") {
-    changes.push("PAS128 / utility mapping playbooks will appear");
+  if (isSurveyGeospatialPackId(toId)) {
+    changes.push("PAS128 / geospatial RAMS packs and survey report module will appear");
     changes.push("Survey report module will be shown");
     changes.push("Readiness will track survey completeness and mobilisation MS");
   } else if (toId !== "showEverything") {
@@ -324,8 +362,8 @@ function stealGatePoints(gates, fromKey, { key, label, max, ok }) {
 }
 
 function projectRows(rows, pid) {
-  if (!pid) return rows || [];
-  return (rows || []).filter((r) => r.projectId === pid);
+  if (!pid) return asStorageArray(rows);
+  return asStorageArray(rows).filter((r) => r.projectId === pid);
 }
 
 function liveLotoForProject(loto, pid) {
@@ -363,6 +401,7 @@ function surveysMissingCalibration(surveys) {
  * Adjust readiness gates for the active workspace profile (keeps 100pt total).
  */
 export function applyIndustryReadinessGates(gates, project, dash, packId = getOrgIndustryPackId(), registers) {
+  const effectivePack = resolveProfileBehaviorPackId(packId);
   const pid = project?.id;
   const openSnags = dash?.totals?.openSnags || 0;
   const snags = dash?.snags || [];
@@ -370,7 +409,7 @@ export function applyIndustryReadinessGates(gates, project, dash, packId = getOr
   const projectSurveys = dash?.surveys || [];
   const projectInspections = dash?.inspections || [];
 
-  switch (packId) {
+  switch (effectivePack) {
     case "electricalContractor": {
       const hotWork = projectRows(reg.hotWork, pid).filter((r) => String(r.status || "active") !== "closed");
       const hasHotPermit = (dash?.permits || []).some(
@@ -584,7 +623,7 @@ export function buildIndustryCompliancePulse(dash, packId = getOrgIndustryPackId
     });
   }
 
-  if (packId === "surveyingGeodesy" && isSurveyWorkflowEnabled()) {
+  if (isSurveyGeospatialPackId(packId) && isSurveyWorkflowEnabled()) {
     const surveys = dash?.surveys || [];
     const drafts = surveys.filter((s) => s.status !== "final").length;
     const complete = surveyCompletenessOk(surveys);
@@ -720,7 +759,7 @@ export function pickIndustryMoreNextAction(packId = getOrgIndustryPackId(), regi
     }
   }
 
-  if (packId === "surveyingGeodesy" && isModuleVisible("survey-report")) {
+  if (isSurveyGeospatialPackId(packId) && isModuleVisible("survey-report")) {
     const missingCal = surveysMissingCalibration(reg.surveys);
     if (missingCal.length) {
       return {
@@ -823,7 +862,7 @@ export function pickIndustryProjectNextAction(project, ctx, packId = getOrgIndus
     }
   }
 
-  if (packId === "surveyingGeodesy" && isSurveyWorkflowEnabled()) {
+  if (isSurveyGeospatialPackId(packId) && isSurveyWorkflowEnabled()) {
     if (surveys.length && !surveyCompletenessOk(surveys)) {
       const draft = surveys.find((s) => s.status !== "final") || surveys[0];
       return {

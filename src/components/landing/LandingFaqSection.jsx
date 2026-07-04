@@ -12,7 +12,7 @@ const FAQ = [
   },
   {
     q: "What does a trial include?",
-    a: "When cloud billing is enabled for your deployment, you typically get a trial window in-product — see Settings → Billing & limits after sign-in.",
+    a: "14 days of full module access when you sign in with cloud billing, plus one optional +14 day extension per organisation. After that, subscribe to keep editing — existing records stay viewable and exportable.",
   },
   {
     q: "Is pricing per worker or per seat?",

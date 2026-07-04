@@ -7,9 +7,19 @@ import { pushOrgBrandingToCloud } from "../utils/orgBrandingCloudSync";
 import {
   applyIndustryPack,
   getAppliedIndustryPackId,
+  getWorkspacePack,
+  getWorkspacePackLabel,
   INDUSTRY_PACKS,
   isValidIndustryPackId,
 } from "../utils/orgIndustryPacks";
+import {
+  createCustomWorkspaceProfile,
+  deleteCustomWorkspaceProfile,
+  duplicateCustomWorkspaceProfile,
+  isCustomWorkspacePackId,
+  listWorkspaceProfilesForOrg,
+} from "../utils/customWorkspaceProfiles";
+import CustomProfileEditor from "./CustomProfileEditor";
 import {
   previewPackSwitch,
   getPackHighlights,
@@ -22,7 +32,7 @@ import {
   isIndustryPackPreviewActive,
   setIndustryPackPreview,
 } from "../utils/industryPackPreview";
-import { SEED_MODULES_BY_PACK } from "../utils/industryPackSeeds";
+import { getSeedModulesPreviewForPack } from "../utils/industryPackSeeds";
 import { getRamsStarterLabel } from "../utils/ramsIndustryStarters";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import { resetOnboardingWizard } from "../utils/workspaceOnboarding";
@@ -45,6 +55,11 @@ export default function OrgWorkspaceProfile() {
   const [seedTemplates, setSeedTemplates] = useState(true);
   const [previewActive, setPreviewActive] = useState(() => isIndustryPackPreviewActive());
   const [busy, setBusy] = useState(false);
+  const [customLabel, setCustomLabel] = useState("");
+  const [customBasedOn, setCustomBasedOn] = useState("generalContractor");
+  const [profileList, setProfileList] = useState(() => listWorkspaceProfilesForOrg());
+
+  const refreshProfiles = () => setProfileList(listWorkspaceProfilesForOrg());
 
   useEffect(() => {
     const refresh = () => {
@@ -65,7 +80,7 @@ export default function OrgWorkspaceProfile() {
 
   const preview = useMemo(() => previewPackSwitch(appliedId, draftId), [appliedId, draftId]);
   const workflowHelp = useMemo(() => getPackWorkflowHelp(draftId), [draftId]);
-  const seedPreview = SEED_MODULES_BY_PACK[draftId] || [];
+  const seedPreview = getSeedModulesPreviewForPack(draftId);
   const dirty = draftId !== appliedId;
   const previewId = getIndustryPackPreviewId();
 
@@ -93,7 +108,7 @@ export default function OrgWorkspaceProfile() {
       });
       await syncCloud();
       const seedMsg = seeded.length ? ` · ${seeded.length} starter row(s) added` : "";
-      pushToast(`Workspace profile set to ${INDUSTRY_PACKS[draftId]?.label || draftId}${seedMsg}`, "success");
+      pushToast(`Workspace profile set to ${getWorkspacePackLabel(draftId)}${seedMsg}`, "success");
       setPreviewActive(false);
     } finally {
       setBusy(false);
@@ -104,7 +119,7 @@ export default function OrgWorkspaceProfile() {
     if (!isValidIndustryPackId(draftId)) return;
     setIndustryPackPreview(draftId);
     setPreviewActive(true);
-    pushToast(`Previewing ${INDUSTRY_PACKS[draftId]?.label} in Project Hub (session only)`, "info");
+    pushToast(`Previewing ${getWorkspacePackLabel(draftId)} in Project Hub (session only)`, "info");
     openWorkspaceView({ viewId: "projects" });
   };
 
@@ -125,13 +140,13 @@ export default function OrgWorkspaceProfile() {
   return (
     <div className="app-org-profile">
       <p className="app-org-profile__lead">
-        Choose a profile that matches your work — modules, Project Hub pipeline, playbooks, readiness gates, site pack PDFs, and RAMS hazard starters adjust automatically.
+        Choose a built-in profile or save your own — custom profiles stay private to your organisation and are never shared with other companies. Modules, Project Hub pipeline, playbooks, readiness gates, site pack PDFs, and RAMS hazard starters adjust automatically.
         Existing records are never deleted when you switch. Open <button type="button" className="app-org-profile__help-link" onClick={() => openWorkspaceView({ viewId: "help" })}>Help → Workspace profiles</button> for the full catalogue.
       </p>
 
       {previewActive && previewId ? (
         <div className="app-org-profile__preview-banner" role="status">
-          <strong>Preview mode:</strong> Project Hub shows <em>{INDUSTRY_PACKS[previewId]?.label}</em> readiness and copy.
+          <strong>Preview mode:</strong> Project Hub shows <em>{getWorkspacePackLabel(previewId)}</em> readiness and copy.
           Module layout updates when you click Apply.
           <button type="button" className="app-org-profile__preview-exit" onClick={exitPreview}>
             Exit preview
@@ -144,18 +159,59 @@ export default function OrgWorkspaceProfile() {
       ) : null}
 
       <div className="app-onboarding-options app-org-profile__options">
-        {Object.entries(INDUSTRY_PACKS).map(([key, pack]) => (
+        {profileList.map((pack) => (
           <button
-            key={key}
+            key={pack.id}
             type="button"
-            className={`app-onboarding-option${draftId === key ? " app-onboarding-option--active" : ""}`}
-            onClick={() => setDraftId(key)}
+            className={`app-onboarding-option${draftId === pack.id ? " app-onboarding-option--active" : ""}`}
+            onClick={() => setDraftId(pack.id)}
             disabled={!canManage}
           >
-            <span className="app-onboarding-option__title">{pack.label}</span>
+            <span className="app-onboarding-option__title">
+              {pack.label}
+              {pack.custom ? <span style={{ fontSize: 11, marginLeft: 6, opacity: 0.7 }}>· Custom</span> : null}
+            </span>
             <span className="app-onboarding-option__hint">{pack.hint}</span>
-            {appliedId === key ? (
+            {appliedId === pack.id ? (
               <span className="app-org-profile__applied">Current profile</span>
+            ) : null}
+            {canManage && pack.custom ? (
+              <span style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  style={{ ...ss.btn, fontSize: 11, padding: "2px 8px" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    try {
+                      const copy = duplicateCustomWorkspaceProfile(pack.id);
+                      refreshProfiles();
+                      setDraftId(copy.id);
+                      void syncCloud();
+                      pushToast(`Duplicated as "${copy.label}"`, "success");
+                    } catch (err) {
+                      pushToast(err?.message || "Could not duplicate", "error");
+                    }
+                  }}
+                >
+                  Duplicate
+                </button>
+                <button
+                  type="button"
+                  style={{ ...ss.btn, fontSize: 11, padding: "2px 8px" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete custom profile "${pack.label}"?`)) {
+                      deleteCustomWorkspaceProfile(pack.id);
+                      refreshProfiles();
+                      if (draftId === pack.id) setDraftId(appliedId);
+                      void syncCloud();
+                      pushToast("Custom profile deleted", "info");
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+              </span>
             ) : null}
           </button>
         ))}
@@ -175,9 +231,9 @@ export default function OrgWorkspaceProfile() {
       <div className="app-org-profile__workflow">
         <p className="app-org-profile__workflow-title">Typical workflow</p>
         <p className="app-org-profile__workflow-summary">{workflowHelp.summary}</p>
-        {INDUSTRY_PACKS[draftId]?.ramsStarterKey !== null ? (
+        {getWorkspacePack(draftId)?.ramsStarterKey !== null ? (
           <p className="app-org-profile__workflow-summary" style={{ marginTop: 8 }}>
-            RAMS builder starter: <strong>{getRamsStarterLabel(INDUSTRY_PACKS[draftId]?.ramsStarterKey || "general")}</strong>
+            RAMS builder starter: <strong>{getRamsStarterLabel(getWorkspacePack(draftId)?.ramsStarterKey || "general")}</strong>
           </p>
         ) : null}
         <ol className="app-org-profile__workflow-steps">
@@ -226,6 +282,66 @@ export default function OrgWorkspaceProfile() {
           Full guide in Help
         </button>
       </div>
+
+      {canManage && isCustomWorkspacePackId(draftId) ? (
+        <CustomProfileEditor profileId={draftId} onSaved={refreshProfiles} onSyncCloud={syncCloud} />
+      ) : null}
+
+      {canManage ? (
+        <div style={{ ...ss.card, marginTop: 20, padding: 16 }}>
+          <p style={{ fontWeight: 600, margin: "0 0 8px" }}>Save your own profile</p>
+          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.5 }}>
+            Create a private workspace profile for your organisation. Other companies cannot see or use profiles you save here.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+            <label style={{ flex: "1 1 200px", fontSize: 13 }}>
+              Profile name
+              <input
+                value={customLabel}
+                onChange={(e) => setCustomLabel(e.target.value)}
+                placeholder="e.g. Our civils + survey mix"
+                style={{ ...ss.inp, marginTop: 4, width: "100%" }}
+              />
+            </label>
+            <label style={{ flex: "1 1 180px", fontSize: 13 }}>
+              Based on
+              <select
+                value={customBasedOn}
+                onChange={(e) => setCustomBasedOn(e.target.value)}
+                style={{ ...ss.inp, marginTop: 4, width: "100%" }}
+              >
+                {Object.entries(INDUSTRY_PACKS).map(([key, p]) => (
+                  <option key={key} value={key}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              style={ss.btnP}
+              disabled={!customLabel.trim()}
+              onClick={() => {
+                try {
+                  const created = createCustomWorkspaceProfile({
+                    label: customLabel.trim(),
+                    basedOn: customBasedOn,
+                  });
+                  refreshProfiles();
+                  setDraftId(created.id);
+                  setCustomLabel("");
+                  void syncCloud();
+                  pushToast(`Custom profile "${created.label}" saved`, "success");
+                } catch (e) {
+                  pushToast(e?.message || "Could not save profile", "error");
+                }
+              }}
+            >
+              Save custom profile
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

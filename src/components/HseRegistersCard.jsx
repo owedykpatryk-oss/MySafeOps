@@ -1,11 +1,13 @@
 import { openWorkspaceMoreSection, openWorkspaceView } from "../utils/workspaceNavContext";
 import { HSE_SECTION_TITLE } from "../utils/moduleRegisterStats";
 import { modulesWithSeedTemplates, seedEmptyRegisters } from "../utils/registerSeedTemplates";
+import { useToast } from "../context/ToastContext";
 
 /**
  * Dashboard widget — HSE register health, attention list, seed empty registers.
  */
 export default function HseRegistersCard({ summary, attentionModules = [], emptyModules = [], onSeeded }) {
+  const { pushToast } = useToast();
   const score = summary?.healthScore ?? 0;
   const scoreColour = score >= 75 ? "#0d9488" : score >= 45 ? "#d97706" : "#dc2626";
   const seedableEmpty = modulesWithSeedTemplates(emptyModules.map((m) => m.id));
@@ -22,7 +24,7 @@ export default function HseRegistersCard({ summary, attentionModules = [], empty
     const { seeded } = seedEmptyRegisters(seedableEmpty);
     onSeeded?.(seeded.length);
     if (seeded.length) {
-      window.alert(`Added starter records to ${seeded.length} register(s). Open More → HSE to review.`);
+      pushToast({ type: "success", message: `Added starter records to ${seeded.length} register(s). Open More → HSE to review.` });
     }
   };
 

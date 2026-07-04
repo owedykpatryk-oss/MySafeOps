@@ -16,7 +16,17 @@ import {
   getPlanByComparisonId,
 } from "../lib/billingPlans";
 import { trackBillingError, trackBillingEvent } from "../lib/billingTelemetry";
-import { refreshOrgFromSupabase } from "../utils/orgMembership";
+import {
+  extendOrgTrial,
+  getTrialExtensionCount,
+  refreshOrgFromSupabase,
+} from "../utils/orgMembership";
+import {
+  canExtendOrgTrial,
+  isTrialExpiredWithoutPaid,
+  shouldShowTrialExtensionOffer,
+  TRIAL_EXTENSION_DAYS,
+} from "../utils/billingAccess";
 import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "./InlineAlert";
@@ -90,6 +100,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const [stripeFnDiagnostics, setStripeFnDiagnostics] = useState({});
   const [lastHealthCheckAt, setLastHealthCheckAt] = useState(null);
   const [lastActionRequestId, setLastActionRequestId] = useState(null);
+  const [extendLoading, setExtendLoading] = useState(false);
 
   const isAdmin = role === "admin";
   const cloudOk = isSupabaseConfigured() && supabase;
@@ -349,6 +360,30 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const paidActive =
     (billing?.subscriptionStatus === "active" || billing?.subscriptionStatus === "trialing") &&
     billing?.paidPlanId;
+  const trialExtensionCount = getTrialExtensionCount();
+  const expiredReadOnly = isTrialExpiredWithoutPaid({ trialStatus, billing, isPlatformOwner });
+  const canExtend = canExtendOrgTrial({ billing, isPlatformOwner, trialExtensionCount });
+  const showExtendOffer = shouldShowTrialExtensionOffer({ trialStatus, billing, isPlatformOwner, trialExtensionCount });
+
+  const handleExtendTrial = async () => {
+    if (!supabase || !canExtend) return;
+    setExtendLoading(true);
+    setActionError(null);
+    try {
+      await extendOrgTrial(supabase);
+      await refreshOrgFromSupabase(supabase);
+      pushToast({
+        type: "success",
+        message: `Evaluation extended by ${TRIAL_EXTENSION_DAYS} days.`,
+      });
+    } catch (e) {
+      const msg = e?.message || "Could not extend trial.";
+      setActionError(msg);
+      pushToast({ type: "error", message: msg });
+    } finally {
+      setExtendLoading(false);
+    }
+  };
 
   const healthChip = (status) => {
     if (status === "ready") return { label: "reachable", color: "#0f766e", bg: "#ccfbf1", border: "#99f6e4" };
@@ -488,10 +523,29 @@ export default function BillingLimits({ checkoutReturn = null }) {
             : ""}
           {paidActive ? ` · Stripe: ${billing.subscriptionStatus}` : ""}
         </p>
-        {!trialStatus?.isActive && !paidActive && (
+        {!trialStatus?.isActive && !paidActive && trialStatus && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>
-            Trial ended. Free-tier limits apply until you subscribe to a paid plan.
+            {expiredReadOnly
+              ? "Evaluation ended — read-only mode. View and export existing records, or subscribe to resume editing."
+              : "Sign in with cloud billing to start your organisation evaluation."}
           </p>
+        )}
+        {trialStatus?.isActive && !paidActive && (
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>
+            Full module access during evaluation. One free +{TRIAL_EXTENSION_DAYS}-day extension per organisation if you need more site time.
+          </p>
+        )}
+        {showExtendOffer && isAdmin && cloudOk && (
+          <div style={{ marginBottom: 10 }}>
+            <button
+              type="button"
+              disabled={extendLoading || !canExtend}
+              onClick={() => void handleExtendTrial()}
+              style={{ ...ss.btn, fontSize: 13 }}
+            >
+              {extendLoading ? "Extending…" : `Extend evaluation +${TRIAL_EXTENSION_DAYS} days (once)`}
+            </button>
+          </div>
         )}
         {isAdmin && cloudOk && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>

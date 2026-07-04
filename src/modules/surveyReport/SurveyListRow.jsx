@@ -24,6 +24,10 @@ function SurveyListRow({
   onDuplicate,
   onHtmlExport,
   onGeoJsonExport,
+  onKmlExport,
+  onKmzExport,
+  onGpxExport,
+  onCadPackExport,
   onRevision,
   onProjectHub,
   onDelete,
@@ -102,6 +106,26 @@ function SurveyListRow({
                   {onGeoJsonExport ? (
                     <button type="button" onClick={() => onGeoJsonExport(r)}>
                       GeoJSON
+                    </button>
+                  ) : null}
+                  {onKmlExport ? (
+                    <button type="button" onClick={() => onKmlExport(r)}>
+                      KML (geo-photos)
+                    </button>
+                  ) : null}
+                  {onKmzExport ? (
+                    <button type="button" onClick={() => onKmzExport(r)}>
+                      KMZ + photos
+                    </button>
+                  ) : null}
+                  {onGpxExport ? (
+                    <button type="button" onClick={() => onGpxExport(r)}>
+                      GPX (geo-photos)
+                    </button>
+                  ) : null}
+                  {onCadPackExport ? (
+                    <button type="button" onClick={() => onCadPackExport(r)}>
+                      CAD pack (geo-photos)
                     </button>
                   ) : null}
                   {r.status === "final" && onRevision ? (

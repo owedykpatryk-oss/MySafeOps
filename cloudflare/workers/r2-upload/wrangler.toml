@@ -14,6 +14,6 @@ compatibility_date = "2024-09-23"
 binding = "BUCKET"
 bucket_name = "mysafeops-files"
 
-# Optional: pin allowed browser origins (comma-separated). If empty, * is used.
-# [vars]
-# ALLOWED_ORIGINS = "https://your-app.vercel.app,http://localhost:5173"
+# Pin allowed browser origins (comma-separated). Use vercel_preview:mysafeops to allow https://mysafeops*.vercel.app previews.
+[vars]
+ALLOWED_ORIGINS = "https://mysafeops.com,https://www.mysafeops.com,http://localhost:5173,http://127.0.0.1:5173,vercel_preview:mysafeops"

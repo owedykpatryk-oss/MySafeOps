@@ -10,6 +10,7 @@ export const SURVEY_TYPES = [
   { key: "uav_aerial", label: "UAV / aerial survey" },
   { key: "setting_out", label: "Setting out / engineering survey" },
   { key: "general_site_survey", label: "General site survey" },
+  { key: "site_investigation_campaign", label: "Site investigation & geotechnics" },
 ];
 
 export const PAS128_QUALITY_LEVELS = [
@@ -209,6 +210,27 @@ export const QA_CHECKLIST_ITEMS = [
   { key: "independentCheck", label: "Independent check on critical dimensions / control" },
 ];
 
+/** Extra QA items shown for site investigation & geotechnics reports. */
+export const GI_QA_CHECKLIST_ITEMS = [
+  { key: "utilityClearanceGi", label: "Utility search / permit-to-dig before intrusive GI" },
+  { key: "chainOfCustody", label: "Sample chain of custody completed on site" },
+  { key: "gasMonitoringGi", label: "Ground gas monitoring undertaken (if required by desk study)" },
+  { key: "boreholeAbandoned", label: "Boreholes capped / abandoned per specification" },
+  { key: "pitReinstated", label: "Trial pits backfilled and surface reinstated" },
+];
+
+export const GI_METHOD_OPTIONS = [
+  { key: "trial_pit", label: "Trial pit" },
+  { key: "window_sampling", label: "Window sampling" },
+  { key: "borehole", label: "Borehole" },
+  { key: "dcp", label: "DCP / dynamic probe" },
+  { key: "hand_auger", label: "Hand auger" },
+  { key: "cpt", label: "CPT" },
+  { key: "piezometer", label: "Piezometer / standpipe" },
+  { key: "sample_recovery", label: "Sample recovery" },
+  { key: "other", label: "Other" },
+];
+
 export const UTILITY_RECORDS_PRESETS = {
   pas128_typical: {
     label: "PAS128 typical pack",
@@ -227,6 +249,12 @@ export const UTILITY_RECORDS_PRESETS = {
     sources: ["desktop_search"],
     outcomes: ["incomplete"],
     gaps: ["client_not_supplied"],
+  },
+  gi_typical: {
+    label: "GI desk study typical",
+    sources: ["desktop_search", "client_drawings", "statutory_undertaker"],
+    outcomes: ["consistent"],
+    gaps: [],
   },
 };
 
@@ -285,6 +313,7 @@ export function blankSurveyReport(overrides = {}) {
     deliverables: [],
     recordsReferences: [],
     utilitiesTable: [],
+    giLocationsTable: [],
     qaChecklist: {
       catScanBeforeWork: false,
       controlVerified: false,
@@ -292,6 +321,11 @@ export function blankSurveyReport(overrides = {}) {
       clientWalkthrough: false,
       trialHoles: false,
       independentCheck: false,
+      utilityClearanceGi: false,
+      chainOfCustody: false,
+      gasMonitoringGi: false,
+      boreholeAbandoned: false,
+      pitReinstated: false,
     },
     hseRefs: {
       permitRef: "",

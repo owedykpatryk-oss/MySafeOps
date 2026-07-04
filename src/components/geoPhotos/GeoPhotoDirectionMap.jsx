@@ -15,6 +15,7 @@ function GeoPhotoDirectionMap({
   height = 180,
   interactive = false,
   satellite = false,
+  onLocationChange = null,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -101,12 +102,24 @@ function GeoPhotoDirectionMap({
     map.setView([lat, lng], end ? 18 : 17, { animate: false });
   }, [latitude, longitude, accuracyMeters, bearing, arrowColor]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || typeof onLocationChange !== "function") return undefined;
+    const handler = (e) => onLocationChange(e.latlng.lat, e.latlng.lng);
+    map.on("click", handler);
+    return () => map.off("click", handler);
+  }, [onLocationChange]);
+
   return (
     <div
       ref={containerRef}
       className="geo-photo-direction-map"
-      style={{ height, width: "100%" }}
-      title="Arrow shows camera direction (0°=North, 90°=East)"
+      style={{ height, width: "100%", cursor: onLocationChange ? "crosshair" : undefined }}
+      title={
+        onLocationChange
+          ? "Click map to set GPS position. Arrow shows camera direction."
+          : "Arrow shows camera direction (0°=North, 90°=East)"
+      }
     />
   );
 }

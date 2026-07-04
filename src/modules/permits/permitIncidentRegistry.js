@@ -1,4 +1,4 @@
-import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, asStorageArray } from "../../utils/orgStorage";
 
 const INCIDENTS_KEY = "permit_incidents_v1";
 
@@ -14,7 +14,7 @@ export function savePermitIncidents(rows) {
 }
 
 export function incidentsForPermit(permitId, rows = listPermitIncidents()) {
-  return (rows || []).filter((x) => x?.permitId === permitId);
+  return asStorageArray(rows).filter((x) => x?.permitId === permitId);
 }
 
 export function createPermitIncident({

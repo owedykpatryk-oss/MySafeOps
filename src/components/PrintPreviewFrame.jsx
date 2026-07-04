@@ -1,6 +1,10 @@
-import { memo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import useDebouncedValue from "../hooks/useDebouncedValue";
-import { sanitizePrintPreviewHtml } from "../utils/htmlEscape.js";
+import { buildPrintPreviewSrcDoc, sanitizePrintPreviewHtmlAsync } from "../utils/htmlEscape.js";
+
+const EMPTY_PREVIEW_SRCDOC = buildPrintPreviewSrcDoc(
+  "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:24px;color:#64748b'>Building preview…</body></html>"
+);
 
 /**
  * A4 print preview in iframe — RAMS, Survey, Permits.
@@ -17,7 +21,26 @@ function PrintPreviewFrame({
 }) {
   const debouncedHtml = useDebouncedValue(html, debounceMs);
   const isPending = html !== debouncedHtml;
-  const safeHtml = sanitizePrintPreviewHtml(debouncedHtml);
+  const [sanitizedHtml, setSanitizedHtml] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!debouncedHtml) {
+      setSanitizedHtml("");
+      return undefined;
+    }
+    void sanitizePrintPreviewHtmlAsync(debouncedHtml).then((safe) => {
+      if (!cancelled) setSanitizedHtml(safe);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedHtml]);
+
+  const srcDoc = useMemo(() => {
+    if (!sanitizedHtml) return "";
+    return buildPrintPreviewSrcDoc(sanitizedHtml);
+  }, [sanitizedHtml]);
 
   if (!html && !debouncedHtml) {
     return (
@@ -30,7 +53,7 @@ function PrintPreviewFrame({
   const previewClass = [
     "app-print-preview",
     responsive ? "app-print-preview--responsive" : "",
-    isPending ? "app-print-preview--pending" : "",
+    isPending || (debouncedHtml && !srcDoc) ? "app-print-preview--pending" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -50,10 +73,11 @@ function PrintPreviewFrame({
       </div>
       <iframe
         title={title}
-        srcDoc={safeHtml || "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:24px;color:#64748b'>Building preview…</body></html>"}
+        srcDoc={srcDoc || EMPTY_PREVIEW_SRCDOC}
         className="app-print-preview__frame"
-        sandbox="allow-same-origin allow-modals"
+        sandbox=""
         loading="lazy"
+        referrerPolicy="no-referrer"
       />
     </div>
   );

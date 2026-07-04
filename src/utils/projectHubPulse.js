@@ -2,7 +2,7 @@
  * Project hub pulse — computed readiness, pipeline gates, compliance strip, A4 site pack.
  */
 
-import { openPrintWindow, escapeHtml } from "./htmlEscape.js";
+import { openPrintWindow, escapeHtml, writePrintWindowDocument } from "./htmlEscape.js";
 import { healthTone, todayIsoDate, fmtProjectDay } from "./projectDashboard";
 import { missingRequiredPermits } from "../modules/permits/permitProjectDefaults";
 import { isSurveyWorkflowEnabled, getProjectHubTailStep } from "./projectHubIndustry";
@@ -264,6 +264,7 @@ function gateRowsHtml(gates) {
  * A4 print summary for one project — client / handover snapshot.
  */
 export function printProjectSitePack(project, dash, workers = []) {
+  void (async () => {
   if (!project) return;
   const industryCtx = {
     packId: getOrgIndustryPackId(),
@@ -277,7 +278,7 @@ export function printProjectSitePack(project, dash, workers = []) {
     return;
   }
 
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+  await writePrintWindowDocument(win, `<!DOCTYPE html><html><head><meta charset="utf-8"/>
   <title>${he(getIndustrySitePackTitle(industryCtx.packId))} — ${he(project.name || "Project")}</title>
   <style>
     body{font-family:system-ui,sans-serif;font-size:11px;color:#0f172a;margin:24px;line-height:1.45}
@@ -330,6 +331,6 @@ export function printProjectSitePack(project, dash, workers = []) {
 
   <p class="foot">MySafeOps project site pack · CDM / RAMS / PTW / briefing evidence should be maintained on the live system.</p>
   </body></html>`);
-  win.document.close();
   win.print();
+  })();
 }

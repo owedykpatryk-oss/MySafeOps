@@ -2,14 +2,20 @@ import { applyHidePreset, clearAllHidden, getHiddenModuleIds, HIDE_PRESETS } fro
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { clearIndustryPackPreview } from "./industryPackPreview";
 import { seedRegistersForIndustryPack } from "./industryPackSeeds";
+import {
+  getCustomWorkspaceProfile,
+  isCustomWorkspacePackId,
+  resolveWorkspacePack,
+} from "./customWorkspaceProfiles";
 
-/** Workspace profiles for any tenant — applies module visibility + optional sectors. */
+/** Built-in workspace profiles — any tenant can use; custom profiles are org-private. */
 export const INDUSTRY_PACKS = {
   generalContractor: {
     label: "General construction & trades",
     hint: "Builders, subcontractors, civils — RAMS, PTW, CDM, briefings. No PAS128 survey module.",
     hidePreset: "hideSurveyingRams",
     hiddenModules: ["survey-report"],
+    showModules: ["construction-setup"],
     industrySectors: ["construction"],
     ramsStarterKey: "general",
   },
@@ -26,16 +32,18 @@ export const INDUSTRY_PACKS = {
     hint: "Refurb, fit-out, snagging — core site HSE without surveying reports.",
     hidePreset: "hideSurveyingRams",
     hiddenModules: ["survey-report"],
+    showModules: ["construction-setup"],
     industrySectors: ["construction"],
     ramsStarterKey: "refurb_build",
   },
   surveyingGeodesy: {
     label: "Surveying & geodesy",
-    hint: "PAS128 / utility mapping — full survey report workflow and RAMS surveying packs.",
+    hint:
+      "PAS128 / AS5488 utility mapping, aerial LiDAR, laser scan, hydrographic and rail corridor — survey reports and geospatial RAMS packs.",
     hidePreset: "surveyingFocus",
-    showModules: ["survey-report"],
+    showModules: ["survey-report", "construction-setup"],
     industrySectors: ["construction"],
-    ramsStarterKey: "utility_mapping_survey",
+    ramsStarterKey: "geospatial_intelligence",
     surveyWorkflow: true,
   },
   contractorPlusSurveying: {
@@ -52,25 +60,34 @@ export const INDUSTRY_PACKS = {
     hint: "PPM inspections, PAT and plant — less survey/CDM emphasis for FM teams.",
     hidePreset: "hideSurveyingRams",
     hiddenModules: ["survey-report"],
-    showModules: ["electrical-pat", "plant", "inspections"],
+    showModules: ["electrical-pat", "plant", "inspections", "construction-setup"],
     industrySectors: ["construction", "maintenance"],
-    ramsStarterKey: "general",
+    ramsStarterKey: "healthcare_fm",
   },
   demolitionStripout: {
     label: "Demolition & strip-out",
     hint: "Excavation, temp works, gate book and asbestos — civils and demolition HSE.",
     hidePreset: "hideSurveyingRams",
     hiddenModules: ["survey-report"],
-    showModules: ["excavation", "temp-works", "gate", "asbestos"],
+    showModules: ["excavation", "temp-works", "gate", "asbestos", "construction-setup"],
     industrySectors: ["construction"],
-    ramsStarterKey: "groundworks",
+    ramsStarterKey: "demolition",
   },
   foodPharma: {
     label: "Food, beverage & pharma",
     hint: "Industrial hygiene registers — hides surveying RAMS packs and survey reports.",
     hidePreset: "foodPharmaFocus",
     hiddenModules: ["survey-report"],
-    showModules: ["allergen-changeovers", "gmp-deviations", "high-care-access", "cip-signoff"],
+    showModules: [
+      "allergen-changeovers",
+      "gmp-deviations",
+      "high-care-access",
+      "cip-signoff",
+      "ghp-register",
+      "dynamic-ra",
+      "legislation",
+      "hygiene-setup",
+    ],
     industrySectors: ["construction", "food_beverage", "pharma", "pet_food"],
     ramsStarterKey: "general",
   },
@@ -85,34 +102,63 @@ export const INDUSTRY_PACKS = {
   },
 };
 
+const LEGACY_PACK_ALIASES = {
+  geospatialIntelligence: "surveyingGeodesy",
+  "fess-setup": "hygiene-setup",
+};
+
 /** @param {unknown} packKey */
-export function isValidIndustryPackId(packKey) {
-  return typeof packKey === "string" && Object.prototype.hasOwnProperty.call(INDUSTRY_PACKS, packKey);
+export function normalizeIndustryPackId(packKey) {
+  if (typeof packKey !== "string" || !packKey) return null;
+  if (LEGACY_PACK_ALIASES[packKey]) return LEGACY_PACK_ALIASES[packKey];
+  return packKey;
 }
 
-/** @param {keyof typeof INDUSTRY_PACKS} packKey @param {{ seedTemplates?: boolean }} [options] */
-export function applyIndustryPack(packKey, options = {}) {
-  if (!isValidIndustryPackId(packKey)) return { seeded: [] };
-  const pack = INDUSTRY_PACKS[packKey];
+/** @param {unknown} packKey */
+export function isValidIndustryPackId(packKey) {
+  const id = normalizeIndustryPackId(packKey);
+  if (!id) return false;
+  return Object.prototype.hasOwnProperty.call(INDUSTRY_PACKS, id) || isCustomWorkspacePackId(id);
+}
 
-  if (packKey === "showEverything") {
+/** @param {string} packKey */
+export function getWorkspacePack(packKey) {
+  const id = normalizeIndustryPackId(packKey);
+  if (!id) return null;
+  return resolveWorkspacePack(id);
+}
+
+/** @param {string} [packKey] */
+export function getWorkspacePackLabel(packKey) {
+  const pack = getWorkspacePack(packKey);
+  return pack?.label || "General construction";
+}
+
+/** @param {string} packKey @param {{ seedTemplates?: boolean }} [options] */
+export function applyIndustryPack(packKey, options = {}) {
+  const id = normalizeIndustryPackId(packKey);
+  if (!id || !isValidIndustryPackId(id)) return { seeded: [] };
+  const pack = getWorkspacePack(id);
+  if (!pack) return { seeded: [] };
+
+  if (id === "showEverything") {
     clearAllHidden();
   } else if (pack.hidePreset && HIDE_PRESETS[pack.hidePreset]) {
     applyHidePreset(pack.hidePreset);
   }
 
-  let hiddenModules = packKey === "showEverything" ? [] : [...getHiddenModuleIds()];
+  let hiddenModules = id === "showEverything" ? [] : [...getHiddenModuleIds()];
   if (Array.isArray(pack.hiddenModules) && pack.hiddenModules.length) {
     hiddenModules = [...new Set([...hiddenModules, ...pack.hiddenModules])];
   }
   if (Array.isArray(pack.showModules) && pack.showModules.length) {
-    hiddenModules = hiddenModules.filter((id) => !pack.showModules.includes(id));
+    hiddenModules = hiddenModules.filter((mid) => !pack.showModules.includes(mid));
   }
 
   const raw = loadOrgSettingsRaw();
   const next = {
     ...raw,
-    industryPackId: packKey,
+    industryPackId: id,
     hiddenModulesBootstrapped: true,
     hiddenModules,
     ramsStarterKey: pack.ramsStarterKey ?? raw.ramsStarterKey ?? null,
@@ -125,7 +171,8 @@ export function applyIndustryPack(packKey, options = {}) {
 
   let seeded = [];
   if (options.seedTemplates) {
-    seeded = seedRegistersForIndustryPack(packKey).seeded;
+    const seedKey = pack.custom && pack.basedOn ? pack.basedOn : id;
+    seeded = seedRegistersForIndustryPack(seedKey).seeded;
   }
 
   if (typeof window !== "undefined") {
@@ -137,6 +184,6 @@ export function applyIndustryPack(packKey, options = {}) {
 }
 
 export function getAppliedIndustryPackId() {
-  const id = loadOrgSettingsRaw().industryPackId;
+  const id = normalizeIndustryPackId(loadOrgSettingsRaw().industryPackId);
   return isValidIndustryPackId(id) ? id : null;
 }

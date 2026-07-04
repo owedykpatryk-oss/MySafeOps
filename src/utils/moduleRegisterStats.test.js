@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { itemNeedsAttention, summarizeSectionStats } from "./moduleRegisterStats.js";
+/** @vitest-environment jsdom */
+import { describe, expect, it, beforeEach } from "vitest";
+import { itemNeedsAttention, summarizeSectionStats, getModuleRegisterStat } from "./moduleRegisterStats.js";
+import { saveOrgScoped as save } from "./orgStorage";
 
 describe("moduleRegisterStats", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem("mysafeops_orgId", "test-org");
+  });
+
   it("flags overdue due dates", () => {
     expect(itemNeedsAttention({ dueDate: "2020-01-01" })).toBe(true);
     expect(itemNeedsAttention({ status: "open" })).toBe(true);
@@ -19,5 +26,18 @@ describe("moduleRegisterStats", () => {
     expect(s.active).toBe(1);
     expect(s.attention).toBe(1);
     expect(s.records).toBe(7);
+  });
+
+  it("includes 7-day sparkline buckets for active registers", () => {
+    const today = new Date().toISOString();
+    save("snags", [
+      { id: "1", status: "open", createdAt: today },
+      { id: "2", status: "open", createdAt: today },
+    ]);
+    const stat = getModuleRegisterStat("snags");
+    expect(stat.sparkline).not.toBeNull();
+    expect(stat.sparkline.buckets).toHaveLength(7);
+    expect(stat.sparkline.bucketDates).toHaveLength(7);
+    expect(stat.sparkline.total).toBeGreaterThanOrEqual(2);
   });
 });

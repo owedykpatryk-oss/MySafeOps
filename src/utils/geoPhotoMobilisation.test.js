@@ -43,9 +43,15 @@ describe("geoPhotoMobilisation", () => {
     expect(result.pct).toBeGreaterThan(0);
   });
 
-  it("summarises group coverage", () => {
-    const groups = geoPhotoGroupCoverage(photos, "p1");
-    expect(groups.some((g) => g.group === "Access & logistics")).toBe(true);
-    expect(groups.some((g) => g.group === "Site constraints & safety")).toBe(true);
+  it("includes GI checks when giPack enabled", () => {
+    const giPhotos = [
+      { id: "g1", projectId: "p1", type: "utility_locator", includeInReport: true },
+      { id: "g2", projectId: "p1", type: "borehole_location", includeInReport: true },
+      { id: "g3", projectId: "p1", type: "borehole_cap", includeInReport: true },
+    ];
+    const result = buildGeoPhotoMobilisationChecklist(giPhotos, "p1", { giPack: true });
+    expect(result.checks.find((c) => c.id === "gi_clearance")?.done).toBe(true);
+    expect(result.checks.find((c) => c.id === "gi_point")?.done).toBe(true);
+    expect(result.checks.find((c) => c.id === "gi_reinstatement")?.done).toBe(true);
   });
 });

@@ -5,7 +5,7 @@
 
 import { PROJECT_DOC_KEYS } from "./projectDashboard";
 import { isSurveyWorkflowEnabled } from "./projectHubIndustry";
-import { loadOrgScoped as load, saveOrgScoped as save } from "./orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, asStorageArray } from "./orgStorage";
 import { blankSurveyReport } from "../modules/surveyReport/surveyReportConstants";
 import {
   prefillReportFromProject,
@@ -46,6 +46,26 @@ const SURVEY_PACK = {
     method:
       "1. Set control points and verify datum/benchmark before data capture.\n\n2. Establish safe working routes around plant movement and public interfaces.\n\n3. Capture topo features with calibrated survey equipment.\n\n4. Perform repeat checks and closure checks to validate accuracy.\n\n5. Securely store field data and produce checked outputs for issue.",
   },
+  site_investigation_campaign: {
+    label: "Site investigation & geotechnics campaign",
+    scope:
+      "Combined ground investigation programme — trial pits, window sampling, dynamic probing, boreholes, in-situ testing and monitoring wells — with unified permit interface, contamination/gas plan and sample chain of custody.",
+    method:
+      "1. Review GI specification, desk study and contamination assessment; agree method sequence.\n\n2. Mobilise with permit-to-dig and ground disturbance controls; daily briefing on hold points.\n\n3. Execute intrusive methods in agreed order; maintain master sample register.\n\n4. Monitor ground gas at open holes; secure all boreholes and reinstate trial pits same shift where practicable.\n\n5. Issue factual report inputs — logs, sample register, abandonment records.",
+  },
+  window_sampling_trial_pit: {
+    label: "Window sampling / trial pit",
+    scope:
+      "Ground investigation by window sampling and/or trial pits with service avoidance, pit stability, sample chain of custody and reinstatement.",
+    method:
+      "1. Utility search and permit-to-dig; mark sample locations and exclusion zones.\n\n2. Window sample or excavate trial pit with banksman/shoring controls.\n\n3. Log strata, bag and label samples; complete chain-of-custody on site.\n\n4. Backfill, compact and reinstate surface; cap residual openings.",
+  },
+  dcp_dynamic_probe: {
+    label: "Dynamic probing / DCP",
+    scope: "In-situ DCP and dynamic probing with blow-count recording, utility clearance and hole capping.",
+    method:
+      "1. Utility clearance and probe positioning.\n\n2. Drive rods with two-person handling; record blow counts vs depth.\n\n3. Withdraw rods, cap holes and decontaminate equipment between locations.",
+  },
 };
 
 /** @type {Array<{ id: string, label: string, description: string, industryStarter?: string, surveyType?: string, pas128Ql?: string, permitTypes: string[], msTemplate?: string, ramsSurveyKey?: string, checklistExtras?: string[] }>} */
@@ -80,6 +100,23 @@ export const PROJECT_PLAYBOOKS = [
       "Arrange utility scans and trial holes before breaking ground",
       "Define traffic and plant segregation",
       "Prepare adverse weather contingency",
+    ],
+  },
+  {
+    id: "site_investigation",
+    label: "Site investigation & geotechnics",
+    description: "GI RAMS + window sampling / boreholes / DCP + excavation & ground disturbance PTW",
+    industryStarter: "infrastructure",
+    surveyType: "site_investigation_campaign",
+    ramsSurveyKey: "site_investigation_campaign",
+    permitTypes: ["excavation", "ground_disturbance", "confined_space", "general"],
+    msTemplate: "mobilisation",
+    checklistExtras: [
+      "Desk study and contamination/gas assessment reviewed",
+      "Utility search and permit-to-dig issued before intrusive works",
+      "Sample chain-of-custody forms and lab instructions confirmed",
+      "Borehole abandonment and trial pit reinstatement plan agreed",
+      "Ground gas monitor calibrated if desk study flags risk",
     ],
   },
   {
@@ -122,6 +159,93 @@ export const PROJECT_PLAYBOOKS = [
     ],
   },
   {
+    id: "utilities_water",
+    label: "Utilities — water & sewer",
+    description: "Water/sewer civils RAMS + excavation & confined space PTW",
+    industryStarter: "infrastructure",
+    permitTypes: ["excavation", "confined_space", "general"],
+    msTemplate: "mobilisation",
+    ramsStarterKey: "utilities",
+    checklistExtras: [
+      "Obtain utility records and agree isolation points",
+      "Chlorination / pressure test procedure agreed if applicable",
+      "Confined space rescue plan for chamber entry",
+    ],
+  },
+  {
+    id: "utilities_street",
+    label: "Utilities — streetworks (NRSWA)",
+    description: "Road opening RAMS + excavation PTW + TM checklist",
+    industryStarter: "infrastructure",
+    permitTypes: ["excavation", "ground_disturbance", "general"],
+    msTemplate: "mobilisation",
+    ramsStarterKey: "highways",
+    checklistExtras: [
+      "NRSWA / streetworks notice submitted",
+      "Chapter 8 TM plan approved",
+      "CAT/Genny scan before breaking carriageway",
+    ],
+  },
+  {
+    id: "demolition",
+    label: "Demolition & strip-out",
+    description: "Demolition RAMS + hot work & general PTW",
+    industryStarter: "maintenance",
+    permitTypes: ["hot_work", "general", "lifting"],
+    msTemplate: "mobilisation",
+    ramsStarterKey: "demolition",
+    checklistExtras: [
+      "Asbestos / pre-demolition survey reviewed",
+      "Services isolated and proven dead",
+      "Exclusion zone and dust controls in place",
+    ],
+  },
+  {
+    id: "highways",
+    label: "Highways & traffic management",
+    description: "Streetworks RAMS + ground disturbance PTW",
+    industryStarter: "infrastructure",
+    permitTypes: ["ground_disturbance", "general", "night_works"],
+    msTemplate: "mobilisation",
+    ramsStarterKey: "highways",
+    checklistExtras: [
+      "NHSS12 / TM competence verified",
+      "Signing and lighting checked after setup",
+      "Live traffic interface briefed to all operatives",
+    ],
+  },
+  {
+    id: "interiors_fitout",
+    label: "Interiors & fit-out",
+    description: "Fit-out RAMS + hot work & general PTW in occupied buildings",
+    industryStarter: "general",
+    permitTypes: ["hot_work", "general", "work_at_height"],
+    msTemplate: "mobilisation",
+    ramsStarterKey: "interiors_fitout",
+    checklistExtras: [
+      "Client / occupier notification and segregation",
+      "Dust and noise controls agreed",
+      "Out-of-hours working approval if required",
+    ],
+  },
+  {
+    id: "food_factory_me",
+    label: "Food factory M&E",
+    description: "Food factory RAMS + line clearance & hot-work PTW + allergen/G&HP checklist",
+    industryStarter: "maintenance",
+    permitTypes: ["line_clearance", "hot_work", "loto", "general"],
+    msTemplate: "mobilisation",
+    ramsStarterKey: "utilities",
+    checklistExtras: [
+      "Allergen briefing and zone segregation confirmed",
+      "G&HP register checked — no unregistered glass/hard plastic in zone",
+      "Production line isolation sign-off before mechanical work",
+      "COSHH substances on site have SDS in register",
+      "Nearest A&E confirmed for site coordinates",
+      "CIP / hygiene restart procedure agreed with production",
+    ],
+  },
+  {
     id: "general",
     label: "General site pack",
     description: "Baseline RAMS + common PTW + method statement",
@@ -139,12 +263,12 @@ export function getPlaybook(playbookId) {
 
 export function projectHasRams(projectId, ramsDocs = []) {
   if (!projectId) return true;
-  return (ramsDocs || []).some((d) => String(d.projectId || "") === String(projectId));
+  return asStorageArray(ramsDocs).some((d) => String(d.projectId || "") === String(projectId));
 }
 
 export function docsForProject(projectId, rows = []) {
   if (!projectId) return [];
-  return (rows || []).filter((r) => String(r.projectId || "") === String(projectId));
+  return asStorageArray(rows).filter((r) => String(r.projectId || "") === String(projectId));
 }
 
 export function createRamsDraftFromPlaybook(project, playbook) {

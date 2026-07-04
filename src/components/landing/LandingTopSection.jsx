@@ -2,17 +2,33 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
+import { LANDING_RAMS_PACK_COUNT } from "./landingShowcaseData";
+import LandingHeroMockup from "./LandingHeroMockup";
+import LandingSectorMarquee from "./LandingSectorMarquee";
+
+const MOBILE_DRAWER_LINKS = [
+  { href: "#workflow", label: "How it works" },
+  { href: "#profiles", label: "Profiles & RAMS" },
+  { href: "#features", label: "Features" },
+  { href: "#readiness", label: "Readiness check" },
+  { href: "#pricing", label: "Pricing" },
+  { href: "#faq", label: "FAQ" },
+  { href: "/blog", label: "Blog", spa: true },
+  { href: "#missing", label: "Request a feature" },
+];
 
 const NAV_LINKS = [
+  { href: "#workflow", label: "Workflow" },
   { href: "#features", label: "Features" },
+  { href: "#profiles", label: "Profiles & RAMS" },
   { href: "#modules", label: "Modules" },
-  { href: "#readiness", label: "Readiness check" },
-  { href: "#roi", label: "Value" },
-  { href: "#roles", label: "How it works" },
+  { href: "#readiness", label: "Readiness check", compactHide: true },
+  { href: "#roi", label: "Value", compactHide: true },
+  { href: "#roles", label: "How it works", compactHide: true },
   { href: "#pricing", label: "Pricing" },
   { href: "/blog", label: "Blog", spa: true },
   { href: "#faq", label: "FAQ" },
-  { href: "#missing", label: "Request feature" },
+  { href: "#missing", label: "Request feature", compactHide: true },
 ];
 
 export default function LandingTopSection({ navScrolled, cloud }) {
@@ -26,9 +42,11 @@ export default function LandingTopSection({ navScrolled, cloud }) {
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    document.body.classList.add("landing-mobile-menu-open");
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
+      document.body.classList.remove("landing-mobile-menu-open");
     };
   }, [mobileOpen]);
 
@@ -57,11 +75,11 @@ export default function LandingTopSection({ navScrolled, cloud }) {
             <div className="nl">
               {NAV_LINKS.map((item) =>
                 item.spa ? (
-                  <Link key={item.href} to={item.href}>
+                  <Link key={item.href} to={item.href} className={item.compactHide ? "nl-link--compact-hide" : undefined}>
                     {item.label}
                   </Link>
                 ) : (
-                  <a key={item.href} href={item.href}>
+                  <a key={item.href} href={item.href} className={item.compactHide ? "nl-link--compact-hide" : undefined}>
                     {item.label}
                   </a>
                 )
@@ -107,7 +125,7 @@ export default function LandingTopSection({ navScrolled, cloud }) {
               </button>
             </div>
             <div className="landing-mobile-links">
-              {NAV_LINKS.map((item) =>
+              {MOBILE_DRAWER_LINKS.map((item) =>
                 item.spa ? (
                   <Link
                     key={item.href}
@@ -152,143 +170,71 @@ export default function LandingTopSection({ navScrolled, cloud }) {
       )}
 
       <section className="hero" aria-labelledby="landing-hero-heading">
+        <div className="hero-mesh" aria-hidden />
+        <div className="hero-orb hero-orb--teal" aria-hidden />
+        <div className="hero-orb hero-orb--org" aria-hidden />
         <div className="ctn">
           <div className="hg">
-            <div>
-              <div className="badge hb">🏗️ Built for UK Construction</div>
+            <div className="hero-copy fu vi">
+              <div className="badge hb landing-badge-pulse">🇬🇧 UK site teams — construction to survey</div>
               <h1 id="landing-hero-heading">
                 Site safety,
                 <br />
-                <span className="hl">simplified.</span>
+                <span className="hl landing-hl-shimmer">with real depth.</span>
               </h1>
-              <p>
-                RAMS, Permits to Work, inspections, worker competency — all managed from your phone. UK-focused workflows for construction teams.{" "}
-                {cloud ? "Cloud sign-in and backup are enabled for this deployment." : "Add Supabase in your environment for optional cloud backup."}
+              <p className="hero-lead">
+                <span className="hero-lead-full">
+                  RAMS quick packs, permits, PAS128 survey workflows, geo evidence and hygiene registers — one workspace tuned to your
+                  trade. Offline-first core
+                  {cloud ? " with cloud sign-in and backup enabled on this deployment." : " with optional cloud backup when Supabase is configured."}
+                </span>
+                <span className="hero-lead-short">
+                  RAMS packs, PAS128 surveys, permits and registers — one workspace for your trade. Offline-first
+                  {cloud ? ", cloud backup enabled." : "."}
+                </span>
               </p>
               <div className="hbs">
-                <Link to="/login" className="btn btn-p" {...loginLinkPrefetchProps}>
+                <Link to="/login" className="btn btn-p landing-btn-glow" {...loginLinkPrefetchProps}>
                   Get started →
                 </Link>
-                <a href="#readiness" className="btn btn-o">
-                  Run 2-min check
+                <a href="#profiles" className="btn btn-o hero-btn-secondary">
+                  See profiles
                 </a>
-                <a href="#pricing" className="btn btn-o">
-                  View pricing
+                <a href="#readiness" className="btn btn-o hero-btn-tertiary">
+                  2-min check
                 </a>
               </div>
-              <div className="landing-trust-strip" role="note">
-                <span>Offline-capable core</span>
-                <span className="landing-trust-dot" aria-hidden>
-                  ·
-                </span>
-                <span>UK-oriented copy &amp; registers</span>
-                <span className="landing-trust-dot" aria-hidden>
-                  ·
-                </span>
-                <span>Flat org pricing — not per seat</span>
-                <span className="landing-trust-dot" aria-hidden>
-                  ·
-                </span>
-                <span>Optional Supabase backup</span>
+              <div className="landing-trust-strip landing-trust-pills" role="note">
+                <span>Offline-capable</span>
+                <span>UK registers</span>
+                <span>Flat org pricing</span>
+                <span className="landing-trust-pill--hide-sm">Optional cloud backup</span>
               </div>
               <div className="hs" aria-label="Product highlights">
                 <div>
-                  <strong>14+</strong>
-                  <span>Document Types</span>
+                  <strong>40+</strong>
+                  <span>Modules</span>
                 </div>
                 <div>
-                  <strong>7</strong>
-                  <span>Permit Types</span>
+                  <strong>{LANDING_RAMS_PACK_COUNT}+</strong>
+                  <span>RAMS quick packs</span>
                 </div>
                 <div>
-                  <strong>30+</strong>
-                  <span>Trade Libraries</span>
+                  <strong>9</strong>
+                  <span>Workspace profiles</span>
                 </div>
                 <div>
-                  <strong>100%</strong>
-                  <span>Browser-first</span>
+                  <strong>14d</strong>
+                  <span>Full evaluation</span>
                 </div>
               </div>
             </div>
-            <div className="pw">
-              <div className="pg" aria-hidden />
-              <div className="ph" role="img" aria-label="Example MySafeOps dashboard preview (illustration)">
-                <div className="ps">
-                  <div className="phd">
-                    <div className="pl">⚙️ MySafeOps</div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#f97316" }} />
-                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--sl4)" }} />
-                    </div>
-                  </div>
-                  <div className="pb">
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", marginBottom: 8 }}>📊 Dashboard</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>
-                      <div style={{ background: "#1e293b", borderRadius: 8, padding: 8, textAlign: "center", borderLeft: "3px solid #f97316" }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>12</div>
-                        <div style={{ fontSize: 7, color: "#64748b" }}>RAMS</div>
-                      </div>
-                      <div style={{ background: "#1e293b", borderRadius: 8, padding: 8, textAlign: "center", borderLeft: "3px solid #a78bfa" }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>8</div>
-                        <div style={{ fontSize: 7, color: "#64748b" }}>Permits</div>
-                      </div>
-                      <div style={{ background: "#1e293b", borderRadius: 8, padding: 8, textAlign: "center", borderLeft: "3px solid #ef4444" }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>2</div>
-                        <div style={{ fontSize: 7, color: "#64748b" }}>Incidents</div>
-                      </div>
-                      <div style={{ background: "#1e293b", borderRadius: 8, padding: 8, textAlign: "center", borderLeft: "3px solid #06b6d4" }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>24</div>
-                        <div style={{ fontSize: 7, color: "#64748b" }}>Workers</div>
-                      </div>
-                    </div>
-                    <div className="pc">
-                      <div className="pct">⚠️ RAMS — Welding/Hot Works</div>
-                      <div className="pcs">RAMS-003 · Zone B · Approved ✅</div>
-                      <div className="pcb">
-                        <div style={{ width: "95%", background: "#22c55e" }} />
-                      </div>
-                    </div>
-                    <div className="pc" style={{ borderLeftColor: "#3b82f6" }}>
-                      <div className="pct" style={{ color: "#3b82f6" }}>
-                        🏗️ Height PTW — Roof Access
-                      </div>
-                      <div className="pcs">PTW-007 · 6h remaining</div>
-                      <div className="pcb">
-                        <div style={{ width: "70%", background: "#3b82f6" }} />
-                      </div>
-                    </div>
-                    <div className="pc" style={{ borderLeftColor: "#ef4444" }}>
-                      <div className="pct" style={{ color: "#ef4444" }}>
-                        🚨 Near Miss Reported
-                      </div>
-                      <div className="pcs">INC-004 · Zone C · Pending review</div>
-                      <div className="pcb">
-                        <div style={{ width: "40%", background: "#eab308" }} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pn">
-                    <div>
-                      <span>📊</span>Home
-                    </div>
-                    <div style={{ color: "#f97316" }}>
-                      <span>📄</span>Docs
-                    </div>
-                    <div>
-                      <span>👷</span>Workers
-                    </div>
-                    <div>
-                      <span>🔧</span>Equip
-                    </div>
-                    <div>
-                      <span>⚙️</span>More
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="pw fu vi">
+              <LandingHeroMockup />
             </div>
           </div>
         </div>
+        <LandingSectorMarquee />
       </section>
     </>
   );

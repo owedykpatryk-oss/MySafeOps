@@ -2,8 +2,23 @@ import { lazy, Suspense, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { loginLinkPrefetchProps, prefetchLoginPage } from "../../utils/routePrefetch";
 import LandingBlogSection from "./LandingBlogSection";
+import LandingWorkflowBento from "./LandingWorkflowBento";
 
+const LandingIndustryShowcase = lazy(() => import("./LandingIndustryShowcase"));
 const LandingFaqSection = lazy(() => import("./LandingFaqSection"));
+
+function IndustryShowcaseSuspenseFallback() {
+  return (
+    <section className="landing-industry" id="profiles" aria-busy="true" aria-label="Loading product profiles">
+      <div className="ctn">
+        <div className="sh">
+          <h2 style={{ marginTop: 12 }}>Workspace profiles &amp; RAMS libraries</h2>
+          <p style={{ color: "var(--sl6)" }}>Loading…</p>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function FaqSuspenseFallback() {
   return (
@@ -70,6 +85,10 @@ const MODULE_TICKER = [
   "📊 Training Matrix",
   "🗺️ Site Plans",
   "📸 Evidence",
+  "📐 PAS128 surveys",
+  "🛰️ Geo photos",
+  "🧪 GMP & allergen",
+  "📋 Legislation register",
   "🚗 Vehicles",
   "🔧 Equipment",
   "🖨️ PDF Export",
@@ -240,6 +259,8 @@ function RoiEstimatorSection() {
 export default function LandingContentSections({ supportEmail, featureForm, onChangeFeature, onSubmitFeature, ctaEmail, onCtaEmailChange, onCtaGo }) {
   return (
     <>
+      <LandingWorkflowBento />
+
       <section className="feat" id="features">
         <div className="ctn">
           <div className="sh fu">
@@ -250,8 +271,8 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
             <p>From risk assessments to permit management, worker competency to equipment tracking — one app replaces scattered paperwork.</p>
           </div>
           <div className="fg">
-            {FEATURES.map((x) => (
-              <div key={x.t} className="fc fu">
+            {FEATURES.map((x, i) => (
+              <div key={x.t} className="fc fu" style={{ transitionDelay: `${Math.min(i * 60, 360)}ms` }}>
                 <div className="fi" style={{ background: x.bg }}>
                   {x.emoji}
                 </div>
@@ -262,6 +283,10 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
           </div>
         </div>
       </section>
+
+      <Suspense fallback={<IndustryShowcaseSuspenseFallback />}>
+        <LandingIndustryShowcase />
+      </Suspense>
 
       <ReadinessCheckSection />
 
@@ -323,16 +348,16 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
             <p>Flat organisation pricing — not per seat. Live limits and usage are in the app under Settings → Billing & limits.</p>
           </div>
           <div className="prc">
-            <div className="pcard fu">
-              <h3>Free</h3><div className="pr">£0</div><div className="yr">3 workers · 10 projects</div><div className="wf">👷 Try before you buy</div>
-              <ul><li>Core RAMS &amp; permits</li><li>500MB cloud backup cap</li><li>Offline-first</li></ul>
+            <div className="pcard fu pop">
+              <h3>Evaluation</h3><div className="pr">£0</div><div className="yr">14 days · all modules</div><div className="wf">👷 Try before you buy</div>
+              <ul><li>Full module library during trial</li><li>One free +14 day extension</li><li>Then subscribe from Solo</li></ul>
               <Link
                 to="/login"
-                className="btn btn-o"
+                className="btn btn-p"
                 style={{ width: "100%", justifyContent: "center", fontSize: 14 }}
                 {...loginLinkPrefetchProps}
               >
-                Open app
+                Start evaluation
               </Link>
             </div>
             <div className="pcard fu">
@@ -396,7 +421,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
             </div>
           </div>
           <p style={{ textAlign: "center", fontSize: 14, color: "var(--sl4)", marginTop: 24 }}>
-            Includes a 14-day trial in-product when you sign in (where enabled). Not legal advice — always follow your site rules and UK requirements.
+            Includes a 14-day evaluation in-product when you sign in (optional +14 day extension once). After trial, subscribe to keep editing — existing data stays viewable and exportable. Not legal advice — always follow your site rules and UK requirements.
           </p>
         </div>
       </section>
@@ -479,7 +504,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
                 outline: "none",
               }}
             />
-            <button type="button" className="btn btn-p" onMouseEnter={prefetchLoginPage} onFocus={prefetchLoginPage} onClick={onCtaGo}>
+            <button type="button" className="btn btn-p landing-btn-glow" onMouseEnter={prefetchLoginPage} onFocus={prefetchLoginPage} onClick={onCtaGo}>
               Continue to sign in →
             </button>
           </div>

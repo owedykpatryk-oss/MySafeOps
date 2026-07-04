@@ -26,7 +26,24 @@ import {
   projectGeoPhotosForReport,
   reorderGeoPhotoReport,
   snagDraftFromGeoPhoto,
+  persistPermitEvidenceFromGeoPhoto,
+  clearPermitEvidenceForGeoPhoto,
 } from "../utils/geoPhotoIntegrations";
+import {
+  downloadGeoPhotosKml,
+  downloadGeoPhotosKmz,
+  downloadGeoPhotosDxf,
+  downloadGeoPhotosCadBundle,
+  downloadGeoPhotosGpx,
+  filterGeoPhotosWithCoords,
+  prepareGeoPhotoExport,
+} from "../utils/geoPhotoExport";
+import {
+  isGiGeoPhotoType,
+  buildStructuredGeoPhotoNotes,
+  CAPTURE_PHASE_OPTIONS,
+  suggestedGeoPhotoPresetForPlaybook,
+} from "../utils/geoPhotoFields";
 
 const STORAGE_KEY = "geo_photos";
 const LIST_PAGE = 48;
@@ -112,6 +129,9 @@ function exportCsv(rows) {
     "longitude",
     "bearing",
     "includeInReport",
+    "locationId",
+    "depthM",
+    "linkedPermitId",
     "notes",
     "capturedBy",
     "timestampUtc",
@@ -127,6 +147,9 @@ function exportCsv(rows) {
         r.longitude,
         r.bearing,
         r.includeInReport ? "yes" : "no",
+        r.locationId || "",
+        r.depthM ?? "",
+        r.linkedPermitId || "",
         r.notes,
         r.capturedBy,
         r.timestampUtc,
@@ -144,16 +167,25 @@ function exportCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
-function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOpenSurvey }) {
+function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOpenSurvey, onOpenPermit }) {
   const preset = geoPhotoPreset(photo.type);
+  const showGi = isGiGeoPhotoType(photo.type);
   const [notes, setNotes] = useState(photo.notes || "");
   const [includeInReport, setIncludeInReport] = useState(!!photo.includeInReport);
   const [bearing, setBearing] = useState(photo.bearing);
+  const [locationId, setLocationId] = useState(photo.locationId || "");
+  const [depthM, setDepthM] = useState(photo.depthM ?? "");
+  const [sampleRef, setSampleRef] = useState(photo.sampleRef || "");
+  const [capturePhase, setCapturePhase] = useState(photo.capturePhase || "");
 
   useEffect(() => {
     setNotes(photo.notes || "");
     setIncludeInReport(!!photo.includeInReport);
     setBearing(photo.bearing);
+    setLocationId(photo.locationId || "");
+    setDepthM(photo.depthM ?? "");
+    setSampleRef(photo.sampleRef || "");
+    setCapturePhase(photo.capturePhase || "");
   }, [photo]);
 
   return (
@@ -185,6 +217,52 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
           {photo.projectName || "No project"} · {fmtWhen(photo.timestampUtc)}
           {photo.capturedBy ? ` · ${photo.capturedBy}` : ""}
         </p>
+        {photo.linkedPermitId ? (
+          <p className="geo-photos-card__meta" style={{ margin: "0 0 12px" }}>
+            Linked permit:{" "}
+            {onOpenPermit ? (
+              <button type="button" style={{ ...ms.btn, padding: "2px 8px", fontSize: 12 }} onClick={() => onOpenPermit(photo.linkedPermitId)}>
+                {photo.linkedPermitId}
+              </button>
+            ) : (
+              photo.linkedPermitId
+            )}
+          </p>
+        ) : null}
+        {showGi ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <label className="geo-photos-toolbar__field">
+              Location ID
+              <input value={locationId} onChange={(e) => setLocationId(e.target.value)} placeholder="BH01, TP02…" style={ms.inp} />
+            </label>
+            <label className="geo-photos-toolbar__field">
+              Depth (m)
+              <input
+                type="number"
+                min={0}
+                step="0.1"
+                value={depthM}
+                onChange={(e) => setDepthM(e.target.value)}
+                placeholder="e.g. 12"
+                style={ms.inp}
+              />
+            </label>
+            <label className="geo-photos-toolbar__field">
+              Sample ref
+              <input value={sampleRef} onChange={(e) => setSampleRef(e.target.value)} placeholder="S-001" style={ms.inp} />
+            </label>
+            <label className="geo-photos-toolbar__field">
+              Phase
+              <select value={capturePhase} onChange={(e) => setCapturePhase(e.target.value)} style={ms.inp}>
+                {CAPTURE_PHASE_OPTIONS.map((o) => (
+                  <option key={o.key || "none"} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : null}
         <label className="geo-photos-toolbar__field" style={{ marginBottom: 12 }}>
           Notes
           <textarea
@@ -216,15 +294,29 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
           <button
             type="button"
             style={ms.btnP}
-            onClick={() =>
+            onClick={() => {
+              const depthVal = depthM === "" ? null : Number(depthM);
+              const mergedNotes = showGi
+                ? buildStructuredGeoPhotoNotes({
+                    notes: notes.trim(),
+                    locationId: locationId.trim(),
+                    depthM: Number.isFinite(depthVal) ? depthVal : null,
+                    sampleRef: sampleRef.trim(),
+                    capturePhase,
+                  })
+                : notes.trim();
               onUpdate({
                 ...photo,
-                notes: notes.trim(),
+                notes: mergedNotes,
+                locationId: locationId.trim(),
+                depthM: Number.isFinite(depthVal) ? depthVal : null,
+                sampleRef: sampleRef.trim(),
+                capturePhase,
                 includeInReport,
                 bearing,
                 updatedAt: new Date().toISOString(),
-              })
-            }
+              });
+            }}
           >
             Save changes
           </button>
@@ -259,6 +351,9 @@ export default function GeoPhotos() {
   const [query, setQuery] = useState("");
   const [satellite, setSatellite] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [capturePreset, setCapturePreset] = useState("");
+  const [captureLinkedPermitId, setCaptureLinkedPermitId] = useState("");
+  const [exportBusy, setExportBusy] = useState("");
   const [detail, setDetail] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
 
@@ -284,6 +379,8 @@ export default function GeoPhotos() {
     const nav = consumeWorkspaceNavTarget();
     if (nav?.viewId !== "geo-photos") return;
     if (nav.projectId) setFilterProject(nav.projectId);
+    if (nav.geoPhotoPreset) setCapturePreset(nav.geoPhotoPreset);
+    if (nav.permitId) setCaptureLinkedPermitId(nav.permitId);
     if (nav.action === "capture") setCaptureOpen(true);
     if (nav.geoPhotoId) pendingGeoPhotoIdRef.current = nav.geoPhotoId;
   }, []);
@@ -333,6 +430,8 @@ export default function GeoPhotos() {
       );
   }, [safePhotos, filterProject, filterReport, filterType, query]);
 
+  const exportGpsStats = useMemo(() => filterGeoPhotosWithCoords(filtered), [filtered]);
+
   const pdfExportNote = hasActiveFilters ? `Filtered view · ${filtered.length} photo(s)` : null;
   useRegisterPdfExportOverride("geo-photos", filtered, pdfExportNote);
 
@@ -342,8 +441,14 @@ export default function GeoPhotos() {
   );
 
   const mobilisation = useMemo(
-    () => (filterProject ? buildGeoPhotoMobilisationChecklist(safePhotos, filterProject, { surveyPack }) : null),
-    [safePhotos, filterProject, surveyPack]
+    () =>
+      filterProject
+        ? buildGeoPhotoMobilisationChecklist(safePhotos, filterProject, {
+            surveyPack,
+            giPack: selectedProject?.playbookId === "site_investigation",
+          })
+        : null,
+    [filterProject, safePhotos, surveyPack, selectedProject?.playbookId]
   );
 
   const groupCoverage = useMemo(
@@ -407,6 +512,9 @@ export default function GeoPhotos() {
         enriched.reportOrder = nextGeoPhotoReportOrder(safePhotos, enriched.projectId);
       }
       setPhotos((prev) => [enriched, ...asPhotoArray(prev)]);
+      if (enriched.linkedPermitId) {
+        persistPermitEvidenceFromGeoPhoto(enriched, { load, save });
+      }
       pushAudit({
         action: "geo_photo_create",
         detail: `${geoPhotoPresetLabel(enriched.type)} — ${enriched.projectName || "no project"}`,
@@ -418,6 +526,9 @@ export default function GeoPhotos() {
 
   const handleUpdate = (row) => {
     setPhotos((prev) => asPhotoArray(prev).map((p) => (p.id === row.id ? row : p)));
+    if (row.linkedPermitId) {
+      persistPermitEvidenceFromGeoPhoto(row, { load, save });
+    }
     setDetail(null);
     pushAudit({ action: "geo_photo_update", detail: row.id, module: "geo-photos" });
   };
@@ -438,9 +549,16 @@ export default function GeoPhotos() {
     ) {
       return;
     }
+    clearPermitEvidenceForGeoPhoto(victim, { load, save });
     setPhotos((prev) => asPhotoArray(prev).filter((p) => p.id !== id));
     setDetail(null);
     pushAudit({ action: "geo_photo_delete", detail: id, module: "geo-photos" });
+  };
+
+  const openLinkedPermit = (permitId) => {
+    setDetail(null);
+    setWorkspaceNavTarget({ viewId: "permits", permitId, action: "edit" });
+    openWorkspaceView({ viewId: "permits" });
   };
 
   const pushToSurvey = (projectId) => {
@@ -471,6 +589,28 @@ export default function GeoPhotos() {
     setPhotos((prev) => reorderGeoPhotoReport(prev, photoId, direction));
   };
 
+  const runExport = async (kind) => {
+    if (!filtered.length) return;
+    const prepared = prepareGeoPhotoExport(filtered);
+    if (!prepared) return;
+    const stamp = new Date().toISOString().slice(0, 10);
+    const projectName = selectedProject?.name || "";
+    const opts = { projectName, name: projectName || "Geo-photos", projectId: filterProject || "" };
+    setExportBusy(kind);
+    try {
+      const photos = prepared.photos;
+      if (kind === "kml") downloadGeoPhotosKml(photos, `geo-photos-${stamp}.kml`, opts);
+      else if (kind === "kmz") await downloadGeoPhotosKmz(photos, `geo-photos-${stamp}.kmz`, opts);
+      else if (kind === "dxf") downloadGeoPhotosDxf(photos, `geo-photos-${stamp}.dxf`, opts);
+      else if (kind === "cad") await downloadGeoPhotosCadBundle(photos, `geo-photos-cad-${stamp}.zip`, opts);
+      else if (kind === "gpx") downloadGeoPhotosGpx(photos, `geo-photos-${stamp}.gpx`, opts);
+    } catch (e) {
+      window.alert(e?.message || "Export failed");
+    } finally {
+      setExportBusy("");
+    }
+  };
+
   const syncReportOrder = () => {
     if (!filterProject) return;
     setPhotos((prev) => normalizeGeoPhotoReportOrders(prev, filterProject));
@@ -481,7 +621,7 @@ export default function GeoPhotos() {
       <PageHero
         badgeText="GP"
         title="Geo-photos"
-        lead="Field photos with GPS and direction arrow — access routes, hazards, utilities and site conditions. Tick “Include in report”, then import into Survey report."
+        lead="Field photos with GPS and direction arrow — export to KML/KMZ (Google Earth), GPX, AutoCAD DXF (camera block + GI attributes) or CAD ZIP with OSM viewer and images."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {filterProject ? (
@@ -557,8 +697,28 @@ export default function GeoPhotos() {
             onClick={() => downloadGeoJson(filtered)}
             disabled={filtered.length === 0}
           >
-            Export GeoJSON
+            GeoJSON
           </button>
+          <button type="button" style={ms.btn} onClick={() => runExport("kml")} disabled={exportGpsStats.withCoords.length === 0 || exportBusy}>
+            {exportBusy === "kml" ? "KML…" : "KML"}
+          </button>
+          <button type="button" style={ms.btn} onClick={() => runExport("kmz")} disabled={exportGpsStats.withCoords.length === 0 || exportBusy}>
+            {exportBusy === "kmz" ? "KMZ…" : "KMZ + photos"}
+          </button>
+          <button type="button" style={ms.btn} onClick={() => runExport("gpx")} disabled={exportGpsStats.withCoords.length === 0 || exportBusy}>
+            {exportBusy === "gpx" ? "GPX…" : "GPX"}
+          </button>
+          <button type="button" style={ms.btn} onClick={() => runExport("dxf")} disabled={exportGpsStats.withCoords.length === 0 || exportBusy}>
+            {exportBusy === "dxf" ? "DXF…" : "AutoCAD DXF"}
+          </button>
+          <button type="button" style={ms.btnP} onClick={() => runExport("cad")} disabled={exportGpsStats.withCoords.length === 0 || exportBusy}>
+            {exportBusy === "cad" ? "ZIP…" : "CAD pack (ZIP)"}
+          </button>
+          {exportGpsStats.withoutCoords.length > 0 ? (
+            <span className="geo-photos-toolbar__hint" style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              {exportGpsStats.withCoords.length} with GPS · {exportGpsStats.withoutCoords.length} skipped in map exports
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -800,10 +960,16 @@ export default function GeoPhotos() {
 
       <GeoPhotoCaptureModal
         open={captureOpen}
-        onClose={() => setCaptureOpen(false)}
+        onClose={() => {
+          setCaptureOpen(false);
+          setCapturePreset("");
+          setCaptureLinkedPermitId("");
+        }}
         onSave={handleSaveNew}
         projects={activeProjects}
         initialProjectId={filterProject}
+        initialPreset={capturePreset}
+        linkedPermitId={captureLinkedPermitId}
       />
 
       {detail ? (
@@ -814,6 +980,7 @@ export default function GeoPhotos() {
           onDelete={handleDelete}
           onCreateSnag={createSnagFromPhoto}
           onOpenSurvey={pushToSurvey}
+          onOpenPermit={openLinkedPermit}
         />
       ) : null}
     </div>

@@ -12,19 +12,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const envLocal = resolve(root, ".env.local");
 
-function printManualOpsChecklist() {
+function printManualOpsChecklist(d1Tip) {
   console.log("\nManual ops (not verified here — see DOCS/CYBER_ESSENTIALS_PLAN.md + DOCS/BACKEND_CONTINUATION_PLAN.md §C):\n");
   console.log("  · Supabase: MFA + password policy; Turnstile secret in Auth → Bot protection (site key: VITE_TURNSTILE_SITE_KEY).\n");
   console.log("  · Supabase: apply migrations (org RPCs + audit read RPC) for operator accounts.\n");
-  console.log("  · Cloudflare: D1 schemas 0001+0002 on remote; wrangler secret put AUDIT_CHAIN_SECRET on d1-api; deploy d1-backup → R2.\n");
-  console.log("  · Vercel Production: set VITE_D1_API_URL when org sync is live; redeploy after env changes.\n");
+  if (d1Tip) {
+    console.log(`  · Cloudflare D1: ${d1Tip}\n`);
+  } else {
+    console.log("  · Cloudflare D1: npm run d1:doctor (schema, secrets, backup worker).\n");
+  }
+  console.log("  · Vercel Production: redeploy after env changes; Preview hosts may need VITE_PUBLIC_SITE_URL.\n");
   console.log("  · Stripe: npm run stripe:seed-prices then npm run stripe:sync-secrets (Supabase Edge STRIPE_PRICE_*).\n");
+  console.log("  · Production smoke: npm run ops:smoke (APIs, login Turnstile, security headers).\n");
 }
 
 if (!existsSync(envLocal)) {
   console.log("env:check — no .env.local found.");
   console.log("  Copy .env.local.example → .env.local and fill values (file is gitignored).\n");
-  printManualOpsChecklist();
+  printManualOpsChecklist(null);
   process.exit(0);
 }
 
@@ -60,7 +65,8 @@ const viteRows = [
   ["VITE_AI_PROXY_SECRET", "Optional header secret; pair with AI_PROXY_SHARED_SECRET on Vercel"],
   ["VITE_ANTHROPIC_MODEL", "Anthropic model id (optional)"],
   ["VITE_WEB_VITALS_URL", "Optional POST endpoint for Web Vitals (default prod: /api/web-vitals)"],
-  ["VITE_OPENWEATHER_API_KEY", "RAMS weather — optional; else Open-Meteo"],
+  ["OPENWEATHER_API_KEY", "RAMS weather via /api/weather — optional; else Open-Meteo"],
+  ["VITE_OPENWEATHER_API_KEY", "Dev-only direct OpenWeather (blocked in production builds)"],
   ["VITE_APP_VERSION", "Optional display version in Help / about"],
   ["VITE_PUBLIC_SITE_URL", "Canonical site origin for OG, RSS, sitemap (set per Vercel Preview host when testing)"],
   ["VITE_BLOG_POSTS_BASE_URL", "Optional base URL for blog markdown assets / canonical links"],
@@ -168,7 +174,8 @@ if (set("VITE_D1_API_URL")) {
   console.log("D1: (optional) set VITE_D1_API_URL for org JSON sync — see DOCS/D1_SETUP.md\n  Tip: npm run d1:smoke\n");
 }
 
-printManualOpsChecklist();
+const d1Tip = set("VITE_D1_API_URL") ? "npm run d1:doctor" : null;
+printManualOpsChecklist(d1Tip);
 console.log("Done. Address any items above, then restart `npm run dev`.\n");
   })();
 }

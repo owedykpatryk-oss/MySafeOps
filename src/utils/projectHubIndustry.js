@@ -2,14 +2,15 @@
  * Industry-aware project hub — survey workflow only for geodesy / PAS128 orgs.
  */
 
-import { getAppliedIndustryPackId, INDUSTRY_PACKS } from "./orgIndustryPacks";
+import { getAppliedIndustryPackId, getWorkspacePack, INDUSTRY_PACKS } from "./orgIndustryPacks";
+import { resolveProfileBehaviorPackId } from "./customWorkspaceProfiles";
 import { getIndustryPackPreviewId } from "./industryPackPreview";
 import { isModuleVisible } from "./hiddenModules";
 import { PROJECT_PLAYBOOKS } from "./projectPlaybooks";
 
 function packHasSurveyWorkflow(packId) {
-  if (!packId || !INDUSTRY_PACKS[packId]) return false;
-  return Boolean(INDUSTRY_PACKS[packId].surveyWorkflow);
+  const pack = getWorkspacePack(packId);
+  return Boolean(pack?.surveyWorkflow);
 }
 
 /** Effective pack — preview (session) overrides saved profile for hub UI only. */
@@ -27,17 +28,13 @@ export function isSurveyWorkflowEnabled() {
 
 export function isSurveyingOrg() {
   const pack = getOrgIndustryPackId();
-  return pack === "surveyingGeodesy" || pack === "contractorPlusSurveying";
+  return pack === "surveyingGeodesy" || pack === "contractorPlusSurveying" || packHasSurveyWorkflow(pack);
 }
 
 /** Playbooks shown in project create / hub — no PAS128 packs for pure contractors. */
 export function getPlaybooksForOrg() {
   const pack = getOrgIndustryPackId();
-  if (
-    pack === "surveyingGeodesy" ||
-    pack === "contractorPlusSurveying" ||
-    (pack === "showEverything" && isSurveyWorkflowEnabled())
-  ) {
+  if (packHasSurveyWorkflow(pack) || pack === "contractorPlusSurveying" || pack === "showEverything") {
     return PROJECT_PLAYBOOKS;
   }
   return PROJECT_PLAYBOOKS.filter((pb) => !pb.surveyType);
@@ -47,18 +44,18 @@ const FEATURED_BY_PACK = {
   generalContractor: ["general", "refurb_build", "confined_space", "electrical"],
   electricalContractor: ["electrical", "general", "confined_space"],
   buildingTrades: ["refurb_build", "general", "groundworks", "confined_space"],
-  surveyingGeodesy: ["utility_mapping", "groundworks", "general", "confined_space"],
-  contractorPlusSurveying: ["general", "utility_mapping", "refurb_build", "groundworks"],
+  surveyingGeodesy: ["utility_mapping", "site_investigation", "groundworks", "general"],
+  contractorPlusSurveying: ["general", "utility_mapping", "site_investigation", "refurb_build"],
   facilitiesMaintenance: ["general", "electrical", "confined_space"],
-  demolitionStripout: ["groundworks", "general", "confined_space"],
+  demolitionStripout: ["demolition", "groundworks", "general", "confined_space"],
   foodPharma: ["general", "confined_space"],
-  showEverything: ["general", "electrical", "utility_mapping", "groundworks"],
+  showEverything: ["general", "electrical", "utility_mapping", "site_investigation", "groundworks"],
 };
 
 /** Top playbooks for hub alerts and project wizard. */
 export function getFeaturedPlaybooksForOrg(limit = 3) {
   const allowed = new Set(getPlaybooksForOrg().map((p) => p.id));
-  const order = FEATURED_BY_PACK[getOrgIndustryPackId()] || FEATURED_BY_PACK.generalContractor;
+  const order = FEATURED_BY_PACK[resolveProfileBehaviorPackId(getOrgIndustryPackId())] || FEATURED_BY_PACK.generalContractor;
   const picked = [];
   for (const id of order) {
     if (!allowed.has(id)) continue;

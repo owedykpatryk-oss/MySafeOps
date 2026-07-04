@@ -18,7 +18,7 @@ Jeśli masz już tylko `VITE_STORAGE_API_URL` i `VITE_STORAGE_UPLOAD_TOKEN`, **d
 | 4 | `VITE_BLOG_POSTS_BASE_URL` | `VITE_*` | Linki do wpisów bloga (np. `https://mysafeops.com/blog`) |jak `VITE_PUBLIC_SITE_URL` per środowisko |
 | 5 | `VITE_R2_PUBLIC_BASE_URL` | `VITE_*` | Publiczne URL-e plików R2 (jeśli używasz R2) | Production + Preview |
 | 6 | `VITE_VAPID_PUBLIC_KEY` | `VITE_*` | Web Push w przeglądarce (klucz **publiczny**; prywatny tylko w Supabase Edge) | Production + Preview |
-| 7 | `VITE_OPENWEATHER_API_KEY` | `VITE_*` | RAMS „pogoda” (opcjonalne; brak = Open-Meteo) | Jeśli używasz lokalnie — ten sam w prod |
+| 7 | `OPENWEATHER_API_KEY` | serwer (bez `VITE_`) | RAMS „pogoda” przez `/api/weather` (opcjonalne; brak = Open-Meteo w przeglądarce) | Production + Preview |
 | 8 | `VITE_STRIPE_PUBLISHABLE_KEY` | `VITE_*` | Stripe tylko **publishable** w UI | Production + Preview (często `pk_test_` na Preview) |
 | 9 | `VITE_SUPPORT_EMAIL` | `VITE_*` | E-mail w UI / mailto (opcjonalne; w kodzie domyślnie `support@mysafeops.com`) | Production + Preview |
 | 10 | `VITE_PLATFORM_OWNER_EMAIL` | `VITE_*` | Superadmin / owner — zgodnie z migracjami | Production |

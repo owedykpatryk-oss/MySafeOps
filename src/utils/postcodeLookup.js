@@ -104,6 +104,8 @@ export async function lookupUkPostcode(postcode) {
   const fromLegacyProxy = await fetchPostcodeJson(legacyProxyUrl).catch(() => null);
   if (fromLegacyProxy?.result) return mapPostcodeResult(fromLegacyProxy.result, pc);
 
+  if (import.meta.env.PROD) return null;
+
   const fromDirect = await fetchPostcodeJson(directUrl).catch(() => null);
   if (fromDirect?.result) return mapPostcodeResult(fromDirect.result, pc);
 

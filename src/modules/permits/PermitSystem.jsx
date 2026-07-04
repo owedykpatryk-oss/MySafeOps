@@ -30,10 +30,14 @@ import { findSimopsConflicts, buildSimopsConflictMap } from "./permitSimops";
 import { evaluatePermitTypeConflicts, PERMIT_CONFLICT_MATRIX, normalizeConflictPair } from "./permitConflictMatrix";
 import { workspaceDeepLink } from "../../utils/appDeepLinks";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
+import GeoPhotoEvidencePicker from "../../components/geoPhotos/GeoPhotoEvidencePicker";
+import { pickGeoPhotoAsPermitEvidence } from "../../utils/geoPhotoIntegrations";
+import { permitHasSiteEvidence, suggestedGeoPhotoPresetForPermit } from "../../utils/geoPhotoFields";
 import { getOrgId } from "../../utils/orgStorage";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { mirrorPermitsToSupabase } from "../../utils/permitSupabaseMirror";
+import { attachRamsSnapshotOnIssue } from "../../utils/permitRamsSnapshot";
 import {
   logPermitAuditToSupabase,
   logPermitDeletedToSupabase,
@@ -48,7 +52,7 @@ import PermitEvidenceImage from "./components/PermitEvidenceImage";
 import { getTypeComplianceMeta } from "./ukComplianceMatrix";
 import { PERMIT_TYPES, checklistStringsForType } from "./permitTypes";
 import { renderPermitDocumentHtml } from "./permitDocumentHtml";
-import { safeOpaqueToken, openPrintWindow } from "../../utils/htmlEscape.js";
+import { safeOpaqueToken, openPrintWindow, writePrintWindowDocument } from "../../utils/htmlEscape.js";
 import { buildPermitEmailRecipients, parseManualEmails, sendPermitNotificationEmail, sendPermitNotificationWebPush } from "../../utils/permitNotifications";
 import {
   listPermitIncidents,
@@ -818,6 +822,7 @@ function PermitForm({
     evidenceNotes: formDefaults.defaultEvidenceNotesTemplate || "",
     evidencePhotoUrl: "",
     evidencePhotoStoragePath: "",
+    evidenceGeoPhotoId: "",
     workflow: { state: "draft", history: [] },
     signatures: [],
     templateHistory: [],
@@ -847,8 +852,11 @@ function PermitForm({
       evidenceNotes: permit.evidenceNotes || "",
       evidencePhotoUrl: permit.evidencePhotoUrl || "",
       evidencePhotoStoragePath: permit.evidencePhotoStoragePath || "",
+      evidenceGeoPhotoId: permit.evidenceGeoPhotoId || "",
     }, permitType);
   });
+  const geoPhotos = load("geo_photos", []);
+  const [geoEvidencePickerOpen, setGeoEvidencePickerOpen] = useState(false);
   const [evidenceUploadBusy, setEvidenceUploadBusy] = useState(false);
   const [fieldCaptureOpen, setFieldCaptureOpen] = useState(false);
   const [fieldCaptureKind, setFieldCaptureKind] = useState("scan_proof");
@@ -1578,7 +1586,7 @@ function PermitForm({
   if (formDefaults.requireBriefingBeforeIssue && !form.briefingConfirmedAt) {
     policyBlockers.push("Company policy: briefing confirmation is required before issue.");
   }
-  if (formDefaults.requireEvidencePhotoBeforeIssue && !(form.evidencePhotoUrl || form.evidencePhotoStoragePath)) {
+  if (formDefaults.requireEvidencePhotoBeforeIssue && !permitHasSiteEvidence(form)) {
     policyBlockers.push("Company policy: evidence photo is required before issue.");
   }
   conditionalEval.blockers.forEach((b) => policyBlockers.push(b.message));
@@ -1802,7 +1810,7 @@ function PermitForm({
     if (isFieldRequiredEffective("issuedBy") && !String(form.issuedBy || "").trim()) fixes.push({ id: "issuedBy", label: "Select authorised issuer", step: 3 });
     if ((isFieldRequiredEffective("startDateTime") || isFieldRequiredEffective("endDateTime")) && (!form.startDateTime || !form.endDateTime)) fixes.push({ id: "time", label: "Set valid start/expiry times", step: 3 });
     if (formDefaults.requireBriefingBeforeIssue && !form.briefingConfirmedAt) fixes.push({ id: "briefing", label: "Confirm briefing timestamp", step: 3 });
-    if (formDefaults.requireEvidencePhotoBeforeIssue && !(form.evidencePhotoUrl || form.evidencePhotoStoragePath)) fixes.push({ id: "photo", label: "Add evidence photo", step: 3 });
+    if (formDefaults.requireEvidencePhotoBeforeIssue && !permitHasSiteEvidence(form)) fixes.push({ id: "photo", label: "Add evidence photo", step: 3 });
     if (dynamicReq.missingRequired.length > 0) fixes.push({ id: "dynamic", label: "Complete required dynamic fields", step: 2 });
     if (!allowSignLater && missingSignatureRoles.length > 0) fixes.push({ id: "signatures", label: "Collect required signatures", step: 3 });
     return fixes;
@@ -2359,8 +2367,60 @@ function PermitForm({
             {(form.evidencePhotoUrl || form.evidencePhotoStoragePath) ? (
               <div style={{ marginTop:8 }}>
                 <PermitEvidenceImage storagePath={form.evidencePhotoStoragePath} srcUrl={form.evidencePhotoUrl} />
+                {form.evidenceGeoPhotoId ? (
+                  <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4, display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <span>Linked geo-photo: {form.evidenceGeoPhotoId}</span>
+                    <button
+                      type="button"
+                      style={{ ...ss.btn, fontSize:11, padding:"2px 8px" }}
+                      onClick={() => {
+                        setWorkspaceNavTarget({ viewId: "geo-photos", geoPhotoId: form.evidenceGeoPhotoId, projectId: form.projectId });
+                        openWorkspaceView({ viewId: "geo-photos" });
+                      }}
+                    >
+                      Open geo-photo
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
+            <div style={{ marginTop:8, display:"flex", gap:8, flexWrap:"wrap" }}>
+              <button
+                type="button"
+                style={{ ...ss.btn, fontSize:11, padding:"4px 10px" }}
+                disabled={!form.projectId}
+                onClick={() => setGeoEvidencePickerOpen(true)}
+              >
+                Pick from geo-photos
+              </button>
+              <button
+                type="button"
+                style={{ ...ss.btn, fontSize:11, padding:"4px 10px" }}
+                disabled={!form.projectId}
+                onClick={() => {
+                  setWorkspaceNavTarget({
+                    viewId: "geo-photos",
+                    projectId: form.projectId,
+                    permitId: form.id,
+                    action: "capture",
+                    geoPhotoPreset: suggestedGeoPhotoPresetForPermit(type),
+                  });
+                  openWorkspaceView({ viewId: "geo-photos" });
+                }}
+              >
+                Capture geo-photo
+              </button>
+            </div>
+            <GeoPhotoEvidencePicker
+              open={geoEvidencePickerOpen}
+              onClose={() => setGeoEvidencePickerOpen(false)}
+              photos={geoPhotos}
+              projectId={form.projectId}
+              onPick={(photo) => {
+                setForm((prev) => pickGeoPhotoAsPermitEvidence(prev, photo, { load, save }));
+                setGeoEvidencePickerOpen(false);
+              }}
+            />
             {supabase ? (
               <div style={{ marginTop:8 }}>
                 <label style={{ ...ss.lbl, fontSize:12 }}>Or upload image (signed in; 7-day view link)</label>
@@ -3085,8 +3145,9 @@ function PermitForm({
                     : active;
                 saveFormPrefs(withOverride);
                 trackEvent("permit_issued", { permitType: type, legalReady });
+                const issuedPayload = attachRamsSnapshotOnIssue(withOverride);
                 onSave({
-                  ...withOverride,
+                  ...issuedPayload,
                   integrationQueue: [
                     queueIntegrationEvent(form, "calendar", { event: "permit_expiry_reminder" }),
                     queueIntegrationEvent(form, "webhook", { event: "permit_issued" }),
@@ -3359,6 +3420,11 @@ function PermitCard({
               <strong>Changed since activation:</strong> {issueDrift.changedFields.join(", ")}
             </div>
           )}
+          {permit.ramsSnapshotAtIssue?.snapshotAt ? (
+            <div style={{ marginTop:8, fontSize:11, padding:"6px 8px", borderRadius:6, background:"#E6F1FB", border:"1px solid #bfdbfe", color:"#0C447C", lineHeight:1.4 }}>
+              <strong>RAMS snapshot at issue:</strong> {permit.ramsSnapshotAtIssue.ramsTitle || permit.ramsSnapshotAtIssue.documentNo || "Linked RAMS"} · rev {permit.ramsSnapshotAtIssue.revision || "—"} · {permit.ramsSnapshotAtIssue.rowCount || 0} hazard rows · {fmtDateTime(permit.ramsSnapshotAtIssue.snapshotAt)}
+            </div>
+          ) : null}
           {decisionBanner ? (
             <div
               style={{
@@ -3665,22 +3731,22 @@ function PermitCard({
 
 
 function openPermitDocument(permit, { autoPrint = false } = {}) {
-  const win = openPrintWindow();
-  if (!win) return;
-  win.document.open();
-  win.document.write(renderPermitDocumentHtml(permit));
-  win.document.close();
-  if (autoPrint) {
-    const triggerPrint = () => {
-      win.focus();
-      setTimeout(() => win.print(), 180);
-    };
-    if (win.document.readyState === "complete") {
-      triggerPrint();
-    } else {
-      win.onload = triggerPrint;
+  void (async () => {
+    const win = openPrintWindow();
+    if (!win) return;
+    await writePrintWindowDocument(win, renderPermitDocumentHtml(permit));
+    if (autoPrint) {
+      const triggerPrint = () => {
+        win.focus();
+        setTimeout(() => win.print(), 180);
+      };
+      if (win.document.readyState === "complete") {
+        triggerPrint();
+      } else {
+        win.onload = triggerPrint;
+      }
     }
-  }
+  })();
 }
 
 function previewPermit(permit) {

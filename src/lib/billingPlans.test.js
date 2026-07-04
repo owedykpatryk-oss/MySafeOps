@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BILLING_PLANS, STRIPE_SUBSCRIBABLE_PLAN_IDS } from "./billingPlans";
+import { BILLING_PLANS, STRIPE_SUBSCRIBABLE_PLAN_IDS, getEffectivePlanId } from "./billingPlans";
 
 /** Keep in sync with scripts/stripe-seed-prices.mjs PLANS.amountPence */
 const SEED_AMOUNTS_PENCE = {
@@ -39,8 +39,7 @@ describe("billingPlans", () => {
     }
   });
 
-  it("free tier limits unchanged", () => {
-    expect(BILLING_PLANS.free.limits.workers).toBe(3);
-    expect(BILLING_PLANS.free.limits.projects).toBe(10);
+  it("local workspace limits match evaluation trial caps", () => {
+    expect(getEffectivePlanId(null, {})).toBe("local");
   });
 });

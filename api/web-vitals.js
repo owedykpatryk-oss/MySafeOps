@@ -2,7 +2,7 @@
  * Vercel serverless: accepts Web Vitals metric JSON; logs one line (Vercel → Functions → Logs).
  */
 
-import { API_JSON_HEADERS, readJsonBody, sanitizeWebVitalsPayload, sendJson } from "./securityUtils.js";
+import { API_JSON_HEADERS, isSameSiteApiRequest, readJsonBody, sanitizeWebVitalsPayload, sendJson } from "./securityUtils.js";
 
 const MAX_JSON_BYTES = 12_000;
 
@@ -10,6 +10,10 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return sendJson(res, 405, { error: "method_not_allowed" });
+  }
+
+  if (!isSameSiteApiRequest(req)) {
+    return sendJson(res, 403, { error: "forbidden_origin" });
   }
 
   const contentType = String(req.headers["content-type"] || "").toLowerCase();

@@ -1,10 +1,12 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense, memo, startTransition } from "react";
 import "../styles/workspace.css";
+import "../styles/workspace-more.css";
 import { useSearchParams } from "react-router-dom";
-import { BarChart2, FileCheck, ClipboardList, Users, Building2, Menu, Pin, Shield, Trash2, FileDown, EyeOff } from "lucide-react";
+import { BarChart2, FileCheck, ClipboardList, Users, Building2, Menu, Pin, Shield, Trash2, FileDown, EyeOff, Sparkles, Zap } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
+import TrialBillingBanner from "../components/TrialBillingBanner";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
 import RouteErrorBoundary from "../components/RouteErrorBoundary";
 import { ViewFallback } from "../components/ViewFallback";
@@ -17,6 +19,7 @@ import {
   OPEN_WORKSPACE_MORE_EVENT,
   WORKSPACE_SETTINGS_TAB_IDS,
 } from "../utils/workspaceNavContext";
+import { getModuleTilePresentation, tileSmartLine } from "../utils/moduleTileIntelligence";
 import {
   MORE_SECTIONS,
   MORE_TABS,
@@ -56,7 +59,10 @@ import {
 } from "../utils/moduleRegisterStats";
 import MoreSectionSpotlight from "../components/MoreSectionSpotlight";
 import MorePanelCommandCentre from "../components/MorePanelCommandCentre";
-import { ORG_CHANGED_EVENT } from "../utils/orgStorage";
+import ModuleTileSparkline from "../components/ModuleTileSparkline";
+import { useToast } from "../context/ToastContext";
+import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
+import { BILLING_WRITE_BLOCKED_EVENT, billingWriteBlockedMessage } from "../utils/billingAccess";
 import {
   BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
   DEFAULT_BOTTOM_NAV_FALLBACK_ID,
@@ -79,16 +85,71 @@ function isEditableSurfaceTarget(target) {
 const LazySettingsCenter = lazy(() => import("../components/SettingsCenter"));
 const LazyWorkspaceSearchPalette = lazy(() => import("../components/WorkspaceSearchPalette"));
 const LazyWorkspaceOnboarding = lazy(() => import("../components/WorkspaceOnboarding"));
+const LazyTrialExpiredModal = lazy(() => import("../components/TrialExpiredModal"));
 
-const MoreModuleTile = memo(function MoreModuleTile({ tab, active, pinnedIds, sectionTone, stat, onOpen, onTogglePin, onExportPdf, onHide, canHide }) {
+const MORE_COMPACT_KEY = "mysafeops_more_compact_v1";
+
+function loadMoreCompactMode() {
+  try {
+    return localStorage.getItem(MORE_COMPACT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveMoreCompactMode(value) {
+  try {
+    localStorage.setItem(MORE_COMPACT_KEY, value ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+const MoreModuleTile = memo(function MoreModuleTile({
+  tab,
+  active,
+  pinnedIds,
+  sectionTone,
+  stat,
+  compactMode,
+  onOpen,
+  onTogglePin,
+  onExportPdf,
+  onHide,
+  canHide,
+}) {
   const isPinned = pinnedIds.includes(tab.id);
   const Icon = getModuleIcon(tab.id);
   const exportable = canExportModulePdf(tab.id);
   const meta = stat ? registerStatMetaLine(stat) : "";
   const statusClass = stat?.status && stat.status !== "unknown" ? ` app-more-tile-wrap--${stat.status}` : "";
+  const presentation = useMemo(() => getModuleTilePresentation(tab.id, stat), [tab.id, stat]);
+  const smartLine = tileSmartLine(presentation);
+  const prebuild = presentation.prebuild;
+
+  const runPrebuild = (e) => {
+    e.stopPropagation();
+    const viewId = prebuild?.viewId || tab.id;
+    if (prebuild?.action) {
+      setWorkspaceNavTarget({ viewId, action: prebuild.action });
+    }
+    onOpen(viewId);
+  };
+
+  const runSmartAction = (e) => {
+    e.stopPropagation();
+    const action = presentation.smartAction;
+    if (!action) return;
+    const viewId = action.viewId || tab.id;
+    if (action.action) {
+      setWorkspaceNavTarget({ viewId, action: action.action });
+    }
+    onOpen(viewId);
+  };
 
   return (
-    <div className={`app-more-tile-wrap app-more-tile-wrap--${sectionTone || "data"}${statusClass}`}>
+    <div className={`app-more-tile-wrap app-more-tile-wrap--${sectionTone || "data"}${statusClass}${compactMode ? " app-more-tile-wrap--compact" : ""}`}>
+      <div className="app-more-tile__glow" aria-hidden />
       <button
         type="button"
         className={`app-more-tile app-more-tile--v2${active ? " app-more-tile--active" : ""}`}
@@ -107,6 +168,23 @@ const MoreModuleTile = memo(function MoreModuleTile({ tab, active, pinnedIds, se
           {meta ? (
             <span className={`app-more-tile__meta app-more-tile__meta--${stat?.status || "unknown"}`}>{meta}</span>
           ) : null}
+          {smartLine ? (
+            <span className={`app-more-tile__smart app-more-tile__smart--${presentation.smartTone || "info"}`}>
+              <Sparkles size={11} strokeWidth={2.2} aria-hidden />
+              {smartLine}
+              {presentation.smartAction ? (
+                <button type="button" className="app-more-tile__smart-cta" onClick={runSmartAction}>
+                  {presentation.smartAction.label} →
+                </button>
+              ) : null}
+            </span>
+          ) : null}
+          {!compactMode && stat?.sparkline ? (
+            <span className="app-more-tile__spark-row">
+              <span className="app-more-tile__spark-label">7d activity</span>
+              <ModuleTileSparkline sparkline={stat.sparkline} tone={stat.status} />
+            </span>
+          ) : null}
         </span>
         {stat?.count != null && (
           <span className={`app-more-tile__badge app-more-tile__badge--${stat.status}`} aria-hidden>
@@ -114,43 +192,58 @@ const MoreModuleTile = memo(function MoreModuleTile({ tab, active, pinnedIds, se
           </span>
         )}
       </button>
-      {exportable && (
+      <div className="app-more-tile__toolbar">
+        {prebuild ? (
+          <button
+            type="button"
+            className="app-more-tile-prebuild"
+            title={prebuild.label}
+            aria-label={`Quick start: ${prebuild.shortLabel}`}
+            onClick={runPrebuild}
+          >
+            <Zap size={12} strokeWidth={2.4} aria-hidden />
+            <span>{prebuild.shortLabel}</span>
+          </button>
+        ) : null}
+        {exportable ? (
+          <button
+            type="button"
+            className="app-more-tile-pdf app-more-tile-pdf--premium"
+            aria-label={`Premium PDF — ${tab.label}`}
+            title="Premium A4 PDF export"
+            onClick={(e) => {
+              e.stopPropagation();
+              onExportPdf?.(tab.id, tab.label);
+            }}
+          >
+            <FileDown size={13} strokeWidth={2.3} aria-hidden />
+            <span>PDF</span>
+          </button>
+        ) : null}
+        {canHide && onHide ? (
+          <button
+            type="button"
+            className="app-more-tile-hide"
+            aria-label={`Hide ${tab.label} from workspace`}
+            title="Hide module (restore in Settings → Organisation → Modules)"
+            onClick={(e) => {
+              e.stopPropagation();
+              onHide(tab.id);
+            }}
+          >
+            <EyeOff size={13} strokeWidth={2.2} aria-hidden />
+          </button>
+        ) : null}
         <button
           type="button"
-          className="app-more-tile-pdf"
-          aria-label={`Export ${tab.label} to PDF`}
-          title="Export register (A4 PDF)"
-          onClick={(e) => {
-            e.stopPropagation();
-            onExportPdf?.(tab.id, tab.label);
-          }}
+          className="app-more-tile-pin"
+          data-active={isPinned}
+          aria-label={isPinned ? "Remove from pinned shortcuts" : "Pin to shortcuts"}
+          onClick={() => onTogglePin(tab.id)}
         >
-          <FileDown size={14} strokeWidth={2.2} aria-hidden />
+          <Pin size={14} strokeWidth={2} aria-hidden />
         </button>
-      )}
-      {canHide && onHide ? (
-        <button
-          type="button"
-          className="app-more-tile-hide"
-          aria-label={`Hide ${tab.label} from workspace`}
-          title="Hide module (restore in Settings → Organisation → Modules)"
-          onClick={(e) => {
-            e.stopPropagation();
-            onHide(tab.id);
-          }}
-        >
-          <EyeOff size={14} strokeWidth={2.2} aria-hidden />
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="app-more-tile-pin"
-        data-active={isPinned}
-        aria-label={isPinned ? "Remove from pinned shortcuts" : "Pin to shortcuts"}
-        onClick={() => onTogglePin(tab.id)}
-      >
-        <Pin size={15} strokeWidth={2} aria-hidden />
-      </button>
+      </div>
     </div>
   );
 });
@@ -254,6 +347,7 @@ const NAV_TABS = NAV_TAB_IDS.map((t) => ({
 export default function MainAppLayout() {
   const { user } = useSupabaseAuth();
   const { caps } = useApp();
+  const { pushToast } = useToast();
   const orgBranding = useOrgBranding();
   const isSuperadmin = isSuperAdminEmail(user?.email);
   const [hiddenRev, setHiddenRev] = useState(0);
@@ -331,10 +425,10 @@ export default function MainAppLayout() {
   const [moreFilter, setMoreFilter] = useState("");
   const [moreSectionFilters, setMoreSectionFilters] = useState({});
   const [registerStatsTick, setRegisterStatsTick] = useState(0);
+  const [moreCompact, setMoreCompact] = useState(() => loadMoreCompactMode());
   const [pendingMoreNav, setPendingMoreNav] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => getPinnedModuleIds());
-  const [moduleIconGen, setModuleIconGen] = useState(0);
   const allowedModuleIds = useMemo(() => {
     const base = isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin");
     return new Set(filterVisibleModuleTabs(base, visibilityOpts).map((t) => t.id));
@@ -354,12 +448,24 @@ export default function MainAppLayout() {
   }, []);
 
   useEffect(() => {
+    const onWriteBlocked = () => {
+      pushToast({ type: "warning", message: billingWriteBlockedMessage(), title: "Read-only" });
+    };
+    window.addEventListener(BILLING_WRITE_BLOCKED_EVENT, onWriteBlocked);
+    return () => window.removeEventListener(BILLING_WRITE_BLOCKED_EVENT, onWriteBlocked);
+  }, [pushToast]);
+
+  useEffect(() => {
     const bump = () => {
       invalidateRegisterStatsCache();
       setRegisterStatsTick((t) => t + 1);
     };
     window.addEventListener(ORG_CHANGED_EVENT, bump);
-    return () => window.removeEventListener(ORG_CHANGED_EVENT, bump);
+    window.addEventListener(ORG_DATA_CHANGED_EVENT, bump);
+    return () => {
+      window.removeEventListener(ORG_CHANGED_EVENT, bump);
+      window.removeEventListener(ORG_DATA_CHANGED_EVENT, bump);
+    };
   }, []);
 
   useEffect(() => {
@@ -385,7 +491,7 @@ export default function MainAppLayout() {
 
   useEffect(() => {
     const preload = () => {
-      preloadModuleIcons().then(() => setModuleIconGen((g) => g + 1));
+      preloadModuleIcons();
     };
     if (typeof requestIdleCallback === "function") {
       const id = requestIdleCallback(preload, { timeout: 5000 });
@@ -660,35 +766,38 @@ export default function MainAppLayout() {
     try {
       const { exportModuleRegisterPdf } = await import("../utils/moduleRegisterPdf");
       const result = await exportModuleRegisterPdf(moduleId, { label });
-      if (!result.ok) window.alert("This module does not support quick PDF export yet.");
+      if (!result.ok) pushToast({ type: "warn", message: "This module does not support quick PDF export yet." });
+      else pushToast({ type: "success", message: `${label} PDF exported.` });
     } catch (e) {
-      window.alert(e?.message || "Could not export PDF.");
+      pushToast({ type: "error", message: e?.message || "Could not export PDF." });
     }
-  }, []);
+  }, [pushToast]);
 
   const handleExportAllHsePdf = useCallback(async () => {
     try {
       const { exportAllHseRegistersPdf } = await import("../utils/moduleRegisterPdf");
       const result = await exportAllHseRegistersPdf();
-      if (!result.ok) window.alert("Could not build HSE register pack PDF.");
+      if (!result.ok) pushToast({ type: "error", message: "Could not build HSE register pack PDF." });
+      else pushToast({ type: "success", message: "HSE register pack PDF exported." });
     } catch (e) {
-      window.alert(e?.message || "Could not export HSE pack.");
+      pushToast({ type: "error", message: e?.message || "Could not export HSE pack." });
     }
-  }, []);
+  }, [pushToast]);
 
   const handleExportSectionPdf = useCallback(async (sectionTitle, tabs) => {
     const modules = tabs.filter((t) => canExportModulePdf(t.id)).map((t) => ({ id: t.id, label: t.label }));
     if (modules.length === 0) {
-      window.alert("No registers in this section support PDF export yet.");
+      pushToast({ type: "warn", message: "No registers in this section support PDF export yet." });
       return;
     }
     try {
       const { exportMoreSectionPdf } = await import("../utils/moduleRegisterPdf");
       await exportMoreSectionPdf({ title: sectionTitle, modules });
+      pushToast({ type: "success", message: `${sectionTitle} PDF exported.` });
     } catch (e) {
-      window.alert(e?.message || "Could not export section PDF.");
+      pushToast({ type: "error", message: e?.message || "Could not export section PDF." });
     }
-  }, []);
+  }, [pushToast]);
 
   const MainComponent = workspaceViewComponents[view] || workspaceViewComponents[DEFAULT_WORKSPACE_VIEW_ID];
 
@@ -734,6 +843,7 @@ export default function MainAppLayout() {
       </a>
       <OfflineStatusBanner />
       <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
+        <TrialBillingBanner />
         <IndustrialSectorBanners />
       </div>
       <WorkspaceAppBar
@@ -761,7 +871,11 @@ export default function MainAppLayout() {
         <Suspense fallback={null}>
           <LazyWorkspaceOnboarding onComplete={() => setShowOnboarding(false)} />
         </Suspense>
-      ) : null}
+      ) : (
+        <Suspense fallback={null}>
+          <LazyTrialExpiredModal />
+        </Suspense>
+      )}
       <main id="main-content" tabIndex={-1} className="app-workspace-main">
         <div className="app-module-shell">
           {view === "settings" ? (
@@ -785,6 +899,18 @@ export default function MainAppLayout() {
               onOpenModule={selectMoreModule}
             />
             <div className="app-more-panel__exports">
+              <button
+                type="button"
+                className={`app-more-compact-toggle${moreCompact ? " app-more-compact-toggle--active" : ""}`}
+                aria-pressed={moreCompact}
+                onClick={() => {
+                  const next = !moreCompact;
+                  setMoreCompact(next);
+                  saveMoreCompactMode(next);
+                }}
+              >
+                {moreCompact ? "Expanded tiles" : "Compact tiles"}
+              </button>
               <button type="button" className="app-more-section-pdf" onClick={handleExportAllHsePdf}>
                 <FileDown size={14} strokeWidth={2.2} aria-hidden />
                 Export all HSE registers (A4)
@@ -796,9 +922,10 @@ export default function MainAppLayout() {
                   try {
                     const { exportSiteOperationsRegistersPdf } = await import("../utils/moduleRegisterPdf");
                     const result = await exportSiteOperationsRegistersPdf();
-                    if (!result.ok) window.alert("Could not build site operations pack PDF.");
+                    if (!result.ok) pushToast({ type: "error", message: "Could not build site operations pack PDF." });
+                    else pushToast({ type: "success", message: "Site operations pack PDF exported." });
                   } catch (e) {
-                    window.alert(e?.message || "Could not export site pack.");
+                    pushToast({ type: "error", message: e?.message || "Could not export site pack." });
                   }
                 }}
               >
@@ -807,7 +934,7 @@ export default function MainAppLayout() {
               </button>
             </div>
             <p className="app-more-panel__hint">
-              Pin modules for quick access, or hide ones you do not use (admins: eye icon). Download icon on each tile exports that register; section exports bundle multiple registers.
+              Smart suggestions on each tile · <strong>Quick start</strong> opens pre-built templates · <strong>PDF</strong> exports premium A4 registers (or module guide when empty). Pin favourites with the pin icon.
             </p>
             {pinnedTabsFiltered.length > 0 && (
               <div style={{ marginBottom: 18 }}>
@@ -827,12 +954,13 @@ export default function MainAppLayout() {
                 <div className="app-more-grid">
                   {pinnedTabsFiltered.map((t) => (
                     <MoreModuleTile
-                      key={`pin-${t.id}-${moduleIconGen}`}
+                      key={`pin-${t.id}`}
                       tab={t}
                       active={view === t.id}
                       pinnedIds={pinnedIds}
                       sectionTone="pinned"
                       stat={registerStatsMap[t.id]}
+                      compactMode={moreCompact}
                       onOpen={selectMoreModule}
                       onTogglePin={handleTogglePin}
                       onExportPdf={handleExportModulePdf}
@@ -870,10 +998,10 @@ export default function MainAppLayout() {
               const allSectionTabs = filterModuleTabsByQuery(getMoreTabsForSection(section), q);
               let tabs = allSectionTabs;
               const sectionFilter = moreSectionFilters[section.title] || "all";
-              if ((tone === "hse" || tone === "site") && sectionFilter !== "all") {
+              if ((tone === "hse" || tone === "site" || tone === "insights" || tone === "data") && sectionFilter !== "all") {
                 tabs = filterTabsByRegisterStat(tabs, registerStatsMap, sectionFilter);
               }
-              if (tone === "hse" || tone === "site") {
+              if (tone === "hse" || tone === "site" || tone === "insights" || tone === "data") {
                 tabs = sortTabsByRegisterPriority(tabs, registerStatsMap);
               }
               if (allSectionTabs.length === 0) return null;
@@ -893,7 +1021,7 @@ export default function MainAppLayout() {
                         onClick={() => handleExportSectionPdf(section.title, allSectionTabs)}
                       >
                         <FileDown size={14} strokeWidth={2.2} aria-hidden />
-                        Export section PDF
+                        Premium section PDF
                       </button>
                     )}
                   </div>
@@ -920,12 +1048,13 @@ export default function MainAppLayout() {
                   <div className="app-more-grid">
                     {tabs.map((t) => (
                       <MoreModuleTile
-                        key={`${t.id}-${moduleIconGen}`}
+                        key={t.id}
                         tab={t}
                         active={view === t.id}
                         pinnedIds={pinnedIds}
                         sectionTone={tone}
                         stat={registerStatsMap[t.id]}
+                        compactMode={moreCompact}
                         onOpen={selectMoreModule}
                         onTogglePin={handleTogglePin}
                         onExportPdf={handleExportModulePdf}

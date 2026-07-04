@@ -1,6 +1,9 @@
 import RegisterHealthRing from "./RegisterHealthRing";
 import { buildMoreSectionPulse } from "../utils/moreSectionPulse";
 import { modulesWithSeedTemplates, seedEmptyRegisters } from "../utils/registerSeedTemplates";
+import { MODULE_PREBUILDS } from "../utils/moduleTileIntelligence";
+import { setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { useToast } from "../context/ToastContext";
 
 /**
  * Section spotlight — health ring, do-this-now, attention pulse, filters.
@@ -15,12 +18,15 @@ export default function MoreSectionSpotlight({
   onSeeded,
   onOpenModule,
 }) {
-  if (tone !== "hse" && tone !== "site") return null;
+  const { pushToast } = useToast();
+  const showSpotlight = tone === "hse" || tone === "site" || tone === "insights" || tone === "data";
+  if (!showSpotlight) return null;
 
   const pulse = buildMoreSectionPulse(tone, tabs, statsMap);
   const { summary, attentionModules, nextAction, scoreColor } = pulse;
   const ids = tabs.map((t) => t.id);
   const emptySeedable = modulesWithSeedTemplates(ids.filter((id) => statsMap[id]?.status === "empty"));
+  const emptyQuickStart = ids.filter((id) => statsMap[id]?.status === "empty" && MODULE_PREBUILDS[id]);
 
   const chips = [
     ["all", "All"],
@@ -34,7 +40,23 @@ export default function MoreSectionSpotlight({
     if (!window.confirm(`Add starter template rows to ${emptySeedable.length} empty register(s)?`)) return;
     const { seeded } = seedEmptyRegisters(emptySeedable);
     onSeeded?.();
-    if (seeded.length) window.alert(`Seeded ${seeded.length} register(s) with template rows.`);
+    if (seeded.length) {
+      pushToast({ type: "success", message: `Seeded ${seeded.length} register(s) with template rows.` });
+    }
+  };
+
+  const handleQuickStartEmpty = () => {
+    if (!emptyQuickStart.length) return;
+    const first = emptyQuickStart[0];
+    const def = MODULE_PREBUILDS[first];
+    if (def?.action) {
+      setWorkspaceNavTarget({ viewId: first, action: def.action });
+    }
+    onOpenModule?.(first);
+    pushToast({
+      type: "info",
+      message: `Quick start opened for ${emptyQuickStart.length} empty module(s) — starting with ${def?.shortLabel || first}.`,
+    });
   };
 
   return (
@@ -99,6 +121,11 @@ export default function MoreSectionSpotlight({
               {label}
             </button>
           ))}
+          {emptyQuickStart.length > 0 ? (
+            <button type="button" className="app-more-section-chip app-more-section-chip--seed" onClick={handleQuickStartEmpty}>
+              Quick start {emptyQuickStart.length} empty
+            </button>
+          ) : null}
           {tone === "hse" && emptySeedable.length > 0 && (
             <button type="button" className="app-more-section-chip app-more-section-chip--seed" onClick={handleSeedEmpty}>
               Seed {emptySeedable.length} empty

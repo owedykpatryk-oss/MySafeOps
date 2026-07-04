@@ -3,17 +3,28 @@
  * GET /api/postcode?code=KT227SH — flat route (reliable on Vercel + Vite dev proxy).
  */
 
-import { parseBoundedJson } from "./securityUtils.js";
+import { parseBoundedJson, isSameSiteApiRequest } from "./securityUtils.js";
+import { normaliseUkPostcodeCompact, isValidUkPostcodeCompact } from "./postcodeUtils.js";
 
 const UPSTREAM = "https://api.postcodes.io/postcodes";
-const POSTCODE_RE = /^[A-Z]{1,2}\d{1,2}[A-Z]?\d[A-Z]{2}$/i;
 const MAX_UPSTREAM_BYTES = 32_768;
 
-function normaliseCompact(raw) {
-  return String(raw || "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
+/** Keep only fields the app uses — postcodes.io returns large census payloads. */
+function slimPostcodePayload(value) {
+  if (!value?.result) return value;
+  const r = value.result;
+  return {
+    status: value.status,
+    result: {
+      postcode: r.postcode,
+      latitude: r.latitude,
+      longitude: r.longitude,
+      admin_district: r.admin_district,
+      region: r.region,
+      country: r.country,
+      parish: r.parish,
+    },
+  };
 }
 
 const API_JSON_HEADERS = {
@@ -33,9 +44,13 @@ export default async function handler(req, res) {
     return sendJson(res, 405, { error: "Method not allowed" });
   }
 
+  if (!isSameSiteApiRequest(req)) {
+    return sendJson(res, 403, { error: "forbidden_origin" });
+  }
+
   const raw = String(req.query?.code || req.query?.postcode || "").trim();
-  const compact = normaliseCompact(raw);
-  if (!compact || !POSTCODE_RE.test(compact)) {
+  const compact = normaliseUkPostcodeCompact(raw);
+  if (!compact || !isValidUkPostcodeCompact(compact)) {
     return sendJson(res, 400, { error: "Invalid UK postcode" });
   }
 
@@ -49,7 +64,7 @@ export default async function handler(req, res) {
       return sendJson(res, 502, { error: "Postcode lookup unavailable" });
     }
     res.writeHead(upstream.status, API_JSON_HEADERS);
-    res.end(JSON.stringify(parsed.value));
+    res.end(JSON.stringify(slimPostcodePayload(parsed.value)));
   } catch {
     return sendJson(res, 502, { error: "Postcode lookup unavailable" });
   }

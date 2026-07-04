@@ -21,13 +21,14 @@ const STEPS = ["welcome", "profile", "shortcut", "done"];
  * First-run wizard for any organisation — industry pack, bottom-bar shortcut, quick links.
  */
 export default function WorkspaceOnboarding({ onComplete }) {
-  const { caps } = useApp();
+  const { caps, trialStatus } = useApp();
   const { supabase } = useSupabaseAuth();
   const branding = useOrgBranding();
   const [stepIndex, setStepIndex] = useState(0);
   const [packKey, setPackKey] = useState(() => {
     const id = loadOrgSettingsRaw().industryPackId;
-    return id && INDUSTRY_PACKS[id] ? id : "generalContractor";
+    if (id && INDUSTRY_PACKS[id]) return id;
+    return trialStatus?.isActive ? "showEverything" : "generalContractor";
   });
   const [shortcutId, setShortcutId] = useState(() => getBottomNavModuleId() || "");
   const [busy, setBusy] = useState(false);

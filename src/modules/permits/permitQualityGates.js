@@ -1,3 +1,5 @@
+import { permitHasSiteEvidence } from "../../utils/geoPhotoFields";
+
 function isRequired(requiredMap, key, fallback = true) {
   if (!requiredMap || typeof requiredMap !== "object") return fallback;
   if (requiredMap[key] == null) return fallback;
@@ -27,7 +29,7 @@ function buildSmartRecommendations(permit, options = {}) {
   const extra = permit?.extraFields || {};
   const dynamic = extra.dynamic || {};
   const linkedRamsId = cleanText(permit?.linkedRamsId);
-  const hasEvidencePhoto = Boolean(permit?.evidencePhotoUrl || permit?.evidencePhotoStoragePath);
+  const hasEvidencePhoto = permitHasSiteEvidence(permit);
   const hasChecklistSignal = (text) => {
     const checks = permit?.checklist || {};
     const items = Array.isArray(permit?.checklistItems) ? permit.checklistItems : [];

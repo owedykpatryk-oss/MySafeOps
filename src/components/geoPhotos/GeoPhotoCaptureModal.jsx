@@ -14,6 +14,11 @@ import {
 } from "../../utils/geoPhotoUtils";
 import { uploadGeoPhotoToR2 } from "../../utils/geoPhotoMedia";
 import { findNearestProject } from "../../utils/geoPhotoIntegrations";
+import {
+  isGiGeoPhotoType,
+  buildStructuredGeoPhotoNotes,
+  CAPTURE_PHASE_OPTIONS,
+} from "../../utils/geoPhotoFields";
 
 const LAST_PRESET_KEY = "mysafeops_geo_photo_last_preset";
 const STEPS = ["photo", "location", "details"];
@@ -30,6 +35,8 @@ export default function GeoPhotoCaptureModal({
   onSave,
   projects = [],
   initialProjectId = "",
+  initialPreset = "",
+  linkedPermitId = "",
   saving = false,
 }) {
   const [step, setStep] = useState("photo");
@@ -43,6 +50,7 @@ export default function GeoPhotoCaptureModal({
   const [compassBearing, setCompassBearing] = useState(null);
   const [manualBearing, setManualBearing] = useState(null);
   const [type, setType] = useState(() => {
+    if (initialPreset) return initialPreset;
     try {
       const stored = localStorage.getItem(LAST_PRESET_KEY);
       return stored || "general_site_condition";
@@ -51,6 +59,10 @@ export default function GeoPhotoCaptureModal({
     }
   });
   const [notes, setNotes] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const [depthM, setDepthM] = useState("");
+  const [sampleRef, setSampleRef] = useState("");
+  const [capturePhase, setCapturePhase] = useState("");
   const [includeInReport, setIncludeInReport] = useState(true);
   const [projectId, setProjectId] = useState(initialProjectId || "");
   const [capturedBy, setCapturedBy] = useState("");
@@ -61,6 +73,7 @@ export default function GeoPhotoCaptureModal({
   const effectiveBearing = manualBearing ?? compassBearing;
   const preset = geoPhotoPreset(type);
   const groupedPresets = useMemo(() => presetsByGroup(), []);
+  const showGiFields = isGiGeoPhotoType(type);
 
   const reset = useCallback(() => {
     setStep("photo");
@@ -73,11 +86,25 @@ export default function GeoPhotoCaptureModal({
     setCompassBearing(null);
     setManualBearing(null);
     setNotes("");
+    setLocationId("");
+    setDepthM("");
+    setSampleRef("");
+    setCapturePhase("");
     setIncludeInReport(true);
     setProjectId(initialProjectId || "");
     setCapturedBy("");
     setAutoProjectHint("");
-  }, [initialProjectId]);
+    const presetId =
+      initialPreset ||
+      (() => {
+        try {
+          return localStorage.getItem(LAST_PRESET_KEY) || "general_site_condition";
+        } catch {
+          return "general_site_condition";
+        }
+      })();
+    setType(presetId);
+  }, [initialProjectId, initialPreset]);
 
   useEffect(() => {
     if (!open) return;
@@ -160,6 +187,14 @@ export default function GeoPhotoCaptureModal({
 
   const handleSave = async (takeAnother = false) => {
     const proj = projects.find((p) => p.id === projectId);
+    const depthVal = depthM === "" ? null : Number(depthM);
+    const mergedNotes = buildStructuredGeoPhotoNotes({
+      notes: notes.trim(),
+      locationId: locationId.trim(),
+      depthM: Number.isFinite(depthVal) ? depthVal : null,
+      sampleRef: sampleRef.trim(),
+      capturePhase,
+    });
     const row = blankGeoPhoto({
       projectId: projectId || "",
       projectName: proj?.name || "",
@@ -168,7 +203,12 @@ export default function GeoPhotoCaptureModal({
       longitude,
       gpsAccuracyMeters,
       bearing: effectiveBearing,
-      notes: notes.trim(),
+      notes: mergedNotes,
+      locationId: locationId.trim().toUpperCase(),
+      depthM: Number.isFinite(depthVal) ? depthVal : null,
+      sampleRef: sampleRef.trim(),
+      capturePhase,
+      linkedPermitId: linkedPermitId || "",
       includeInReport,
       photoDataUrl,
       capturedBy: capturedBy.trim(),
@@ -193,6 +233,9 @@ export default function GeoPhotoCaptureModal({
       setPhotoDataUrl("");
       setPhotoName("");
       setNotes("");
+      setLocationId("");
+      setDepthM("");
+      setSampleRef("");
       acquireGps();
     } else {
       onClose();
@@ -277,8 +320,17 @@ export default function GeoPhotoCaptureModal({
                 arrowColor={preset.color}
                 height={200}
                 interactive
+                onLocationChange={(lat, lng) => {
+                  setLatitude(lat);
+                  setLongitude(lng);
+                  setGpsAccuracyMeters(null);
+                  setGpsError("");
+                }}
               />
             </div>
+            <p className="geo-photo-capture__hint">
+              Tap the map to drop a pin if GPS is off. Compass arrow shows photo direction.
+            </p>
             <p className="geo-photo-capture__hint">
               {latitude != null && longitude != null ? (
                 <>
@@ -363,6 +415,11 @@ export default function GeoPhotoCaptureModal({
               </div>
             </div>
 
+            {linkedPermitId ? (
+              <p className="geo-photo-capture__hint geo-photo-capture__hint--ok">
+                Linked to permit — will attach as site evidence on save.
+              </p>
+            ) : null}
             {autoProjectHint ? (
               <p className="geo-photo-capture__hint geo-photo-capture__hint--ok">{autoProjectHint}</p>
             ) : null}
@@ -391,6 +448,53 @@ export default function GeoPhotoCaptureModal({
                 ))}
               </select>
             </label>
+            {showGiFields ? (
+              <div className="geo-photo-capture__panel" style={{ marginBottom: 12 }}>
+                <div className="geo-photo-capture__panel-title">Ground investigation fields</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+                  <label className="geo-photos-toolbar__field">
+                    Location ID
+                    <input
+                      value={locationId}
+                      onChange={(e) => setLocationId(e.target.value)}
+                      placeholder="BH01"
+                      style={ms.inp}
+                    />
+                  </label>
+                  <label className="geo-photos-toolbar__field">
+                    Depth (m bgl)
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={depthM}
+                      onChange={(e) => setDepthM(e.target.value)}
+                      placeholder="12.5"
+                      style={ms.inp}
+                    />
+                  </label>
+                  <label className="geo-photos-toolbar__field">
+                    Sample ref
+                    <input
+                      value={sampleRef}
+                      onChange={(e) => setSampleRef(e.target.value)}
+                      placeholder="S-042"
+                      style={ms.inp}
+                    />
+                  </label>
+                  <label className="geo-photos-toolbar__field">
+                    Phase
+                    <select value={capturePhase} onChange={(e) => setCapturePhase(e.target.value)} style={ms.inp}>
+                      {CAPTURE_PHASE_OPTIONS.map((p) => (
+                        <option key={p.key || "none"} value={p.key}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+            ) : null}
             <label className="geo-photos-toolbar__field">
               Notes
               <textarea

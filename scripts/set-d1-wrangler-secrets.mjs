@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * Reads VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from .env.local
+ * Reads Supabase + optional AUDIT_CHAIN_SECRET from .env.local
  * and runs `wrangler secret put` for the D1 API worker (no values printed).
  *
  * Usage (from repo root):
- *   node scripts/set-d1-wrangler-secrets.mjs
+ *   npm run d1:secrets
+ *   node scripts/set-d1-wrangler-secrets.mjs --generate-audit-secret
+ *
  * Requires: wrangler logged in, cloudflare/workers/d1-api/wrangler.toml
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, appendFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -17,6 +20,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const envPath = resolve(root, ".env.local");
 const workerDir = resolve(root, "cloudflare", "workers", "d1-api");
+const generateAudit = process.argv.includes("--generate-audit-secret");
 
 function parseEnvFile(raw) {
   const out = {};
@@ -36,7 +40,7 @@ function parseEnvFile(raw) {
 
 function putSecret(name, value) {
   if (!value) {
-    console.error(`Missing ${name} in .env.local — aborting.`);
+    console.error(`Missing ${name} — aborting.`);
     process.exit(1);
   }
   const r = spawnSync("npx", ["wrangler@3", "secret", "put", name], {
@@ -69,4 +73,22 @@ if (!url || !anon) {
 
 putSecret("SUPABASE_URL", url);
 putSecret("SUPABASE_ANON_KEY", anon);
-console.log("Done. Run: npx wrangler@3 deploy (in cloudflare/workers/d1-api) if you need to re-bind after secrets.");
+
+let auditSecret = (env.AUDIT_CHAIN_SECRET || "").trim();
+if (!auditSecret && generateAudit) {
+  auditSecret = randomBytes(32).toString("base64url");
+  appendFileSync(envPath, `\n# D1 audit HMAC chain (Worker secret; generated ${new Date().toISOString()})\nAUDIT_CHAIN_SECRET=${auditSecret}\n`);
+  console.log("Generated AUDIT_CHAIN_SECRET and appended to .env.local");
+}
+
+if (auditSecret) {
+  if (auditSecret.length < 16) {
+    console.error("AUDIT_CHAIN_SECRET must be at least 16 characters");
+    process.exit(1);
+  }
+  putSecret("AUDIT_CHAIN_SECRET", auditSecret);
+} else {
+  console.log("Skipping AUDIT_CHAIN_SECRET (not in .env.local). Use --generate-audit-secret or set manually.");
+}
+
+console.log("Done. Run: npm run d1:deploy if you need to re-bind after secrets.");

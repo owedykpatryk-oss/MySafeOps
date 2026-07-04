@@ -119,4 +119,88 @@ describe("geoPhotoIntegrations", () => {
     expect(next.utilitiesTable.length).toBe(1);
     expect(next.utilitiesTable[0].method).toContain("Trial pit");
   });
+
+  it("upserts utility rows when geo-photo metadata changes", async () => {
+    const { geoPhotosToUtilitiesTable } = await import("./geoPhotoIntegrations.js");
+    const photo = {
+      id: "g4",
+      projectId: "p1",
+      type: "utility_locator",
+      includeInReport: true,
+      notes: "old",
+      depthM: 1.0,
+      latitude: 51.503,
+      longitude: -0.103,
+    };
+    const first = geoPhotosToUtilitiesTable([photo], "p1");
+    expect(first).toHaveLength(1);
+    const updatedPhoto = { ...photo, depthM: 2.5, notes: "revised depth" };
+    const second = geoPhotosToUtilitiesTable([updatedPhoto], "p1", { existingRows: first });
+    expect(second).toHaveLength(1);
+    expect(second[0].depth).toBe("2.5 m");
+    expect(second[0].notes).toContain("revised depth");
+  });
+
+  it("builds GI location rows from ground investigation geo-photos", async () => {
+    const {
+      geoPhotoToGiLocationRow,
+      geoPhotosToGiLocationsTable,
+      parseLocationIdFromNotes,
+    } = await import("./geoPhotoIntegrations.js");
+    expect(parseLocationIdFromNotes("BH01 made ground to 2m")).toBe("BH01");
+
+    const bhPhoto = {
+      id: "g5",
+      projectId: "p1",
+      type: "borehole_location",
+      includeInReport: true,
+      locationId: "BH02",
+      depthM: 12.5,
+      notes: "Made ground",
+      latitude: 51.504,
+      longitude: -0.104,
+    };
+    const row = geoPhotoToGiLocationRow(bhPhoto);
+    expect(row.locationId).toBe("BH02");
+    expect(row.depth).toBe("12.5 m");
+    expect(row.method).toContain("Borehole");
+
+    const giReport = {
+      projectId: "p1",
+      surveyType: "site_investigation_campaign",
+      sections: { findings: "" },
+      photos: [],
+      giLocationsTable: [],
+    };
+    const next = importGeoPhotosIntoReport(giReport, [...photos, bhPhoto]);
+    expect(next.giLocationsTable.length).toBe(1);
+    expect(next.giLocationsTable[0].geoPhotoId).toBe("g5");
+
+    const table = geoPhotosToGiLocationsTable([bhPhoto], "p1");
+    expect(table.length).toBe(1);
+  });
+
+  it("links geo-photo to permit evidence", async () => {
+    const { linkGeoPhotoToPermit, persistPermitEvidenceFromGeoPhoto } = await import("./geoPhotoIntegrations.js");
+    const photo = {
+      id: "gp_ev1",
+      type: "trial_pit",
+      notes: "TP01 exposed gas main",
+      photoDataUrl: "data:image/jpeg;base64,abc",
+      linkedPermitId: "perm_1",
+    };
+    const permit = linkGeoPhotoToPermit({ id: "perm_1", evidenceNotes: "" }, photo);
+    expect(permit.evidenceGeoPhotoId).toBe("gp_ev1");
+    expect(permit.evidencePhotoUrl).toContain("data:image");
+
+    const store = { permits: [{ id: "perm_1", evidenceNotes: "" }] };
+    const ok = persistPermitEvidenceFromGeoPhoto(photo, {
+      load: (k) => (k === "permits_v2" ? store.permits : []),
+      save: (k, v) => {
+        if (k === "permits_v2") store.permits = v;
+      },
+    });
+    expect(ok).toBe(true);
+    expect(store.permits[0].evidenceGeoPhotoId).toBe("gp_ev1");
+  });
 });

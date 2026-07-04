@@ -1,4 +1,5 @@
 import { getEffectivePlan } from "../lib/billingPlans";
+import { isBillingWriteBlocked, billingWriteBlockedMessage } from "./billingAccess";
 import { loadOrgScoped as load } from "./orgStorage";
 
 export function getOrgUsageCounts() {
@@ -12,6 +13,16 @@ export function getOrgUsageCounts() {
  * @param {"workers"|"projects"} kind
  */
 export function checkBillingLimit(kind, { trialStatus, billing, isPlatformOwner = false } = {}) {
+  if (isBillingWriteBlocked({ trialStatus, billing, isPlatformOwner })) {
+    return {
+      ok: false,
+      count: getOrgUsageCounts()[kind] ?? 0,
+      limit: 0,
+      planName: "Trial ended",
+      kind,
+      readOnly: true,
+    };
+  }
   const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner });
   const usage = getOrgUsageCounts();
   const limit = plan?.limits?.[kind];
@@ -26,6 +37,7 @@ export function checkBillingLimit(kind, { trialStatus, billing, isPlatformOwner 
 }
 
 export function billingLimitMessage(result) {
+  if (result?.readOnly) return billingWriteBlockedMessage();
   if (result?.ok) return "";
   const label = result.kind === "workers" ? "workers" : "projects";
   return `${result.planName} plan allows up to ${result.limit} ${label}. You have ${result.count}. Upgrade in Settings → Billing.`;

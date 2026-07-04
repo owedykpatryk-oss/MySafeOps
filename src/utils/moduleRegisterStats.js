@@ -115,19 +115,75 @@ const MODULE_STAT_HANDLERS = {
     });
     return { attentionCount };
   },
+  training: (items) => {
+    const now = new Date();
+    let attentionCount = 0;
+    items.forEach((row) => {
+      const d = parseDate(row.expiryDate || row.certExpiry || row.validUntil);
+      if (d && d < now) attentionCount += 1;
+      else if (d) {
+        const days = Math.ceil((d - now) / 86400000);
+        if (days <= 30) attentionCount += 1;
+      }
+    });
+    return { attentionCount };
+  },
+  inspections: (items) => {
+    const now = new Date();
+    let attentionCount = 0;
+    items.forEach((row) => {
+      const d = parseDate(row.nextInspection || row.nextInspectionDate || row.dueDate);
+      if (d && d < now) attentionCount += 1;
+      else if (d) {
+        const days = Math.ceil((d - now) / 86400000);
+        if (days <= 14) attentionCount += 1;
+      }
+    });
+    return { attentionCount };
+  },
+  incidents: (items) => {
+    let attentionCount = 0;
+    items.forEach((row) => {
+      const st = String(row.status || "").toLowerCase();
+      if (st === "open" || st === "reported" || st === "investigating") attentionCount += 1;
+    });
+    return { attentionCount };
+  },
 };
 
-/** @returns {{ moduleId: string, count: number|null, attentionCount: number, status: 'empty'|'active'|'attention'|'unknown', lastUpdated: string|null }} */
+function buildSparklineFromItems(items, days = 7) {
+  const buckets = Array(days).fill(0);
+  const bucketDates = [];
+  const now = Date.now();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (days - 1 - i));
+    bucketDates.push(d.toISOString().slice(0, 10));
+  }
+  for (const item of items) {
+    const ts = itemTimestamp(item);
+    if (!ts) continue;
+    const diffDays = Math.floor((now - ts) / 86400000);
+    if (diffDays >= 0 && diffDays < days) buckets[days - 1 - diffDays] += 1;
+  }
+  const total = buckets.reduce((a, b) => a + b, 0);
+  if (total === 0) return null;
+  return { buckets, max: Math.max(...buckets, 1), total, bucketDates };
+}
+
+/** @returns {{ moduleId: string, count: number|null, attentionCount: number, status: 'empty'|'active'|'attention'|'unknown', lastUpdated: string|null, sparkline: { buckets: number[], max: number, total: number } | null }} */
 export function getModuleRegisterStat(moduleId) {
   const cfg = MODULE_PDF_REGISTRY[moduleId];
   if (!cfg) {
-    return { moduleId, count: null, attentionCount: 0, status: "unknown", lastUpdated: null };
+    return { moduleId, count: null, attentionCount: 0, status: "unknown", lastUpdated: null, sparkline: null };
   }
 
   const data = loadOrgScoped(cfg.key, []);
   const items = Array.isArray(data) ? data : [];
   if (items.length === 0) {
-    return { moduleId, count: 0, attentionCount: 0, status: "empty", lastUpdated: null };
+    return { moduleId, count: 0, attentionCount: 0, status: "empty", lastUpdated: null, sparkline: null };
   }
   let attentionCount = 0;
   let lastTs = 0;
@@ -152,6 +208,7 @@ export function getModuleRegisterStat(moduleId) {
     attentionCount,
     status,
     lastUpdated: lastTs ? new Date(lastTs).toISOString() : null,
+    sparkline: buildSparklineFromItems(items),
   };
 }
 

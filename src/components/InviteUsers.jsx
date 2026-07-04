@@ -3,12 +3,11 @@ import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
+import { billingWriteBlockedMessage, isBillingWriteBlocked } from "../utils/billingAccess";
 import { getSupportEmail } from "../config/supportContact";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
-import { isFessOrgSlug } from "../data/fessOrgBrandingPreset";
-
 const ss = ms;
 const NO_MEMBERSHIP_MSG = "No organisation membership";
 
@@ -34,7 +33,7 @@ function makeToken() {
 }
 
 export default function InviteUsers() {
-  const { orgId, caps } = useApp();
+  const { orgId, caps, trialStatus, billing } = useApp();
   const { supabase, user } = useSupabaseAuth();
   const { pushToast } = useToast();
   const [orgRow, setOrgRow] = useState(null);
@@ -54,8 +53,7 @@ export default function InviteUsers() {
   const [lastLoadedAt, setLastLoadedAt] = useState("");
 
   const canManage = Boolean(caps?.orgSettings);
-  const fessOrgClosed = isFessOrgSlug(orgId);
-
+  const readOnly = isBillingWriteBlocked({ trialStatus, billing });
   const load = async () => {
     if (!supabase || !user) return;
     setLoading(true);
@@ -220,11 +218,9 @@ export default function InviteUsers() {
 
   const invite = async () => {
     if (!supabase || !orgRow || !canManage) return;
-    if (fessOrgClosed) {
-      setStatus({
-        type: "warn",
-        text: "FESS Group is limited to Jack and Maciej. Colleagues should register for their own organisation, or accept an invite from another company.",
-      });
+    if (readOnly) {
+      setStatus({ type: "warn", text: billingWriteBlockedMessage() });
+      pushToast({ type: "warning", message: billingWriteBlockedMessage(), title: "Read-only" });
       return;
     }
     const clean = email.trim().toLowerCase();
@@ -390,22 +386,18 @@ export default function InviteUsers() {
       <PageHero
         badgeText="👥"
         title="Invite users"
-        lead={
-          fessOrgClosed
-            ? "FESS Group is a dedicated workspace for Jack and Maciej only. Other users register separately or join via invite from their own company org."
-            : "Invite teammates into your organisation. Accepted invites join the same org automatically."
-        }
+        lead="Invite teammates into your organisation. Accepted invites join the same org automatically."
       />
+      {readOnly ? (
+        <div style={{ marginBottom: 16 }}>
+          <InlineAlert type="warn" text={billingWriteBlockedMessage()} />
+        </div>
+      ) : null}
       <div style={{ ...ss.card, marginBottom: 16 }}>
         {!canManage ? (
           <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>
             Only organisation admins can invite users.
           </p>
-        ) : fessOrgClosed ? (
-          <InlineAlert
-            type="info"
-            text="This organisation cannot invite additional members. New MySafeOps users get their own workspace on sign-up. To add someone to your team, they register first, then you invite them from your company's organisation (not FESS Group)."
-          />
         ) : (
           <>
             <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--color-text-secondary)" }}>

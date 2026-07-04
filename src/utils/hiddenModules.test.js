@@ -52,4 +52,27 @@ describe("hiddenModules", () => {
     expect(getHiddenModuleIds()).toEqual([]);
     expect(getHiddenFeatureIds()).toEqual([]);
   });
+
+  it("active org trial shows hidden modules and RAMS features", () => {
+    const endsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    localStorage.setItem("mysafeops_trial_ends_at", endsAt);
+    hideModule("snags");
+    hideFeature(RAMS_FEATURES.SURVEYING);
+    expect(isModuleVisible("snags")).toBe(true);
+    expect(isFeatureVisible(RAMS_FEATURES.SURVEYING)).toBe(true);
+    expect(getHiddenModuleIds()).toEqual(["snags"]);
+  });
+
+  it("expired trial respects hidden modules again", () => {
+    hideModule("snags");
+    const endsAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    localStorage.setItem("mysafeops_trial_ends_at", endsAt);
+    expect(isModuleVisible("snags")).toBe(false);
+  });
+
+  it("deferred AI modules stay hidden during trial", () => {
+    const endsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    localStorage.setItem("mysafeops_trial_ends_at", endsAt);
+    expect(isModuleVisible("ai-rams")).toBe(false);
+  });
 });

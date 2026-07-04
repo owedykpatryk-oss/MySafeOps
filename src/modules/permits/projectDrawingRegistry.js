@@ -1,4 +1,4 @@
-import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, asStorageArray } from "../../utils/orgStorage";
 
 const PROJECT_DRAWING_OBJECTS_KEY = "project_drawing_objects_v1";
 const MAX_OBJECTS = 1500;
@@ -85,7 +85,7 @@ export function saveProjectDrawingObjects(rows) {
 }
 
 export function objectsForProject(projectId, rows = listProjectDrawingObjects()) {
-  return (rows || []).filter((row) => row.projectId === String(projectId || ""));
+  return asStorageArray(rows).filter((row) => row.projectId === String(projectId || ""));
 }
 
 export function buildProjectDrawingObject(input = {}) {

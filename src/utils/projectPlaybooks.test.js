@@ -5,6 +5,7 @@ import {
   getPlaybook,
   applyProjectPlaybook,
   projectHasRams,
+  docsForProject,
   buildMissingDocChecklist,
   createRamsDraftFromPlaybook,
 } from "./projectPlaybooks";
@@ -31,6 +32,13 @@ describe("projectPlaybooks", () => {
     expect(rams.surveyWorkType).toBe("utility_mapping_survey");
     expect(rams.surveyDeliverables).toMatch(/PAS128/i);
     expect(rams.documentNo).toMatch(/^RAMS-/);
+  });
+
+  it("creates RAMS draft for site investigation playbook", () => {
+    const pb = getPlaybook("site_investigation");
+    const rams = createRamsDraftFromPlaybook(project, pb);
+    expect(rams.surveyWorkType).toBe("site_investigation_campaign");
+    expect(pb.permitTypes).toContain("ground_disturbance");
   });
 
   it("applyProjectPlaybook creates RAMS, survey, permits and MS when empty", () => {
@@ -79,5 +87,11 @@ describe("projectPlaybooks", () => {
     expect(projectHasRams("proj_1", [{ projectId: "proj_1" }])).toBe(true);
     expect(projectHasRams("proj_1", [{ projectId: "other" }])).toBe(false);
     expect(projectHasRams("", [])).toBe(true);
+    expect(projectHasRams("proj_1", { broken: true })).toBe(false);
+  });
+
+  it("docsForProject tolerates corrupted non-array rows", () => {
+    expect(docsForProject("proj_1", [{ projectId: "proj_1", id: "a" }])).toHaveLength(1);
+    expect(docsForProject("proj_1", { broken: true })).toEqual([]);
   });
 });

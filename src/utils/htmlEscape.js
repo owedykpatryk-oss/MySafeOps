@@ -1,5 +1,21 @@
 import { safeHttpUrl } from "./safeUrl.js";
 
+let domPurifyPromise = null;
+
+async function loadDomPurify() {
+  if (domPurifyPromise) return domPurifyPromise;
+  domPurifyPromise = import("dompurify")
+    .then((m) => m.default)
+    .catch(() => null);
+  return domPurifyPromise;
+}
+
+const PRINT_PURIFY_CONFIG = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "base", "link", "meta", "foreignObject"],
+  FORBID_ATTR: ["onerror", "onclick", "onload", "onmouseover", "onfocus", "onblur", "srcdoc"],
+};
+
 /** Escape text for HTML body content. */
 export function escapeHtml(s) {
   return String(s ?? "")
@@ -46,6 +62,36 @@ export function safeOpaqueToken(raw, { maxLen = 128 } = {}) {
 
 /** Strip active content from print-preview HTML before iframe srcDoc. */
 export function sanitizePrintPreviewHtml(html) {
+  const raw = String(html || "");
+  if (typeof window !== "undefined") {
+    try {
+      // Sync path when DOMPurify already loaded (browser print flows).
+      // eslint-disable-next-line no-underscore-dangle
+      const purify = window.__mysafeopsPurify;
+      if (purify?.sanitize) {
+        return purify.sanitize(raw, PRINT_PURIFY_CONFIG);
+      }
+    } catch {
+      /* fallback below */
+    }
+  }
+  return sanitizePrintPreviewHtmlRegex(raw);
+}
+
+/** Async sanitizer — prefers DOMPurify when available (browser). */
+export async function sanitizePrintPreviewHtmlAsync(html) {
+  const raw = String(html || "");
+  if (typeof window !== "undefined") {
+    const purify = await loadDomPurify();
+    if (purify?.sanitize) {
+      window.__mysafeopsPurify = purify;
+      return purify.sanitize(raw, PRINT_PURIFY_CONFIG);
+    }
+  }
+  return sanitizePrintPreviewHtmlRegex(raw);
+}
+
+function sanitizePrintPreviewHtmlRegex(html) {
   let out = String(html || "");
   for (let i = 0; i < 4; i += 1) {
     const prev = out;
@@ -60,11 +106,12 @@ function stripPrintPreviewActiveContent(out) {
   out = out.replace(/<script\b[^>]*\/>/gi, "");
   out = out.replace(/<script\b[^>]*>/gi, "");
   out = out.replace(/<\/script>/gi, "");
+  out = out.replace(/<noscript\b[\s\S]*?<\/noscript>/gi, "");
   out = out.replace(/<iframe\b[\s\S]*?<\/iframe>/gi, "");
   out = out.replace(/<object\b[\s\S]*?<\/object>/gi, "");
   out = out.replace(/<embed\b[^>]*\/?>/gi, "");
   out = out.replace(/<base\b[^>]*>/gi, "");
-  out = out.replace(/<link\b[^>]*\brel\s*=\s*["']?(?:import|preload|prefetch)["']?[^>]*>/gi, "");
+  out = out.replace(/<link\b[^>]*>/gi, "");
   out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
   out = out.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
   out = out.replace(
@@ -73,10 +120,49 @@ function stripPrintPreviewActiveContent(out) {
   );
   out = out.replace(/url\s*\(\s*["']?\s*javascript:/gi, "url(");
   out = out.replace(/expression\s*\(/gi, "");
+  // SVG active content
+  out = out.replace(/<foreignObject\b[\s\S]*?<\/foreignObject>/gi, "");
+  out = out.replace(/<(?:script|handler)\b[\s\S]*?<\/(?:script|handler)>/gi, "");
   return out;
+}
+
+const PRINT_PREVIEW_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data: https: http:; font-src data: https:; script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none';";
+
+/** Wrap sanitized HTML for iframe srcDoc — injects CSP so scripts never run in sandboxed preview. */
+export function buildPrintPreviewSrcDoc(html) {
+  const safe = sanitizePrintPreviewHtml(html);
+  const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${PRINT_PREVIEW_CSP}"/>`;
+  if (/<html[\s>]/i.test(safe)) {
+    if (/<head[\s>]/i.test(safe)) {
+      return safe.replace(/<head([^>]*)>/i, `<head$1>${cspMeta}`);
+    }
+    return safe.replace(/<html([^>]*)>/i, `<html$1><head>${cspMeta}</head>`);
+  }
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/>${cspMeta}</head><body>${safe}</body></html>`;
 }
 
 /** Open a blank print window without giving it `window.opener` access. */
 export function openPrintWindow() {
   return window.open("", "_blank", "noopener,noreferrer");
+}
+
+/** Write sanitized HTML into a print window (CSP + DOMPurify when loaded). */
+export async function writePrintWindowDocument(win, html) {
+  if (!win?.document) return;
+  const sanitized = await sanitizePrintPreviewHtmlAsync(html);
+  const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${PRINT_PREVIEW_CSP}"/>`;
+  let safe = sanitized;
+  if (/<html[\s>]/i.test(safe)) {
+    if (/<head[\s>]/i.test(safe)) {
+      safe = safe.replace(/<head([^>]*)>/i, `<head$1>${cspMeta}`);
+    } else {
+      safe = safe.replace(/<html([^>]*)>/i, `<html$1><head>${cspMeta}</head>`);
+    }
+  } else {
+    safe = `<!DOCTYPE html><html><head><meta charset="utf-8"/>${cspMeta}</head><body>${safe}</body></html>`;
+  }
+  win.document.open();
+  win.document.write(safe);
+  win.document.close();
 }

@@ -10,6 +10,7 @@ import {
   ACCESS_LIMITATION_TYPES,
   SURVEY_TYPES,
   QA_CHECKLIST_ITEMS,
+  GI_QA_CHECKLIST_ITEMS,
   UTILITY_TYPE_OPTIONS,
   UTILITY_CONFIDENCE_LEVELS,
   DELIVERABLE_FORMAT_OPTIONS,
@@ -53,6 +54,7 @@ export function normalizeSurveyReport(report) {
     deliverables: report.deliverables || [],
     recordsReferences: report.recordsReferences || [],
     utilitiesTable: report.utilitiesTable || [],
+    giLocationsTable: report.giLocationsTable || [],
     revisionHistory: report.revisionHistory || [],
     changesSincePrevious: report.changesSincePrevious || [],
     parentReportId: report.parentReportId || "",
@@ -101,9 +103,11 @@ export function buildWeatherNarrative(weather) {
   return parts.join(" ");
 }
 
-export function buildQaChecklistNarrative(qa) {
+export function buildQaChecklistNarrative(qa, surveyType = "") {
   if (!qa) return "";
-  const lines = QA_CHECKLIST_ITEMS.map(({ key, label }) => {
+  const items =
+    surveyType === "site_investigation_campaign" ? [...QA_CHECKLIST_ITEMS, ...GI_QA_CHECKLIST_ITEMS] : QA_CHECKLIST_ITEMS;
+  const lines = items.map(({ key, label }) => {
     const ok = Boolean(qa[key]);
     return `${ok ? "Yes" : "No"} — ${label}`;
   });
@@ -210,7 +214,11 @@ export function surveyReportQuality(report) {
     "Weather at site"
   );
   add(!!r.documentControl?.preparedBy?.trim() || !!r.surveyor?.trim(), "Document control");
-  add((r.utilitiesTable?.length || 0) > 0 || !!r.sections?.findings?.trim(), "Utility schedule or findings");
+  const hasFindingsData =
+    (r.utilitiesTable?.length || 0) > 0 ||
+    (r.giLocationsTable?.length || 0) > 0 ||
+    !!r.sections?.findings?.trim();
+  add(hasFindingsData, r.surveyType === "site_investigation_campaign" ? "GI location schedule or findings" : "Utility schedule or findings");
   add(Boolean(r.cadImport?.summary?.length) || r.surveyType !== "utility_mapping_survey", "CAD length summary");
   add(Object.values(r.qaChecklist || {}).some(Boolean), "QA checklist");
   add((r.equipmentCalibration || []).length > 0, "Equipment calibration");

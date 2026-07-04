@@ -51,4 +51,31 @@ describe("surveyCompletenessGates", () => {
     });
     expect(evaluateSurveyExportGate(report).allowed).toBe(true);
   });
+
+  it("blocks GI export without location schedule or utility clearance QA", () => {
+    const report = blankSurveyReport({
+      status: "final",
+      surveyType: "site_investigation_campaign",
+      qaChecklist: { controlVerified: true },
+      equipmentCalibration: [{ id: "eq_1" }],
+      documentControl: { approvedBy: "Lead" },
+      photos: [{ id: "ph_1" }],
+    });
+    const gate = evaluateSurveyExportGate(report);
+    expect(gate.allowed).toBe(false);
+    expect(gate.missing.some((m) => /GI location/i.test(m))).toBe(true);
+  });
+
+  it("allows GI export when location schedule and clearance QA present", () => {
+    const report = blankSurveyReport({
+      status: "final",
+      surveyType: "site_investigation_campaign",
+      giLocationsTable: [{ id: "gi1", locationId: "BH01", method: "Borehole" }],
+      qaChecklist: { utilityClearanceGi: true, chainOfCustody: true },
+      equipmentCalibration: [{ id: "eq_1" }],
+      documentControl: { approvedBy: "Lead" },
+      photos: [{ id: "ph_1" }],
+    });
+    expect(evaluateSurveyExportGate(report).allowed).toBe(true);
+  });
 });

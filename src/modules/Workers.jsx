@@ -15,6 +15,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { ms } from "../utils/moduleStyles";
 import { geocodeAddressNominatim } from "../utils/geocode";
 import PageHero from "../components/PageHero";
+import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { getOrgId, orgScopedKey, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import {
@@ -186,8 +187,8 @@ export function WorkersModule({ mode = "all" }) {
   const { user } = useSupabaseAuth();
   const { pushToast } = useToast();
   const isPlatformOwner = isSuperAdminEmail(user?.email);
-  const [workers, setWorkers] = useState(() => load(WORKERS_KEY));
-  const [projects, setProjects] = useState(() => load(PROJECTS_KEY));
+  const [workers, setWorkers] = useState(() => load(WORKERS_KEY, []));
+  const [projects, setProjects] = useState(() => load(PROJECTS_KEY, []));
   const [modal, setModal] = useState(null);
   const [hubProject, setHubProject] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -207,10 +208,10 @@ export function WorkersModule({ mode = "all" }) {
   const projectActionCtx = useMemo(
     () =>
       buildProjectActionContext({
-        rams: load("rams_builder_docs"),
-        surveys: load("survey_reports"),
-        permits: load("permits_v2"),
-        methodStatements: load("method_statements"),
+        rams: load("rams_builder_docs", []),
+        surveys: load("survey_reports", []),
+        permits: load("permits_v2", []),
+        methodStatements: load("method_statements", []),
       }),
     [projects]
   );
@@ -502,6 +503,8 @@ export function WorkersModule({ mode = "all" }) {
         onConfirm={confirm?.onConfirm}
         onCancel={() => setConfirm(null)}
       />
+
+      <BillingReadOnlyBanner />
 
       <PageHero
         badgeText={showProjects && !showPeople ? "PR" : showPeople && !showProjects ? "TM" : "WP"}
@@ -1072,9 +1075,23 @@ function ProjectForm({ item, onSave, onClose }) {
   };
 
   const fetchStartForecast = async () => {
-    const lat = parseFloat(String(form.lat ?? "").trim());
-    const lng = parseFloat(String(form.lng ?? "").trim());
+    let lat = parseFloat(String(form.lat ?? "").trim(), 10);
+    let lng = parseFloat(String(form.lng ?? "").trim(), 10);
+    const postcodeQuery = resolveUkPostcodeInput(form.postcode, form.address, form.site);
     const start = String(form.timelineStart || "").trim().slice(0, 10);
+    if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && postcodeQuery) {
+      const pc = await lookupUkPostcode(postcodeQuery);
+      if (pc) {
+        lat = pc.lat;
+        lng = pc.lng;
+        setForm((f) => ({
+          ...f,
+          lat: String(pc.lat),
+          lng: String(pc.lng),
+          postcode: pc.postcode,
+        }));
+      }
+    }
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       setGeoMsg("Set coordinates first (step 3 — postcode lookup).");
       return;
@@ -1086,7 +1103,9 @@ function ProjectForm({ item, onSave, onClose }) {
     setForecastBusy(true);
     setGeoMsg("");
     try {
-      const forecast = await fetchWeatherForDate(lat, lng, start);
+      const forecast = await fetchWeatherForDate(lat, lng, start, {
+        postcode: postcodeQuery || undefined,
+      });
       setForm((f) => ({
         ...f,
         weatherAtStartSnapshot: forecast?.text || "",

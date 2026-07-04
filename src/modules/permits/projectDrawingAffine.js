@@ -96,3 +96,20 @@ export function planPercentToLatLngAffine(px, py, aff) {
     lng: aff.d * u + aff.e * v + aff.f,
   };
 }
+
+/**
+ * Inverse of planPercentToLatLngAffine — WGS84 → plan coordinates (0–100 %, origin top-left).
+ * @returns {{ px: number, py: number, u: number, v: number } | null}
+ */
+export function latLngToPlanPercentAffine(lat, lng, aff) {
+  const la = Number(lat);
+  const ln = Number(lng);
+  if (!aff || ![la, ln, aff.a, aff.b, aff.c, aff.d, aff.e, aff.f].every(Number.isFinite)) return null;
+  const lat0 = la - aff.c;
+  const lng0 = ln - aff.f;
+  const det = aff.a * aff.e - aff.b * aff.d;
+  if (Math.abs(det) < 1e-14) return null;
+  const u = (aff.e * lat0 - aff.b * lng0) / det;
+  const v = (-aff.d * lat0 + aff.a * lng0) / det;
+  return { u, v, px: u * 100, py: v * 100 };
+}

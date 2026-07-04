@@ -3,6 +3,7 @@ import {
   MORE_SECTIONS,
   NAV_TAB_IDS,
 } from "../navigation/appModules";
+import { isTrialUnlockActive } from "./orgMembership";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { RAMS_FEATURES } from "./ramsFeatureIds";
 
@@ -100,10 +101,12 @@ export function isModuleVisible(moduleId, { hiddenModules = getHiddenModuleIds()
   const id = String(moduleId || "");
   if (!id || MODULE_ALWAYS_VISIBLE.has(id)) return true;
   if (DEFERRED_MODULE_IDS.has(id)) return false;
+  if (isTrialUnlockActive()) return true;
   return !hiddenModules.includes(id);
 }
 
 export function isFeatureVisible(featureId, { hiddenFeatures = getHiddenFeatureIds() } = {}) {
+  if (isTrialUnlockActive()) return true;
   return !hiddenFeatures.includes(featureId);
 }
 

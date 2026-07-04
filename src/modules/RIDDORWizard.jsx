@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
-import { escapeHtml, safeCssColor, safeImageSrc, openPrintWindow } from "../utils/htmlEscape.js";
+import { escapeHtml, safeCssColor, safeImageSrc, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
@@ -57,6 +57,7 @@ const DANGEROUS_OCCURRENCES = [
 ];
 
 export function printRiddorF2508(form) {
+  void (async () => {
   const org = getOrgSettings();
   const def = RIDDOR_TYPES[form.riddorType] || {};
   const win = openPrintWindow();
@@ -65,7 +66,7 @@ export function printRiddorF2508(form) {
   const row = (a, b) => `<tr><td style="border:1px solid #333;padding:6px;width:32%;font-weight:600;background:#f5f5f5">${he(a)}</td><td style="border:1px solid #333;padding:6px">${he(b ?? "—")}</td></tr>`;
   const primary = safeCssColor(org.primaryColor);
   const logoSrc = safeImageSrc(org.logo);
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>RIDDOR F2508 — draft worksheet</title>
+  await writePrintWindowDocument(win, `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>RIDDOR F2508 — draft worksheet</title>
   <style>body{font-family:Arial,sans-serif;font-size:11px;padding:16px;color:#000} h1{font-size:14px} .note{font-size:10px;color:#444;margin-top:12px} @media print{.noPrint{display:none}}</style></head><body>
   <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid ${primary};padding-bottom:8px;margin-bottom:12px">
     ${logoSrc ? `<img src="${he(logoSrc)}" style="height:40px;max-width:100px;object-fit:contain"/>` : ""}
@@ -101,8 +102,8 @@ export function printRiddorF2508(form) {
   </table>
   <p class="note">${he(org.pdfFooter || "MySafeOps")}</p>
   </body></html>`);
-  win.document.close();
   win.print();
+  })();
 }
 
 function DeadlineAlert({ reportDate, deadlineDays }) {

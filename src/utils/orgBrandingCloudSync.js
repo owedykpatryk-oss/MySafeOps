@@ -5,6 +5,7 @@ import {
   saveOrgSettingsRaw,
 } from "./orgSettingsStorage";
 import { isValidIndustryPackId } from "./orgIndustryPacks";
+import { mergeCustomProfilesFromCloudSettings } from "./customWorkspaceProfiles";
 
 /** @param {Record<string, unknown>} settings */
 export async function resolveBrandingLogoUrl(settings) {
@@ -55,6 +56,7 @@ export async function syncOrgBrandingFromCloud(supabase, orgSlug) {
     customFields: existing.customFields?.length ? existing.customFields : merged.customFields || [],
   };
   saveOrgSettingsRaw(merged, orgSlug, row.updated_at || new Date().toISOString());
+  mergeCustomProfilesFromCloudSettings(row.settings);
   return true;
 }
 

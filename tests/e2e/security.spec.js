@@ -27,4 +27,88 @@ test.describe("Security posture (public)", () => {
       expect(typeof json?.result?.latitude).toBe("number");
     }
   });
+
+  test("marketing and login pages send security headers", async ({ request }) => {
+    for (const path of ["/", "/login"]) {
+      const res = await request.get(path);
+      expect(res.ok()).toBeTruthy();
+      const headers = res.headers();
+      expect(headers["x-content-type-options"]).toBe("nosniff");
+      expect(headers["strict-transport-security"]).toMatch(/max-age=/i);
+      expect(headers["content-security-policy"]).toMatch(/default-src 'self'/);
+      expect(headers["content-security-policy"]).not.toMatch(/api\.anthropic\.com/);
+      expect(headers["content-security-policy"]).not.toMatch(/api\.openweathermap\.org/);
+      expect(headers["cross-origin-opener-policy"]).toBe("same-origin");
+    }
+  });
+
+  test("web-vitals API rejects cross-origin POST", async ({ request }) => {
+    const res = await request.post("/api/web-vitals", {
+      headers: { Origin: "https://evil.example.com", "Content-Type": "application/json" },
+      data: { name: "LCP", value: 1.2, id: "v1" },
+    });
+    expect(res.status()).toBe(403);
+  });
+
+  test("postcode API rejects cross-origin GET", async ({ request }) => {
+    const res = await request.get("/api/postcode?code=KT227SH", {
+      headers: { Origin: "https://evil.example.com" },
+    });
+    expect(res.status()).toBe(403);
+  });
+
+  test("weather API rejects cross-origin GET", async ({ request }) => {
+    const res = await request.get("/api/weather?lat=51.5&lng=-0.12", {
+      headers: { Origin: "https://evil.example.com" },
+    });
+    expect(res.status()).toBe(403);
+  });
+
+  test("weather API returns OpenWeather for valid coordinates", async ({ request }) => {
+    const res = await request.get("/api/weather?lat=51.299424&lng=-0.33181");
+    expect(res.ok()).toBeTruthy();
+    const json = await res.json();
+    expect(json?.main?.temp).toEqual(expect.any(Number));
+    expect(json?.weather?.[0]?.description).toEqual(expect.any(String));
+  });
+
+  test("weather API accepts UK postcode and returns weather", async ({ request }) => {
+    const res = await request.get("/api/weather?postcode=KT227SH");
+    expect(res.ok()).toBeTruthy();
+    const json = await res.json();
+    expect(json?.main?.temp).toEqual(expect.any(Number));
+    expect(json?._mysafeops?.postcode).toMatch(/KT22 7SH/i);
+  });
+
+  test("weather API rejects invalid postcode", async ({ request }) => {
+    const res = await request.get("/api/weather?postcode=NOTVALID");
+    expect(res.status()).toBe(400);
+  });
+
+  test("health API returns ok", async ({ request }) => {
+    const res = await request.get("/api/health");
+    expect(res.ok()).toBeTruthy();
+    const json = await res.json();
+    expect(json?.ok).toBe(true);
+  });
+
+  test("postcode API returns slim payload", async ({ request }) => {
+    const res = await request.get("/api/postcode?code=KT227SH");
+    expect(res.ok()).toBeTruthy();
+    const json = await res.json();
+    expect(json?.result?.latitude).toBeGreaterThan(50);
+    expect(json?.result?.eastings).toBeUndefined();
+  });
+
+  test("postcode then weather chain (KT22 7SH)", async ({ request }) => {
+    const pc = await request.get("/api/postcode?code=KT227SH");
+    expect(pc.ok()).toBeTruthy();
+    const pcJson = await pc.json();
+    const lat = pcJson?.result?.latitude;
+    const lng = pcJson?.result?.longitude;
+
+    const wx = await request.get(`/api/weather?lat=${lat}&lng=${lng}`);
+    expect(wx.ok()).toBeTruthy();
+    expect((await wx.json())?.main?.temp).toEqual(expect.any(Number));
+  });
 });

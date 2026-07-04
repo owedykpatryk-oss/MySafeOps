@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   missingRequiredPermits,
   permitReadinessForProject,
+  permitsForProject,
   requiredPermitTypesForProject,
 } from "./permitProjectDefaults";
 
@@ -20,5 +21,10 @@ describe("permitProjectDefaults", () => {
   it("returns empty when no defaults", () => {
     expect(requiredPermitTypesForProject({ id: "x" })).toEqual([]);
     expect(missingRequiredPermits({ id: "x" }, [])).toEqual([]);
+  });
+
+  it("tolerates corrupted non-array permit storage", () => {
+    expect(permitsForProject("p1", { broken: true })).toEqual([]);
+    expect(missingRequiredPermits(project, { broken: true })).toEqual(["hot_work", "excavation"]);
   });
 });

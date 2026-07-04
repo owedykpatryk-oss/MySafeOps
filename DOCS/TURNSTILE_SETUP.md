@@ -9,13 +9,14 @@ Anti-bot on `/login` and **Cloud account** (sign-up, sign-in, password reset, re
 | `npm run env:turnstile` | Adds Cloudflare **test** site key to `.env.local` |
 | `npm run setup:turnstile` | Above + sets `VITE_TURNSTILE_SITE_KEY` on **Vercel** (Production & Preview) via CLI |
 | `npm run setup:turnstile:all` | Also PATCH Supabase Auth captcha (needs token) and optional Cloudflare widget API |
+| `npm run turnstile:push-secret` | Push **prod** Turnstile secret from `.env.local` to Supabase (safe — reverts `config.toml` test secret after) |
 
 After Vercel env changes: **Redeploy** Production (and Preview if you use it).
 
 ## Production keys (one-time)
 
 1. [Cloudflare Dashboard](https://dash.cloudflare.com/) → Turnstile → **Add widget**
-   - Hostnames: `mysafeops.com`, `www.mysafeops.com`, `localhost`, your `*.vercel.app` preview host if needed
+   - Hostnames: `mysafeops.com`, `www.mysafeops.com`, `localhost`, `127.0.0.1`, your `*.vercel.app` preview host if needed
    - Copy **Site key** → `VITE_TURNSTILE_SITE_KEY` (Vercel + `.env.local`)
    - Copy **Secret key** → Supabase only (below)
 

@@ -41,6 +41,24 @@ export const MOBILISATION_CHECK_DEFS = [
     label: "Orientation wide shot",
     matchTypes: ["orientation_wide_shot"],
   },
+  {
+    id: "gi_clearance",
+    label: "Utility clearance before GI (CAT / permit-to-dig)",
+    matchTypes: ["buried_services_warning", "utility_locator", "gpr_setup"],
+    giOnly: true,
+  },
+  {
+    id: "gi_point",
+    label: "GI intrusive point photographed",
+    matchGroups: ["Ground investigation"],
+    giOnly: true,
+  },
+  {
+    id: "gi_reinstatement",
+    label: "Borehole cap / pit reinstatement",
+    matchTypes: ["borehole_cap", "trial_pit"],
+    giOnly: true,
+  },
 ];
 
 function projectPhotos(photos, projectId) {
@@ -60,11 +78,15 @@ function matchesCheck(photo, check) {
  * @param {{ surveyPack?: boolean, minReportPhotos?: number }} [opts]
  */
 export function buildGeoPhotoMobilisationChecklist(photos, projectId, opts = {}) {
-  const { surveyPack = false, minReportPhotos = MOBILISATION_MIN_REPORT_PHOTOS } = opts;
+  const { surveyPack = false, giPack = false, minReportPhotos = MOBILISATION_MIN_REPORT_PHOTOS } = opts;
   const list = projectPhotos(photos, projectId);
   const reportCount = list.filter((p) => p.includeInReport).length;
 
-  const checks = MOBILISATION_CHECK_DEFS.filter((c) => !c.surveyOnly || surveyPack).map((check) => ({
+  const checks = MOBILISATION_CHECK_DEFS.filter((c) => {
+    if (c.surveyOnly && !surveyPack) return false;
+    if (c.giOnly && !giPack && !surveyPack) return false;
+    return true;
+  }).map((check) => ({
     id: check.id,
     label: check.label,
     done: list.some((p) => matchesCheck(p, check)),

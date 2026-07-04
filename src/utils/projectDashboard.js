@@ -1,4 +1,4 @@
-import { loadOrgScoped as load } from "./orgStorage";
+import { loadOrgScoped as load, asStorageArray } from "./orgStorage";
 import { plansForProject, listProjectPlans } from "../modules/permits/permitPlanOverlayRegistry";
 import { permitReadinessForProject } from "../modules/permits/permitProjectDefaults";
 
@@ -65,12 +65,12 @@ export function sortByRecent(rows = []) {
 
 export function filterByProject(projectId, rows = []) {
   if (!projectId) return [];
-  return (rows || []).filter((r) => r?.projectId === projectId);
+  return asStorageArray(rows).filter((r) => r?.projectId === projectId);
 }
 
 export function workersForProject(projectId, workers = []) {
   if (!projectId) return [];
-  return (workers || []).filter(
+  return asStorageArray(workers).filter(
     (w) => Array.isArray(w?.projectIds) && w.projectIds.includes(projectId)
   );
 }

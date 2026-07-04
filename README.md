@@ -51,7 +51,7 @@ Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project
 | `VITE_VAPID_PUBLIC_KEY` | Web Push in the browser; pair with Supabase Edge secrets `VAPID_*` |
 | `VITE_ANTHROPIC_*` | Optional AI features (RAMS, toolbox, photo hazard) |
 | `VITE_STORAGE_*` / `VITE_R2_PUBLIC_BASE_URL` | Optional document uploads via Cloudflare R2 Worker |
-| `VITE_OPENWEATHER_API_KEY` | Optional override for RAMS weather (otherwise Open-Meteo) |
+| `OPENWEATHER_API_KEY` | Optional server-side OpenWeather for RAMS weather via `/api/weather` (otherwise Open-Meteo) |
 | `VITE_BLOG_POSTS_BASE_URL` / `VITE_PUBLIC_SITE_URL` | Optional canonical blog base and site origin for links, RSS, and Open Graph |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | Optional Stripe **publishable** key if you add Stripe.js in the browser (never put secret keys in `VITE_*`) |
 
@@ -146,9 +146,9 @@ MySafeOps exposes **Billing & limits** in Settings with:
 
 Default effective plans:
 
-- **Trial**: £0 for 14 days (auto-created on first sign-in per organisation).
-- **Starter**: default after trial if there is no active Stripe subscription.
-- **Paid**: Team / Business limits apply when the organisation row has `subscription_status` active/trialing and a matching `billing_plan` from the webhook.
+- **Evaluation trial**: £0 for 14 days with full module access (auto-created on first cloud sign-in per organisation). One optional +14 day extension per org.
+- **After trial**: read-only workspace until you subscribe — view and export existing records, no new edits.
+- **Paid**: Solo / Team / Business / Enterprise limits apply when Stripe reports an active subscription.
 
 ### Auth E2E tests (Playwright)
 

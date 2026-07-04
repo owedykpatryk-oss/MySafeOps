@@ -61,4 +61,12 @@ export const SURVEY_TYPE_TEMPLATES = {
       "Control verified from project grid; setting out from latest revision drawings with independent check on critical points. As-built dimensions recorded and issued on completion sheets.",
     equipmentUsed: "Robotic total station or GNSS rover, design drawings, setting-out record sheets.",
   },
+  site_investigation_campaign: {
+    scope:
+      "Ground investigation campaign over the agreed extent — trial pits, window sampling, dynamic probing, boreholes, in-situ testing and monitoring wells — to inform geotechnical and environmental design.",
+    methodology:
+      "Desk study and contamination/gas assessment reviewed before mobilisation. Intrusive methods executed in agreed sequence with permit-to-dig and ground disturbance controls. Samples logged with chain of custody; boreholes abandoned or monitoring wells installed per specification. Factual logs and sample register issued for interpretation.",
+    equipmentUsed:
+      "Window sampler / mini excavator, DCP/dynamic probe kit, drilling rig (cable percussive/rotary as specified), hand auger, U100/piston samplers, gas monitor, sample tubes and chain-of-custody forms.",
+  },
 };

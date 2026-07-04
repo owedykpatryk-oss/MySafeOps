@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { loadOrgScoped as load, ORG_CHANGED_EVENT, getOrgId, ORG_ID_KEY } from "../utils/orgStorage";
+import { loadOrgScoped as load, ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT, getOrgId, ORG_ID_KEY } from "../utils/orgStorage";
 import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 import { activeAllergenWindows, orgShowsIndustrialMoreModules } from "../utils/industrialSectors";
+import { getAppliedIndustryPackId } from "../utils/orgIndustryPacks";
+import { getFoodPharmaSetupStatus, isFoodPharmaPackActive } from "../utils/foodPharmaOnboarding";
+import { getConstructionSetupStatus, isConstructionPackActive } from "../utils/constructionOnboarding";
+import { getGeospatialSetupStatus, isGeospatialPackActive } from "../utils/geospatialOnboarding";
+import { invalidateRegisterStatsCache, buildHseDashboardSummary, emptyHseDashboardSummary } from "../utils/moduleRegisterStats";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import WorkplaceTodayCard from "./WorkplaceTodayCard";
@@ -10,8 +15,9 @@ import ProjectCommandCenter from "./ProjectCommandCenter";
 import { useOrgBranding } from "../hooks/useOrgBranding";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { openWorkspaceSettings, openWorkspaceView, openWorkspaceMoreSection, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
+import { getTrialExtensionCount } from "../utils/orgMembership";
+import { canExtendOrgTrial, shouldShowTrialExtensionOffer, TRIAL_EXTENSION_DAYS } from "../utils/billingAccess";
 import HseRegistersCard from "./HseRegistersCard";
-import { buildHseDashboardSummary, emptyHseDashboardSummary } from "../utils/moduleRegisterStats";
 import {
   DASHBOARD_WIDGETS,
   isWidgetVisible,
@@ -217,17 +223,22 @@ export default function AnalyticsDashboard() {
   const dashboardPdfRef = useRef(null);
 
   useEffect(() => {
-    const bump = () => setDataRefreshTick((t) => t + 1);
+    const bump = () => {
+      invalidateRegisterStatsCache();
+      setDataRefreshTick((t) => t + 1);
+    };
     const onStorage = (e) => {
       const key = e?.key || "";
       if (!key || (key !== ORG_ID_KEY && !key.endsWith(`_${getOrgId()}`))) return;
       bump();
     };
     window.addEventListener(ORG_CHANGED_EVENT, bump);
+    window.addEventListener(ORG_DATA_CHANGED_EVENT, bump);
     window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
     window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener(ORG_CHANGED_EVENT, bump);
+      window.removeEventListener(ORG_DATA_CHANGED_EVENT, bump);
       window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
       window.removeEventListener("storage", onStorage);
     };
@@ -249,6 +260,9 @@ export default function AnalyticsDashboard() {
   const geoPhotos = useMemo(() => load("geo_photos", []), [dataRefreshTick]);
   const allergenWindows = useMemo(() => load("allergen_changeover_windows", []), [dataRefreshTick]);
   const activeAllergens = useMemo(() => activeAllergenWindows(allergenWindows), [allergenWindows]);
+  const foodPharmaSetup = useMemo(() => getFoodPharmaSetupStatus(), [dataRefreshTick, orgId]);
+  const constructionSetup = useMemo(() => getConstructionSetupStatus(), [dataRefreshTick, orgId]);
+  const geospatialSetup = useMemo(() => getGeospatialSetupStatus(), [dataRefreshTick, orgId]);
 
   // compliance score calculation
   const { score: complianceScore, issues: complianceIssues } = useMemo(() => {
@@ -688,24 +702,43 @@ export default function AnalyticsDashboard() {
     const items = [];
     if (trialStatus?.isActive) {
       const d = trialStatus.remainingDays;
+      const ext = shouldShowTrialExtensionOffer({
+        trialStatus,
+        billing,
+        trialExtensionCount: getTrialExtensionCount(),
+      });
       items.push({
         key: "trial-active",
         tone: d <= 7 ? "warn" : "info",
         text:
           d <= 0
-            ? "Organisation trial ends today — confirm billing so access is not interrupted."
-            : `Organisation trial: ${d} day(s) remaining (this device clock).`,
-        cta: "Open billing",
+            ? "Organisation evaluation ends today — subscribe or use your one-time +14 day extension."
+            : ext
+              ? `Evaluation: ${d} day(s) left — you can extend once for +${TRIAL_EXTENSION_DAYS} days if you need more site time.`
+              : `Organisation evaluation: ${d} day(s) remaining (this device clock).`,
+        cta: ext ? "Extend or subscribe" : "Open billing",
         onCta: () => openWorkspaceSettings({ tab: "billing" }),
       });
     } else if (trialStatus && !trialStatus.isActive) {
+      const ext = canExtendOrgTrial({ billing, trialExtensionCount: getTrialExtensionCount() });
       items.push({
         key: "trial-ended",
         tone: "warn",
-        text: "The organisation trial window on this device has passed — review subscription status in Billing.",
-        cta: "Open billing",
-        onCta: () => openWorkspaceSettings({ tab: "billing" }),
+        text: ext
+          ? "Evaluation ended — read-only until you subscribe or use your one-time extension."
+          : "Evaluation ended — read-only until you subscribe. Export data anytime from Backup.",
+        cta: ext ? "Extend or subscribe" : "Export backup",
+        onCta: () => (ext ? openWorkspaceSettings({ tab: "billing" }) : openWorkspaceView({ viewId: "backup" })),
       });
+      if (!ext) {
+        items.push({
+          key: "trial-ended-billing",
+          tone: "info",
+          text: "Resume editing with Solo from £19/mo — flat org pricing, not per seat.",
+          cta: "Open billing",
+          onCta: () => openWorkspaceSettings({ tab: "billing" }),
+        });
+      }
     }
     const sub = String(billing?.subscriptionStatus || "none");
     const paid = billing?.paidPlanId;
@@ -930,6 +963,96 @@ export default function AnalyticsDashboard() {
             Allergen changeovers
           </button>
           <span style={{ color: "#78350f" }}> and reference in RAMS Step 1.</span>
+        </div>
+      ) : null}
+      {isFoodPharmaPackActive() && foodPharmaSetup.pct < 100 ? (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 16px",
+            borderRadius: 10,
+            border: "1px solid #93c5fd",
+            background: "#eff6ff",
+            fontSize: 13,
+            lineHeight: 1.5,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 12,
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <strong style={{ color: "#1e40af" }}>Food & pharma setup — {foodPharmaSetup.complete}/{foodPharmaSetup.total} complete ({foodPharmaSetup.pct}%)</strong>
+            <span style={{ color: "#1e3a8a" }}> · Finish hygiene onboarding: hazard packs, COSHH, G&HP, client portal.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => openWorkspaceView({ viewId: "hygiene-setup" })}
+            style={{ ...ms.btnP, fontSize: 12, padding: "6px 12px" }}
+          >
+            Open setup wizard
+          </button>
+        </div>
+      ) : null}
+      {isGeospatialPackActive() && geospatialSetup.pct < 100 ? (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 16px",
+            borderRadius: 10,
+            border: "1px solid #93c5fd",
+            background: "linear-gradient(180deg,#eff6ff 0%,#dbeafe 100%)",
+            fontSize: 13,
+            lineHeight: 1.5,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 12,
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <strong style={{ color: "#1e40af" }}>Surveying setup — {geospatialSetup.complete}/{geospatialSetup.total} complete ({geospatialSetup.pct}%)</strong>
+            <span style={{ color: "#1e3a8a" }}> · PAS128/AS5488, geospatial packs, survey deliverable and field permits.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => openWorkspaceView({ viewId: "construction-setup" })}
+            style={{ ...ms.btnP, fontSize: 12, padding: "6px 12px" }}
+          >
+            Open setup wizard
+          </button>
+        </div>
+      ) : null}
+      {isConstructionPackActive() && constructionSetup.pct < 100 ? (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 16px",
+            borderRadius: 10,
+            border: "1px solid #9FE1CB",
+            background: "linear-gradient(180deg,#f0fdfa 0%,#ecfdf5 100%)",
+            fontSize: 13,
+            lineHeight: 1.5,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 12,
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <strong style={{ color: "#0f766e" }}>Construction setup — {constructionSetup.complete}/{constructionSetup.total} complete ({constructionSetup.pct}%)</strong>
+            <span style={{ color: "#115e59" }}> · CDM, RAMS, permits, daily briefing and client portal in one afternoon.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => openWorkspaceView({ viewId: "construction-setup" })}
+            style={{ ...ms.btnP, fontSize: 12, padding: "6px 12px" }}
+          >
+            Open setup wizard
+          </button>
         </div>
       ) : null}
       <div ref={dashboardPdfRef}>

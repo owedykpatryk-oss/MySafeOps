@@ -246,8 +246,9 @@ export default function CloudAccount() {
   const lockout = getAuthLockoutState(normalizedEmail, Date.now());
   const signUpThrottle = getSignUpThrottleState(Date.now());
   const {
-    enabled: captchaEnabled,
+    turnstileConfigured,
     setCaptchaToken,
+    setCaptchaUnavailable,
     turnstileNonce,
     resetCaptcha,
     validateCaptcha,
@@ -289,11 +290,11 @@ export default function CloudAccount() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LAST_AUTH_EMAIL_KEY);
-      if (saved && !email) setEmail(saved);
+      if (saved) setEmail((prev) => prev || saved);
     } catch {
       /* ignore */
     }
-  }, [email]);
+  }, []);
 
   if (!isSupabaseConfigured() || !client) {
     return (
@@ -584,7 +585,9 @@ export default function CloudAccount() {
           {trialStatus && (
             <p style={{ fontSize: 12, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
               Organisation: <strong>{orgId}</strong> · Trial{" "}
-              {trialStatus.isActive ? `active (${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left)` : "ended"}
+              {trialStatus.isActive
+                ? `active (${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left · full access)`
+                : "ended — read-only until you subscribe (export still available)"}
             </p>
           )}
           <button type="button" style={ss.btn} onClick={signOut} disabled={busy}>
@@ -734,8 +737,13 @@ export default function CloudAccount() {
           pointerEvents: "none",
         }}
       />
-      {captchaEnabled && (
-        <TurnstileWidget resetKey={turnstileNonce} action="login" onTokenChange={setCaptchaToken} />
+      {turnstileConfigured && (
+        <TurnstileWidget
+          resetKey={turnstileNonce}
+          action="login"
+          onTokenChange={setCaptchaToken}
+          onUnavailable={setCaptchaUnavailable}
+        />
       )}
       {lockout.isLocked && (
         <InlineAlert

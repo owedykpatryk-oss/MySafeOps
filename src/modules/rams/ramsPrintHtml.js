@@ -4,7 +4,7 @@
 import { getRiskLevel } from "./ramsRiskLevel.js";
 import { normalizePrintSections, RAMS_SECTION_IDS, documentContentHash } from "./ramsSectionConfig";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
-import { openPrintWindow, safeCssColor, safeImageSrc, escapeAttr } from "../../utils/htmlEscape.js";
+import { openPrintWindow, safeCssColor, safeImageSrc, escapeAttr, writePrintWindowDocument } from "../../utils/htmlEscape.js";
 
 const RL = {
   high: { bg: "#FCEBEB", color: "#791F1F" },
@@ -1445,9 +1445,7 @@ export async function openRamsDocumentWindow(form, rows, workers, projects, opti
       );
       return;
     }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+    await writePrintWindowDocument(win, html);
     if (doPrint) {
       let didPrint = false;
       const triggerPrint = () => {

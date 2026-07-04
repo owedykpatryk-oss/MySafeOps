@@ -7,6 +7,7 @@ import { getOrgId } from "../utils/orgStorage";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import {
   AUTOMATION_RULE_DEFS,
+  REMINDER_RULE_DEFS,
   getOrgAutomationRules,
   saveOrgAutomationRules,
 } from "../utils/orgAutomationRules";
@@ -150,6 +151,22 @@ export default function OrgAutomationSettings() {
         <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
           Reminders
         </div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+          Reminders
+        </div>
+        {REMINDER_RULE_DEFS.map((def) => (
+          <div key={def.id} style={ss.row}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{def.label}</div>
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4, lineHeight: 1.45 }}>{def.hint}</div>
+            </div>
+            <Toggle
+              value={rules[def.id] !== false}
+              onChange={(v) => setRule(def.id, v)}
+              disabled={!canEdit || busy}
+            />
+          </div>
+        ))}
         <div style={{ ...ss.row, borderBottom: "none" }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600, fontSize: 13 }}>Stale survey draft reminders</div>

@@ -69,8 +69,20 @@ async function patchSupabaseAuth({ ref, token, secret }) {
   console.log(`  https://supabase.com/dashboard/project/${ref}/auth/protection`);
 }
 
-async function createCloudflareWidget({ accountId, token, hostname }) {
-  const domains = [hostname, "localhost", "127.0.0.1"].filter(Boolean);
+async function createCloudflareWidget({ accountId, token, hostname, domains }) {
+  const listRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/challenges/widgets`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const listJson = await listRes.json();
+  if (listJson?.success && Array.isArray(listJson.result)) {
+    const existing = listJson.result.find((w) => w.name === "MySafeOps auth");
+    if (existing?.sitekey && existing?.secret) {
+      console.log(`✓ Reusing Cloudflare widget for ${hostname}.`);
+      return { siteKey: existing.sitekey, secret: existing.secret };
+    }
+  }
+
+  const domainList = (domains || [hostname, "localhost", "127.0.0.1"]).filter(Boolean);
   const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/challenges/widgets`, {
     method: "POST",
     headers: {
@@ -79,7 +91,7 @@ async function createCloudflareWidget({ accountId, token, hostname }) {
     },
     body: JSON.stringify({
       name: "MySafeOps auth",
-      domains,
+      domains: domainList,
       mode: "managed",
     }),
   });
@@ -91,7 +103,7 @@ async function createCloudflareWidget({ accountId, token, hostname }) {
   const sitekey = result.sitekey || result.site_key;
   const secret = result.secret;
   if (!sitekey || !secret) throw new Error("Cloudflare response missing sitekey/secret");
-  console.log(`✓ Cloudflare widget (domains: ${domains.join(", ")}).`);
+  console.log(`✓ Cloudflare widget (domains: ${domainList.join(", ")}).`);
   return { siteKey: sitekey, secret };
 }
 
@@ -132,11 +144,21 @@ async function main() {
     /* keep default */
   }
 
-  if (runCloudflare && process.env.CLOUDFLARE_API_TOKEN?.trim() && process.env.CLOUDFLARE_ACCOUNT_ID?.trim()) {
+  const cfAccountId =
+    process.env.CLOUDFLARE_ACCOUNT_ID?.trim() || "18efbdd5472a2d731ef6fe63b0df2c9b";
+  const cfDomains = [
+    hostname,
+    hostname.startsWith("www.") ? hostname.slice(4) : `www.${hostname}`,
+    "localhost",
+    "127.0.0.1",
+  ].filter((v, i, a) => a.indexOf(v) === i);
+
+  if (runCloudflare && process.env.CLOUDFLARE_API_TOKEN?.trim() && cfAccountId) {
     const created = await createCloudflareWidget({
-      accountId: process.env.CLOUDFLARE_ACCOUNT_ID.trim(),
+      accountId: cfAccountId,
       token: process.env.CLOUDFLARE_API_TOKEN.trim(),
       hostname,
+      domains: cfDomains,
     });
     siteKey = created.siteKey;
     secret = created.secret;

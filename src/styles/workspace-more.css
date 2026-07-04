@@ -1,0 +1,123 @@
+/* More module grid — sparkline + tile polish (loaded with workspace.css) */
+
+.app-more-tile__spark-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.app-more-tile__spark-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+.app-more-tile__spark-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.app-more-tile__spark {
+  flex-shrink: 0;
+  display: block;
+}
+
+.app-more-tile__spark-bar {
+  cursor: pointer;
+  outline: none;
+}
+
+.app-more-tile__spark-tip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 600;
+  color: #0f766e;
+  background: #f0fdfa;
+  border: 0.5px solid #99f6e4;
+  border-radius: 4px;
+  padding: 2px 5px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.app-more-tile-wrap--attention .app-more-tile__spark rect {
+  fill: #f59e0b;
+}
+
+.app-more-tile__smart-cta {
+  display: inline;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  color: #0f766e;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.app-more-tile__smart-cta:hover {
+  color: #115e59;
+}
+
+.app-more-compact-toggle {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 0.5px solid var(--color-border-secondary, #cbd5e1);
+  background: var(--color-background-primary, #fff);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  margin-right: auto;
+}
+
+.app-more-compact-toggle--active {
+  border-color: #0d9488;
+  color: #0f766e;
+  background: #f0fdfa;
+}
+
+.app-more-tile-wrap--compact .app-more-tile__spark-row {
+  display: none;
+}
+
+.app-register-ring__progress {
+  transition: stroke-dashoffset 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-register-ring--pulse .app-register-ring__progress {
+  animation: app-ring-pulse 0.8s ease-out;
+}
+
+@keyframes app-ring-pulse {
+  0% {
+    filter: drop-shadow(0 0 0 rgba(13, 148, 136, 0));
+  }
+  40% {
+    filter: drop-shadow(0 0 6px rgba(13, 148, 136, 0.45));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 rgba(13, 148, 136, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-register-ring__progress {
+    transition: none;
+  }
+  .app-register-ring--pulse .app-register-ring__progress {
+    animation: none;
+  }
+}

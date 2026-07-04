@@ -28,6 +28,11 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   const base = getStorageApiBase();
   if (!base) throw new Error("Cloud storage is not configured (set VITE_STORAGE_API_URL).");
 
+  const maxBytes = 25 * 1024 * 1024;
+  if (Number(file?.size) > maxBytes) {
+    throw new Error("File exceeds 25 MB upload limit.");
+  }
+
   const token = getStorageUploadToken();
   const safeName = (file.name || "file").replace(/[^\w.-]+/g, "_").slice(0, 180);
   const key = `${subPath.replace(/^\/+|\/+$/g, "")}/org_${orgId}/${Date.now()}_${safeName}`;

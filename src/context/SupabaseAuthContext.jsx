@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
 import { syncSentryUser } from "../utils/sentryClient.js";
 import { ensureUserOrgContext } from "../utils/orgMembership";
+import { initPortalCloudAutoSync } from "../utils/clientPortalAutoSync";
 
 const Ctx = createContext(null);
 
@@ -61,6 +62,11 @@ export function SupabaseAuthProvider({ children }) {
 
   useEffect(() => {
     syncSentryUser(session?.user ?? null);
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!supabase || !session?.user) return undefined;
+    return initPortalCloudAutoSync(supabase);
   }, [session?.user?.id]);
 
   const value = useMemo(

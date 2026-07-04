@@ -69,15 +69,15 @@ export const PROFILE_GUIDE_ENTRIES = {
     ramsNote: "Refurb starter — dust, noise, occupied building interfaces, and fit-out hazards.",
   },
   surveyingGeodesy: {
-    tagline: "PAS128 utility mapping and full survey deliverable workflow.",
+    tagline: "PAS128 / AS5488 utility mapping, aerial LiDAR, laser scan and full survey deliverable workflow.",
     whoFor: "Utility surveyors, geospatial firms, and drainage/CCTV specialists issuing PAS128 or topo deliverables.",
     adjusts: [
-      "Survey report module shown; surveying RAMS packs available in Step 2.",
+      "Survey report module shown; surveying and geospatial RAMS packs available in Step 2.",
       "Project Hub pipeline ends with Survey (client deliverable).",
       "Readiness tracks mobilisation MS, survey QA, and PAS128 completeness.",
     ],
     hubFocus: "Survey & geodesy site pack — survey reports, PAS128, geo photos, drawings, surveying RAMS.",
-    ramsNote: "PAS128 utility mapping survey pack pre-selected in RAMS builder.",
+    ramsNote: "Geospatial & surveying starter — utility strike, NDD, aerial, marine and rail hazards.",
   },
   contractorPlusSurveying: {
     tagline: "Mostly construction with occasional PAS128 or survey jobs.",

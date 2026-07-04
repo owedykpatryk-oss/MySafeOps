@@ -5,7 +5,7 @@
 import { PROJECT_DOC_KEYS, hasBriefingTodayForProject, todayIsoDate } from "./projectDashboard";
 import { isSurveyWorkflowEnabled } from "./projectHubIndustry";
 import { pickIndustryProjectNextAction } from "./industryPackProfile";
-import { loadOrgScoped as load } from "./orgStorage";
+import { loadOrgScoped as load, asStorageArray } from "./orgStorage";
 import { missingRequiredPermits } from "../modules/permits/permitProjectDefaults";
 import { setWorkspaceNavTarget, openWorkspaceView } from "./workspaceNavContext";
 
@@ -26,7 +26,7 @@ function daysUntil(iso) {
 
 function groupByProject(rows = []) {
   const map = {};
-  for (const row of rows || []) {
+  for (const row of asStorageArray(rows)) {
     const pid = row?.projectId;
     if (!pid) continue;
     if (!map[pid]) map[pid] = [];

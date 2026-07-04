@@ -396,8 +396,53 @@ export const MODULE_PDF_REGISTRY = {
     ],
   },
   "geo-photos": { key: "geo_photos" },
+  "ghp-register": {
+    key: "ghp_register",
+    columns: [
+      { k: "itemDescription", l: "Item" },
+      { k: "zone", l: "Zone" },
+      { k: "broughtBy", l: "By" },
+      { k: "dateIn", l: "Date in" },
+    ],
+  },
+  "dynamic-ra": {
+    key: "dynamic_risk_assessments",
+    columns: [
+      { k: "location", l: "Location" },
+      { k: "authorName", l: "Author" },
+      { k: "assessedAt", l: "Assessed" },
+      { k: "newHazards", l: "Hazards" },
+    ],
+  },
+  legislation: {
+    key: "legislation_register",
+    columns: [
+      { k: "shortName", l: "Regulation" },
+      { k: "applicable", l: "Applicable" },
+      { k: "nextReview", l: "Review" },
+    ],
+  },
+  induction: { key: "induction_entries" },
+  signatures: { key: "signatures" },
+  documents: { key: "mysafeops_r2_uploads" },
+  "project-drawings": { key: "project_drawing_objects_v1" },
+  "client-portal": { key: "client_portals" },
+  templates: { key: "document_templates" },
+  "monthly-report": { key: "monthly_reports" },
+  backup: { key: "backup_exports" },
 };
 
+const PDF_EXPORT_BLOCKLIST = new Set(["help", "settings", "superadmin"]);
+
 export function canExportModulePdf(moduleId) {
-  return Boolean(MODULE_PDF_REGISTRY[moduleId]);
+  if (PDF_EXPORT_BLOCKLIST.has(moduleId)) return false;
+  return true;
+}
+
+/** @returns {{ key: string, columns?: object[], overview?: boolean } | null} */
+export function getModulePdfConfig(moduleId) {
+  if (PDF_EXPORT_BLOCKLIST.has(moduleId)) return null;
+  const cfg = MODULE_PDF_REGISTRY[moduleId];
+  if (cfg) return cfg;
+  return { key: "", overview: true };
 }

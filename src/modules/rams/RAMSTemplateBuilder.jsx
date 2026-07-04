@@ -18,6 +18,8 @@ import {
 import { loadEmergencySiteExtras, googleMapsSearchUrl } from "../../utils/emergencySiteExtras";
 import { ms } from "../../utils/moduleStyles";
 import { safeHttpUrl } from "../../utils/safeUrl";
+import { fetchWeatherSummary } from "../../utils/weatherSummary";
+import { lookupUkPostcode, resolveUkPostcodeInput } from "../../utils/postcodeLookup";
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
@@ -43,7 +45,14 @@ import {
   getOrgRamsStarterKey,
   getRamsStarterLabel,
   isSurveyRamsStarterKey,
+  hazardMatchesStarterTokens,
 } from "../../utils/ramsIndustryStarters";
+import {
+  CONSTRUCTION_ACTIVITY_CATALOG,
+  CORE_RAMS_ACTIVITY_MODULES,
+} from "./constructionActivityCatalog";
+import { ensureBuiltInConstructionPacks } from "./constructionQuickPacks";
+import { evaluateRamsCoshhGate, evaluateRamsHospitalGate } from "../../utils/ramsComplianceGates";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
@@ -874,18 +883,101 @@ const SURVEYING_PACKS = [
   {
     key: "window_sampling_trial_pit",
     label: "Window sampling / trial pit",
-    scope: "Ground investigation by window sampling/trial pits with stability, service avoidance, and sample integrity controls.",
+    scope:
+      "Ground investigation by window sampling (tracked windowless sampler) and/or trial pits — service avoidance, pit stability, contamination pathways, sample chain of custody, and reinstatement.",
     method:
-      "1. Set sample locations and verify utility constraints.\n\n2. Establish exclusion/banksman controls for plant movement.\n\n3. Execute trial pit/window sample under supervised method.\n\n4. Label and log samples with timestamps.\n\n5. Backfill, reinstate, and issue sample chain notes.",
-    hazardTokens: ["window sampling", "trial pit", "ground", "excavation", "plant", "buried", "sample"],
+      "1. Desk study, utility records, and CAT/Genny sweep; agree sample locations with client/engineer.\n\n2. Issue permit-to-dig / ground disturbance; mark exclusion zones and no-go lines.\n\n3. Window sampling: deploy tracked sampler with banksman; step/shore hole if depth exceeds safe angle; stop on refusal or service proximity.\n\n4. Trial pit option: machine strip to safe depth then hand-finish; log face, photograph strata, bag/label samples on site.\n\n5. Ground gas/VOC monitoring where desk study indicates; RPE and decon per contamination assessment.\n\n6. Complete chain-of-custody forms; backfill in layers, compact, reinstate surface; cap any residual openings.",
+    hazardTokens: ["window sampling", "trial pit", "ground", "excavation", "plant", "buried", "sample", "hand dig", "contamination", "chain of custody"],
   },
   {
     key: "borehole_gi_drilling",
     label: "Borehole logging / GI drilling",
-    scope: "Ground investigation drilling with plant controls, contamination pathways management, and borehole integrity checks.",
+    scope:
+      "Ground investigation drilling — cable percussive, rotary open-hole, and coring — with rig exclusion, spoil handling, ground gas monitoring, undisturbed sampling, and secure borehole abandonment.",
     method:
-      "1. Verify drilling location, utility constraints, and permit interfaces.\n\n2. Set exclusion area and pre-use checks for rig.\n\n3. Conduct drilling with supervised spoil handling.\n\n4. Record strata/log data and sample references.\n\n5. Secure or backfill borehole and complete QA records.",
-    hazardTokens: ["borehole", "drilling", "ground investigation", "spoil", "plant", "contamination", "utility"],
+      "1. Verify borehole location against records, scans, and permit interfaces; brief rig crew on contamination/gas triggers.\n\n2. Establish rig exclusion (mast height); daily pre-use checks; banksman for vehicle movements.\n\n3. Drill to specification — shell & auger, rotary, or core barrel — with spoil containment and sample sealing at point of recovery.\n\n4. Install standpipe/piezometer if specified; otherwise grout/backfill and lockable surface cap per abandonment plan.\n\n5. Continuous or periodic gas monitoring at open holes; no leaning over uncapped boreholes.\n\n6. Issue borehole log, sample register, and as-built abandonment record.",
+    hazardTokens: ["borehole", "drilling", "ground investigation", "spoil", "plant", "contamination", "utility", "rotary", "coring", "cable percussive"],
+  },
+  {
+    key: "dcp_dynamic_probe",
+    label: "Dynamic probing / DCP (DPL–DPH)",
+    scope:
+      "In-situ dynamic probing and dynamic cone penetrometer (DCP) testing — manual handling of drive rods, utility clearance, blow-count recording, and hole capping.",
+    method:
+      "1. Locate utilities and agree probe positions; obtain ground disturbance permit where required.\n\n2. Set exclusion zone on carriageway or soft ground; Chapter 8 TM if on live highway.\n\n3. Assemble drive rods and hammer; two-person lift for heavy sections; stop on refusal or unexpected contact.\n\n4. Record blow counts vs depth at defined intervals; photograph/log refusal layers.\n\n5. Withdraw rods, cap probe holes, and decontaminate equipment between contaminated locations.",
+    hazardTokens: ["dynamic probe", "dcp", "dph", "dpm", "dpl", "penetrometer", "blow count", "ground investigation"],
+  },
+  {
+    key: "cpt_cone_penetration",
+    label: "Cone penetration test (CPT / piezocone)",
+    scope:
+      "Push-in cone penetration testing with tracked push-frame rig — hydraulic thrust, platform stability, utility clearance, and real-time data QA.",
+    method:
+      "1. Confirm CPT location, bearing capacity of platform, and utility search clearance.\n\n2. Deploy outriggers; establish exclusion zone during thrust cycles.\n\n3. Push cone to refusal or target depth; monitor pore pressure and friction data in real time.\n\n4. Withdraw rods under controlled hydraulic release; inspect hoses and connections.\n\n5. Issue CPT log with depth, qc/fs/u2 traces and location metadata.",
+    hazardTokens: ["cpt", "cone penetration", "piezocone", "push frame", "hydraulic", "ground investigation"],
+  },
+  {
+    key: "cable_percussive_boring",
+    label: "Cable percussive / shell & auger boring",
+    scope:
+      "Light to medium GI boring by cable percussive or shell-and-auger — rotating tools, spoil ejection, borehole collapse, and sample recovery.",
+    method:
+      "1. Site rig on stable pad; utility clearance and permit-to-dig sign-off.\n\n2. Establish exclusion equal to mast height; tool catcher and crown limits checked.\n\n3. Progress bore with bailer/auger; log strata; seal disturbed samples immediately.\n\n4. Line borehole if collapse risk; install temporary casing where specified.\n\n5. Backfill/grout abandonment or install monitoring well per specification.",
+    hazardTokens: ["cable percussive", "shell auger", "boring", "bailer", "borehole", "ground investigation"],
+  },
+  {
+    key: "rotary_coring_drilling",
+    label: "Rotary open-hole & rock coring",
+    scope:
+      "Rotary drilling and core barrel recovery for rock and stiff strata — mud circulation, torque control, core handling, and H₂S/ground gas interfaces.",
+    method:
+      "1. Pre-start rig inspection; mud tank and spill kit in place; gas monitor if desk study flags risk.\n\n2. Establish exclusion; commence circulation before full rotation; control weight on bit.\n\n3. Recover core runs; label barrels with depth, orientation, and run length; wax/seal ends.\n\n4. Monitor for gas release at open hole; ventilate before sampling headspace.\n\n5. Complete borehole per abandonment spec — grout plug, bentonite seal, lockable cap.",
+    hazardTokens: ["rotary", "core barrel", "rock coring", "mud circulation", "ground gas", "borehole"],
+  },
+  {
+    key: "hand_auger_sampling",
+    label: "Hand auger / shallow sampling",
+    scope:
+      "Shallow ground investigation by hand auger or handheld sampler — manual handling, sharp tools, utility proximity, and sample integrity.",
+    method:
+      "1. CAT/Genny sweep and mark probe location; brief team on stop-dig triggers.\n\n2. Assemble auger extensions; rotate with clear grip — no loose clothing.\n\n3. Extract and bag samples at defined intervals; label with depth and location ID.\n\n4. Cap auger holes and reinstate turf/surface.\n\n5. Decontaminate tools between contaminated sample points.",
+    hazardTokens: ["hand auger", "handheld", "shallow sampling", "manual handling", "ground investigation"],
+  },
+  {
+    key: "undisturbed_core_u100",
+    label: "Undisturbed sampling (U100 / thin-wall / piston)",
+    scope:
+      "Recovery of undisturbed soil samples — U100 tubes, thin-wall/piston samplers — with minimal disturbance, immediate sealing, and chain of custody.",
+    method:
+      "1. Confirm sampler type with laboratory specification and ground conditions.\n\n2. Clean equipment; push or drive sampler without over-driving; extract tube intact.\n\n3. Wax ends, cap tubes, and complete chain-of-custody on site.\n\n4. Transport upright and cushioned; store per lab instructions.\n\n5. Record sampler type, depth, and any disturbance notes on borehole log.",
+    hazardTokens: ["u100", "undisturbed", "thin-wall", "piston sampler", "shelby", "core sample", "chain of custody"],
+  },
+  {
+    key: "piezometer_standpipe",
+    label: "Piezometer / standpipe / monitoring well",
+    scope:
+      "Installation of standpipes, piezometers, and monitoring wells — open borehole guarding, gravel pack, bentonite seal, and surface protection.",
+    method:
+      "1. Complete borehole to design depth; gas test if contaminated or landfill site.\n\n2. Install slotted casing, gravel pack, and bentonite seal per engineer's detail.\n\n3. Flush/development if specified; take initial water level/gas reading.\n\n4. Fit lockable protective cover; record GPS, level, and as-built diagram.\n\n5. Hand over monitoring schedule and trigger levels to client.",
+    hazardTokens: ["piezometer", "standpipe", "monitoring well", "gravel pack", "bentonite", "groundwater"],
+  },
+  {
+    key: "machine_trial_pit_gi",
+    label: "Machine-excavated trial pit (GI logging)",
+    scope:
+      "Trial pits excavated by mini excavator for strata logging — side stability, plant/person interface, hand-finish near services, and same-shift backfill.",
+    method:
+      "1. Design pit dimensions and max depth with competent person; permit-to-dig issued.\n\n2. Machine strip with banksman; no persons in pit during excavation.\n\n3. Step, batter, or shore if depth requires; hand-dig final 300 mm near services.\n\n4. Log face, sample, and photograph before backfill.\n\n5. Backfill in layers; compact; secure overnight if not same-shift reinstatement.",
+    hazardTokens: ["trial pit", "machine excavated", "mini excavator", "logging", "excavation", "shoring"],
+  },
+  {
+    key: "site_investigation_campaign",
+    label: "Site investigation campaign (multi-method GI)",
+    scope:
+      "Combined ground investigation programme — trial pits, window sampling, probing, boreholes, in-situ testing, monitoring wells — with unified permit interface and contamination/gas plan.",
+    method:
+      "1. Review GI specification, desk study, and contamination/gas assessment; agree sequence of methods.\n\n2. Mobilise with unified permit-to-dig and ground disturbance controls; daily briefing on hold points.\n\n3. Execute intrusive methods in agreed order — minimise reopening and cross-contamination.\n\n4. Maintain master sample register and chain-of-custody across all methods.\n\n5. Complete all borehole abandonments and pit reinstatements; issue GI factual report inputs.",
+    hazardTokens: ["site investigation", "ground investigation", "trial pit", "borehole", "dynamic probe", "contamination", "ground gas", "sample"],
   },
   {
     key: "foundation_exposure_verification",
@@ -943,6 +1035,105 @@ const SURVEYING_PACKS = [
       "1. Confirm access window/possession controls and authorisations.\n\n2. Verify team competencies and briefing requirements.\n\n3. Execute survey tasks within controlled safe zones.\n\n4. Capture hold-point verification at each stage gate.\n\n5. Close-out with interface notes and formal handback.",
     hazardTokens: ["rail", "public infrastructure", "permit", "access window", "traffic", "interface", "lone working"],
   },
+  {
+    key: "as5488_utility_deliverable",
+    label: "AS5488 subsurface utility intelligence (AU)",
+    scope:
+      "Australian AS 5488 subsurface utility information deliverable — records search, detection, verification and QL assignment with NDD where required.",
+    method:
+      "1. Confirm DBYD / utility owner records and project datum.\n\n2. EML + GPR detection with competent operators.\n\n3. NDD or hand-dig verification in uncertainty zones.\n\n4. Peer review QL assignment before issue.\n\n5. Issue deliverable with residual uncertainty and safe dig rules.",
+    hazardTokens: ["utility", "buried", "as5488", "ndd", "vacuum", "gpr", "eml", "chamber", "permit-to-dig"],
+  },
+  {
+    key: "hydrographic_bathymetric_survey",
+    label: "Hydrographic / bathymetric survey",
+    scope:
+      "Marine survey from vessel or RHIB — bathymetry, tidal reduction, port interfaces and MOB controls.",
+    method:
+      "1. Marine risk assessment and MOB drill.\n\n2. Confirm tide/weather window with harbour authority.\n\n3. Mobilise survey sensors with secure deck rigging.\n\n4. Execute lines with coxswain supervision.\n\n5. Process tidal reduction and issue with metadata.",
+    hazardTokens: ["hydrographic", "marine", "vessel", "tide", "mob", "bathymetry", "boat"],
+  },
+  {
+    key: "aerial_lidar_photomapping",
+    label: "Aerial LiDAR & photomapping",
+    scope:
+      "Helicopter, fixed-wing or UAV corridor capture — flight planning, ground exclusion and data QA.",
+    method:
+      "1. Flight plan, NOTAM/CAA coordination and landowner notification.\n\n2. Ground exclusion under flight path; fuel/battery controls.\n\n3. Execute capture passes with pilot + survey lead comms.\n\n4. Boresight and calibration QA before issue.\n\n5. Issue ortho/LiDAR with accuracy metadata.",
+    hazardTokens: ["aerial", "lidar", "helicopter", "uav", "drone", "flight", "photomapping", "downwash"],
+  },
+  {
+    key: "laser_scanning_reality_capture",
+    label: "Laser scanning & reality capture",
+    scope:
+      "Terrestrial laser scanning and point cloud capture for digital twin / BIM — laser safety and traffic interfaces.",
+    method:
+      "1. Scan exclusion zone cordoned; laser safety briefing.\n\n2. Control network verified before scan epoch.\n\n3. Capture scans with overlap and registration checks.\n\n4. QA point cloud density and registration RMS.\n\n5. Issue point cloud / mesh with coordinate metadata.",
+    hazardTokens: ["laser", "scan", "tls", "point cloud", "digital twin", "bim", "tripod", "traffic"],
+  },
+  {
+    key: "mobile_mapping_slam",
+    label: "Mobile mapping / SLAM LiDAR",
+    scope:
+      "Vehicle or backpack mobile mapping in corridors — TM, banksman and calibration controls.",
+    method:
+      "1. Route risk assessment and TM if on public highway.\n\n2. Boresight/calibration hold point before run.\n\n3. Execute corridor run at agreed speed.\n\n4. Post-process trajectory and loop closure QA.\n\n5. Issue mobile mapping dataset with accuracy statement.",
+    hazardTokens: ["mobile mapping", "slam", "lidar", "vehicle", "backpack", "traffic", "banksman"],
+  },
+  {
+    key: "tunnel_condition_scan",
+    label: "Tunnel condition scan",
+    scope:
+      "Tunnel mobile mapping or static scan — confined atmosphere, rail possession and ventilation controls.",
+    method:
+      "1. Rail/confined space permits and possession confirmed.\n\n2. Gas test and ventilation where required.\n\n3. Escape route walk-through before scan.\n\n4. Execute scan with control room comms.\n\n5. Issue condition model with chainage references.",
+    hazardTokens: ["tunnel", "confined", "rail", "scan", "ventilation", "possession", "mobile mapping"],
+  },
+  {
+    key: "dimensional_control_monitoring",
+    label: "Dimensional control & deformation monitoring",
+    scope:
+      "3B Survey style plant/shipping dimensional control — SIMOPS, baseline epochs and trend analysis.",
+    method:
+      "1. Client SIMOPS/PTW interface and exclusion zones.\n\n2. Establish stable control network.\n\n3. Capture baseline epoch with repeat measurements.\n\n4. Trend analysis against alert thresholds.\n\n5. Issue monitoring report with epoch metadata.",
+    hazardTokens: ["dimensional", "deformation", "monitoring", "control network", "plant", "shipping", "oil", "gas"],
+  },
+  {
+    key: "cadastral_boundary_survey",
+    label: "Cadastral / boundary survey",
+    scope:
+      "Lot boundary and cadastral survey for residential/commercial developments — Oracle Surveys style deliverables.",
+    method:
+      "1. Confirm land access and boundary conflict checks.\n\n2. GNSS/total station capture with redundancy.\n\n3. Compare against title and easement records.\n\n4. Flag conflicts to client before pegging.\n\n5. Issue plan with surveyor certification.",
+    hazardTokens: ["cadastral", "boundary", "lot", "residential", "gnss", "total station", "verge", "lone working"],
+  },
+  {
+    key: "mining_open_pit_survey",
+    label: "Mining / open-pit survey",
+    scope:
+      "Resources sector volumetrics and pit survey — bench edges, blast windows and mine induction.",
+    method:
+      "1. Mine site induction and blast clearance protocol.\n\n2. Supervisor authorisation before pit entry.\n\n3. Stay behind berms; radio check-in.\n\n4. Capture topo/volumetric with control checks.\n\n5. Issue volumetric report with epoch date.",
+    hazardTokens: ["mining", "open pit", "bench", "blast", "volumetric", "quarry", "dust", "plant"],
+  },
+  {
+    key: "dam_structural_monitoring",
+    label: "Dam / structural monitoring survey",
+    scope:
+      "Deformation monitoring on dams and critical structures — crest WAH and reservoir operating plan.",
+    method:
+      "1. Review reservoir operating plan and emergency contacts.\n\n2. Fall protection at crest edges.\n\n3. Control network stability check before epoch.\n\n4. Capture monitoring epoch with weather limits.\n\n5. Issue trend report against alert thresholds.",
+    hazardTokens: ["dam", "monitoring", "deformation", "reservoir", "crest", "remote", "work at height"],
+  },
+  {
+    key: "pavement_3d_gpr_scan",
+    label: "3D GPR pavement utility scan",
+    scope:
+      "Carriageway 3D GPR pavement scan — Chapter 8 TM, scan vehicle banksman and calibration.",
+    method:
+      "1. Chapter 8 TM or lane closure approved.\n\n2. Calibration plate check hold point.\n\n3. Execute corridor at agreed scan speed.\n\n4. Process 3D volume and mark utilities.\n\n5. Issue pavement scan with QL/residual uncertainty.",
+    hazardTokens: ["pavement", "3d gpr", "carriageway", "traffic", "chapter 8", "utility", "scan vehicle"],
+  },
 ];
 
 const SURVEY_PACK_METADATA = {
@@ -976,6 +1167,102 @@ const SURVEY_PACK_METADATA = {
     mandatoryEvidence: ["Pre-start scan proof", "Exposed service photo", "Reinstatement note"],
     holdPoints: ["HP1 permit validation", "HP2 first exposure verification", "HP3 close-out sign-off"],
   },
+  window_sampling_trial_pit: {
+    permitDependencies: ["Excavation / permit-to-dig", "Ground disturbance permit", "Contamination interface (if applicable)"],
+    requiredCerts: ["Window sampling operator competence", "CAT/Genny competence", "GI logging awareness"],
+    mandatoryEvidence: ["Utility search record", "Sample chain-of-custody form", "Pit/sampler reinstatement photo"],
+    holdPoints: ["HP1 utility clearance", "HP2 first sample sealed and logged", "HP3 backfill and close-out"],
+  },
+  borehole_gi_drilling: {
+    permitDependencies: ["Ground disturbance permit", "Excavation / permit-to-dig", "Confined space / gas permit (as required)"],
+    requiredCerts: ["Drilling rig operator competence", "Ground gas awareness", "Banksman (where required)"],
+    mandatoryEvidence: ["Rig pre-use check", "Borehole log and sample register", "Abandonment/cap photo"],
+    holdPoints: ["HP1 rig setup and utility clearance", "HP2 first sample recovery", "HP3 borehole secured/abandoned"],
+  },
+  dcp_dynamic_probe: {
+    permitDependencies: ["Ground disturbance permit", "Traffic management (if on highway)"],
+    requiredCerts: ["Dynamic probing / DCP operator training"],
+    mandatoryEvidence: ["Probe location plan", "Blow-count log", "Hole capping photo"],
+    holdPoints: ["HP1 utility clearance", "HP2 first refusal recorded", "HP3 rods withdrawn and holes capped"],
+  },
+  cpt_cone_penetration: {
+    permitDependencies: ["Ground disturbance permit", "Excavation interface (services)"],
+    requiredCerts: ["CPT rig operator competence"],
+    mandatoryEvidence: ["Platform stability check", "Real-time CPT trace export", "Location/as-built record"],
+    holdPoints: ["HP1 outrigger/platform check", "HP2 thrust exclusion enforced", "HP3 rods withdrawn safely"],
+  },
+  cable_percussive_boring: {
+    permitDependencies: ["Ground disturbance permit", "Excavation / permit-to-dig"],
+    requiredCerts: ["Cable percussive drilling competence"],
+    mandatoryEvidence: ["Rig exclusion zone photo", "Borehole log", "Sample sealing record"],
+    holdPoints: ["HP1 rig daily check", "HP2 first strata logged", "HP3 borehole abandoned or capped"],
+  },
+  rotary_coring_drilling: {
+    permitDependencies: ["Ground disturbance permit", "Confined space / gas permit (as required)"],
+    requiredCerts: ["Rotary drilling operator", "Ground gas awareness"],
+    mandatoryEvidence: ["Mud/spill containment check", "Core run register", "Gas monitor log (if required)"],
+    holdPoints: ["HP1 gas monitoring active", "HP2 core run sealed", "HP3 grout plug and cap installed"],
+  },
+  hand_auger_sampling: {
+    permitDependencies: ["Excavation / permit-to-dig"],
+    requiredCerts: ["GI sampling awareness", "CAT/Genny competence"],
+    mandatoryEvidence: ["Sample labels and depth log", "Utility sweep record", "Surface reinstatement note"],
+    holdPoints: ["HP1 utility sweep", "HP2 first sample bagged", "HP3 holes capped"],
+  },
+  undisturbed_core_u100: {
+    permitDependencies: ["Ground disturbance permit", "Excavation interface"],
+    requiredCerts: ["Undisturbed sampling training"],
+    mandatoryEvidence: ["Sampler type confirmation", "Chain-of-custody form", "Tube wax/seal photo"],
+    holdPoints: ["HP1 sampler type verified", "HP2 tube extracted intact", "HP3 custody handover to lab"],
+  },
+  piezometer_standpipe: {
+    permitDependencies: ["Ground disturbance permit", "Confined space / gas permit (as required)"],
+    requiredCerts: ["Monitoring well install competence", "Gas monitor competence (as required)"],
+    mandatoryEvidence: ["Gravel pack/bentonite seal record", "As-built diagram", "Lockable cover photo"],
+    holdPoints: ["HP1 borehole gas test", "HP2 seal installed", "HP3 protective cover secured"],
+  },
+  machine_trial_pit_gi: {
+    permitDependencies: ["Excavation / permit-to-dig", "Temporary works (shoring if required)"],
+    requiredCerts: ["Excavation supervisor competence", "CAT/Genny competence"],
+    mandatoryEvidence: ["Pit log and photos", "Shoring/temp works check (if used)", "Backfill compaction record"],
+    holdPoints: ["HP1 permit and shoring plan", "HP2 face logged before backfill", "HP3 pit secured or backfilled"],
+  },
+  site_investigation_campaign: {
+    permitDependencies: ["Excavation / permit-to-dig", "Ground disturbance permit", "Confined space / gas permit (as required)"],
+    requiredCerts: ["GI supervisor competence", "CAT/Genny competence", "Ground gas awareness"],
+    mandatoryEvidence: ["Master sample register", "Daily briefing record", "All abandonment/reinstatement photos"],
+    holdPoints: ["HP1 unified permit and contamination plan", "HP2 each method hold point per sub-method", "HP3 campaign close-out audit"],
+  },
+  as5488_utility_deliverable: {
+    permitDependencies: ["Excavation / permit-to-dig (NDD)", "Confined space permit (chambers)"],
+    requiredCerts: ["CAT/Genny competence", "GPR operator", "NDD/vacuum excavation awareness"],
+    mandatoryEvidence: ["DBYD/records screenshot", "QL assignment peer review", "NDD exposure photos"],
+    holdPoints: ["HP1 records + detection complete", "HP2 QL peer review", "HP3 deliverable issue sign-off"],
+  },
+  hydrographic_bathymetric_survey: {
+    permitDependencies: ["Marine / hydrographic works permit", "Harbour authority notification"],
+    requiredCerts: ["Boat master competency", "MOB training", "Hydrographic survey competency"],
+    mandatoryEvidence: ["Marine risk assessment", "Tide window confirmation", "MOB drill record"],
+    holdPoints: ["HP1 vessel competency check", "HP2 tide/weather window", "HP3 data issue QA"],
+  },
+  aerial_lidar_photomapping: {
+    permitDependencies: ["Aerial survey coordination permit", "Landowner notification"],
+    requiredCerts: ["CAA A2 CofC or GVC (UAV)", "Aerial survey crew induction"],
+    mandatoryEvidence: ["Flight plan", "NOTAM/airspace clearance", "Ground exclusion zone photo"],
+    holdPoints: ["HP1 airspace clearance", "HP2 pre-flight checklist", "HP3 post-flight secure storage"],
+  },
+  laser_scanning_reality_capture: {
+    permitDependencies: ["Work at height permit (as required)", "Night works permit (as required)"],
+    requiredCerts: ["Laser scanning operator training", "TLS competency"],
+    mandatoryEvidence: ["Control network check", "Scan exclusion zone photo", "Registration RMS report"],
+    holdPoints: ["HP1 control verified", "HP2 scan session QA", "HP3 point cloud issue sign-off"],
+  },
+  tunnel_condition_scan: {
+    permitDependencies: ["Rail corridor access permit", "Confined space permit"],
+    requiredCerts: ["PTS (rail)", "Tunnel scan system training", "Confined space awareness"],
+    mandatoryEvidence: ["Possession confirmation", "Gas test log", "Escape route walk-through"],
+    holdPoints: ["HP1 possession/permit", "HP2 ventilation/gas test", "HP3 handback inspection"],
+  },
   default: {
     permitDependencies: ["Check project permit interface before start"],
     requiredCerts: ["Supervisor briefing completion"],
@@ -986,62 +1273,6 @@ const SURVEY_PACK_METADATA = {
 
 function surveyPackMetaFor(packKey) {
   return SURVEY_PACK_METADATA[packKey] || SURVEY_PACK_METADATA.default;
-}
-
-function openWeatherDescription(code = "", fallback = "") {
-  const c = String(code || "").slice(0, 2);
-  const MAP = {
-    "01": "Clear",
-    "02": "Few clouds",
-    "03": "Scattered clouds",
-    "04": "Overcast",
-    "09": "Shower rain",
-    "10": "Rain",
-    "11": "Thunderstorm",
-    "13": "Snow",
-    "50": "Mist",
-  };
-  return MAP[c] || fallback || "Weather";
-}
-
-async function fetchWeatherSummary(lat, lng) {
-  const la = parseFloat(String(lat).trim(), 10);
-  const lo = parseFloat(String(lng).trim(), 10);
-  if (!Number.isFinite(la) || !Number.isFinite(lo)) throw new Error("Invalid coordinates");
-  const openWeatherKey = String(import.meta.env.VITE_OPENWEATHER_API_KEY || "").trim();
-  const when = new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-
-  // Prefer OpenWeather when key is provided; fallback to Open-Meteo for keyless usage.
-  if (openWeatherKey) {
-    const u = new URL("https://api.openweathermap.org/data/2.5/weather");
-    u.searchParams.set("lat", String(la));
-    u.searchParams.set("lon", String(lo));
-    u.searchParams.set("appid", openWeatherKey);
-    u.searchParams.set("units", "metric");
-    const r = await fetch(u.toString());
-    if (!r.ok) throw new Error("Weather request failed");
-    const j = await r.json();
-    const t = Number(j.main?.temp).toFixed(1);
-    const w = Number(j.wind?.speed || 0) * 2.23694; // m/s -> mph
-    const iconCode = j.weather?.[0]?.icon || "";
-    const desc = openWeatherDescription(iconCode, j.weather?.[0]?.description || "");
-    return `Site weather (${when}): ~${t}°C, ${desc}, wind ~${w.toFixed(1)} mph — OpenWeather snapshot for this location.`;
-  }
-
-  const u = new URL("https://api.open-meteo.com/v1/forecast");
-  u.searchParams.set("latitude", String(la));
-  u.searchParams.set("longitude", String(lo));
-  u.searchParams.set("current", "temperature_2m,weather_code,wind_speed_10m");
-  u.searchParams.set("wind_speed_unit", "mph");
-  const r = await fetch(u.toString());
-  if (!r.ok) throw new Error("Weather request failed");
-  const j = await r.json();
-  const t = j.current?.temperature_2m;
-  const w = j.current?.wind_speed_10m;
-  const code = j.current?.weather_code;
-  const WMO = { 0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Drizzle", 61: "Rain", 80: "Rain showers", 95: "Thunderstorm" };
-  const desc = WMO[code] ?? `Weather code ${code}`;
-  return `Site weather (${when}): ~${t}°C, ${desc}, wind ~${w} mph — Open-Meteo snapshot for this location.`;
 }
 
 function findSurveyPackByKey(packKey) {
@@ -1068,6 +1299,15 @@ const SURVEY_PACK_QUICK_PREFIX = {
   trial_holes_slit_trenches: "Trial holes",
   window_sampling_trial_pit: "Trial pit",
   borehole_gi_drilling: "GI drilling",
+  dcp_dynamic_probe: "DCP / probing",
+  cpt_cone_penetration: "CPT",
+  cable_percussive_boring: "Shell & auger",
+  rotary_coring_drilling: "Rotary coring",
+  hand_auger_sampling: "Hand auger",
+  undisturbed_core_u100: "U100 sample",
+  piezometer_standpipe: "Piezometer",
+  machine_trial_pit_gi: "Machine trial pit",
+  site_investigation_campaign: "GI campaign",
   foundation_exposure_verification: "Foundation verify",
   soakaway_infiltration_testing: "Soakaway test",
   vacuum_excavation_services: "Vacuum dig",
@@ -1533,11 +1773,31 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
   const runWeatherLookup = async () => {
     setWeatherLoading(true);
     try {
-      const line = await fetchWeatherSummary(form.siteLat, form.siteLng);
-      set("siteWeatherNote", [form.siteWeatherNote, line].filter(Boolean).join("\n\n"));
+      const postcodeHint = resolveUkPostcodeInput("", form.location);
+      const hasCoords = String(form.siteLat || "").trim() && String(form.siteLng || "").trim();
+      const snap = hasCoords
+        ? await fetchWeatherSummary(form.siteLat, form.siteLng)
+        : postcodeHint
+          ? await fetchWeatherSummary("", "", { postcode: postcodeHint })
+          : null;
+      if (!snap) {
+        alert("Enter lat/lng or a UK postcode in the site location field.");
+        return;
+      }
+      if (!hasCoords && postcodeHint) {
+        const pc = await lookupUkPostcode(postcodeHint);
+        if (pc) {
+          setForm((f) => ({
+            ...f,
+            siteLat: String(Number(pc.lat.toFixed(5))),
+            siteLng: String(Number(pc.lng.toFixed(5))),
+          }));
+        }
+      }
+      set("siteWeatherNote", [form.siteWeatherNote, snap.text].filter(Boolean).join("\n\n"));
     } catch (e) {
       console.warn(e);
-      alert("Could not load weather. Check latitude / longitude and try again.");
+      alert("Could not load weather. Check postcode, latitude / longitude, and try again.");
     } finally {
       setWeatherLoading(false);
     }
@@ -1547,20 +1807,37 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
     if (!project) return;
     let lat = project.lat;
     let lng = project.lng;
+    const postcodeQuery = resolveUkPostcodeInput(project.postcode, project.address, project.site, project.location);
     if ((lat == null || lat === "") || (lng == null || lng === "")) {
-      const q = [project.address, project.site, project.postcode, project.location].filter(Boolean).join(", ");
-      if (!String(q).trim()) return;
-      setProjectGeoLoading(true);
-      try {
-        const coords = await geocodeAddressNominatim(q);
-        if (coords) {
-          lat = coords.lat;
-          lng = coords.lng;
+      if (postcodeQuery) {
+        setProjectGeoLoading(true);
+        try {
+          const pc = await lookupUkPostcode(postcodeQuery);
+          if (pc) {
+            lat = pc.lat;
+            lng = pc.lng;
+          }
+        } catch (e) {
+          console.warn(e);
+        } finally {
+          setProjectGeoLoading(false);
         }
-      } catch (e) {
-        console.warn(e);
-      } finally {
-        setProjectGeoLoading(false);
+      }
+      if ((lat == null || lat === "") || (lng == null || lng === "")) {
+        const q = [project.address, project.site, project.location].filter(Boolean).join(", ");
+        if (!String(q).trim()) return;
+        setProjectGeoLoading(true);
+        try {
+          const coords = await geocodeAddressNominatim(q);
+          if (coords) {
+            lat = coords.lat;
+            lng = coords.lng;
+          }
+        } catch (e) {
+          console.warn(e);
+        } finally {
+          setProjectGeoLoading(false);
+        }
       }
     }
     if (lat == null || lng == null || lat === "" || lng === "") return;
@@ -1577,7 +1854,7 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
     if (String(project.weatherSnapshot || "").trim()) return;
     setWeatherLoading(true);
     try {
-      const line = await fetchWeatherSummary(latStr, lngStr);
+      const line = (await fetchWeatherSummary(latStr, lngStr)).text;
       setForm((f) => ({ ...f, siteLat: latStr, siteLng: lngStr, siteWeatherNote: line }));
     } catch (e) {
       console.warn(e);
@@ -2168,14 +2445,14 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
           >
             {geoLoading ? "Getting location…" : "Use my location (lat / lng)"}
           </button>
-          <button type="button" disabled={weatherLoading || !String(form.siteLat || "").trim() || !String(form.siteLng || "").trim()} onClick={runWeatherLookup} style={{ ...ss.btnP, fontSize:12, width:"100%", opacity: weatherLoading ? 0.7 : 1 }}>
+          <button type="button" disabled={weatherLoading || (!String(form.siteLat || "").trim() && !resolveUkPostcodeInput("", form.location))} onClick={runWeatherLookup} style={{ ...ss.btnP, fontSize:12, width:"100%", opacity: weatherLoading ? 0.7 : 1 }}>
             {weatherLoading ? "Loading…" : "Fetch weather"}
           </button>
         </div>
       </div>
       <div style={{ marginBottom:12 }}>
         <label style={ss.lbl}>Site weather note</label>
-        <textarea value={form.siteWeatherNote || ""} onChange={(e) => set("siteWeatherNote", e.target.value)} rows={2} placeholder="Conditions for the work date, or use Open-Meteo above" style={ss.ta} />
+        <textarea value={form.siteWeatherNote || ""} onChange={(e) => set("siteWeatherNote", e.target.value)} rows={2} placeholder="Conditions for the work date — fetch via postcode (in location) or lat/lng" style={ss.ta} />
       </div>
       <div style={{ marginBottom:12 }}>
         <label style={ss.lbl}>Map / OSM link (optional)</label>
@@ -2270,6 +2547,8 @@ function HazardPicker({
   const [activeSurveyTokens, setActiveSurveyTokens] = useState([]);
   const [packName, setPackName] = useState("");
   const [selectedPackId, setSelectedPackId] = useState("");
+  const [catalogSectorId, setCatalogSectorId] = useState("");
+  const [catalogActivityId, setCatalogActivityId] = useState("");
   const [packDialog, setPackDialog] = useState(null);
   const importPackRef = useRef(null);
   const [showOrgForm, setShowOrgForm] = useState(false);
@@ -2306,6 +2585,15 @@ function HazardPicker({
   const recentIds = hazardPrefs?.recentIds || [];
   const recentSet = new Set(recentIds);
   const sourceAll = useMemo(() => [...orgList, ...library], [orgList, library]);
+  const catalogActivity = useMemo(() => {
+    if (!catalogSectorId || !catalogActivityId) return null;
+    const sector = CONSTRUCTION_ACTIVITY_CATALOG.find((s) => s.id === catalogSectorId);
+    return sector?.activities.find((a) => a.id === catalogActivityId) || null;
+  }, [catalogSectorId, catalogActivityId]);
+  const builtInPacks = useMemo(
+    () => quickPacks.filter((p) => p.builtIn && String(p.status || HAZARD_PACK_STATUS.CURRENT) !== HAZARD_PACK_STATUS.SUPERSEDED),
+    [quickPacks]
+  );
 
   useEffect(() => {
     if (surveyPackFilter?.active && Array.isArray(surveyPackFilter.tokens)) {
@@ -2326,6 +2614,9 @@ function HazardPicker({
     if (surveyPackFilter?.active && surveyTokenMatches) {
       return surveyTokenMatches;
     }
+    if (catalogActivity?.hazardTokens?.length) {
+      return sourceAll.filter((h) => hazardMatchesStarterTokens(h, catalogActivity.hazardTokens));
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       return sourceAll.filter(
@@ -2338,7 +2629,7 @@ function HazardPicker({
     if (activeCategory === "All") return sourceAll;
     if (activeCategory === ORG_ACTIVITY_CATEGORY) return orgList;
     return [...getByCategorySafe(activeCategory), ...orgList.filter((h) => String(h.category || "") === activeCategory)];
-  }, [search, activeCategory, sourceAll, orgList, surveyPackFilter, surveyTokenMatches, getByCategorySafe]);
+  }, [search, activeCategory, sourceAll, orgList, surveyPackFilter, surveyTokenMatches, catalogActivity, getByCategorySafe]);
   const results = useMemo(() => {
     let list = [...baseResults];
     if (quickFilter === "favorites") {
@@ -2708,6 +2999,87 @@ function HazardPicker({
           </div>
         </div>
       )}
+
+      <div style={{ ...ss.card, marginBottom: 12, padding: 12, border: "0.5px solid #e2e8f0", background: "#fafafa" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Construction activity catalogue</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <select
+            value={catalogSectorId}
+            onChange={(e) => {
+              setCatalogSectorId(e.target.value);
+              setCatalogActivityId("");
+              setActiveCategory("All");
+              setSearch("");
+            }}
+            style={{ ...ss.inp, minWidth: 160, maxWidth: 220 }}
+          >
+            <option value="">— Sector —</option>
+            {CONSTRUCTION_ACTIVITY_CATALOG.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+          <select
+            value={catalogActivityId}
+            disabled={!catalogSectorId}
+            onChange={(e) => {
+              setCatalogActivityId(e.target.value);
+              setActiveCategory("All");
+              setSearch("");
+            }}
+            style={{ ...ss.inp, minWidth: 200, maxWidth: 320, opacity: catalogSectorId ? 1 : 0.6 }}
+          >
+            <option value="">— Activity —</option>
+            {(CONSTRUCTION_ACTIVITY_CATALOG.find((s) => s.id === catalogSectorId)?.activities || []).map((a) => (
+              <option key={a.id} value={a.id}>{a.label}</option>
+            ))}
+          </select>
+          {catalogActivity ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCatalogSectorId("");
+                setCatalogActivityId("");
+              }}
+              style={{ ...ss.btn, fontSize: 12 }}
+            >
+              Clear filter
+            </button>
+          ) : null}
+        </div>
+        {catalogActivity ? (
+          <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+            Showing hazards matching <strong>{catalogActivity.label}</strong>
+            {catalogActivity.permitHints?.length ? ` · Permits: ${catalogActivity.permitHints.join(", ")}` : ""}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+            {CORE_RAMS_ACTIVITY_MODULES.length}+ core activity modules · pick a sector to filter the library
+          </div>
+        )}
+        {builtInPacks.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {builtInPacks.slice(0, 8).map((pack) => (
+              <button
+                key={pack.id}
+                type="button"
+                onClick={() => onApplyHazardPack?.(pack)}
+                style={{
+                  ...ss.btn,
+                  fontSize: 11,
+                  padding: "4px 10px",
+                  minHeight: 28,
+                  background: pack.isPinned ? "#ecfdf5" : "#fff",
+                  borderColor: "#0d9488",
+                  color: "#0f766e",
+                }}
+                title={pack.description || pack.name}
+              >
+                {pack.isPinned ? "★ " : ""}{pack.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
 
       <div style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:16 }}>
         Select all activities that apply to this job. You can edit each one in the next step.
@@ -4608,6 +4980,13 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             <div><span style={{ color:"var(--color-text-secondary)" }}>Review due:</span> {fmtDate(form.reviewDate)}</div>
             <div><span style={{ color:"var(--color-text-secondary)" }}>Approved by:</span> {form.approvedBy || "—"}</div>
             <div><span style={{ color:"var(--color-text-secondary)" }}>Approval date:</span> {fmtDate(form.approvalDate)}</div>
+            {form.clientApproval?.at ? (
+              <div style={{ gridColumn:"1 / -1" }}>
+                <span style={{ color:"var(--color-text-secondary)" }}>Client approval:</span>{" "}
+                {form.clientApproval.by} · {fmtDateTime(form.clientApproval.at)}
+                {form.clientApproval.notes ? ` — ${form.clientApproval.notes}` : ""}
+              </div>
+            ) : null}
           </div>
           {(form.revisionSummary || "").trim() && (
             <div style={{ marginTop:8, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.45 }}>
@@ -4920,6 +5299,11 @@ function SavedList({
                   color:(doc.documentStatus || doc.status)==="approved"?"#27500A":(doc.documentStatus || doc.status)==="issued"?"#0C447C":(doc.documentStatus || doc.status)==="draft"?"var(--color-text-secondary)":"#633806" }}>
                   {(doc.documentStatus || doc.status || "draft").replace(/_/g, " ")}
                 </span>
+                {doc.clientApproval?.at ? (
+                  <span style={{ padding:"2px 10px", borderRadius:20, fontSize:11, fontWeight:600, background:"#EAF3DE", color:"#27500A" }} title={`Approved by ${doc.clientApproval.by}`}>
+                    Client ✓
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => onPreview(doc)}
@@ -5066,6 +5450,7 @@ export default function RAMSTemplateBuilder() {
     load(RAMS_HAZARD_PREFS_KEY, { favoriteIds: [], usageCounts: {}, recentIds: [] })
   );
   const [hazardPacks, setHazardPacks] = useState(() => load(RAMS_HAZARD_PACKS_KEY, []));
+  const builtInPacksSeededRef = useRef(false);
   const [workers] = useState(()=>load("mysafeops_workers",[]));
   const [projects] = useState(()=>load("mysafeops_projects",[]));
   const [editingDoc, setEditingDoc] = useState(null);
@@ -5102,6 +5487,20 @@ export default function RAMSTemplateBuilder() {
       cancelled = true;
     };
   }, [view]);
+
+  useEffect(() => {
+    if (builtInPacksSeededRef.current) return;
+    builtInPacksSeededRef.current = true;
+    loadRamsHazardLibrary().then(({ library }) => {
+      setHazardPacks((prev) => {
+        const next = ensureBuiltInConstructionPacks(prev, library);
+        if (next.length !== prev.length || next.some((p, i) => p.id !== prev[i]?.id)) {
+          save(RAMS_HAZARD_PACKS_KEY, next);
+        }
+        return next;
+      });
+    });
+  }, []);
 
   useEffect(() => {
     const refreshStarter = () => setOrgRamsStarterKey(getOrgRamsStarterKey());
@@ -5863,6 +6262,24 @@ export default function RAMSTemplateBuilder() {
     }
     if (resolvedStatus === "approved" && qaPctOnSave < 84) {
       if (!window.confirm(`QA readiness is ${qaPctOnSave}%. Save as APPROVED anyway?`)) return;
+    }
+    if (["approved", "issued"].includes(resolvedStatus)) {
+      const coshhGate = evaluateRamsCoshhGate(form, editedRows);
+      if (coshhGate.required && !coshhGate.ok) {
+        const missingList = coshhGate.missing.map((m) => `- ${m.name}: ${m.reason}`).join("\n");
+        window.alert(
+          `Cannot save as ${resolvedStatus.toUpperCase()}: COSHH gate failed.\n\n${coshhGate.message || ""}\n\n${missingList}\n\nAdd SDS URLs in the COSHH register or remove chemical references from scope.`
+        );
+        return;
+      }
+      const project = (projects || []).find((p) => p.id === form.projectId);
+      const hospitalGate = evaluateRamsHospitalGate(form, project);
+      if (hospitalGate.required && !hospitalGate.ok) {
+        window.alert(
+          `Cannot save as ${resolvedStatus.toUpperCase()}: ${hospitalGate.message || "Nearest A&E hospital must be set when project has map coordinates."}\n\nUse Enrich site on the project or fill nearest hospital on the RAMS header.`
+        );
+        return;
+      }
     }
     let nextSignatureEvents = Array.isArray(form.signatureEvents) ? [...form.signatureEvents] : [];
     if (

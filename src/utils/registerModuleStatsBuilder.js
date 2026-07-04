@@ -132,6 +132,12 @@ export function buildRegisterModuleStats(moduleId, items = []) {
         stat("Overdue", list.filter((i) => i.nextInspectionDate && new Date(i.nextInspectionDate) < new Date()).length, "warn"),
         stat("Total", n),
       ];
+    case "legislation":
+      return [
+        stat("Entries", n),
+        stat("Applicable", list.filter((i) => i.applicable).length, "good"),
+        stat("Review due", list.filter((i) => i.nextReview && new Date(i.nextReview) <= new Date()).length, "warn"),
+      ];
     default:
       return [
         stat("Records", n),

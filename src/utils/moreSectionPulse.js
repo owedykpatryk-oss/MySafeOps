@@ -117,8 +117,38 @@ function pickHseNextAction(attentionModules, emptyModules) {
   return null;
 }
 
+function pickInsightsNextAction(attentionModules, emptyModules) {
+  if (attentionModules.some((m) => m.id === "survey-report")) {
+    const m = attentionModules.find((x) => x.id === "survey-report");
+    return {
+      viewId: "survey-report",
+      label: "Review survey report",
+      reason: `${m?.attentionCount || 1} item(s) need attention`,
+      tone: "warn",
+    };
+  }
+  if (attentionModules.length) {
+    const m = attentionModules[0];
+    return {
+      viewId: m.id,
+      label: `Review ${m.label}`,
+      reason: `${m.attentionCount || 1} item(s) need attention`,
+      tone: "warn",
+    };
+  }
+  if (emptyModules.some((m) => m.id === "monthly-report")) {
+    return {
+      viewId: "monthly-report",
+      label: "Generate monthly HSE report",
+      reason: "No monthly report yet this period",
+      tone: "info",
+    };
+  }
+  return null;
+}
+
 /**
- * @param {'hse'|'site'} tone
+ * @param {'hse'|'site'|'insights'|'data'} tone
  * @param {{ id: string }[]} tabs
  * @param {Record<string, import('./moduleRegisterStats').getModuleRegisterStat extends (...args: any[]) => infer R ? R : never>} statsMap
  */
@@ -132,7 +162,9 @@ export function buildMoreSectionPulse(tone, tabs, statsMap, industryCtx) {
       ? pickSiteNextAction(attentionModules, emptyModules, industryCtx)
       : tone === "hse"
         ? pickHseNextAction(attentionModules, emptyModules)
-        : null;
+        : tone === "insights"
+          ? pickInsightsNextAction(attentionModules, emptyModules)
+          : null;
 
   return {
     summary,

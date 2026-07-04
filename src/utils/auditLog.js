@@ -14,10 +14,16 @@ function mirrorAuditToD1(row) {
 }
 
 export function pushAudit(entry) {
+  const detail =
+    entry?.detail && typeof entry.detail === "string" && entry.detail.includes("@")
+      ? entry.detail.replace(/^([^@\s]+)@/, (_, local) => `${local.slice(0, 2)}…@`)
+      : entry?.detail;
+
   const row = {
     id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     at: new Date().toISOString(),
     ...entry,
+    ...(detail !== undefined ? { detail } : {}),
   };
   let list = [];
   try {

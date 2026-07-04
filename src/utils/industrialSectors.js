@@ -3,6 +3,7 @@
  * Stored on org-scoped `mysafeops_org_settings` as `industrySectors: string[]`.
  */
 
+import { isTrialUnlockActive } from "./orgMembership";
 import { getOrgSettings } from "./orgSettingsStorage";
 
 export const INDUSTRY_SECTOR_OPTIONS = [
@@ -23,11 +24,13 @@ export function readIndustrySectorsFromStorage() {
 }
 
 export function orgHasFoodIndustrialPack() {
+  if (isTrialUnlockActive()) return true;
   const s = readIndustrySectorsFromStorage();
   return s.some((id) => FOODISH.has(id) || id === "petrochem");
 }
 
 export function orgHasPharmaPack() {
+  if (isTrialUnlockActive()) return true;
   return readIndustrySectorsFromStorage().includes("pharma");
 }
 

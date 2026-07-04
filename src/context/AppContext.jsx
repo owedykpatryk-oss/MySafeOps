@@ -2,7 +2,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { isLocalWorkspaceOnly, hasPersistedSupabaseSession } from "../lib/authPrefs";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { ORG_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
-import { getBillingEntitlements, getTrialStatus } from "../utils/orgMembership";
+import { getBillingEntitlements, getTrialExtensionCount, getTrialStatus } from "../utils/orgMembership";
+import {
+  canExtendOrgTrial,
+  isBillingWriteBlocked,
+  isTrialExpiredWithoutPaid,
+} from "../utils/billingAccess";
 
 const Ctx = createContext(null);
 
@@ -39,6 +44,7 @@ export function AppProvider({ children }) {
   const [role, setRoleState] = useState(() => resolveMembershipRole());
   const [trialStatus, setTrialStatus] = useState(() => getTrialStatus());
   const [billing, setBilling] = useState(() => getBillingEntitlements());
+  const [trialExtensionCount, setTrialExtensionCount] = useState(() => getTrialExtensionCount());
 
   useEffect(() => {
     setRoleState(resolveMembershipRole());
@@ -78,6 +84,7 @@ export function AppProvider({ children }) {
     const onOrgUpdated = () => {
       setTrialStatus(getTrialStatus());
       setBilling(getBillingEntitlements());
+      setTrialExtensionCount(getTrialExtensionCount());
       const next = readMembershipRoleForCurrentOrg();
       if (next) setRoleState(next);
       else setRoleState(defaultMembershipRole());
@@ -112,9 +119,29 @@ export function AppProvider({ children }) {
     [role]
   );
 
+  const billingAccess = useMemo(
+    () => ({
+      writeBlocked: isBillingWriteBlocked({ trialStatus, billing }),
+      trialExpired: isTrialExpiredWithoutPaid({ trialStatus, billing }),
+      canExtendTrial: canExtendOrgTrial({ trialStatus, billing, trialExtensionCount }),
+      trialExtensionCount,
+    }),
+    [trialStatus, billing, trialExtensionCount]
+  );
+
   const value = useMemo(
-    () => ({ role, setRole, caps, orgId, ROLES, trialStatus, billing }),
-    [role, setRole, caps, orgId, trialStatus, billing]
+    () => ({
+      role,
+      setRole,
+      caps,
+      orgId,
+      ROLES,
+      trialStatus,
+      billing,
+      trialExtensionCount,
+      billingAccess,
+    }),
+    [role, setRole, caps, orgId, trialStatus, billing, trialExtensionCount, billingAccess]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

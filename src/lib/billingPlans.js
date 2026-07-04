@@ -20,7 +20,7 @@ export const STRIPE_SUBSCRIBABLE_PLAN_IDS = ["starter", "team", "business", "ent
 /** Row order for the in-app comparison table (includes non-Stripe tiers). */
 export const BILLING_COMPARISON_PLAN_IDS = [
   "trial",
-  "free",
+  "expired",
   "starter",
   "team",
   "business",
@@ -29,17 +29,18 @@ export const BILLING_COMPARISON_PLAN_IDS = [
 ];
 
 export const BILLING_PLANS = {
+  /** Legacy reference — not offered after evaluation trial ends. */
   free: {
     id: "free",
-    name: "Free",
-    priceLabel: "£0",
-    interval: "forever",
+    name: "Free (legacy)",
+    priceLabel: "—",
+    interval: "retired",
     limits: {
-      workers: 3,
-      projects: 10,
-      cloudBytes: 500_000_000,
+      workers: 0,
+      projects: 0,
+      cloudBytes: 0,
     },
-    includes: ["Core RAMS and permits", "Up to 3 workers", "10 active projects", "Offline-capable"],
+    includes: ["Replaced by evaluation trial + paid plans"],
   },
   starter: {
     id: "starter",
@@ -149,19 +150,57 @@ export const BILLING_PLANS = {
 
 export const TRIAL_PLAN = {
   id: "trial",
-  name: "Trial",
+  name: "Evaluation trial",
   priceLabel: "£0",
-  interval: "14 days",
+  interval: "14 days (+ optional 14)",
   limits: {
     workers: 200,
     projects: 50,
     cloudBytes: 10_000_000_000,
   },
-  includes: ["All core modules", "Cloud backup enabled", "Google/Email sign-in"],
+  includes: [
+    "All modules and RAMS sections visible",
+    "One free +14 day extension per organisation",
+    "Industrial sector registers unlocked",
+    "Cloud backup enabled",
+  ],
+};
+
+/** After trial ends without a paid subscription — view/export only. */
+export const EXPIRED_PLAN = {
+  id: "expired",
+  name: "Trial ended",
+  priceLabel: "Subscribe",
+  interval: "read-only",
+  limits: {
+    workers: 0,
+    projects: 0,
+    cloudBytes: 0,
+  },
+  includes: [
+    "View and export existing records",
+    "No new RAMS, permits, workers or projects",
+    "Subscribe to resume editing",
+  ],
+};
+
+/** Offline / local-only workspace without cloud trial metadata. */
+export const LOCAL_WORKSPACE_PLAN = {
+  id: "local",
+  name: "Local workspace",
+  priceLabel: "—",
+  interval: "offline",
+  limits: {
+    workers: 200,
+    projects: 50,
+    cloudBytes: 10_000_000_000,
+  },
+  includes: ["Full local editing without cloud billing"],
 };
 
 export function getPlanByComparisonId(id) {
   if (id === "trial") return TRIAL_PLAN;
+  if (id === "expired") return EXPIRED_PLAN;
   return BILLING_PLANS[id] ?? null;
 }
 
@@ -171,7 +210,8 @@ export function getEffectivePlanId(trialStatus, billing) {
     (b.subscriptionStatus === "active" || b.subscriptionStatus === "trialing") && b.paidPlanId;
   if (paidActive) return b.paidPlanId;
   if (trialStatus?.isActive) return "trial";
-  return "free";
+  if (trialStatus && !trialStatus.isActive) return "expired";
+  return "local";
 }
 
 /**
@@ -181,7 +221,9 @@ export function getEffectivePlan(trialStatus, billing, options) {
   if (options?.isPlatformOwner) return PLATFORM_OWNER_PLAN;
   const id = getEffectivePlanId(trialStatus, billing);
   if (id === "trial") return TRIAL_PLAN;
-  return BILLING_PLANS[id] ?? BILLING_PLANS.free;
+  if (id === "expired") return EXPIRED_PLAN;
+  if (id === "local") return LOCAL_WORKSPACE_PLAN;
+  return BILLING_PLANS[id] ?? EXPIRED_PLAN;
 }
 
 export function formatBytes(bytes) {

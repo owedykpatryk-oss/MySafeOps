@@ -1,4 +1,4 @@
-import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, asStorageArray } from "../../utils/orgStorage";
 
 const PLANS_KEY = "project_plan_overlays_v1";
 
@@ -20,11 +20,11 @@ export function saveProjectPlans(rows) {
 }
 
 export function plansForProject(projectId, rows = listProjectPlans()) {
-  return (rows || []).filter((p) => p?.projectId === projectId);
+  return asStorageArray(rows).filter((p) => p?.projectId === projectId);
 }
 
 export function updateProjectPlan(rows, planId, updater) {
-  return (rows || []).map((p) => (p.id === planId ? updater(p) : p));
+  return asStorageArray(rows).map((p) => (p.id === planId ? updater(p) : p));
 }
 
 export function planDisplaySrc(plan) {

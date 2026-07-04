@@ -98,8 +98,9 @@ export default function LoginPage() {
   const [honeypot, setHoneypot] = useState("");
   const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
   const {
-    enabled: captchaEnabled,
+    turnstileConfigured,
     setCaptchaToken,
+    setCaptchaUnavailable,
     turnstileNonce,
     resetCaptcha,
     validateCaptcha,
@@ -119,11 +120,11 @@ export default function LoginPage() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LAST_AUTH_EMAIL_KEY);
-      if (saved && !email) setEmail(saved);
+      if (saved) setEmail((prev) => prev || saved);
     } catch {
       /* ignore */
     }
-  }, [email]);
+  }, []);
 
   useEffect(() => {
     if (!inviteToken) return;
@@ -775,6 +776,7 @@ export default function LoginPage() {
                 </div>
               )}
               <label
+                className="login-legal-checkbox"
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
@@ -823,11 +825,12 @@ export default function LoginPage() {
                   pointerEvents: "none",
                 }}
               />
-              {captchaEnabled && (
+              {turnstileConfigured && (
                 <TurnstileWidget
                   resetKey={turnstileNonce}
                   action="login"
                   onTokenChange={setCaptchaToken}
+                  onUnavailable={setCaptchaUnavailable}
                 />
               )}
               {signUpThrottle.isThrottled && (
@@ -891,16 +894,22 @@ export default function LoginPage() {
                   </div>
                 </div>
               )}
-              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
                 <button
                   type="button"
-                  style={ss.btn}
+                  style={{ ...ss.btn, padding: "6px 0", minHeight: 0, border: "none", background: "transparent", color: teal, fontWeight: 600, fontSize: 13 }}
                   disabled={busy || passwordResetThrottle.isThrottled}
                   onClick={sendPasswordReset}
                 >
                   Forgot password
                 </button>
-                <button type="button" style={ss.btn} disabled={busy} onClick={resendConfirmationEmail}>
+                <span style={{ color: "var(--color-border-tertiary)", fontSize: 12 }} aria-hidden>·</span>
+                <button
+                  type="button"
+                  style={{ ...ss.btn, padding: "6px 0", minHeight: 0, border: "none", background: "transparent", color: teal, fontWeight: 600, fontSize: 13 }}
+                  disabled={busy || resendCooldown > 0}
+                  onClick={resendConfirmationEmail}
+                >
                   {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend confirmation email"}
                 </button>
               </div>

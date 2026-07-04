@@ -12,7 +12,6 @@ import { INDUSTRY_SECTOR_OPTIONS } from "../utils/industrialSectors";
 import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw, ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 import { syncOrgBrandingFromCloud } from "../utils/orgBrandingCloudSync";
-import { buildFessOrgBrandingPreset, FESS_ORG_SLUG } from "../data/fessOrgBrandingPreset";
 import OrgModuleVisibility from "./OrgModuleVisibility";
 import OrgWorkspaceProfile from "./OrgWorkspaceProfile";
 
@@ -56,7 +55,6 @@ export default function OrgSettings() {
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState("brand");
   const [roleSyncing, setRoleSyncing] = useState(false);
-  const [brandingBusy, setBrandingBusy] = useState(false);
   const logoRef = useRef();
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
@@ -127,27 +125,6 @@ export default function OrgSettings() {
     set("customFields", (form.customFields||[]).filter(f=>f.id!==id));
   };
 
-  const applyFessBranding = async () => {
-    if (!caps.orgSettings || getOrgId() !== FESS_ORG_SLUG) return;
-    setBrandingBusy(true);
-    try {
-      const preset = await buildFessOrgBrandingPreset();
-      const next = {
-        ...loadOrgSettingsRaw(),
-        ...preset,
-        logoUrl: "/branding/fess-group-logo.png",
-        customFields: form.customFields || [],
-      };
-      await persistSettings(next, "org_settings_fess_preset");
-    } catch (e) {
-      alert(e?.message || "Could not load FESS branding preset.");
-    } finally {
-      setBrandingBusy(false);
-    }
-  };
-
-  const showFessPreset = getOrgId() === FESS_ORG_SLUG;
-
   const TABS = [["brand","Branding & logo"],["company","Company info"],["sectors","Sectors"],["modules","Modules & RAMS"],["pdf","PDF defaults"],["custom","Custom fields"],["access","Access"],["preview","Preview"]];
 
   return (
@@ -183,21 +160,6 @@ export default function OrgSettings() {
 
       {tab==="brand" && (
         <>
-          {showFessPreset && caps.orgSettings ? (
-            <Section title="FESS Group preset">
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 10, lineHeight: 1.55 }}>
-                Loads the FESS logo, orange brand colour, website{" "}
-                <a href="https://pl.fessgroup.co.uk/" target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>
-                  pl.fessgroup.co.uk
-                </a>
-                , and sector defaults. Saves to this device and syncs to your organisation in the cloud (all admins see the same branding on login).
-              </div>
-              <button type="button" onClick={applyFessBranding} disabled={brandingBusy} style={ss.btn}>
-                {brandingBusy ? "Loading…" : "Apply FESS Group branding"}
-              </button>
-            </Section>
-          ) : null}
-
           <Section title="Logo">
             <div style={{ display:"flex", gap:20, alignItems:"flex-start", flexWrap:"wrap" }}>
               {/* logo preview */}
@@ -302,7 +264,7 @@ export default function OrgSettings() {
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(160px,100%),1fr))", gap:10 }}>
             <div style={{ gridColumn:"1/-1" }}>
               <Field label="Company / organisation name">
-                <input value={form.name||""} onChange={e=>set("name",e.target.value)} placeholder="e.g. FESS Food Engineering Services Ltd" style={ss.inp} />
+                <input value={form.name||""} onChange={e=>set("name",e.target.value)} placeholder="e.g. Acme Construction Ltd" style={ss.inp} />
               </Field>
             </div>
             <div style={{ gridColumn:"1/-1" }}>
@@ -341,7 +303,7 @@ export default function OrgSettings() {
         <Section title="PDF document defaults">
           <Field label="Document header text" hint="Appears below your logo on all printed documents">
             <input value={form.pdfHeader||""} onChange={e=>set("pdfHeader",e.target.value)}
-              placeholder="e.g. FESS Food Engineering Services Ltd — Health & Safety Documentation" style={ss.inp} />
+              placeholder="e.g. Acme Construction Ltd — Health & Safety Documentation" style={ss.inp} />
           </Field>
           <Field label="Document footer text" hint="Appears at the bottom of every printed page">
             <input value={form.pdfFooter||""} onChange={e=>set("pdfFooter",e.target.value)}
@@ -363,7 +325,7 @@ export default function OrgSettings() {
                 <option value="classic">Classic</option>
               </select>
             </Field>
-            <Field label="Version prefix" hint="Used in visible revision labels (e.g. MSO, FESS, PTW).">
+            <Field label="Version prefix" hint="Used in visible revision labels (e.g. MSO, ACME, PTW).">
               <input value={form.pdfVersionPrefix||"MSO"} onChange={e=>set("pdfVersionPrefix",e.target.value)} placeholder="MSO" style={ss.inp} />
             </Field>
           </div>

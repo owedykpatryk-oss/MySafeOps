@@ -5,6 +5,8 @@ import {
   safeImageSrc,
   safeOpaqueToken,
   sanitizePrintPreviewHtml,
+  buildPrintPreviewSrcDoc,
+  writePrintWindowDocument,
 } from "./htmlEscape.js";
 
 describe("escapeHtml", () => {
@@ -67,5 +69,28 @@ describe("sanitizePrintPreviewHtml", () => {
     expect(clean).not.toMatch(/<script/i);
     expect(clean).not.toMatch(/<\/script/i);
     expect(clean).toContain("Ok");
+  });
+
+  it("writePrintWindowDocument strips scripts before write", async () => {
+    const writes = [];
+    const win = {
+      document: {
+        open: () => {},
+        write: (s) => writes.push(s),
+        close: () => {},
+      },
+    };
+    await writePrintWindowDocument(win, `<html><head></head><body><script>x</script><p>Print</p></body></html>`);
+    expect(writes.join("")).not.toMatch(/<script/i);
+    expect(writes.join("")).toContain("Print");
+    expect(writes.join("")).toMatch(/Content-Security-Policy/i);
+  });
+
+  it("buildPrintPreviewSrcDoc injects CSP and strips scripts for sandboxed iframe", () => {
+    const doc = buildPrintPreviewSrcDoc(`<!DOCTYPE html><html><head></head><body><script>alert(1)</script><p>RAMS</p></body></html>`);
+    expect(doc).toMatch(/Content-Security-Policy/i);
+    expect(doc).toMatch(/script-src 'none'/i);
+    expect(doc).not.toMatch(/<script/i);
+    expect(doc).toContain("RAMS");
   });
 });

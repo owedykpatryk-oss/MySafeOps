@@ -4,7 +4,8 @@
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
 import { workspaceDeepLink } from "../utils/appDeepLinks";
-import { staleSurveyReminderDays } from "../utils/orgAutomationRules";
+import { staleSurveyReminderDays, isAutomationEnabled } from "../utils/orgAutomationRules";
+import { todayIsoDate } from "../utils/projectDashboard";
 
 const VAPID_PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "").trim();
 const NOTIF_PREFS_KEY = "mysafeops_notif_prefs";
@@ -502,6 +503,49 @@ export function checkExpiryNotifications(opts = {}) {
           body: `${projects.length} active project(s) · ${activePermits} active PTW · ${draftSurveys} survey draft(s) · ${finals} final survey(s).`,
           tag: id,
           data: { url: workspaceDeepLink("dashboard") },
+        });
+        markSeen(id);
+      }
+    }
+  }
+
+  // ── Daily briefing (weekdays from 10:00) ──
+  if (isAutomationEnabled("dailyBriefingReminder") && isNotificationTypeEnabled("daily_briefing")) {
+    const day = new Date().getDay();
+    if (day >= 1 && day <= 5 && new Date().getHours() >= 10) {
+      const today = todayIsoDate();
+      const briefings = loadJSON("daily_briefings", []);
+      const hasToday = briefings.some((b) => String(b.date || "").slice(0, 10) === today);
+      if (!hasToday) {
+        const id = `daily_briefing_missing_${today}`;
+        if (!wasRecentlySeen(id)) {
+          showLocalNotification("Record today's briefing", {
+            body: "No daily briefing recorded yet — capture weather, scope and signed attendance before work starts.",
+            tag: id,
+            data: { url: workspaceDeepLink("daily-briefing") },
+          });
+          markSeen(id);
+        }
+      }
+    }
+  }
+
+  // ── Monthly HSE report ──
+  if (isAutomationEnabled("monthlyReportReminder") && isNotificationTypeEnabled("monthly_report")) {
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const reports = loadJSON("monthly_reports", []);
+    const hasThisMonth = reports.some((r) => {
+      const d = r.month || r.period || r.date || r.createdAt;
+      return d && String(d).slice(0, 7) === monthKey;
+    });
+    if (!hasThisMonth && now.getDate() >= 5) {
+      const id = `monthly_report_missing_${monthKey}`;
+      if (!wasRecentlySeen(id)) {
+        showLocalNotification("Monthly HSE report due", {
+          body: `No monthly safety report for ${now.toLocaleDateString("en-GB", { month: "long", year: "numeric" })} yet.`,
+          tag: id,
+          data: { url: workspaceDeepLink("monthly-report") },
         });
         markSeen(id);
       }

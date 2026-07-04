@@ -1,7 +1,8 @@
 /**
  * Smart automation for survey reports — project prefill, weather mapping, templates, AI draft.
  */
-import { fetchWeatherForDate } from "../../utils/weatherSummary";
+import { fetchWeatherForDate, resolveSiteCoordinates } from "../../utils/weatherSummary";
+import { resolveUkPostcodeInput } from "../../utils/postcodeLookup";
 import { anthropicMessages, isAnthropicConfigured } from "../../utils/anthropicClient";
 import {
   buildAccessLimitationsText,
@@ -288,7 +289,9 @@ export function applyDefaultRecordsPreset(report) {
   const presetKey =
     report.surveyType === "utility_mapping_survey" || report.surveyType === "eml_cat_survey" || report.surveyType === "gpr_survey"
       ? "pas128_typical"
-      : null;
+      : report.surveyType === "site_investigation_campaign"
+        ? "gi_typical"
+        : null;
   if (!presetKey) return report;
 
   const p = UTILITY_RECORDS_PRESETS[presetKey];
@@ -331,6 +334,18 @@ export function smartFillNextSteps(report, { project, projectPlans = [], geoPhot
   ).length;
   if (utilityGeoCount > 0 && !(report.utilitiesTable || []).some((r) => r.geoPhotoId)) {
     steps.push({ id: "utilities-geo", label: "Import utilities from geo-photos", tab: "findings" });
+  }
+  const giGeoCount = projectGeoPhotosForReport(geoPhotos, report.projectId).filter((p) =>
+    ["trial_pit", "borehole_location", "window_sampling", "dcp_probe", "hand_auger_point", "sample_custody", "borehole_cap", "piezometer_install"].includes(
+      p.type
+    )
+  ).length;
+  if (
+    report.surveyType === "site_investigation_campaign" &&
+    giGeoCount > 0 &&
+    !(report.giLocationsTable || []).some((r) => r.geoPhotoId)
+  ) {
+    steps.push({ id: "gi-geo", label: "Import GI locations from geo-photos", tab: "findings" });
   }
   if (!report.cadImport?.summary?.length && report.surveyType === "utility_mapping_survey") {
     steps.push({ id: "cad", label: "Import utility mapping DXF", tab: "findings" });
@@ -558,12 +573,14 @@ export function pullScopeFromRams(report, ramsDoc) {
 
 /** Fetch live/historical weather for survey date and merge into report weather fields. */
 export async function fetchWeatherIntoReport(report, project) {
-  const lat = project?.lat;
-  const lng = project?.lng;
   const date = report?.surveyDate;
-  if (!lat || !lng || !date) throw new Error("Project coordinates and survey date are required.");
+  if (!date) throw new Error("Survey date is required.");
 
-  const snap = await fetchWeatherForDate(lat, lng, date);
+  const pcHint = resolveUkPostcodeInput(project?.postcode, project?.address, project?.site);
+  const coords = await resolveSiteCoordinates(project?.lat, project?.lng, pcHint);
+  if (!coords) throw new Error("Project coordinates or UK postcode are required.");
+
+  const snap = await fetchWeatherForDate(coords.lat, coords.lng, date, { postcode: pcHint || undefined });
   const mapped = mapWeatherSnapshotToFields({
     description: snap.description,
     tempC: snap.tempC,
@@ -618,6 +635,14 @@ export function buildDefaultEquipmentCalibration(surveyType) {
   if (surveyType === "cctv_drainage_survey") {
     return [mk("CCTV crawler"), mk("Winch / sonde locator")];
   }
+  if (surveyType === "site_investigation_campaign") {
+    return [
+      mk("CAT & Genny / utility locator"),
+      mk("Gas monitor (as required)"),
+      mk("DCP / dynamic probe kit"),
+      mk("Drilling rig / window sampler (as required)"),
+    ];
+  }
   return [mk("Primary survey instrument")];
 }
 
@@ -643,6 +668,14 @@ export function buildDefaultDeliverables(surveyType) {
     return [
       ...common,
       { id: `del_${Date.now()}_2`, format: "cctv_footage", description: "CCTV footage and log", crs: "—", status: "Issued with report" },
+    ];
+  }
+  if (surveyType === "site_investigation_campaign") {
+    return [
+      ...common,
+      { id: `del_${Date.now()}_2`, format: "pdf_drawing", description: "Borehole / trial pit location plan", crs: "OSGB36", status: "Issued with report" },
+      { id: `del_${Date.now()}_3`, format: "report_pdf", description: "Factual borehole logs & sample register", crs: "—", status: "Issued with report" },
+      { id: `del_${Date.now()}_4`, format: "other", description: "Chain-of-custody forms (as applicable)", crs: "—", status: "Issued with report" },
     ];
   }
   return common;
@@ -687,6 +720,9 @@ export function prefillProfessionalFields(report, { project, ramsDoc, permits = 
   const ctrl = { ...(next.controlAccuracy || {}) };
   if (!ctrl.controlSource?.trim() && (next.surveyType === "utility_mapping_survey" || next.surveyType === "topographical_survey")) {
     ctrl.controlSource = "GNSS rover / total station tied to project grid or OSGB36 as agreed.";
+  }
+  if (!ctrl.controlSource?.trim() && next.surveyType === "site_investigation_campaign") {
+    ctrl.controlSource = "GI locations referenced to site grid / OSGB36 or client coordinate system as agreed.";
   }
   if (!ctrl.horizontalTolerance?.trim()) {
     ctrl.horizontalTolerance =

@@ -10,8 +10,23 @@ import { todayIsoDate } from "./projectDashboard";
  * @returns {Array<{ id: string, tone: 'warn'|'info'|'good', text: string, actionLabel?: string, viewId?: string, action?: string }>}
  */
 export function getRegisterSmartTips(moduleId, ctx = {}) {
-  const items = ctx.items ?? ctx.list ?? ctx.docs ?? ctx.reports ?? ctx.briefings ?? ctx.packs ?? ctx.snags ?? [];
-  const enriched = { ...ctx, items, count: ctx.count ?? (Array.isArray(items) ? items.length : 0) };
+  const items =
+    ctx.items ??
+    ctx.list ??
+    ctx.docs ??
+    ctx.reports ??
+    ctx.briefings ??
+    ctx.packs ??
+    ctx.snags ??
+    ctx.entries ??
+    [];
+  const enriched = {
+    ...ctx,
+    items,
+    briefings: ctx.briefings ?? items,
+    entries: ctx.entries ?? items,
+    count: ctx.count ?? (Array.isArray(items) ? items.length : 0),
+  };
 
   switch (moduleId) {
     case "daily-briefing":
@@ -62,6 +77,17 @@ export function getRegisterSmartTips(moduleId, ctx = {}) {
       return emergencyTips(enriched);
     case "riddor":
       return riddorTips(enriched);
+    case "legislation":
+      return legislationTips(enriched);
+    case "ghp-register":
+      return ghpTips(enriched);
+    case "dynamic-ra":
+      return dynamicRaTips(enriched);
+    case "hygiene-setup":
+    case "fess-setup":
+      return foodPharmaSetupTips(enriched);
+    case "construction-setup":
+      return constructionSetupTips(enriched);
     default:
       return genericRegisterTips(moduleId, enriched);
   }
@@ -376,13 +402,36 @@ function riddorTips({ items = [] }) {
   return [{ id: "ok", tone: "good", text: "RIDDOR assessments on file — keep F2508 deadline tracking current." }];
 }
 
+function legislationTips({ count = 0 }) {
+  if (count === 0) return [{ id: "seed", tone: "info", text: "Load UK HSE + food safety legislation library — one click in the module.", viewId: "legislation", actionLabel: "Open register" }];
+  return [{ id: "review", tone: "info", text: "Review applicability and next review dates before client or BRC audit." }];
+}
+
+function ghpTips({ count = 0 }) {
+  if (count === 0) return [{ id: "start", tone: "warn", text: "Food sites need G&HP register before tools enter production — use Quick start on the tile.", viewId: "ghp-register", actionLabel: "Add entry" }];
+  return [{ id: "ok", tone: "good", text: "G&HP register active — log every brittle item brought into high-care." }];
+}
+
+function dynamicRaTips({ count = 0 }) {
+  if (count === 0) return [{ id: "start", tone: "info", text: "Use Dynamic RA when site conditions change beyond the written RAMS.", viewId: "dynamic-ra", actionLabel: "New DRA" }];
+  return [{ id: "ok", tone: "good", text: "Field DRAs on file — link to RAMS for audit traceability." }];
+}
+
+function foodPharmaSetupTips() {
+  return [{ id: "wizard", tone: "info", text: "Complete food & pharma setup — hazard packs, COSHH, G&HP and client portal in one afternoon.", viewId: "hygiene-setup", actionLabel: "Open wizard" }];
+}
+
+function constructionSetupTips() {
+  return [{ id: "wizard", tone: "info", text: "Complete construction setup — CDM, RAMS, permits, briefing and client portal in one afternoon.", viewId: "construction-setup", actionLabel: "Open wizard" }];
+}
+
 function genericRegisterTips(moduleId, { count = 0, attentionCount = 0 }) {
   if (count === 0) {
     return [
       {
         id: "empty",
         tone: "info",
-        text: "No records yet — add your first entry or use Seed empty in More modules (HSE section) for starter templates.",
+        text: "No records yet — tap Quick start on this tile for a pre-built template, or seed empty registers in the HSE spotlight.",
       },
     ];
   }

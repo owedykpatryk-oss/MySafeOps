@@ -53,6 +53,16 @@ export function evaluateSurveyExportGate(report) {
     if (!(r.utilitiesTable || []).length) missing.push("Utility schedule (utilities table)");
   }
 
+  if (r.surveyType === "site_investigation_campaign") {
+    if (!(r.giLocationsTable || []).length && !String(r.sections?.findings || "").trim()) {
+      missing.push("GI location schedule or findings narrative");
+    }
+    const qa = r.qaChecklist || {};
+    if (!qa.utilityClearanceGi && !qa.catScanBeforeWork) {
+      missing.push("Utility clearance / permit-to-dig QA confirmation");
+    }
+  }
+
   const unique = [...new Set(missing)];
 
   return {

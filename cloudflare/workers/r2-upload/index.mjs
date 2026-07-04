@@ -3,6 +3,10 @@
  * Header: X-Upload-Token must match secret UPLOAD_TOKEN
  */
 
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const KEY_RE = /^[\w./-]+$/;
+const ORG_KEY_RE = /\/org_[\w-]+\//;
+
 function timingSafeEqual(expected, received) {
   const a = String(expected ?? "");
   const b = String(received ?? "");
@@ -27,22 +31,42 @@ function corsHeaders(request, env) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  if (!origin || allowed.length === 0) {
-    return {
-      ...(origin ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : {}),
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, X-Upload-Token",
-      "Access-Control-Max-Age": "86400",
-    };
-  }
-  const allow = allowed.includes(origin) ? origin : null;
-  return {
-    "Access-Control-Allow-Origin": allow || "null",
+  const base = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Upload-Token",
     "Access-Control-Max-Age": "86400",
+  };
+  if (allowed.length === 0) {
+    return base;
+  }
+  const allow = allowed.includes(origin) ? origin : null;
+  return {
+    ...base,
+    "Access-Control-Allow-Origin": allow || "null",
     Vary: "Origin",
   };
+}
+
+function isOriginAllowed(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  const allowed = (env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!origin) return true;
+  if (allowed.includes(origin)) return true;
+  if (allowed.includes("vercel_preview:mysafeops")) {
+    try {
+      const u = new URL(origin);
+      if (u.protocol === "https:" && u.hostname.endsWith(".vercel.app") && u.hostname.startsWith("mysafeops")) {
+        return true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (allowed.length === 0) return true;
+  return false;
 }
 
 export default {
@@ -50,11 +74,18 @@ export default {
     const c = corsHeaders(request, env);
 
     if (request.method === "OPTIONS") {
+      if (!isOriginAllowed(request, env)) {
+        return json({ error: "Origin not allowed" }, 403, c);
+      }
       return new Response(null, { status: 204, headers: c });
     }
 
     if (request.method !== "POST") {
       return json({ error: "Method not allowed" }, 405, c);
+    }
+
+    if (!isOriginAllowed(request, env)) {
+      return json({ error: "Origin not allowed" }, 403, c);
     }
 
     const url = new URL(request.url);
@@ -79,12 +110,16 @@ export default {
       return json({ error: "Missing file" }, 400, c);
     }
 
+    if (Number(file.size) > MAX_UPLOAD_BYTES) {
+      return json({ error: "File too large" }, 413, c);
+    }
+
     let key = form.get("key");
     if (!key || typeof key !== "string") {
       key = `uploads/${crypto.randomUUID()}-${file.name || "blob"}`;
     }
     key = key.replace(/^\/+/, "").slice(0, 900);
-    if (!/^[\w./-]+$/.test(key) || key.includes("..")) {
+    if (!KEY_RE.test(key) || key.includes("..") || !ORG_KEY_RE.test(key)) {
       return json({ error: "Invalid key" }, 400, c);
     }
 

@@ -2,6 +2,8 @@
  * Project-level permit defaults — required types vs issued permits.
  */
 
+import { asStorageArray } from "../../utils/orgStorage";
+
 export function requiredPermitTypesForProject(project) {
   const fromProject = project?.permitDefaults?.requiredPermitTypes;
   if (Array.isArray(fromProject) && fromProject.length) {
@@ -12,7 +14,7 @@ export function requiredPermitTypesForProject(project) {
 
 export function permitsForProject(projectId, permits = []) {
   if (!projectId) return [];
-  return (permits || []).filter((p) => String(p.projectId || "") === String(projectId));
+  return asStorageArray(permits).filter((p) => String(p.projectId || "") === String(projectId));
 }
 
 export function issuedPermitTypesForProject(projectId, permits = []) {

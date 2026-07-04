@@ -91,9 +91,144 @@ export const TRADE_RAMS_STARTERS = {
     ],
     categories: ["Groundworks", "General", "Plant"],
   },
+  utilities: {
+    key: "utilities",
+    label: "Utilities (water, gas, electric, telecom)",
+    scope:
+      "Utility installation, repair and mapping with permit-to-dig, isolation, pressure testing and streetworks controls.",
+    method:
+      "1. Obtain utility records and agree isolation points.\n\n2. CAT/Genny scan and mark services before breaking ground.\n\n3. Execute works under permit with competent operatives.\n\n4. Pressure test / commission per network operator procedure.\n\n5. Reinstate and issue handover records.",
+    hazardTokens: [
+      "utility",
+      "water main",
+      "gas",
+      "sewer",
+      "jetting",
+      "cable",
+      "fibre",
+      "excavation",
+      "confined",
+      "traffic",
+    ],
+    categories: ["Utilities — Water & Sewer", "Utilities — Gas & Electric", "Groundworks & Excavation"],
+  },
+  highways: {
+    key: "highways",
+    label: "Highways & streetworks",
+    scope:
+      "Road and footway works with Chapter 8 traffic management, NRSWA notices and live-traffic interface controls.",
+    method:
+      "1. Agree TM plan and NRSWA/streetworks notices.\n\n2. Deploy signing, lighting and barriers before work starts.\n\n3. Maintain TM throughout; check after setup and hourly.\n\n4. Coordinate plant movements with banksman.\n\n5. Remove TM and reinstate to spec.",
+    hazardTokens: ["traffic", "chapter 8", "nrswa", "surfacing", "live traffic", "pedestrian", "plant"],
+    categories: ["Highways & Streetworks", "Chapter 8 Traffic Management"],
+  },
+  rail: {
+    key: "rail",
+    label: "Rail & trackside",
+    scope:
+      "Trackside and station works with PTS competence, possession rules and OLE/third-rail awareness.",
+    method:
+      "1. Confirm possession / isolation and site-specific rail induction.\n\n2. Brief team on OLE/third-rail and exclusion zones.\n\n3. Execute works under COSS/ES supervision as required.\n\n4. Maintain lookout and communication protocols.\n\n5. Hand back and close permits.",
+    hazardTokens: ["rail", "trackside", "ole", "pts", "electrified", "possession"],
+    categories: ["Rail & Trackside"],
+  },
+  demolition: {
+    key: "demolition",
+    label: "Demolition & strip-out",
+    scope:
+      "Controlled demolition and strip-out with asbestos survey, isolation and sequential dismantling.",
+    method:
+      "1. Review pre-demolition survey and asbestos register.\n\n2. Isolate services and establish exclusion zones.\n\n3. Dismantle top-down per method statement.\n\n4. Manage dust, noise and waste streams.\n\n5. Final inspection and handover.",
+    hazardTokens: ["demolition", "strip-out", "asbestos", "collapse", "dust", "manual handling"],
+    categories: ["Demolition & Strip-out", "Asbestos & Hazardous Materials"],
+  },
+  interiors_fitout: {
+    key: "interiors_fitout",
+    label: "Interiors & fit-out",
+    scope:
+      "Drylining, ceilings, flooring and M&E fit-out in occupied or live buildings.",
+    method:
+      "1. Set segregation and dust/noise controls.\n\n2. Sequence works to minimise occupant interface.\n\n3. Verify isolation before any intrusive M&E.\n\n4. Manage manual handling and work at height access.\n\n5. Snag, clean and hand over.",
+    hazardTokens: ["drylining", "fit-out", "dust", "manual handling", "occupied", "work at height"],
+    categories: ["Interiors & Fit-Out", "Painting, Decorating & Flooring"],
+  },
+  plant_operation: {
+    key: "plant_operation",
+    label: "Plant operation & banksman",
+    scope:
+      "360, telehandler, dumper/roller and banksman controls on civils sites.",
+    method:
+      "1. Daily plant checks and competence verification.\n\n2. Mark exclusion zones and pedestrian routes.\n\n3. Banksman for reversing and complex lifts.\n\n4. Permit to dig before excavation bucket work.\n\n5. Fuel and spill controls at compound.",
+    hazardTokens: ["excavator", "telehandler", "dumper", "banksman", "reversing", "plant", "rollover"],
+    categories: ["Plant & Machinery", "Groundworks & Excavation"],
+  },
+  confined_space: {
+    key: "confined_space",
+    label: "Confined space & tank entry",
+    scope:
+      "Chamber, tank, sewer and vessel entry with gas testing, rescue and permit controls.",
+    method:
+      "1. Confined space assessment and entry permit.\n\n2. Isolate, purge and test atmosphere.\n\n3. Top-man and rescue plan in place.\n\n4. Continuous monitoring during entry.\n\n5. Close permit and secure area.",
+    hazardTokens: ["confined", "tank", "chamber", "manhole", "atmosphere", "rescue", "gas"],
+    categories: ["Confined Space", "Confined Space & Tank Entry"],
+  },
+  energy: {
+    key: "energy",
+    label: "Energy & renewables",
+    scope:
+      "Solar PV, BESS, wind turbine and substation works with electrical and WAH controls.",
+    method:
+      "1. Electrical isolation and LOTO where required.\n\n2. Weather and wind limits per OEM.\n\n3. Lift plans for modules and nacelle components.\n\n4. Exclusion zones and dropped object controls.\n\n5. Commissioning and handover records.",
+    hazardTokens: ["solar", "wind", "battery", "bess", "substation", "electrical", "work at height"],
+    categories: ["Energy & Renewables", "Solar PV & EV Charging", "Wind Energy Service"],
+  },
+  facade_roof: {
+    key: "facade_roof",
+    label: "Facade, cladding & roofing",
+    scope:
+      "Curtain wall, cladding, glazing and roofing with fragile surface and weather controls.",
+    method:
+      "1. WAH hierarchy — prefer MEWP/scaffold over ladders.\n\n2. Fragile roof assessment and crawl boards.\n\n3. Wind speed monitoring; stop work limits.\n\n4. Dropped object controls at ground level.\n\n5. Close-out inspection and weathertightness check.",
+    hazardTokens: ["facade", "cladding", "roof", "fragile", "glazing", "work at height", "wind"],
+    categories: ["Facade & Glazing", "Roofing & Waterproofing"],
+  },
+  healthcare_fm: {
+    key: "healthcare_fm",
+    label: "Healthcare & facilities maintenance",
+    scope:
+      "Works in hospitals, labs and occupied healthcare with IPC, dust and critical services controls.",
+    method:
+      "1. IPC risk assessment with estates/trust.\n\n2. Negative pressure and HEPA where required.\n\n3. Medical gas and critical power isolation scheme.\n\n4. Agreed hours and patient interface controls.\n\n5. Clean handback and certification.",
+    hazardTokens: ["healthcare", "cleanroom", "ipc", "dust", "occupied", "medical gas"],
+    categories: ["Healthcare & Cleanroom", "Site Setup & Welfare"],
+  },
+  timber_frame: {
+    key: "timber_frame",
+    label: "Timber frame & carpentry",
+    scope:
+      "Timber frame erection, carpentry fix-out, nail guns and silica-generating cuts.",
+    method:
+      "1. Panel lift plan and temporary bracing sequence.\n\n2. Wind limits per manufacturer.\n\n3. Nail gun training and sequential triggers.\n\n4. Silica controls on cutting tasks.\n\n5. Scaffold/WAH access for fix-out.",
+    hazardTokens: ["timber", "carpentry", "nail gun", "silica", "panel", "bracing", "work at height"],
+    categories: ["Timber Frame & Carpentry", "Structural Steel"],
+  },
+  industrial_shutdown: {
+    key: "industrial_shutdown",
+    label: "Industrial shutdown & lifting",
+    scope:
+      "Factory shutdown, LOTO, conveyors and critical lifts during maintenance windows.",
+    method:
+      "1. Shutdown isolation register and SIMOPS review.\n\n2. LOTO on all energy sources.\n\n3. Lift plans for machinery removal.\n\n4. Confined space and hot work permits as required.\n\n5. Re-energise only under authorised procedure.",
+    hazardTokens: ["shutdown", "loto", "conveyor", "lifting", "loler", "confined", "simops"],
+    categories: ["Plant & Machinery", "Warehousing & Logistics"],
+  },
 };
 
-export const SURVEY_RAMS_STARTER_KEYS = new Set(["utility_mapping_survey"]);
+export const SURVEY_RAMS_STARTER_KEYS = new Set([
+  "utility_mapping_survey",
+  "site_investigation_campaign",
+  "geospatial_intelligence",
+]);
 
 /** @param {unknown} key */
 export function isSurveyRamsStarterKey(key) {
@@ -113,6 +248,8 @@ export function findTradeStarterByKey(key) {
 
 /** @param {unknown} key */
 export function getRamsStarterLabel(key) {
+  if (key === "geospatial_intelligence") return "Geospatial & surveying";
+  if (key === "site_investigation_campaign") return "Site investigation & geotechnics";
   if (isSurveyRamsStarterKey(key)) return "PAS128 utility mapping survey";
   const starter = findTradeStarterByKey(key);
   return starter?.label || "General construction";
@@ -134,6 +271,12 @@ export function getOrgRamsStarterKey() {
 
 /** Short AI / Help context line for the active starter. */
 export function getRamsStarterAiHint(starterKey = getOrgRamsStarterKey()) {
+  if (starterKey === "geospatial_intelligence") {
+    return "Organisation profile: geospatial surveying. Include utility strike (PAS128/AS5488), NDD, aerial LiDAR, laser scan, hydrographic, rail corridor and tunnel hazards where relevant.";
+  }
+  if (starterKey === "site_investigation_campaign") {
+    return "Organisation profile: site investigation & geotechnics. Include trial pits, window sampling, DCP/probing, boreholes, coring, ground gas, contamination and chain-of-custody controls.";
+  }
   if (isSurveyRamsStarterKey(starterKey)) {
     return "Organisation profile: surveying / PAS128. Include utility strike, traffic, chamber and scan-validation hazards where relevant.";
   }

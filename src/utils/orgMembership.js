@@ -7,6 +7,7 @@ import { clearPendingInvite, peekPendingInvite } from "../lib/inviteToken";
 
 export const ORG_BILLING_PLAN_KEY = "mysafeops_billing_plan";
 export const ORG_SUBSCRIPTION_STATUS_KEY = "mysafeops_subscription_status";
+export const ORG_TRIAL_EXTENSION_COUNT_KEY = "mysafeops_trial_extension_count";
 
 export function persistOrgRow(row) {
   const slug = getOrgId();
@@ -20,6 +21,9 @@ export function persistOrgRow(row) {
   }
   if (row.trial_ends_at) {
     localStorage.setItem("mysafeops_trial_ends_at", String(row.trial_ends_at));
+  }
+  if (row.trial_extension_count != null && row.trial_extension_count !== "") {
+    localStorage.setItem(ORG_TRIAL_EXTENSION_COUNT_KEY, String(row.trial_extension_count));
   }
   if (row.billing_plan != null && row.billing_plan !== "") {
     localStorage.setItem(ORG_BILLING_PLAN_KEY, String(row.billing_plan));
@@ -95,6 +99,27 @@ export async function ensureUserOrgContext(supabase) {
   return row;
 }
 
+export function getTrialExtensionCount() {
+  const raw = localStorage.getItem(ORG_TRIAL_EXTENSION_COUNT_KEY);
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
+}
+
+export async function extendOrgTrial(supabase) {
+  if (!supabase) throw new Error("Cloud sign-in required to extend trial.");
+  const { data, error } = await supabase.rpc("extend_org_trial");
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (row?.trial_ends_at) {
+    localStorage.setItem("mysafeops_trial_ends_at", String(row.trial_ends_at));
+  }
+  if (row?.trial_extension_count != null) {
+    localStorage.setItem(ORG_TRIAL_EXTENSION_COUNT_KEY, String(row.trial_extension_count));
+  }
+  window.dispatchEvent(new CustomEvent("mysafeops-org-updated"));
+  return row;
+}
+
 export function getTrialStatus(now = Date.now()) {
   const raw = localStorage.getItem("mysafeops_trial_ends_at");
   if (!raw) return null;
@@ -107,6 +132,11 @@ export function getTrialStatus(now = Date.now()) {
     isActive: remainingMs > 0,
     remainingDays,
   };
+}
+
+/** Active 14-day org trial — unlocks all modules and premium feature flags in the UI. */
+export function isTrialUnlockActive(now = Date.now()) {
+  return Boolean(getTrialStatus(now)?.isActive);
 }
 
 export function getBillingEntitlements() {

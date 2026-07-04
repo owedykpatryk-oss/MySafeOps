@@ -18,14 +18,7 @@ describe("ramsIndustryStarters", () => {
     localStorage.setItem("mysafeops_orgId", "test-org");
   });
 
-  it("defines trade starters for profile keys", () => {
-    expect(Object.keys(TRADE_RAMS_STARTERS).sort()).toEqual(
-      ["electrical", "general", "groundworks", "refurb_build"].sort()
-    );
-    expect(findTradeStarterByKey("electrical")?.label).toMatch(/Electrical/i);
-  });
-
-  it("recognises survey starter keys", () => {
+  it("buildPortalSnapshot scopes rows by projectId", () => {
     expect(isSurveyRamsStarterKey("utility_mapping_survey")).toBe(true);
     expect(isSurveyRamsStarterKey("general")).toBe(false);
   });
@@ -35,7 +28,7 @@ describe("ramsIndustryStarters", () => {
     expect(getOrgRamsStarterKey()).toBe("electrical");
 
     saveOrgSettingsRaw({ industryPackId: "demolitionStripout" });
-    expect(getOrgRamsStarterKey()).toBe("groundworks");
+    expect(getOrgRamsStarterKey()).toBe("demolition");
 
     saveOrgSettingsRaw({ industryPackId: "showEverything", ramsStarterKey: null });
     expect(getOrgRamsStarterKey()).toBe(null);

@@ -218,7 +218,7 @@ web3 = 30
 [auth.captcha]
 enabled = true
 provider = "turnstile"
-# Cloudflare test secret (pairs with site key 1x00000000000000000000AA). Production: Dashboard only.
+# Cloudflare test secret (pairs with site key 1x00000000000000000000AA). Production secret: Supabase Dashboard only.
 secret = "1x0000000000000000000000000000000AA"
 
 [auth.email]

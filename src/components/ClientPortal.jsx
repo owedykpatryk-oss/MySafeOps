@@ -1,13 +1,19 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { useToast } from "../context/ToastContext";
+import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { copyTextToClipboard } from "../utils/copyToClipboard";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
+import { genPortalToken, publishPortalToCloud, fetchPublishedPortal, syncPortalCloudState, deletePortalFromCloud } from "../utils/clientPortalCloud";
+import { PORTAL_CLOUD_SYNC_EVENT } from "../utils/clientPortalAutoSync";
+import { loadPublishedPortalTokens, markPortalPublished, unmarkPortalPublished } from "../utils/clientPortalPublished";
+import { supabase as supabaseClient, isSupabaseConfigured } from "../lib/supabase";
 import { ms } from "../utils/moduleStyles";
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
 import PageHero from "./PageHero";
 
-const genId = () => `portal_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+const genRowId = () => `portal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 const fmtDateTime = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }); };
 const daysUntil = (iso) => { if (!iso) return null; return Math.ceil((new Date(iso)-new Date())/(1000*60*60*24)); };
@@ -19,30 +25,72 @@ const ss = {
 };
 
 // ─── Client Portal VIEW (what the client sees) ────────────────────────────────
-function PortalView({ token, portals }) {
-  const portal = portals.find(p=>p.token===token);
-  if (!portal) return (
-    <div style={{ fontFamily:"DM Sans,sans-serif", padding:"3rem 1rem", textAlign:"center" }}>
-      <div style={{ fontSize:14, color:"var(--color-text-secondary)" }}>Invalid or expired portal link.</div>
-    </div>
-  );
+function isPortalAccessible(portal) {
+  if (!portal || portal.active === false) return false;
+  if (portal.expiresAt && new Date(portal.expiresAt) < new Date()) return false;
+  return true;
+}
 
-  const workers = load("mysafeops_workers",[]);
-  const rams = load("rams_builder_docs",[]);
-  const permits = load("permits_v2",[]);
-  const incidents = load("mysafeops_incidents",[]);
-  const snags = load("snags",[]);
+function PortalView({ token, portals, cloudBundle }) {
+  const portal = cloudBundle?.portal ?? portals.find((p) => p.token === token);
+  const snapshot = cloudBundle?.snapshot;
+  const readOnlyCloud = Boolean(cloudBundle);
+  const [ramsDocs, setRamsDocs] = useState(() => snapshot?.rams ?? load("rams_builder_docs", []));
+  const [approvingId, setApprovingId] = useState(null);
+  const [approveForm, setApproveForm] = useState({ by: "", notes: "" });
+
+  if (!isPortalAccessible(portal)) {
+    return (
+      <div style={{ fontFamily:"DM Sans,sans-serif", padding:"3rem 1rem", textAlign:"center" }}>
+        <div style={{ fontSize:14, color:"var(--color-text-secondary)" }}>Invalid or expired portal link.</div>
+      </div>
+    );
+  }
+
+  const workers = snapshot?.workers ?? load("mysafeops_workers",[]);
+  const permits = snapshot?.permits ?? load("permits_v2",[]);
+  const incidents = snapshot?.incidents ?? load("mysafeops_incidents",[]);
+  const snags = snapshot?.snags ?? load("snags",[]);
   const now = new Date();
+
+  const saveRamsApproval = (ramsId) => {
+    if (readOnlyCloud) {
+      window.alert("RAMS approval from a published cloud link is read-only. Ask your contractor to record approval in the workspace.");
+      return;
+    }
+    const by = String(approveForm.by || portal.clientName || "").trim();
+    if (!by) {
+      window.alert("Enter your name to approve this RAMS.");
+      return;
+    }
+    const next = ramsDocs.map((r) =>
+      r.id === ramsId
+        ? {
+            ...r,
+            clientApproval: {
+              by,
+              at: new Date().toISOString(),
+              notes: String(approveForm.notes || "").trim(),
+              portalToken: token,
+            },
+          }
+        : r
+    );
+    setRamsDocs(next);
+    save("rams_builder_docs", next);
+    setApprovingId(null);
+    setApproveForm({ by: "", notes: "" });
+  };
 
   // filter to project if scoped
   const filteredWorkers = portal.projectId ? workers.filter(w=>(w.projectIds||[]).includes(portal.projectId)) : workers;
-  const filteredRAMS = portal.projectId ? rams.filter(r=>r.projectId===portal.projectId) : rams;
+  const filteredRAMS = portal.projectId ? ramsDocs.filter(r=>r.projectId===portal.projectId) : ramsDocs;
   const filteredPermits = portal.projectId ? permits.filter(p=>p.projectId===portal.projectId) : permits;
   const filteredSnags = portal.projectId ? snags.filter(s=>s.projectId===portal.projectId) : snags;
   const filteredIncidents = portal.projectId ? incidents.filter((i) => i.projectId === portal.projectId) : incidents;
 
   const expiredCerts = filteredWorkers.flatMap(w=>(w.certifications||[]).filter(c=>c.expiryDate&&new Date(c.expiryDate)<now).map(c=>({...c,workerName:w.name})));
-  const unsignedRAMS = filteredRAMS.filter(r=>!r.signed&&r.status!=="draft");
+  const unsignedRAMS = filteredRAMS.filter(r=>!r.signed&&r.status!=="draft"&&!r.clientApproval?.at);
   const activePermits = filteredPermits.filter(p=>p.status==="active");
   const openSnags = filteredSnags.filter(s=>s.status==="open");
 
@@ -59,7 +107,7 @@ function PortalView({ token, portals }) {
           <div style={{ color:"#94a3b8", fontSize:12 }}>{portal.projectName||"All projects"} · Read-only compliance view</div>
         </div>
         <div style={{ marginLeft:"auto", fontSize:11, color:"#64748b", flexShrink: 0 }}>
-          Updated: {fmtDateTime(new Date().toISOString())}
+          {readOnlyCloud ? "Cloud snapshot · " : ""}Updated: {fmtDateTime(snapshot?.publishedAt || new Date().toISOString())}
         </div>
       </div>
 
@@ -114,19 +162,47 @@ function PortalView({ token, portals }) {
             <div style={{ fontWeight:500, fontSize:14, marginBottom:12 }}>RAMS documents — {filteredRAMS.length}</div>
             {filteredRAMS.length===0 ? <div style={{ fontSize:13, color:"var(--color-text-secondary)" }}>No RAMS.</div> :
               filteredRAMS.map(r=>(
-                <div key={r.id} style={{ display:"flex", gap:10, alignItems:"center", padding:"8px 0", borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)", fontSize:13 }}>
-                  <div style={{ flex:1 }}>
+                <div key={r.id} style={{ display:"flex", gap:10, alignItems:"center", padding:"8px 0", borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)", fontSize:13, flexWrap:"wrap" }}>
+                  <div style={{ flex:1, minWidth:180 }}>
                     <div style={{ fontWeight:500 }}>{r.title}</div>
                     <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>{fmtDate(r.date)}{r.reviewDate?` · Review: ${fmtDate(r.reviewDate)}`:""}</div>
+                    {r.clientApproval?.at ? (
+                      <div style={{ fontSize:11, color:"#27500A", marginTop:4 }}>Client approved by {r.clientApproval.by} · {fmtDateTime(r.clientApproval.at)}</div>
+                    ) : null}
                   </div>
                   <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:500,
-                    background:r.signed?"#EAF3DE":r.status==="draft"?"var(--color-background-secondary,#f7f7f5)":"#FAEEDA",
-                    color:r.signed?"#27500A":r.status==="draft"?"var(--color-text-secondary)":"#633806" }}>
-                    {r.signed?"Signed":r.status||"draft"}
+                    background:r.clientApproval?.at?"#EAF3DE":r.signed?"#EAF3DE":r.status==="draft"?"var(--color-background-secondary,#f7f7f5)":"#FAEEDA",
+                    color:r.clientApproval?.at?"#27500A":r.signed?"#27500A":r.status==="draft"?"var(--color-text-secondary)":"#633806" }}>
+                    {r.clientApproval?.at?"Client approved":r.signed?"Signed":r.status||"draft"}
                   </span>
+                  {!readOnlyCloud && !r.clientApproval?.at && r.status!=="draft" && portal.allowRamsApproval !== false ? (
+                    <button
+                      type="button"
+                      style={{ ...ss.btnP, fontSize:11, padding:"4px 10px" }}
+                      onClick={() => {
+                        setApprovingId(r.id);
+                        setApproveForm({ by: portal.clientName || "", notes: "" });
+                      }}
+                    >
+                      Approve RAMS
+                    </button>
+                  ) : null}
                 </div>
               ))
             }
+            {approvingId ? (
+              <div style={{ marginTop:12, padding:12, background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8 }}>
+                <div style={{ fontWeight:500, fontSize:13, marginBottom:8 }}>Client RAMS approval</div>
+                <label style={{ fontSize:11, color:"var(--color-text-secondary)" }}>Your name</label>
+                <input style={{ ...ss.inp, marginBottom:8 }} value={approveForm.by} onChange={(e)=>setApproveForm(f=>({...f,by:e.target.value}))} />
+                <label style={{ fontSize:11, color:"var(--color-text-secondary)" }}>Notes (optional)</label>
+                <textarea style={{ ...ss.inp, minHeight:50, marginBottom:8 }} value={approveForm.notes} onChange={(e)=>setApproveForm(f=>({...f,notes:e.target.value}))} placeholder="Conditions or comments" />
+                <div style={{ display:"flex", gap:8 }}>
+                  <button type="button" style={ss.btn} onClick={()=>setApprovingId(null)}>Cancel</button>
+                  <button type="button" style={ss.btnP} onClick={()=>saveRamsApproval(approvingId)}>Confirm approval</button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -202,10 +278,23 @@ function PortalView({ token, portals }) {
 export default function ClientPortal() {
   const { caps } = useApp();
   const { pushToast } = useToast();
+  const { user, supabase } = useSupabaseAuth();
+  const cloudReady = Boolean(user && supabase && isSupabaseConfigured());
   const [portals, setPortals] = useState(()=>load("client_portals",[]));
   const [modal, setModal] = useState(null);
   const [previewToken, setPreviewToken] = useState(null);
+  const [publishingId, setPublishingId] = useState(null);
+  const [publishedTokens, setPublishedTokens] = useState(() => loadPublishedPortalTokens());
+  const [lastCloudSyncAt, setLastCloudSyncAt] = useState(null);
   const projects = load("mysafeops_projects",[]);
+
+  useEffect(() => {
+    const onSync = (event) => {
+      setLastCloudSyncAt(event?.detail?.at || new Date().toISOString());
+    };
+    window.addEventListener(PORTAL_CLOUD_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(PORTAL_CLOUD_SYNC_EVENT, onSync);
+  }, []);
 
   useEffect(()=>{ save("client_portals",portals); },[portals]);
 
@@ -218,8 +307,8 @@ export default function ClientPortal() {
     if (!newPortal.clientName.trim()) return;
     const p = {
       ...newPortal,
-      id: genId(),
-      token: genId(),
+      id: genRowId(),
+      token: genPortalToken(),
       projectName: projects.find(p=>p.id===newPortal.projectId)?.name||"All projects",
       createdAt: new Date().toISOString(),
       active: true,
@@ -227,6 +316,66 @@ export default function ClientPortal() {
     setPortals(prev=>[p,...prev]);
     setShowCreate(false);
     setNewPortal({ clientName:"", projectId:"", sections:["workers","rams","permits","snags"], expiresAt:"" });
+    if (cloudReady) {
+      pushToast({ type: "info", message: "Portal created — click Publish cloud so your client can open the link on any device." });
+    }
+  };
+
+  const publishPortal = async (portalRow) => {
+    if (!supabase || !user) {
+      pushToast({ type: "warn", message: "Sign in to publish portal links for clients on any device." });
+      return;
+    }
+    setPublishingId(portalRow.id);
+    try {
+      const orgSlug = await syncOrgSlugIfNeeded(supabase);
+      await publishPortalToCloud(supabase, portalRow, orgSlug);
+      markPortalPublished(portalRow.token);
+      setPublishedTokens((prev) => new Set(prev).add(portalRow.token));
+      setLastCloudSyncAt(new Date().toISOString());
+      pushToast({ type: "success", message: "Portal published — link works on any device for your client." });
+    } catch (err) {
+      pushToast({ type: "error", message: err?.message || "Could not publish portal to cloud." });
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  const togglePortalActive = async (portalRow) => {
+    const next = { ...portalRow, active: !portalRow.active };
+    setPortals((prev) => prev.map((x) => (x.id === portalRow.id ? next : x)));
+    if (!cloudReady || !publishedTokens.has(portalRow.token)) return;
+    setPublishingId(portalRow.id);
+    try {
+      const orgSlug = await syncOrgSlugIfNeeded(supabase);
+      await syncPortalCloudState(supabase, next, orgSlug);
+      pushToast({
+        type: next.active ? "success" : "warn",
+        message: next.active ? "Portal re-activated in cloud." : "Portal deactivated — cloud link revoked.",
+      });
+    } catch (err) {
+      pushToast({ type: "error", message: err?.message || "Could not sync portal status to cloud." });
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  const removePortal = async (portalRow) => {
+    if (!window.confirm("Delete portal?")) return;
+    setPortals((prev) => prev.filter((x) => x.id !== portalRow.id));
+    if (cloudReady && publishedTokens.has(portalRow.token)) {
+      try {
+        await deletePortalFromCloud(supabase, portalRow.token);
+        unmarkPortalPublished(portalRow.token);
+        setPublishedTokens((prev) => {
+          const s = new Set(prev);
+          s.delete(portalRow.token);
+          return s;
+        });
+      } catch {
+        pushToast({ type: "warn", message: "Portal removed locally; cloud copy may still exist until you delete it in Supabase." });
+      }
+    }
   };
 
   const copyPortalLink = async (url) => {
@@ -328,6 +477,9 @@ export default function ClientPortal() {
                         color:expired?"#791F1F":p.active?"#27500A":"var(--color-text-secondary)" }}>
                         {expired?"Expired":p.active?"Active":"Inactive"}
                       </span>
+                      {publishedTokens.has(p.token) ? (
+                        <span style={{ padding:"2px 8px", borderRadius:20, fontSize:10, fontWeight:700, background:"#E6F1FB", color:"#0C447C" }}>Cloud</span>
+                      ) : null}
                     </div>
                     <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>
                       Scope: {p.projectName||"All projects"} · Sections: {(p.sections||[]).join(", ")} · Created: {fmtDate(p.createdAt)}
@@ -337,11 +489,21 @@ export default function ClientPortal() {
                   <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                     <button onClick={()=>setPreviewToken(p.token)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Preview</button>
                     <button onClick={() => void copyPortalLink(portalUrl)} style={{ ...ss.btnP, fontSize:12, padding:"4px 10px" }}>Copy link</button>
+                    {cloudReady && caps.clientPortalManage ? (
+                      <button
+                        type="button"
+                        disabled={publishingId === p.id || !p.active || expired}
+                        onClick={() => void publishPortal(p)}
+                        style={{ ...ss.btn, fontSize:12, padding:"4px 10px", borderColor:"#9FE1CB", color:"#0f766e" }}
+                        title="Publish snapshot to cloud so clients can open the link on any device"
+                      >
+                        {publishingId === p.id ? "Publishing…" : publishedTokens.has(p.token) ? "Re-publish" : "Publish cloud"}
+                      </button>
+                    ) : null}
                     {caps.clientPortalManage && (
                       <>
-                        <button onClick={()=>setPortals(prev=>prev.map(x=>x.id===p.id?{...x,active:!x.active}:x))}
-                          style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>{p.active?"Deactivate":"Activate"}</button>
-                        <button onClick={()=>{ if(confirm("Delete portal?")) setPortals(prev=>prev.filter(x=>x.id!==p.id)); }}
+                        <button type="button" onClick={() => void togglePortalActive(p)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>{p.active?"Deactivate":"Activate"}</button>
+                        <button type="button" onClick={() => void removePortal(p)}
                           style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
                       </>
                     )}
@@ -358,15 +520,49 @@ export default function ClientPortal() {
       )}
 
       <div style={{ marginTop:24, padding:"12px 14px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)", lineHeight:1.6 }}>
-        Client portal links are read-only — clients cannot edit any data. Each link can be scoped to a specific project and set of sections. Deactivate a link at any time to revoke access.
+        Client portal links are read-only for compliance viewing. Use <strong>Publish cloud</strong> (when signed in) so clients can open the link on any device. Deactivate a link to revoke access. Same-browser preview works without cloud.
+        {cloudReady && publishedTokens.size > 0 ? (
+          <div style={{ marginTop: 8, fontSize: 11, color: "#0f766e" }}>
+            {publishingId ? "Syncing cloud snapshot…" : lastCloudSyncAt ? `Last cloud sync: ${fmtDateTime(lastCloudSyncAt)} · auto-updates when you save compliance data` : "Cloud published — auto-updates when you save compliance data"}
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-/** Public read-only view when opened with ?portal=token (same device / org data). */
+/** Public read-only view when opened with ?portal=token */
 export function PublicClientPortalView({ token }) {
   const safeToken = safeOpaqueToken(token);
+  const [cloudBundle, setCloudBundle] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!safeToken) {
+      setLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      if (supabaseClient) {
+        try {
+          const data = await fetchPublishedPortal(supabaseClient, safeToken);
+          if (!cancelled && data) {
+            setCloudBundle(data);
+            setLoading(false);
+            return;
+          }
+        } catch {
+          /* fall through to local */
+        }
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [safeToken]);
+
   if (!safeToken) {
     return (
       <div style={{ fontFamily: "DM Sans,sans-serif", padding: "3rem 1rem", textAlign: "center" }}>
@@ -374,6 +570,19 @@ export function PublicClientPortalView({ token }) {
       </div>
     );
   }
+
+  if (loading) {
+    return (
+      <div style={{ fontFamily: "DM Sans,sans-serif", padding: "3rem 1rem", textAlign: "center" }}>
+        <div style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>Loading client portal…</div>
+      </div>
+    );
+  }
+
+  if (cloudBundle) {
+    return <PortalView token={safeToken} portals={[]} cloudBundle={cloudBundle} />;
+  }
+
   const portals = load("client_portals", []);
   return <PortalView token={safeToken} portals={portals} />;
 }

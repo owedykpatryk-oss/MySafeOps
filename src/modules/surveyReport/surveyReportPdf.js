@@ -5,6 +5,7 @@ import { jsPDF } from "jspdf";
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
 import { sanitizePdfFileSegment } from "../../utils/pdfFileName";
 import { buildSurveyReportHtml } from "./surveyReportPrintHtml";
+import { sanitizePrintPreviewHtml } from "../../utils/htmlEscape.js";
 import { normalizeSurveyReport } from "./surveyReportHelpers";
 
 const A4_W_MM = 210;
@@ -52,7 +53,7 @@ function buildFileName(report) {
  */
 export async function downloadSurveyReportPdf(report, extras = {}, opts = {}) {
   const notify = (phase) => opts.onProgress?.(phase);
-  const html = buildSurveyReportHtml(report, extras);
+  const html = sanitizePrintPreviewHtml(buildSurveyReportHtml(report, extras));
   const fileName = buildFileName(report);
 
   notify("prepare");

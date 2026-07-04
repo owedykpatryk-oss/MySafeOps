@@ -14,10 +14,12 @@ import {
   uploadBackupToSupabase,
 } from "../utils/cloudSync";
 import { formatBytes, getEffectivePlan } from "../lib/billingPlans";
+import { isBillingWriteBlocked, billingWriteBlockedMessage } from "../utils/billingAccess";
 import { isSuperAdminEmail } from "../utils/superAdmin";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import InlineAlert from "../components/InlineAlert";
 
 const ss = ms;
 
@@ -34,6 +36,17 @@ export default function BackupExport() {
   const cloudEnabled = isSupabaseConfigured() && supabase;
   const d1Enabled = isD1Configured();
   const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner: isSuperAdminEmail(user?.email) });
+  const readOnly = isBillingWriteBlocked({
+    trialStatus,
+    billing,
+    isPlatformOwner: isSuperAdminEmail(user?.email),
+  });
+
+  const blockWriteAction = (action) => {
+    if (!readOnly) return true;
+    setMsg(billingWriteBlockedMessage());
+    return false;
+  };
 
   useEffect(() => {
     if (!cloudEnabled || !user || !ready) {
@@ -77,7 +90,7 @@ export default function BackupExport() {
   const onFile = (e) => {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (!f || !caps.backupImport) return;
+    if (!f || !caps.backupImport || !blockWriteAction("import")) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -102,7 +115,7 @@ export default function BackupExport() {
   const mergeFile = (e) => {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (!f || !caps.backupImport) return;
+    if (!f || !caps.backupImport || !blockWriteAction("merge")) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -125,7 +138,7 @@ export default function BackupExport() {
   };
 
   const uploadCloud = async () => {
-    if (!cloudEnabled || !user) return;
+    if (!cloudEnabled || !user || !blockWriteAction("cloud-upload")) return;
     setMsg("");
     setCloudBusy(true);
     try {
@@ -161,7 +174,7 @@ export default function BackupExport() {
   };
 
   const pushToD1 = async () => {
-    if (!cloudEnabled || !user || !caps.backupImport) return;
+    if (!cloudEnabled || !user || !caps.backupImport || !blockWriteAction("d1-push")) return;
     if (!isD1Configured()) {
       setMsg("Cloud sync is not available in this build.");
       return;
@@ -205,7 +218,7 @@ export default function BackupExport() {
   };
 
   const downloadCloud = async (merge) => {
-    if (!cloudEnabled || !user || !caps.backupImport) return;
+    if (!cloudEnabled || !user || !caps.backupImport || !blockWriteAction(merge ? "cloud-merge" : "cloud-restore")) return;
     setMsg("");
     setCloudBusy(true);
     try {
@@ -237,6 +250,14 @@ export default function BackupExport() {
         title="Backup & restore"
         lead="Export all organisation-scoped data and global settings to JSON. Sign in under Settings to sync backups to the cloud."
       />
+      {readOnly ? (
+        <div style={{ marginBottom: 16 }}>
+          <InlineAlert
+            type="warn"
+            text={`Read-only mode — local export still works. ${billingWriteBlockedMessage()}`}
+          />
+        </div>
+      ) : null}
       {cloudEnabled && (
         <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
           <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 10, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>

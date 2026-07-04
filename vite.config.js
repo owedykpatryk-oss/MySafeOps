@@ -81,6 +81,101 @@ export default defineConfig(({ mode }) => {
         },
       },
       {
+        name: "block-anthropic-key-in-production",
+        config(_config, { mode }) {
+          if (mode === "production" && String(env.VITE_ANTHROPIC_API_KEY || "").trim()) {
+            throw new Error(
+              "VITE_ANTHROPIC_API_KEY must not be set for production builds — use VITE_ANTHROPIC_PROXY_URL and server-side ANTHROPIC_API_KEY instead."
+            );
+          }
+        },
+      },
+      {
+        name: "block-openweather-key-in-production",
+        config(_config, { mode }) {
+          if (mode === "production" && String(env.VITE_OPENWEATHER_API_KEY || "").trim()) {
+            throw new Error(
+              "VITE_OPENWEATHER_API_KEY must not be set for production builds — use server-side OPENWEATHER_API_KEY with /api/weather instead."
+            );
+          }
+        },
+      },
+      {
+        name: "dev-weather-api",
+        configureServer(server) {
+          server.middlewares.use("/api/weather", async (req, res, next) => {
+            if (req.method !== "GET" && req.method !== "HEAD") return next();
+            const apiKey = String(env.OPENWEATHER_API_KEY || env.VITE_OPENWEATHER_API_KEY || "").trim();
+            const q = req.url?.includes("?") ? req.url.slice(req.url.indexOf("?") + 1) : "";
+            const params = new URLSearchParams(q);
+            let lat = parseFloat(params.get("lat") || "");
+            let lng = parseFloat(params.get("lng") || params.get("lon") || "");
+            let postcodeMeta = "";
+            const pcRaw = String(params.get("postcode") || params.get("code") || "")
+              .trim()
+              .toUpperCase()
+              .replace(/[^A-Z0-9]/g, "");
+            if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && pcRaw) {
+              try {
+                const pcRes = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(pcRaw)}`, {
+                  headers: { Accept: "application/json" },
+                });
+                if (pcRes.ok) {
+                  const pcJson = await pcRes.json();
+                  lat = Number(pcJson?.result?.latitude);
+                  lng = Number(pcJson?.result?.longitude);
+                  postcodeMeta = pcJson?.result?.postcode || pcRaw;
+                }
+              } catch {
+                /* fall through */
+              }
+            }
+            if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+              res.statusCode = pcRaw ? 404 : 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: pcRaw ? "postcode_not_found" : "invalid_coordinates" }));
+              return;
+            }
+            if (!apiKey) {
+              res.statusCode = 503;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "openweather_not_configured" }));
+              return;
+            }
+            try {
+              const u = new URL("https://api.openweathermap.org/data/2.5/weather");
+              u.searchParams.set("lat", String(lat));
+              u.searchParams.set("lon", String(lng));
+              u.searchParams.set("appid", apiKey);
+              u.searchParams.set("units", "metric");
+              const upstream = await fetch(u.toString());
+              const text = await upstream.text();
+              res.statusCode = upstream.status;
+              res.setHeader("Content-Type", "application/json");
+              if (req.method === "HEAD") {
+                res.end();
+                return;
+              }
+              if (upstream.ok && postcodeMeta) {
+                try {
+                  const parsed = JSON.parse(text);
+                  parsed._mysafeops = { postcode: postcodeMeta, lat, lng };
+                  res.end(JSON.stringify(parsed));
+                  return;
+                } catch {
+                  /* raw text */
+                }
+              }
+              res.end(text);
+            } catch {
+              res.statusCode = 502;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "weather_upstream_unreachable" }));
+            }
+          });
+        },
+      },
+      {
         name: "inject-supabase-resource-hints",
         transformIndexHtml(html) {
           const site = String(env.VITE_PUBLIC_SITE_URL || "https://mysafeops.com").replace(/\/$/, "");
@@ -120,6 +215,7 @@ export default defineConfig(({ mode }) => {
               ) {
                 return "rams-hazards";
               }
+              if (norm.includes("/modules/rams/constructionQuickPacks")) return "rams-quick-packs";
               if (norm.includes("/modules/permits/PermitSystem")) return "permits";
               if (norm.includes("moduleCatalogIcons")) return "module-icons";
               return;
