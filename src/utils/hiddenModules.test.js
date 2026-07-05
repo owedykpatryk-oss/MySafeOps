@@ -1,6 +1,5 @@
 /** @vitest-environment jsdom */
 import { describe, expect, it, beforeEach } from "vitest";
-import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
 import {
   RAMS_FEATURES,
   applyHidePreset,

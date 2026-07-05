@@ -3,7 +3,7 @@ import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
 import { showAdminLoginHints } from "../lib/showAdminLoginHints";
-import { refreshOrgFromSupabase } from "../utils/orgMembership";
+import { refreshOrgFromSupabase, isTrialUnlockActive } from "../utils/orgMembership";
 import { pushOrgBrandingToCloud } from "../utils/orgBrandingCloudSync";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
