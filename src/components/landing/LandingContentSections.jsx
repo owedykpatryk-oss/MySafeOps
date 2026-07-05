@@ -1,6 +1,7 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { loginLinkPrefetchProps, prefetchLoginPage } from "../../utils/routePrefetch";
+import { PRICE_ADJUSTMENT_SHORT } from "../../lib/billingPlans";
 import LandingBlogSection from "./LandingBlogSection";
 import LandingWorkflowBento from "./LandingWorkflowBento";
 
@@ -422,6 +423,13 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
           </div>
           <p style={{ textAlign: "center", fontSize: 14, color: "var(--sl4)", marginTop: 24 }}>
             Includes a 14-day evaluation in-product when you sign in (optional +14 day extension once). After trial, subscribe to keep editing — existing data stays viewable and exportable. Not legal advice — always follow your site rules and UK requirements.
+          </p>
+          <p style={{ textAlign: "center", fontSize: 13, color: "var(--sl5)", marginTop: 10, maxWidth: 640, marginLeft: "auto", marginRight: "auto", lineHeight: 1.5 }}>
+            {PRICE_ADJUSTMENT_SHORT}{" "}
+            <Link to="/terms" style={{ color: "var(--sl4)", textDecoration: "underline" }}>
+              Terms §7.5
+            </Link>
+            .
           </p>
         </div>
       </section>

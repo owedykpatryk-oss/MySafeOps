@@ -1,0 +1,77 @@
+name: Cursor nightly
+
+# Weeknights 02:00 UTC — full pack; Saturday 03:00 UTC — light health only
+on:
+  schedule:
+    - cron: "0 2 * * 1-5"
+    - cron: "0 3 * * 6"
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Task to run"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - health
+          - vercel
+          - sentry
+          - prs
+          - weekend
+
+concurrency:
+  group: cursor-nightly-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Resolve nightly flags
+        id: flags
+        run: |
+          TASK="${{ github.event.inputs.task }}"
+          if [ -z "$TASK" ]; then
+            if [ "${{ github.event.schedule }}" = "0 3 * * 6" ]; then
+              TASK="weekend"
+            else
+              TASK="all"
+            fi
+          fi
+          case "$TASK" in
+            health)   echo "args=--health" >> "$GITHUB_OUTPUT" ;;
+            vercel)   echo "args=--vercel" >> "$GITHUB_OUTPUT" ;;
+            sentry)   echo "args=--sentry --force-sentry" >> "$GITHUB_OUTPUT" ;;
+            prs)      echo "args=--prs" >> "$GITHUB_OUTPUT" ;;
+            weekend)  echo "args=--weekend --health" >> "$GITHUB_OUTPUT" ;;
+            *)        echo "args=--all" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Check CURSOR_API_KEY
+        id: gate
+        env:
+          HAS_KEY: ${{ secrets.CURSOR_API_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::CURSOR_API_KEY not set — skipping nightly"
+          fi
+
+      - name: Trigger Cursor nightly agents
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURSOR_MAX_AGENTS: "4"
+          CURSOR_PR_DAYS: "7"
+        run: node scripts/cursor-nightly.mjs ${{ steps.flags.outputs.args }}

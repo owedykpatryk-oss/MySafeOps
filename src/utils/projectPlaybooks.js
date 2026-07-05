@@ -15,6 +15,7 @@ import {
 } from "../modules/surveyReport/surveyReportSmart";
 import { nextSurveyRef } from "../modules/surveyReport/surveyReportHelpers";
 import { buildPermitDraftFromProject } from "../modules/permits/permitProjectDefaults";
+import { getPlaybookSurveyPack } from "./surveyContentCatalog";
 import { checklistStringsForType } from "../modules/permits/permitTypes";
 import { createDefaultChecklistItems, normalizeChecklistState } from "../modules/permits/permitChecklistUtils";
 import { getTemplateForType } from "../modules/permits/permitTemplateCatalog";
@@ -30,43 +31,6 @@ function generateRamsDocNo() {
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
-
-const SURVEY_PACK = {
-  utility_mapping_survey: {
-    label: "PAS128 utility mapping survey",
-    scope:
-      "PAS128 QLB utility mapping survey to locate and record underground utility apparatus, reduce strike risk, and issue marked outputs for safe delivery.",
-    method:
-      "1. Pre-start briefing and permit checks before entering survey area.\n\n2. Confirm utility records, walkover hazards, and exclusion zones.\n\n3. Detect utilities using EML and GPR methods with competent operators.\n\n4. Mark detected services and maintain safe dig rules near marked lines.\n\n5. Record survey control and quality checks before issue.\n\n6. Communicate residual risk and handover notes to site management.",
-  },
-  topographical_survey: {
-    label: "Topographical land survey",
-    scope:
-      "Topographical survey to capture levels, boundaries, structures and site features with agreed survey control and QA checks.",
-    method:
-      "1. Set control points and verify datum/benchmark before data capture.\n\n2. Establish safe working routes around plant movement and public interfaces.\n\n3. Capture topo features with calibrated survey equipment.\n\n4. Perform repeat checks and closure checks to validate accuracy.\n\n5. Securely store field data and produce checked outputs for issue.",
-  },
-  site_investigation_campaign: {
-    label: "Site investigation & geotechnics campaign",
-    scope:
-      "Combined ground investigation programme — trial pits, window sampling, dynamic probing, boreholes, in-situ testing and monitoring wells — with unified permit interface, contamination/gas plan and sample chain of custody.",
-    method:
-      "1. Review GI specification, desk study and contamination assessment; agree method sequence.\n\n2. Mobilise with permit-to-dig and ground disturbance controls; daily briefing on hold points.\n\n3. Execute intrusive methods in agreed order; maintain master sample register.\n\n4. Monitor ground gas at open holes; secure all boreholes and reinstate trial pits same shift where practicable.\n\n5. Issue factual report inputs — logs, sample register, abandonment records.",
-  },
-  window_sampling_trial_pit: {
-    label: "Window sampling / trial pit",
-    scope:
-      "Ground investigation by window sampling and/or trial pits with service avoidance, pit stability, sample chain of custody and reinstatement.",
-    method:
-      "1. Utility search and permit-to-dig; mark sample locations and exclusion zones.\n\n2. Window sample or excavate trial pit with banksman/shoring controls.\n\n3. Log strata, bag and label samples; complete chain-of-custody on site.\n\n4. Backfill, compact and reinstate surface; cap residual openings.",
-  },
-  dcp_dynamic_probe: {
-    label: "Dynamic probing / DCP",
-    scope: "In-situ DCP and dynamic probing with blow-count recording, utility clearance and hole capping.",
-    method:
-      "1. Utility clearance and probe positioning.\n\n2. Drive rods with two-person handling; record blow counts vs depth.\n\n3. Withdraw rods, cap holes and decontaminate equipment between locations.",
-  },
-};
 
 /** @type {Array<{ id: string, label: string, description: string, industryStarter?: string, surveyType?: string, pas128Ql?: string, permitTypes: string[], msTemplate?: string, ramsSurveyKey?: string, checklistExtras?: string[] }>} */
 export const PROJECT_PLAYBOOKS = [
@@ -272,7 +236,7 @@ export function docsForProject(projectId, rows = []) {
 }
 
 export function createRamsDraftFromPlaybook(project, playbook) {
-  const pack = playbook.ramsSurveyKey ? SURVEY_PACK[playbook.ramsSurveyKey] : null;
+  const pack = playbook.ramsSurveyKey ? getPlaybookSurveyPack(playbook.ramsSurveyKey) : null;
   const location = String(project.address || project.site || project.name || "").trim();
   return {
     id: genId("rams"),
@@ -320,8 +284,8 @@ export function createSurveyDraftFromPlaybook(project, playbook, existingReports
   return draft;
 }
 
-export function createPermitDraftFromPlaybook(project, permitType, ramsDoc = null, { allPermits = [] } = {}) {
-  const partial = buildPermitDraftFromProject(project, permitType, { allPermits });
+export function createPermitDraftFromPlaybook(project, permitType, ramsDoc = null, { allPermits = [], surveys = [] } = {}) {
+  const partial = buildPermitDraftFromProject(project, permitType, { allPermits, surveys });
   const type = partial.type || permitType || "general";
   const template = getTemplateForType(type, PERMIT_TYPES);
   const checklistStrings = checklistStringsForType(type);
@@ -374,7 +338,7 @@ export function createMethodStatementFromPlaybook(project, playbook, ramsDoc = n
     date: today(),
     revision: "1A",
     scope: playbook.surveyType
-      ? SURVEY_PACK[playbook.ramsSurveyKey || playbook.surveyType]?.scope || ""
+      ? getPlaybookSurveyPack(playbook.ramsSurveyKey || playbook.surveyType)?.scope || ""
       : `Mobilisation and safe delivery of works at ${project.name || location}.`,
     steps,
     plant: [],
@@ -468,7 +432,7 @@ export function applyProjectPlaybook(project, playbookId, existing = {}) {
   const existingPermitTypes = new Set(docsForProject(project.id, permits).map((p) => p.type));
   for (const permitType of playbook.permitTypes || []) {
     if (existingPermitTypes.has(permitType)) continue;
-    const permit = createPermitDraftFromPlaybook(project, permitType, ramsDoc, { allPermits: permits });
+    const permit = createPermitDraftFromPlaybook(project, permitType, ramsDoc, { allPermits: permits, surveys });
     permits.unshift(permit);
     created.permits.push(permit);
     existingPermitTypes.add(permitType);

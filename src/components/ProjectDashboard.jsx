@@ -11,6 +11,10 @@ import { buildProjectHubPulse, printProjectSitePack } from "../utils/projectHubP
 import { getFeaturedPlaybooksForOrg, isSurveyWorkflowEnabled } from "../utils/projectHubIndustry";
 import { getIndustryPackLabel } from "../utils/industryPackProfile";
 import { isIndustryPackPreviewActive } from "../utils/industryPackPreview";
+import { PERMIT_TYPES } from "../modules/permits/permitTypes";
+import { buildPermitDraftFromProject, requiredPermitTypesForProject } from "../modules/permits/permitProjectDefaults";
+import { filterPermitTypesForOrg, getEnabledPermitTypeIds } from "../modules/permits/permitOrgPrefs";
+import { loadOrgSettingsRaw } from "../utils/orgSettingsStorage";
 
 const EMPTY_ROUTES = [];
 
@@ -201,6 +205,19 @@ export default function ProjectDashboard({
   const showApplyPlaybook = missingDocItems.length > 0 && onApplyPlaybook;
   const showSurvey = isSurveyWorkflowEnabled();
   const featuredPlaybooks = useMemo(() => getFeaturedPlaybooksForOrg(3), []);
+
+  const permitShortcuts = useMemo(() => {
+    if (!project?.id) return [];
+    const org = loadOrgSettingsRaw();
+    const types = filterPermitTypesForOrg(PERMIT_TYPES, getEnabledPermitTypeIds(org));
+    const required = requiredPermitTypesForProject(project);
+    const order = [...new Set([...required, ...Object.keys(types)])].slice(0, 4);
+    return order.filter((id) => types[id]).map((id) => ({ id, label: types[id].label }));
+  }, [project]);
+
+  const issuePermitForSite = (typeId) => {
+    go("permits", "issue", { permitType: typeId });
+  };
 
   const runNextAction = () => {
     if (!nextAction) return;
@@ -507,6 +524,16 @@ export default function ProjectDashboard({
           Snags
         </button>
       </div>
+
+      {permitShortcuts.length > 0 ? (
+        <div className="app-project-dashboard__quick" style={{ marginTop: 8 }}>
+          {permitShortcuts.map((row) => (
+            <button key={row.id} type="button" onClick={() => issuePermitForSite(row.id)} title={`Prefill ${project?.location || project?.site || "site"} + RAMS`}>
+              Issue {row.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {showApplyPlaybook ? (
         <div className="app-project-dashboard__alert">

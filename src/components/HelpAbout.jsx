@@ -14,6 +14,16 @@ import {
 } from "../utils/workspaceProfileGuide";
 import { MORE_SECTIONS, getMoreTabsForSection, NAV_TAB_IDS } from "../navigation/appModules";
 import { WORKSPACE_SETTINGS_TABS } from "../config/workspaceSettingsTabs";
+import {
+  APP_LAYOUT,
+  BILLING_TRIAL_GUIDE,
+  FIRST_WEEK_STEPS,
+  GLOSSARY,
+  HELP_FAQ,
+  HELP_TOC,
+  MODULE_BLURBS_EXTRA,
+  SETTINGS_TAB_HELP,
+} from "../utils/helpGuideContent";
 
 const DISPLAY_APP_VERSION = getDisplayAppVersion();
 const SHOW_DEV_HINTS = showAdminLoginHints();
@@ -107,6 +117,33 @@ const ss = {
   },
   btnRow: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12, alignItems: "center" },
   moduleLi: { marginBottom: 6 },
+  toc: {
+    display: "grid",
+    gap: 6,
+    margin: 0,
+    padding: 0,
+    listStyle: "none",
+    fontSize: 13,
+  },
+  tocLi: { margin: 0 },
+  details: {
+    marginBottom: 10,
+    border: "0.5px solid var(--color-border-tertiary,#e2e8f0)",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  summary: {
+    padding: "10px 12px",
+    cursor: "pointer",
+    fontWeight: 600,
+    fontSize: 13,
+    listStyle: "none",
+    background: "var(--color-background-secondary,#f8fafc)",
+  },
+  detailsBody: { padding: "10px 12px", fontSize: 13, lineHeight: 1.55, color: "var(--color-text-secondary)" },
+  glossGrid: { display: "grid", gap: 10, margin: 0 },
+  glossTerm: { fontWeight: 600, fontSize: 13, color: "var(--color-text-primary)" },
+  glossDef: { fontSize: 13, color: "var(--color-text-secondary)", margin: "2px 0 0" },
 };
 
 const SUPPORT_EMAIL = getSupportEmail();
@@ -123,7 +160,7 @@ const MODULE_BLURBS = {
   "site-map": "Map of project sites, who is on site, boundaries, escape routes.",
   "project-drawings": "Upload plans; click to mark escape routes, zones, and emergency assets.",
   "method-statement": "Standalone method statements linked to projects.",
-  cdm: "CDM duty-holder checklist and project compliance records.",
+  cdm: "CDM duty-holder checklist, F10 notifiability hint, and H&S file inventory.",
   "daily-briefing": "Daily site briefing, attendance, hazards — feeds site map presence.",
   induction: "QR-based site induction and sign-on records.",
   signatures: "Capture digital signatures on documents.",
@@ -185,9 +222,18 @@ const MODULE_BLURBS = {
   "ai-rams": "AI-assisted RAMS draft generator (when enabled).",
   "ai-toolbox": "AI toolbox talk drafts (when enabled).",
   "ai-photo": "AI hazard hints from site photos (when enabled).",
+  ...MODULE_BLURBS_EXTRA,
 };
 
 const BOTTOM_NAV_IDS = NAV_TAB_IDS.filter((t) => t.id !== "more").map((t) => t.id);
+
+function HelpAnchor({ id, children }) {
+  return (
+    <section id={id} style={{ scrollMarginTop: 80 }}>
+      {children}
+    </section>
+  );
+}
 
 function ModuleLink({ viewId, label }) {
   if (viewId === "help") return <strong>{label}</strong>;
@@ -286,8 +332,39 @@ export default function HelpAbout() {
       <PageHero
         badgeText="?"
         title="Help & about"
-        lead="UK construction safety and compliance workspace. Profiles tailor modules and Project Hub to your trade — everything below is in plain English. Use Search (Ctrl+K) or the module index to find any screen."
+        lead="Everything in plain English: what each part of MySafeOps does, how to get started, and where to click. Press ? from anywhere (when not typing) to return here."
       />
+
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          On this page
+        </h2>
+        <ul style={ss.toc}>
+          {HELP_TOC.map((item) => (
+            <li key={item.id} style={ss.tocLi}>
+              <a href={`#${item.id}`} style={ss.a}>
+                {item.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <HelpAnchor id="start-here">
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          {APP_LAYOUT.title}
+        </h2>
+        <p style={ss.p}>{APP_LAYOUT.lead}</p>
+        <ul style={ss.ul}>
+          {APP_LAYOUT.layers.map((layer) => (
+            <li key={layer.name} style={{ ...ss.moduleLi, marginBottom: 10 }}>
+              <strong>{layer.name}</strong> — {layer.body}
+            </li>
+          ))}
+        </ul>
+      </div>
+      </HelpAnchor>
 
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
@@ -298,10 +375,10 @@ export default function HelpAbout() {
             <strong>Search</strong> — top bar, <kbd style={ss.kbd}>Ctrl</kbd>+<kbd style={ss.kbd}>K</kbd>, or <kbd style={ss.kbd}>/</kbd> — jump to a module or find workers, projects, RAMS, permits, snags.
           </li>
           <li>
-            <strong>More</strong> — filter the module grid; pin tiles for shortcuts.
+            <strong>More</strong> — filter the module grid; pin tiles for shortcuts; long-press to set bottom-bar favourite.
           </li>
           <li>
-            <strong>Module index</strong> — complete list with one-line descriptions further down this page; names are clickable.
+            <strong>Module index</strong> — complete list with one-line descriptions at the bottom of this page; names are clickable.
           </li>
           <li>
             <strong>Help</strong> — press <kbd style={ss.kbd}>?</kbd> from anywhere (when not typing in a field).
@@ -341,47 +418,43 @@ export default function HelpAbout() {
         </div>
       </div>
 
+      <HelpAnchor id="first-week">
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Get started
+          Your first week
         </h2>
         <ol style={{ ...ss.ol, listStyle: "decimal" }}>
-          <li style={{ marginBottom: 10 }}>
-            <strong>Workspace profile</strong> — pick your trade under Settings → Organisation (modules, Project Hub, RAMS starter). See the{" "}
-            <button type="button" style={ss.linkBtn} onClick={() => document.getElementById("workspace-profiles")?.scrollIntoView({ behavior: "smooth" })}>
-              profile guide
-            </button>{" "}
-            below.
-          </li>
-          <li style={{ marginBottom: 10 }}>
-            <strong>Organisation details</strong> — logo, company name, brand colours, PDF footer lines.
-          </li>
-          <li style={{ marginBottom: 10 }}>
-            <strong>At least one project</strong> — site or job record (5-step wizard on Projects).
-          </li>
-          <li style={{ marginBottom: 10 }}>
-            <strong>People</strong> — team members for briefings, RAMS, training, registers.
-          </li>
-          <li style={{ marginBottom: 10 }}>
-            <strong>First RAMS or permit</strong> — document work before it starts on site.
-          </li>
-          <li style={{ marginBottom: 10 }}>
-            <strong>Team access</strong> — Settings → Invites / Members when your plan includes seats.
-          </li>
+          {FIRST_WEEK_STEPS.map((step, i) => (
+            <li key={step.title} style={{ marginBottom: 10 }}>
+              <strong>
+                {i + 1}. {step.title}
+              </strong>{" "}
+              — {step.body}
+            </li>
+          ))}
         </ol>
+        <p style={ss.note}>
+          Workspace profile details are in the{" "}
+          <a href="#workspace-profiles" style={ss.a}>
+            profile guide
+          </a>{" "}
+          below.
+        </p>
         {SHOW_DEV_HINTS ? (
           <p style={{ ...ss.p, marginBottom: 0, fontSize: 12 }}>
             Deep links: <code style={{ fontSize: 11 }}>/app?view=permits</code>, <code style={{ fontSize: 11 }}>?settingsTab=billing</code>, etc.
           </p>
         ) : null}
       </div>
+      </HelpAnchor>
 
+      <HelpAnchor id="settings-guide">
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           Settings centre
         </h2>
         <p style={ss.p}>
-          <strong>More → Settings</strong>. Tabs:
+          <strong>More → Settings</strong>. Each tab:
         </p>
         <ul style={ss.ul}>
           {WORKSPACE_SETTINGS_TABS.filter((t) => t.id !== "developer" || SHOW_DEV_HINTS).map((t) => (
@@ -390,18 +463,63 @@ export default function HelpAbout() {
                 {t.label}
               </button>
               {" — "}
-              {t.id === "cloud" && "Sign in, switch organisation, link cloud account."}
-              {t.id === "billing" && "Subscription plan, usage limits, Stripe checkout."}
-              {t.id === "invites" && "Send email invites for colleagues to join."}
-              {t.id === "members" && "Review roles: admin, supervisor, operative."}
-              {t.id === "organisation" && "Branding, workspace profile, modules, PDF defaults."}
-              {t.id === "automation" && "Gates for surveys, PTW, project links, and stale-draft reminders."}
-              {t.id === "notifications" && "Browser reminders for expiring certs, permits, RAMS reviews."}
-              {t.id === "developer" && "API keys and integration hooks (IT only)."}
+              {SETTINGS_TAB_HELP[t.id] || ""}
             </li>
           ))}
         </ul>
       </div>
+      </HelpAnchor>
+
+      <HelpAnchor id="billing-trial">
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          {BILLING_TRIAL_GUIDE.title}
+        </h2>
+        <ul style={ss.ul}>
+          {BILLING_TRIAL_GUIDE.points.map((line) => (
+            <li key={line} style={ss.moduleLi}>
+              {line}
+            </li>
+          ))}
+        </ul>
+        <div style={ss.btnRow}>
+          <button type="button" style={ss.btn} onClick={() => openWorkspaceSettings({ tab: "billing" })}>
+            Open Billing
+          </button>
+        </div>
+      </div>
+      </HelpAnchor>
+
+      <HelpAnchor id="glossary">
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Glossary
+        </h2>
+        <p style={ss.p}>Short definitions for terms used across modules and this help page.</p>
+        <dl style={ss.glossGrid}>
+          {GLOSSARY.map((entry) => (
+            <div key={entry.term}>
+              <dt style={ss.glossTerm}>{entry.term}</dt>
+              <dd style={ss.glossDef}>{entry.def}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      </HelpAnchor>
+
+      <HelpAnchor id="faq">
+      <div className="app-surface-card" style={ss.card}>
+        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
+          Common questions
+        </h2>
+        {HELP_FAQ.map((item) => (
+          <details key={item.q} style={ss.details}>
+            <summary style={ss.summary}>{item.q}</summary>
+            <div style={ss.detailsBody}>{item.a}</div>
+          </details>
+        ))}
+      </div>
+      </HelpAnchor>
 
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
@@ -413,6 +531,7 @@ export default function HelpAbout() {
         </p>
       </div>
 
+      <HelpAnchor id="workspace-profiles">
       <div className="app-surface-card" style={ss.card} id="workspace-profiles">
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           {WORKSPACE_PROFILE_OVERVIEW.title}
@@ -482,7 +601,9 @@ export default function HelpAbout() {
         </p>
         <ProfileGuideCatalogue activePackId={activePackId} />
       </div>
+      </HelpAnchor>
 
+      <HelpAnchor id="project-hub">
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           Project Hub &amp; readiness
@@ -510,46 +631,36 @@ export default function HelpAbout() {
           </button>
         </div>
       </div>
+      </HelpAnchor>
 
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          New project wizard (5 steps)
-        </h2>
-        <p style={ss.p}>
-          <strong>Projects → Add project</strong>
-        </p>
-        <ol style={{ ...ss.ol, listStyle: "decimal" }}>
-          <li style={{ marginBottom: 8 }}><strong>Name &amp; client</strong></li>
-          <li style={{ marginBottom: 8 }}><strong>Team &amp; industry</strong> — starter preset and site roles.</li>
-          <li style={{ marginBottom: 8 }}>
-            <strong>Location</strong> — postcode → <strong>Lookup coordinates</strong> → map; <strong>Weather + nearest A&amp;E</strong>; optional KML boundary and plan markup.
-          </li>
-          <li style={{ marginBottom: 8 }}><strong>Timeline &amp; risks</strong> — dates and start-date weather forecast.</li>
-          <li style={{ marginBottom: 8 }}><strong>Permits &amp; go-live</strong> — required PTW types, health score, startup checklist.</li>
-        </ol>
-        <div style={ss.btnRow}>
-          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "projects" })}>
-            Open wizard
-          </button>
-        </div>
-      </div>
-
+      <HelpAnchor id="workflows">
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           Key workflows
         </h2>
 
-        <h3 style={ss.h3First}>Permits</h3>
+        <h3 style={ss.h3First}>New project (5 steps)</h3>
+        <p style={ss.p}>
+          <strong>Projects → Add project</strong> — name &amp; client → team &amp; industry → location (postcode, map, weather, A&amp;E) → timeline → permits &amp; go-live checklist.
+        </p>
+
+        <h3 style={ss.h3}>Permits</h3>
         <p style={ss.p}>
           List, board, and timeline views; live wall for the gate; conflict checks between permit types; evidence photos; handover between shifts.
-          Upload a site plan under <strong>Project plan overlay &amp; safety map</strong> — click escape routes and emergency assets (same tools as Project drawings).
-          <strong> Report incident</strong> on a permit card links to the incident register.
+          Upload a site plan under <strong>Drawings</strong> or permit plan overlay — click escape routes and emergency assets.
+          <strong> Report incident</strong> on a permit card links to the incident register. Competent-person confirm is required before activate/close when enabled.
         </p>
 
         <h3 style={ss.h3}>RAMS</h3>
         <p style={ss.p}>
           Pick hazards from the library or add custom rows; link operatives and project; print branded PDFs; export JSON; import JSON with operative matching; optional evidence pack for audits.
-          Your workspace profile suggests a <strong>hazard starter</strong> in Step 2 — electrical, refurb, groundworks, general, or PAS128 surveying packs — to pre-fill scope and filter the library. Surveying firms also get PAS128 pack dropdowns when the survey module is visible.
+          Your workspace profile suggests a <strong>hazard starter</strong>. Tick <strong>competent review</strong> before issuing approved RAMS — the app records the review; you remain responsible for competence on site.
+        </p>
+
+        <h3 style={ss.h3}>CDM &amp; H&amp;S file</h3>
+        <p style={ss.p}>
+          <strong>CDM compliance</strong> module tracks duty holders and checklist items. Project dashboard shows an <strong>F10 indicator</strong> when duration/workers may make the project notifiable — verify and submit to HSE yourself.
+          <strong> H&amp;S file</strong> inventory builds from linked project records; export and complete for handover.
         </p>
 
         <h3 style={ss.h3}>Daily briefing → Site map</h3>
@@ -580,10 +691,12 @@ export default function HelpAbout() {
 
         <h3 style={ss.h3}>Food &amp; pharma (optional)</h3>
         <p style={ss.p}>
-          High-care access, CIP sign-off, allergen changeovers, and GMP deviations — for hygiene-critical manufacturing sites.
+          Tick food/pharma under Settings → Organisation → Sectors to see hygiene banners and modules: high-care access, CIP sign-off, allergen changeovers, GMP deviations, glass &amp; hard plastic.
         </p>
       </div>
+      </HelpAnchor>
 
+      <HelpAnchor id="roles">
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           Roles &amp; permissions
@@ -595,7 +708,9 @@ export default function HelpAbout() {
         </ul>
         <p style={ss.note}>Roles are set per organisation under Settings → Members.</p>
       </div>
+      </HelpAnchor>
 
+      <HelpAnchor id="backup-audit">
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           Backup, bin &amp; audit
@@ -617,7 +732,9 @@ export default function HelpAbout() {
           </button>
         </div>
       </div>
+      </HelpAnchor>
 
+      <HelpAnchor id="portals">
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           Client &amp; subcontractor portals
@@ -632,6 +749,7 @@ export default function HelpAbout() {
           </p>
         ) : null}
       </div>
+      </HelpAnchor>
 
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
@@ -649,14 +767,16 @@ export default function HelpAbout() {
           What&apos;s new
         </h2>
         <ul style={ss.ul}>
-          <li><strong>Workspace profiles</strong> — nine trade presets; Project Hub, modules, RAMS starters, site pack PDFs.</li>
-          <li><strong>Project wizard</strong> — postcode, weather, A&amp;E, KML, permit readiness score.</li>
-          <li><strong>Plan markup</strong> — click escape routes on site drawings.</li>
+          <li><strong>Workspace profiles</strong> — trade presets; Project Hub, modules, RAMS starters, site pack PDFs.</li>
+          <li><strong>CDM F10 hint</strong> — project dashboard flag for notifiable duration/workers.</li>
+          <li><strong>H&amp;S file inventory</strong> — auto-collect linked records per project.</li>
+          <li><strong>Competent review gates</strong> — RAMS issue and PTW activate/close confirmations.</li>
+          <li><strong>Billing usage banners</strong> — warn before worker/project caps.</li>
           <li><strong>Survey report</strong> — professional report builder with plans and geo-photos.</li>
-          <li><strong>Pinned &amp; recent</strong> modules in Search and More.</li>
         </ul>
       </div>
 
+      <HelpAnchor id="module-index">
       <div className="app-surface-card" style={ss.card}>
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
           Complete module index
@@ -686,6 +806,7 @@ export default function HelpAbout() {
           </div>
         ) : null}
       </div>
+      </HelpAnchor>
 
       {SHOW_DEV_HINTS ? (
         <>
@@ -718,6 +839,10 @@ export default function HelpAbout() {
             {SUPPORT_EMAIL}
           </a>
           {" · "}
+          <Link to="/terms" style={ss.a}>
+            Terms of service
+          </Link>
+          {" · "}
           <Link to="/privacy" style={ss.a}>
             Privacy policy
           </Link>
@@ -737,7 +862,11 @@ export default function HelpAbout() {
           Disclaimer
         </h2>
         <p style={{ ...ss.p, marginBottom: 0 }}>
-          Record-keeping support only — not legal advice. Verify RIDDOR, CDM, and site-specific requirements with competent persons and official guidance.
+          Record-keeping support only — not legal, HSE, engineering, or insurance advice. Verify RIDDOR, CDM F10, competent persons, and site-specific requirements with qualified advisers and official guidance. See{" "}
+          <Link to="/terms" style={ss.a}>
+            Terms of service
+          </Link>
+          .
         </p>
       </div>
     </div>

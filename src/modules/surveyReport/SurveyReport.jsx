@@ -73,6 +73,10 @@ import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import ModuleOverlay from "../../components/ModuleOverlay";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import SurveyEditorStepNav from "./SurveyEditorStepNav";
+import SurveySimpleStepNav from "./SurveySimpleStepNav";
+import { adjacentSimpleStep, simpleStepForTab, tabsForSimpleStep } from "./surveySimpleEditorNav";
+import { isSurveySimpleMode } from "../../utils/surveyOrgTemplates";
+import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import SurveyEditorHero from "./SurveyEditorHero";
 import SurveyListStatsBar from "./SurveyListStatsBar";
 import SurveyRevisionTimeline from "./SurveyRevisionTimeline";
@@ -329,8 +333,9 @@ function CheckboxGrid({ options, selected, onToggle }) {
   );
 }
 
-function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = [], permits = [], onApply, linkedRams, onGoToTab }) {
-  const [open, setOpen] = useState(true);
+function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = [], permits = [], onApply, linkedRams, onGoToTab, simpleMode = false }) {
+  const [open, setOpen] = useState(!simpleMode);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const [useAiOnFill, setUseAiOnFill] = useState(false);
@@ -422,7 +427,7 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#0C447C" }}>Smart assist</div>
           <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2 }}>
-            One-click fill, site plan import, weather, templates and optional AI polish.
+            {simpleMode ? "One-click Smart fill all — expand for individual tools." : "One-click fill, site plan import, weather, templates and optional AI polish."}
           </div>
         </div>
         <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 8px" }} onClick={() => setOpen((o) => !o)}>
@@ -458,7 +463,13 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
                 Last auto-fill: {new Date(form.smartFillAt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}
               </span>
             )}
+            {simpleMode ? (
+              <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 10px" }} onClick={() => setAdvancedOpen((v) => !v)}>
+                {advancedOpen ? "Hide advanced tools" : "Advanced tools"}
+              </button>
+            ) : null}
           </div>
+          {(simpleMode ? advancedOpen : true) ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {assistBtn("Prefill project + RAMS", !project, async () => {
               const rams = pickRamsForProject(ramsDocs, form.projectId) || linkedRams;
@@ -557,7 +568,8 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
               };
             })}
           </div>
-          {nextSteps.length > 0 && (
+          ) : null}
+          {(simpleMode ? advancedOpen : true) && nextSteps.length > 0 && (
             <div style={{ marginTop: 10, fontSize: 11 }}>
               <span style={{ color: "var(--color-text-secondary)", marginRight: 6 }}>Next:</span>
               {nextSteps.slice(0, 4).map((step) => (
@@ -614,6 +626,15 @@ function ReportEditor({
 }) {
   const [form, setForm] = useState(() => normalizeSurveyReport({ ...report }));
   const [tab, setTab] = useState("details");
+  const simpleMode = useMemo(() => isSurveySimpleMode(loadOrgSettingsRaw()), []);
+  const activeSimpleStep = useMemo(() => simpleStepForTab(tab), [tab]);
+  const showTab = useCallback(
+    (tabId) => {
+      if (!simpleMode) return tab === tabId;
+      return tabsForSimpleStep(activeSimpleStep.id).includes(tabId);
+    },
+    [simpleMode, tab, activeSimpleStep]
+  );
   const [saving, setSaving] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [cadBusy, setCadBusy] = useState(false);
@@ -919,6 +940,8 @@ function ReportEditor({
   );
   const prevTab = adjacentSurveyTab(tab, "prev");
   const nextTabNav = adjacentSurveyTab(tab, "next");
+  const prevSimpleStep = simpleMode ? adjacentSimpleStep(activeSimpleStep.id, "prev") : null;
+  const nextSimpleStep = simpleMode ? adjacentSimpleStep(activeSimpleStep.id, "next") : null;
 
   const printExtras = useMemo(() => {
     const project = projects.find((p) => p.id === form.projectId);
@@ -1053,18 +1076,28 @@ function ReportEditor({
       }
       if (!typing && e.altKey && e.key === "ArrowRight") {
         e.preventDefault();
-        const n = adjacentSurveyTab(tab, "next");
-        if (n) setTab(n);
+        if (simpleMode) {
+          const step = adjacentSimpleStep(activeSimpleStep.id, "next");
+          if (step) setTab(step.tabs[0]);
+        } else {
+          const n = adjacentSurveyTab(tab, "next");
+          if (n) setTab(n);
+        }
       }
       if (!typing && e.altKey && e.key === "ArrowLeft") {
         e.preventDefault();
-        const p = adjacentSurveyTab(tab, "prev");
-        if (p) setTab(p);
+        if (simpleMode) {
+          const step = adjacentSimpleStep(activeSimpleStep.id, "prev");
+          if (step) setTab(step.tabs[0]);
+        } else {
+          const p = adjacentSurveyTab(tab, "prev");
+          if (p) setTab(p);
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [tab]);
+  }, [tab, simpleMode, activeSimpleStep.id]);
 
   return (
     <ModuleOverlay>
@@ -1092,15 +1125,20 @@ function ReportEditor({
           permits={permits}
           linkedRams={linkedRams}
           onGoToTab={setTab}
+          simpleMode={simpleMode}
           onApply={(next) => setForm({ ...next, updatedAt: new Date().toISOString() })}
         />
 
-        <SurveyEditorStepNav tab={tab} report={form} onTabChange={setTab} />
+        {simpleMode ? (
+          <SurveySimpleStepNav tab={tab} report={form} onTabChange={setTab} />
+        ) : (
+          <SurveyEditorStepNav tab={tab} report={form} onTabChange={setTab} />
+        )}
 
         <div className={`app-survey-editor-layout${livePreviewOpen ? " app-survey-editor-layout--split" : ""}`}>
           <div className="app-survey-editor-layout__main">
         <div key={tab} className="app-survey-tab-panel">
-        {tab === "details" && (
+        {showTab("details") && (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10 }}>
               <div style={{ gridColumn: "1 / -1" }}>
@@ -1304,7 +1342,7 @@ function ReportEditor({
           </>
         )}
 
-        {tab === "scope" && (
+        {showTab("scope") && (
           <>
             <label style={ss.lbl}>Scope of works *</label>
             <textarea
@@ -1376,7 +1414,7 @@ function ReportEditor({
           </>
         )}
 
-        {tab === "professional" && (
+        {showTab("professional") && (
           <>
             <div style={ss.sectionHead}>Survey programme</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
@@ -1480,7 +1518,7 @@ function ReportEditor({
           </>
         )}
 
-        {tab === "weather" && (
+        {showTab("weather") && (
           <>
             {(form.weather?.tempC != null || form.weather?.windMph != null) && (
               <div
@@ -1565,7 +1603,7 @@ function ReportEditor({
           </>
         )}
 
-        {tab === "records" && (
+        {showTab("records") && (
           <>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
               {Object.entries(UTILITY_RECORDS_PRESETS).map(([key, p]) => (
@@ -1620,7 +1658,7 @@ function ReportEditor({
           </>
         )}
 
-        {tab === "limitations" && (
+        {showTab("limitations") && (
           <>
             <div style={ss.sectionHead}>Standard limitation clauses</div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
@@ -1659,7 +1697,7 @@ function ReportEditor({
           </>
         )}
 
-        {tab === "findings" && (
+        {showTab("findings") && (
           <>
             {pas128Stats ? (
               <div className="app-survey-pas128-summary">
@@ -1792,7 +1830,7 @@ function ReportEditor({
           </>
         )}
 
-        {tab === "photos" && (
+        {showTab("photos") && (
           <>
             {form.projectId && countGeoPhotosForReport(geoPhotos, form.projectId) > 0 ? (
               <div
@@ -1875,7 +1913,7 @@ function ReportEditor({
           </>
         )}
 
-        {tab === "preview" && (
+        {showTab("preview") && (
           livePreviewOpen ? (
             <div className="app-survey-preview-hint">
               <p>Live preview is docked on the right.</p>
@@ -1896,14 +1934,28 @@ function ReportEditor({
         </div>
 
         <div className="app-sticky-footer app-sticky-footer--actions app-survey-editor-shortcuts" title="Ctrl+S save · Alt+←/→ tabs · Ctrl+Shift+P preview">
-          {prevTab ? (
+          {simpleMode ? (
+            prevSimpleStep ? (
+              <button type="button" style={ss.btn} onClick={() => setTab(prevSimpleStep.tabs[0])}>
+                ← {prevSimpleStep.label}
+              </button>
+            ) : (
+              <span />
+            )
+          ) : prevTab ? (
             <button type="button" style={ss.btn} onClick={() => setTab(prevTab)}>
               ← Previous
             </button>
           ) : (
             <span />
           )}
-          {nextTabNav ? (
+          {simpleMode ? (
+            nextSimpleStep ? (
+              <button type="button" style={ss.btn} onClick={() => setTab(nextSimpleStep.tabs[0])}>
+                {nextSimpleStep.label} →
+              </button>
+            ) : null
+          ) : nextTabNav ? (
             <button type="button" style={ss.btn} onClick={() => setTab(nextTabNav)}>
               Next →
             </button>

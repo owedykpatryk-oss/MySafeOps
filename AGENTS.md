@@ -6,9 +6,11 @@ UK construction H&S SaaS (RAMS, permits, surveys, Supabase).
 
 1. Read `.cursor/rules/cloud-mobile-ops.mdc`.
 2. Smallest correct diff; run targeted `npx vitest run` on touched tests.
-3. Branch: `fix/ci-*`, `fix/mobile-*`, `fix/sentry-*`, `fix/slack-*`.
+3. Branch: `fix/ci-*`, `fix/mobile-*`, `fix/sentry-*`, `fix/health-*`, `fix/billing-*`.
 4. Open PR with 3-bullet test plan. Never commit `.env` or secrets.
 5. Do not force-push `main`. Do not commit unless the prompt explicitly asks.
+
+Cloud automations (API + GitHub Actions): `.cursor/automations/README.md`.
 
 ## Key paths
 

@@ -26,9 +26,14 @@ import PermitBuilder from "./components/PermitBuilder";
 import PermitBoardView from "./components/PermitBoard";
 import PermitTimelineView from "./components/PermitTimeline";
 import PermitLiveWall from "./components/PermitLiveWall";
+import PermitCommandCentre from "./components/PermitCommandCentre";
+import PermitSafetyMap from "./components/PermitSafetyMap";
+import PermitGuidancePanel from "./permitGuidance/components/PermitGuidancePanel";
+import { getPermitGuidance, hasPermitGuidance } from "./permitGuidance/registry";
 import { createDefaultChecklistItems, normalizeChecklistItems, normalizeChecklistState } from "./permitChecklistUtils";
-import { findSimopsConflicts, buildSimopsConflictMap } from "./permitSimops";
+import { permitsForPlan } from "./permitPlanLivePins";
 import { evaluatePermitTypeConflicts, PERMIT_CONFLICT_MATRIX, normalizeConflictPair } from "./permitConflictMatrix";
+import { buildSimopsConflictMap, findSimopsConflicts } from "./permitSimops";
 import { workspaceDeepLink } from "../../utils/appDeepLinks";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import GeoPhotoEvidencePicker from "../../components/geoPhotos/GeoPhotoEvidencePicker";
@@ -81,6 +86,16 @@ import {
   missingRequiredPermits,
   requiredPermitTypesForProject,
 } from "./permitProjectDefaults";
+import PermitQuickIssueHub from "./components/PermitQuickIssueHub";
+import {
+  filterPermitTypesForOrg,
+  getDefaultPermitSavedViewId,
+  getEnabledPermitTypeIds,
+  getPermitQuickFavorites,
+  isPermitSupervisorMode,
+} from "./permitOrgPrefs";
+import { pushPermitRecentHistory, recentPermitsFromHistory } from "./permitRecentHistory";
+import { ORG_SETTINGS_UPDATED_EVENT, saveOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { projectHasRams } from "../../utils/projectPlaybooks";
 import {
   PROJECT_DRAWING_OBJECT_TYPES,
@@ -516,6 +531,8 @@ const AUDIT_ACTION_OPTIONS = [
   "handover_ack_incoming",
 ];
 const PERMIT_SAVED_VIEWS_KEY = "permit_saved_views_v1";
+const PERMIT_LAST_VIEW_KEY = "permit_last_view_v1";
+const PERMIT_WALL_SOUND_KEY = "permit_wall_sound_v1";
 const PERMIT_CONFLICT_MATRIX_OVERRIDES_KEY = "permit_conflict_matrix_overrides_v1";
 const PERMIT_TYPE_OVERRIDES_KEY = "permit_type_overrides_v1";
 const PERMIT_SHIFT_BOUNDARY_HOURS_KEY = "permit_shift_boundary_hours_v1";
@@ -769,6 +786,7 @@ function PermitForm({
   orgPermitDefaults = DEFAULT_PERMIT_FORM_DEFAULTS,
   permitFieldOverrides = {},
   conditionalRules = [],
+  supervisorMode = false,
 }) {
   const projects = load("mysafeops_projects",[]);
   const workers = load("mysafeops_workers",[]);
@@ -917,6 +935,7 @@ function PermitForm({
   const [evidenceNoteSnippets, setEvidenceNoteSnippets] = useState(() => loadSnippetList(PERMIT_EVIDENCE_NOTE_SNIPPETS_KEY));
   const [conditionSnippets, setConditionSnippets] = useState(() => loadSnippetList(PERMIT_CONDITIONS_SNIPPETS_KEY));
   const [wizardStep, setWizardStep] = useState(1);
+  const [qualityPanelOpen, setQualityPanelOpen] = useState(!supervisorMode);
   const baselineRef = useRef(null);
   const formSnapshotStr = useCallback(
     () =>
@@ -1860,6 +1879,11 @@ function PermitForm({
               ))}
             </div>
             {def?.description && <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginTop:8, padding:"6px 10px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:6 }}>{def.description}</div>}
+            {getPermitGuidance(type)?.wizardHint ? (
+              <div style={{ marginTop:10, fontSize:11, color: getPermitGuidance(type)?.theme?.color || "#14532d", padding:"8px 10px", background: getPermitGuidance(type)?.theme?.bg || "#f0fdf4", borderRadius:8, border:`1px solid ${getPermitGuidance(type)?.theme?.border || "#86efac"}` }}>
+                {getPermitGuidance(type).wizardHint}
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -1894,8 +1918,13 @@ function PermitForm({
               <span style={{ ...ss.chip, fontSize:11, background:riskScore.level === "high" ? "#FCEBEB" : riskScore.level === "medium" ? "#FAEEDA" : "#EAF3DE", color:riskScore.level === "high" ? "#791F1F" : riskScore.level === "medium" ? "#633806" : "#27500A" }}>
                 Risk {riskScore.score}
               </span>
+              <button type="button" onClick={() => setQualityPanelOpen((v) => !v)} style={{ ...ss.btn, fontSize:11, padding:"2px 8px" }}>
+                {qualityPanelOpen ? "Collapse" : "Expand"}
+              </button>
             </div>
           </div>
+          {qualityPanelOpen ? (
+            <>
           {qualitySummary.blockers.length > 0 ? (
             <ul style={{ margin:"6px 0 0", paddingLeft:18, fontSize:12, color:"#791F1F" }}>
               {qualitySummary.blockers.slice(0, 4).map((b) => (
@@ -1942,6 +1971,10 @@ function PermitForm({
               </ul>
             </div>
           ) : null}
+            </>
+          ) : (
+            <div style={{ marginTop:6, fontSize:11, color:"var(--color-text-secondary)" }}>Quality panel collapsed — expand for AI hints and blockers.</div>
+          )}
         </div>
 
         {/* Step 1 — scope */}
@@ -2697,8 +2730,17 @@ function PermitForm({
 
         {wizardStep === 2 && (
         <>
+        {hasPermitGuidance(type) ? (
+          <PermitGuidancePanel
+            permitType={type}
+            extraFields={form.extraFields || {}}
+            onExtraChange={(key, value) => setExtra(key, value)}
+            ss={ss}
+            permit={form}
+          />
+        ) : null}
         {/* type-specific extra fields */}
-        {def?.extraFields?.length > 0 && (
+        {def?.extraFields?.length > 0 && !hasPermitGuidance(type) && (
           <div style={{ marginBottom:12 }}>
             <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>
               {def.label} — specific information
@@ -3735,7 +3777,12 @@ function openPermitDocument(permit, { autoPrint = false } = {}) {
   void (async () => {
     const win = openPrintWindow();
     if (!win) return;
-    await writePrintWindowDocument(win, renderPermitDocumentHtml(permit));
+    await writePrintWindowDocument(
+      win,
+      renderPermitDocumentHtml(permit, {
+        origin: typeof window !== "undefined" ? window.location.origin : "",
+      })
+    );
     if (autoPrint) {
       const triggerPrint = () => {
         win.focus();
@@ -3797,13 +3844,27 @@ export default function PermitSystem() {
   );
   const [savedViews, setSavedViews] = useState(() => load(PERMIT_SAVED_VIEWS_KEY, []));
   const [selectedPermitIds, setSelectedPermitIds] = useState({});
-  const [viewMode, setViewMode] = useState("list");
+  const [orgSettingsTick, setOrgSettingsTick] = useState(0);
+  const defaultViewAppliedRef = useRef(false);
+  const [viewMode, setViewMode] = useState(() => {
+    const saved = String(load(PERMIT_LAST_VIEW_KEY, "") || "").trim().toLowerCase();
+    if (saved) return saved;
+    const orgRaw = loadOrgSettingsRaw();
+    const defaultViewId = getDefaultPermitSavedViewId(orgRaw);
+    if (defaultViewId) {
+      const views = load(PERMIT_SAVED_VIEWS_KEY, []);
+      const dv = views.find((v) => v.id === defaultViewId);
+      if (dv?.viewMode) return String(dv.viewMode).toLowerCase();
+    }
+    return "quick";
+  });
   const listPg = useRegisterListPaging(40);
   const [cardDensity, setCardDensity] = useState("comfort");
   const [listSkeleton, setListSkeleton] = useState(false);
   const [mobileQuickActionsPermitId, setMobileQuickActionsPermitId] = useState("");
   const [wallNow, setWallNow] = useState(() => new Date());
   const [wallFullscreen, setWallFullscreen] = useState(false);
+  const [wallSoundEnabled, setWallSoundEnabled] = useState(() => load(PERMIT_WALL_SOUND_KEY, true) !== false);
   const [highlightPermitId, setHighlightPermitId] = useState(null);
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1200
@@ -3902,6 +3963,8 @@ export default function PermitSystem() {
   const [conflictMatrixEditorError, setConflictMatrixEditorError] = useState("");
   const advancedViewsEnabled = isFeatureEnabled("permits_board_timeline");
   const liveWallEnabled = isFeatureEnabled("permits_live_wall_v1");
+  const commandCentreEnabled = isFeatureEnabled("permits_command_centre_v1");
+  const safetyMapEnabled = isFeatureEnabled("permits_plan_overlay_v1");
   const permitNotifyEnabled = isFeatureEnabled("permits_notifications_v1");
   const navHandledRef = useRef(false);
   const mirrorTimerRef = useRef(null);
@@ -3923,6 +3986,19 @@ export default function PermitSystem() {
     () => mergePermitTypeOverrides(PERMIT_TYPES, permitTypeOverrides),
     [permitTypeOverrides]
   );
+  const orgSettingsLive = useMemo(() => loadOrgSettingsRaw(), [orgSettingsTick]);
+  const supervisorMode = isPermitSupervisorMode(orgSettingsLive);
+  const permitQuickFavorites = useMemo(() => getPermitQuickFavorites(orgSettingsLive), [orgSettingsLive]);
+  const enabledPermitTypeIds = useMemo(() => getEnabledPermitTypeIds(orgSettingsLive), [orgSettingsLive]);
+  const issuePermitTypes = useMemo(
+    () => filterPermitTypesForOrg(effectivePermitTypes, enabledPermitTypeIds),
+    [effectivePermitTypes, enabledPermitTypeIds]
+  );
+  const recentLocationsHub = useMemo(
+    () => normalizeRecentPermitLocations(load(PERMIT_RECENT_LOCATIONS_KEY, [])),
+    [permits.length, orgSettingsTick]
+  );
+  const recentPermitsHub = useMemo(() => recentPermitsFromHistory(permits, 12), [permits]);
   const effectiveWorkflowPolicy = useMemo(
     () => mergeWorkflowPolicy(workflowPolicyOverrides),
     [workflowPolicyOverrides]
@@ -3945,6 +4021,11 @@ export default function PermitSystem() {
   );
 
   useEffect(()=>{ save(PERMIT_SAVED_VIEWS_KEY, savedViews); },[savedViews]);
+  useEffect(() => {
+    const onUpdate = () => setOrgSettingsTick((n) => n + 1);
+    window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, onUpdate);
+    return () => window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, onUpdate);
+  }, []);
   useEffect(() => { save(PERMIT_CONFLICT_MATRIX_OVERRIDES_KEY, conflictMatrixOverrides); }, [conflictMatrixOverrides]);
   useEffect(() => { save(PERMIT_TYPE_OVERRIDES_KEY, permitTypeOverrides); }, [permitTypeOverrides]);
   useEffect(() => { save(PERMIT_WORKFLOW_OVERRIDES_KEY, workflowPolicyOverrides); }, [workflowPolicyOverrides]);
@@ -4008,8 +4089,12 @@ export default function PermitSystem() {
       const projs = load("mysafeops_projects", []);
       const project = projs.find((p) => p.id === t.projectId);
       if (project && (t.action === "issueFromDefaults" || t.action === "issue")) {
-        const draft = buildPermitDraftFromProject(project, null, { allPermits: load("permits_v2", []) });
+        const draft = buildPermitDraftFromProject(project, t.permitType || null, {
+          allPermits: load("permits_v2", []),
+          surveys: load("survey_reports", []),
+        });
         setModal({ type: "form", data: draft });
+        setViewMode("quick");
       }
       if (project) setPlanProjectId(String(project.id));
     }
@@ -4102,9 +4187,18 @@ export default function PermitSystem() {
   useEffect(() => {
     if (viewMode !== "wall") return undefined;
     setWallNow(new Date());
-    const t = setInterval(() => setWallNow(new Date()), 10000);
+    const intervalMs = wallFullscreen ? 1000 : 10000;
+    const t = setInterval(() => setWallNow(new Date()), intervalMs);
     return () => clearInterval(t);
+  }, [viewMode, wallFullscreen]);
+
+  useEffect(() => {
+    save(PERMIT_LAST_VIEW_KEY, viewMode);
   }, [viewMode]);
+
+  useEffect(() => {
+    save(PERMIT_WALL_SOUND_KEY, wallSoundEnabled);
+  }, [wallSoundEnabled]);
 
   useEffect(() => {
     const onFs = () => setWallFullscreen(Boolean(document.fullscreenElement));
@@ -4308,6 +4402,7 @@ export default function PermitSystem() {
         next = { ...next, versionHistory: [], updatedBy: permitActorLabel };
       }
       void logPermitAuditToSupabase(existing, next, getOrgId());
+      pushPermitRecentHistory(next);
       return existing ? prev.map((x) => (x.id === p.id ? next : x)) : [next, ...prev];
     });
     setModal(null);
@@ -4759,15 +4854,35 @@ export default function PermitSystem() {
     return { active, review, approved, expired, handoverDue, blockedNow, briefingPending, ramsMissing };
   }, [permits, now, handoverStateForPermit, blockedNowForPermit]);
   const heatmapRows = permitsHeatmap(permits, effectivePermitTypes);
-  const effectiveViewMode =
-    viewMode === "wall"
-      ? (liveWallEnabled ? "wall" : "list")
-      : (advancedViewsEnabled ? viewMode : "list");
-  const availableViewModes = [
-    "list",
-    ...(advancedViewsEnabled ? ["board", "timeline"] : []),
-    ...(liveWallEnabled ? ["wall"] : []),
-  ];
+  const effectiveViewMode = (() => {
+    if (viewMode === "quick") return "quick";
+    if (viewMode === "wall" && !liveWallEnabled) return supervisorMode ? "quick" : "list";
+    if (viewMode === "map" && !safetyMapEnabled) return supervisorMode ? "quick" : "list";
+    if (viewMode === "command" && (!commandCentreEnabled || supervisorMode)) return supervisorMode ? "quick" : "list";
+    if ((viewMode === "board" || viewMode === "timeline") && (!advancedViewsEnabled || supervisorMode)) return supervisorMode ? "quick" : "list";
+    if (supervisorMode && !["quick", "list", "wall"].includes(viewMode)) return "quick";
+    return viewMode;
+  })();
+  const viewModeLabels = {
+    quick: "Quick issue",
+    command: "Command",
+    list: "List",
+    board: "Board",
+    timeline: "Timeline",
+    wall: "TV wall",
+    map: "Safety map",
+  };
+  const availableViewModes = supervisorMode
+    ? ["quick", "list", ...(liveWallEnabled ? ["wall"] : [])]
+    : [
+        "quick",
+        ...(commandCentreEnabled ? ["command"] : []),
+        "list",
+        ...(advancedViewsEnabled ? ["board", "timeline"] : []),
+        ...(liveWallEnabled ? ["wall"] : []),
+        ...(safetyMapEnabled ? ["map"] : []),
+      ];
+  const showAdvancedPermitAdmin = !supervisorMode;
   const warRoomAlerts = permits
     .filter((p) => derivePermitStatus(p, now) === "expired" || (derivePermitStatus(p, now) === "active" && permitEndIso(p) && (new Date(permitEndIso(p)) - now) < 3600000))
     .slice(0, 8);
@@ -5782,7 +5897,93 @@ export default function PermitSystem() {
 
   const deleteSavedView = (id) => {
     setSavedViews((prev) => prev.filter((v) => v.id !== id));
+    const defaultId = getDefaultPermitSavedViewId(orgSettingsLive);
+    if (defaultId && defaultId === id) {
+      saveOrgSettingsRaw({ ...orgSettingsLive, permitDefaultSavedViewId: "" });
+    }
   };
+
+  const setDefaultSavedView = (viewId) => {
+    const id = String(viewId || "").trim();
+    saveOrgSettingsRaw({ ...orgSettingsLive, permitDefaultSavedViewId: id });
+    setOrgSettingsTick((n) => n + 1);
+    pushToast(id ? "Default permit view saved" : "Default permit view cleared");
+    trackEvent("permit_default_view_set", { viewId: id || "none" });
+  };
+
+  const openIssueWithType = (typeId, extra = {}) => {
+    const tid = String(typeId || "").trim();
+    if (!tid || !issuePermitTypes[tid]) return;
+    const template = getTemplateForType(tid, issuePermitTypes);
+    const draft = normalizeAdvancedPermit(
+      {
+        type: tid,
+        projectId: String(extra.projectId || planProjectId || "").trim(),
+        location: String(extra.location || "").trim(),
+        linkedRamsId: String(extra.linkedRamsId || "").trim(),
+        status: "draft",
+        templateId: template.templateId || `permit.${tid}.default`,
+        startDateTime: new Date().toISOString(),
+        endDateTime: new Date(Date.now() + (Number(permitFormDefaults.defaultValidityHours) || 8) * 3600000).toISOString(),
+        issuedTo: permitFormDefaults.defaultIssuedTo || "",
+        issuedBy: permitFormDefaults.defaultIssuedBy || org.defaultLeadEngineer || "",
+      },
+      tid
+    );
+    setModal({ type: "form", data: draft });
+    trackEvent("permit_quick_issue_type", { type: tid });
+  };
+
+  const openIssueWithLocation = (loc) => {
+    const location = String(loc || "").trim();
+    if (!location) return;
+    const defaultType = permitQuickFavorites.types[0] || Object.keys(issuePermitTypes)[0] || "hot_work";
+    openIssueWithType(defaultType, { location });
+  };
+
+  const repeatSameTypeNewLocation = (source) => {
+    if (!source) return;
+    const loc = window.prompt("New location:", source.location || "");
+    if (loc === null) return;
+    const copy = normalizeAdvancedPermit(
+      {
+        ...JSON.parse(JSON.stringify(source)),
+        id: genId(),
+        status: "draft",
+        location: String(loc).trim() || source.location,
+        closedAt: undefined,
+        approvedAt: undefined,
+        activatedAt: undefined,
+        suspendedAt: undefined,
+        shareToken: undefined,
+        auditLog: [],
+        versionHistory: [],
+        notificationLog: [],
+        workflow: { state: "draft", history: [] },
+        signatures: [],
+        revalidationLog: [],
+        integrationQueue: [],
+        conflictWarnOverride: null,
+        createdAt: new Date().toISOString(),
+        startDateTime: new Date().toISOString(),
+        endDateTime: new Date(Date.now() + (Number(permitFormDefaults.defaultValidityHours) || 8) * 3600000).toISOString(),
+      },
+      source.type || "general"
+    );
+    setPermits((prev) => [copy, ...prev]);
+    setModal({ type: "form", data: copy });
+  };
+
+  useEffect(() => {
+    if (defaultViewAppliedRef.current) return;
+    if (String(load(PERMIT_LAST_VIEW_KEY, "") || "").trim()) return;
+    const defaultId = getDefaultPermitSavedViewId(orgSettingsLive);
+    if (!defaultId) return;
+    const view = savedViews.find((v) => v.id === defaultId);
+    if (!view) return;
+    defaultViewAppliedRef.current = true;
+    applySavedView(view);
+  }, [savedViews, orgSettingsLive]);
 
   const toggleWallFullscreen = async () => {
     try {
@@ -6198,6 +6399,20 @@ export default function PermitSystem() {
     trackEvent("permit_sla_digest_exported", { queueSize: slaQueue.length });
   };
 
+  const openOpsActionItem = useCallback(
+    (item) => {
+      if (!item?.permitId) return;
+      const target = permits.find((p) => p.id === item.permitId);
+      setHighlightPermitId(item.permitId);
+      if (target) setModal({ type: "form", data: target });
+      trackEvent("permit_ops_action_open", { kind: item.kind, permitId: item.permitId });
+    },
+    [permits]
+  );
+
+  const projectList = useMemo(() => load("mysafeops_projects", []), [permits.length]);
+  const allDrawingObjects = useMemo(() => listProjectDrawingObjects(), [projectPlans.length, permits.length]);
+
   const exportAuditCsvViaServer = async () => {
     setAuditServerExportBusy(true);
     setAuditError("");
@@ -6253,15 +6468,16 @@ export default function PermitSystem() {
       {modal?.type==="form" && (
         <PermitForm
           permit={modal.data}
-          recentPermit={permits[0] || null}
+          recentPermit={recentPermitsHub[0] || permits[0] || null}
           allPermits={permits}
           conflictMatrix={effectiveConflictMatrix}
-          permitTypes={effectivePermitTypes}
+          permitTypes={issuePermitTypes}
           handoverShiftHours={shiftBoundaryHours}
           dependencyRules={effectiveDependencyRules}
           orgPermitDefaults={permitFormDefaults}
           permitFieldOverrides={permitFieldOverrides}
           conditionalRules={conditionalRuleOverrides}
+          supervisorMode={supervisorMode}
           onSave={savePermit}
           onClose={()=>setModal(null)}
         />
@@ -6577,8 +6793,47 @@ export default function PermitSystem() {
         badgeText="PTW"
         title="Permits to work"
         lead="Fifteen permit types, SIMOPS overlap checks, and change logs. Data stays on device; signed-in users also mirror permits to your cloud workspace when configured."
-        right={<button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnO}>+ Issue permit</button>}
+        right={<button type="button" onClick={() => { setViewMode("quick"); openIssueWithType(permitQuickFavorites.types[0] || Object.keys(issuePermitTypes)[0] || "hot_work"); }} style={ss.btnO}>+ Issue permit</button>}
       />
+
+      {effectiveViewMode === "quick" ? (
+        <PermitQuickIssueHub
+          issuePermitTypes={issuePermitTypes}
+          favorites={permitQuickFavorites}
+          recentPermits={recentPermitsHub}
+          recentLocations={recentLocationsHub}
+          projects={projectList}
+          supervisorMode={supervisorMode}
+          onIssueType={openIssueWithType}
+          onRepeatPermit={duplicatePermit}
+          onRepeatSameTypeNewLocation={repeatSameTypeNewLocation}
+          onLocationChip={openIssueWithLocation}
+          onOpenList={() => setViewMode("list")}
+          onOpenWall={() => {
+            setViewMode("wall");
+            trackEvent("permit_view_changed", { mode: "wall", source: "quick_hub" });
+          }}
+        />
+      ) : null}
+
+      {permits.length > 0 && commandCentreEnabled && !supervisorMode && (effectiveViewMode === "command" || effectiveViewMode === "list") ? (
+        <PermitCommandCentre
+          opsActionItems={opsActionItems}
+          commandCounts={commandCounts}
+          permitScorecard={permitScorecard}
+          compact={effectiveViewMode === "list"}
+          onFixNext={openOpsActionItem}
+          onOpenPermit={openOpsActionItem}
+          onOpenWall={() => {
+            setViewMode("wall");
+            trackEvent("permit_view_changed", { mode: "wall", source: "command_centre" });
+          }}
+          onOpenMap={() => {
+            setViewMode("map");
+            trackEvent("permit_view_changed", { mode: "map", source: "command_centre" });
+          }}
+        />
+      ) : null}
 
       {ackTokenParam ? (
         <div className="app-panel-surface" style={{ padding: 12, borderRadius: 10, marginBottom: 14 }}>
@@ -6636,7 +6891,7 @@ export default function PermitSystem() {
       ) : null}
 
       {/* stat cards */}
-      {permits.length>0 && (
+      {permits.length>0 && effectiveViewMode !== "command" && effectiveViewMode !== "map" && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8, marginBottom:20 }}>
           {[
             { label:"In review", value:stats.pendingReview, bg:"#FAEEDA", color:"#633806", filter:"pending_review" },
@@ -6751,7 +7006,7 @@ export default function PermitSystem() {
         </div>
       )}
 
-      {permits.length > 0 && (
+      {permits.length > 0 && !commandCentreEnabled && (
         <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16, border:"1px solid var(--permit-panel-border)", background:"var(--permit-panel-bg)" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, flexWrap:"wrap", marginBottom:8 }}>
             <div style={{ fontSize:12, fontWeight:700 }}>Ops Inbox / Action Center</div>
@@ -6900,6 +7155,7 @@ export default function PermitSystem() {
             );
           }
           const planPins = incidents.filter((i) => i.planPin?.planId === plan.id);
+          const livePermitPins = permitsForPlan(permits, plan.id, allDrawingObjects, now);
           const incidentOverlay = planPins.map((inc) => (
             <div
               key={inc.id}
@@ -6920,11 +7176,38 @@ export default function PermitSystem() {
               }}
             />
           ));
+          const permitOverlay = livePermitPins.map(({ permit, pin, status }) => {
+            const def = effectivePermitTypes[permit.type] || effectivePermitTypes.general;
+            return (
+              <button
+                key={`live_${permit.id}`}
+                type="button"
+                title={`${def.label} · ${status} · ${permit.location || ""}`}
+                onClick={() => setModal({ type: "form", data: permit })}
+                style={{
+                  position:"absolute",
+                  left:`${pin.x}%`,
+                  top:`${pin.y}%`,
+                  transform:"translate(-50%,-50%)",
+                  width:16,
+                  height:16,
+                  borderRadius:"50%",
+                  background: def.color || "#0d9488",
+                  border:"2px solid #fff",
+                  boxShadow:"0 2px 6px rgba(0,0,0,0.35)",
+                  cursor:"pointer",
+                  padding:0,
+                  zIndex:5,
+                }}
+              />
+            );
+          });
+          const combinedOverlay = [...permitOverlay, ...incidentOverlay];
           return (
             <PlanMarkupCanvas
               plan={plan}
               compact
-              extraOverlay={incidentOverlay.length ? incidentOverlay : null}
+              extraOverlay={combinedOverlay.length ? combinedOverlay : null}
               onPlanChange={(next) => {
                 setProjectPlans((prev) => prev.map((p) => (p.id === plan.id ? next : p)));
                 trackEvent("permit_plan_markup_updated", { planId: plan.id });
@@ -6935,6 +7218,8 @@ export default function PermitSystem() {
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr", gap:12, marginBottom:16 }}>
+        {showAdvancedPermitAdmin ? (
+        <>
         <div className="app-panel-surface" style={{ padding:10, borderRadius:10 }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:8 }}>
             <div style={{ fontSize:12, fontWeight:700 }}>Automation & SLA</div>
@@ -6981,6 +7266,8 @@ export default function PermitSystem() {
             )}
           </div>
         </div>
+        </>
+        ) : null}
       </div>
 
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:12, background:"var(--permit-panel-bg)", border:"1px solid var(--permit-panel-border)" }}>
@@ -7107,19 +7394,27 @@ export default function PermitSystem() {
         {savedViews.length === 0 ? (
           <span style={{ fontSize:12, color:"var(--color-text-secondary)" }}>No saved views yet.</span>
         ) : (
-          savedViews.map((v) => (
+          savedViews.map((v) => {
+            const isDefault = getDefaultPermitSavedViewId(orgSettingsLive) === v.id;
+            return (
             <div key={v.id} style={{ display:"inline-flex", alignItems:"center", gap:4, maxWidth: isNarrow ? "100%" : 280 }}>
-              <button type="button" onClick={() => applySavedView(v)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px", overflowWrap:"anywhere" }}>
-                {v.name}
+              <button type="button" onClick={() => applySavedView(v)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px", overflowWrap:"anywhere", borderColor: isDefault ? "var(--color-accent,#0d9488)" : undefined }}>
+                {isDefault ? "★ " : ""}{v.name}
+              </button>
+              <button type="button" title="Set as start view" onClick={() => setDefaultSavedView(isDefault ? "" : v.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 6px" }}>
+                {isDefault ? "Unset" : "Default"}
               </button>
               <button type="button" onClick={() => deleteSavedView(v.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 6px", color:"#A32D2D", borderColor:"#F09595" }} aria-label={`Delete view ${v.name}`}>
                 ×
               </button>
             </div>
-          ))
+          );
+          })
         )}
       </div>
 
+      {showAdvancedPermitAdmin ? (
+      <>
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
           <div>
@@ -7842,6 +8137,8 @@ export default function PermitSystem() {
           </div>
         ) : null}
       </div>
+      </>
+      ) : null}
 
       <div
         className={`app-panel-surface${isNarrow ? "" : " app-permit-bulk-bar"}`}
@@ -7923,7 +8220,7 @@ export default function PermitSystem() {
               borderColor: viewMode === mode ? "var(--color-accent,#0d9488)" : "var(--color-border-secondary,#ccc)",
             }}
           >
-            {mode[0].toUpperCase() + mode.slice(1)}
+            {viewModeLabels[mode] || mode[0].toUpperCase() + mode.slice(1)}
           </button>
         ))}
         {effectiveViewMode === "wall" ? (
@@ -7937,6 +8234,8 @@ export default function PermitSystem() {
         ) : null}
       </div>
 
+      {showAdvancedPermitAdmin ? (
+      <>
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:6, flexWrap:"wrap" }}>
           <div style={{ fontSize:12, fontWeight:600 }}>Integration adapters (AI/Automation readiness)</div>
@@ -8164,8 +8463,10 @@ export default function PermitSystem() {
           )}
         </div>
       )}
+      </>
+      ) : null}
 
-      {advancedViewsEnabled && permits.length > 0 && (
+      {advancedViewsEnabled && showAdvancedPermitAdmin && permits.length > 0 && (
         <div style={{ display:"grid", gridTemplateColumns: isTablet ? "1fr" : "2fr 1fr", gap:12, marginBottom:16 }}>
           <div className="app-panel-surface" style={{ padding:10, borderRadius:10 }}>
             <div style={{ fontSize:12, fontWeight:600, marginBottom:8 }}>Permit risk heatmap (type × status)</div>
@@ -8214,13 +8515,13 @@ export default function PermitSystem() {
         </div>
       )}
 
-      {permits.length===0 ? (
+      {effectiveViewMode !== "quick" && (permits.length===0 ? (
         <EmptyState
           icon="📋"
           title="No permits yet"
           description="Create your first permit to start review, activation, and compliance workflows."
           actionLabel="+ Issue first permit"
-          onAction={() => setModal({ type: "form" })}
+          onAction={() => openIssueWithType(Object.keys(issuePermitTypes)[0] || "hot_work")}
           variant="dashed"
         />
       ) : listSkeleton && permits.length > 0 ? (
@@ -8246,6 +8547,58 @@ export default function PermitSystem() {
           variant="dashed"
           compact
         />
+      ) : effectiveViewMode === "map" ? (
+        <PermitSafetyMap
+          projects={projectList}
+          plans={projectPlans}
+          permits={permits}
+          drawingObjects={allDrawingObjects}
+          simopsMap={simopsMap}
+          now={now}
+          permitTypes={effectivePermitTypes}
+          onOpenPermit={(permit) => setModal({ type: "form", data: permit })}
+          onPreviewPermit={previewPermit}
+        />
+      ) : effectiveViewMode === "command" ? (
+        <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+          {opsActionItems.length === 0 ? (
+            <EmptyState
+              icon="✓"
+              title="All clear"
+              description="No urgent permit actions. Use List view to browse all permits or TV wall for site office display."
+              actionLabel="Open TV wall"
+              onAction={() => setViewMode("wall")}
+              variant="dashed"
+              compact
+            />
+          ) : (
+            filtered
+              .filter((p) => opsActionItems.some((item) => item.permitId === p.id))
+              .slice(0, 12)
+              .map((p) => (
+                <PermitCard
+                  key={p.id}
+                  permit={p}
+                  simopsConflicts={simopsMap.get(p.id) || []}
+                  conflictMatrix={effectiveConflictMatrix}
+                  permitTypes={effectivePermitTypes}
+                  handoverState={handoverStateForPermit(p, now)}
+                  activationHandoverRequirement={handoverRequirementForActivation(p, now)}
+                  activationDependencyResult={evaluatePermitDependencies(p, permits, effectiveDependencyRules, { now })}
+                  onOpenHandover={openHandoverDialog}
+                  cardDensity="comfort"
+                  highlight={highlightPermitId === p.id}
+                  compact={isNarrow}
+                  onEdit={(x) => setModal({ type: "form", data: x })}
+                  onClose={requestClosePermit}
+                  onPreview={previewPermit}
+                  onPrint={exportPermitPdf}
+                  onApprove={approvePermit}
+                  onActivate={activatePermit}
+                />
+              ))
+          )}
+        </div>
       ) : effectiveViewMode === "wall" ? (
         <PermitLiveWall
           permits={filtered}
@@ -8253,7 +8606,10 @@ export default function PermitSystem() {
           isNarrow={isNarrow}
           stats={stats}
           simopsMap={simopsMap}
+          commandCounts={commandCounts}
           isFullscreen={wallFullscreen}
+          soundEnabled={wallSoundEnabled}
+          onToggleSound={() => setWallSoundEnabled((v) => !v)}
           onToggleFullscreen={() => void toggleWallFullscreen()}
           onOpen={(permit) => setModal({ type:"form", data: permit })}
           onPreview={previewPermit}
@@ -8408,7 +8764,7 @@ export default function PermitSystem() {
             </div>
           ) : null}
         </>
-      )}
+      ))}
     </div>
   );
 }

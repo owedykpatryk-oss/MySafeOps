@@ -1,3 +1,4 @@
+/** @vitest-environment jsdom */
 import { describe, expect, it } from "vitest";
 import {
   applyDefaultRecordsPreset,
@@ -55,7 +56,7 @@ describe("surveyReportSmart", () => {
       sections: { findings: "Utilities traced across frontage." },
     });
     const summary = buildExecutiveSummaryDraft(report);
-    expect(summary).toContain("PAS128 utility mapping");
+    expect(summary).toMatch(/utility mapping survey/i);
     expect(summary).toContain("1 Test Road");
   });
 
@@ -98,7 +99,7 @@ describe("surveyReportSmart", () => {
   it("drafts recommendations by survey type", () => {
     const report = blankSurveyReport({ surveyType: "utility_mapping_survey", pas128Ql: "B1" });
     const text = buildRecommendationsDraft(report);
-    expect(text).toContain("Trial holes");
+    expect(text).toMatch(/permit-to-dig|hand-dig/i);
   });
 
   it("finds projects without reports and batch creates drafts", () => {

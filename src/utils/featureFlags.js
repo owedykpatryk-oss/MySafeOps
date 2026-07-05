@@ -24,6 +24,7 @@ const defaults = {
   sales_enablement_v1: true,
   permits_incident_traceability_v1: true,
   permits_plan_overlay_v1: true,
+  permits_command_centre_v1: true,
   smart_copilot_v1: true,
   platform_enterprise_readiness_v1: true,
 };

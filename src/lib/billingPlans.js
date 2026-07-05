@@ -17,6 +17,17 @@ export const PLATFORM_OWNER_PLAN = {
 /** Plans with a Stripe Checkout price (`STRIPE_PRICE_*`). Keep in sync with Edge Functions + seed script. */
 export const STRIPE_SUBSCRIBABLE_PLAN_IDS = ["starter", "team", "business", "enterprise"];
 
+/** Annual list-price review cap — keep in sync with Terms §7.5 and pricing footnotes. */
+export const ANNUAL_PRICE_INCREASE_PERCENT = 10;
+
+/** Short footnote for pricing tables and billing (not a headline). */
+export const PRICE_ADJUSTMENT_SHORT =
+  "Published list prices are reviewed once a year (up to 10% at renewal, with at least 30 days’ notice). Your current billing period is never repriced mid-term.";
+
+/** FAQ / longer copy with legal pointer. */
+export const PRICE_ADJUSTMENT_DETAIL =
+  "We review published list prices once a year. Any increase is capped at 10% and applies from your next renewal after at least 30 days’ email notice — never mid-term on your current period. Enterprise Plus is agreed separately in writing.";
+
 /** Row order for the in-app comparison table (includes non-Stripe tiers). */
 export const BILLING_COMPARISON_PLAN_IDS = [
   "trial",

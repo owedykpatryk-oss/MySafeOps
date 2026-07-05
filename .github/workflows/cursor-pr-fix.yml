@@ -1,0 +1,48 @@
+name: Cursor PR /fix
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  pr-fix:
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/fix') &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check CURSOR_API_KEY
+        id: gate
+        env:
+          HAS_KEY: ${{ secrets.CURSOR_API_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::CURSOR_API_KEY not set — skipping PR /fix"
+          fi
+
+      - name: Trigger Cursor PR fix agent
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          FIX_USER: ${{ github.event.comment.user.login }}
+          FIX_COMMENT: ${{ github.event.comment.body }}
+          PR_URL: https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}
+        run: |
+          node scripts/cursor-cloud-agent.mjs pr-fix \
+            --pr-url "$PR_URL" \
+            --message "Comment from @$FIX_USER: $FIX_COMMENT"

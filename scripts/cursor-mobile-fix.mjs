@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Send a fix request to your Cursor Automation webhook (Mobile fix webhook).
+ * Send a fix request from phone/CLI to a Cursor Cloud Agent.
  *
- * Setup (once):
- *   1. Save automation "MySafeOps — Mobile fix webhook" in Cursor Automations.
- *   2. Copy webhook URL + secret from the automation settings.
- *   3. Set env vars (PowerShell):
- *        $env:CURSOR_WEBHOOK_URL = "https://..."
- *        $env:CURSOR_WEBHOOK_SECRET = "..."
+ * Preferred (API — no Automations UI):
+ *   1. Cursor Dashboard → Integrations → API Keys
+ *   2. CURSOR_API_KEY=... in .env.local
+ *   3. npm run fix:mobile -- "Hot work PDF missing fire watch"
+ *
+ * Fallback (webhook automation):
+ *   CURSOR_WEBHOOK_URL + optional CURSOR_WEBHOOK_SECRET
  *
  * Usage:
  *   node scripts/cursor-mobile-fix.mjs "Hot work PDF missing fire watch"
@@ -15,7 +16,16 @@
  *   node scripts/cursor-mobile-fix.mjs --file payload.json
  */
 
+import {
+  createCloudAgent,
+  loadCursorEnv,
+  loadPrompt,
+} from "./cursor-agent-api.mjs";
+
+loadCursorEnv();
+
 const args = process.argv.slice(2);
+const apiKey = process.env.CURSOR_API_KEY?.trim();
 const url = process.env.CURSOR_WEBHOOK_URL?.trim();
 const secret = process.env.CURSOR_WEBHOOK_SECRET?.trim();
 
@@ -43,8 +53,39 @@ if (args[0] === "--file" && args[1]) {
   usage();
 }
 
+if (apiKey) {
+  const ticket = [
+    `Problem: ${body.message}`,
+    body.module ? `Where: ${body.module}` : "",
+    `Urgency: ${body.urgency}`,
+    `Source: ${body.source} at ${body.at}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const promptText = `${loadPrompt("mobile")}\n\n## Webhook payload\n\`\`\`json\n${JSON.stringify(body, null, 2)}\n\`\`\`\n\n## Ticket\n${ticket}`;
+
+  try {
+    const result = await createCloudAgent({
+      promptText,
+      name: "MySafeOps mobile fix",
+      apiKey,
+    });
+    console.log("OK — cloud agent started (API).");
+    if (result?.agent?.url) console.log(`Agent: ${result.agent.url}`);
+    process.exit(0);
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
+
 if (!url) {
-  console.error("Missing CURSOR_WEBHOOK_URL. Save the Mobile fix webhook automation in Cursor, then set the env var.");
+  console.error(
+    "Missing CURSOR_API_KEY or CURSOR_WEBHOOK_URL.\n" +
+      "  API: Cursor Dashboard → Integrations → API Keys → .env.local\n" +
+      "  Webhook: save Mobile fix automation and set CURSOR_WEBHOOK_URL",
+  );
   process.exit(1);
 }
 
@@ -57,5 +98,5 @@ if (!res.ok) {
   console.error(`Webhook failed ${res.status}: ${text}`);
   process.exit(1);
 }
-console.log("OK — cloud agent triggered.");
+console.log("OK — cloud agent triggered (webhook).");
 if (text) console.log(text);

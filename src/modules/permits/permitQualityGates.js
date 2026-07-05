@@ -1,4 +1,7 @@
 import { permitHasSiteEvidence } from "../../utils/geoPhotoFields";
+import { isDigPermitType, mechanicalDigAssessment } from "./permitDigGuidance";
+import { hotWorkAssessment } from "./permitGuidance/hotWorkGuidance";
+import { confinedSpaceAssessment } from "./permitGuidance/confinedSpaceGuidance";
 
 function isRequired(requiredMap, key, fallback = true) {
   if (!requiredMap || typeof requiredMap !== "object") return fallback;
@@ -43,6 +46,9 @@ function buildSmartRecommendations(permit, options = {}) {
   if (!location || location.length < 4) addRec("precise_location", "Refine location to exact zone/area reference.");
 
   if (type === "hot_work") {
+    const hw = hotWorkAssessment(extra, permit);
+    hw.blockers.forEach((msg, i) => addRec(`hw_block_${i}`, msg));
+    hw.warnings.slice(0, 3).forEach((msg, i) => addRec(`hw_warn_${i}`, msg));
     const fireWatch = cleanText(dynamic.hotWorkFireWatchMins || extra.fireWatcher || extra.postInspectionTime);
     if (!fireWatch && !hasChecklistSignal("fire watch")) {
       addRec(
@@ -72,7 +78,10 @@ function buildSmartRecommendations(permit, options = {}) {
   }
 
   if (type === "confined_space") {
-    const rescueRef = cleanText(dynamic.csRescuePlanRef || extra.rescuePlanRef || "");
+    const cs = confinedSpaceAssessment(extra);
+    cs.blockers.forEach((msg, i) => addRec(`cs_block_${i}`, msg));
+    cs.warnings.slice(0, 3).forEach((msg, i) => addRec(`cs_warn_${i}`, msg));
+    const rescueRef = cleanText(dynamic.csRescuePlanRef || extra.rescueTeamRef || extra.rescuePlanRef || "");
     if (!rescueRef) {
       addRec(
         "confined_space_rescue_ref",
@@ -91,7 +100,19 @@ function buildSmartRecommendations(permit, options = {}) {
   }
 
   if (type === "excavation" || type === "ground_disturbance") {
-    if (!containsAny(`${description} ${notes} ${evidenceNotes}`, ["cat scan", "utility", "service drawing"])) {
+    if (!cleanText(extra.pas128QualityLevel)) {
+      addRec("pas128_ql", "Record PAS 128 quality level (QL-D to QL-A).");
+    }
+    if (!cleanText(extra.pas128SurveyType)) {
+      addRec("pas128_survey", "Record PAS 128 survey type (D / C / B1 / B2 / B3 / A).");
+    }
+    if (!cleanText(extra.surveyDrawingRef)) {
+      addRec("survey_ref", "Add utility survey / drawing reference.");
+    }
+    const dig = mechanicalDigAssessment(extra);
+    dig.blockers.forEach((msg, i) => addRec(`dig_block_${i}`, msg));
+    dig.warnings.slice(0, 2).forEach((msg, i) => addRec(`dig_warn_${i}`, msg));
+    if (!containsAny(`${description} ${notes} ${evidenceNotes}`, ["cat scan", "utility", "service drawing", "pas 128", "pas128"])) {
       addRec(
         "ground_cat_scan",
         "Ground works: reference CAT scan / utility drawing evidence.",

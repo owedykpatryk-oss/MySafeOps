@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
@@ -14,6 +15,7 @@ import {
   formatStorageLimit,
   getEffectivePlan,
   getPlanByComparisonId,
+  PRICE_ADJUSTMENT_SHORT,
 } from "../lib/billingPlans";
 import { trackBillingError, trackBillingEvent } from "../lib/billingTelemetry";
 import {
@@ -677,6 +679,13 @@ export default function BillingLimits({ checkoutReturn = null }) {
           <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: "#0d9488", fontWeight: 500 }}>
             {SUPPORT_EMAIL}
           </a>
+        </p>
+        <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+          {PRICE_ADJUSTMENT_SHORT}{" "}
+          <Link to="/terms" style={{ color: "inherit", textDecoration: "underline" }}>
+            Terms §7.5
+          </Link>
+          .
         </p>
       </div>
 
