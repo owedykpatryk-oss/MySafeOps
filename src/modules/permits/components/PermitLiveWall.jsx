@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { derivePermitStatus, permitEndIso } from "../permitRules";
 import { PERMIT_TYPES } from "../permitTypes";
-import "./permitLiveWall.css";
+import "./../permitLiveWall.css";
 
 function fmtTimeLeft(endIso, now) {
   if (!endIso) return "No expiry";
