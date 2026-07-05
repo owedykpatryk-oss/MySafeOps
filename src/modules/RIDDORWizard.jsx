@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
-import { escapeHtml, safeCssColor, safeImageSrc, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { escapeHtml, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
@@ -63,17 +64,10 @@ export function printRiddorF2508(form) {
   const win = openPrintWindow();
   if (!win) return;
   const he = escapeHtml;
-  const row = (a, b) => `<tr><td style="border:1px solid #333;padding:6px;width:32%;font-weight:600;background:#f5f5f5">${he(a)}</td><td style="border:1px solid #333;padding:6px">${he(b ?? "—")}</td></tr>`;
-  const primary = safeCssColor(org.primaryColor);
-  const logoSrc = safeImageSrc(org.logo);
-  await writePrintWindowDocument(win, `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>RIDDOR F2508 — draft worksheet</title>
-  <style>body{font-family:Arial,sans-serif;font-size:11px;padding:16px;color:#000} h1{font-size:14px} .note{font-size:10px;color:#444;margin-top:12px} @media print{.noPrint{display:none}}</style></head><body>
-  <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid ${primary};padding-bottom:8px;margin-bottom:12px">
-    ${logoSrc ? `<img src="${he(logoSrc)}" style="height:40px;max-width:100px;object-fit:contain"/>` : ""}
-    <div><strong>${he(org.name || "Organisation")}</strong><br/><span style="font-size:10px">RIDDOR report worksheet (F2508-style) — submit via HSE online</span></div>
-  </div>
-  <h1>Incident / dangerous occurrence — draft record</h1>
-  <p class="noPrint" style="background:#FAEEDA;padding:8px;border-radius:6px">This is a local worksheet mirroring F2508 fields. Official reporting: <a href="https://www.hse.gov.uk/riddor/report.htm">hse.gov.uk/riddor/report.htm</a></p>
+  const row = (a, b) => `<tr><td style="border:1px solid #e2e8f0;padding:8px;width:32%;font-weight:600;background:#f8fafc">${he(a)}</td><td style="border:1px solid #e2e8f0;padding:8px">${he(b ?? "—")}</td></tr>`;
+  const bodyHtml = `
+  <p class="noPrint" style="background:#FAEEDA;padding:10px;border-radius:8px;border:1px solid #FAC775">This is a local worksheet mirroring F2508 fields. Official reporting: <a href="https://www.hse.gov.uk/riddor/report.htm">hse.gov.uk/riddor/report.htm</a></p>
+  <div class="print-section-title">Incident / dangerous occurrence — draft record</div>
   <table style="width:100%;border-collapse:collapse;margin-top:10px">
     ${row("Form type", def.form || "F2508")}
     ${row("Incident type", def.label || form.riddorType)}
@@ -99,9 +93,22 @@ export function printRiddorF2508(form) {
     ${row("Immediate actions", form.immediateActions)}
     ${row("Reported to HSE", form.reportedToHSE ? "Yes" : "No")}
     ${row("HSE reference", form.hseReportRef)}
-  </table>
-  <p class="note">${he(org.pdfFooter || "MySafeOps")}</p>
-  </body></html>`);
+  </table>`;
+
+  await writePrintWindowDocument(
+    win,
+    wrapPrintHtmlDocument(org, {
+      pageTitle: "RIDDOR F2508 — draft worksheet",
+      extraCss: `.noPrint{} @media print{.noPrint{display:none}}`,
+      headerOpts: {
+        docTitle: "RIDDOR report worksheet",
+        docSubtitle: `${def.form || "F2508"} · submit via HSE online`,
+        docBadge: "RIDDOR",
+      },
+      metaFields: { recordNote: def.label || form.riddorType || "Draft worksheet" },
+      bodyHtml,
+    })
+  );
   win.print();
   })();
 }

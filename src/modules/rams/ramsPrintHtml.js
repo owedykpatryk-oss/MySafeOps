@@ -5,6 +5,7 @@ import { getRiskLevel } from "./ramsRiskLevel.js";
 import { normalizePrintSections, RAMS_SECTION_IDS, documentContentHash } from "./ramsSectionConfig";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { openPrintWindow, safeCssColor, safeImageSrc, escapeAttr, writePrintWindowDocument } from "../../utils/htmlEscape.js";
+import { renderMySafeOpsMarkSvg } from "../../utils/pdfBranding.js";
 
 const RL = {
   high: { bg: "#FCEBEB", color: "#791F1F" },
@@ -556,7 +557,7 @@ function ramsDocumentCss() {
 function wrapRamsPrintDocument(pageTitle, bodyInner, extraHeadCss = "", footerMeta = "") {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${escHtml(pageTitle)}</title>
   <style>${ramsDocumentCss()}${extraHeadCss || ""}</style></head><body>${bodyInner}
-  <div class="page-footer"><span>${escHtml(footerMeta)}</span><span class="page-num"></span></div>
+  <div class="page-footer"><span>${escHtml(footerMeta)}</span><span style="display:inline-flex;align-items:center;gap:5px">${renderMySafeOpsMarkSvg(16)}<span class="page-num"></span></span></div>
   </body></html>`;
 }
 
@@ -1316,7 +1317,10 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
       <span style="font-size:11px;background:#E6F1FB;color:#0C447C;padding:2px 8px;border-radius:999px">QA ${qaPass}/${qaChecks.length} · ${qaPct}%</span>
       <span style="font-size:11px;background:#ecfeff;color:#0f766e;padding:2px 8px;border-radius:999px">Readiness ${readinessScore}/100</span>
     </div>
-    <div style="margin-top:16px;font-size:11px;color:#64748b">Prepared by ${escHtml(orgName)} • Operational RAMS dossier • A4 issue pack</div>
+    <div style="margin-top:16px;font-size:11px;color:#64748b;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <span>Prepared by ${escHtml(orgName)} • Operational RAMS dossier • A4 issue pack</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;border:1px solid #e2e8f0;border-radius:10px;padding:4px 8px;background:#f8fafc">${renderMySafeOpsMarkSvg(20)}<span style="font-size:10px;font-weight:700;color:#0d9488">MySafeOps</span></span>
+    </div>
     ${liveShareUrl ? `<div style="margin-top:6px;font-size:10px;color:#0C447C;word-break:break-all">Live URL: ${escHtml(liveShareUrl)}</div>` : ""}
   </div>`;
 

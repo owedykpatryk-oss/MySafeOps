@@ -3,6 +3,11 @@
  */
 import { geoPhotoPresetLabel } from "./geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
+import {
+  PDF_PAGE,
+  drawPdfMetaStrip,
+  buildDocReference,
+} from "./pdfBranding.js";
 
 const he = (s) =>
   String(s ?? "")
@@ -222,151 +227,211 @@ export function prepareRegisterExport(moduleId, rawRows, { summary = false } = {
  * @param {import("jspdf").jsPDF} pdf
  */
 export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
-  const { drawPdfPageHeader, renderRegisterTable, org, rgb, theme, label } = helpers;
+  const { drawPdfPageHeader, org, rgb, accentRgb, theme, label } = helpers;
   const rows = briefings || [];
+  const margin = PDF_PAGE.MARGIN;
+  const contentW = PDF_PAGE.W - margin * 2;
+  const bottomY = PDF_PAGE.CONTENT_BOTTOM;
+
+  const fmtDate = (iso) => {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    } catch {
+      return String(iso);
+    }
+  };
+
+  const drawInfoGrid = (brief, yStart) => {
+    const pairs = [
+      ["Location", brief.location || "—"],
+      ["Date", fmtDate(brief.date)],
+      ["Time", brief.time || "—"],
+      ["Conducted by", brief.conductedBy || "—"],
+    ];
+    if (brief.weatherConditions || brief.temperature) {
+      pairs.push([
+        "Weather",
+        [brief.weatherConditions, brief.temperature ? `${brief.temperature}°C` : ""].filter(Boolean).join(" · "),
+      ]);
+    }
+    const colW = contentW / 2;
+    let y = yStart;
+    pdf.setDrawColor(226, 232, 240);
+    pdf.setFillColor(248, 250, 252);
+    const gridH = Math.ceil(pairs.length / 2) * 11 + 4;
+    pdf.roundedRect(margin, y, contentW, gridH, 2, 2, "FD");
+    pairs.forEach(([k, v], i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = margin + 4 + col * colW;
+      const cy = y + 5 + row * 11;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(6.5);
+      pdf.setTextColor(...rgb);
+      pdf.text(String(k).toUpperCase(), x, cy);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(30, 41, 59);
+      const lines = pdf.splitTextToSize(String(v).slice(0, 80), colW - 8);
+      pdf.text(lines.slice(0, 2), x, cy + 3.8);
+    });
+    return y + gridH + 5;
+  };
+
+  const ensureSpace = (y, need, brief, docRef) => {
+    if (y + need <= bottomY) return y;
+    pdf.addPage();
+    let ny = drawPdfPageHeader(pdf, {
+      org,
+      title: "Daily safety briefing (continued)",
+      subtitle: brief.location || "",
+      rgb,
+      accentRgb,
+      theme,
+      docRef,
+    });
+    ny = drawPdfMetaStrip(pdf, org, { moduleLabel: "Daily briefing", docRef, recordNote: brief.location || "" }, rgb, ny);
+    return ny + 2;
+  };
 
   if (!rows.length) {
+    const docRef = buildDocReference(org, label);
     let y = drawPdfPageHeader(pdf, {
       org,
       title: label,
       subtitle: "No briefing records",
       rgb,
+      accentRgb,
       theme,
+      docRef,
     });
-    renderRegisterTable(pdf, {
-      rows: [],
-      columns: REGISTER_PDF_ADAPTERS["daily-briefing"].columns,
-      sectionTitle: label,
-      org,
-      rgb,
-      theme,
-      startY: y + 2,
-    });
+    drawPdfMetaStrip(pdf, org, { moduleLabel: label, docRef, recordNote: "0 records" }, rgb, y);
     return;
   }
 
   rows.forEach((brief, index) => {
     if (index > 0) pdf.addPage();
+    const docRef = buildDocReference(org, `Brief-${brief.date || index + 1}`);
     let y = drawPdfPageHeader(pdf, {
       org,
       title: "Daily safety briefing",
-      subtitle: `${brief.location || "Site"} · ${brief.date || ""} ${brief.time || ""}`.trim(),
+      subtitle: `${brief.location || "Site"} · ${fmtDate(brief.date)} · ${brief.time || ""}`.trim(),
       rgb,
+      accentRgb,
       theme,
+      docRef,
     });
-    y += 2;
+    y = drawPdfMetaStrip(
+      pdf,
+      org,
+      {
+        moduleLabel: "Daily safety briefing",
+        docRef,
+        recordNote: `${(brief.attendees || []).filter((a) => a.present).length} attendees · ${brief.conductedBy || "—"}`,
+      },
+      rgb,
+      y
+    );
+    y = drawInfoGrid(brief, y);
 
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(9);
-    pdf.setTextColor(51, 65, 85);
-    const meta = [
-      `Conducted by: ${brief.conductedBy || "—"}`,
-      brief.weatherConditions ? `Weather: ${brief.weatherConditions}${brief.temperature ? ` · ${brief.temperature}°C` : ""}` : "",
-    ].filter(Boolean);
-    meta.forEach((line) => {
-      pdf.text(line, 12, y);
-      y += 4.5;
-    });
-    y += 2;
-
-    if (brief.scopeToday) {
+    const section = (title, bodyLines, yStart) => {
+      let yy = ensureSpace(yStart, 14 + bodyLines.length * 3.8, brief, docRef);
+      pdf.setFillColor(...rgb);
+      pdf.rect(margin, yy, 2, 6, "F");
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(8);
-      pdf.text("TODAY'S SCOPE", 12, y);
-      y += 4;
+      pdf.setTextColor(...rgb);
+      pdf.text(title, margin + 4, yy + 4.5);
+      yy += 8;
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(8.5);
-      const scopeLines = pdf.splitTextToSize(String(brief.scopeToday), 186);
-      pdf.text(scopeLines, 12, y);
-      y += scopeLines.length * 3.8 + 4;
+      pdf.setTextColor(51, 65, 85);
+      pdf.text(bodyLines, margin + 2, yy);
+      return yy + bodyLines.length * 3.8 + 5;
+    };
+
+    if (brief.scopeToday) {
+      const scopeLines = pdf.splitTextToSize(String(brief.scopeToday), contentW - 4);
+      y = section("TODAY'S SCOPE", scopeLines, y);
     }
 
     const topics = [...(brief.topics || [])];
     if (brief.customTopics?.trim()) topics.push(String(brief.customTopics).trim());
     if (topics.length) {
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(8);
-      pdf.text("TOPICS COVERED", 12, y);
-      y += 4;
-      pdf.setFont("helvetica", "normal");
-      topics.forEach((t) => {
-        const lines = pdf.splitTextToSize(`• ${t}`, 184);
-        pdf.text(lines, 12, y);
-        y += lines.length * 3.6;
-      });
-      y += 3;
+      const topicLines = topics.flatMap((t) => pdf.splitTextToSize(`• ${t}`, contentW - 6));
+      y = section("TOPICS COVERED", topicLines, y);
     }
 
     if (brief.notes) {
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(8);
-      pdf.text("NOTES / ACTIONS", 12, y);
-      y += 4;
-      pdf.setFont("helvetica", "normal");
-      const noteLines = pdf.splitTextToSize(String(brief.notes), 186);
-      pdf.text(noteLines, 12, y);
-      y += noteLines.length * 3.6 + 4;
+      const noteLines = pdf.splitTextToSize(String(brief.notes), contentW - 4);
+      y = section("NOTES / ACTIONS", noteLines, y);
     }
 
+    y = ensureSpace(y, 20, brief, docRef);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(8);
-    pdf.text("ATTENDANCE & SIGNATURES", 12, y);
-    y += 5;
+    pdf.setTextColor(...rgb);
+    pdf.text("ATTENDANCE & SIGNATURES", margin, y);
+    y += 6;
+
+    const colW = [58, 34, 72, 26];
+    const startX = margin;
+    pdf.setFillColor(...rgb);
+    pdf.rect(startX, y, contentW, 7, "F");
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(255, 255, 255);
+    ["Name", "Role", "Signature", "Time"].forEach((h, i) => {
+      pdf.text(h, startX + colW.slice(0, i).reduce((s, w) => s + w, 0) + 2, y + 4.8);
+    });
+    y += 8;
 
     const present = (brief.attendees || []).filter((a) => a.present);
-    const colW = [52, 32, 78, 28];
-    const startX = 12;
-    pdf.setFillColor(241, 245, 249);
-    pdf.rect(startX, y, 186, 6, "F");
-    pdf.setFontSize(7.5);
-    pdf.setTextColor(71, 85, 105);
-    ["Name", "Role", "Signature", "Time"].forEach((h, i) => {
-      pdf.text(h, startX + colW.slice(0, i).reduce((s, w) => s + w, 0) + 1.5, y + 4.2);
-    });
-    y += 7;
-
     present.forEach((att) => {
-      if (y > 268) {
-        pdf.addPage();
-        y = drawPdfPageHeader(pdf, {
-          org,
-          title: "Daily safety briefing (continued)",
-          subtitle: brief.location || "",
-          rgb,
-          theme,
-        });
-        y += 8;
-      }
-      const rowH = 14;
+      y = ensureSpace(y, 16, brief, docRef);
+      const rowH = 15;
       pdf.setDrawColor(226, 232, 240);
-      pdf.rect(startX, y, 186, rowH);
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(startX, y, contentW, rowH, "FD");
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(8);
       pdf.setTextColor(30, 41, 59);
-      pdf.text(String(att.name || "").slice(0, 28), startX + 2, y + 5);
-      pdf.text(String(att.role || "").slice(0, 18), startX + colW[0] + 2, y + 5);
+      let cx = startX + 2;
+      pdf.text(String(att.name || "").slice(0, 26), cx, y + 5);
+      cx += colW[0];
+      pdf.text(String(att.role || "").slice(0, 16), cx, y + 5);
+      cx += colW[1];
       if (att.sig && String(att.sig).startsWith("data:image")) {
         try {
-          pdf.addImage(String(att.sig), "PNG", startX + colW[0] + colW[1] + 2, y + 2, 36, 10, undefined, "FAST");
+          pdf.addImage(String(att.sig), "PNG", cx + 1, y + 2, 40, 11, undefined, "FAST");
         } catch {
-          pdf.text("Signed", startX + colW[0] + colW[1] + 2, y + 5);
+          pdf.setFontSize(7);
+          pdf.setTextColor(100, 116, 139);
+          pdf.text("Signed", cx + 2, y + 8);
         }
+      } else {
+        pdf.setFontSize(7);
+        pdf.setTextColor(148, 163, 184);
+        pdf.text("—", cx + 2, y + 8);
       }
+      cx += colW[2];
       if (att.sigTime) {
         try {
           const t = new Date(att.sigTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-          pdf.text(t, startX + colW[0] + colW[1] + colW[2] + 2, y + 5);
+          pdf.setFontSize(7.5);
+          pdf.setTextColor(30, 41, 59);
+          pdf.text(t, cx + 1, y + 8);
         } catch {
           /* ignore */
         }
       }
-      y += rowH;
+      y += rowH + 1;
     });
 
     if (!present.length) {
       pdf.setFontSize(8);
       pdf.setTextColor(120, 120, 120);
-      pdf.text("No attendees marked present.", startX, y + 3);
+      pdf.text("No attendees marked present.", startX + 2, y + 4);
     }
   });
 }

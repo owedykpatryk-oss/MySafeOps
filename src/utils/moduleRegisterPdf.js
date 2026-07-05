@@ -5,6 +5,18 @@ import { MODULE_PDF_REGISTRY, canExportModulePdf, getModulePdfConfig } from "../
 import { getModuleTilePresentation } from "./moduleTileIntelligence";
 import { MORE_SECTIONS, getMoreTabsForSection } from "../navigation/appModules";
 import { prepareRegisterExport, renderDailyBriefingDetailPages, renderGeoPhotoDetailPages } from "./registerPdfAdapters";
+import {
+  PDF_PAGE,
+  hexToRgb,
+  getPdfTheme,
+  drawPremiumPdfHeader,
+  drawPdfMetaStrip,
+  drawRegisterHeroBlock,
+  drawEmptyRegisterState,
+  drawPremiumPdfFooter,
+  drawWatermark,
+  buildDocReference,
+} from "./pdfBranding.js";
 
 let jsPDFPromise = null;
 async function loadJsPDF() {
@@ -12,11 +24,10 @@ async function loadJsPDF() {
   return jsPDFPromise;
 }
 
-const PAGE_W = 210;
-const PAGE_H = 297;
-const MARGIN = 12;
-const FOOTER_H = 10;
-const HEADER_H = 26;
+const PAGE_W = PDF_PAGE.W;
+const PAGE_H = PDF_PAGE.H;
+const MARGIN = PDF_PAGE.MARGIN;
+const FOOTER_H = PDF_PAGE.FOOTER_H;
 
 const HSE_SECTION_TITLE = "Health, safety & environment";
 
@@ -98,16 +109,42 @@ function loadRegisterRows(moduleId) {
   return { rows, cfg };
 }
 
-function renderModuleOverviewPage(pdf, moduleId, label, org, rgb, theme) {
+function pdfBrandingContext(org) {
+  const theme = getPdfTheme(org);
+  const rgb = hexToRgb(org.primaryColor);
+  const accentRgb = hexToRgb(org.accentColor);
+  return { theme, rgb, accentRgb };
+}
+
+function drawPdfPageHeader(pdf, meta, yStart = MARGIN) {
+  return drawPremiumPdfHeader(pdf, meta, yStart);
+}
+
+function renderModuleOverviewPage(pdf, moduleId, label, org, rgb, accentRgb, theme) {
   const pres = getModuleTilePresentation(moduleId, { count: 0, status: "empty" });
+  const docRef = buildDocReference(org, label);
   let y = drawPdfPageHeader(pdf, {
     org,
     title: label,
-    subtitle: "Premium module guide · MySafeOps",
+    subtitle: "Premium module guide · audit-ready export",
     rgb,
+    accentRgb,
     theme,
+    docRef,
   });
-  y += 6;
+  y = drawPdfMetaStrip(pdf, org, { moduleLabel: label, docRef, recordNote: "Overview export" }, rgb, y);
+  y = drawRegisterHeroBlock(pdf, {
+    org,
+    moduleLabel: label,
+    rows: [],
+    rgb,
+    accentRgb,
+    theme,
+    smartText: pres.smartText,
+    yStart: y,
+  });
+  y += 4;
+
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(10);
   pdf.setTextColor(...rgb);
@@ -145,133 +182,6 @@ function renderModuleOverviewPage(pdf, moduleId, label, org, rgb, theme) {
   return y + 36;
 }
 
-function hexToRgb(hex) {
-  const h = String(hex || "#0d9488").replace("#", "");
-  if (h.length !== 6) return [13, 148, 136];
-  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-}
-
-function getPdfTheme(org) {
-  const raw = String(org.pdfTheme || "executive").toLowerCase();
-  return raw === "classic" ? "classic" : "executive";
-}
-
-function logoImageFormat(dataUrl) {
-  const s = String(dataUrl || "").toLowerCase();
-  if (s.includes("image/png") || s.includes("png")) return "PNG";
-  if (s.includes("image/jpeg") || s.includes("image/jpg") || s.includes("jpeg")) return "JPEG";
-  if (s.includes("image/webp")) return "WEBP";
-  return "PNG";
-}
-
-function tryAddLogo(pdf, org, x, y, maxW = 22, maxH = 12) {
-  const logo = org.logo;
-  if (!logo || !String(logo).startsWith("data:image")) return 0;
-  try {
-    pdf.addImage(String(logo), logoImageFormat(logo), x, y, maxW, maxH, undefined, "FAST");
-    return maxW + 4;
-  } catch {
-    return 0;
-  }
-}
-
-function drawWatermark(pdf, org) {
-  const text = String(org.pdfWatermarkText || "").trim();
-  if (!text) return;
-  const pageCount = pdf.getNumberOfPages();
-  for (let p = 1; p <= pageCount; p++) {
-    pdf.setPage(p);
-    try {
-      if (typeof pdf.saveGraphicsState === "function") pdf.saveGraphicsState();
-      pdf.setTextColor(220, 220, 220);
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(42);
-      pdf.text(text.toUpperCase(), PAGE_W / 2, PAGE_H / 2, {
-        align: "center",
-        angle: 35,
-      });
-      if (typeof pdf.restoreGraphicsState === "function") pdf.restoreGraphicsState();
-    } catch {
-      /* watermark optional */
-    }
-  }
-}
-
-/**
- * @param {import("jspdf").jsPDF} pdf
- * @param {{ org: ReturnType<typeof getOrgSettings>; title: string; subtitle?: string; rgb: number[]; theme: string }} meta
- * @param {number} yStart
- */
-function drawPdfPageHeader(pdf, meta, yStart = MARGIN) {
-  const { org, rgb, theme } = meta;
-  const [r, g, b] = rgb;
-  const barH = theme === "executive" ? 3 : 1.8;
-  pdf.setFillColor(r, g, b);
-  pdf.rect(MARGIN, yStart, PAGE_W - MARGIN * 2, barH, "F");
-
-  let textX = MARGIN;
-  const logoW = tryAddLogo(pdf, org, MARGIN, yStart + barH + 2, theme === "executive" ? 24 : 18, theme === "executive" ? 11 : 9);
-  if (logoW > 0) textX = MARGIN + logoW;
-
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(theme === "executive" ? 12 : 11);
-  pdf.setTextColor(theme === "classic" ? 0 : 30, theme === "classic" ? 0 : 41, theme === "classic" ? 0 : 59);
-  pdf.text(org.name || "MySafeOps", textX, yStart + barH + 9);
-
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(9);
-  pdf.setTextColor(100, 116, 139);
-  pdf.text(meta.title, textX, yStart + barH + 14.5);
-  if (meta.subtitle) {
-    pdf.setFontSize(8);
-    pdf.text(meta.subtitle, textX, yStart + barH + 18.5);
-  }
-
-  const stamp = new Date().toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  pdf.setFontSize(8);
-  pdf.text(stamp, PAGE_W - MARGIN, yStart + barH + 9, { align: "right" });
-  if (org.pdfVersionPrefix) {
-    pdf.text(String(org.pdfVersionPrefix), PAGE_W - MARGIN, yStart + barH + 14, { align: "right" });
-  }
-
-  return yStart + HEADER_H;
-}
-
-function drawPdfFooter(pdf, org, pageNum, pageTotal, theme) {
-  const y = PAGE_H - FOOTER_H;
-  const [r, g, b] = hexToRgb(org.primaryColor);
-  if (theme === "executive") {
-    pdf.setDrawColor(r, g, b);
-    pdf.setLineWidth(0.4);
-  } else {
-    pdf.setDrawColor(200, 200, 200);
-    pdf.setLineWidth(0.2);
-  }
-  pdf.line(MARGIN, y - 2, PAGE_W - MARGIN, y - 2);
-
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(7);
-  pdf.setTextColor(120, 120, 120);
-  const footer = org.pdfFooter || "Generated by MySafeOps — mysafeops.com";
-  pdf.text(footer.slice(0, 95), MARGIN, y + 1.5);
-
-  const compliance = String(org.pdfComplianceLine || "").trim();
-  if (compliance) {
-    pdf.setFontSize(6.5);
-    pdf.text(compliance.slice(0, 110), MARGIN, y + 4.5);
-  }
-
-  pdf.setFontSize(7.5);
-  pdf.setTextColor(100, 116, 139);
-  pdf.text(`${pageNum} / ${pageTotal}`, PAGE_W - MARGIN, y + 1.5, { align: "right" });
-}
-
 function tableHeaderColors(theme, rgb) {
   if (theme === "executive") {
     return { fill: rgb, text: [255, 255, 255] };
@@ -279,7 +189,7 @@ function tableHeaderColors(theme, rgb) {
   return { fill: [241, 245, 249], text: [71, 85, 105] };
 }
 
-function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, theme, startY }) {
+function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, accentRgb, theme, startY, prebuildLabel = null }) {
   const usableW = PAGE_W - MARGIN * 2;
   const colW = usableW / columns.length;
   let y = startY;
@@ -298,15 +208,17 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, theme
   };
 
   const ensureSpace = (need) => {
-    if (y + need <= PAGE_H - FOOTER_H - 5) return;
+    if (y + need <= PAGE_H - FOOTER_H - 8) return;
     pdf.addPage();
     y = drawPdfPageHeader(pdf, {
       org,
       title: sectionTitle,
       subtitle: "Continued",
       rgb,
+      accentRgb,
       theme,
     });
+    y = drawPdfMetaStrip(pdf, org, { moduleLabel: sectionTitle, recordNote: "Continued" }, rgb, y);
     y += 2;
     drawTableHeaderRow();
   };
@@ -314,19 +226,23 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, theme
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(theme === "executive" ? 11 : 10);
   pdf.setTextColor(15, 23, 42);
-  pdf.text(sectionTitle, MARGIN, y);
+  pdf.text("Register data", MARGIN, y);
   y += 5;
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(100, 116, 139);
-  pdf.text(`${rows.length} record(s)`, MARGIN, y);
+  pdf.text(`${rows.length} record(s) · controlled export`, MARGIN, y);
   y += 6;
 
   if (rows.length === 0) {
-    pdf.setFontSize(9);
-    pdf.setTextColor(120, 120, 120);
-    pdf.text("No records stored for this organisation yet.", MARGIN, y + 2);
-    return y + 10;
+    return drawEmptyRegisterState(pdf, {
+      org,
+      moduleLabel: sectionTitle,
+      rgb,
+      accentRgb,
+      prebuildLabel,
+      yStart: y,
+    });
   }
 
   drawTableHeaderRow();
@@ -354,11 +270,11 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, theme
   return y + 6;
 }
 
-function finalizePdf(pdf, org, theme) {
+function finalizePdf(pdf, org, theme, rgb, accentRgb) {
   const pageCount = pdf.getNumberOfPages();
   for (let p = 1; p <= pageCount; p++) {
     pdf.setPage(p);
-    drawPdfFooter(pdf, org, p, pageCount, theme);
+    drawPremiumPdfFooter(pdf, org, p, pageCount, theme, rgb, accentRgb);
   }
   drawWatermark(pdf, org);
 }
@@ -368,15 +284,19 @@ function buildFileName(org, slugPart) {
   return `${sanitizePdfFileSegment(org.name, 20) || "MySafeOps"}-${slugPart}-${ts}.pdf`.replace(/--+/g, "-");
 }
 
-function renderModulesIntoPdf(pdf, { org, rgb, theme, bundleTitle, bundleSubtitle, modules }) {
+function renderModulesIntoPdf(pdf, { org, rgb, accentRgb, theme, bundleTitle, bundleSubtitle, modules }) {
+  const docRef = buildDocReference(org, bundleTitle);
   let y = drawPdfPageHeader(pdf, {
     org,
     title: bundleTitle,
     subtitle: bundleSubtitle || (org.pdfHeader ? String(org.pdfHeader).slice(0, 90) : undefined),
     rgb,
+    accentRgb,
     theme,
+    docRef,
   });
-  y += 4;
+  y = drawPdfMetaStrip(pdf, org, { moduleLabel: bundleTitle, docRef, recordNote: `${modules.length} modules` }, rgb, y);
+  y += 2;
 
   modules.forEach((mod, index) => {
     const { rows, cfg } = loadRegisterRows(mod.id);
@@ -386,30 +306,45 @@ function renderModulesIntoPdf(pdf, { org, rgb, theme, bundleTitle, bundleSubtitl
     const columns =
       prepared.columns ||
       (Array.isArray(cfg.columns) && cfg.columns.length > 0 ? cfg.columns : inferRegisterColumns(tableRows));
-    if (y > PAGE_H - 62 && index > 0) {
+    if (y > PAGE_H - 72 && index > 0) {
       pdf.addPage();
       y = drawPdfPageHeader(pdf, {
         org,
         title: bundleTitle,
         subtitle: "Continued",
         rgb,
+        accentRgb,
         theme,
+        docRef,
       });
+      y = drawPdfMetaStrip(pdf, org, { moduleLabel: bundleTitle, recordNote: "Continued" }, rgb, y);
       y += 2;
     }
+    const pres = getModuleTilePresentation(mod.id, { count: tableRows.length });
+    y = drawRegisterHeroBlock(pdf, {
+      org,
+      moduleLabel: mod.label,
+      rows: tableRows,
+      rgb,
+      accentRgb,
+      theme,
+      smartText: pres.smartText,
+      yStart: y,
+    });
     y = renderRegisterTable(pdf, {
       rows: tableRows,
       columns,
       sectionTitle: mod.label,
       org,
       rgb,
+      accentRgb,
       theme,
       startY: y,
     });
     y += 4;
   });
 
-  finalizePdf(pdf, org, theme);
+  finalizePdf(pdf, org, theme, rgb, accentRgb);
 }
 
 /**
@@ -425,14 +360,14 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
   }
   const rows = Array.isArray(opts.rowsOverride) ? opts.rowsOverride : storedRows;
   const org = getOrgSettings();
-  const theme = getPdfTheme(org);
-  const rgb = hexToRgb(org.primaryColor);
+  const { theme, rgb, accentRgb } = pdfBrandingContext(org);
   const label = opts.label || humanizeKey(moduleId);
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  const docRef = buildDocReference(org, label);
 
   if (cfg.overview && rows.length === 0) {
-    renderModuleOverviewPage(pdf, moduleId, label, org, rgb, theme);
-    finalizePdf(pdf, org, theme);
+    renderModuleOverviewPage(pdf, moduleId, label, org, rgb, accentRgb, theme);
+    finalizePdf(pdf, org, theme, rgb, accentRgb);
     const slug = sanitizePdfFileSegment(label, 36) || sanitizePdfFileSegment(moduleId, 36) || "module";
     const fileName = buildFileName(org, slug);
     pdf.save(fileName);
@@ -441,23 +376,35 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
 
   const prepared = prepareRegisterExport(moduleId, rows, { summary: opts.summary === true });
   const filterSuffix = opts.filterNote ? ` · ${opts.filterNote}` : rows.length !== storedRows.length ? ` · ${rows.length} of ${storedRows.length} shown` : "";
-  const baseSubtitle = org.pdfHeader ? String(org.pdfHeader).slice(0, 90) : "Register export";
+  const baseSubtitle = org.pdfHeader ? String(org.pdfHeader).slice(0, 90) : "Register export · audit-ready";
+
+  const headerMeta = {
+    org,
+    title: label,
+    subtitle: `${baseSubtitle}${filterSuffix}`.slice(0, 120),
+    rgb,
+    accentRgb,
+    theme,
+    docRef,
+  };
 
   if (prepared.mode === "detail" && moduleId === "daily-briefing") {
     renderDailyBriefingDetailPages(pdf, prepared.rows, {
-      drawPdfPageHeader: (doc, meta) => drawPdfPageHeader(doc, meta),
+      drawPdfPageHeader: (doc, meta) => drawPdfPageHeader(doc, { ...meta, accentRgb, docRef }),
       renderRegisterTable,
       org,
       rgb,
+      accentRgb,
       theme,
       label,
     });
   } else if (prepared.mode === "detail" && moduleId === "geo-photos") {
     renderGeoPhotoDetailPages(pdf, prepared.rows, {
-      drawPdfPageHeader: (doc, meta) => drawPdfPageHeader(doc, meta),
+      drawPdfPageHeader: (doc, meta) => drawPdfPageHeader(doc, { ...meta, accentRgb, docRef }),
       renderRegisterTable,
       org,
       rgb,
+      accentRgb,
       theme,
       label,
     });
@@ -466,17 +413,43 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
     const columns =
       prepared.columns ||
       (Array.isArray(cfg.columns) && cfg.columns.length > 0 ? cfg.columns : inferRegisterColumns(tableRows));
-    const y = drawPdfPageHeader(pdf, {
+    const pres = getModuleTilePresentation(moduleId, { count: tableRows.length });
+    let y = drawPdfPageHeader(pdf, headerMeta);
+    y = drawPdfMetaStrip(
+      pdf,
       org,
-      title: label,
-      subtitle: `${baseSubtitle}${filterSuffix}`.slice(0, 120),
+      {
+        moduleLabel: label,
+        docRef,
+        recordNote: `${tableRows.length} record(s)`,
+      },
       rgb,
+      y
+    );
+    y = drawRegisterHeroBlock(pdf, {
+      org,
+      moduleLabel: label,
+      rows: tableRows,
+      rgb,
+      accentRgb,
       theme,
+      smartText: pres.smartText,
+      yStart: y,
     });
-    renderRegisterTable(pdf, { rows: tableRows, columns, sectionTitle: label, org, rgb, theme, startY: y + 2 });
+    renderRegisterTable(pdf, {
+      rows: tableRows,
+      columns,
+      sectionTitle: label,
+      org,
+      rgb,
+      accentRgb,
+      theme,
+      startY: y,
+      prebuildLabel: pres.prebuild?.shortLabel || pres.prebuild?.label,
+    });
   }
 
-  finalizePdf(pdf, org, theme);
+  finalizePdf(pdf, org, theme, rgb, accentRgb);
 
   const slug = sanitizePdfFileSegment(label, 36) || sanitizePdfFileSegment(moduleId, 36) || "register";
   const fileName = buildFileName(org, slug);
@@ -496,16 +469,16 @@ export async function exportMoreSectionPdf(section) {
   }
 
   const org = getOrgSettings();
-  const theme = getPdfTheme(org);
-  const rgb = hexToRgb(org.primaryColor);
+  const { theme, rgb, accentRgb } = pdfBrandingContext(org);
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
 
   renderModulesIntoPdf(pdf, {
     org,
     rgb,
+    accentRgb,
     theme,
     bundleTitle: section.title || "Modules",
-    bundleSubtitle: `${modules.length} register export(s)`,
+    bundleSubtitle: `${modules.length} register export(s) · full compliance pack`,
     modules,
   });
 

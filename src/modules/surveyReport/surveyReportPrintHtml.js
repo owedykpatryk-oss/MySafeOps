@@ -34,6 +34,7 @@ import {
   cadUtilityColor,
 } from "../../utils/cadImportVisuals";
 import { buildCadPreviewSvg, buildCadQlDonutSvg } from "../../utils/cadPreviewSvg";
+import { renderMySafeOpsMarkSvg } from "../../utils/pdfBranding.js";
 
 function esc(s) {
   return String(s ?? "")
@@ -166,10 +167,16 @@ function coverPage(report, org, primary, accent, extras) {
 
   return `<div class="sr-cover">
     <div class="sr-cover-top">
-      ${org.logo ? `<img src="${imgSrcAttr(org.logo)}" alt="" class="sr-cover-logo"/>` : ""}
-      <div class="sr-cover-org">
-        <div class="sr-cover-org-name">${esc(org.name)}</div>
-        ${org.pdfHeader ? `<div class="sr-cover-org-sub">${esc(org.pdfHeader)}</div>` : org.address ? `<div class="sr-cover-org-sub">${esc(org.address)}</div>` : ""}
+      <div class="sr-cover-top-left">
+        ${org.logo ? `<img src="${imgSrcAttr(org.logo)}" alt="" class="sr-cover-logo"/>` : ""}
+        <div class="sr-cover-org">
+          <div class="sr-cover-org-name">${esc(org.name)}</div>
+          ${org.pdfHeader ? `<div class="sr-cover-org-sub">${esc(org.pdfHeader)}</div>` : org.address ? `<div class="sr-cover-org-sub">${esc(org.address)}</div>` : ""}
+        </div>
+      </div>
+      <div class="sr-cover-mso">
+        ${renderMySafeOpsMarkSvg(28)}
+        <div class="sr-cover-mso-label"><strong>MySafeOps</strong><span>mysafeops.com</span></div>
       </div>
     </div>
     <div class="sr-cover-main">
@@ -751,7 +758,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
 <style>
   @page {
     size: A4;
-    margin: 16mm 14mm 22mm;
+    margin: 16mm 14mm 28mm;
     @bottom-right {
       content: "Page " counter(page);
       font-size: 8pt;
@@ -765,7 +772,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     line-height: 1.45;
     color: #111827;
     margin: 0;
-    padding: 0;
+    padding: 0 0 24mm;
     counter-reset: sr-page;
   }
   .sr-cover {
@@ -777,14 +784,38 @@ export function buildSurveyReportHtml(report, extras = {}) {
   }
   .sr-cover-top {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: 16px;
     border-bottom: 3px solid ${primary};
     padding-bottom: 12px;
     margin-bottom: 20px;
   }
-  .sr-cover-logo { max-height: 56px; max-width: 150px; object-fit: contain; }
-  .sr-cover-org-name { font-weight: 700; font-size: 14pt; }
+  .sr-cover-top-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+  }
+  .sr-cover-mso {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    max-width: 38%;
+  }
+  .sr-cover-mso-label {
+    font-size: 8pt;
+    color: #64748b;
+    text-align: right;
+    line-height: 1.3;
+  }
+  .sr-cover-mso-label strong { display: block; color: ${primary}; font-size: 9pt; }
+  .sr-cover-logo { max-height: 56px; max-width: 150px; object-fit: contain; flex-shrink: 0; }
+  .sr-cover-org { min-width: 0; }
+  .sr-cover-org-name { font-weight: 700; font-size: 14pt; overflow-wrap: anywhere; }
   .sr-cover-org-sub { font-size: 9.5pt; color: #6b7280; margin-top: 4px; }
   .sr-cover-main { flex: 1; }
   .sr-cover-title {
@@ -826,7 +857,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     text-decoration: none;
   }
   .sr-toc-dots { flex: 1; border-bottom: 1px dotted #cbd5e1; min-width: 24px; }
-  .sr-body { padding: 0 2mm 16mm; }
+  .sr-body { padding: 0 2mm 22mm; }
   @media print {
     .sr-running-header {
       display: flex;
@@ -842,7 +873,8 @@ export function buildSurveyReportHtml(report, extras = {}) {
       background: #fff;
       z-index: 9999;
     }
-    .sr-body { padding-top: 14mm; }
+    .sr-body { padding-top: 14mm; padding-bottom: 26mm; }
+    body { padding-bottom: 28mm; }
   }
   .sr-running-header { display: none; }
   .sr-header-mini {
@@ -911,7 +943,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     color: ${primary};
     line-height: 1.2;
   }
-  .sr-section { margin-bottom: 16px; page-break-inside: avoid; }
+  .sr-section { margin-bottom: 16px; page-break-inside: auto; }
   .sr-section h2 {
     font-size: 11.5pt;
     color: ${primary};
@@ -951,7 +983,11 @@ export function buildSurveyReportHtml(report, extras = {}) {
     padding: 5px 8px;
     text-align: left;
     vertical-align: top;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    hyphens: auto;
   }
+  .sr-data-table tr { page-break-inside: avoid; }
   .sr-data-table th { background: #f3f4f6; font-weight: 600; }
   .sr-data-table tr:nth-child(even) td { background: #fafafa; }
   .sr-narrative { margin-top: 10px; }
@@ -1134,8 +1170,12 @@ export function buildSurveyReportHtml(report, extras = {}) {
     padding: 6px 14mm;
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    gap: 12px;
     background: #fff;
+    z-index: 9998;
   }
+  .sr-print-footer span { overflow-wrap: anywhere; max-width: 48%; }
   @media print {
     .sr-cover, .sr-badge, .sr-ql-badge, .sr-ql-pill, .sr-cad-comp-seg, .sr-cad-bar-fill, .sr-cad-stat--accent, .sr-cad-cover-strip, .sr-section h2, .sr-callout, .sr-data-table th {
       -webkit-print-color-adjust: exact;
@@ -1161,7 +1201,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     </div>
   </div>
   <div class="sr-print-footer">
-    <span>${esc(org.pdfFooter || "Generated by MySafeOps")}</span>
+    <span>${esc(org.pdfFooter || "Generated by MySafeOps")} · mysafeops.com</span>
     <span>${esc(footerRef)}</span>
   </div>
 </body>

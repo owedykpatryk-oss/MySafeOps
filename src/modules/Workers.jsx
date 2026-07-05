@@ -41,6 +41,16 @@ import {
 } from "../utils/projectNextAction";
 import { isAutomationEnabled } from "../utils/orgAutomationRules";
 import { cloneProjectDocuments } from "../utils/documentPropagation";
+import { getOrgSettings } from "../utils/orgSettingsStorage";
+import {
+  applySoloProjectRoles,
+  buildSoloWorkerSeed,
+  buildStartupChecklist,
+  deriveUserDisplayName,
+  inferSoloMode,
+  projectHealthScore,
+  projectMissingItems,
+} from "../utils/soloWorkspace";
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -119,53 +129,6 @@ function suggestProjectRisks(form) {
   if (address.includes("school") || address.includes("hospital")) extra.push("public interface");
   if (address.includes("city") || address.includes("high street")) extra.push("traffic management");
   return Array.from(new Set([...(preset.riskHints || []), ...extra])).slice(0, 8);
-}
-
-function projectMissingItems(form) {
-  const missing = [];
-  if (!String(form?.name || "").trim()) missing.push("Project name");
-  if (!String(form?.site || "").trim()) missing.push("Site / client");
-  if (!String(form?.address || "").trim()) missing.push("Address");
-  if (!String(form?.owner || "").trim()) missing.push("Project owner");
-  if (!String(form?.hseLead || "").trim()) missing.push("HSE lead");
-  if (!String(form?.timelineStart || "").trim()) missing.push("Start date");
-  if (!String(form?.timelineEnd || "").trim()) missing.push("Target end date");
-  if ((form?.lat == null || form?.lat === "") || (form?.lng == null || form?.lng === "")) missing.push("Coordinates");
-  return missing;
-}
-
-function projectHealthScore(form) {
-  const checks = [
-    Boolean(String(form?.name || "").trim()),
-    Boolean(String(form?.site || "").trim()),
-    Boolean(String(form?.address || "").trim()),
-    Boolean(String(form?.owner || "").trim()),
-    Boolean(String(form?.hseLead || "").trim()),
-    Boolean(String(form?.timelineStart || "").trim()),
-    Boolean(String(form?.timelineEnd || "").trim()),
-    form?.lat != null && form?.lat !== "" && form?.lng != null && form?.lng !== "",
-    Array.isArray(form?.riskRegister) && form.riskRegister.length > 0,
-    Boolean(String(form?.industryStarter || "").trim()),
-  ];
-  const done = checks.filter(Boolean).length;
-  return Math.round((done / checks.length) * 100);
-}
-
-function buildStartupChecklist(form) {
-  const starterId = form?.industryStarter || inferProjectStarter(form);
-  const preset = PROJECT_STARTERS.find((p) => p.id === starterId) || PROJECT_STARTERS[0];
-  const base = [
-    "Invite site team and assign responsibilities",
-    "Review permit default flow for this project",
-    "Run pre-start safety briefing",
-    ...(preset.starterChecklist || []),
-  ];
-  const missing = projectMissingItems(form).map((m) => `Fill missing: ${m}`);
-  return Array.from(new Set([...base, ...missing])).slice(0, 16).map((text, idx) => ({
-    id: `pc_${Date.now().toString(36)}_${idx}`,
-    text,
-    status: "todo",
-  }));
 }
 
 const ss = { ...ms, btnO: { padding: "10px 14px", borderRadius: 6, border: "0.5px solid #c2410c", background: "#f97316", color: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", minHeight: 44, lineHeight: 1.3 } };
@@ -372,6 +335,18 @@ export function WorkersModule({ mode = "all" }) {
       }
       return [saved, ...prev];
     });
+
+    if (saved.soloMode !== false && workers.length === 0) {
+      const workerGate = checkBillingLimit("workers", billingOpts);
+      if (workerGate.ok) {
+        const seed = buildSoloWorkerSeed(user, getOrgSettings(), genId);
+        if (seed) {
+          setWorkers((prev) => (prev.length > 0 ? prev : [seed, ...prev]));
+          pushToast(`Solo profile added: ${seed.name} — use this for briefings, PTW and signatures.`, "success");
+        }
+      }
+    }
+
     setModal(null);
     if (useInlineHub && isNew) {
       openProjectHub(saved);
@@ -489,6 +464,8 @@ export function WorkersModule({ mode = "all" }) {
       {modal?.type === "project" && (
         <ProjectForm
           item={modal.data}
+          workers={workers}
+          user={user}
           onSave={saveProject}
           onClose={() => setModal(null)}
         />
@@ -963,7 +940,9 @@ function WorkerForm({ item, onSave, onClose }) {
   );
 }
 
-function projectFormShape(p) {
+function projectFormShape(p, { workers = [], user, orgSettings } = {}) {
+  const soloDefault = inferSoloMode(p, workers);
+  const leadDefault = deriveUserDisplayName(user, orgSettings);
   if (!p) {
     return {
       id: genId(),
@@ -974,9 +953,11 @@ function projectFormShape(p) {
       lat: "",
       lng: "",
       industryStarter: "general",
-      owner: "",
-      hseLead: "",
-      siteManager: "",
+      soloMode: soloDefault,
+      soloLeadName: leadDefault,
+      owner: leadDefault,
+      hseLead: leadDefault,
+      siteManager: leadDefault,
       contractorLead: "",
       timelineStart: todayIso(),
       timelineEnd: addDaysIso(90),
@@ -996,6 +977,7 @@ function projectFormShape(p) {
       boundaryPoints: [],
       boundarySource: "",
       boundaryName: "",
+      playbookId: "general",
     };
   }
   return {
@@ -1004,6 +986,8 @@ function projectFormShape(p) {
     lng: p.lng != null && p.lng !== "" ? String(p.lng) : "",
     postcode: p.postcode || "",
     industryStarter: p.industryStarter || inferProjectStarter(p),
+    soloMode: inferSoloMode(p, workers),
+    soloLeadName: p.soloLeadName || p.owner || leadDefault,
     owner: p.owner || "",
     hseLead: p.hseLead || "",
     siteManager: p.siteManager || "",
@@ -1017,8 +1001,9 @@ function projectFormShape(p) {
   };
 }
 
-function ProjectForm({ item, onSave, onClose }) {
-  const [form, setForm] = useState(() => projectFormShape(item));
+function ProjectForm({ item, workers = [], user, onSave, onClose }) {
+  const orgSettings = useMemo(() => getOrgSettings(), []);
+  const [form, setForm] = useState(() => projectFormShape(item, { workers, user, orgSettings }));
   const [geoBusy, setGeoBusy] = useState(false);
   const [geoMsg, setGeoMsg] = useState("");
   const [enrichBusy, setEnrichBusy] = useState(false);
@@ -1027,8 +1012,9 @@ function ProjectForm({ item, onSave, onClose }) {
   const [step, setStep] = useState(1);
   const totalSteps = 5;
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const missing = projectMissingItems(form);
-  const health = projectHealthScore(form);
+  const soloMode = form.soloMode !== false;
+  const missing = projectMissingItems(form, { soloMode });
+  const health = projectHealthScore(form, { soloMode });
   const starterMeta = PROJECT_STARTERS.find((p) => p.id === form.industryStarter) || PROJECT_STARTERS[0];
   const boundaryRing = parseProjectBoundaryRing(form);
 
@@ -1120,24 +1106,34 @@ function ProjectForm({ item, onSave, onClose }) {
   };
 
   useEffect(() => {
-    setForm(projectFormShape(item));
+    setForm(projectFormShape(item, { workers, user, orgSettings }));
     setStep(1);
-  }, [item?.id]);
+  }, [item?.id, workers.length, user?.id, orgSettings]);
 
   const applyAutoSuggest = () => {
     const nextStarter = inferProjectStarter(form);
     const starter = PROJECT_STARTERS.find((p) => p.id === nextStarter) || PROJECT_STARTERS[0];
-    setForm((f) => ({
-      ...f,
-      industryStarter: nextStarter,
-      riskRegister: suggestProjectRisks({ ...f, industryStarter: nextStarter }),
-      permitDefaults: {
-        ...(f.permitDefaults || {}),
-        requiredPermitTypes: starter.defaultPermitFlow,
-      },
-      owner: f.owner || "Project lead",
-      hseLead: f.hseLead || "HSE lead",
-    }));
+    const lead = deriveUserDisplayName(user, orgSettings);
+    setForm((f) => {
+      const solo = f.soloMode !== false;
+      const next = {
+        ...f,
+        industryStarter: nextStarter,
+        riskRegister: suggestProjectRisks({ ...f, industryStarter: nextStarter }),
+        permitDefaults: {
+          ...(f.permitDefaults || {}),
+          requiredPermitTypes: starter.defaultPermitFlow,
+        },
+      };
+      if (solo) {
+        return applySoloProjectRoles(next, f.soloLeadName || lead);
+      }
+      return {
+        ...next,
+        owner: f.owner || lead,
+        hseLead: f.hseLead || "HSE lead",
+      };
+    });
   };
 
   const persist = (options = {}) => {
@@ -1151,8 +1147,9 @@ function ProjectForm({ item, onSave, onClose }) {
       Array.isArray(form.riskRegister) && form.riskRegister.length > 0
         ? form.riskRegister.slice(0, 12)
         : suggestProjectRisks({ ...form, industryStarter: safeStarter });
+    const draftBase = form.soloMode !== false ? applySoloProjectRoles(form, form.soloLeadName || deriveUserDisplayName(user, orgSettings)) : form;
     const draft = {
-      ...form,
+      ...draftBase,
       industryStarter: safeStarter,
       riskRegister: normalizedRiskRegister,
       permitDefaults: {
@@ -1163,8 +1160,8 @@ function ProjectForm({ item, onSave, onClose }) {
             : starter.defaultPermitFlow,
       },
     };
-    const nextMissing = projectMissingItems(draft);
-    const nextHealth = projectHealthScore(draft);
+    const nextMissing = projectMissingItems(draft, { soloMode: draft.soloMode !== false });
+    const nextHealth = projectHealthScore(draft, { soloMode: draft.soloMode !== false });
     onSave({
       ...draft,
       lat: lat !== undefined && !Number.isNaN(lat) ? lat : undefined,
@@ -1174,7 +1171,7 @@ function ProjectForm({ item, onSave, onClose }) {
       startupChecklist:
         Array.isArray(draft.startupChecklist) && draft.startupChecklist.length > 0
           ? draft.startupChecklist.slice(0, 30)
-          : buildStartupChecklist(draft),
+          : buildStartupChecklist(draft, { soloMode: draft.soloMode !== false, preset: starter }),
     }, {
       ...options,
       applyPlaybook: !item?.id ? draft.playbookId : options.applyPlaybook,
@@ -1298,7 +1295,7 @@ function ProjectForm({ item, onSave, onClose }) {
 
         {step === 2 ? (
           <>
-            <label style={ss.lbl}>Industry starter</label>
+            <label style={{ ...ss.lbl }}>Industry starter</label>
             <select
               style={ss.inp}
               value={form.industryStarter || "general"}
@@ -1316,14 +1313,53 @@ function ProjectForm({ item, onSave, onClose }) {
                 <option key={p.id} value={p.id}>{p.label}</option>
               ))}
             </select>
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Project owner</label>
-            <input style={ss.inp} value={form.owner || ""} onChange={(e) => set("owner", e.target.value)} placeholder="e.g. PM / contract manager" />
-            <label style={{ ...ss.lbl, marginTop: 10 }}>HSE lead</label>
-            <input style={ss.inp} value={form.hseLead || ""} onChange={(e) => set("hseLead", e.target.value)} />
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Site manager</label>
-            <input style={ss.inp} value={form.siteManager || ""} onChange={(e) => set("siteManager", e.target.value)} />
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Main contractor lead</label>
-            <input style={ss.inp} value={form.contractorLead || ""} onChange={(e) => set("contractorLead", e.target.value)} />
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 12, fontSize: 13, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={soloMode}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  const lead = form.soloLeadName || deriveUserDisplayName(user, orgSettings);
+                  setForm((f) =>
+                    checked
+                      ? applySoloProjectRoles({ ...f, soloMode: true }, lead)
+                      : { ...f, soloMode: false }
+                  );
+                }}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <strong>Solo site — just me on this job</strong>
+                <span style={{ display: "block", fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2, lineHeight: 1.4 }}>
+                  One person can be project owner, HSE lead and permit approver. MySafeOps will add your profile automatically if needed.
+                </span>
+              </span>
+            </label>
+            {soloMode ? (
+              <>
+                <label style={{ ...ss.lbl, marginTop: 10 }}>Your name and role</label>
+                <input
+                  style={ss.inp}
+                  value={form.soloLeadName || ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setForm((f) => applySoloProjectRoles({ ...f, soloLeadName: v }, v));
+                  }}
+                  placeholder="e.g. Pat O — Principal contractor / HSE"
+                />
+              </>
+            ) : (
+              <>
+                <label style={{ ...ss.lbl, marginTop: 10 }}>Project owner</label>
+                <input style={ss.inp} value={form.owner || ""} onChange={(e) => set("owner", e.target.value)} placeholder="e.g. PM / contract manager" />
+                <label style={{ ...ss.lbl, marginTop: 10 }}>HSE lead</label>
+                <input style={ss.inp} value={form.hseLead || ""} onChange={(e) => set("hseLead", e.target.value)} />
+                <label style={{ ...ss.lbl, marginTop: 10 }}>Site manager</label>
+                <input style={ss.inp} value={form.siteManager || ""} onChange={(e) => set("siteManager", e.target.value)} />
+                <label style={{ ...ss.lbl, marginTop: 10 }}>Main contractor lead</label>
+                <input style={ss.inp} value={form.contractorLead || ""} onChange={(e) => set("contractorLead", e.target.value)} />
+              </>
+            )}
           </>
         ) : null}
 
@@ -1555,15 +1591,20 @@ function ProjectForm({ item, onSave, onClose }) {
             <div style={{ marginTop: 10, fontSize: 12 }}>
               <strong>Missing before go-live:</strong>{" "}
               {missing.length === 0 ? (
-                <span style={{ color: "#27500A" }}>none</span>
+                <span style={{ color: "#27500A" }}>none{soloMode ? " · solo mode" : ""}</span>
               ) : (
                 <span style={{ color: "#791F1F" }}>{missing.join(", ")}</span>
               )}
             </div>
+            {soloMode ? (
+              <div style={{ marginTop: 8, fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                Coordinates are recommended for weather and nearest A&amp;E, but not required to save in solo mode.
+              </div>
+            ) : null}
             <div style={{ marginTop: 10, border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, padding: 10 }}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>Generated startup checklist</div>
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
-                {buildStartupChecklist(form).slice(0, 8).map((it) => (
+                {buildStartupChecklist(form, { soloMode, preset: starterMeta }).slice(0, 8).map((it) => (
                   <li key={it.id}>{it.text}</li>
                 ))}
               </ul>

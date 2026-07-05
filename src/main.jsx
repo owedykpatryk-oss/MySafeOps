@@ -9,6 +9,7 @@ import { AppProvider } from "./context/AppContext";
 import { SupabaseAuthProvider } from "./context/SupabaseAuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { bootSentryIfConfigured } from "./instrument.js";
+import { initClientOpsMonitor } from "./utils/clientOpsMonitor.js";
 
 function scheduleDeferredInit() {
   const run = () => {
@@ -27,6 +28,8 @@ function scheduleDeferredInit() {
 }
 
 function bootstrap() {
+  initClientOpsMonitor();
+
   createRoot(document.getElementById("root")).render(
     <StrictMode>
       <AppProvider>

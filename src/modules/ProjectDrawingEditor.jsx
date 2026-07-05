@@ -229,6 +229,10 @@ export default function ProjectDrawingEditor() {
 
   const [projectPlans, setProjectPlans] = useState(() => listProjectPlans());
 
+  const [rows, setRows] = useState(() => listProjectDrawingObjects());
+  const [projectId, setProjectId] = useState("");
+  const [planId, setPlanId] = useState("");
+
   const currentProject = useMemo(
     () => projects.find((p) => p.id === projectId) || null,
     [projects, projectId]
@@ -245,9 +249,6 @@ export default function ProjectDrawingEditor() {
     },
     [setProjects]
   );
-  const [rows, setRows] = useState(() => listProjectDrawingObjects());
-  const [projectId, setProjectId] = useState("");
-  const [planId, setPlanId] = useState("");
   const [objectType, setObjectType] = useState("zone");
   const [visibleType, setVisibleType] = useState("all");
   const [tool, setTool] = useState(() => {

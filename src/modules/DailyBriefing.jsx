@@ -10,6 +10,8 @@ import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { escapeHtml, safeImageSrc, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { getOrgSettings } from "../utils/orgSettingsStorage";
+import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 
 const genId = () => `brief_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -858,39 +860,39 @@ function printBriefing(brief) {
     })
     .join("");
 
-  await writePrintWindowDocument(win, `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-  <title>Daily Briefing — ${he(brief.location)} — ${he(brief.date)}</title>
-  <style>
-    body{font-family:Arial,sans-serif;font-size:12px;margin:0;padding:20px;color:#000}
-    h1{font-size:15px;font-weight:bold;background:#0d9488;color:#fff;padding:8px 12px;margin:0 0 12px}
-    .hdr{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px}
-    .hdr-cell{border:0.5px solid #ccc;padding:6px 8px}
-    .hdr-cell .lbl{font-size:10px;color:#666;font-weight:bold;margin-bottom:2px}
-    .section{font-weight:bold;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 6px}
-    ul{margin:0;padding-left:16px;line-height:1.8}
-    table{width:100%;border-collapse:collapse;margin-bottom:12px}
-    th{background:#f5f5f5;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #ccc}
-    @media print{body{padding:10px}h1{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-  </style></head><body>
-  <h1>Daily Safety Briefing Record — MySafeOps</h1>
-  <div class="hdr">
-    <div class="hdr-cell"><div class="lbl">Location</div>${he(brief.location)}</div>
-    <div class="hdr-cell"><div class="lbl">Date</div>${he(fmtDate(brief.date))}</div>
-    <div class="hdr-cell"><div class="lbl">Time</div>${he(brief.time)}</div>
-    <div class="hdr-cell"><div class="lbl">Conducted by</div>${he(brief.conductedBy || "—")}</div>
+  const org = getOrgSettings();
+  const bodyHtml = `
+  <div class="hdr" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+    <div class="hdr-cell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="lbl" style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Location</div>${he(brief.location)}</div>
+    <div class="hdr-cell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="lbl" style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Date</div>${he(fmtDate(brief.date))}</div>
+    <div class="hdr-cell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="lbl" style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Time</div>${he(brief.time)}</div>
+    <div class="hdr-cell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="lbl" style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Conducted by</div>${he(brief.conductedBy || "—")}</div>
   </div>
-  ${brief.weatherConditions ? `<div class="hdr-cell" style="margin-bottom:12px;border:0.5px solid #ccc;padding:6px 8px"><div class="lbl">Weather</div>${he(brief.weatherConditions)}${brief.temperature ? ` · ${he(brief.temperature)}°C` : ""}</div>` : ""}
-  ${brief.scopeToday ? `<div class="section">Today's scope</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(brief.scopeToday)}</p>` : ""}
-  <div class="section">Topics covered</div>
-  <ul style="margin-bottom:12px">${topicsHTML}${customTopicHTML}</ul>
-  ${brief.notes ? `<div class="section">Notes / actions</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px;padding:8px;background:#f9f9f9;border:0.5px solid #ccc">${he(brief.notes)}</p>` : ""}
-  <div class="section">Attendance &amp; signatures</div>
-  <table>
-    <thead><tr><th style="width:30%">Name</th><th style="width:20%">Role</th><th style="width:35%">Signature</th><th style="width:15%">Time</th></tr></thead>
+  ${brief.weatherConditions ? `<div style="margin-bottom:12px;border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#f8fafc"><div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Weather</div>${he(brief.weatherConditions)}${brief.temperature ? ` · ${he(brief.temperature)}°C` : ""}</div>` : ""}
+  ${brief.scopeToday ? `<div class="print-section-title">Today's scope</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(brief.scopeToday)}</p>` : ""}
+  <div class="print-section-title">Topics covered</div>
+  <ul style="margin:0 0 12px;padding-left:18px;line-height:1.8">${topicsHTML}${customTopicHTML}</ul>
+  ${brief.notes ? `<div class="print-section-title">Notes / actions</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px;padding:10px;background:#f8fafc;border:0.5px solid #e2e8f0;border-radius:8px">${he(brief.notes)}</p>` : ""}
+  <div class="print-section-title">Attendance &amp; signatures</div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
+    <thead><tr><th style="width:30%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Name</th><th style="width:20%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Role</th><th style="width:35%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Signature</th><th style="width:15%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Time</th></tr></thead>
     <tbody>${attendeeRows}</tbody>
-  </table>
-  <p style="font-size:10px;color:#888;margin-top:16px">Generated by MySafeOps · ${fmtDateTime(brief.createdAt)}</p>
-  </body></html>`);
+  </table>`;
+
+  await writePrintWindowDocument(
+    win,
+    wrapPrintHtmlDocument(org, {
+      pageTitle: `Daily Briefing — ${brief.location} — ${brief.date}`,
+      headerOpts: {
+        docTitle: "Daily safety briefing",
+        docSubtitle: `${brief.location} · ${fmtDate(brief.date)}`,
+        docBadge: "SITE BRIEFING",
+      },
+      metaFields: { recordNote: `${(brief.attendees || []).filter((a) => a.present).length} attendees signed` },
+      footerExtra: fmtDateTime(brief.createdAt),
+      bodyHtml,
+    })
+  );
   win.print();
   })();
 }

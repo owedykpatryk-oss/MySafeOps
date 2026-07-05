@@ -176,6 +176,65 @@ export default defineConfig(({ mode }) => {
         },
       },
       {
+        name: "dev-overpass-api",
+        configureServer(server) {
+          server.middlewares.use("/api/overpass", async (req, res, next) => {
+            if (req.method !== "POST" && req.method !== "HEAD") return next();
+            if (req.method === "HEAD") {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+            const chunks = [];
+            for await (const chunk of req) chunks.push(chunk);
+            let body = {};
+            try {
+              body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+            } catch {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "invalid_json" }));
+              return;
+            }
+            const lat = Number(body.lat);
+            const lng = Number(body.lng);
+            const radiusM = Math.max(500, Math.min(50_000, Number(body.radiusM) || 25_000));
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "invalid_coordinates" }));
+              return;
+            }
+            const query = `
+[out:json][timeout:15];
+(
+  node(around:${radiusM},${lat},${lng})["amenity"="hospital"];
+  node(around:${radiusM},${lat},${lng})["healthcare"="hospital"];
+);
+out body;`.trim();
+            try {
+              const upstream = await fetch("https://overpass-api.de/api/interpreter", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/x-www-form-urlencoded",
+                  Accept: "application/json",
+                  "User-Agent": "MySafeOps/1.0 (dev nearest hospital; mysafeops.com)",
+                },
+                body: `data=${encodeURIComponent(query)}`,
+              });
+              const text = await upstream.text();
+              res.statusCode = upstream.status;
+              res.setHeader("Content-Type", "application/json");
+              res.end(text);
+            } catch {
+              res.statusCode = 502;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "overpass_upstream_unreachable" }));
+            }
+          });
+        },
+      },
+      {
         name: "inject-supabase-resource-hints",
         transformIndexHtml(html) {
           const site = String(env.VITE_PUBLIC_SITE_URL || "https://mysafeops.com").replace(/\/$/, "");

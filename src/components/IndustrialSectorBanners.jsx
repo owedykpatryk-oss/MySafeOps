@@ -1,8 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadOrgScoped as load } from "../utils/orgStorage";
 import { activeAllergenWindows, orgHasFoodIndustrialPack, orgHasPharmaPack } from "../utils/industrialSectors";
+import { openWorkspaceView } from "../utils/workspaceNavContext";
 
 const ALLERGEN_KEY = "allergen_changeover_windows";
+
+const bannerBtn = {
+  marginTop: 10,
+  padding: "8px 14px",
+  borderRadius: 8,
+  border: "1px solid #86EFAC",
+  background: "#fff",
+  color: "#14532D",
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontFamily: "DM Sans, system-ui, sans-serif",
+  minHeight: 40,
+};
 
 /**
  * Workspace banners: active allergen changeover windows; optional reminder when pharma sector enabled.
@@ -68,16 +83,33 @@ export default function IndustrialSectorBanners() {
       {pharma && (
         <div
           style={{
-            padding: "8px 12px",
+            padding: "12px 14px",
             borderRadius: "var(--radius-sm, 10px)",
             background: "#F0FDF4",
             border: "1px solid #BBF7D0",
             color: "#14532D",
-            fontSize: 12,
+            fontSize: 13,
+            lineHeight: 1.5,
             fontFamily: "DM Sans, system-ui, sans-serif",
           }}
         >
-          Pharma sector enabled — use <strong>GMP deviation log</strong> for QA-controlled deviations.
+          <strong style={{ display: "block", fontSize: 14, marginBottom: 6 }}>Pharma sector enabled</strong>
+          <p style={{ margin: "0 0 8px" }}>
+            Your organisation profile includes <strong>pharmaceutical / GMP-controlled</strong> work — manufacturing or
+            maintenance where procedures, batch records and quality approval matter (not just general construction safety).
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>GMP</strong> (Good Manufacturing Practice) means following validated methods and specs. When something
+            goes off-plan — wrong material, skipped step, out-of-limit reading, unapproved change — record it in the{" "}
+            <strong>GMP deviation log</strong>: what happened, immediate action, who in QA was notified, and any CAPA
+            reference. Use that register instead of the general incident log for QA-controlled deviations.
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: "#166534" }}>
+            Related registers: high-care access, CIP sign-off, allergen changeovers (where food/pharma overlap).
+          </p>
+          <button type="button" style={bannerBtn} onClick={() => openWorkspaceView({ viewId: "gmp-deviations" })}>
+            Open GMP deviation log
+          </button>
         </div>
       )}
     </div>

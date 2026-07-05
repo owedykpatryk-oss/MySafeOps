@@ -3,9 +3,7 @@
  * Adapted from processing-tracker lib/rams/nearestHospital.ts
  */
 
-import { NOMINATIM_USER_AGENT } from "./geocode.js";
-
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const OVERPASS_PROXY_URL = "/api/overpass";
 const SEARCH_RADIUS_M = 25000;
 
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -39,22 +37,13 @@ export async function getNearestHospital(lat, lng) {
   const lo = Number(lng);
   if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
 
-  const query = `
-[out:json][timeout:15];
-(
-  node(around:${SEARCH_RADIUS_M},${la},${lo})["amenity"="hospital"];
-  node(around:${SEARCH_RADIUS_M},${la},${lo})["healthcare"="hospital"];
-);
-out body;
-`.trim();
-
-  const res = await fetch(OVERPASS_URL, {
+  const res = await fetch(OVERPASS_PROXY_URL, {
     method: "POST",
     headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": NOMINATIM_USER_AGENT,
+      "Content-Type": "application/json",
+      Accept: "application/json",
     },
-    body: `data=${encodeURIComponent(query)}`,
+    body: JSON.stringify({ lat: la, lng: lo, radiusM: SEARCH_RADIUS_M }),
   });
   if (!res.ok) return null;
 

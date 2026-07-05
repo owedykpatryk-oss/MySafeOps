@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { OPS_TOAST_EVENT_NAME } from "../utils/clientOpsMonitor.js";
 
 const ToastCtx = createContext(null);
 
@@ -22,6 +23,21 @@ export function ToastProvider({ children }) {
     },
     [dismissToast]
   );
+
+  useEffect(() => {
+    const onOpsToast = (event) => {
+      const d = event?.detail;
+      if (!d?.message && !d?.title) return;
+      pushToast({
+        type: d.type || "error",
+        title: d.title || "",
+        message: d.message || "",
+        durationMs: d.durationMs ?? 6000,
+      });
+    };
+    window.addEventListener(OPS_TOAST_EVENT_NAME, onOpsToast);
+    return () => window.removeEventListener(OPS_TOAST_EVENT_NAME, onOpsToast);
+  }, [pushToast]);
 
   const value = useMemo(() => ({ pushToast, dismissToast }), [pushToast, dismissToast]);
 

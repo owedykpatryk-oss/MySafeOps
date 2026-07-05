@@ -11,6 +11,8 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { escapeHtml, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { getOrgSettings } from "../utils/orgSettingsStorage";
+import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { MS_TEMPLATE_DEFS } from "./msStepTemplates";
 import { getMsStepTemplate } from "../utils/msOrgTemplates";
 
@@ -454,44 +456,47 @@ function printMS(form, workers, projects) {
 
   const win = openPrintWindow();
   if (!win) return;
-  await writePrintWindowDocument(win, `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>MS — ${he(form.title)}</title>
-  <style>body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:0;padding:20px}
-  h1{font-size:15px;font-weight:bold;background:#f97316;color:#fff;padding:8px 12px;margin:0 0 12px;text-align:center}
-  h2{font-size:12px;font-weight:bold;background:#f5f5f5;padding:5px 8px;margin:12px 0 6px;border-left:3px solid #f97316}
-  .hgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-  .hcell{border:0.5px solid #ccc;padding:5px 8px}.hcell .l{font-size:10px;color:#666;font-weight:bold}
-  table{width:100%;border-collapse:collapse;margin-bottom:12px}
-  th{background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a}
-  .pill{display:inline-block;padding:1px 8px;border-radius:20px;font-size:10px;background:#e5f7f0;margin:2px}
-  @media print{body{padding:10px}h1,h2{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style>
-  </head><body>
-  <h1>METHOD STATEMENT — MySafeOps</h1>
-  <div class="hgrid">
-    <div class="hcell"><div class="l">Document title</div>${he(form.title)}</div>
-    <div class="hcell"><div class="l">Location</div>${he(form.location)}</div>
-    <div class="hcell"><div class="l">Client</div>${he(form.client||"—")}</div>
-    <div class="hcell"><div class="l">Job reference</div>${he(form.jobRef||"—")}</div>
-    <div class="hcell"><div class="l">Date</div>${he(fmtDate(form.date))}</div>
-    <div class="hcell"><div class="l">Revision</div>${he(form.revision||"1A")}</div>
-    <div class="hcell"><div class="l">Lead engineer</div>${he(form.leadEngineer||"—")}</div>
-    <div class="hcell"><div class="l">Prepared by</div>${he(form.preparedBy||"—")}</div>
-    <div class="hcell"><div class="l">Approved by</div>${he(form.approvedBy||"—")}</div>
+  const org = getOrgSettings();
+  const bodyHtml = `
+  <div class="hgrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+    <div class="hcell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="l" style="font-size:10px;color:#64748b;font-weight:700">Document title</div>${he(form.title)}</div>
+    <div class="hcell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="l" style="font-size:10px;color:#64748b;font-weight:700">Location</div>${he(form.location)}</div>
+    <div class="hcell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="l" style="font-size:10px;color:#64748b;font-weight:700">Client</div>${he(form.client||"—")}</div>
+    <div class="hcell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="l" style="font-size:10px;color:#64748b;font-weight:700">Job reference</div>${he(form.jobRef||"—")}</div>
+    <div class="hcell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="l" style="font-size:10px;color:#64748b;font-weight:700">Date</div>${he(fmtDate(form.date))}</div>
+    <div class="hcell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="l" style="font-size:10px;color:#64748b;font-weight:700">Revision</div>${he(form.revision||"1A")}</div>
+    <div class="hcell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="l" style="font-size:10px;color:#64748b;font-weight:700">Lead engineer</div>${he(form.leadEngineer||"—")}</div>
+    <div class="hcell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="l" style="font-size:10px;color:#64748b;font-weight:700">Prepared by</div>${he(form.preparedBy||"—")}</div>
+    <div class="hcell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="l" style="font-size:10px;color:#64748b;font-weight:700">Approved by</div>${he(form.approvedBy||"—")}</div>
   </div>
-  ${form.scope?`<h2>Scope of works</h2><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(form.scope)}</p>`:""}
-  ${form.restrictions?`<h2>Restrictions</h2><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(form.restrictions)}</p>`:""}
-  ${(form.steps||[]).length>0?`<h2>Work sequence</h2>
-  <table><thead><tr><th style="width:40px">Step</th><th style="width:20%">Activity</th><th>Description</th><th style="width:15%">Responsible</th><th style="width:12%">Duration</th></tr></thead>
+  ${form.scope?`<div class="print-section-title">Scope of works</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(form.scope)}</p>`:""}
+  ${form.restrictions?`<div class="print-section-title">Restrictions</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(form.restrictions)}</p>`:""}
+  ${(form.steps||[]).length>0?`<div class="print-section-title">Work sequence</div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px"><thead><tr><th style="width:40px;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Step</th><th style="width:20%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Activity</th><th style="background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Description</th><th style="width:15%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Responsible</th><th style="width:12%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Duration</th></tr></thead>
   <tbody>${stepsHTML}</tbody></table>`:""}
-  ${(form.plant||[]).length>0?`<h2>Plant and equipment</h2><p style="font-size:12px">${form.plant.map(p=>`<span class="pill">${he(p)}</span>`).join("")}</p>`:""}
-  ${(form.materials||[]).length>0?`<h2>Key materials</h2><p style="font-size:12px">${form.materials.map(m=>`<span class="pill">${he(m)}</span>`).join("")}</p>`:""}
-  ${(form.ppeRequired||[]).length>0?`<h2>Required PPE</h2><p style="font-size:12px">${form.ppeRequired.map(p=>`<span class="pill">${he(p)}</span>`).join("")}</p>`:""}
-  ${form.emergencyProcedure?`<h2>Emergency procedure</h2><p style="font-size:12px;line-height:1.6">${he(form.emergencyProcedure)}</p>`:""}
-  ${form.wasteDisposal?`<h2>Waste disposal</h2><p style="font-size:12px;line-height:1.6">${he(form.wasteDisposal)}</p>`:""}
-  ${operatives.length>0?`<h2>Operative signatures</h2>
-  <table><thead><tr><th style="width:35%">Name</th><th style="width:40%">Signature</th><th style="width:25%">Date</th></tr></thead>
-  <tbody>${sigRows}</tbody></table>`:""}
-  <p style="font-size:10px;color:#999;margin-top:16px">Generated by MySafeOps · Rev ${he(form.revision||"1A")} · ${he(fmtDate(form.date))}</p>
-  </body></html>`);
+  ${(form.plant||[]).length>0?`<div class="print-section-title">Plant and equipment</div><p style="font-size:12px">${form.plant.map(p=>`<span class="pill" style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;background:#e5f7f0;margin:2px">${he(p)}</span>`).join("")}</p>`:""}
+  ${(form.materials||[]).length>0?`<div class="print-section-title">Key materials</div><p style="font-size:12px">${form.materials.map(m=>`<span class="pill" style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;background:#e5f7f0;margin:2px">${he(m)}</span>`).join("")}</p>`:""}
+  ${(form.ppeRequired||[]).length>0?`<div class="print-section-title">Required PPE</div><p style="font-size:12px">${form.ppeRequired.map(p=>`<span class="pill" style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;background:#e5f7f0;margin:2px">${he(p)}</span>`).join("")}</p>`:""}
+  ${form.emergencyProcedure?`<div class="print-section-title">Emergency procedure</div><p style="font-size:12px;line-height:1.6">${he(form.emergencyProcedure)}</p>`:""}
+  ${form.wasteDisposal?`<div class="print-section-title">Waste disposal</div><p style="font-size:12px;line-height:1.6">${he(form.wasteDisposal)}</p>`:""}
+  ${operatives.length>0?`<div class="print-section-title">Operative signatures</div>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:12px"><thead><tr><th style="width:35%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Name</th><th style="width:40%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Signature</th><th style="width:25%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Date</th></tr></thead>
+  <tbody>${sigRows}</tbody></table>`:""}`;
+
+  await writePrintWindowDocument(
+    win,
+    wrapPrintHtmlDocument(org, {
+      pageTitle: `MS — ${form.title}`,
+      headerOpts: {
+        docTitle: form.title || "Method statement",
+        docSubtitle: `${form.location || "Site"} · Rev ${form.revision || "1A"}`,
+        docBadge: "METHOD STATEMENT",
+      },
+      metaFields: { recordNote: form.jobRef || form.client || "Controlled method statement" },
+      footerExtra: `Rev ${form.revision || "1A"} · ${fmtDate(form.date)}`,
+      bodyHtml,
+    })
+  );
   win.print();
   })();
 }

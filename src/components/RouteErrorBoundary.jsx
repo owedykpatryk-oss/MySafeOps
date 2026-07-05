@@ -2,6 +2,7 @@ import { Component } from "react";
 import { getSupportEmail } from "../config/supportContact";
 import { captureSentryException } from "../utils/sentryClient.js";
 import { isChunkLoadError, reloadOnceForStaleChunk } from "../utils/chunkLoadError.js";
+import { logOpsEvent } from "../utils/clientOpsMonitor.js";
 
 export default class RouteErrorBoundary extends Component {
   constructor(props) {
@@ -16,6 +17,17 @@ export default class RouteErrorBoundary extends Component {
   componentDidCatch(error, errorInfo) {
     if (import.meta.env.DEV) {
       console.error("[RouteErrorBoundary]", error, errorInfo);
+    }
+    try {
+      logOpsEvent({
+        level: "critical",
+        source: "RouteErrorBoundary",
+        message: error?.message || String(error),
+        stack: error?.stack,
+        meta: { componentStack: errorInfo?.componentStack },
+      });
+    } catch {
+      /* ignore */
     }
     captureSentryException(error, { extra: { componentStack: errorInfo?.componentStack } });
     if (isChunkLoadError(error)) {

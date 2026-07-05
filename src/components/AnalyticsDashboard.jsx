@@ -6,6 +6,7 @@ import { getAppliedIndustryPackId } from "../utils/orgIndustryPacks";
 import { getFoodPharmaSetupStatus, isFoodPharmaPackActive } from "../utils/foodPharmaOnboarding";
 import { getConstructionSetupStatus, isConstructionPackActive } from "../utils/constructionOnboarding";
 import { getGeospatialSetupStatus, isGeospatialPackActive } from "../utils/geospatialOnboarding";
+import { isSoloWorkspace } from "../utils/soloWorkspace";
 import { invalidateRegisterStatsCache, buildHseDashboardSummary, emptyHseDashboardSummary } from "../utils/moduleRegisterStats";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
@@ -684,10 +685,12 @@ export default function AnalyticsDashboard() {
       },
       { label: "Create first RAMS or permit", done: rams.length > 0 || permits.length > 0, next: "RAMS or Permits tab" },
       {
-        label: "Add at least one teammate profile",
-        done: workers.length > 1,
-        next: "Settings → Invites / Members",
-        cta: "invites",
+        label: isSoloWorkspace(workers)
+          ? "Solo mode — one profile is enough (invite later optional)"
+          : "Add at least one teammate profile",
+        done: isSoloWorkspace(workers) ? workers.length >= 1 : workers.length > 1,
+        next: isSoloWorkspace(workers) ? "Optional: Settings → Invites" : "Settings → Invites / Members",
+        cta: isSoloWorkspace(workers) ? null : "invites",
       },
     ],
     [orgProfileDone, projects.length, workers.length, rams.length, permits.length]

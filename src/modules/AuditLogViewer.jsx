@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { readAudit, clearAudit } from "../utils/auditLog";
+import { readOpsLog, clearOpsLog, exportOpsLogJson } from "../utils/clientOpsMonitor.js";
 import { useApp } from "../context/AppContext";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
@@ -81,6 +82,8 @@ export default function AuditLogViewer() {
   }, [bump, serverRows]);
 
   const [visible, setVisible] = useState(AUDIT_PAGE);
+  const [opsBump, setOpsBump] = useState(0);
+  const opsRows = useMemo(() => readOpsLog(), [bump, opsBump]);
 
   const refresh = () => {
     setVisible(AUDIT_PAGE);
@@ -92,7 +95,7 @@ export default function AuditLogViewer() {
       <PageHero
         badgeText="LOG"
         title="Audit log"
-        lead="Local activity log plus optional cloud copy for admins and supervisors. Clear removes only entries stored in this browser."
+        lead="Local activity log plus optional cloud copy. Technical diagnostics captures console and runtime errors for support — export if something breaks."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button type="button" style={ss.btn} onClick={refresh}>
@@ -192,6 +195,70 @@ export default function AuditLogViewer() {
                 </button>
               </div>
             ) : null}
+          </div>
+        )}
+      </div>
+
+      <h3 style={{ margin: "24px 0 8px", fontSize: 16 }}>Diagnostics (errors &amp; auto-heal)</h3>
+      <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45, maxWidth: 720 }}>
+        When something fails in the browser, MySafeOps saves it here and (if configured) sends it to Sentry. Chunk-load
+        errors trigger one automatic reload. For email alerts, enable Sentry in production with{" "}
+        <code>VITE_SENTRY_DSN</code>.
+      </p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <button type="button" style={ss.btn} onClick={() => setOpsBump((x) => x + 1)}>
+          Refresh diagnostics
+        </button>
+        <button
+          type="button"
+          style={ss.btn}
+          onClick={() => {
+            const blob = new Blob([exportOpsLogJson()], { type: "application/json;charset=utf-8" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `mysafeops-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+          }}
+        >
+          Export JSON
+        </button>
+        {caps.backupImport ? (
+          <button
+            type="button"
+            style={{ ...ss.btn, color: "#A32D2D", borderColor: "#F09595" }}
+            onClick={() => {
+              if (confirm("Clear diagnostics log for this organisation in this browser?")) {
+                clearOpsLog();
+                setOpsBump((x) => x + 1);
+              }
+            }}
+          >
+            Clear diagnostics
+          </button>
+        ) : null}
+      </div>
+      <div style={ss.card}>
+        {opsRows.length === 0 ? (
+          <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>No technical errors recorded yet.</div>
+        ) : (
+          <div style={{ maxHeight: 320, overflow: "auto" }}>
+            {opsRows.slice(0, 40).map((r) => (
+              <div
+                key={r.id}
+                style={{
+                  padding: "10px 0",
+                  borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
+                  fontSize: 12,
+                }}
+              >
+                <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
+                  {new Date(r.at).toLocaleString("en-GB")} · {r.level} · {r.source}
+                  {r.healAction ? ` · heal: ${r.healAction}` : ""}
+                </div>
+                <div style={{ marginTop: 4, wordBreak: "break-word" }}>{r.message}</div>
+              </div>
+            ))}
           </div>
         )}
       </div>
