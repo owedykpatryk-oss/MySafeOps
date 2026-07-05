@@ -50,7 +50,8 @@
     "format": "prettier --write \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\"",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fix:mobile": "node scripts/cursor-mobile-fix.mjs"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.2.8",
