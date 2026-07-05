@@ -1,0 +1,41 @@
+---
+description: Cloud agent and mobile fix workflow for MySafeOps — small PRs, targeted tests, no secret commits
+alwaysApply: true
+---
+
+# Cloud & mobile operations (MySafeOps)
+
+Use when the request comes from **Cursor Automations**, **Cloud Agents**, **Slack**, **webhook**, or **phone** — not only from the desktop IDE.
+
+## Default behaviour
+
+1. **Minimal diff** — fix the reported problem only; match repo conventions.
+2. **Test before PR** — run `npx vitest run` on touched test files; run `npm run lint` if TS/JS changed.
+3. **Branch naming** — `fix/ci-*`, `fix/mobile-*`, `fix/sentry-*`, `fix/health-*`.
+4. **PR summary** — what broke, what changed, how to verify (3 bullets).
+5. **Never** commit `.env`, API keys, or force-push `main`.
+6. **Never** create git commits unless the automation prompt or user explicitly asks.
+
+## Repo map (high-traffic)
+
+| Area | Path |
+|------|------|
+| Permits / PTW | `src/modules/permits/` |
+| Survey | `src/modules/surveyReport/`, `src/utils/surveyContentCatalog.js` |
+| RAMS | `src/modules/rams/` |
+| Supabase edge | `supabase/functions/` |
+| CI | `.github/workflows/ci.yml` |
+
+## Mobile / Slack message format
+
+If the user message is short or from Slack, treat it as a **fix ticket**:
+
+- **Problem:** (one line)
+- **Where:** (module or URL, optional)
+- **Acceptance:** (what “done” looks like)
+
+If unclear, open a draft PR with investigation notes instead of guessing.
+
+## UK product context
+
+MySafeOps = UK construction H&S SaaS (RAMS, permits, surveys). Prefer plain UK English in user-facing copy.

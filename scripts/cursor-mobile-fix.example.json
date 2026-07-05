@@ -1,0 +1,6 @@
+{
+  "message": "Permit hot work GO/NO-GO does not save fireWatcher on quick issue",
+  "module": "permits",
+  "urgency": "normal",
+  "acceptance": "Field persists after save; PDF shows fire watcher name"
+}
