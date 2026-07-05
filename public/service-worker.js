@@ -1,9 +1,32 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.3.1";
+const SW_VERSION = "mysafeops-v1.3.2";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
+
+function isCacheableResponse(res) {
+  return res && res.ok && res.status >= 200 && res.status < 300;
+}
+
+function putIfOk(cache, request, response) {
+  if (isCacheableResponse(response)) {
+    return cache.put(request, response.clone());
+  }
+  return Promise.resolve();
+}
+
+async function fetchWithOptionalRetry(request) {
+  try {
+    return await fetch(request);
+  } catch {
+    try {
+      return await fetch(request, { cache: "no-store" });
+    } catch {
+      return null;
+    }
+  }
+}
 
 // Vite build: hashed assets live under /assets/; precache only shell + manifest + icons
 const PRECACHE_ASSETS = [
@@ -53,15 +76,24 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
-        .then(res => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(request, clone));
+        .then((res) => {
+          if (isCacheableResponse(res)) {
+            caches.open(CACHE_NAME).then((c) => putIfOk(c, request, res));
+          }
           return res;
         })
         .catch(() =>
           caches.match("/index.html")
-            .then(cached => cached || caches.match(OFFLINE_URL))
-            .then(fallback => fallback || new Response("Offline", { status: 503, statusText: "Offline", headers: { "Content-Type": "text/plain" } }))
+            .then((cached) => cached || caches.match(OFFLINE_URL))
+            .then(
+              (fallback) =>
+                fallback ||
+                new Response("Offline", {
+                  status: 503,
+                  statusText: "Offline",
+                  headers: { "Content-Type": "text/plain" },
+                })
+            )
         )
     );
     return;
@@ -74,13 +106,17 @@ self.addEventListener("fetch", (event) => {
     url.pathname.match(/\.(js|css|woff2?|ttf|eot|png|jpg|svg|ico|webmanifest)$/)
   ) {
     event.respondWith(
-      caches.match(request).then(cached => {
+      caches.match(request).then(async (cached) => {
         if (cached) return cached;
-        return fetch(request).then(res => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(request, clone));
+        const res = await fetchWithOptionalRetry(request);
+        if (res) {
+          if (isCacheableResponse(res)) {
+            const c = await caches.open(CACHE_NAME);
+            await putIfOk(c, request, res);
+          }
           return res;
-        });
+        }
+        return Response.error();
       })
     );
     return;
@@ -90,9 +126,10 @@ self.addEventListener("fetch", (event) => {
   if (url.hostname.includes("open-meteo.com") || url.hostname.includes("api.qrserver.com")) {
     event.respondWith(
       fetch(request)
-        .then(res => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(request, clone));
+        .then((res) => {
+          if (isCacheableResponse(res)) {
+            caches.open(CACHE_NAME).then((c) => putIfOk(c, request, res));
+          }
           return res;
         })
         .catch(() => caches.match(request).then((cached) => cached || Response.error()))
@@ -117,17 +154,14 @@ self.addEventListener("fetch", (event) => {
         .then((res) => {
           const ct = String(res.headers.get("content-type") || "").toLowerCase();
           const isAsset =
-            res.ok &&
+            isCacheableResponse(res) &&
             (ct.includes("javascript") || ct.includes("css") || ct.includes("wasm") || ct.includes("json"));
           if (isAsset) {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(request, clone));
+            caches.open(CACHE_NAME).then((c) => putIfOk(c, request, res));
           }
           return res;
         })
-        .catch(() =>
-          caches.match(request).then((cached) => cached || new Response(null, { status: 504, statusText: "Network unavailable" }))
-        )
+        .catch(() => caches.match(request).then((cached) => cached || Response.error()))
     );
     return;
   }
@@ -135,16 +169,15 @@ self.addEventListener("fetch", (event) => {
   // Default (same-origin): network first, cache fallback
   event.respondWith(
     fetch(request)
-      .then(res => {
-        if (res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(c => c.put(request, clone));
+      .then((res) => {
+        if (isCacheableResponse(res)) {
+          caches.open(CACHE_NAME).then((c) => putIfOk(c, request, res));
         }
         return res;
       })
       .catch(async () => {
         const cached = await caches.match(request);
-        return cached || new Response(null, { status: 504, statusText: "Network unavailable" });
+        return cached || Response.error();
       })
   );
 });
