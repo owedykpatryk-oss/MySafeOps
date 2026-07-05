@@ -108,6 +108,12 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const checkoutBlocked = stripeFnStatus === "missing" || stripeFnStatus === "misconfigured";
   const stripeCheckoutEnabled = cloudOk && isAdmin && !checkoutBlocked;
   const stripePortalEnabled = cloudOk && isAdmin && portalReady;
+  const stripeTestReady = Boolean(stripeFnDiagnostics["stripe-checkout"]?.testReady);
+  const allowTestCheckout =
+    stripeTestReady &&
+    isAdmin &&
+    cloudOk &&
+    (showDevHints || import.meta.env.VITE_STRIPE_ALLOW_TEST_CHECKOUT === "true");
 
   useEffect(() => {
     if (checkoutReturn !== "success" || !supabase) return;
@@ -160,13 +166,21 @@ export default function BillingLimits({ checkoutReturn = null }) {
                 () => clearTimeout(timer)
               );
               if (res.status === 404) return [fn, "missing"];
-              if (res.status === 503) {
-                const body = await res.json().catch(() => null);
-                return [fn, "misconfigured", body];
-              }
               const data = await res.json().catch(() => null);
+              if (data?.liveReady === false || res.status === 503) return [fn, "misconfigured", data];
+              if (data?.liveReady === true) return [fn, "ready", data];
               if (data?.configured && typeof data.configured === "object") {
-                const configuredValues = Object.values(data.configured);
+                const liveKeys = [
+                  "stripeSecretKey",
+                  "stripePriceStarter",
+                  "stripePriceTeam",
+                  "stripePriceBusiness",
+                  "stripePriceEnterprise",
+                  "siteUrl",
+                  "supabaseUrl",
+                  "serviceRoleKey",
+                ];
+                const configuredValues = liveKeys.map((k) => data.configured[k]);
                 if (configuredValues.length && configuredValues.some((v) => !v)) {
                   return [fn, "misconfigured", data];
                 }
@@ -248,13 +262,17 @@ export default function BillingLimits({ checkoutReturn = null }) {
     return invokeOnce();
   };
 
-  const startCheckout = async (planId) => {
+  const startCheckout = async (planId, { testMode = false } = {}) => {
     setActionError(null);
     if (!supabase) {
       setActionError("Sign in with cloud account to manage subscriptions.");
       return;
     }
-    if (stripeFnStatus === "missing") {
+    if (testMode && !allowTestCheckout) {
+      setActionError("Stripe test checkout is not available in this environment.");
+      return;
+    }
+    if (!testMode && stripeFnStatus === "missing") {
       const msg = showDevHints
         ? "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-checkout)."
         : "Online subscriptions are not set up on this site yet. Contact support to upgrade.";
@@ -262,7 +280,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
       pushToast({ type: "error", message: msg });
       return;
     }
-    if (stripeFnStatus === "misconfigured") {
+    if (!testMode && stripeFnStatus === "misconfigured") {
       const msg = showDevHints
         ? "stripe-checkout is deployed but not configured. Add STRIPE_SECRET_KEY, STRIPE_PRICE_* and SITE_URL in Supabase Edge Function secrets."
         : "Billing is temporarily unavailable. Contact support if this persists.";
@@ -270,9 +288,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
       pushToast({ type: "error", message: msg });
       return;
     }
-    setCheckoutLoading(planId);
+    setCheckoutLoading(testMode ? `test:${planId}` : planId);
     try {
-      const { data, error } = await invokeStripeFunctionWithRecovery("stripe-checkout", { planId });
+      const { data, error } = await invokeStripeFunctionWithRecovery("stripe-checkout", { planId, testMode });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.requestId) setLastActionRequestId(String(data.requestId));
@@ -302,10 +320,14 @@ export default function BillingLimits({ checkoutReturn = null }) {
     }
   };
 
-  const openPortal = async () => {
+  const openPortal = async ({ testMode = false } = {}) => {
     setActionError(null);
     if (!supabase) {
       setActionError("Sign in with cloud account to manage subscriptions.");
+      return;
+    }
+    if (testMode && !allowTestCheckout) {
+      setActionError("Stripe test portal is not available in this environment.");
       return;
     }
     const portalState = stripeFnHealth["stripe-portal"] || "unknown";
@@ -327,7 +349,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
     }
     setPortalLoading(true);
     try {
-      const { data, error } = await invokeStripeFunctionWithRecovery("stripe-portal", {});
+      const { data, error } = await invokeStripeFunctionWithRecovery("stripe-portal", { testMode });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.requestId) setLastActionRequestId(String(data.requestId));
@@ -553,7 +575,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {STRIPE_SUBSCRIBABLE_PLAN_IDS.map((id) => {
                 const p = BILLING_PLANS[id];
-                const loading = checkoutLoading === id;
+                const loading = checkoutLoading === id || checkoutLoading === `test:${id}`;
                 return (
                   <button
                     key={id}
@@ -590,11 +612,54 @@ export default function BillingLimits({ checkoutReturn = null }) {
             <button
               type="button"
               disabled={!stripePortalEnabled || portalLoading || Boolean(checkoutLoading)}
-              onClick={openPortal}
+              onClick={() => openPortal()}
               style={{ ...ss.btn, fontSize: 13, alignSelf: "flex-start", opacity: stripePortalEnabled ? 1 : 0.6 }}
             >
               {portalLoading ? "Opening…" : "Manage billing (portal)"}
             </button>
+            {allowTestCheckout && (
+              <div
+                style={{
+                  marginTop: 4,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1px dashed var(--color-border-secondary, #cbd5e1)",
+                  background: "var(--color-surface-secondary, #f8fafc)",
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 6 }}>
+                  QA — Stripe test mode (card 4242 4242 4242 4242)
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {STRIPE_SUBSCRIBABLE_PLAN_IDS.map((id) => {
+                    const p = BILLING_PLANS[id];
+                    const loading = checkoutLoading === `test:${id}`;
+                    return (
+                      <button
+                        key={`test-${id}`}
+                        type="button"
+                        disabled={Boolean(checkoutLoading) || loading}
+                        onClick={() => startCheckout(id, { testMode: true })}
+                        style={{ ...ss.btn, fontSize: 12, opacity: checkoutLoading && !loading ? 0.6 : 1 }}
+                      >
+                        {loading ? "Redirecting…" : `Test ${p.name}`}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    disabled={portalLoading || Boolean(checkoutLoading)}
+                    onClick={() => openPortal({ testMode: true })}
+                    style={{ ...ss.btn, fontSize: 12 }}
+                  >
+                    Test portal
+                  </button>
+                </div>
+                <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                  Live Subscribe buttons above stay on production Stripe. Test buttons use Stripe test keys only — no real charges.
+                </p>
+              </div>
+            )}
             <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
               {showDevHints
                 ? "Uses Supabase Edge Functions with your Stripe secret keys — not exposed to the browser. Configure Price IDs and webhook in the README."

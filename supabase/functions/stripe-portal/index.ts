@@ -1,23 +1,17 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+import {
+  hasLiveStripeConfig,
+  hasTestStripeConfig,
+  isValidSiteUrl,
+  resolveStripeConfig,
+  stripeDiagnostics,
+} from "../_shared/stripeConfig.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-function isValidStripeSecret(value: string): boolean {
-  return value.startsWith("sk_");
-}
-
-function isValidSiteUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
 
 Deno.serve(async (req) => {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
@@ -26,29 +20,33 @@ Deno.serve(async (req) => {
   }
 
   if (req.method === "GET") {
-    const secret = Deno.env.get("STRIPE_SECRET_KEY")?.trim() ?? "";
     const siteUrl = Deno.env.get("SITE_URL")?.trim() ?? "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
+    const live = stripeDiagnostics("live");
+    const test = stripeDiagnostics("test");
     const diagnostics = {
       function: "stripe-portal",
       deployed: true,
+      stripeLive: live,
+      stripeTest: test,
       configured: {
-        stripeSecretKey: Boolean(secret),
+        stripeSecretKey: hasLiveStripeConfig(),
+        stripeTestSecretKey: hasTestStripeConfig(),
         siteUrl: Boolean(siteUrl),
         supabaseUrl: Boolean(supabaseUrl),
         serviceRoleKey: Boolean(serviceKey),
       },
       valid: {
-        stripeSecretKeyFormat: !secret || isValidStripeSecret(secret),
+        stripeSecretKeyFormat: live.validMap.secretKeyFormat,
         siteUrlFormat: !siteUrl || isValidSiteUrl(siteUrl),
       },
       requestId,
     };
-    const allConfigured = Object.values(diagnostics.configured).every(Boolean);
+    const liveReady = live.configured;
     const allValid = Object.values(diagnostics.valid).every(Boolean);
-    return new Response(JSON.stringify(diagnostics), {
-      status: allConfigured && allValid ? 200 : 503,
+    return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady: test.configured }), {
+      status: liveReady && allValid ? 200 : 503,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });
   }
@@ -61,22 +59,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const secret = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
     const siteUrl = (Deno.env.get("SITE_URL") ?? "http://localhost:5173").replace(/\/$/, "");
     if (!isValidSiteUrl(siteUrl)) {
       return new Response(JSON.stringify({ error: "SITE_URL invalid. Expected absolute http(s) URL." }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
-      });
-    }
-    if (!secret) {
-      return new Response(JSON.stringify({ error: "STRIPE_SECRET_KEY not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
-      });
-    }
-    if (!isValidStripeSecret(secret)) {
-      return new Response(JSON.stringify({ error: "STRIPE_SECRET_KEY format invalid. Expected sk_..." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
       });
@@ -115,6 +100,21 @@ Deno.serve(async (req) => {
       });
     }
 
+    const body = await req.json().catch(() => ({}));
+    const testMode = Boolean(body?.testMode);
+
+    const stripeConfig = resolveStripeConfig(testMode ? "test" : "live");
+    if (!stripeConfig) {
+      return new Response(
+        JSON.stringify({
+          error: testMode
+            ? "Stripe test portal is not configured."
+            : "STRIPE_SECRET_KEY not configured",
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId } },
+      );
+    }
+
     const { data: mem, error: memErr } = await supabase
       .from("org_memberships")
       .select("org_id, role")
@@ -135,27 +135,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    const customerColumn = testMode ? "stripe_test_customer_id" : "stripe_customer_id";
     const { data: org, error: orgErr } = await supabase
       .from("organizations")
-      .select("stripe_customer_id")
+      .select(`id, ${customerColumn}`)
       .eq("id", mem.org_id)
       .single();
 
-    if (orgErr || !org?.stripe_customer_id) {
-      return new Response(JSON.stringify({ error: "No Stripe customer on file yet. Start a subscription first." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
-      });
+    const customerId = org?.[customerColumn] as string | null | undefined;
+    if (orgErr || !customerId) {
+      return new Response(
+        JSON.stringify({
+          error: testMode
+            ? "No Stripe test customer on file yet. Start a test subscription first."
+            : "No Stripe customer on file yet. Start a subscription first.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId } },
+      );
     }
 
-    const stripe = new Stripe(secret, { apiVersion: "2023-10-16" });
+    const stripe = new Stripe(stripeConfig.secretKey, { apiVersion: "2023-10-16" });
 
     const session = await stripe.billingPortal.sessions.create({
-      customer: org.stripe_customer_id,
-      return_url: `${siteUrl}/app?settingsTab=billing`,
+      customer: customerId,
+      return_url: `${siteUrl}/app?settingsTab=billing${testMode ? "&stripeMode=test" : ""}`,
     });
 
-    return new Response(JSON.stringify({ url: session.url, requestId }), {
+    return new Response(JSON.stringify({ url: session.url, requestId, stripeMode: stripeConfig.mode }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });

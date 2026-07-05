@@ -37,14 +37,30 @@ async function checkFunction(fnName) {
       return { fnName, deployed: false, configured: null, rawStatus: 404 };
     }
     const body = await res.json().catch(() => null);
+    const liveReady = body?.liveReady === true;
+    const testReady = body?.testReady === true;
     if (body?.configured && typeof body.configured === "object") {
-      const configured = Object.values(body.configured).every(Boolean);
+      const liveKeys = [
+        "stripeSecretKey",
+        "stripePriceStarter",
+        "stripePriceTeam",
+        "stripePriceBusiness",
+        "stripePriceEnterprise",
+        "siteUrl",
+        "supabaseUrl",
+        "serviceRoleKey",
+      ];
+      const configured =
+        body.liveReady === true ||
+        (body.liveReady !== false && liveKeys.every((k) => Boolean(body.configured[k])));
       const valid = body?.valid && typeof body.valid === "object" ? Object.values(body.valid).every(Boolean) : true;
       return {
         fnName,
         deployed: true,
         configured,
         valid,
+        liveReady,
+        testReady,
         configuredMap: body.configured,
         validMap: body.valid || {},
         pendingFailures: Number.isFinite(body?.pendingFailures) ? Number(body.pendingFailures) : null,
@@ -79,7 +95,7 @@ async function main() {
 
     if (result.configured === false || result.valid === false) {
       hasIssues = true;
-      console.log(`- ${result.fnName}: deployed, but misconfigured`);
+      console.log(`- ${result.fnName}: deployed, but live billing misconfigured`);
       for (const [key, ok] of Object.entries(result.configuredMap || {})) {
         console.log(`    - ${key}: ${fmt(Boolean(ok))}`);
       }
@@ -89,14 +105,15 @@ async function main() {
       continue;
     }
 
-    if (result.configured === true) {
+    if (result.configured === true || result.liveReady) {
       if (result.fnName === "stripe-webhook" && (result.pendingFailures || 0) > 0) {
         hasIssues = true;
-        console.log(`- ${result.fnName}: ready, but pending failures=${result.pendingFailures}`);
+        console.log(`- ${result.fnName}: live ready, but pending failures=${result.pendingFailures}`);
         console.log("    - run: npm run stripe:retry-webhooks");
         continue;
       }
-      console.log(`- ${result.fnName}: ready`);
+      const testNote = result.testReady ? "live + test QA ready" : "live ready (test QA: npm run stripe:setup-test)";
+      console.log(`- ${result.fnName}: ${testNote}`);
       if (result.fnName === "stripe-webhook" && result.lastProcessedAt) {
         console.log(`    - lastProcessedAt: ${result.lastProcessedAt}`);
       }
@@ -126,6 +143,7 @@ function printStripePriceGuide() {
   console.log("  Business          £249  → STRIPE_PRICE_BUSINESS");
   console.log("  Enterprise        £499  → STRIPE_PRICE_ENTERPRISE");
   console.log("  Seed: npm run stripe:seed-prices  |  Sync secrets: npm run stripe:sync-secrets");
+  console.log("  QA test mode: npm run stripe:setup-test  (STRIPE_SECRET_KEY_TEST in .env.local)");
   console.log("  Secrets live in Supabase Edge only (not Vercel).\n");
 }
 

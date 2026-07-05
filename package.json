@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "stripe:seed-prices": "node scripts/stripe-seed-prices.mjs",
     "stripe:sync-secrets": "node scripts/sync-stripe-prices-to-supabase.mjs",
+    "stripe:setup-test": "node scripts/stripe-setup-test-mode.mjs",
     "provision:fess-group": "node scripts/provision-fess-group.mjs",
     "stripe:retry-webhooks": "node scripts/stripe-retry-webhook-failures.mjs",
     "billing:doctor": "node scripts/billing-doctor.mjs",

@@ -1,25 +1,31 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+import {
+  hasLiveStripeConfig,
+  hasTestStripeConfig,
+  isValidStripeSecret,
+  isValidWebhookSecret,
+  planFromPriceId,
+  resolveStripeConfig,
+  stripeDiagnostics,
+  type StripeMode,
+} from "../_shared/stripeConfig.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature",
 };
 
-function isValidSecret(value: string): boolean {
-  return value.startsWith("sk_");
-}
-
-function isValidWebhookSecret(value: string): boolean {
-  return value.startsWith("whsec_");
-}
-
 type Diagnostics = {
   function: string;
   deployed: boolean;
+  stripeLive: ReturnType<typeof stripeDiagnostics>;
+  stripeTest: ReturnType<typeof stripeDiagnostics>;
   configured: {
     stripeSecretKey: boolean;
     stripeWebhookSecret: boolean;
+    stripeTestSecretKey: boolean;
+    stripeTestWebhookSecret: boolean;
     supabaseUrl: boolean;
     serviceRoleKey: boolean;
   };
@@ -31,19 +37,6 @@ type Diagnostics = {
   pendingFailures: number | null;
   requestId: string;
 };
-
-function planFromPriceId(priceId: string): "starter" | "team" | "business" | "enterprise" | null {
-  const p = priceId.trim();
-  const s = Deno.env.get("STRIPE_PRICE_STARTER")?.trim();
-  const t = Deno.env.get("STRIPE_PRICE_TEAM")?.trim();
-  const b = Deno.env.get("STRIPE_PRICE_BUSINESS")?.trim();
-  const e = Deno.env.get("STRIPE_PRICE_ENTERPRISE")?.trim();
-  if (s && p === s) return "starter";
-  if (t && p === t) return "team";
-  if (b && p === b) return "business";
-  if (e && p === e) return "enterprise";
-  return null;
-}
 
 function mapStripeStatus(status: string): "none" | "active" | "trialing" | "past_due" | "canceled" | "unpaid" {
   switch (status) {
@@ -61,7 +54,11 @@ function mapStripeStatus(status: string): "none" | "active" | "trialing" | "past
   }
 }
 
-async function applySubscription(supabase: ReturnType<typeof createClient>, sub: Stripe.Subscription) {
+async function applySubscription(
+  supabase: ReturnType<typeof createClient>,
+  sub: Stripe.Subscription,
+  livemode: boolean,
+) {
   const orgId = sub.metadata?.org_id;
   if (!orgId) {
     console.warn("stripe-webhook: subscription without org_id metadata", sub.id);
@@ -69,15 +66,21 @@ async function applySubscription(supabase: ReturnType<typeof createClient>, sub:
   }
 
   const priceId = sub.items.data[0]?.price?.id;
-  const plan = priceId ? planFromPriceId(priceId) : null;
+  const mapped = priceId ? planFromPriceId(priceId) : null;
+  const plan = mapped?.plan ?? null;
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
 
   const row: Record<string, unknown> = {
     stripe_subscription_id: sub.id,
-    stripe_customer_id: customerId ?? null,
     subscription_status: mapStripeStatus(sub.status),
     billing_plan: plan,
   };
+
+  if (livemode) {
+    row.stripe_customer_id = customerId ?? null;
+  } else {
+    row.stripe_test_customer_id = customerId ?? null;
+  }
 
   if (sub.status === "canceled" || sub.status === "unpaid") {
     row.billing_plan = null;
@@ -95,7 +98,7 @@ async function findOrgIdByCustomerId(
   const { data, error } = await supabase
     .from("organizations")
     .select("id")
-    .eq("stripe_customer_id", customerId)
+    .or(`stripe_customer_id.eq.${customerId},stripe_test_customer_id.eq.${customerId}`)
     .maybeSingle();
   if (error) {
     console.error("findOrgIdByCustomerId error", error);
@@ -170,23 +173,27 @@ async function buildDiagnostics(
   supabase: ReturnType<typeof createClient> | null,
   requestId: string,
 ): Promise<Diagnostics> {
-  const secret = Deno.env.get("STRIPE_SECRET_KEY")?.trim() ?? "";
-  const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET")?.trim() ?? "";
+  const live = stripeDiagnostics("live");
+  const test = stripeDiagnostics("test");
   const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
 
   const diagnostics: Diagnostics = {
     function: "stripe-webhook",
     deployed: true,
+    stripeLive: live,
+    stripeTest: test,
     configured: {
-      stripeSecretKey: Boolean(secret),
-      stripeWebhookSecret: Boolean(webhookSecret),
+      stripeSecretKey: hasLiveStripeConfig(),
+      stripeWebhookSecret: live.configuredMap.webhookSecret,
+      stripeTestSecretKey: hasTestStripeConfig(),
+      stripeTestWebhookSecret: test.configuredMap.webhookSecret,
       supabaseUrl: Boolean(supabaseUrl),
       serviceRoleKey: Boolean(serviceKey),
     },
     valid: {
-      stripeSecretKeyFormat: !secret || isValidSecret(secret),
-      stripeWebhookSecretFormat: !webhookSecret || isValidWebhookSecret(webhookSecret),
+      stripeSecretKeyFormat: live.validMap.secretKeyFormat,
+      stripeWebhookSecretFormat: live.validMap.webhookSecretFormat,
     },
     lastProcessedAt: null,
     pendingFailures: null,
@@ -227,14 +234,34 @@ async function clearSubscription(
   if (error) console.error("clearSubscription error", error);
 }
 
+function constructStripeEvent(
+  body: string,
+  sig: string,
+): { event: Stripe.Event; mode: StripeMode; stripe: Stripe } {
+  const attempts: StripeMode[] = ["live", "test"];
+  let lastError: unknown = null;
+
+  for (const mode of attempts) {
+    const config = resolveStripeConfig(mode);
+    if (!config?.webhookSecret) continue;
+    const stripe = new Stripe(config.secretKey, { apiVersion: "2023-10-16" });
+    try {
+      const event = stripe.webhooks.constructEvent(body, sig, config.webhookSecret);
+      return { event, mode, stripe };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Invalid payload");
+}
+
 Deno.serve(async (req) => {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const secret = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
-  const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const supabase =
@@ -246,12 +273,19 @@ Deno.serve(async (req) => {
 
   if (req.method === "GET") {
     const diagnostics = await buildDiagnostics(supabase, requestId);
-    const allConfigured = Object.values(diagnostics.configured).every(Boolean);
+    const liveReady = diagnostics.stripeLive.configured && diagnostics.stripeLive.configuredMap.webhookSecret;
     const allValid = Object.values(diagnostics.valid).every(Boolean);
-    return new Response(JSON.stringify(diagnostics), {
-      status: allConfigured && allValid ? 200 : 503,
-      headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
-    });
+    return new Response(
+      JSON.stringify({
+        ...diagnostics,
+        liveReady,
+        testReady: diagnostics.stripeTest.configured && diagnostics.stripeTest.configuredMap.webhookSecret,
+      }),
+      {
+        status: liveReady && allValid ? 200 : 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+      },
+    );
   }
 
   if (req.method !== "POST") {
@@ -261,13 +295,15 @@ Deno.serve(async (req) => {
     });
   }
 
-  if (!secret || !webhookSecret || !supabaseUrl || !serviceKey) {
+  if (!hasLiveStripeConfig() || !supabaseUrl || !serviceKey) {
     return new Response(JSON.stringify({ error: "Webhook not configured" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });
   }
-  if (!isValidSecret(secret) || !isValidWebhookSecret(webhookSecret)) {
+
+  const liveWebhook = Deno.env.get("STRIPE_WEBHOOK_SECRET")?.trim() ?? "";
+  if (!isValidStripeSecret(Deno.env.get("STRIPE_SECRET_KEY")?.trim() ?? "") || !isValidWebhookSecret(liveWebhook)) {
     return new Response(JSON.stringify({ error: "Webhook secret format invalid" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
@@ -281,9 +317,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  const stripe = new Stripe(secret, { apiVersion: "2023-10-16" });
-
   let event: Stripe.Event;
+  let stripe: Stripe;
   try {
     const body = await req.text();
     const sig = req.headers.get("stripe-signature");
@@ -293,7 +328,9 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
       });
     }
-    event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
+    const parsed = constructStripeEvent(body, sig);
+    event = parsed.event;
+    stripe = parsed.stripe;
   } catch (e) {
     console.error("stripe-webhook invalid payload", { requestId, error: e instanceof Error ? e.message : String(e) });
     return new Response(JSON.stringify({ error: "Invalid payload" }), {
@@ -330,14 +367,14 @@ Deno.serve(async (req) => {
         const subId = session.subscription;
         if (typeof subId === "string") {
           const sub = await stripe.subscriptions.retrieve(subId);
-          await applySubscription(supabase, sub);
+          await applySubscription(supabase, sub, event.livemode ?? false);
         }
         break;
       }
       case "customer.subscription.updated":
       case "customer.subscription.created": {
         const sub = event.data.object as Stripe.Subscription;
-        await applySubscription(supabase, sub);
+        await applySubscription(supabase, sub, event.livemode ?? false);
         break;
       }
       case "customer.subscription.deleted": {

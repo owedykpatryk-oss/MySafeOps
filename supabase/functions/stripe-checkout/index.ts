@@ -1,42 +1,19 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+import {
+  hasLiveStripeConfig,
+  hasTestStripeConfig,
+  isValidSiteUrl,
+  priceForPlan,
+  resolveStripeConfig,
+  stripeDiagnostics,
+  type StripePricePlanId,
+} from "../_shared/stripeConfig.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-type PlanId = "starter" | "team" | "business" | "enterprise";
-
-function isValidStripeSecret(value: string): boolean {
-  return value.startsWith("sk_");
-}
-
-function isValidPriceId(value: string): boolean {
-  return value.startsWith("price_");
-}
-
-function isValidSiteUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function priceForPlan(planId: PlanId): string | undefined {
-  const key =
-    planId === "starter"
-      ? "STRIPE_PRICE_STARTER"
-      : planId === "team"
-        ? "STRIPE_PRICE_TEAM"
-        : planId === "business"
-          ? "STRIPE_PRICE_BUSINESS"
-          : "STRIPE_PRICE_ENTERPRISE";
-  const v = Deno.env.get(key);
-  return v && v.trim() ? v.trim() : undefined;
-}
 
 Deno.serve(async (req) => {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
@@ -45,41 +22,40 @@ Deno.serve(async (req) => {
   }
 
   if (req.method === "GET") {
-    const secret = Deno.env.get("STRIPE_SECRET_KEY")?.trim() ?? "";
-    const starter = Deno.env.get("STRIPE_PRICE_STARTER")?.trim() ?? "";
-    const team = Deno.env.get("STRIPE_PRICE_TEAM")?.trim() ?? "";
-    const business = Deno.env.get("STRIPE_PRICE_BUSINESS")?.trim() ?? "";
-    const enterprise = Deno.env.get("STRIPE_PRICE_ENTERPRISE")?.trim() ?? "";
     const siteUrl = Deno.env.get("SITE_URL")?.trim() ?? "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim() ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
+    const live = stripeDiagnostics("live");
+    const test = stripeDiagnostics("test");
     const diagnostics = {
       function: "stripe-checkout",
       deployed: true,
+      stripeLive: live,
+      stripeTest: test,
       configured: {
-        stripeSecretKey: Boolean(secret),
-        stripePriceStarter: Boolean(starter),
-        stripePriceTeam: Boolean(team),
-        stripePriceBusiness: Boolean(business),
-        stripePriceEnterprise: Boolean(enterprise),
+        stripeSecretKey: hasLiveStripeConfig(),
+        stripePriceStarter: live.configuredMap.priceStarter,
+        stripePriceTeam: live.configuredMap.priceTeam,
+        stripePriceBusiness: live.configuredMap.priceBusiness,
+        stripePriceEnterprise: live.configuredMap.priceEnterprise,
         siteUrl: Boolean(siteUrl),
         supabaseUrl: Boolean(supabaseUrl),
         serviceRoleKey: Boolean(serviceKey),
       },
       valid: {
-        stripeSecretKeyFormat: !secret || isValidStripeSecret(secret),
-        stripePriceStarterFormat: !starter || isValidPriceId(starter),
-        stripePriceTeamFormat: !team || isValidPriceId(team),
-        stripePriceBusinessFormat: !business || isValidPriceId(business),
-        stripePriceEnterpriseFormat: !enterprise || isValidPriceId(enterprise),
+        stripeSecretKeyFormat: live.validMap.secretKeyFormat,
+        stripePriceStarterFormat: live.validMap.priceStarterFormat,
+        stripePriceTeamFormat: live.validMap.priceTeamFormat,
+        stripePriceBusinessFormat: live.validMap.priceBusinessFormat,
+        stripePriceEnterpriseFormat: live.validMap.priceEnterpriseFormat,
         siteUrlFormat: !siteUrl || isValidSiteUrl(siteUrl),
       },
       requestId,
     };
-    const allConfigured = Object.values(diagnostics.configured).every(Boolean);
+    const liveReady = live.configured;
     const allValid = Object.values(diagnostics.valid).every(Boolean);
-    return new Response(JSON.stringify(diagnostics), {
-      status: allConfigured && allValid ? 200 : 503,
+    return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady: test.configured }), {
+      status: liveReady && allValid ? 200 : 503,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });
   }
@@ -92,22 +68,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const secret = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
     const siteUrl = (Deno.env.get("SITE_URL") ?? "http://localhost:5173").replace(/\/$/, "");
     if (!isValidSiteUrl(siteUrl)) {
       return new Response(JSON.stringify({ error: "SITE_URL invalid. Expected absolute http(s) URL." }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
-      });
-    }
-    if (!secret) {
-      return new Response(JSON.stringify({ error: "STRIPE_SECRET_KEY not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
-      });
-    }
-    if (!isValidStripeSecret(secret)) {
-      return new Response(JSON.stringify({ error: "STRIPE_SECRET_KEY format invalid. Expected sk_..." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
       });
@@ -147,7 +110,8 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const planId = body?.planId as PlanId | undefined;
+    const planId = body?.planId as StripePricePlanId | undefined;
+    const testMode = Boolean(body?.testMode);
     if (!planId || !["starter", "team", "business", "enterprise"].includes(planId)) {
       return new Response(JSON.stringify({ error: "planId must be starter, team, business, or enterprise" }), {
         status: 400,
@@ -155,19 +119,25 @@ Deno.serve(async (req) => {
       });
     }
 
-    const priceId = priceForPlan(planId);
-    if (!priceId) {
+    const stripeConfig = resolveStripeConfig(testMode ? "test" : "live");
+    if (!stripeConfig) {
       return new Response(
         JSON.stringify({
-          error: "Stripe Price ID not configured for this plan. Set STRIPE_PRICE_STARTER / TEAM / BUSINESS / ENTERPRISE.",
+          error: testMode
+            ? "Stripe test mode is not configured. Set STRIPE_SECRET_KEY_TEST and STRIPE_PRICE_*_TEST in Supabase Edge secrets."
+            : "STRIPE_SECRET_KEY not configured",
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId } },
       );
     }
-    if (!isValidPriceId(priceId)) {
+
+    const priceId = priceForPlan(stripeConfig, planId);
+    if (!priceId) {
       return new Response(
         JSON.stringify({
-          error: "Stripe Price ID format invalid. Expected price_...",
+          error: testMode
+            ? "Stripe test Price ID not configured for this plan."
+            : "Stripe Price ID not configured for this plan. Set STRIPE_PRICE_STARTER / TEAM / BUSINESS / ENTERPRISE.",
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId } },
       );
@@ -195,7 +165,7 @@ Deno.serve(async (req) => {
 
     const { data: org, error: orgErr } = await supabase
       .from("organizations")
-      .select("id, stripe_customer_id")
+      .select("id, stripe_customer_id, stripe_test_customer_id")
       .eq("id", mem.org_id)
       .single();
 
@@ -207,22 +177,22 @@ Deno.serve(async (req) => {
     }
 
     const orgId = org.id;
+    const stripe = new Stripe(stripeConfig.secretKey, { apiVersion: "2023-10-16" });
+    const customerColumn = testMode ? "stripe_test_customer_id" : "stripe_customer_id";
+    let customerId = (org[customerColumn] as string | null) ?? null;
 
-    const stripe = new Stripe(secret, { apiVersion: "2023-10-16" });
-
-    let customerId = org.stripe_customer_id as string | null;
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
-        metadata: { org_id: orgId },
+        metadata: { org_id: orgId, stripe_mode: stripeConfig.mode },
       });
       customerId = customer.id;
       const { error: upErr } = await supabase
         .from("organizations")
-        .update({ stripe_customer_id: customerId })
+        .update({ [customerColumn]: customerId })
         .eq("id", orgId);
       if (upErr) {
-        console.error("stripe-checkout update customer failed", { requestId, orgId, error: upErr });
+        console.error("stripe-checkout update customer failed", { requestId, orgId, testMode, error: upErr });
         return new Response(JSON.stringify({ error: "Could not save Stripe customer" }), {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
@@ -234,16 +204,16 @@ Deno.serve(async (req) => {
       mode: "subscription",
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${siteUrl}/app?checkout=success&settingsTab=billing`,
-      cancel_url: `${siteUrl}/app?checkout=canceled&settingsTab=billing`,
+      success_url: `${siteUrl}/app?checkout=success&settingsTab=billing${testMode ? "&stripeMode=test" : ""}`,
+      cancel_url: `${siteUrl}/app?checkout=canceled&settingsTab=billing${testMode ? "&stripeMode=test" : ""}`,
       client_reference_id: orgId,
-      metadata: { org_id: orgId, plan_id: planId },
+      metadata: { org_id: orgId, plan_id: planId, stripe_mode: stripeConfig.mode },
       subscription_data: {
-        metadata: { org_id: orgId, plan_id: planId },
+        metadata: { org_id: orgId, plan_id: planId, stripe_mode: stripeConfig.mode },
       },
     });
 
-    return new Response(JSON.stringify({ url: session.url, requestId }), {
+    return new Response(JSON.stringify({ url: session.url, requestId, stripeMode: stripeConfig.mode }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });
