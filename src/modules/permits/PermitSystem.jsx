@@ -33,6 +33,7 @@ import { getPermitGuidance, hasPermitGuidance } from "./permitGuidance/registry"
 import { createDefaultChecklistItems, normalizeChecklistItems, normalizeChecklistState } from "./permitChecklistUtils";
 import { permitsForPlan } from "./permitPlanLivePins";
 import { evaluatePermitTypeConflicts, PERMIT_CONFLICT_MATRIX, normalizeConflictPair } from "./permitConflictMatrix";
+import { buildSimopsConflictMap, findSimopsConflicts } from "./permitSimops";
 import { workspaceDeepLink } from "../../utils/appDeepLinks";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import GeoPhotoEvidencePicker from "../../components/geoPhotos/GeoPhotoEvidencePicker";
@@ -7413,6 +7414,7 @@ export default function PermitSystem() {
       </div>
 
       {showAdvancedPermitAdmin ? (
+      <>
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
           <div>
@@ -8135,6 +8137,7 @@ export default function PermitSystem() {
           </div>
         ) : null}
       </div>
+      </>
       ) : null}
 
       <div
@@ -8232,6 +8235,7 @@ export default function PermitSystem() {
       </div>
 
       {showAdvancedPermitAdmin ? (
+      <>
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:6, flexWrap:"wrap" }}>
           <div style={{ fontSize:12, fontWeight:600 }}>Integration adapters (AI/Automation readiness)</div>
@@ -8459,6 +8463,7 @@ export default function PermitSystem() {
           )}
         </div>
       )}
+      </>
       ) : null}
 
       {advancedViewsEnabled && showAdvancedPermitAdmin && permits.length > 0 && (

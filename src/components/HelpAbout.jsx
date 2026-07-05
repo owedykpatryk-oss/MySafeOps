@@ -644,7 +644,7 @@ export default function HelpAbout() {
           <strong>Projects → Add project</strong> — name &amp; client → team &amp; industry → location (postcode, map, weather, A&amp;E) → timeline → permits &amp; go-live checklist.
         </p>
 
-        <h3 style={ss.h3}>Permits
+        <h3 style={ss.h3}>Permits</h3>
         <p style={ss.p}>
           List, board, and timeline views; live wall for the gate; conflict checks between permit types; evidence photos; handover between shifts.
           Upload a site plan under <strong>Drawings</strong> or permit plan overlay — click escape routes and emergency assets.
