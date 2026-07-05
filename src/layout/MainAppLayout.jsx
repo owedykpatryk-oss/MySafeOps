@@ -7,6 +7,7 @@ import { BarChart2, FileCheck, ClipboardList, Users, Building2, Menu, Pin, Shiel
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import TrialBillingBanner from "../components/TrialBillingBanner";
+import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
 import BillingUsageWarning from "../components/BillingUsageWarning";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
 import RouteErrorBoundary from "../components/RouteErrorBoundary";
