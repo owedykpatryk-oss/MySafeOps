@@ -7,6 +7,7 @@ import { BarChart2, FileCheck, ClipboardList, Users, Building2, Menu, Pin, Shiel
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import TrialBillingBanner from "../components/TrialBillingBanner";
+import BillingUsageWarning from "../components/BillingUsageWarning";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
 import RouteErrorBoundary from "../components/RouteErrorBoundary";
 import { ViewFallback } from "../components/ViewFallback";
@@ -844,6 +845,8 @@ export default function MainAppLayout() {
       <OfflineStatusBanner />
       <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
         <TrialBillingBanner />
+        <BillingReadOnlyBanner />
+        <BillingUsageWarning />
         <IndustrialSectorBanners />
       </div>
       <WorkspaceAppBar

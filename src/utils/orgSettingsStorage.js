@@ -24,7 +24,9 @@ export function loadOrgSettingsRaw(orgId = getOrgId()) {
 
 /** @param {Record<string, unknown>} value @param {string} [orgId] @param {string} [updatedAtIso] */
 export function saveOrgSettingsRaw(value, orgId = getOrgId(), updatedAtIso) {
-  saveOrgScoped(ORG_SETTINGS_BASE_KEY, value);
+  // Org configuration (branding, sectors, automation, modules) — always writable so admins
+  // can prepare workspace before/after subscribe; HSE records stay read-only when trial ended.
+  saveOrgScoped(ORG_SETTINGS_BASE_KEY, value, { bypassBillingGuard: true });
   if (updatedAtIso) {
     localStorage.setItem(`${ORG_SETTINGS_UPDATED_AT_KEY}_${orgId}`, updatedAtIso);
   }

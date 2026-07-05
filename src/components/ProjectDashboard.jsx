@@ -3,6 +3,8 @@ import ProjectSitePreviewMap from "./ProjectSitePreviewMap";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { collectProjectDashboard, fmtProjectDay, fmtProjectWhen, healthTone } from "../utils/projectDashboard";
+import { assessCdmF10Notification, f10StatusLabel } from "../utils/cdmF10Assessment";
+import { buildHealthSafetyFileInventory } from "../utils/hsFileAccumulator";
 import { getPlaybook, buildMissingDocChecklist } from "../utils/projectPlaybooks";
 import { buildProjectActionContext, pickNextActionForProject } from "../utils/projectNextAction";
 import { buildProjectHubPulse, printProjectSitePack } from "../utils/projectHubPulse";
@@ -106,6 +108,27 @@ export default function ProjectDashboard({
   onCloneDocuments,
 }) {
   const dash = useMemo(() => collectProjectDashboard(project, workers), [project, workers]);
+
+  const f10Assessment = useMemo(
+    () => (dash.cdmPacks[0] ? assessCdmF10Notification(dash.cdmPacks[0]) : null),
+    [dash.cdmPacks]
+  );
+
+  const hsFile = useMemo(
+    () =>
+      project?.id
+        ? buildHealthSafetyFileInventory(project.id, {
+            rams: dash.rams,
+            permits: dash.permits,
+            methodStatements: dash.methodStatements,
+            surveys: dash.surveys,
+            cdmPacks: dash.cdmPacks,
+            dailyBriefings: dash.dailyBriefings,
+            inspections: dash.inspections,
+          })
+        : { items: [], total: 0, counts: {} },
+    [project?.id, dash]
+  );
 
   const hubPulse = useMemo(() => (project ? buildProjectHubPulse(project, dash) : null), [project, dash]);
 
@@ -258,6 +281,18 @@ export default function ProjectDashboard({
             ) : null}
             {checklist.length > 0 ? (
               <span className="app-project-dashboard__chip">Checklist {checklistOpen} open</span>
+            ) : null}
+            {f10Assessment?.notifiable ? (
+              <span
+                className={`app-project-dashboard__chip ${
+                  f10Assessment.f10Submitted ? "app-project-dashboard__chip--good" : "app-project-dashboard__chip--warn"
+                }`}
+              >
+                {f10StatusLabel(f10Assessment)}
+              </span>
+            ) : null}
+            {hsFile.total > 0 ? (
+              <span className="app-project-dashboard__chip">H&amp;S File {hsFile.total} docs</span>
             ) : null}
           </div>
         </div>
@@ -615,6 +650,32 @@ export default function ProjectDashboard({
               />
             );
           })}
+        </DocSection>
+
+        <DocSection
+          title="Health & Safety File"
+          count={hsFile.total}
+          emptyHint="Issue RAMS and permits for this project — they appear here for CDM handover."
+          actionLabel="Open CDM"
+          onAction={() => go("cdm", dash.cdmPacks.length ? "view" : "create", dash.cdmPacks[0] ? { cdmPackId: dash.cdmPacks[0].id } : {})}
+        >
+          {hsFile.items.slice(0, 10).map((it) => (
+            <DocRow
+              key={`${it.type}-${it.id}`}
+              title={it.title}
+              meta={[it.type, it.status, fmtProjectWhen(it.updatedAt)].filter(Boolean).join(" · ")}
+              badge={it.type}
+              onClick={() => {
+                if (it.type === "RAMS") go("rams", "edit", { ramsId: it.id });
+                else if (it.type === "PTW") go("permits", "view", { permitId: it.id });
+                else if (it.type === "Survey report") go("survey-report", "view", { surveyReportId: it.id });
+                else if (it.type === "CDM / CPP") go("cdm", "view", { cdmPackId: it.id });
+                else if (it.type === "Method statement") go("method-statement", "view", { methodStatementId: it.id });
+                else if (it.type === "Briefing") go("daily-briefing", "view", { briefingId: it.id });
+                else if (it.type === "Inspection") go("inspections", "view", { inspectionId: it.id });
+              }}
+            />
+          ))}
         </DocSection>
 
         <DocSection

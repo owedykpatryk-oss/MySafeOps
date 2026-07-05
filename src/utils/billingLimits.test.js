@@ -40,5 +40,16 @@ describe("billingLimits", () => {
   it("returns read-only message when trial ended", () => {
     const msg = billingLimitMessage({ ok: false, readOnly: true });
     expect(msg).toContain("evaluation trial has ended");
+    expect(msg).toContain("organisation settings");
+  });
+
+  it("trial plan allows up to 100 projects", () => {
+    const result = checkBillingLimit("projects", {
+      trialStatus: { isActive: true, remainingDays: 10 },
+      billing: {},
+      isPlatformOwner: false,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.limit).toBe(100);
   });
 });

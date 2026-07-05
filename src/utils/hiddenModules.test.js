@@ -1,11 +1,13 @@
 /** @vitest-environment jsdom */
 import { describe, expect, it, beforeEach } from "vitest";
+import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
 import {
   RAMS_FEATURES,
   applyHidePreset,
   clearAllHidden,
   getHiddenFeatureIds,
   getHiddenModuleIds,
+  hasFullModuleEntitlement,
   hideFeature,
   hideModule,
   isFeatureVisible,
@@ -21,20 +23,22 @@ describe("hiddenModules", () => {
     saveOrgSettingsRaw({ hiddenModules: [], hiddenModulesBootstrapped: true });
   });
 
-  it("hides and unhides workspace modules", () => {
-    expect(isModuleVisible("snags")).toBe(true);
+  it("stores hidden modules in org settings", () => {
+    const endsAt = new Date(Date.now() + 7 * 86400000).toISOString();
+    localStorage.setItem("mysafeops_trial_ends_at", endsAt);
     hideModule("snags");
     expect(getHiddenModuleIds()).toEqual(["snags"]);
-    expect(isModuleVisible("snags")).toBe(false);
-    expect(isModuleVisible("settings")).toBe(true);
+    expect(isModuleVisible("snags")).toBe(true);
     unhideModule("snags");
     expect(getHiddenModuleIds()).toEqual([]);
   });
 
-  it("hides RAMS surveying feature", () => {
+  it("stores hidden RAMS features in org settings", () => {
+    const endsAt = new Date(Date.now() + 7 * 86400000).toISOString();
+    localStorage.setItem("mysafeops_trial_ends_at", endsAt);
     hideFeature(RAMS_FEATURES.SURVEYING);
     expect(getHiddenFeatureIds()).toEqual([RAMS_FEATURES.SURVEYING]);
-    expect(isFeatureVisible(RAMS_FEATURES.SURVEYING)).toBe(false);
+    expect(isFeatureVisible(RAMS_FEATURES.SURVEYING)).toBe(true);
     expect(isFeatureVisible(RAMS_FEATURES.ALLERGEN)).toBe(true);
   });
 
@@ -74,5 +78,20 @@ describe("hiddenModules", () => {
     const endsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     localStorage.setItem("mysafeops_trial_ends_at", endsAt);
     expect(isModuleVisible("ai-rams")).toBe(false);
+  });
+
+  it("paid subscription shows modules hidden by slim bootstrap", () => {
+    hideModule("gmp-deviations");
+    localStorage.setItem("mysafeops_trial_ends_at", new Date(Date.now() - 86400000).toISOString());
+    localStorage.setItem("mysafeops_subscription_status", "active");
+    localStorage.setItem("mysafeops_billing_plan", "starter");
+    expect(hasFullModuleEntitlement()).toBe(true);
+    expect(isModuleVisible("gmp-deviations")).toBe(true);
+  });
+
+  it("local workspace without trial metadata shows all modules", () => {
+    hideModule("survey-report");
+    expect(hasFullModuleEntitlement()).toBe(true);
+    expect(isModuleVisible("survey-report")).toBe(true);
   });
 });

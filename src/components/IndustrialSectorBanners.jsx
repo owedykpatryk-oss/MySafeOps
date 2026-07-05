@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadOrgScoped as load } from "../utils/orgStorage";
-import { activeAllergenWindows, orgHasFoodIndustrialPack, orgHasPharmaPack } from "../utils/industrialSectors";
+import {
+  activeAllergenWindows,
+  orgFoodSectorBannerActive,
+  orgPharmaSectorBannerActive,
+} from "../utils/industrialSectors";
+import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 import { openWorkspaceView } from "../utils/workspaceNavContext";
+import { dismissSectorBanner, isSectorBannerDismissed } from "../utils/sectorBannerDismiss";
 
 const ALLERGEN_KEY = "allergen_changeover_windows";
 
@@ -19,18 +25,42 @@ const bannerBtn = {
   minHeight: 40,
 };
 
+const dismissBtn = {
+  marginLeft: "auto",
+  padding: "4px 10px",
+  borderRadius: 6,
+  border: "1px solid currentColor",
+  background: "transparent",
+  color: "inherit",
+  fontSize: 11,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontFamily: "DM Sans, system-ui, sans-serif",
+  flexShrink: 0,
+};
+
 /**
- * Workspace banners: active allergen changeover windows; optional reminder when pharma sector enabled.
+ * Workspace banners: active allergen changeover windows; pharma reminder when sector ticked in org settings.
  */
 export default function IndustrialSectorBanners() {
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const food = orgHasFoodIndustrialPack();
-  const pharma = orgHasPharmaPack();
+  const [settingsRev, setSettingsRev] = useState(0);
+  const [dismissRev, setDismissRev] = useState(0);
 
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), 8000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const bump = () => setSettingsRev((n) => n + 1);
+    window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+    return () => window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+  }, []);
+
+  const food = useMemo(() => orgFoodSectorBannerActive(), [settingsRev]);
+  const pharma = useMemo(() => orgPharmaSectorBannerActive(), [settingsRev]);
+  const pharmaDismissed = useMemo(() => isSectorBannerDismissed("pharma"), [dismissRev, settingsRev]);
 
   const windows = useMemo(() => {
     if (!food) return [];
@@ -50,7 +80,9 @@ export default function IndustrialSectorBanners() {
     );
   }, [food, nowMs]);
 
-  if (!food && !pharma) return null;
+  const showPharma = pharma && !pharmaDismissed;
+
+  if (!food && !showPharma && windows.length === 0) return null;
 
   return (
     <div role="region" aria-label="Industrial sector notices" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -80,7 +112,7 @@ export default function IndustrialSectorBanners() {
           {w.extraPpeHint ? <div style={{ marginTop: 6, fontWeight: 500 }}>{w.extraPpeHint}</div> : null}
         </div>
       ))}
-      {pharma && (
+      {showPharma && (
         <div
           style={{
             padding: "12px 14px",
@@ -93,7 +125,19 @@ export default function IndustrialSectorBanners() {
             fontFamily: "DM Sans, system-ui, sans-serif",
           }}
         >
-          <strong style={{ display: "block", fontSize: 14, marginBottom: 6 }}>Pharma sector enabled</strong>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+            <strong style={{ display: "block", fontSize: 14, flex: 1 }}>Pharma sector enabled</strong>
+            <button
+              type="button"
+              style={dismissBtn}
+              onClick={() => {
+                dismissSectorBanner("pharma");
+                setDismissRev((n) => n + 1);
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
           <p style={{ margin: "0 0 8px" }}>
             Your organisation profile includes <strong>pharmaceutical / GMP-controlled</strong> work — manufacturing or
             maintenance where procedures, batch records and quality approval matter (not just general construction safety).

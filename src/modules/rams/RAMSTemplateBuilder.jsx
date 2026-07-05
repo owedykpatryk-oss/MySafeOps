@@ -34,10 +34,16 @@ import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import PageHero from "../../components/PageHero";
+import EmptyState from "../../components/EmptyState";
 import SimpleFormDialog from "../../components/SimpleFormDialog";
 import { geocodeAddressNominatim } from "../../utils/geocode";
 import { useToast } from "../../context/ToastContext";
 import { orgHasFoodIndustrialPack, orgHasPharmaPack } from "../../utils/industrialSectors";
+import {
+  COMPETENT_REVIEW_LABEL,
+  requiresCompetentReviewForRamsStatus,
+  stampCompetentReview,
+} from "../../utils/competentReviewGate";
 import { getIndustryPackLabel } from "../../utils/industryPackProfile";
 import {
   findTradeStarterByKey,
@@ -807,6 +813,7 @@ const RAMS_FORM_DEFAULTS = {
   documentStatus: "draft",
   issueDate: "",
   strictMode: false,
+  competentReviewAck: false,
   strictMinControls: 3,
   strictRequireHoldPoints: true,
   signatureEvents: [],
@@ -2066,6 +2073,19 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
             <label style={ss.lbl}>Approval date</label>
             <input type="date" value={form.approvalDate||""} onChange={e=>set("approvalDate",e.target.value)} style={ss.inp} />
           </div>
+          {requiresCompetentReviewForRamsStatus(form.documentStatus) ? (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 12, lineHeight: 1.45 }}>
+                <input
+                  type="checkbox"
+                  checked={!!form.competentReviewAck}
+                  onChange={(e) => set("competentReviewAck", e.target.checked)}
+                  style={{ marginTop: 3, width: 16, height: 16, flexShrink: 0 }}
+                />
+                <span>{COMPETENT_REVIEW_LABEL}</span>
+              </label>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -5216,19 +5236,16 @@ function SavedList({
       ) : null}
 
       {ramsDocs.length===0 ? (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "2.75rem 1.25rem",
-            border: "2px dashed var(--color-border-tertiary,#e2e8f0)",
-            borderRadius: "var(--radius-lg, 16px)",
-            background: "linear-gradient(180deg, rgba(13,148,136,0.06) 0%, var(--color-background-primary) 55%)",
-          }}
-        >
-          <p style={{ color: "var(--color-text-secondary)", fontSize: 14, margin: 0, lineHeight: 1.55, maxWidth: 400, marginLeft: "auto", marginRight: "auto" }}>
-            No RAMS yet. Use <strong style={{ color: "var(--color-text-primary)" }}>Build new</strong> or <strong style={{ color: "var(--color-text-primary)" }}>Import JSON</strong> above (e.g. from another device or backup).
-          </p>
-        </div>
+        <EmptyState
+          icon="⚠️"
+          title="No RAMS yet"
+          description="Build a risk assessment and method statement for your site, or import JSON from another device or backup."
+          actionLabel="+ Build new RAMS"
+          onAction={onNew}
+          secondaryLabel="Import JSON"
+          onSecondary={() => importRef.current?.click()}
+          variant="dashed"
+        />
       ) : filtered.length===0 ? (
         <div style={{ ...ss.card, textAlign:"center", color:"var(--color-text-secondary)", fontSize:13 }}>
           No documents match your search.
@@ -6264,6 +6281,12 @@ export default function RAMSTemplateBuilder() {
       if (!window.confirm(`QA readiness is ${qaPctOnSave}%. Save as APPROVED anyway?`)) return;
     }
     if (["approved", "issued"].includes(resolvedStatus)) {
+      if (!form.competentReviewAck) {
+        window.alert(
+          `Cannot save as ${resolvedStatus.toUpperCase()}: tick the competent review confirmation below the approval fields.`
+        );
+        return;
+      }
       const coshhGate = evaluateRamsCoshhGate(form, editedRows);
       if (coshhGate.required && !coshhGate.ok) {
         const missingList = coshhGate.missing.map((m) => `- ${m.name}: ${m.reason}`).join("\n");
@@ -6313,8 +6336,9 @@ export default function RAMSTemplateBuilder() {
         note: "Document moved to ISSUED status.",
       });
     }
-    const doc = {
+    const docBase = {
       ...form,
+      competentReviewAck: undefined,
       documentNo: form.documentNo || generateRamsDocNo(),
       revision: nextRevision,
       revisionSummary: nextRevisionSummary,
@@ -6348,6 +6372,9 @@ export default function RAMSTemplateBuilder() {
         };
       });
     }
+    const doc = requiresCompetentReviewForRamsStatus(resolvedStatus)
+      ? stampCompetentReview(docBase, { by: String(form.approvedBy || form.leadEngineer || "").trim() })
+      : docBase;
     setRamsDocs(prev => editingDoc
       ? prev.map(d=>d.id===doc.id?doc:d)
       : [doc,...prev]

@@ -1,5 +1,5 @@
 import { NAV_TAB_IDS, MORE_TABS } from "../navigation/appModules";
-import { isModuleVisible } from "./hiddenModules";
+import { getHiddenModuleIds } from "./hiddenModules";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 
 export const BOTTOM_NAV_SHORTCUT_UPDATED_EVENT = "mysafeops-bottom-nav-shortcut-updated";
@@ -31,7 +31,7 @@ export function getBottomNavModuleId() {
   const id = loadOrgSettingsRaw().bottomNavModuleId;
   if (typeof id !== "string" || !isValidBottomNavModuleId(id)) return null;
   if (isBottomNavOccupiedId(id)) return null;
-  if (!isModuleVisible(id)) return null;
+  if (getHiddenModuleIds().includes(id)) return null;
   return id;
 }
 
@@ -47,8 +47,9 @@ export function setBottomNavModuleId(moduleId) {
 }
 
 export function getBottomNavShortcutOptions() {
+  const hidden = new Set(getHiddenModuleIds());
   const ids = [...VALID_SHORTCUT_IDS].filter(
-    (id) => isModuleVisible(id) && !isBottomNavOccupiedId(id) && id !== "bin"
+    (id) => !hidden.has(id) && !isBottomNavOccupiedId(id) && id !== "bin"
   );
   ids.sort((a, b) => a.localeCompare(b));
   return ids;

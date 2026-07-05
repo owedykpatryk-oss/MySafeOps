@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { ms } from "../utils/moduleStyles";
@@ -9,17 +9,15 @@ import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { escapeHtml, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { assessCdmF10Notification } from "../utils/cdmF10Assessment";
+import { buildHealthSafetyFileInventory } from "../utils/hsFileAccumulator";
 
 const genId = () => `cdm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 
 function computeNotifiable(form) {
-  return (
-    parseInt(form.estimatedPersonDays || 0, 10) > 500 ||
-    parseInt(form.estimatedWorkers || 0, 10) > 20 ||
-    parseInt(form.calendarPhaseDays || 0, 10) > 30
-  );
+  return assessCdmF10Notification(form).notifiable;
 }
 
 const ss = {
@@ -85,6 +83,19 @@ function CDMForm({ cdm, onSave, onClose }) {
   const setNested = (parent,k,v) => setForm(f=>({...f,[parent]:{...f[parent],[k]:v}}));
 
   const notifiable = computeNotifiable(form);
+  const f10Assessment = assessCdmF10Notification(form);
+  const hsFilePreview = useMemo(() => {
+    if (!form.projectId) return null;
+    return buildHealthSafetyFileInventory(form.projectId, {
+      rams: load("rams_builder_docs", []),
+      permits: load("permits_v2", []),
+      methodStatements: load("method_statements", []),
+      surveys: load("survey_reports", []),
+      cdmPacks: load("cdm_packs", []),
+      dailyBriefings: load("daily_briefings", []),
+      inspections: load("inspection_records", []),
+    });
+  }, [form.projectId]);
   const completedSections = CPP_SECTIONS.filter(s=>form.cppSections?.[s.key]?.trim()).length;
 
   const DUTYHOLDER_CHECKS = [
@@ -228,7 +239,7 @@ function CDMForm({ cdm, onSave, onClose }) {
             <div style={{ gridColumn:"1/-1", padding:"8px 12px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)" }}>
               {NOTIFICATION_THRESHOLDS}
               <div style={{ marginTop:4, fontWeight:500, color:notifiable?"#791F1F":"#27500A" }}>
-                {notifiable ? "⚠ This project IS notifiable or exceeds review threshold — verify F10 / CDM duties" : "✓ Below common notification thresholds on figures entered (confirm against current HSE guidance)"}
+                {notifiable ? `⚠ Notifiable — ${f10Assessment.reasons.join("; ")}` : "✓ Below common notification thresholds on figures entered (confirm against current HSE guidance)"}
               </div>
             </div>
             {notifiable && (
@@ -330,6 +341,27 @@ function CDMForm({ cdm, onSave, onClose }) {
                 <span>CPP sections: {completedSections}/{CPP_SECTIONS.length}</span>
               </div>
             </div>
+            {hsFilePreview ? (
+              <div style={{ ...ss.card, marginBottom: 14 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Health &amp; Safety File — auto inventory</div>
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.5 }}>
+                  Issued RAMS, active/closed permits and linked records for this project ({hsFilePreview.total} item{hsFilePreview.total === 1 ? "" : "s"}). Export individual PDFs from each module for handover.
+                </p>
+                {hsFilePreview.total === 0 ? (
+                  <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0 }}>No issued documents yet — issue RAMS and permits to populate the file.</p>
+                ) : (
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.6 }}>
+                    {hsFilePreview.items.slice(0, 12).map((it) => (
+                      <li key={`${it.type}-${it.id}`}>
+                        <strong>{it.type}</strong> — {it.title}
+                        {it.status ? ` (${it.status})` : ""}
+                      </li>
+                    ))}
+                    {hsFilePreview.total > 12 ? <li>…and {hsFilePreview.total - 12} more</li> : null}
+                  </ul>
+                )}
+              </div>
+            ) : null}
             <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
               <button onClick={()=>printCDM(form)} style={ss.btn}>Print / PDF</button>
             </div>
@@ -360,6 +392,7 @@ function printCDM(form) {
   const checked = Object.entries(form.dutyholderChecks || {}).filter(([, v]) => v).length;
   const cppFilled = CPP_SECTIONS.filter((s) => form.cppSections?.[s.key]?.trim()).length;
   const notifiable = computeNotifiable(form);
+  const f10Assessment = assessCdmF10Notification(form);
   const cppHTML = CPP_SECTIONS.filter((s) => form.cppSections?.[s.key]?.trim())
     .map(
       (s) => `

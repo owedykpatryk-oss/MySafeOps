@@ -24,7 +24,7 @@ export const INDUSTRY_PACKS = {
     hint: "Electrical PTW, hot work, RAMS and inspections — hides geodesy / survey deliverables.",
     hidePreset: "hideSurveyingRams",
     hiddenModules: ["survey-report"],
-    industrySectors: ["construction", "maintenance"],
+    industrySectors: ["construction", "facilities"],
     ramsStarterKey: "electrical",
   },
   buildingTrades: {
@@ -61,7 +61,7 @@ export const INDUSTRY_PACKS = {
     hidePreset: "hideSurveyingRams",
     hiddenModules: ["survey-report"],
     showModules: ["electrical-pat", "plant", "inspections", "construction-setup"],
-    industrySectors: ["construction", "maintenance"],
+    industrySectors: ["construction", "facilities"],
     ramsStarterKey: "healthcare_fm",
   },
   demolitionStripout: {
@@ -70,7 +70,7 @@ export const INDUSTRY_PACKS = {
     hidePreset: "hideSurveyingRams",
     hiddenModules: ["survey-report"],
     showModules: ["excavation", "temp-works", "gate", "asbestos", "construction-setup"],
-    industrySectors: ["construction"],
+    industrySectors: ["construction", "demolition"],
     ramsStarterKey: "demolition",
   },
   foodPharma: {
@@ -96,7 +96,7 @@ export const INDUSTRY_PACKS = {
     hint: "Full library including survey reports — trim later in Settings.",
     hidePreset: null,
     showModules: ["survey-report"],
-    industrySectors: null,
+    industrySectors: ["construction"],
     ramsStarterKey: null,
     surveyWorkflow: true,
   },

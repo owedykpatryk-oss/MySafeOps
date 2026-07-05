@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import {
   listMsTemplatesForEditor,
@@ -19,6 +19,15 @@ export default function MsTemplateEditor() {
   const [expanded, setExpanded] = useState(null);
   const [draft, setDraft] = useState("");
   const [savedKey, setSavedKey] = useState(null);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => r.label.toLowerCase().includes(q) || r.key.includes(q));
+  }, [rows, query]);
+
+  const customCount = rows.filter((r) => r.hasOverride).length;
 
   const openRow = (row) => {
     setExpanded(row.key);
@@ -49,9 +58,17 @@ export default function MsTemplateEditor() {
       </div>
       <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.45 }}>
         Override default work-sequence steps used when loading templates in the method statement editor or applying project playbooks. One step per line.
+        {customCount ? ` · ${customCount} sequence${customCount === 1 ? "" : "s"} customised` : ""}
       </p>
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Filter sequences…"
+        style={{ ...ss.inp, marginBottom: 12, fontSize: 13 }}
+      />
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {rows.map((row) => (
+        {filtered.map((row) => (
           <div key={row.key} style={{ border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, overflow: "hidden" }}>
             <button
               type="button"

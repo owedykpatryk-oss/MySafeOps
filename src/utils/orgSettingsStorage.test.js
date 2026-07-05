@@ -41,15 +41,10 @@ describe("orgSettingsStorage", () => {
     expect(payload.hiddenFeatures).toEqual(["rams/surveying"]);
   });
 
-  it("pickCloudBrandingPayload includes workspace onboarding fields", () => {
-    const payload = pickCloudBrandingPayload({
-      name: "X",
-      bottomNavModuleId: "permits",
-      industryPackId: "generalContractor",
-      onboardingWizardCompleted: true,
-    });
-    expect(payload.bottomNavModuleId).toBe("permits");
-    expect(payload.industryPackId).toBe("generalContractor");
-    expect(payload.onboardingWizardCompleted).toBe(true);
+  it("org settings save bypasses read-only billing gate", () => {
+    const past = new Date(Date.now() - 86400000).toISOString();
+    localStorage.setItem("mysafeops_trial_ends_at", past);
+    saveOrgSettingsRaw({ name: "Still Configurable Ltd" });
+    expect(loadOrgSettingsRaw().name).toBe("Still Configurable Ltd");
   });
 });

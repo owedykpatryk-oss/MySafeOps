@@ -333,7 +333,7 @@ export function checkExpiryNotifications(opts = {}) {
   const ramsDocs = loadJSON("rams_builder_docs", []);
 
   // ── Worker certifications ──
-  if (isNotificationTypeEnabled("cert_expiry")) workers.forEach(w => {
+  if (isAutomationEnabled("certExpiryReminder") && isNotificationTypeEnabled("cert_expiry")) workers.forEach(w => {
     (w.certifications || []).forEach(cert => {
       const days = daysUntil(cert.expiryDate);
       if (days === null) return;
@@ -362,7 +362,7 @@ export function checkExpiryNotifications(opts = {}) {
   });
 
   // ── Permits (active only — same-day uses hours for clearer copy) ──
-  if (isNotificationTypeEnabled("permit_expiry")) permits.forEach((p) => {
+  if (isAutomationEnabled("permitExpiryReminder") && isNotificationTypeEnabled("permit_expiry")) permits.forEach((p) => {
     if (p.status !== "active") return;
     const endIso = permitEndIso(p);
     if (!endIso) return;
@@ -401,7 +401,7 @@ export function checkExpiryNotifications(opts = {}) {
   });
 
   // ── Active permit briefing reminders ──
-  if (isNotificationTypeEnabled("permit_briefing")) permits.forEach((p) => {
+  if (isAutomationEnabled("permitBriefingReminder") && isNotificationTypeEnabled("permit_briefing")) permits.forEach((p) => {
     const status = String(p?.status || "").toLowerCase();
     const permitType = String(p?.type || "").toLowerCase();
     if (status !== "active" || !PERMIT_TYPES_REQUIRING_BRIEFING.has(permitType)) return;
@@ -426,7 +426,7 @@ export function checkExpiryNotifications(opts = {}) {
   });
 
   // ── Active permit missing RAMS link ──
-  if (isNotificationTypeEnabled("permit_rams_link")) permits.forEach((p) => {
+  if (isAutomationEnabled("permitRamsLinkReminder") && isNotificationTypeEnabled("permit_rams_link")) permits.forEach((p) => {
     const status = String(p?.status || "").toLowerCase();
     if (status !== "active") return;
     if (String(p?.linkedRamsId || "").trim()) return;
@@ -442,7 +442,7 @@ export function checkExpiryNotifications(opts = {}) {
   });
 
   // ── Equipment inspections ──
-  if (isNotificationTypeEnabled("equip_inspect")) equipment.forEach(item => {
+  if (isAutomationEnabled("equipInspectReminder") && isNotificationTypeEnabled("equip_inspect")) equipment.forEach(item => {
     const days = daysUntil(item.nextInspection);
     if (days === null) return;
 
@@ -488,7 +488,7 @@ export function checkExpiryNotifications(opts = {}) {
   }
 
   // ── Weekly workspace digest (Mondays) ──
-  if (isNotificationTypeEnabled("weekly_digest")) {
+  if (isAutomationEnabled("weeklyDigest") && isNotificationTypeEnabled("weekly_digest")) {
     const day = new Date().getDay();
     if (day === 1) {
       const weekKey = new Date().toISOString().slice(0, 10);
@@ -553,7 +553,7 @@ export function checkExpiryNotifications(opts = {}) {
   }
 
   // ── RAMS review ──
-  if (isNotificationTypeEnabled("rams_review")) ramsDocs.forEach(doc => {
+  if (isAutomationEnabled("ramsReviewReminder") && isNotificationTypeEnabled("rams_review")) ramsDocs.forEach(doc => {
     const days = daysUntil(doc.reviewDate);
     if (days === null) return;
 

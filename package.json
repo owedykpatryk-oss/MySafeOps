@@ -11,6 +11,8 @@
     "stripe:seed-prices": "node scripts/stripe-seed-prices.mjs",
     "stripe:sync-secrets": "node scripts/sync-stripe-prices-to-supabase.mjs",
     "stripe:setup-test": "node scripts/stripe-setup-test-mode.mjs",
+    "setup:stripe-test-checkout": "node scripts/setup-stripe-test-checkout.mjs",
+    "setup:stripe-test-checkout:all": "node scripts/setup-stripe-test-checkout.mjs --all",
     "provision:fess-group": "node scripts/provision-fess-group.mjs",
     "stripe:retry-webhooks": "node scripts/stripe-retry-webhook-failures.mjs",
     "billing:doctor": "node scripts/billing-doctor.mjs",

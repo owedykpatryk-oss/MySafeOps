@@ -68,7 +68,8 @@ export default function TrialExpiredModal() {
         <ul className="app-trial-expired-modal__list">
           <li>View existing RAMS, permits, registers and dashboards</li>
           <li>Download a JSON backup anytime (More → Backup)</li>
-          <li>Subscribe to resume creating and editing records</li>
+          <li>Update organisation settings (branding, sectors, automation) before you subscribe</li>
+          <li>Subscribe to resume creating and editing site records</li>
         </ul>
         <div className="app-trial-expired-modal__actions">
           {isAdmin && canExtend && cloudOk ? (

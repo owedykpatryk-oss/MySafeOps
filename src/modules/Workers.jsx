@@ -15,7 +15,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { ms } from "../utils/moduleStyles";
 import { geocodeAddressNominatim } from "../utils/geocode";
 import PageHero from "../components/PageHero";
-import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
+import EmptyState from "../components/EmptyState";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { getOrgId, orgScopedKey, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import {
@@ -481,8 +481,6 @@ export function WorkersModule({ mode = "all" }) {
         onCancel={() => setConfirm(null)}
       />
 
-      <BillingReadOnlyBanner />
-
       <PageHero
         badgeText={showProjects && !showPeople ? "PR" : showPeople && !showProjects ? "TM" : "WP"}
         title={showProjects && !showPeople ? "Projects" : showPeople && !showProjects ? "People" : "Workers & projects"}
@@ -608,9 +606,15 @@ export function WorkersModule({ mode = "all" }) {
           Projects ({projects.length})
         </div>
         {projects.length === 0 ? (
-          <div style={{ color: "var(--color-text-secondary)", fontSize: 13, lineHeight: 1.5 }}>
-            No projects yet. Add a site, pick a playbook on save, then open the project hub for RAMS, survey and PTW drafts.
-          </div>
+          <EmptyState
+            icon="📍"
+            title="No projects yet"
+            description="Add a site, pick a playbook on save, then open the project hub for RAMS, survey and permit drafts."
+            actionLabel="+ Add first project"
+            onAction={tryAddProject}
+            variant="dashed"
+            compact
+          />
         ) : (
           <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
             Click a project name to open its hub — documents, checklist and quick actions live there.

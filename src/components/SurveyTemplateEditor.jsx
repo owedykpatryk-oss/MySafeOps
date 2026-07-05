@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import {
   listSurveyTemplatesForEditor,
@@ -12,6 +12,22 @@ const ss = {
   ta: { ...ms.inp, resize: "vertical", minHeight: 72, fontSize: 12, lineHeight: 1.45 },
 };
 
+const SURVEY_GROUPS = [
+  { id: "utility", label: "Utility & PAS128", match: /utility|eml|pas128|cctv|drainage/i },
+  { id: "topo", label: "Topographic & setting out", match: /topograph|setting|gnss|control/i },
+  { id: "scan", label: "Scanning & aerial", match: /gpr|laser|uav|aerial|point cloud/i },
+  { id: "gi", label: "Site investigation", match: /investigation|geotechn/i },
+  { id: "general", label: "General", match: /.*/ },
+];
+
+function groupForLabel(label) {
+  for (const g of SURVEY_GROUPS) {
+    if (g.id === "general") continue;
+    if (g.match.test(label)) return g.id;
+  }
+  return "general";
+}
+
 export default function SurveyTemplateEditor() {
   const { caps } = useApp();
   const canEdit = Boolean(caps?.orgSettings);
@@ -19,6 +35,23 @@ export default function SurveyTemplateEditor() {
   const [expanded, setExpanded] = useState(null);
   const [draft, setDraft] = useState({ scope: "", methodology: "", equipmentUsed: "" });
   const [savedKey, setSavedKey] = useState(null);
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => r.label.toLowerCase().includes(q) || r.key.includes(q));
+  }, [rows, query]);
+
+  const customCount = rows.filter((r) => r.hasOverride).length;
+
+  const grouped = useMemo(() => {
+    const map = Object.fromEntries(SURVEY_GROUPS.map((g) => [g.id, { ...g, items: [] }]));
+    filtered.forEach((row) => {
+      map[groupForLabel(row.label)].items.push(row);
+    });
+    return SURVEY_GROUPS.map((g) => map[g.id]).filter((g) => g.items.length);
+  }, [filtered]);
 
   const openRow = (row) => {
     setExpanded(row.key);
@@ -58,9 +91,23 @@ export default function SurveyTemplateEditor() {
       </div>
       <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.45 }}>
         Override default scope, method and equipment text used when creating or smart-filling survey reports. Built-in defaults remain for fields you leave blank.
+        {customCount ? ` · ${customCount} type${customCount === 1 ? "" : "s"} customised` : ""}
       </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {rows.map((row) => (
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Filter survey types…"
+        style={{ ...ss.inp, marginBottom: 12, fontSize: 13 }}
+      />
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {grouped.map((group) => (
+          <div key={group.id}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 8, letterSpacing: "0.04em" }}>
+              {group.label.toUpperCase()}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {group.items.map((row) => (
           <div key={row.key} style={{ border: "0.5px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, overflow: "hidden" }}>
             <button
               type="button"
@@ -123,6 +170,9 @@ export default function SurveyTemplateEditor() {
                 </div>
               </div>
             ) : null}
+          </div>
+        ))}
+            </div>
           </div>
         ))}
       </div>

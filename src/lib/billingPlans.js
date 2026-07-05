@@ -55,7 +55,7 @@ export const BILLING_PLANS = {
     includes: [
       "Up to 5 workers",
       "100 active projects",
-      "All safety modules",
+      "Full module library (construction, food/pharma, survey)",
       "2GB cloud backup",
       "Email support",
     ],
@@ -73,8 +73,7 @@ export const BILLING_PLANS = {
     includes: [
       "Up to 20 workers",
       "500 active projects",
-      "All safety modules",
-      "Industrial Sector Pack",
+      "Full module library (same as all paid plans)",
       "10GB cloud backup",
       "Priority support",
     ],
@@ -92,8 +91,7 @@ export const BILLING_PLANS = {
     includes: [
       "Up to 75 workers",
       "2,500 active projects",
-      "All safety modules",
-      "Industrial Sector Pack",
+      "Full module library (same as all paid plans)",
       "50GB cloud backup",
       "Dedicated onboarding",
       "Tamper-evident audit log",
@@ -112,8 +110,7 @@ export const BILLING_PLANS = {
     includes: [
       "Up to 200 workers",
       "10,000 active projects",
-      "All safety modules",
-      "Industrial Sector Pack",
+      "Full module library (same as all paid plans)",
       "200GB cloud backup",
       "Dedicated onboarding",
       "Tamper-evident audit log",
@@ -135,8 +132,7 @@ export const BILLING_PLANS = {
     includes: [
       "Unlimited workers and projects",
       "Unlimited storage",
-      "All safety modules",
-      "Industrial Sector Pack",
+      "Full module library",
       "Custom onboarding and training",
       "Tamper-evident audit log",
       "Group MI dashboard",
@@ -155,13 +151,13 @@ export const TRIAL_PLAN = {
   interval: "14 days (+ optional 14)",
   limits: {
     workers: 200,
-    projects: 50,
+    projects: 100,
     cloudBytes: 10_000_000_000,
   },
   includes: [
-    "All modules and RAMS sections visible",
+    "Full module library — all registers and RAMS sections",
     "One free +14 day extension per organisation",
-    "Industrial sector registers unlocked",
+    "Up to 100 projects and 200 workers during evaluation",
     "Cloud backup enabled",
   ],
 };
@@ -179,8 +175,9 @@ export const EXPIRED_PLAN = {
   },
   includes: [
     "View and export existing records",
+    "Organisation settings still editable (branding, sectors, automation)",
     "No new RAMS, permits, workers or projects",
-    "Subscribe to resume editing",
+    "Subscribe to resume editing site records",
   ],
 };
 
@@ -192,7 +189,7 @@ export const LOCAL_WORKSPACE_PLAN = {
   interval: "offline",
   limits: {
     workers: 200,
-    projects: 50,
+    projects: 100,
     cloudBytes: 10_000_000_000,
   },
   includes: ["Full local editing without cloud billing"],

@@ -1,7 +1,7 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.3.2";
+const SW_VERSION = "mysafeops-v1.3.3";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -9,11 +9,16 @@ function isCacheableResponse(res) {
   return res && res.ok && res.status >= 200 && res.status < 300;
 }
 
-function putIfOk(cache, request, response) {
-  if (isCacheableResponse(response)) {
-    return cache.put(request, response.clone());
+/** Clone synchronously — Response bodies can only be read once. */
+function scheduleCachePut(request, response) {
+  if (!isCacheableResponse(response)) return;
+  let copy;
+  try {
+    copy = response.clone();
+  } catch {
+    return;
   }
-  return Promise.resolve();
+  void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
 }
 
 async function fetchWithOptionalRetry(request) {
@@ -26,6 +31,16 @@ async function fetchWithOptionalRetry(request) {
       return null;
     }
   }
+}
+
+function shouldBypassSw(url) {
+  const p = url.pathname;
+  return (
+    p.startsWith("/api/") ||
+    p.includes("feedback") ||
+    p.includes("hot-update") ||
+    p.includes("__vite")
+  );
 }
 
 // Vite build: hashed assets live under /assets/; precache only shell + manifest + icons
@@ -72,14 +87,21 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   if (!url.protocol.startsWith("http")) return;
 
+  // Cross-origin requests — do not intercept (CSP + API calls should bypass the SW)
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  if (shouldBypassSw(url)) {
+    return;
+  }
+
   // Navigation requests — network first, fallback to cached index, then offline page
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          if (isCacheableResponse(res)) {
-            caches.open(CACHE_NAME).then((c) => putIfOk(c, request, res));
-          }
+          scheduleCachePut(request, res);
           return res;
         })
         .catch(() =>
@@ -110,10 +132,7 @@ self.addEventListener("fetch", (event) => {
         if (cached) return cached;
         const res = await fetchWithOptionalRetry(request);
         if (res) {
-          if (isCacheableResponse(res)) {
-            const c = await caches.open(CACHE_NAME);
-            await putIfOk(c, request, res);
-          }
+          scheduleCachePut(request, res);
           return res;
         }
         return Response.error();
@@ -122,57 +141,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Weather API — network first with cache fallback
-  if (url.hostname.includes("open-meteo.com") || url.hostname.includes("api.qrserver.com")) {
-    event.respondWith(
-      fetch(request)
-        .then((res) => {
-          if (isCacheableResponse(res)) {
-            caches.open(CACHE_NAME).then((c) => putIfOk(c, request, res));
-          }
-          return res;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || Response.error()))
-    );
-    return;
-  }
-
-  // Cross-origin requests — do not intercept (CSP + API calls should bypass the SW)
-  if (url.origin !== self.location.origin) {
-    return;
-  }
-
-  // Same-origin API routes — bypass SW (no stale JSON cache)
-  if (url.pathname.startsWith("/api/")) {
-    return;
-  }
-
-  // Fingerprinted Vite chunks — network only; never treat SPA HTML as JS/CSS
-  if (url.pathname.startsWith("/assets/")) {
-    event.respondWith(
-      fetch(request)
-        .then((res) => {
-          const ct = String(res.headers.get("content-type") || "").toLowerCase();
-          const isAsset =
-            isCacheableResponse(res) &&
-            (ct.includes("javascript") || ct.includes("css") || ct.includes("wasm") || ct.includes("json"));
-          if (isAsset) {
-            caches.open(CACHE_NAME).then((c) => putIfOk(c, request, res));
-          }
-          return res;
-        })
-        .catch(() => caches.match(request).then((cached) => cached || Response.error()))
-    );
-    return;
-  }
-
   // Default (same-origin): network first, cache fallback
   event.respondWith(
     fetch(request)
       .then((res) => {
-        if (isCacheableResponse(res)) {
-          caches.open(CACHE_NAME).then((c) => putIfOk(c, request, res));
-        }
+        scheduleCachePut(request, res);
         return res;
       })
       .catch(async () => {

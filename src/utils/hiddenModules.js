@@ -3,7 +3,8 @@ import {
   MORE_SECTIONS,
   NAV_TAB_IDS,
 } from "../navigation/appModules";
-import { isTrialUnlockActive } from "./orgMembership";
+import { isPaidSubscriptionActive } from "./billingAccess";
+import { getTrialStatus, isTrialUnlockActive } from "./orgMembership";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { RAMS_FEATURES } from "./ramsFeatureIds";
 
@@ -97,16 +98,24 @@ export function getFeatureLabel(featureId) {
   return FEATURE_LABELS[featureId] || featureId;
 }
 
+/** Trial, any paid plan, or offline local workspace (no cloud trial date). */
+export function hasFullModuleEntitlement() {
+  if (isTrialUnlockActive()) return true;
+  if (isPaidSubscriptionActive()) return true;
+  if (!getTrialStatus()) return true;
+  return false;
+}
+
 export function isModuleVisible(moduleId, { hiddenModules = getHiddenModuleIds() } = {}) {
   const id = String(moduleId || "");
   if (!id || MODULE_ALWAYS_VISIBLE.has(id)) return true;
   if (DEFERRED_MODULE_IDS.has(id)) return false;
-  if (isTrialUnlockActive()) return true;
+  if (hasFullModuleEntitlement()) return true;
   return !hiddenModules.includes(id);
 }
 
 export function isFeatureVisible(featureId, { hiddenFeatures = getHiddenFeatureIds() } = {}) {
-  if (isTrialUnlockActive()) return true;
+  if (hasFullModuleEntitlement()) return true;
   return !hiddenFeatures.includes(featureId);
 }
 
@@ -126,6 +135,10 @@ export function hideModule(moduleId) {
   const hiddenModules = [...getHiddenModuleIds()];
   if (!hiddenModules.includes(moduleId)) hiddenModules.push(moduleId);
   persistHidden({ hiddenModules });
+  const raw = loadOrgSettingsRaw();
+  if (raw.bottomNavModuleId === moduleId) {
+    saveOrgSettingsRaw({ ...loadOrgSettingsRaw(), bottomNavModuleId: null });
+  }
   return hiddenModules;
 }
 

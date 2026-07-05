@@ -94,7 +94,7 @@ export default function SettingsCenter({ initialTab = "cloud", checkoutReturn = 
           {tab === "invites" && <InviteUsers />}
           {tab === "members" && <OrgMembers />}
           {tab === "organisation" && <OrgSettings />}
-          {tab === "automation" && <OrgAutomationSettings />}
+          {tab === "automation" && <OrgAutomationSettings onOpenNotifications={() => setTab("notifications")} />}
           {tab === "notifications" && (
             <div style={{ marginBottom: 24 }}>
               <NotificationSettings />

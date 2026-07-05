@@ -192,14 +192,16 @@ export default function NotificationSettings() {
 
   const NOTIFICATION_TYPES = [
     { key: "master",         label: "Enable all reminder checks",       sub: "Master switch for scheduled notification scans" },
-    { key: "cert_expiry",    label: "Certificate expiry reminders",    sub: "30, 14, 7 and 1 day before expiry" },
-    { key: "permit_expiry",  label: "Permit expiry reminders",         sub: "14, 7 and 1 day before expiry" },
-    { key: "permit_briefing",label: "Permit briefing pending alerts",   sub: "Active high-risk permits with missing briefing confirmation" },
-    { key: "permit_rams_link",label: "Permit missing RAMS alerts",      sub: "Active permits without linked RAMS document" },
-    { key: "survey_stale",   label: "Stale survey draft alerts",       sub: "When a non-final survey has not been updated (days set in Automation rules)" },
-    { key: "weekly_digest",  label: "Weekly workspace digest",         sub: "Monday summary of projects, PTW and survey counts" },
-    { key: "rams_review",    label: "RAMS review due reminders",       sub: "14 days before review date" },
-    { key: "equip_inspect",  label: "Equipment inspection reminders",  sub: "14 and 7 days before due date" },
+    { key: "cert_expiry",    label: "Certificate expiry reminders",    sub: "30, 14, 7 and 1 day before expiry · org toggle in Automation rules" },
+    { key: "permit_expiry",  label: "Permit expiry reminders",         sub: "14, 7 and 1 day before expiry · org toggle in Automation rules" },
+    { key: "permit_briefing",label: "Permit briefing pending alerts",   sub: "High-risk active permits missing briefing · Automation rules" },
+    { key: "permit_rams_link",label: "Permit missing RAMS alerts",      sub: "Active permits without linked RAMS · Automation rules" },
+    { key: "survey_stale",   label: "Stale survey draft alerts",       sub: "Idle draft surveys (days set in Automation rules)" },
+    { key: "daily_briefing", label: "Daily briefing reminders",        sub: "Weekday from 10:00 when no briefing recorded · Automation rules" },
+    { key: "monthly_report", label: "Monthly HSE report reminders",    sub: "From day 5 when no report for current month · Automation rules" },
+    { key: "weekly_digest",  label: "Weekly workspace digest",         sub: "Monday summary · org toggle in Automation rules" },
+    { key: "rams_review",    label: "RAMS review due reminders",       sub: "14 days before review date · Automation rules" },
+    { key: "equip_inspect",  label: "Equipment inspection reminders",  sub: "14 and 7 days before due · Automation rules" },
     { key: "timesheet",      label: "Timesheet approval reminders",    sub: "When timesheets are awaiting approval" },
     { key: "snag_overdue",   label: "Overdue snag alerts",             sub: "When snag items pass their due date" },
   ];
@@ -209,7 +211,7 @@ export default function NotificationSettings() {
       <PageHero
         badgeText="NTF"
         title="Notifications"
-        lead="Reminders for expiring certifications, permits, RAMS reviews, and more (browser permission required)."
+        lead="Delivery layer for scheduled reminders — pair with Automation rules for org-wide on/off. Browser permission required."
       />
       <div style={{ ...ss.card, marginBottom:16 }}>
 

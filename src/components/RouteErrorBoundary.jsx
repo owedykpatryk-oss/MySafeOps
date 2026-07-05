@@ -71,7 +71,7 @@ export default class RouteErrorBoundary extends Component {
             <p style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5, marginBottom: 12 }}>
               {stale
                 ? "This screen uses an older cached file from before the last update. Reload the page to load the latest version."
-                : "This screen failed to load. Try again, or refresh the page if the problem continues."}
+                : "Something broke on our end. We've been notified. Try refreshing, or contact support if it continues."}
             </p>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5, marginBottom: 16 }}>
               Need help?{" "}

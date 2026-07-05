@@ -20,6 +20,7 @@ import { nextLegalReviewDate } from "./permitLegalGovernance";
 import { runPermitQualityGates } from "./permitQualityGates";
 import { isFeatureEnabled } from "../../utils/featureFlags";
 import { projectRamsCheckForPermit } from "../../utils/orgAutomationRules";
+import { gateCompetentReview, stampCompetentReview } from "../../utils/competentReviewGate";
 import { trackEvent } from "../../utils/telemetry";
 import PermitBuilder from "./components/PermitBuilder";
 import PermitBoardView from "./components/PermitBoard";
@@ -4367,13 +4368,17 @@ export default function PermitSystem() {
   const closePermit = (id, lessonsLearned) => {
     const target = permits.find((x) => x.id === id);
     if (!target) return;
+    if (!gateCompetentReview("close this permit")) return;
     if (!ensureWorkflowRoleAllowed("closed", "close permit")) return;
     if (!ensureWorkflowTransitionAllowed(target, "closed", "close permit")) return;
     setPermits((prev) =>
       prev.map((p) => {
         if (p.id !== id) return p;
         const ll = typeof lessonsLearned === "string" ? lessonsLearned.trim() : "";
-        let next = { ...p, status: "closed", closedAt: new Date().toISOString() };
+        let next = stampCompetentReview(
+          { ...p, status: "closed", closedAt: new Date().toISOString() },
+          { by: p.supervisorName || p.issuerName || "Closer" }
+        );
         if (ll) next = { ...next, lessonsLearned: ll };
         next = transitionPermitWorkflowWithPolicy(next, "closed", "manual_close");
         const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
@@ -4491,6 +4496,7 @@ export default function PermitSystem() {
     setPermits((prev) => {
       const p = prev.find((x) => x.id === id);
       if (!p) return prev;
+      if (!gateCompetentReview("approve this permit")) return prev;
       if (!ensureWorkflowRoleAllowed("approved", "approve permit")) return prev;
       if (!canPermitWorkflowTransition(p, "approved", effectiveWorkflowPolicy)) {
         window.alert(`Workflow policy blocks approve: ${permitCurrentWorkflowState(p)} -> approved.`);
@@ -4505,7 +4511,10 @@ export default function PermitSystem() {
       }
       return prev.map((row) => {
         if (row.id !== id) return row;
-        let next = { ...row, status: "approved", approvedAt: new Date().toISOString() };
+        let next = stampCompetentReview(
+          { ...row, status: "approved", approvedAt: new Date().toISOString() },
+          { by: row.issuerName || row.supervisorName || "Approver" }
+        );
         next = transitionPermitWorkflowWithPolicy(next, "approved", "manual_approve");
         const withLog = { ...next, auditLog: appendPermitAuditEntry(row, next) };
         void logPermitAuditToSupabase(row, withLog, getOrgId());
@@ -4515,6 +4524,7 @@ export default function PermitSystem() {
   const activatePermit = async (id) => {
     const p = permits.find((x) => x.id === id);
     if (!p) return;
+    if (!gateCompetentReview("activate this permit")) return;
     if (!ensureWorkflowRoleAllowed("issued", "activate permit")) return;
     if (!ensureWorkflowTransitionAllowed(p, "issued", "activate permit")) return;
     const conflictResult = conflictResultForPermitGate(p, permits);

@@ -42,7 +42,7 @@ export function shouldShowTrialExtensionOffer(options = {}) {
 }
 
 export function billingWriteBlockedMessage() {
-  return "Your evaluation trial has ended. Subscribe in Settings → Billing to create or edit records. You can still view and export existing data.";
+  return "Your evaluation trial has ended. Subscribe in Settings → Billing to create or edit site records (RAMS, permits, workers, projects). You can still view, export, and change organisation settings (branding, sectors, automation).";
 }
 
 export function notifyBillingWriteBlocked(detail = {}) {

@@ -8,7 +8,9 @@ import { pushOrgBrandingToCloud } from "../utils/orgBrandingCloudSync";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
-import { INDUSTRY_SECTOR_OPTIONS } from "../utils/industrialSectors";
+import { INDUSTRY_SECTOR_GROUPS, getIndustrySectorLabel, getSectorRegisterHints } from "../utils/industrialSectors";
+import { CUSTOM_FIELD_PRESETS } from "../utils/orgCustomFields";
+import { resetSectorBannerDismiss } from "../utils/sectorBannerDismiss";
 import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw, ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 import { syncOrgBrandingFromCloud } from "../utils/orgBrandingCloudSync";
@@ -31,6 +33,14 @@ function Section({ title, children }) {
   return (
     <div style={ss.card}>
       <div style={ss.sec}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function TabIntro({ children }) {
+  return (
+    <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 14, lineHeight: 1.55, padding: "10px 12px", background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
       {children}
     </div>
   );
@@ -91,6 +101,10 @@ export default function OrgSettings() {
 
   const persistSettings = async (next, auditAction) => {
     saveOrgSettingsRaw(next);
+    const sectors = Array.isArray(next.industrySectors) ? next.industrySectors : [];
+    if (!sectors.includes("pharma") && !sectors.includes("medical_devices")) {
+      resetSectorBannerDismiss("pharma");
+    }
     setForm(next);
     pushAudit({ action: auditAction, entity: "mysafeops_org_settings", detail: next.name || "" });
     if (supabase && caps.orgSettings) {
@@ -215,41 +229,163 @@ export default function OrgSettings() {
       {tab==="sectors" && (
         <Section title="Industry sectors">
           <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 14, lineHeight: 1.55 }}>
-            Select the environments your teams work in. This turns on food/pharma registers, allergen banners, LOTO ↔ hot work links, and ATEX markers on site plans — without hiding core construction tools.
+            Select the environments your teams work in. Tick every sector that matches your sites — banners, allergen notices and sector-specific registers follow your selection. Core construction tools stay available regardless.
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {INDUSTRY_SECTOR_OPTIONS.map((opt) => {
-              const sectorSet = new Set(form.industrySectors || ["construction"]);
-              const checked = sectorSet.has(opt.id);
-              return (
-                <label
-                  key={opt.id}
-                  style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 14 }}
+          {isTrialUnlockActive() && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: "10px 14px",
+                borderRadius: 10,
+                background: "#EFF6FF",
+                border: "1px solid #BFDBFE",
+                color: "#1E3A8A",
+                fontSize: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>Evaluation period:</strong> all sector modules are visible so you can explore. Banners and defaults only appear for sectors you tick below — they are not turned on automatically during trial.
+            </div>
+          )}
+          <div
+            style={{
+              marginBottom: 16,
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "var(--color-background-secondary,#f8fafc)",
+              border: "1px solid var(--color-border-tertiary,#e2e8f0)",
+              color: "var(--color-text-secondary)",
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>Workspace profile vs sectors:</strong> the profile under <strong>Modules &amp; RAMS</strong> controls which modules and RAMS packs appear (e.g. survey + construction). Sector ticks here control industrial banners, register emphasis and food/pharma RAMS sections — they are independent.
+          </div>
+          {(() => {
+            const selected = form.industrySectors || ["construction"];
+            const hints = getSectorRegisterHints(selected);
+            return (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: "var(--color-text-tertiary,#888)", marginBottom: 8 }}>
+                  ACTIVE ({selected.length})
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: hints.length ? 10 : 0 }}>
+                  {selected.map((id) => (
+                    <span
+                      key={id}
+                      style={{
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        background: "#ECFDF5",
+                        border: "1px solid #A7F3D0",
+                        color: "#065F46",
+                        fontSize: 12,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {getIndustrySectorLabel(id)}
+                    </span>
+                  ))}
+                </div>
+                {hints.length ? (
+                  <div style={{ fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+                    <strong>Registers emphasised:</strong> {hints.join(" · ")} — enable in <strong>Modules & RAMS</strong> if hidden.
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {INDUSTRY_SECTOR_GROUPS.map((group) => (
+              <div key={group.id}>
+                <div style={{ marginBottom: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>{group.label}</div>
+                  {group.description ? (
+                    <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2 }}>{group.description}</div>
+                  ) : null}
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))",
+                    gap: 10,
+                  }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => {
-                      const next = new Set(form.industrySectors || ["construction"]);
-                      if (e.target.checked) next.add(opt.id);
-                      else {
-                        next.delete(opt.id);
-                        if (next.size === 0) next.add("construction");
-                      }
-                      set("industrySectors", [...next]);
-                    }}
-                    style={{ width: 16, height: 16, accentColor: "#0d9488" }}
-                  />
-                  {opt.label}
-                </label>
-              );
-            })}
+                  {group.options.map((opt) => {
+                    const sectorSet = new Set(form.industrySectors || ["construction"]);
+                    const checked = sectorSet.has(opt.id);
+                    return (
+                      <label
+                        key={opt.id}
+                        style={{
+                          display: "flex",
+                          gap: 12,
+                          padding: "12px 14px",
+                          borderRadius: 10,
+                          cursor: "pointer",
+                          border: checked ? "1.5px solid #0d9488" : "1px solid var(--color-border-secondary,#e5e5e5)",
+                          background: checked ? "#F0FDFA" : "var(--color-surface,#fff)",
+                          boxShadow: checked ? "0 1px 3px rgba(13,148,136,0.08)" : "none",
+                          transition: "border-color 0.15s, background 0.15s",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = new Set(form.industrySectors || ["construction"]);
+                            if (e.target.checked) next.add(opt.id);
+                            else {
+                              next.delete(opt.id);
+                              if (next.size === 0) next.add("construction");
+                            }
+                            set("industrySectors", [...next]);
+                          }}
+                          style={{ width: 18, height: 18, marginTop: 2, flexShrink: 0, accentColor: "#0d9488" }}
+                        />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.3 }}>
+                            {opt.label}
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4, lineHeight: 1.45 }}>
+                            {opt.hint}
+                          </div>
+                          {opt.tags?.length ? (
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+                              {opt.tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    letterSpacing: "0.03em",
+                                    padding: "2px 6px",
+                                    borderRadius: 4,
+                                    background: "#F3F4F6",
+                                    color: "#4B5563",
+                                  }}
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </Section>
       )}
 
       {tab==="modules" && (
         <>
+          <TabIntro>
+            <strong>Workflow:</strong> pick a <strong>workspace profile</strong> (playbooks + RAMS starters), then trim modules. Pair with <strong>Sectors</strong> for food/pharma registers and <strong>Settings → Automation</strong> for gates and survey/MS templates.
+          </TabIntro>
           <Section title="Workspace profile">
             <OrgWorkspaceProfile />
           </Section>
@@ -301,6 +437,10 @@ export default function OrgSettings() {
 
       {tab==="pdf" && (
         <Section title="PDF document defaults">
+          <TabIntro>
+            Branding here flows to RAMS, permits, registers, surveys and briefings. Custom fields (separate tab) print under the header when they have a value. Automation gates live under <strong>Settings → Automation</strong>.
+          </TabIntro>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: 8, letterSpacing: "0.04em" }}>HEADER & IDENTITY</div>
           <Field label="Document header text" hint="Appears below your logo on all printed documents">
             <input value={form.pdfHeader||""} onChange={e=>set("pdfHeader",e.target.value)}
               placeholder="e.g. Acme Construction Ltd — Health & Safety Documentation" style={ss.inp} />
@@ -318,6 +458,7 @@ export default function OrgSettings() {
               autoComplete="off"
             />
           </Field>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", margin: "16px 0 8px", letterSpacing: "0.04em" }}>LAYOUT & COMPLIANCE</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(160px,100%),1fr))", gap:10 }}>
             <Field label="Document theme">
               <select value={form.pdfTheme || "executive"} onChange={(e)=>set("pdfTheme",e.target.value)} style={ss.inp}>
@@ -374,16 +515,34 @@ export default function OrgSettings() {
 
       {tab==="custom" && (
         <Section title="Custom fields">
-          <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:14 }}>
-            Add custom fields that appear on all your documents — e.g. "Principal Contractor", "Contract number", "Client contact".
+          <TabIntro>
+            Fields with a <strong>default value</strong> print under the document header on RAMS, registers, permits and surveys. Use for contract number, principal contractor, client contact — consistent across every export.
+          </TabIntro>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+            {CUSTOM_FIELD_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                style={{ ...ss.btn, fontSize: 12 }}
+                disabled={!caps.orgSettings}
+                onClick={() => {
+                  const exists = (form.customFields || []).some((f) => f.label === preset.label);
+                  if (exists) return;
+                  set("customFields", [...(form.customFields || []), { id: Date.now(), label: preset.label, value: preset.value, hint: preset.hint }]);
+                }}
+              >
+                + {preset.label}
+              </button>
+            ))}
           </div>
           {(form.customFields||[]).map(f=>(
-            <div key={f.id} style={{ display:"flex", gap:8, marginBottom:8, alignItems:"center" }}>
+            <div key={f.id} style={{ display:"flex", gap:8, marginBottom:8, alignItems:"flex-start", flexWrap:"wrap" }}>
               <input value={f.label} onChange={e=>updateCustomField(f.id,"label",e.target.value)}
-                placeholder="Field label (e.g. Contract No.)" style={{ ...ss.inp, flex:1 }} />
+                placeholder="Field label (e.g. Contract No.)" style={{ ...ss.inp, flex:1, minWidth:140 }} />
               <input value={f.value} onChange={e=>updateCustomField(f.id,"value",e.target.value)}
-                placeholder="Default value (optional)" style={{ ...ss.inp, flex:1 }} />
+                placeholder="Default value (prints on PDF when set)" style={{ ...ss.inp, flex:1, minWidth:140 }} />
               <button onClick={()=>removeCustomField(f.id)} style={{ ...ss.btn, padding:"7px 10px", color:"#A32D2D", borderColor:"#F09595", flexShrink:0 }}>×</button>
+              {f.hint ? <div style={{ width: "100%", fontSize: 11, color: "var(--color-text-tertiary)", marginTop: -4 }}>{f.hint}</div> : null}
             </div>
           ))}
           <button onClick={addCustomField} style={{ ...ss.btn, marginTop:4 }}>+ Add custom field</button>

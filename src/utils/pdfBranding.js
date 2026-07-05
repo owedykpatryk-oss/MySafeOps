@@ -2,6 +2,7 @@
  * Shared premium print/PDF branding — org logo, MySafeOps mark, meta strips, footers.
  */
 import { hexToRgb as hexToRgbBase, normalizeHex, shadeHex } from "./orgBrandingTheme";
+import { formatCustomFieldsLine, renderCustomFieldsHtml } from "./orgCustomFields.js";
 import { escapeHtml, escapeAttr, safeCssColor, safeImageSrc } from "./htmlEscape.js";
 
 export const PDF_PAGE = {
@@ -174,6 +175,14 @@ export function drawPremiumPdfHeader(pdf, meta, yStart = PDF_PAGE.MARGIN) {
   pdf.setTextColor(71, 85, 105);
   const headerLine = org?.pdfHeader ? String(org.pdfHeader).slice(0, 90) : "UK construction & site safety workspace";
   y = pdfTextBlock(pdf, headerLine, textX, y + 1, leftMaxW, 3.8);
+
+  const customLine = formatCustomFieldsLine(org?.customFields, 3);
+  if (customLine) {
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(100, 116, 139);
+    y = pdfTextBlock(pdf, customLine.slice(0, 120), textX, y + 1, leftMaxW, 3.2);
+  }
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(theme === "executive" ? 10 : 9.5);
@@ -601,6 +610,7 @@ export function renderPrintDocHeader(org, opts = {}) {
   const docRef = escapeHtml(opts.docRef || buildDocReference(org, opts.docTitle));
   const stamp = escapeHtml(formatPdfTimestamp());
   const badge = opts.docBadge ? `<div class="print-doc-badge">${escapeHtml(opts.docBadge)}</div>` : "";
+  const customFieldsHtml = renderCustomFieldsHtml(org?.customFields);
 
   return `${badge}
   <div class="print-brand-stripe"></div>
@@ -622,7 +632,7 @@ export function renderPrintDocHeader(org, opts = {}) {
       <div>${stamp}</div>
       <div style="font-weight:700;color:${primary};margin-top:4px">${docRef}</div>
     </div>
-  </header>`;
+  </header>${customFieldsHtml}`;
 }
 
 export function renderPrintMetaStrip(org, fields = {}) {

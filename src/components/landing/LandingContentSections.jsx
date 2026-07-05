@@ -362,7 +362,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
             </div>
             <div className="pcard fu">
               <h3>Solo</h3><div className="pr">£19<span>/mo</span></div><div className="yr">5 workers · 100 projects · 2GB</div><div className="wf">👷 Freelancer / single site</div>
-              <ul><li>All safety modules</li><li>Cloud backup (when configured)</li><li>Email support</li></ul>
+              <ul><li>Full module library</li><li>Cloud backup (when configured)</li><li>Email support</li></ul>
               <Link
                 to="/login"
                 className="btn btn-o"
@@ -374,7 +374,7 @@ export default function LandingContentSections({ supportEmail, featureForm, onCh
             </div>
             <div className="pcard pop fu">
               <h3>Team</h3><div className="pr">£99<span>/mo</span></div><div className="yr">20 workers · 500 projects · 10GB</div><div className="wf">👷 Small contractor</div>
-              <ul><li>Industrial Sector Pack</li><li>Invites &amp; role management</li><li>Priority support</li><li className="free">Multi-supervisor sites</li></ul>
+              <ul><li>Full module library</li><li>Invites &amp; role management</li><li>Priority support</li><li className="free">Multi-supervisor sites</li></ul>
               <Link
                 to="/login"
                 className="btn btn-p"
