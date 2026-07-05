@@ -10,6 +10,10 @@ import {
   renderPrintDocFooter,
   buildDocReference,
 } from "../../utils/pdfBranding.js";
+import { buildPermitStatusDeepLink, renderDigGuidancePrintHtml } from "./permitDigGuidance";
+import { renderGuidancePrintHtml } from "./permitGuidance/registry";
+
+export { buildPermitStatusDeepLink };
 
 function fmtDateTime(iso) {
   if (!iso) return "—";
@@ -60,7 +64,7 @@ function deriveVersionTag(prefix, permit) {
 }
 
 /** Full HTML document for permit print/preview (also composed into RAMS site pack). */
-export function renderPermitDocumentHtml(permit) {
+export function renderPermitDocumentHtml(permit, options = {}) {
   const def = PERMIT_TYPES[permit.type] || PERMIT_TYPES.general;
   const printSettings = loadOrgPrintSettings();
   const { org, primaryColor, accentColor, theme, watermarkText, complianceLine, versionPrefix } = printSettings;
@@ -163,6 +167,19 @@ export function renderPermitDocumentHtml(permit) {
   const watermarkFallback =
     statusLc === "active" ? "ACTIVE" : statusLc === "closed" ? "CLOSED" : "DRAFT";
   const watermarkLabel = escapeHtml(watermarkText || watermarkFallback);
+  const statusUrl = buildPermitStatusDeepLink(permit.id, options.origin);
+  const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(statusUrl)}&bgcolor=ffffff&color=0f172a&margin=6`;
+  const qrHtml = permit.id
+    ? `<div style="display:flex;gap:14px;align-items:center;margin:14px 0;padding:12px 14px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;break-inside:avoid-page">
+    <img src="${escapeAttr(qrImgUrl)}" alt="Live permit status QR" width="96" height="96" style="flex-shrink:0;border-radius:4px"/>
+    <div style="font-size:11px;line-height:1.55">
+      <strong style="font-size:12px">Scan for live status</strong><br/>
+      Gate check · site office · supervisor verification<br/>
+      <span style="color:#64748b;word-break:break-all">${escapeHtml(statusUrl)}</span>
+    </div>
+  </div>`
+    : "";
+  const digGuidanceHtml = renderGuidancePrintHtml(permit, { primaryColor }) || renderDigGuidancePrintHtml(permit, { primaryColor });
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>PTW — ${escapeHtml(def.label)}</title>
   <style>
@@ -217,7 +234,9 @@ export function renderPermitDocumentHtml(permit) {
   </table>
   <h2>Pre-work checklist (${checkedCount}/${checklistItems.length || 0} confirmed)</h2>
   <table><tbody>${checklistHTML}</tbody></table>
+  ${digGuidanceHtml}
   ${permit.notes ? `<h2>Conditions / restrictions</h2><p style="font-size:12px;line-height:1.6;padding:6px 8px;background:#fff8e6;border:0.5px solid #e5c060">${escapeHtml(permit.notes)}</p>` : ""}
+  ${qrHtml}
   ${legalRefsHtml}
   <h2>Signatures</h2>
   <table>

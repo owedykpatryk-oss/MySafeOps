@@ -16,6 +16,7 @@ import { loadOrgSettingsRaw, saveOrgSettingsRaw, ORG_SETTINGS_UPDATED_EVENT } fr
 import { syncOrgBrandingFromCloud } from "../utils/orgBrandingCloudSync";
 import OrgModuleVisibility from "./OrgModuleVisibility";
 import OrgWorkspaceProfile from "./OrgWorkspaceProfile";
+import OrgPermitSettings from "./OrgPermitSettings";
 
 export { getOrgSettings } from "../utils/orgSettingsStorage";
 
@@ -391,6 +392,9 @@ export default function OrgSettings() {
           </Section>
           <Section title="Workspace modules">
             <OrgModuleVisibility />
+          </Section>
+          <Section title="Permits (PTW)">
+            <OrgPermitSettings form={form} set={set} />
           </Section>
         </>
       )}

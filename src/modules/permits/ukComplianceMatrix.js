@@ -86,8 +86,15 @@ export const UK_COMPLIANCE_MATRIX = {
     requiredEvidenceFields: ["liftingEquipment", "swl", "appointedPerson"],
   },
   excavation: {
-    legalRequiredChecklistIds: ["excavation_1", "excavation_2", "excavation_5", "excavation_8"],
-    requiredEvidenceFields: ["catScanBy", "knownServices", "excavationDepth"],
+    legalRequiredChecklistIds: ["excavation_1", "excavation_2", "excavation_3", "excavation_4", "excavation_6", "excavation_8"],
+    requiredEvidenceFields: [
+      "catScanBy",
+      "knownServices",
+      "excavationDepth",
+      "pas128QualityLevel",
+      "pas128SurveyType",
+      "surveyDrawingRef",
+    ],
   },
   cold_work: {
     legalRequiredChecklistIds: ["cold_work_1", "cold_work_2", "cold_work_5", "cold_work_6"],
@@ -118,8 +125,15 @@ export const UK_COMPLIANCE_MATRIX = {
     requiredEvidenceFields: ["rps", "sourceType", "controlledAreaRadius"],
   },
   ground_disturbance: {
-    legalRequiredChecklistIds: ["ground_disturbance_1", "ground_disturbance_2", "ground_disturbance_5", "ground_disturbance_6"],
-    requiredEvidenceFields: ["disturbanceMethod", "maxDepth", "groundType"],
+    legalRequiredChecklistIds: ["ground_disturbance_1", "ground_disturbance_2", "ground_disturbance_3", "ground_disturbance_6", "ground_disturbance_7"],
+    requiredEvidenceFields: [
+      "disturbanceMethod",
+      "maxDepth",
+      "groundType",
+      "pas128QualityLevel",
+      "pas128SurveyType",
+      "surveyDrawingRef",
+    ],
   },
   general: {
     legalRequiredChecklistIds: ["general_1", "general_2", "general_4", "general_6"],

@@ -23,6 +23,7 @@ import { lookupUkPostcode, resolveUkPostcodeInput } from "../../utils/postcodeLo
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
+import { mergeRamsPackFromCatalog } from "../../utils/surveyContentCatalog";
 import { isFeatureVisible, RAMS_FEATURES } from "../../utils/hiddenModules";
 import { useHiddenModulesRevision } from "../../hooks/useHiddenModulesRevision";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
@@ -828,7 +829,7 @@ const RL = {
   low:    { bg:"#EAF3DE", color:"#27500A" },
 };
 
-const SURVEYING_PACKS = [
+const SURVEYING_PACKS_RAW = [
   {
     key: "utility_mapping_survey",
     label: "PAS128 utility mapping survey",
@@ -1142,6 +1143,8 @@ const SURVEYING_PACKS = [
     hazardTokens: ["pavement", "3d gpr", "carriageway", "traffic", "chapter 8", "utility", "scan vehicle"],
   },
 ];
+
+const SURVEYING_PACKS = SURVEYING_PACKS_RAW.map(mergeRamsPackFromCatalog);
 
 const SURVEY_PACK_METADATA = {
   utility_mapping_survey: {

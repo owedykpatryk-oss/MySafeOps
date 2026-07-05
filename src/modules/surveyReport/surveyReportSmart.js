@@ -21,9 +21,16 @@ import {
   projectGeoPhotosForReport,
 } from "../../utils/geoPhotoIntegrations.js";
 import { getSurveyTypeTemplate } from "../../utils/surveyOrgTemplates";
-import { SURVEY_TYPE_TEMPLATES } from "./surveyTypeTemplates";
+import { catalogDefaultDeliverables } from "../../utils/surveyContentCatalog";
 
-export { SURVEY_TYPE_TEMPLATES };
+function applySurveyTemplatePlaceholders(template, report) {
+  if (!template?.trim()) return "";
+  const site = report?.siteAddress || report?.projectName || "the agreed site";
+  const date = report?.surveyDate
+    ? new Date(report.surveyDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+    : "the survey date";
+  return template.replace(/\{site\}/gi, site).replace(/\{date\}/gi, date);
+}
 
 /** Map Open-Meteo / OpenWeather description into survey weather checkboxes. */
 export function mapWeatherSnapshotToFields({ description = "", tempC, windMph = 0 } = {}) {
@@ -259,6 +266,11 @@ export async function attachSitePlanSnapshots(report, plans, { maxPlans = 2 } = 
 
 /** Standard recommendations paragraph by survey type. */
 export function buildRecommendationsDraft(report) {
+  const template = getSurveyTypeTemplate(report?.surveyType);
+  if (template?.recommendationsTemplate?.trim()) {
+    return applySurveyTemplatePlaceholders(template.recommendationsTemplate, report);
+  }
+
   const type = report?.surveyType;
   const ql = report?.pas128Ql;
 
@@ -431,7 +443,13 @@ export async function runSmartFillAll(report, ctx = {}) {
     }
   }
 
-  const keys = [...new Set([...suggestLimitationKeys(r), ...(r.limitationKeys || [])])];
+  const keys = [
+    ...new Set([
+      ...suggestLimitationKeys(r),
+      ...(r.limitationKeys || []),
+      ...(getSurveyTypeTemplate(r.surveyType)?.defaultLimitationKeys || []),
+    ]),
+  ];
   r.limitationKeys = keys;
   r.limitationsText = buildLimitationsFromKeys(keys, r.limitationsText);
 
@@ -465,6 +483,12 @@ export async function runSmartFillAll(report, ctx = {}) {
 }
 
 export function buildExecutiveSummaryDraft(report, { linkedRamsTitle = "" } = {}) {
+  const template = getSurveyTypeTemplate(report?.surveyType);
+  if (template?.executiveSummaryTemplate?.trim()) {
+    const base = applySurveyTemplatePlaceholders(template.executiveSummaryTemplate, report);
+    return linkedRamsTitle ? `${base} Works were conducted under RAMS reference: ${linkedRamsTitle}.` : base;
+  }
+
   const type = surveyTypeLabel(report?.surveyType) || "Site survey";
   const site = report?.siteAddress || report?.projectName || "the agreed site";
   const date = report?.surveyDate
@@ -488,7 +512,11 @@ export function buildExecutiveSummaryDraft(report, { linkedRamsTitle = "" } = {}
 export function applyGeneratedNarratives(form) {
   const limitationsText = buildLimitationsFromKeys(form.limitationKeys, form.limitationsText);
   const weatherNarrative = buildWeatherNarrative(form.weather);
-  const recordsNarrative = buildUtilityRecordsNarrative(form.utilityRecords);
+  let recordsNarrative = buildUtilityRecordsNarrative(form.utilityRecords);
+  if (!recordsNarrative?.trim()) {
+    const boilerplate = getSurveyTypeTemplate(form.surveyType)?.recordsBoilerplate;
+    if (boilerplate?.trim()) recordsNarrative = boilerplate.trim();
+  }
   const accessText = buildAccessLimitationsText(form.accessLimitations, form.accessLimitationsNotes);
 
   const nextWeather = { ...form.weather };
@@ -648,37 +676,27 @@ export function buildDefaultEquipmentCalibration(surveyType) {
 
 /** Default deliverables rows by survey type. */
 export function buildDefaultDeliverables(surveyType) {
-  const common = [
-    { id: `del_${Date.now()}_1`, format: "report_pdf", description: "Survey report (PDF)", crs: "OSGB36", status: "Issued with report" },
+  const template = getSurveyTypeTemplate(surveyType);
+  const rows =
+    template?.defaultDeliverables?.length > 0
+      ? template.defaultDeliverables
+      : catalogDefaultDeliverables(surveyType);
+  if (rows?.length) {
+    const ts = Date.now();
+    return rows.map((row, i) => ({
+      ...row,
+      id: row.id || `del_${ts}_${i}_${Math.random().toString(36).slice(2, 5)}`,
+    }));
+  }
+  return [
+    {
+      id: `del_${Date.now()}_1`,
+      format: "report_pdf",
+      description: "Survey report (PDF)",
+      crs: "OSGB36",
+      status: "Issued with report",
+    },
   ];
-  if (surveyType === "utility_mapping_survey" || surveyType === "eml_cat_survey" || surveyType === "gpr_survey") {
-    return [
-      ...common,
-      { id: `del_${Date.now()}_2`, format: "pdf_drawing", description: "Utility mark-up drawing", crs: "OSGB36", status: "Issued with report" },
-      { id: `del_${Date.now()}_3`, format: "dwg", description: "CAD drawing (if in brief)", crs: "OSGB36", status: "On request" },
-    ];
-  }
-  if (surveyType === "topographical_survey") {
-    return [
-      ...common,
-      { id: `del_${Date.now()}_2`, format: "pdf_drawing", description: "Topographical survey drawing", crs: "OSGB36", status: "Issued with report" },
-    ];
-  }
-  if (surveyType === "cctv_drainage_survey") {
-    return [
-      ...common,
-      { id: `del_${Date.now()}_2`, format: "cctv_footage", description: "CCTV footage and log", crs: "—", status: "Issued with report" },
-    ];
-  }
-  if (surveyType === "site_investigation_campaign") {
-    return [
-      ...common,
-      { id: `del_${Date.now()}_2`, format: "pdf_drawing", description: "Borehole / trial pit location plan", crs: "OSGB36", status: "Issued with report" },
-      { id: `del_${Date.now()}_3`, format: "report_pdf", description: "Factual borehole logs & sample register", crs: "—", status: "Issued with report" },
-      { id: `del_${Date.now()}_4`, format: "other", description: "Chain-of-custody forms (as applicable)", crs: "—", status: "Issued with report" },
-    ];
-  }
-  return common;
 }
 
 /** Pick first active permit ref for a project. */

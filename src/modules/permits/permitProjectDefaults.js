@@ -3,6 +3,7 @@
  */
 
 import { asStorageArray } from "../../utils/orgStorage";
+import { enrichPermitDraftFromProjectSurveys } from "../../utils/surveyPermitLink";
 
 export function requiredPermitTypesForProject(project) {
   const fromProject = project?.permitDefaults?.requiredPermitTypes;
@@ -46,17 +47,20 @@ export function permitReadinessForProject(project, permits = []) {
   };
 }
 
-export function buildPermitDraftFromProject(project, permitType, { allPermits = [] } = {}) {
+export function buildPermitDraftFromProject(project, permitType, { allPermits = [], surveys = [] } = {}) {
   const type =
     permitType ||
     missingRequiredPermits(project, allPermits)[0] ||
     requiredPermitTypesForProject(project)[0] ||
     "hot_work";
   const location = String(project?.location || project?.site || project?.address || "").trim();
-  return {
+  let draft = {
     type,
     projectId: String(project?.id || ""),
     location,
     status: "draft",
+    extraFields: {},
   };
+  draft = enrichPermitDraftFromProjectSurveys(draft, project, surveys);
+  return draft;
 }

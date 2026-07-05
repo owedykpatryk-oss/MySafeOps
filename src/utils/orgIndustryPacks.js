@@ -2,6 +2,7 @@ import { applyHidePreset, clearAllHidden, getHiddenModuleIds, HIDE_PRESETS } fro
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { clearIndustryPackPreview } from "./industryPackPreview";
 import { seedRegistersForIndustryPack } from "./industryPackSeeds";
+import { PACK_DEFAULT_PERMIT_TYPES, normalizeEnabledPermitTypeIds } from "../modules/permits/permitOrgPrefs";
 import {
   getCustomWorkspaceProfile,
   isCustomWorkspacePackId,
@@ -156,6 +157,7 @@ export function applyIndustryPack(packKey, options = {}) {
   }
 
   const raw = loadOrgSettingsRaw();
+  const packPermitDefaults = PACK_DEFAULT_PERMIT_TYPES[id];
   const next = {
     ...raw,
     industryPackId: id,
@@ -163,6 +165,11 @@ export function applyIndustryPack(packKey, options = {}) {
     hiddenModules,
     ramsStarterKey: pack.ramsStarterKey ?? raw.ramsStarterKey ?? null,
   };
+  if (id === "showEverything") {
+    next.enabledPermitTypes = [];
+  } else if (Array.isArray(packPermitDefaults) && packPermitDefaults.length) {
+    next.enabledPermitTypes = normalizeEnabledPermitTypeIds(packPermitDefaults);
+  }
   if (Array.isArray(pack.industrySectors) && pack.industrySectors.length) {
     next.industrySectors = pack.industrySectors;
   }
