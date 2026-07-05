@@ -1,0 +1,49 @@
+name: Cursor Sentry auto-fix
+
+# Sentry → Settings → Integrations → Webhooks → send repository_dispatch:
+#   event_type: sentry-issue
+#   client_payload: { "issue_url": "https://sentry.io/...", "title": "...", "level": "error" }
+on:
+  repository_dispatch:
+    types: [sentry-issue]
+  workflow_dispatch:
+    inputs:
+      issue_url:
+        description: "Sentry issue URL"
+        required: true
+        type: string
+
+concurrency:
+  group: cursor-sentry-${{ github.event.client_payload.issue_url || github.event.inputs.issue_url }}
+  cancel-in-progress: false
+
+jobs:
+  trigger-cursor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check CURSOR_API_KEY
+        id: gate
+        env:
+          HAS_KEY: ${{ secrets.CURSOR_API_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::CURSOR_API_KEY not set — skipping Sentry auto-fix"
+          fi
+
+      - name: Trigger Cursor Sentry agent
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          ISSUE_URL: ${{ github.event.client_payload.issue_url || github.event.inputs.issue_url }}
+          ISSUE_TITLE: ${{ github.event.client_payload.title || 'manual dispatch' }}
+          ISSUE_LEVEL: ${{ github.event.client_payload.level || 'unknown' }}
+        run: |
+          node scripts/cursor-cloud-agent.mjs sentry \
+            --message "Sentry alert: $ISSUE_TITLE ($ISSUE_LEVEL) — $ISSUE_URL"

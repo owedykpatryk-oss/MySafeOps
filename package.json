@@ -51,7 +51,12 @@
     "format:check": "prettier --check \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "fix:mobile": "node scripts/cursor-mobile-fix.mjs"
+    "fix:mobile": "node scripts/cursor-mobile-fix.mjs",
+    "cursor:agent": "node scripts/cursor-cloud-agent.mjs",
+    "cursor:ci-fix": "node scripts/cursor-cloud-agent.mjs ci-fix",
+    "cursor:nightly": "node scripts/cursor-nightly.mjs --all",
+    "cursor:push-secret": "node scripts/cursor-push-github-secret.mjs",
+    "cursor:status": "node scripts/cursor-agent-status.mjs"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.2.8",
