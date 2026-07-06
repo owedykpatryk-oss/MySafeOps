@@ -1,4 +1,5 @@
 import { collectBackupBundle, restoreBackupBundle, validateBackupBundle } from "./backup";
+import { decryptCloudBackupPayload, encryptBackupForCloud } from "../lib/backupCrypto.js";
 
 /**
  * Turn Supabase / network failures into short UI copy (Backup screen).
@@ -36,11 +37,12 @@ export async function uploadBackupToSupabase(supabase, orgSlug, { includeGeocode
   if (!user) throw new Error("Not signed in");
 
   const bundle = presetBundle ?? collectBackupBundle({ includeGeocodeCache });
+  const payload = await encryptBackupForCloud(bundle);
   const { error } = await supabase.from("app_sync").upsert(
     {
       user_id: user.id,
       org_slug: orgSlug || "default",
-      payload: bundle,
+      payload,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id,org_slug" }
@@ -70,10 +72,11 @@ export async function downloadBackupFromSupabase(supabase, orgSlug, { merge = fa
   if (error) throw error;
   if (!data?.payload) throw new Error("No cloud backup for this organisation yet.");
 
-  const v = validateBackupBundle(data.payload);
+  const bundle = await decryptCloudBackupPayload(data.payload);
+  const v = validateBackupBundle(bundle);
   if (!v.ok) throw new Error(v.message);
 
-  return restoreBackupBundle(data.payload, { merge });
+  return restoreBackupBundle(bundle, { merge });
 }
 
 export async function getCloudBackupMeta(supabase, orgSlug) {

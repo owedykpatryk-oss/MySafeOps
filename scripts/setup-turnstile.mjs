@@ -8,6 +8,7 @@
  *   node scripts/setup-turnstile.mjs --all        # vercel + supabase + cloudflare (if tokens)
  */
 import dotenv from "dotenv";
+import { getCloudflareAuth } from "./lib/cloudflareAuth.mjs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -153,10 +154,12 @@ async function main() {
     "127.0.0.1",
   ].filter((v, i, a) => a.indexOf(v) === i);
 
-  if (runCloudflare && process.env.CLOUDFLARE_API_TOKEN?.trim() && cfAccountId) {
+  if (runCloudflare) {
+    const cfAuth = getCloudflareAuth(process.env);
+    if (cfAuth?.token && cfAccountId) {
     const created = await createCloudflareWidget({
       accountId: cfAccountId,
-      token: process.env.CLOUDFLARE_API_TOKEN.trim(),
+      token: cfAuth.token,
       hostname,
       domains: cfDomains,
     });
@@ -165,27 +168,42 @@ async function main() {
     upsertEnvLocalKey("VITE_TURNSTILE_SITE_KEY", siteKey);
     upsertEnvLocalKey("TURNSTILE_SECRET_KEY", secret);
     console.log("✓ .env.local updated with Cloudflare keys (values not printed).");
-  } else if (runCloudflare) {
-    console.log("· Cloudflare skipped: set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID in .env.local");
+    } else {
+    console.log("· Cloudflare skipped: run `npx wrangler login` or set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID in .env.local");
+    }
   }
 
   if (runSupabase) {
     const token = process.env.SUPABASE_ACCESS_TOKEN?.trim();
     let supabaseOk = false;
-    try {
-      execSync(`npx supabase config push --project-ref ${ref} --yes`, {
-        cwd: root,
-        stdio: "pipe",
-        encoding: "utf8",
-      });
-      console.log(`✓ Supabase ${ref}: auth config pushed (Turnstile + production URLs from supabase/config.toml).`);
-      supabaseOk = true;
-    } catch (e) {
-      const out = String(e?.stdout || e?.stderr || e?.message || "");
-      if (/access token|not logged in|unauthorized/i.test(out)) {
-        console.log("· Supabase CLI not authenticated — run: npx supabase login");
-      } else {
-        console.warn(`⚠ supabase config push: ${out.slice(0, 300)}`);
+    const useProdSecret = secret && secret !== TEST_SECRET;
+    if (useProdSecret && token) {
+      try {
+        await patchSupabaseAuth({ ref, token, secret });
+        supabaseOk = true;
+      } catch (e) {
+        console.warn(`⚠ Supabase Management API: ${e?.message || e}`);
+      }
+    }
+    if (!supabaseOk) {
+      try {
+        execSync(`npx supabase config push --project-ref ${ref} --yes`, {
+          cwd: root,
+          stdio: "pipe",
+          encoding: "utf8",
+        });
+        console.log(`✓ Supabase ${ref}: auth config pushed (Turnstile + production URLs from supabase/config.toml).`);
+        supabaseOk = true;
+        if (useProdSecret) {
+          console.log("  Run: npm run turnstile:push-secret (prod secret from .env.local → remote auth)");
+        }
+      } catch (e) {
+        const out = String(e?.stdout || e?.stderr || e?.message || "");
+        if (/access token|not logged in|unauthorized/i.test(out)) {
+          console.log("· Supabase CLI not authenticated — run: npx supabase login");
+        } else {
+          console.warn(`⚠ supabase config push: ${out.slice(0, 300)}`);
+        }
       }
     }
     if (!supabaseOk && token) {
@@ -204,7 +222,17 @@ async function main() {
       execSync("npx vercel link --yes", { cwd: root, stdio: "inherit" });
     }
     addVercelEnv("VITE_TURNSTILE_SITE_KEY", siteKey, ["production", "preview"]);
-    console.log("  Redeploy Production/Preview in Vercel so the new VITE_* reaches the bundle.");
+    if (flags.has("--all")) {
+      console.log("→ Redeploying Vercel Production…");
+      try {
+        execSync("npx vercel deploy --prod --yes", { cwd: root, stdio: "inherit" });
+        console.log("✓ Vercel Production redeployed with new Turnstile site key.");
+      } catch (e) {
+        console.warn(`⚠ Vercel deploy: ${e?.message || "failed"} — run: npx vercel deploy --prod --yes`);
+      }
+    } else {
+      console.log("  Redeploy Production/Preview in Vercel so the new VITE_* reaches the bundle.");
+    }
   }
 
   if (!runSupabase && !runVercel && !runCloudflare) {

@@ -17,6 +17,8 @@ jobs:
         run: npm ci
       - name: npm audit
         run: npm audit --audit-level=high
+      - name: Security doctor
+        run: npm run security:doctor
       - name: ESLint
         run: npm run lint
       - name: Unit tests

@@ -5,7 +5,7 @@ import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { copyTextToClipboard } from "../utils/copyToClipboard";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
-import { genPortalToken, publishPortalToCloud, fetchPublishedPortal, syncPortalCloudState, deletePortalFromCloud } from "../utils/clientPortalCloud";
+import { genPortalToken, publishPortalToCloud, fetchPublishedPortal, syncPortalCloudState, deletePortalFromCloud, defaultPortalExpiryIso } from "../utils/clientPortalCloud";
 import { PORTAL_CLOUD_SYNC_EVENT } from "../utils/clientPortalAutoSync";
 import { loadPublishedPortalTokens, markPortalPublished, unmarkPortalPublished } from "../utils/clientPortalPublished";
 import { supabase as supabaseClient, isSupabaseConfigured } from "../lib/supabase";
@@ -305,8 +305,10 @@ export default function ClientPortal() {
 
   const createPortal = () => {
     if (!newPortal.clientName.trim()) return;
+    const expiresAt = newPortal.expiresAt || defaultPortalExpiryIso();
     const p = {
       ...newPortal,
+      expiresAt,
       id: genRowId(),
       token: genPortalToken(),
       projectName: projects.find(p=>p.id===newPortal.projectId)?.name||"All projects",

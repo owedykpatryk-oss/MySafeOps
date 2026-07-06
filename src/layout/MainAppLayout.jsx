@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { BarChart2, FileCheck, ClipboardList, Users, Building2, Menu, Pin, Shield, Trash2, FileDown, EyeOff, Sparkles, Zap } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
+import D1WriteForbiddenBanner from "../components/D1WriteForbiddenBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import TrialBillingBanner from "../components/TrialBillingBanner";
 import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
@@ -844,6 +845,7 @@ export default function MainAppLayout() {
         Skip to main content
       </a>
       <OfflineStatusBanner />
+      <D1WriteForbiddenBanner />
       <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
         <TrialBillingBanner />
         <BillingReadOnlyBanner />

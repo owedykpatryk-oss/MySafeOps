@@ -79,6 +79,27 @@ export async function refreshOrgFromSupabase(supabase) {
   return row;
 }
 
+/**
+ * Lightweight role refresh from Postgres (no org auto-create). Defeats localStorage role tampering.
+ * @returns {Promise<string | null>} role slug or null
+ */
+export async function refreshMembershipRoleFromSupabase(supabase) {
+  if (!supabase) return null;
+  const slug = getOrgId();
+  if (!slug || slug === "default") return null;
+  const { data, error } = await supabase.rpc("get_my_membership_role", { p_org_slug: slug });
+  if (error) throw error;
+  const r = String(data || "").trim().toLowerCase();
+  if (!MEMBERSHIP_ROLES.has(r)) return null;
+  try {
+    localStorage.setItem(`mysafeops_role_${slug}`, r);
+  } catch {
+    /* ignore */
+  }
+  window.dispatchEvent(new CustomEvent("mysafeops-org-updated"));
+  return r;
+}
+
 export async function ensureUserOrgContext(supabase) {
   if (!supabase) return null;
   const { data, error } = await supabase.rpc("ensure_my_org", ensureMyOrgArgs());

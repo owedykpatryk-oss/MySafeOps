@@ -3,6 +3,11 @@ import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
 import { d1GetKv, d1PutKv, isD1Configured } from "../lib/d1SyncClient";
 import {
+  clearD1WriteForbidden,
+  isForbiddenD1Write,
+  notifyD1WriteForbidden,
+} from "../lib/d1WriteForbidden.js";
+import {
   d1OutboxDelete,
   d1OutboxEnqueue,
   d1OutboxHasPending,
@@ -156,6 +161,7 @@ export function useD1OrgArraySync({
           put = { ok: false, error: "fetch_failed" };
         }
         if (put.ok) d1VersionRef.current = put.version || 0;
+        else if (isForbiddenD1Write(put.error)) notifyD1WriteForbidden(namespace);
       }
       await d1OutboxTryFlush(flushCtxBase());
       await refreshPending();
@@ -248,6 +254,7 @@ export function useD1OrgArraySync({
       }
       if (put.ok) {
         d1VersionRef.current = put.version || 0;
+        clearD1WriteForbidden();
         await d1OutboxDelete(orgSlug, namespace, d1DataKey);
         const still = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
         setD1OutboxPending(still);
@@ -263,6 +270,8 @@ export function useD1OrgArraySync({
           setValue(r.value);
           save(storageKey, r.value);
         }
+      } else if (isForbiddenD1Write(put.error)) {
+        notifyD1WriteForbidden(namespace);
       } else {
         try {
           await d1OutboxEnqueue({

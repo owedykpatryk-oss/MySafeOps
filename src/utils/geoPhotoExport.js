@@ -737,12 +737,14 @@ const map = L.map('map');
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
 const detail = document.getElementById('detail');
 function show(p){
-  let html = '<h3>'+p.label+'</h3><dl class="meta">';
-  if(p.loc) html += '<dt>Location</dt><dd>'+p.loc+'</dd>';
-  if(p.depth) html += '<dt>Depth</dt><dd>'+p.depth+'</dd>';
-  if(p.bearing!=null) html += '<dt>View bearing</dt><dd>'+p.bearing+'°</dd>';
-  html += '</dl><img src="'+p.image+'" onerror="this.replaceWith(Object.assign(document.createElement(\\'p\\'),{textContent:\\'Image not found — keep images/ next to this HTML file.\\'}))"/>';
-  if(p.notes) html += '<p>'+p.notes+'</p>';
+  function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function safeImg(u){const x=String(u||'');if(/^https?:\\/\\//i.test(x)||/^\\.\\//.test(x)||/^images\\//.test(x))return esc(x);return '';}
+  let html = '<h3>'+esc(p.label)+'</h3><dl class="meta">';
+  if(p.loc) html += '<dt>Location</dt><dd>'+esc(p.loc)+'</dd>';
+  if(p.depth) html += '<dt>Depth</dt><dd>'+esc(p.depth)+'</dd>';
+  if(p.bearing!=null) html += '<dt>View bearing</dt><dd>'+esc(p.bearing)+'°</dd>';
+  html += '</dl><img src="'+safeImg(p.image)+'" onerror="this.replaceWith(Object.assign(document.createElement(\\'p\\'),{textContent:\\'Image not found — keep images/ next to this HTML file.\\'}))"/>';
+  if(p.notes) html += '<p>'+esc(p.notes)+'</p>';
   detail.innerHTML = html;
 }
 const bounds = [];

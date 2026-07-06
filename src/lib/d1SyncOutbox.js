@@ -4,6 +4,7 @@
  */
 
 import { d1GetKv, d1PutKv } from "./d1SyncClient.js";
+import { isForbiddenD1Write, notifyD1WriteForbidden } from "./d1WriteForbidden.js";
 
 const DB_NAME = "mysafeops_d1_outbox";
 const DB_VERSION = 1;
@@ -171,6 +172,11 @@ export async function d1OutboxTryFlush(ctx) {
     await d1OutboxDelete(ctx.orgSlug, ctx.namespace, ctx.d1DataKey);
     ctx.versionRef.current = put.version || 0;
     return "flushed";
+  }
+  if (isForbiddenD1Write(put.error)) {
+    await d1OutboxDelete(ctx.orgSlug, ctx.namespace, ctx.d1DataKey);
+    notifyD1WriteForbidden(ctx.namespace);
+    return "forbidden";
   }
   if (put.error === "version_conflict") {
     let r;

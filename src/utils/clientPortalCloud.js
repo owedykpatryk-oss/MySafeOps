@@ -2,6 +2,16 @@
  * Client portal cloud publish — share read-only compliance snapshots cross-device via Supabase.
  */
 import { loadOrgScoped as load, asStorageArray } from "./orgStorage";
+import { pushAudit } from "./auditLog";
+
+export const PORTAL_DEFAULT_TTL_DAYS = 90;
+
+/** @param {number} [days] */
+export function defaultPortalExpiryIso(days = PORTAL_DEFAULT_TTL_DAYS) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 const SNAPSHOT_KEYS = {
   workers: "mysafeops_workers",
@@ -54,7 +64,9 @@ export async function publishPortalToCloud(supabase, portal, orgSlug) {
   if (!token) throw new Error("Portal token missing.");
 
   const snapshot = buildPortalSnapshot(portal);
-  const expiresAt = portal.expiresAt ? new Date(portal.expiresAt).toISOString() : null;
+  const expiresAt = portal.expiresAt
+    ? new Date(portal.expiresAt).toISOString()
+    : new Date(`${defaultPortalExpiryIso()}T23:59:59.999Z`).toISOString();
 
   const { error } = await supabase.from("client_portal_shares").upsert(
     {
@@ -69,7 +81,7 @@ export async function publishPortalToCloud(supabase, portal, orgSlug) {
         sections: portal.sections || [],
         allowRamsApproval: portal.allowRamsApproval !== false,
         active: portal.active !== false,
-        expiresAt: portal.expiresAt || null,
+        expiresAt: portal.expiresAt || defaultPortalExpiryIso(),
       },
       snapshot,
       active: portal.active !== false,
@@ -79,6 +91,11 @@ export async function publishPortalToCloud(supabase, portal, orgSlug) {
     { onConflict: "token" }
   );
   if (error) throw error;
+  pushAudit({
+    action: "portal_publish",
+    entity: "client_portal",
+    detail: `${portal.clientName || "portal"} · ${String(token).slice(0, 8)}…`,
+  });
   return { ok: true, token, publishedAt: snapshot.publishedAt };
 }
 

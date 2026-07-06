@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { isLocalWorkspaceOnly, hasPersistedSupabaseSession } from "../lib/authPrefs";
-import { isSupabaseConfigured } from "../lib/supabase";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { ORG_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
-import { getBillingEntitlements, getTrialExtensionCount, getTrialStatus } from "../utils/orgMembership";
+import { getBillingEntitlements, getTrialExtensionCount, getTrialStatus, refreshMembershipRoleFromSupabase } from "../utils/orgMembership";
 import {
   canExtendOrgTrial,
   isBillingWriteBlocked,
@@ -92,6 +92,35 @@ export function AppProvider({ children }) {
     window.addEventListener("mysafeops-org-updated", onOrgUpdated);
     return () => window.removeEventListener("mysafeops-org-updated", onOrgUpdated);
   }, []);
+
+  /** Cloud: re-fetch role from Supabase so DevTools localStorage edits cannot persist. */
+  useEffect(() => {
+    if (!isSupabaseConfigured() || isLocalWorkspaceOnly() || !supabase) return undefined;
+    if (!hasPersistedSupabaseSession()) return undefined;
+
+    let cancelled = false;
+    const syncRole = () => {
+      if (cancelled || !hasPersistedSupabaseSession()) return;
+      refreshMembershipRoleFromSupabase(supabase).catch(() => {
+        /* non-fatal — keep last known role */
+      });
+    };
+
+    syncRole();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncRole();
+    };
+    window.addEventListener("focus", syncRole);
+    document.addEventListener("visibilitychange", onVisible);
+    const id = window.setInterval(syncRole, 5 * 60_000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", syncRole);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(id);
+    };
+  }, [orgId]);
 
   const setRole = useCallback((r) => {
     if (!ROLES.includes(r)) return;

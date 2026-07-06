@@ -277,6 +277,9 @@ export default function BackupExport() {
               <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
                 Plan: <strong>{plan.name}</strong> · Cloud limit: {formatBytes(plan.limits.cloudBytes)}
               </p>
+              <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+                Cloud backups are encrypted in your browser (AES-GCM) before upload. Keep this device or export a JSON file to restore elsewhere.
+              </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                 <button type="button" style={ss.btnP} disabled={cloudBusy} onClick={uploadCloud}>
                   Upload to cloud

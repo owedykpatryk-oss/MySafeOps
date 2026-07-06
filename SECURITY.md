@@ -15,6 +15,10 @@ This document supports procurement and internal review. It is not a legal warran
 - **Optional error monitoring**: set **`VITE_SENTRY_DSN`** (browser DSN only) to load `@sentry/react` at startup; omit in environments where third-party reporting is not allowed. When set, `RouteErrorBoundary` also calls **`Sentry.captureException`** for lazy-route load failures.
 - **CSP (Report-Only)**: `public/_headers` includes `Content-Security-Policy-Report-Only` for visibility into violations; tune `connect-src` to your real API hosts, then consider promoting to an enforced policy at the CDN.
 - **Platform owner (DB)**: superadmin RPCs use `public.platform_owner_email_allowlist` — add each owner email in Supabase SQL (in addition to **`VITE_PLATFORM_OWNER_EMAIL`** in the app).
+- **Insider hardening (D1)**: `DELETE /v1/kv` requires admin or supervisor (`user_can_delete_org_kv`); `PUT /v1/kv` checks `user_can_write_org_kv` (operative cannot overwrite workers/projects/training/CDM/timesheets namespaces); audit append validates `action`/`entity` and rate-limits per user; cloud UI role refreshes from `get_my_membership_role` every focus / 5 min; workspace banner on D1 403 (`D1WriteForbiddenBanner`).
+- **Session revoke**: Edge Function `revoke-org-member-sessions` — admins sign out a member globally after role change or removal (`OrgMembers`).
+- **Client portal**: default cloud expiry 90 days; publish events go to audit log.
+- **Diagnostics**: `npm run security:doctor` — migrations present, npm audit, deploy checklist.
 
 ## What you must configure outside the repo
 

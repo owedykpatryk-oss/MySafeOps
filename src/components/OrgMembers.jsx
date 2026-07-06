@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
-import { refreshOrgFromSupabase } from "../utils/orgMembership";
+import { refreshOrgFromSupabase, refreshMembershipRoleFromSupabase } from "../utils/orgMembership";
+import { revokeOrgMemberSessions } from "../utils/revokeMemberSessions";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
@@ -85,6 +86,19 @@ export default function OrgMembers() {
       });
       if (error) throw error;
       pushToast({ type: "success", title: "Role updated", message: `Member role changed to ${nextRole}.` });
+      const revoke = await revokeOrgMemberSessions(supabase, targetId);
+      if (targetId === user.id) {
+        await refreshMembershipRoleFromSupabase(supabase).catch(() => {});
+      }
+      if (revoke.ok) {
+        pushToast({
+          type: "info",
+          message:
+            targetId === user.id
+              ? "Your other sessions were signed out for security."
+              : "Member was signed out on all devices — they must sign in again.",
+        });
+      }
       await load();
     } catch (e) {
       setStatus({ type: "error", text: e.message || "Could not update role." });
@@ -102,7 +116,11 @@ export default function OrgMembers() {
     try {
       const { error } = await supabase.rpc("remove_org_member", { p_target: targetId });
       if (error) throw error;
+      const revoke = await revokeOrgMemberSessions(supabase, targetId);
       pushToast({ type: "success", title: "Member removed", message: `${emailLabel} was removed from the organisation.` });
+      if (revoke.ok) {
+        pushToast({ type: "info", message: `${emailLabel} was signed out on all devices.` });
+      }
       await load();
     } catch (e) {
       setStatus({ type: "error", text: e.message || "Could not remove member." });

@@ -6,14 +6,57 @@
  *
  * GET  /v1/health
  * GET  /v1/kv?namespace=&key=   |  ?namespace=&list=1
- * PUT  /v1/kv  JSON { namespace, key, value, ifVersion? }
- * DELETE /v1/kv?namespace=&key=
+ * PUT  /v1/kv  JSON { namespace, key, value, ifVersion? }  (operative: no master-data namespaces)
+ * DELETE /v1/kv?namespace=&key=  (admin + supervisor only — RPC user_can_delete_org_kv)
  * POST /v1/audit/append  JSON { action, entity, detail?, client_row_id?, extra? }
  * GET  /v1/audit?limit=50&after_seq=0
  * GET  /v1/audit/verify  (recomputes chain; use sparingly on large orgs)
  */
 
+import { isValidD1Namespace } from "../../../shared/d1NamespacePolicy.mjs";
+
 const GENESIS_HASH = "0".repeat(64);
+/** Audit action/entity — blocks injection of arbitrary strings into the hash chain. */
+const AUDIT_FIELD_RE = /^[a-z][a-z0-9_]{0,63}$/i;
+
+const AUDIT_APPEND_MAX_PER_MINUTE = 90;
+const KV_PUT_MAX_PER_MINUTE = 120;
+
+function currentRateWindowStart() {
+  const d = new Date();
+  d.setUTCSeconds(0, 0);
+  return d.toISOString();
+}
+
+/** Sliding 60s window per bucket key; fails open if org_api_rate table missing. */
+async function consumeRateLimit(env, bucketKey, maxPerMinute) {
+  try {
+    const windowStart = currentRateWindowStart();
+    const row = await env.DB.prepare(`SELECT count, window_start FROM org_api_rate WHERE bucket_key = ?`)
+      .bind(bucketKey)
+      .first();
+    const sameWindow = row?.window_start === windowStart;
+    const next = sameWindow ? (Number(row.count) || 0) + 1 : 1;
+    if (next > maxPerMinute) return false;
+    if (row) {
+      await env.DB.prepare(`UPDATE org_api_rate SET count = ?, window_start = ? WHERE bucket_key = ?`)
+        .bind(next, windowStart, bucketKey)
+        .run();
+    } else {
+      await env.DB.prepare(`INSERT INTO org_api_rate (bucket_key, window_start, count) VALUES (?, ?, ?)`)
+        .bind(bucketKey, windowStart, next)
+        .run();
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function isValidAuditField(value) {
+  const s = String(value || "").trim();
+  return s.length > 0 && s.length <= 64 && AUDIT_FIELD_RE.test(s);
+}
 
 function json(body, status = 200, extra = {}) {
   return new Response(JSON.stringify(body), {
@@ -162,6 +205,89 @@ async function verifyOrgAuditRead(env, authHeader, orgSlug) {
   return { ok: true };
 }
 
+/** DELETE /v1/kv — admin + supervisor only (RPC). Falls back to deny if RPC missing. */
+async function verifyOrgKvDelete(env, authHeader, orgSlug) {
+  const url = (env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const anon = env.SUPABASE_ANON_KEY || "";
+  if (!url || !anon) {
+    return { ok: false, error: "Server misconfiguration: missing SUPABASE_URL or SUPABASE_ANON_KEY" };
+  }
+  if (!orgSlug || !authHeader || !String(authHeader).toLowerCase().startsWith("bearer ")) {
+    return { ok: false, error: "Missing Authorization or X-Org-Slug" };
+  }
+
+  const res = await fetch(`${url}/rest/v1/rpc/user_can_delete_org_kv`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: anon,
+      Authorization: authHeader,
+    },
+    body: JSON.stringify({ p_org_slug: orgSlug }),
+  });
+
+  if (res.status === 404) {
+    return { ok: false, error: "Forbidden: KV delete requires admin or supervisor role" };
+  }
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, error: "Unauthorized" };
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    return { ok: false, error: `Supabase error ${res.status}: ${t.slice(0, 200)}` };
+  }
+
+  const data = await res.json();
+  const allowed = data === true || data === "true";
+  if (!allowed) {
+    return { ok: false, error: "Forbidden: KV delete requires admin or supervisor role" };
+  }
+  return { ok: true };
+}
+
+/** PUT /v1/kv — namespace-scoped write (RPC). Falls back to membership-only if RPC missing. */
+async function verifyOrgKvWrite(env, authHeader, orgSlug, namespace) {
+  const url = (env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const anon = env.SUPABASE_ANON_KEY || "";
+  if (!url || !anon) {
+    return { ok: false, error: "Server misconfiguration: missing SUPABASE_URL or SUPABASE_ANON_KEY" };
+  }
+  if (!orgSlug || !authHeader || !String(authHeader).toLowerCase().startsWith("bearer ")) {
+    return { ok: false, error: "Missing Authorization or X-Org-Slug" };
+  }
+  if (!isValidD1Namespace(namespace)) {
+    return { ok: false, error: "invalid_namespace" };
+  }
+
+  const res = await fetch(`${url}/rest/v1/rpc/user_can_write_org_kv`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: anon,
+      Authorization: authHeader,
+    },
+    body: JSON.stringify({ p_org_slug: orgSlug, p_namespace: namespace }),
+  });
+
+  if (res.status === 404) {
+    return verifyOrgAccess(env, authHeader, orgSlug);
+  }
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, error: "Unauthorized" };
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    return { ok: false, error: `Supabase error ${res.status}: ${t.slice(0, 200)}` };
+  }
+
+  const data = await res.json();
+  const allowed = data === true || data === "true";
+  if (!allowed) {
+    return { ok: false, error: "Forbidden: cannot write this namespace for your role" };
+  }
+  return { ok: true };
+}
+
 function handleHealth(c, requestId) {
   return json({ ok: true, service: "mysafeops-d1-api", request_id: requestId }, 200, c);
 }
@@ -208,7 +334,7 @@ async function handleKvGet(request, env, orgSlug, c) {
   return json({ ok: true, value: parsed, version: row.version, updated_at: row.updated_at }, 200, c);
 }
 
-async function handleKvPut(request, env, orgSlug, c) {
+async function handleKvPut(request, env, orgSlug, authHeader, c) {
   let body;
   try {
     body = await request.json();
@@ -220,6 +346,19 @@ async function handleKvPut(request, env, orgSlug, c) {
   const ifVersion = body.ifVersion;
   if (!namespace || !dataKey) {
     return json({ error: "missing_namespace_or_key" }, 400, c);
+  }
+  if (!isValidD1Namespace(namespace)) {
+    return json({ error: "invalid_namespace" }, 400, c);
+  }
+  const writeGate = await verifyOrgKvWrite(env, authHeader, orgSlug, namespace);
+  if (!writeGate.ok) {
+    const status = writeGate.error === "Unauthorized" ? 401 : writeGate.error === "invalid_namespace" ? 400 : 403;
+    return json({ error: writeGate.error || "forbidden" }, status, c);
+  }
+  const actorSub = parseJwtSub(authHeader);
+  if (actorSub) {
+    const allowed = await consumeRateLimit(env, `kv_put:${orgSlug}:${actorSub}`, KV_PUT_MAX_PER_MINUTE);
+    if (!allowed) return json({ error: "rate_limited" }, 429, c);
   }
   if (dataKey.length > 256 || namespace.length > 128) {
     return json({ error: "key_too_long" }, 400, c);
@@ -288,12 +427,20 @@ async function handleAuditAppend(request, env, orgSlug, authHeader, c) {
   if (!action || !entity) {
     return json({ error: "missing_action_or_entity" }, 400, c);
   }
+  if (!isValidAuditField(action) || !isValidAuditField(entity)) {
+    return json({ error: "invalid_action_or_entity" }, 400, c);
+  }
   const detail = body.detail != null ? String(body.detail) : null;
   const clientRowId = body.client_row_id != null ? String(body.client_row_id) : null;
   const extra = body.extra && typeof body.extra === "object" ? body.extra : null;
 
   const createdAt = new Date().toISOString();
   const actorSub = parseJwtSub(authHeader);
+
+  if (actorSub) {
+    const allowed = await consumeRateLimit(env, `audit_append:${orgSlug}:${actorSub}`, AUDIT_APPEND_MAX_PER_MINUTE);
+    if (!allowed) return json({ error: "rate_limited" }, 429, c);
+  }
 
   const maxAttempts = 6;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -476,9 +623,14 @@ export default {
       return handleKvGet(request, env, orgSlug, c);
     }
     if (request.method === "PUT") {
-      return handleKvPut(request, env, orgSlug, c);
+      return handleKvPut(request, env, orgSlug, auth, c);
     }
     if (request.method === "DELETE") {
+      const deleteGate = await verifyOrgKvDelete(env, auth, orgSlug);
+      if (!deleteGate.ok) {
+        const status = deleteGate.error === "Unauthorized" ? 401 : 403;
+        return json({ error: deleteGate.error || "forbidden", request_id: requestId }, status, c);
+      }
       return handleKvDelete(request, env, orgSlug, c);
     }
     return json({ error: "method_not_allowed" }, 405, c);
