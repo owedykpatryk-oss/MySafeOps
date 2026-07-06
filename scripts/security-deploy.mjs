@@ -28,7 +28,7 @@ function run(cmd, args, { cwd = root, label } = {}) {
 console.log("Security deploy — Supabase + D1\n");
 
 run("npx", ["supabase", "db", "push", "--yes"], { label: "Supabase db push" });
-run("npx", ["supabase", "config", "push", "--yes"], { label: "Supabase config push (auth)" });
+// Auth config push overwrites remote Turnstile secret with config.toml test key — use turnstile:push-secret after deploy.
 run(
   "npx",
   ["wrangler@3", "d1", "execute", "mysafeops-d1", "--remote", "--file=schema/0003_audit_rate_limit_idx.sql", "--config", "wrangler.toml"],
