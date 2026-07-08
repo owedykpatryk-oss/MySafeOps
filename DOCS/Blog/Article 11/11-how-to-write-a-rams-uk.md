@@ -132,6 +132,8 @@ The Health and Safety Executive's **hierarchy of control** tells you the order t
 
 Generic RAMS documents jump straight to PPE. That's a failure. Going up the hierarchy usually means safer work and, ironically, easier supervision. A platform that needs full body harness is inherently riskier than a MEWP that removes the fall hazard entirely.
 
+![Risk assessment matrix and method statement draft on UK site desk](/blog/images/how-to-write-a-rams-uk-inline.png "Caption: score hazards before controls, then again after, so the RAMS shows risk was reduced")
+
 ### Step 5: Recalculate the risk after controls
 
 This is the step most RAMS skip. If the original Risk Factor was 24 and you've listed five control measures, what's the new Risk Factor?
@@ -365,7 +367,7 @@ They'll typically check: is it specific to the task, are hazards realistically i
 
 ## Get the RAMS right, the rest of the paperwork follows
 
-A RAMS that actually works on site does three things. It makes the crew safer because the hazards and controls are clear. It protects the business because the evidence trail is structured. And it keeps the client happy because the document reflects real thought about real risk. Getting that right takes a decent template, 30-60 minutes of effort per task, and the discipline to review when conditions change. The rest is habit.
+A RAMS that actually works on site does three things. It makes the crew safer because the hazards and controls are clear. It protects the business because the evidence trail is structured. And it keeps the client happy because the document reflects real thought about real risk. Getting that right takes a decent template, 30-60 minutes of effort per task, and the discipline to review when conditions change. The rest is habit. When you move from paper to software, see our [digital RAMS software comparison UK 2026](https://mysafeops.com/blog/digital-rams-software-comparison-uk).
 
 [**Start writing RAMS faster with MySafeOps →**](https://mysafeops.com)
 

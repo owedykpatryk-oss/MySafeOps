@@ -227,7 +227,7 @@ The Premium plan is approximately $24 per user per month on annual billing. On 5
 The platform supports custom templates that users can build to represent UK permits. It does not come with pre-built UK permit types (hot work, confined space, etc.) with full permit lifecycle (issue, approve, pause, close-out) in the way UK-specific platforms do.
 
 **What's the cheapest UK construction safety software?**
-For small firms, HBXL Health & Safety Xpert has a low entry price but is desktop-focused. For worker-heavy sites, MySafeOps is often cheapest because worker accounts are free, removing the per-seat cost that dominates most other pricing. Exact cheapest depends on site size and feature needs.
+For small firms, HBXL Health & Safety Xpert has a low entry price but is desktop-focused. For worker-heavy sites, MySafeOps is often cheapest because worker accounts are free, removing the per-seat cost that dominates most other pricing. See [construction safety app pricing UK 2026](https://mysafeops.com/blog/construction-safety-app-pricing-uk-2026) for wider cost bands. If offline permits matter on your sites, read [PTW software offline UK](https://mysafeops.com/blog/ptw-software-offline-uk). Exact cheapest depends on site size and feature needs.
 
 **Is SafetyCulture good for CDM 2015 compliance?**
 It can be configured for CDM compliance, but doesn't come with CDM-specific workflows pre-built. A Construction Phase Plan, Pre-Construction Information pack, or principal contractor duty checklist would all need to be built as custom templates.

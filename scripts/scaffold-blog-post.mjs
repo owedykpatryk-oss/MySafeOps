@@ -195,8 +195,8 @@ const entry = `  {
 
 let landing = readFileSync(landingPath, "utf8");
 landing = landing.replace(
-  "\n];\n\n/** @type {BlogPostMeta[]} */\nexport const LANDING_BLOG_POSTS",
-  `,\n${entry}\n];\n\n/** @type {BlogPostMeta[]} */\nexport const LANDING_BLOG_POSTS`,
+  /  },\n];\n\n\/\*\* @type \{BlogPostMeta\[\]\} \*\//,
+  `  },\n${entry}\n];\n\n/** @type {BlogPostMeta[]} */`,
 );
 writeFileSync(landingPath, landing, "utf8");
 
@@ -208,7 +208,7 @@ const taxEntry = `  "${slug}": {
     featured: ${featured},
   },`;
 let tax = readFileSync(taxPath, "utf8");
-tax = tax.replace("\n};\n\n/** @param {string} slug */", `,\n${taxEntry}\n};\n\n/** @param {string} slug */`);
+tax = tax.replace(/  },\n};\n\n\/\*\* @param \{string\} slug \*\//, `  },\n${taxEntry}\n};\n\n/** @param {string} slug */`);
 writeFileSync(taxPath, tax, "utf8");
 
 // blogFaqJsonLd.js stub
@@ -228,7 +228,7 @@ const faqEntry = `  "${slug}": [
     },
   ],`;
 let faq = readFileSync(faqPath, "utf8");
-faq = faq.replace("\n};\n\n/** @param {string | undefined} slug */", `,\n${faqEntry}\n};\n\n/** @param {string | undefined} slug */`);
+faq = faq.replace(/  \],\n};\n\n\/\*\* @param \{string \| undefined\} slug \*\//, `  ],\n${faqEntry}\n};\n\n/** @param {string | undefined} slug */`);
 writeFileSync(faqPath, faq, "utf8");
 
 spawnSync("node", ["scripts/generate-image-prompt.mjs", slug], { cwd: root, stdio: "inherit" });

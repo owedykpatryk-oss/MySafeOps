@@ -5,7 +5,7 @@
     <link>https://mysafeops.com/blog</link>
     <description>Practical articles for site managers and H&amp;S leads: permits, inductions, toolbox talks, COSHH, and compliance.</description>
     <language>en-gb</language>
-    <lastBuildDate>Sun, 05 Jul 2026 19:27:50 GMT</lastBuildDate>
+    <lastBuildDate>Wed, 08 Jul 2026 13:50:17 GMT</lastBuildDate>
     <atom:link href="https://mysafeops.com/blog/rss.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>Permit to Work App UK: What Good Digital PTW Actually Looks Like</title>
@@ -132,6 +132,132 @@
       <guid isPermaLink="true">https://mysafeops.com/blog/electrical-isolation-permit-uk</guid>
       <pubDate>Sun, 07 Jun 2026 12:00:00 GMT</pubDate>
       <description>Lock-out tag-out, proving dead, and authorised person sign-off — what a UK electrical isolation permit must cover before live work starts.</description>
+    </item>
+    <item>
+      <title>F10 Notification UK: When and How to Submit to HSE</title>
+      <link>https://mysafeops.com/blog/f10-notification-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/f10-notification-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>CDM 2015 F10 rules for UK construction: when to notify HSE, how to submit online, and what principal contractors must keep on file.</description>
+    </item>
+    <item>
+      <title>HSE Inspection Season: What UK Construction Sites Should Prepare</title>
+      <link>https://mysafeops.com/blog/hse-inspection-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/hse-inspection-construction-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Summer HSE inspection blitzes on UK sites: what inspectors check, common failures, and how to keep permits, RAMS and records audit-ready.</description>
+    </item>
+    <item>
+      <title>Construction Safety App Pricing UK 2026: Honest Cost Guide</title>
+      <link>https://mysafeops.com/blog/construction-safety-app-pricing-uk-2026</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/construction-safety-app-pricing-uk-2026</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Per-seat vs flat org pricing for UK construction safety apps: real cost bands, hidden fees, and what small and mid-size contractors should budget.</description>
+    </item>
+    <item>
+      <title>CDM 2015 Compliance Software: A Principal Contractor&apos;s Guide</title>
+      <link>https://mysafeops.com/blog/cdm-2015-compliance-software-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/cdm-2015-compliance-software-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>CDM 2015 compliance software for UK construction: CPP, F10, inductions, permits and audit records in one system for principal contractors.</description>
+    </item>
+    <item>
+      <title>Construction Phase Plan Template UK: What CDM 2015 Actually Requires</title>
+      <link>https://mysafeops.com/blog/construction-phase-plan-template-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/construction-phase-plan-template-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Construction Phase Plan template for UK sites: what CDM 2015 requires in the CPP, common gaps, and how digital plans beat PDF folders.</description>
+    </item>
+    <item>
+      <title>Summer Heat Safety on UK Construction Sites: Practical Guide</title>
+      <link>https://mysafeops.com/blog/summer-heat-safety-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/summer-heat-safety-construction-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Heat stress on UK construction sites: HSE expectations, water, shade, work-rest cycles, and briefing records when temperatures rise.</description>
+    </item>
+    <item>
+      <title>Principal Contractor Duties UK: CDM 2015 Regulations 12-14 Explained</title>
+      <link>https://mysafeops.com/blog/principal-contractor-duties-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/principal-contractor-duties-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Principal contractor duties under CDM 2015 Regs 12-14: what UK PCs must do daily, common gaps, and how to evidence compliance on site.</description>
+    </item>
+    <item>
+      <title>Digital RAMS Software Comparison UK 2026</title>
+      <link>https://mysafeops.com/blog/digital-rams-software-comparison-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/digital-rams-software-comparison-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>RAMS software compared for UK construction: HBXL, EcoOnline, SmartQHSE, MySafeOps and more on pricing, templates and site use.</description>
+    </item>
+    <item>
+      <title>Pre-Construction Information UK: What Clients Must Provide Under CDM</title>
+      <link>https://mysafeops.com/blog/pre-construction-information-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/pre-construction-information-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Pre-construction information under CDM 2015: what UK clients must supply, common gaps PCs should push back on, and how to use PCI in the CPP.</description>
+    </item>
+    <item>
+      <title>Construction Site Visitor Management UK: Sign-In, GDPR and Safety</title>
+      <link>https://mysafeops.com/blog/construction-site-visitor-management-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/construction-site-visitor-management-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>UK construction site visitor logs: GDPR, sign-in rules, contractor vs public visitors, and digital visitor management that ties to induction records.</description>
+    </item>
+    <item>
+      <title>Permit to Work Software Offline: What UK Sites Actually Need</title>
+      <link>https://mysafeops.com/blog/ptw-software-offline-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/ptw-software-offline-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Offline permit to work software for UK construction: what offline must do, sync risks, and how to evaluate PTW apps when site signal is poor.</description>
+    </item>
+    <item>
+      <title>Subcontractor Management Software UK: RAMS, Inductions and Compliance</title>
+      <link>https://mysafeops.com/blog/subcontractor-management-software-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/subcontractor-management-software-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Subcontractor management for UK construction sites: RAMS approval, inductions, permits and audit trails principal contractors need from every trade.</description>
+    </item>
+    <item>
+      <title>Construction Site Security UK: Fencing, Access and Theft Prevention</title>
+      <link>https://mysafeops.com/blog/construction-site-security-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/construction-site-security-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>UK construction site security: perimeter fencing, access control, theft prevention, and linking visitor logs to CDM site rules.</description>
+    </item>
+    <item>
+      <title>Digital Permit Board UK: Replacing the Site Cabin Whiteboard</title>
+      <link>https://mysafeops.com/blog/digital-permit-board-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/digital-permit-board-construction-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Digital permit boards for UK construction: live PTW status, shift handover, and why whiteboards fail when HSE or clients audit permits.</description>
+    </item>
+    <item>
+      <title>Silica Dust on UK Construction Sites: HSE Expectations and Controls</title>
+      <link>https://mysafeops.com/blog/silica-dust-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/silica-dust-construction-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Respirable silica on UK construction sites: cutting, drilling, HSE focus, water suppression, RPE and exposure records for 2026.</description>
+    </item>
+    <item>
+      <title>Asbestos on UK Construction Sites: Survey, Work and Records</title>
+      <link>https://mysafeops.com/blog/asbestos-management-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/asbestos-management-construction-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Asbestos management on UK construction sites: survey types, notifiable work, licensed contractors, and records PCs must keep under CAR 2012.</description>
+    </item>
+    <item>
+      <title>Noise at Work on UK Construction Sites: Exposure Limits and Controls</title>
+      <link>https://mysafeops.com/blog/noise-at-work-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/noise-at-work-construction-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Construction noise UK: exposure action values, hearing protection, tool rotation, and records HSE expects on busy sites.</description>
+    </item>
+    <item>
+      <title>Lone Working on UK Construction Sites: Risk Assessment and Check-In</title>
+      <link>https://mysafeops.com/blog/lone-worker-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/lone-worker-construction-uk</guid>
+      <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Lone working in UK construction: when it is allowed, check-in systems, permits, and what principal contractors must record.</description>
     </item>
   </channel>
 </rss>

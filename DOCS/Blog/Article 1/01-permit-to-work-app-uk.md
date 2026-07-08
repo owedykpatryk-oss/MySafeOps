@@ -21,8 +21,6 @@
 > - Free worker accounts reduce friction. Operatives sign permits on their own phone without a per-seat licence.
 > - The test of a good PTW system is whether it works on a rainy Tuesday, not whether the sales demo looks tidy.
 
-![UK construction site — permits, documentation and controls at end of shift](https://mysafeops.com/blog/images/permit-to-work-app-uk-hero.png)
-
 ---
 
 **Table of contents**
@@ -47,7 +45,7 @@ If you're evaluating MySafeOps or any digital PTW platform, this piece walks thr
 
 A permit to work is a controlled authorisation for high-risk activity. It's not admin. It's the document that says: this work, at this location, by this person, with these controls in place, is safe to start now.
 
-On paper this sounds simple. In practice it's where site safety quietly breaks down. A permit gets issued on Monday and forgotten by Wednesday. A subcontractor changes scope without anyone re-validating the controls. The permit board hasn't been updated since the last inspection. And when something goes wrong, nobody can prove who authorised what.
+On paper this sounds simple. In practice it's where site safety quietly breaks down. A permit gets issued on Monday and forgotten by Wednesday. A subcontractor changes scope without anyone re-validating the controls. The permit board hasn't been updated since the last inspection. And when something goes wrong, nobody can prove who authorised what. A [digital permit board](https://mysafeops.com/blog/digital-permit-board-construction-uk) fixes the stale whiteboard problem when it pulls live status from the same app.
 
 A digital permit does the same job but keeps the evidence trail alive. Every action is timestamped. Every signature is captured. Every close-out check either happened or didn't. That's the real upgrade over paper, and it's why the Health and Safety Executive accepts electronic PTW systems in UK construction when they're set up properly.
 
@@ -122,7 +120,7 @@ Proper offline-capable PTW apps store permits locally on the device. The supervi
 **Do workers need their own licence to sign permits?**
 They shouldn't. Platforms that charge per-worker make digital adoption painful for large teams. MySafeOps keeps worker accounts free permanently, so everyone on site can sign briefings and acknowledge permits without a cost barrier.
 
-![Site office desk — permit folders, risk assessments and PPE paperwork](https://mysafeops.com/blog/images/permit-to-work-app-uk-inline.png)
+![Site office desk with permit folders and risk assessments](/blog/images/permit-to-work-app-uk-inline.png "Caption: digital PTW should replace the folder hunt, not duplicate it on a screen")
 
 ## One app, every permit, on the phone that's already in your pocket
 

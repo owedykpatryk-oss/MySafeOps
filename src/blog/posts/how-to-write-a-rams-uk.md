@@ -12,7 +12,7 @@
 
 # How to Write a RAMS: UK Construction Guide + Free Template for 2026
 
-*By the MySafeOps team · Last updated 7 June 2026 · 16 min read*
+*By the MySafeOps team · Last updated 16 April 2026 · 10 min read*
 
 > **Key takeaways**
 > - RAMS isn't legally required by name in the UK, but the risk assessment duty under HSWA 1974 and Management of Health and Safety at Work Regulations 1999 effectively mandates equivalent documentation.
@@ -21,13 +21,12 @@
 > - UK construction clients and principal contractors increasingly request RAMS before site access, regardless of legal status.
 > - Writing a usable RAMS takes 30-60 minutes with a decent template. Writing a useless one takes 5 minutes and creates liability.
 
-![UK construction site office desk with RAMS and safety paperwork](/blog/images/how-to-write-a-rams-uk-hero.png)
+![How to Write a RAMS: UK Construction Guide + Free Template for 2026](/blog/images/how-to-write-a-rams-uk-hero.png)
 
 ---
 
 **Table of contents**
 - What a RAMS actually is (and isn't)
-- RAMS vs permit vs Construction Phase Plan
 - The 10-step process for writing a RAMS
 - The risk matrix: how scoring actually works
 - Common mistakes that make RAMS useless
@@ -38,9 +37,9 @@
 
 ---
 
-06:50, gate call. Principal contractor will not lift the barrier until RAMS are on file. Your subbie sent a 40-page generic document with another site's name still in the header. The crew is in the van. The client is on the phone. That is the everyday reason **how to write a RAMS** properly matters more than another template download.
+If you run a UK construction site, you've been asked for a RAMS more times than you can count. Client won't let you on site without one. Principal contractor demands one before the first shift. Insurer asks to see the latest version. Subbie sends you one that's clearly copied from another project, with last month's date tippexed over.
 
-If you run a UK construction site, you have been asked for a RAMS more times than you can count. Client will not let you on site without one. Principal contractor demands one before the first shift. Insurer asks to see the latest version. The problem is not that RAMS are hard. Nobody trains people to write them well, so most documents are either bloated templates nobody reads, or generic two-pagers that would not stop anything going wrong. This guide fixes that: step by step, with a free template structure at the bottom and examples from live UK sites.
+The problem with **how to write a RAMS** isn't that it's hard. It's that nobody gets trained on doing it well, so most RAMS documents are either bloated templates that nobody reads, or generic two-pagers that wouldn't stop anything going wrong. This guide fixes that. Step by step, with a free template at the bottom and real examples from live UK sites.
 
 ## What a RAMS actually is (and isn't)
 
@@ -57,19 +56,9 @@ A RAMS without the risk assessment is just a work plan. A RAMS without the metho
 - Not a substitute for live site supervision
 - Not a one-time document (it needs review if conditions change)
 - Not the same as a Construction Phase Plan (that's broader, CDM 2015 specific)
-- Not the same as a [permit to work](https://mysafeops.com/blog/permit-to-work-app-uk) (that's live authorisation, RAMS is planning)
+- Not the same as a [permit to work](/blog/permit-to-work-app-uk) (that's live authorisation, RAMS is planning)
 
-The legal position matters. The Health and Safety at Work Act 1974 requires employers to ensure health and safety of employees "so far as is reasonably practicable". The Management of Health and Safety at Work Regulations 1999 specifically requires risk assessments. CDM 2015 requires principal contractors and contractors to plan construction work properly. RAMS is not named in any of these, but it is the established way UK construction meets these duties for specific tasks.
-
-## RAMS vs permit vs Construction Phase Plan
-
-| Document | Purpose | When you use it |
-| --- | --- | --- |
-| **RAMS** | Plan the task: hazards, controls, method | Before work starts; updated if method changes |
-| **[Permit to work](/blog/permit-to-work-app-uk)** | Authorise high-risk work today | Hot work, height, confined space, dig, lift |
-| **Construction Phase Plan (CDM)** | Whole-project H&S arrangements | Under [CDM 2015](/blog/cdm-2015-small-contractor-uk) for notifiable or multi-contractor jobs |
-
-Teams confuse these constantly. A RAMS without a permit can still be compliant for low-risk repetitive work. A permit without a RAMS is paperwork with no method behind it.
+The legal position matters. The Health and Safety at Work Act 1974 requires employers to ensure health and safety of employees "so far as is reasonably practicable". The Management of Health and Safety at Work Regulations 1999 specifically requires risk assessments. CDM 2015 requires principal contractors and contractors to plan construction work properly. RAMS isn't named in any of these, but it's the established way UK construction meets these duties for specific tasks.
 
 ## The 10-step process for writing a RAMS
 
@@ -105,7 +94,7 @@ For each sub-task, ask three questions:
 - Dust and fumes (silica, welding fumes, bitumen, wood dust)
 - Noise (tools, plant, construction activity)
 - Vibration (HAVS from power tools)
-- Chemicals (solvents, sealants, fuel, cleaning products, plus [COSHH](https://mysafeops.com/blog/coshh-register-software-uk))
+- Chemicals (solvents, sealants, fuel, cleaning products, plus [COSHH](/blog/coshh-register-software-uk))
 - Traffic and plant (on-site vehicle movements, MEWPs, telehandlers)
 - Weather (cold, heat, wet, wind for external work)
 - Other trades (working alongside, conflicting activities)
@@ -144,6 +133,8 @@ The Health and Safety Executive's **hierarchy of control** tells you the order t
 5. **PPE** (last resort, not first)
 
 Generic RAMS documents jump straight to PPE. That's a failure. Going up the hierarchy usually means safer work and, ironically, easier supervision. A platform that needs full body harness is inherently riskier than a MEWP that removes the fall hazard entirely.
+
+![Risk assessment matrix and method statement draft on UK site desk](/blog/images/how-to-write-a-rams-uk-inline.png "Caption: score hazards before controls, then again after, so the RAMS shows risk was reduced")
 
 ### Step 5: Recalculate the risk after controls
 
@@ -220,7 +211,7 @@ Every RAMS needs a review date, usually 6-12 months out, or sooner if:
 - The task or method changes
 - A near-miss or incident occurs
 - A new hazard emerges
-- Regulation changes (like the current [RIDDOR consultation](https://mysafeops.com/blog/riddor-changes-2026))
+- Regulation changes (like the current [RIDDOR consultation](/blog/riddor-changes-2026))
 - Client or principal contractor requests a review
 
 RAMS from 2019 shouldn't be reused in 2026 without a full review. Site conditions, regulations, PPE standards and best practice all shift.
@@ -236,8 +227,6 @@ Misunderstanding the risk matrix is the single most common RAMS error. Three poi
 **The revised risk factor is not aspirational.** Don't drop the revised RF from 24 to 2 just because you've listed some controls. Be honest. If the fall hazard is still present even after harness + lanyard + rescue plan, the revised RF might only drop from 24 to 12, not to 2.
 
 An overly optimistic revised RF is worse than an honest one. It tells an HSE inspector that the assessor either doesn't understand the risk or is gaming the paperwork.
-
-![RAMS risk matrix and method statement on UK site desk](/blog/images/how-to-write-a-rams-uk-inline.png "Caption: a usable RAMS names hazards, scores risk and ties controls to each work step")
 
 ## Common mistakes that make RAMS useless
 
@@ -265,7 +254,7 @@ Not every task needs a bespoke RAMS. Writing a dedicated RAMS for hanging a pict
 
 **Always write a task-specific RAMS for:**
 - High-risk activities (confined space, hot works, work at height over 2m, electrical isolation, lifting operations, excavation)
-- Work requiring a [permit to work](https://mysafeops.com/blog/permit-to-work-app-uk)
+- Work requiring a [permit to work](/blog/permit-to-work-app-uk)
 - Complex multi-trade coordination
 - Unusual or first-time methods
 - When client or principal contractor specifically requests one
@@ -340,7 +329,7 @@ For each sub-task:
 
 Paper RAMS works, up to a point. The point where it breaks is usually around the time a subbie turns up on site at 7am and the RAMS hasn't been issued yet because the paperwork is still in the office.
 
-Digital RAMS fixes three specific failure points of paper. For loaded cost and break-even maths, see [paper vs digital RAMS for UK contractors](/blog/paper-vs-digital-rams-uk).
+Digital RAMS fixes three specific failure points of paper:
 
 **Version control.** The RAMS on the supervisor's phone is always the latest approved version. No risk of working from a superseded document.
 
@@ -380,7 +369,7 @@ They'll typically check: is it specific to the task, are hazards realistically i
 
 ## Get the RAMS right, the rest of the paperwork follows
 
-A RAMS that actually works on site does three things. It makes the crew safer because the hazards and controls are clear. It protects the business because the evidence trail is structured. And it keeps the client happy because the document reflects real thought about real risk. Getting that right takes a decent template, 30-60 minutes of effort per task, and the discipline to review when conditions change. The rest is habit.
+A RAMS that actually works on site does three things. It makes the crew safer because the hazards and controls are clear. It protects the business because the evidence trail is structured. And it keeps the client happy because the document reflects real thought about real risk. Getting that right takes a decent template, 30-60 minutes of effort per task, and the discipline to review when conditions change. The rest is habit. When you move from paper to software, see our [digital RAMS software comparison UK 2026](/blog/digital-rams-software-comparison-uk).
 
 [**Start writing RAMS faster with MySafeOps →**](https://mysafeops.com)
 
@@ -393,7 +382,7 @@ A RAMS that actually works on site does three things. It makes the crew safer be
 - Management of Health and Safety at Work Regulations 1999: https://www.legislation.gov.uk/uksi/1999/3242
 - Construction (Design and Management) Regulations 2015: https://www.hse.gov.uk/construction/cdm/2015/
 
-**See also:** [Paper vs digital RAMS UK](/blog/paper-vs-digital-rams-uk) · [Scaffold inspection checklist UK](/blog/scaffold-inspection-checklist-uk) · [Permit to work app UK](https://mysafeops.com/blog/permit-to-work-app-uk) · [COSHH register software UK](https://mysafeops.com/blog/coshh-register-software-uk) · [RIDDOR changes 2026](https://mysafeops.com/blog/riddor-changes-2026)
+**See also:** [Construction Phase Plan Template UK: What CDM 2015 Actually Requires](/blog/construction-phase-plan-template-uk) · [Paper vs Digital RAMS: Real Cost Comparison for UK Contractors 2026](/blog/paper-vs-digital-rams-uk) · [CDM 2015 Compliance Software: A Principal Contractor's Guide](/blog/cdm-2015-compliance-software-uk) · [CDM 2015 for Small Contractors: Plain English Guide + Free Template 2026](/blog/cdm-2015-small-contractor-uk)
 
 **Disclaimer:** This article is general guidance for UK construction safety and does not constitute legal advice. The template provided is a starting point and must be customised to specific tasks, sites and conditions. Always verify current requirements with HSE publications or a qualified health and safety professional.
 

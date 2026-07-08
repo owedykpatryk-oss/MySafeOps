@@ -438,6 +438,414 @@ export const FAQ_MAIN_ENTITY_BY_SLUG = {
       text: "Live work needs a separate assessment and usually a specific live-work authorisation with tighter controls. Most construction tasks should be done dead. If live work is unavoidable, the permit must name the justification, competence, PPE and emergency response.",
     },
   ],
+  "f10-notification-uk": [
+    {
+      name: "Who is responsible for submitting F10?",
+      text: "The client under CDM 2015. Principal contractors often complete the form, but the client remains legally responsible for ensuring notification happens.",
+    },
+    {
+      name: "How long before work starts should F10 be submitted?",
+      text: "Before construction work begins. Treat it as a pre-start checklist item alongside insurance and site setup.",
+    },
+    {
+      name: "What happens if we forgot to submit F10?",
+      text: "Submit as soon as you realise. Continuing on a notifiable project without notification is a breach. HSE may take enforcement action, especially if other CDM failures appear on inspection.",
+    },
+    {
+      name: "Is F10 the same as a Construction Phase Plan?",
+      text: "No. F10 notifies HSE that a notifiable project is starting. The CPP is the principal contractor's plan for managing site health and safety.",
+    },
+    {
+      name: "Do domestic projects need F10?",
+      text: "Yes, if they meet the notifiable thresholds. CDM still applies; domestic client duties are usually transferred to the designer and contractor.",
+    },
+  ],
+  "hse-inspection-construction-uk": [
+    {
+      name: "Do HSE inspectors give notice before a construction site visit?",
+      text: "Sometimes, but many inspections are unannounced. Treat your site as inspection-ready year-round, with documents and live controls matching your RAMS.",
+    },
+    {
+      name: "What is the first thing HSE asks for on a construction site?",
+      text: "Often the Construction Phase Plan, induction records and RAMS for work in progress. On notifiable projects, F10 confirmation is commonly requested.",
+    },
+    {
+      name: "Can HSE shut down a construction site?",
+      text: "Yes. Prohibition notices stop specified work or whole sites until serious risks are fixed. Improvement notices allow work to continue with a compliance deadline.",
+    },
+    {
+      name: "How long does a construction site HSE inspection take?",
+      text: "From under an hour for a focused visit to a full day on large notifiable projects with multiple subcontractors and complex records to review.",
+    },
+    {
+      name: "What should subcontractors prepare for a principal contractor HSE visit?",
+      text: "Their own RAMS, permits, toolbox talks, training cards and induction evidence for their operatives. PCs aggregate CDM duty; each firm still owns its method.",
+    },
+  ],
+  "construction-safety-app-pricing-uk-2026": [
+    {
+      name: "How much does construction safety software cost in the UK?",
+      text: "Typical range from free to around £600 per year for micro firms up to £15,000–£60,000+ per year for principal contractors. Model depends more than headline rate.",
+    },
+    {
+      name: "Is per-user pricing cheaper for small teams?",
+      text: "Sometimes for under ten users. Above twenty site staff, flat org pricing is often cheaper and easier to adopt.",
+    },
+    {
+      name: "Are there free safety apps for UK construction workers?",
+      text: "Some platforms offer free worker tiers or free trials. Check whether workers can complete inductions and permits or only view content.",
+    },
+    {
+      name: "What is the hidden cost of paper RAMS?",
+      text: "Admin time, reprint churn, audit prep and lost permits. Digital TCO comparisons belong in the same spreadsheet as licence fees.",
+    },
+    {
+      name: "Should I pay per site or per organisation?",
+      text: "Per-site if few long projects; per-organisation if you run many small jobs or rotating gangs across the year.",
+    },
+  ],
+  "cdm-2015-compliance-software-uk": [
+    {
+      name: "Is CDM compliance software a legal requirement?",
+      text: "No. CDM 2015 requires effective management arrangements. Software is one way to demonstrate them.",
+    },
+    {
+      name: "What is the difference between a CPP and CDM compliance software?",
+      text: "The CPP is the document. Compliance software is the system that creates, updates, distributes and evidences the CPP plus linked records.",
+    },
+    {
+      name: "Do small principal contractors need CDM software?",
+      text: "Not always. One site with a stable crew may manage on paper. Multiple subbies, agency labour or client audit requirements usually push firms digital.",
+    },
+    {
+      name: "Can CDM software submit F10 to HSE?",
+      text: "Most platforms record F10 confirmation rather than submitting directly. Submission stays on HSE's online system; store the reference in your project file.",
+    },
+    {
+      name: "How does CDM software help during an HSE inspection?",
+      text: "Faster retrieval of CPP, inductions, permits and cooperation records. Inspectors still walk the site; organised records reduce depth of document review.",
+    },
+  ],
+  "construction-phase-plan-template-uk": [
+    {
+      name: "Is there an official HSE Construction Phase Plan template?",
+      text: "HSE provides guidance and checklist content rather than a single mandatory form. Use their structure; tailor to your project.",
+    },
+    {
+      name: "Who writes the CPP on a small job?",
+      text: "The contractor in control of the work. On notifiable projects, the principal contractor must prepare it.",
+    },
+    {
+      name: "How long should a Construction Phase Plan be?",
+      text: "As long as needed to cover site management arrangements proportionately. Ten pages can suffice for small work; large civils projects run longer.",
+    },
+    {
+      name: "When should the CPP be updated?",
+      text: "When site layout, programme, or significant methods change, or after an incident that exposes a gap.",
+    },
+    {
+      name: "Does the CPP need every subcontractor RAMS attached?",
+      text: "No. The CPP should explain how RAMS are managed and coordinated, not duplicate every method statement.",
+    },
+  ],
+  "summer-heat-safety-construction-uk": [
+    {
+      name: "Is there a maximum temperature to stop work in the UK?",
+      text: "No single legal maximum for all work. Employers must assess risk and implement reasonable controls. Extreme cases may justify stopping via risk assessment.",
+    },
+    {
+      name: "Does HSE inspect sites for heat in summer?",
+      text: "Heat can appear in welfare checks during summer campaigns. Water, shade and rest are observable on walk-rounds.",
+    },
+    {
+      name: "What trades are highest risk?",
+      text: "Roofing, groundworks, steel fixing, plant operators in unventilated cabs, and anyone in heavy PPE on exposed sites.",
+    },
+    {
+      name: "Should we buy a site thermometer?",
+      text: "Useful for consistent triggers in your work-rest policy. Workplace thermometers in the work area are practical on most UK sites.",
+    },
+    {
+      name: "Do we need to change RAMS for heatwaves?",
+      text: "If your method assumes winter PPE and a single water point, update RAMS and brief when summer conditions apply.",
+    },
+  ],
+  "principal-contractor-duties-uk": [
+    {
+      name: "What is a principal contractor under CDM 2015?",
+      text: "The contractor appointed to plan, manage and coordinate the construction phase when there is more than one contractor, or on notifiable projects as appointed by the client.",
+    },
+    {
+      name: "What is the difference between principal contractor and principal designer?",
+      text: "The principal designer manages pre-construction design risk. The principal contractor manages the construction phase on site. Both cooperate through the project.",
+    },
+    {
+      name: "Can a subcontractor be principal contractor?",
+      text: "Yes, if the client appoints them and they have the organisational capability to coordinate the whole construction phase.",
+    },
+    {
+      name: "What documents must a principal contractor maintain?",
+      text: "At minimum: Construction Phase Plan, induction records, subcontractor RAMS approvals, cooperation records, F10 confirmation if notifiable, and links to permits and briefings for high-risk work.",
+    },
+    {
+      name: "What happens if there is no appointed principal contractor?",
+      text: "Duties may fall to the client or contractor in control. Gaps in coordination are a common enforcement theme when multiple trades work without a named PC.",
+    },
+  ],
+  "digital-rams-software-comparison-uk": [
+    {
+      name: "What is the best RAMS software for UK construction?",
+      text: "Depends on firm size. Desktop tools suit micro firms; mobile platforms with sign-off suit active sites; enterprise suites suit multi-site H&S teams.",
+    },
+    {
+      name: "Is HBXL still relevant in 2026?",
+      text: "Yes for small UK firms wanting CDM document generation on desktop. Less suited when you need live mobile sign-off across large crews.",
+    },
+    {
+      name: "How much does RAMS software cost in the UK?",
+      text: "From roughly £200-£500 per year for desktop licences to £3,000-£15,000+ per year for per-user cloud platforms at mid-size headcount.",
+    },
+    {
+      name: "Do I need separate RAMS and permit software?",
+      text: "Not always. Firms with heavy hot work, height and excavation often prefer integrated RAMS and PTW. RAMS-only tools work if permits are rare.",
+    },
+    {
+      name: "Can RAMS software replace a Construction Phase Plan?",
+      text: "No. RAMS are trade-specific. The CPP is the principal contractor's site-wide plan. Good platforms link them.",
+    },
+  ],
+  "pre-construction-information-uk": [
+    {
+      name: "Who is responsible for pre-construction information?",
+      text: "The client under CDM 2015 Regulation 4. Designers and contractors should prompt the client if information is missing.",
+    },
+    {
+      name: "When should PCI be provided?",
+      text: "As soon as practicable, before design and construction planning. Before work starts on site.",
+    },
+    {
+      name: "Is PCI required on small domestic jobs?",
+      text: "CDM applies proportionately. Even small projects need relevant existing hazard information, though the pack may be short.",
+    },
+    {
+      name: "What if the client says they have no information?",
+      text: "Document the gap. Commission surveys if contract allows. Do not start high-risk work such as demolition or excavation without adequate information.",
+    },
+    {
+      name: "How does PCI relate to the Construction Phase Plan?",
+      text: "PCI informs the CPP. The CPP explains how site-wide arrangements manage risks identified in PCI and design.",
+    },
+  ],
+  "construction-site-visitor-management-uk": [
+    {
+      name: "Is a visitor log legally required on UK construction sites?",
+      text: "CDM requires preventing unauthorised access and managing emergencies. A visitor log is standard evidence you know who is on site.",
+    },
+    {
+      name: "Does GDPR apply to construction site visitor books?",
+      text: "Yes. Names, companies, vehicle details and photos are personal data. Provide a privacy notice and retention policy.",
+    },
+    {
+      name: "How long should visitor records be kept?",
+      text: "Often 3-12 months unless needed for an incident investigation or contract. Document your policy.",
+    },
+    {
+      name: "Should delivery drivers sign in?",
+      text: "Yes. Short visits still matter for evacuation and security. Brief on traffic rules.",
+    },
+    {
+      name: "What is the difference between a visitor and a subcontractor operative?",
+      text: "Operatives work under their employer's RAMS and need full induction. Visitors are temporary and usually escorted unless formally inducted.",
+    },
+  ],
+  "ptw-software-offline-uk": [
+    {
+      name: "Do UK construction sites need offline permit software?",
+      text: "If supervisors issue permits away from cabin Wi-Fi or reliable 4G, yes. Otherwise crews revert to paper or unsafe verbal authorisation.",
+    },
+    {
+      name: "What is the difference between offline and online-only PTW?",
+      text: "Offline-first stores actions locally and syncs later. Online-only fails or blocks when there is no connection.",
+    },
+    {
+      name: "Can offline permits still be legally valid?",
+      text: "Yes if the system provides equivalent control and audit trail to paper when synced. HSG250 expects reliable permit records.",
+    },
+    {
+      name: "How do I test offline PTW before buying?",
+      text: "Airplane mode test: issue, acknowledge, close, attach a photo, then sync. Do it on site, not in a sales demo room.",
+    },
+    {
+      name: "Does offline mode cost extra?",
+      text: "Some vendors include it; others charge enterprise tiers. Confirm in your quote.",
+    },
+  ],
+  "subcontractor-management-software-uk": [
+    {
+      name: "What is subcontractor management software in construction?",
+      text: "Platforms that track subcontractor firms, RAMS approvals, insurance, inductions, permits and audit records for principal contractors.",
+    },
+    {
+      name: "Is it required under CDM 2015?",
+      text: "Software is not required. Coordination and cooperation duties are. Software helps evidence them.",
+    },
+    {
+      name: "Should subcontractors use the same app as the principal contractor?",
+      text: "Often yes for inductions and permits. RAMS may be uploaded by the subbie and approved by the PC in the same system.",
+    },
+    {
+      name: "How is this different from RAMS-only software?",
+      text: "RAMS tools author documents. Subcontractor management adds firm-level compliance, workforce induction and cross-trade permit visibility.",
+    },
+    {
+      name: "What about small sites with two subbies?",
+      text: "Paper can work. Software pays back when firm count, agency labour or client audits increase.",
+    },
+  ],
+  "construction-site-security-uk": [
+    {
+      name: "Is construction site security a legal requirement in the UK?",
+      text: "CDM requires preventing unauthorised access. Security measures are how principal contractors demonstrate that duty.",
+    },
+    {
+      name: "What fencing height is standard on UK sites?",
+      text: "Planning conditions often specify 2.4 m hoarding on public boundaries. Internal zones may use lower mesh fencing.",
+    },
+    {
+      name: "Who is responsible for site security?",
+      text: "The principal contractor sets site rules in the CPP. Subcontractors secure their own compounds within those rules.",
+    },
+    {
+      name: "Does CCTV on site need GDPR compliance?",
+      text: "Yes. Signage, lawful basis, retention limits, and subject access requests apply.",
+    },
+    {
+      name: "Should security be in the Construction Phase Plan?",
+      text: "Yes. Include perimeter, gates, out-of-hours arrangements, and how visitors are controlled.",
+    },
+  ],
+  "digital-permit-board-construction-uk": [
+    {
+      name: "What is a digital permit board?",
+      text: "A live dashboard showing open and recently closed permits from your PTW software, replacing manual whiteboard updates.",
+    },
+    {
+      name: "Do UK sites legally need a permit board?",
+      text: "HSG250 expects permit systems with clear status. A visible board, physical or digital, is standard practice.",
+    },
+    {
+      name: "Can we keep a whiteboard and digital system?",
+      text: "Only for a short transition. Dual systems diverge. Pick one source of truth.",
+    },
+    {
+      name: "Does the board work offline?",
+      text: "The cabin display may use cached data. Issue and close should work offline on phones, then sync when connection returns.",
+    },
+    {
+      name: "How does this relate to RAMS?",
+      text: "RAMS are documents. The board shows which permitted tasks are live on site right now.",
+    },
+  ],
+  "silica-dust-construction-uk": [
+    {
+      name: "Is silica dust illegal on UK construction sites?",
+      text: "The work is legal with proper controls. Uncontrolled exposure breaches COSHH and workplace exposure limit requirements.",
+    },
+    {
+      name: "Is wet cutting enough?",
+      text: "Often wet cutting is the main control, but assess enclosed spaces and duration. Add extraction or RPE where the assessment requires it.",
+    },
+    {
+      name: "Do I need face fit testing for dust masks?",
+      text: "Yes for tight-fitting FFP3 used as an exposure control. Keep fit test certificates on file.",
+    },
+    {
+      name: "What about engineered stone worktops?",
+      text: "Very high silica risk. HSE has emphasised stricter controls; treat as a high-priority COSHH assessment.",
+    },
+    {
+      name: "Should silica be in toolbox talks?",
+      text: "Yes when cutting, chasing, or demolition is on the programme. Record who attended or acknowledged the briefing.",
+    },
+  ],
+  "asbestos-management-construction-uk": [
+    {
+      name: "Who is responsible for asbestos surveys on construction projects?",
+      text: "The client must provide information about asbestos in the building. Surveys are commissioned by the client or building owner.",
+    },
+    {
+      name: "What is the difference between management and refurbishment surveys?",
+      text: "Management surveys support ongoing use. Refurbishment or demolition surveys are intrusive and required before work that disturbs the fabric.",
+    },
+    {
+      name: "Can general construction workers remove asbestos?",
+      text: "Only where risk assessment shows non-licensed work with correct training and controls. Licensed work needs HSE-licensed contractors.",
+    },
+    {
+      name: "What is notifiable non-licensed asbestos work?",
+      text: "Work that is not licensed but still meets HSE notification criteria. Competence, medical surveillance and notification rules apply.",
+    },
+    {
+      name: "Should asbestos be in the Construction Phase Plan?",
+      text: "Yes. Include how information is shared, stop-work rules, and waste routes.",
+    },
+    {
+      name: "How does asbestos relate to pre-construction information?",
+      text: "PCI must include available asbestos reports and registers. Principal contractors should not start intrusive work without it.",
+    },
+  ],
+  "noise-at-work-construction-uk": [
+    {
+      name: "What is the legal noise limit on UK construction sites?",
+      text: "The exposure limit value is 87 dB(A) daily or weekly exposure, not exceeded even with PPE. Action values start at 80 and 85 dB(A).",
+    },
+    {
+      name: "Is hearing protection enough?",
+      text: "No. You must reduce noise at source first, then use PPE where exposure remains high.",
+    },
+    {
+      name: "Do small sites need noise assessments?",
+      text: "Yes, proportionate to risk. A day with a breaker in a basement still needs assessment and controls.",
+    },
+    {
+      name: "When is health surveillance required?",
+      text: "Typically when exposure is at or above the upper action value (85 dB(A)), unless assessment justifies otherwise.",
+    },
+    {
+      name: "How does noise relate to RAMS?",
+      text: "Method statements should name noisy steps, rotation, zones, and PPE.",
+    },
+    {
+      name: "Can noise affect lone workers?",
+      text: "Yes. Lone workers in plant rooms may have higher exposure with nobody to share rotation.",
+    },
+  ],
+  "lone-worker-construction-uk": [
+    {
+      name: "Is lone working illegal in UK construction?",
+      text: "No, but you must assess and control risks. Some tasks should never be done alone.",
+    },
+    {
+      name: "What check-in interval should we use?",
+      text: "Risk-based. Higher risk, shorter interval. Document in risk assessment.",
+    },
+    {
+      name: "Do lone worker apps satisfy HSE?",
+      text: "They help if monitored and tested on site. They do not replace task risk controls.",
+    },
+    {
+      name: "Who monitors lone workers on site?",
+      text: "A named competent person on shift with authority to escalate and send help.",
+    },
+    {
+      name: "Should lone working be in site induction?",
+      text: "Yes. Operatives should know check-in rules and prohibited lone tasks.",
+    },
+    {
+      name: "How does lone working relate to permits?",
+      text: "Permits for confined space, hot work, height and isolation should require more than one person. Lone work policy must align.",
+    },
+  ],
 };
 
 /** @param {string | undefined} slug */

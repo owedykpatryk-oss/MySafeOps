@@ -21,7 +21,7 @@
 > - For most UK contractors with 10+ workers, digital RAMS pays for itself in 3-6 months purely on admin time saved.
 > - The hidden costs of paper (lost records, audit scrambles, emergency callout delays) usually outweigh the visible cost of any digital platform.
 
-![UK construction — paper RAMS paperwork versus digital on tablet](https://mysafeops.com/blog/images/paper-vs-digital-rams-uk-hero.png)
+![Paper vs Digital RAMS: Real Cost Comparison for UK Contractors 2026](/blog/images/paper-vs-digital-rams-uk-hero.png)
 
 ---
 
@@ -80,7 +80,7 @@ An emergency callout that needs RAMS prep from scratch takes 2-4 hours before wo
 
 ## The honest costs of digital RAMS (platforms compared)
 
-The pricing tiers for UK construction safety software break into four bands.
+UK construction safety software pricing breaks into four tiers.
 
 **Tier 1: Free + per-worker** (SafetyCulture, iAuditor)
 - Free plan: up to 10 users, limited features
@@ -105,6 +105,8 @@ The pricing tiers for UK construction safety software break into four bands.
 - Best for very occasional users
 
 **Comparable feature set across tiers:**
+
+For a platform-by-platform breakdown of UK RAMS tools, see our [digital RAMS software comparison UK 2026](/blog/digital-rams-software-comparison-uk).
 
 | Platform type | Year 1 cost (20-person firm) | RAMS + permits | Offline | Mobile | Free workers |
 |---------------|------------------------------|----------------|---------|--------|--------------|
@@ -316,7 +318,7 @@ Paper RAMS only looks free until you measure what supervisors actually spend on 
 - HandsHQ pricing references via Capterra and GetApp reviews
 - MySafeOps (product): https://mysafeops.com
 
-**See also:** [How to write a RAMS UK](https://mysafeops.com/blog/how-to-write-a-rams-uk) · [Best permit to work software UK 2026](https://mysafeops.com/blog/best-permit-to-work-software-uk-2026) · [Free safety app for construction workers](https://mysafeops.com/blog/free-safety-app-construction-workers) · [Digital toolbox talks](https://mysafeops.com/blog/digital-toolbox-talks)
+**See also:** [How to Write a RAMS: UK Construction Guide + Free Template for 2026](/blog/how-to-write-a-rams-uk) · [CDM 2015 Compliance Software: A Principal Contractor's Guide](/blog/cdm-2015-compliance-software-uk) · [Digital RAMS Software Comparison UK 2026](/blog/digital-rams-software-comparison-uk) · [CDM 2015 for Small Contractors: Plain English Guide + Free Template 2026](/blog/cdm-2015-small-contractor-uk)
 
 **Disclaimer:** Pricing and cost estimates are based on publicly available sources as of April 2026 and may change. Actual savings for specific UK contractors will vary based on site profile, workforce size, existing processes and chosen platform. This article is general guidance, not a purchase recommendation.
 

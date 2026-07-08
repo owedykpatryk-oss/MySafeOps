@@ -9,13 +9,11 @@
 *By the MySafeOps team · Last updated 7 June 2026 · 7 min read*
 
 > **Key takeaways**
-> - Work at height is anything where a fall could cause injury — not just ladders and scaffolding.
+> - Work at height is anything where a fall could cause injury: not just ladders and scaffolding.
 > - A height work permit should tie together the method, edge protection, rescue and weather before anyone leaves the ground.
-> - WAHR 2005 expects hierarchy of control: avoid, prevent, minimise — permits document the last two when avoidance isn't possible.
+> - WAHR 2005 expects hierarchy of control: avoid, prevent, minimise: permits document the last two when avoidance isn't possible.
 > - Fragile roofs, MEWP operation and leading-edge work need different fields on the same permit system.
 > - Digital height permits keep sign-off and close-out visible when the job runs over a shift change.
-
-![UK construction site — work at height controls and edge protection](/blog/images/height-work-permit-uk-hero.png)
 
 ---
 
@@ -70,9 +68,11 @@ Digital permits help at shift handover: the incoming supervisor sees the live pe
 > MySafeOps links height work permits to your RAMS and toolbox records. Worker accounts are free, so edge teams can acknowledge controls on their own phones without a per-seat licence.
 > [Start free →](/login)
 
+![Scaffold tag and harness kit beside permit clipboard on UK site](/blog/images/height-work-permit-uk-inline.png "Caption: permit should reference live scaffold tag and fall-arrest kit")
+
 ## MEWP, scaffolding and fragile surfaces
 
-**MEWP permits** should record ground bearing, outriggers deployed, exclusion zone, operator card, and whether the platform shares airspace with crane lifts or overhead power. A MEWP isn't a substitute for edge protection on a roof — it's a different control set.
+**MEWP permits** should record ground bearing, outriggers deployed, exclusion zone, operator card, and whether the platform shares airspace with crane lifts or overhead power. A MEWP isn't a substitute for edge protection on a roof: it's a different control set.
 
 **Scaffold access** should reference the current inspection tag and handover note. A height permit doesn't replace the [scaffold inspection register](https://mysafeops.com/blog/scaffold-inspection-checklist-uk); it confirms the team is using tagged scaff only.
 
@@ -84,11 +84,11 @@ If the method relies on fall-arrest lanyards, the permit must name how a suspend
 
 ## Common failures HSE sees
 
-- **Permit signed but edge protection not installed** — the permit becomes paperwork theatre.
-- **MEWP used on soft ground without mats** — outrigger load spread missing from the brief.
-- **Roof work after rain without re-assessing fragility** — conditions changed; permit wasn't reviewed.
-- **Shared permits across days** — each shift or material change needs a fresh authorisation when the method changes.
-- **PFPE selected without anchor assessment** — harness on, nowhere safe to tie off.
+- **Permit signed but edge protection not installed**: the permit becomes paperwork theatre.
+- **MEWP used on soft ground without mats**: outrigger load spread missing from the brief.
+- **Roof work after rain without re-assessing fragility**: conditions changed; permit wasn't reviewed.
+- **Shared permits across days**: each shift or material change needs a fresh authorisation when the method changes.
+- **PFPE selected without anchor assessment**: harness on, nowhere safe to tie off.
 
 ## Frequently asked questions
 
@@ -102,7 +102,7 @@ RAMS describes how the job should be done. A permit authorises a specific task, 
 Low-risk, short-duration ladder use may be covered in RAMS and toolbox talk alone. If the task is non-routine, above 2 m with no other controls, or in a busy area, use a permit.
 
 **Who should sign a height work permit?**
-A competent supervisor who understands the method — often the site manager, appointed person for scaffolding interfaces, or MEWP supervisor. Authorisation must not be a box-tick from someone off site.
+A competent supervisor who understands the method: often the site manager, appointed person for scaffolding interfaces, or MEWP supervisor. Authorisation must not be a box-tick from someone off site.
 
 **How does digital help with WAHR compliance?**
 Timestamped issue, extension and close-out, photos of edge protection, and worker acknowledgements give audit evidence if HSE or a principal contractor asks what was in place on the day.
@@ -111,7 +111,7 @@ Timestamped issue, extension and close-out, photos of edge protection, and worke
 
 **See also:** [Permit to work app UK](/blog/permit-to-work-app-uk) · [Scaffold inspection checklist UK](/blog/scaffold-inspection-checklist-uk) · [Hot work permit UK](/blog/hot-work-permit-uk) · [Confined space permit UK](/blog/confined-space-permit-uk)
 
-**Disclaimer:** General UK construction guidance only — not legal advice. Follow current HSE guidance and your project RAMS.
+**Disclaimer:** General UK construction guidance only: not legal advice. Follow current HSE guidance and your project RAMS.
 
 
 ---

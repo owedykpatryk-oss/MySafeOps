@@ -1,4 +1,4 @@
-import { LANDING_BLOG_POSTS } from "../../data/landingBlogPosts";
+import { LANDING_BLOG_POSTS } from "../../data/landingBlogPosts.js";
 
 /**
  * Suggest internal blog links for a draft or published article.

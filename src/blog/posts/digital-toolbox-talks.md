@@ -21,7 +21,8 @@
 > - A good library covers the seasonal and task-specific risks a UK site actually faces, not 300 generic templates nobody reads.
 > - Platforms that keep worker sign-ins free (like MySafeOps) are the difference between a system that's used and one that lives in the site office.
 
-![Site foreman leading a safety briefing in hi-vis on a UK construction site](https://mysafeops.com/blog/images/digital-toolbox-talks-hero.png)
+
+![Digital Toolbox Talks: How UK Construction Teams Are Ditching the Paper Register](/blog/images/digital-toolbox-talks-hero.png)
 
 ---
 
@@ -39,7 +40,7 @@ Toolbox talks are one of those things everyone on a UK construction site knows s
 
 This is the real case for **digital toolbox talks.** Not that the talks get better on a phone, a good supervisor giving a five-minute briefing is the same conversation on paper or on an app. The change is in what happens after. The register. The signatures. The ability to prove, six months later, that the content was delivered.
 
-The same adoption rules apply to [permit to work software](https://mysafeops.com/blog/permit-to-work-app-uk) and [site inductions](https://mysafeops.com/blog/site-induction-software-uk): if the tool doesn't work offline on a UK site, crews won't use it consistently.
+The same adoption rules apply to [permit to work software](/blog/permit-to-work-app-uk) and [site inductions](/blog/site-induction-software-uk): if the tool doesn't work offline on a UK site, crews won't use it consistently.
 
 ## What HSE expects from toolbox talks
 
@@ -92,7 +93,7 @@ Good toolbox talk topic selection on a UK site usually follows three rules:
 
 **Match the work that's happening this week.** If the crew is starting roof work on Monday, the Friday toolbox talk is about working at height, not about office ergonomics.
 
-**Include seasonal and weather factors.** November talks about winter driving, December about Christmas fatigue and site security, January about sub-zero working, spring about sun exposure and dehydration.
+**Include seasonal and weather factors.** November talks about winter driving, December about Christmas fatigue and site security, January about sub-zero working, spring and summer about sun exposure and dehydration; see [summer heat safety on UK sites](/blog/summer-heat-safety-construction-uk).
 
 **Respond to near-misses and incidents.** If a near-miss was reported two weeks ago, the talk about that risk should happen before the memory fades. Talks that follow real site events land differently from generic templates.
 
@@ -129,7 +130,7 @@ Between 5 and 15 minutes. Shorter and the content doesn't land; longer and the c
 **Can workers complete toolbox talks remotely?**
 They can be delivered remotely, but the supervisor should confirm the worker engaged with the content. Digital platforms that require active acknowledgement (tap to confirm, sign electronically) work better than just emailing a PDF.
 
-![Supervisor recording a toolbox talk attendance on a mobile device](/blog/images/digital-toolbox-talks-inline.png "Caption: attendance and topic should be searchable when HSE or a client asks what was covered")
+![Supervisor recording a toolbox talk attendance on a mobile device](/blog/images/digital-toolbox-talks-inline.png "Caption: digital registers beat illegible paper signatures at audit time")
 
 ## Run the talks, log the evidence, move on with the day
 
@@ -145,6 +146,6 @@ Digital toolbox talks don't replace a good supervisor with a decent briefing sty
 - HSE, CDM 2015 regulations: https://www.hse.gov.uk/construction/cdm/2015/
 - HSE, Managing for health and safety (HSG65): https://www.hse.gov.uk/pubns/books/hsg65.htm
 
-**See also:** [Site induction software UK](https://mysafeops.com/blog/site-induction-software-uk) · [Permit to work app UK](https://mysafeops.com/blog/permit-to-work-app-uk) · [Free safety app for construction workers](https://mysafeops.com/blog/free-safety-app-construction-workers)
+**See also:** [Summer Heat Safety on UK Construction Sites: Practical Guide](/blog/summer-heat-safety-construction-uk) · [Construction Site Visitor Management UK: Sign-In, GDPR and Safety](/blog/construction-site-visitor-management-uk) · [HSE Inspection Season: What UK Construction Sites Should Prepare](/blog/hse-inspection-construction-uk) · [Scaffold Inspection Checklist UK: Weekly Register + Free Template 2026](/blog/scaffold-inspection-checklist-uk)
 
 **Disclaimer:** This article is general guidance for UK construction safety and does not constitute legal advice. Always verify current requirements with HSE publications or a qualified health and safety professional.

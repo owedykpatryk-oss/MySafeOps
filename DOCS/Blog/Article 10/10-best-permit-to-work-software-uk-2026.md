@@ -52,7 +52,7 @@ Was the platform built for UK construction (CDM 2015, HSWA, HSE codes, UK permit
 On a 50-worker site, the difference between £25/user and free worker accounts is about £15,000 a year. This single decision shapes which platforms are viable.
 
 **3. Offline capability, proven on UK sites?**
-Basements, tunnels, rural civils, steel frames. Every platform claims "mobile-friendly" but few genuinely work offline. Test this before buying, not after.
+Basements, tunnels, rural civils, steel frames. Every platform claims "mobile-friendly" but few genuinely work offline. See [PTW software offline UK](https://mysafeops.com/blog/ptw-software-offline-uk). Test this before buying, not after.
 
 **4. Full permit lifecycle or forms-in-a-tool?**
 Permit to work isn't just a form. It's issue, approve, active, pause, expire, close-out, audit. A forms tool can be configured to mimic this, but a purpose-built PTW platform handles it out of the box.
@@ -70,7 +70,7 @@ Now the platforms.
 
 **Strengths:**
 - Built specifically for UK construction: CDM 2015, HSWA, HSE codes, UK permit types native
-- All seven UK permit types pre-built with full lifecycle (hot work, confined space, height, electrical, excavation, lifting, general)
+- All seven UK permit types pre-built with full lifecycle (hot work, confined space, height, electrical, excavation, [lifting](https://mysafeops.com/blog/lifting-operations-permit-uk), general)
 - Worker accounts free forever, no seat cap
 - Offline-first design for UK site conditions
 - 14 document types included (RAMS, permits, inductions, toolbox talks, incident reports, registers)
@@ -115,7 +115,7 @@ Now the platforms.
 
 **Strengths:**
 - Strong UK construction focus with HSE-aligned templates
-- Robust approval workflows and collaboration
+- solid approval workflows and collaboration
 - Curated template library for RAMS and method statements
 - Suitable for larger H&S teams (10+ users)
 - Established UK presence with construction customers
@@ -157,7 +157,7 @@ Now the platforms.
 
 **Strengths:**
 - Established UK/Ireland market presence
-- Comprehensive modules: permits to work, chemical management, audits, training
+- full modules: permits to work, chemical management, audits, training
 - Integrated LMS for certification tracking
 - Construction-specific support available
 - Strong reporting dashboards for multi-site operations
@@ -215,6 +215,8 @@ Now the platforms.
 **Best for:** Small UK builders and contractors focused on CDM paperwork generation rather than live site PTW workflow.
 
 ## Head-to-head comparison table
+
+![Comparison notes and laptop on UK site office desk](/blog/images/best-permit-to-work-software-uk-2026-inline.png "Caption: score offline PTW and per-seat cost before you shortlist")
 
 | Platform | UK Construction Native | Permit Lifecycle | Worker Licence Cost | Mobile Offline | Best Fit |
 |----------|----------------------|------------------|---------------------|----------------|----------|

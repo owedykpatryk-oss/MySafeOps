@@ -123,12 +123,12 @@ Same as the contractor duties above, but with responsibility for everyone, not j
 **On projects involving more than one contractor,** the client appoints a Principal Contractor (usually the main builder). You only become the Principal Contractor if you're the only one, or if the client fails to make an appointment.
 
 > 💡 **CPP and RAMS in one place, exportable in the format clients recognise**
-> MySafeOps handles Construction Phase Plans, RAMS, permits, inductions and workforce records in one UK-focused platform. Worker accounts are free forever, so even your most occasional helper gets a proper induction trail. Mobile-first, built for small contractors who don't have a dedicated H&S department.
+> MySafeOps handles Construction Phase Plans, RAMS, permits, inductions and workforce records in one UK-focused platform. Worker accounts are free forever, so even your most occasional helper gets a proper induction trail. Mobile-first, built for small contractors who don't have a dedicated H&S department. When you outgrow paper, see our [CDM 2015 compliance software](https://mysafeops.com/blog/cdm-2015-compliance-software-uk) guide for principal contractors.
 > [Start free at mysafeops.com →](https://mysafeops.com)
 
 ## What a Construction Phase Plan actually has to contain
 
-HSE guidance L153 is the definitive reference, but for small contractors the practical content of a CPP breaks down into seven sections.
+HSE guidance L153 is the definitive reference, but for small contractors the practical content of a CPP breaks down into seven sections. For a fuller template breakdown and digital options, see our [Construction Phase Plan template UK](https://mysafeops.com/blog/construction-phase-plan-template-uk) guide.
 
 **Section 1: Project description and key dates**
 - Client name and address
@@ -173,6 +173,8 @@ HSE guidance L153 is the definitive reference, but for small contractors the pra
 - Who's responsible for updates
 
 A CPP for a 2-day domestic bathroom fit-out might be 3-4 pages. For a 6-month commercial refurbishment it might be 20-30 pages. The content scales to the project.
+
+![CPP sections marked up on UK site office desk beside induction register](/blog/images/cdm-2015-small-contractor-uk-inline.png "Caption: scale the CPP to the job; a bathroom fit-out needs fewer sections than a multi-trade refurbishment")
 
 ## The domestic client trap
 

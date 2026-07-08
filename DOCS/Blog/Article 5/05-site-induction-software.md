@@ -110,7 +110,7 @@ What works on a UK site:
 
 **Actual hazards, not theoretical ones.** "The excavation in Zone B is 3 metres deep. Edge protection is in place but don't rely on it. Stay 2 metres back unless your permit says otherwise." Concrete beats generic every time.
 
-**Weather and seasonal context.** A January induction on a Scottish site should cover ice and low light. A July induction should cover heat and hydration. This seasonal layer is often missing from templates.
+**Weather and seasonal context.** A January induction on a Scottish site should cover ice and low light. A July induction should cover heat and hydration; see [summer heat safety on UK sites](https://mysafeops.com/blog/summer-heat-safety-construction-uk). This seasonal layer is often missing from templates.
 
 **Recent near-misses.** If a scaffold near-miss happened last week, the induction should mention it. This tells the worker the site takes safety seriously and teaches something they'll actually remember.
 

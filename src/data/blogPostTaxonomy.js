@@ -93,6 +93,96 @@ export const BLOG_POST_TAXONOMY = {
     tags: ["electrical", "loto", "isolation", "ptw", "eawr"],
     featured: false,
   },
+  "f10-notification-uk": {
+    category: "rams-compliance",
+    tags: ["cdm", "f10", "hse", "notification"],
+    featured: false,
+  },
+  "hse-inspection-construction-uk": {
+    category: "site-operations",
+    tags: ["hse", "inspection", "audit", "compliance"],
+    featured: false,
+  },
+  "construction-safety-app-pricing-uk-2026": {
+    category: "product",
+    tags: ["pricing", "comparison", "software", "budget"],
+    featured: false,
+  },
+  "cdm-2015-compliance-software-uk": {
+    category: "rams-compliance",
+    tags: ["cdm", "compliance", "software", "principal-contractor"],
+    featured: true,
+  },
+  "construction-phase-plan-template-uk": {
+    category: "rams-compliance",
+    tags: ["cdm", "cpp", "template"],
+    featured: false,
+  },
+  "summer-heat-safety-construction-uk": {
+    category: "site-operations",
+    tags: ["heat", "summer", "welfare", "briefings"],
+    featured: false,
+  },
+  "principal-contractor-duties-uk": {
+    category: "rams-compliance",
+    tags: ["cdm", "principal-contractor", "duties", "regulation"],
+    featured: false,
+  },
+  "digital-rams-software-comparison-uk": {
+    category: "product",
+    tags: ["rams", "comparison", "software", "digital"],
+    featured: false,
+  },
+  "pre-construction-information-uk": {
+    category: "rams-compliance",
+    tags: ["cdm", "pci", "pre-construction", "client"],
+    featured: false,
+  },
+  "construction-site-visitor-management-uk": {
+    category: "site-operations",
+    tags: ["visitor", "gdpr", "sign-in", "site-security"],
+    featured: false,
+  },
+  "ptw-software-offline-uk": {
+    category: "product",
+    tags: ["ptw", "offline", "mobile", "permits"],
+    featured: false,
+  },
+  "subcontractor-management-software-uk": {
+    category: "site-operations",
+    tags: ["subcontractor", "cdm", "rams", "coordination"],
+    featured: false,
+  },
+  "construction-site-security-uk": {
+    category: "site-operations",
+    tags: ["security", "fencing", "theft", "access-control"],
+    featured: false,
+  },
+  "digital-permit-board-construction-uk": {
+    category: "permits",
+    tags: ["ptw", "permit-board", "digital", "site-cabin"],
+    featured: false,
+  },
+  "silica-dust-construction-uk": {
+    category: "site-operations",
+    tags: ["silica", "dust", "rpe", "hse"],
+    featured: false,
+  },
+  "asbestos-management-construction-uk": {
+    category: "rams-compliance",
+    tags: ["asbestos", "car-2012", "survey", "refurbishment"],
+    featured: false,
+  },
+  "noise-at-work-construction-uk": {
+    category: "site-operations",
+    tags: ["noise", "hearing", "ppe", "exposure"],
+    featured: false,
+  },
+  "lone-worker-construction-uk": {
+    category: "site-operations",
+    tags: ["lone-working", "check-in", "welfare", "risk"],
+    featured: false,
+  },
 };
 
 /** @param {string} slug */

@@ -21,7 +21,6 @@
 > - A good library covers the seasonal and task-specific risks a UK site actually faces, not 300 generic templates nobody reads.
 > - Platforms that keep worker sign-ins free (like MySafeOps) are the difference between a system that's used and one that lives in the site office.
 
-![Site foreman leading a safety briefing in hi-vis on a UK construction site](https://mysafeops.com/blog/images/digital-toolbox-talks-hero.png)
 
 ---
 
@@ -92,7 +91,7 @@ Good toolbox talk topic selection on a UK site usually follows three rules:
 
 **Match the work that's happening this week.** If the crew is starting roof work on Monday, the Friday toolbox talk is about working at height, not about office ergonomics.
 
-**Include seasonal and weather factors.** November talks about winter driving, December about Christmas fatigue and site security, January about sub-zero working, spring about sun exposure and dehydration.
+**Include seasonal and weather factors.** November talks about winter driving, December about Christmas fatigue and site security, January about sub-zero working, spring and summer about sun exposure and dehydration; see [summer heat safety on UK sites](https://mysafeops.com/blog/summer-heat-safety-construction-uk).
 
 **Respond to near-misses and incidents.** If a near-miss was reported two weeks ago, the talk about that risk should happen before the memory fades. Talks that follow real site events land differently from generic templates.
 
@@ -129,7 +128,7 @@ Between 5 and 15 minutes. Shorter and the content doesn't land; longer and the c
 **Can workers complete toolbox talks remotely?**
 They can be delivered remotely, but the supervisor should confirm the worker engaged with the content. Digital platforms that require active acknowledgement (tap to confirm, sign electronically) work better than just emailing a PDF.
 
-![Supervisor recording a toolbox talk attendance on a mobile device](https://mysafeops.com/blog/images/digital-toolbox-talks-inline.png)
+![Supervisor recording a toolbox talk attendance on a mobile device](/blog/images/digital-toolbox-talks-inline.png "Caption: digital registers beat illegible paper signatures at audit time")
 
 ## Run the talks, log the evidence, move on with the day
 

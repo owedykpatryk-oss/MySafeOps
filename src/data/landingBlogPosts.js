@@ -122,7 +122,7 @@ const RAW_LANDING_BLOG_POSTS = [
       "Seven platforms UK firms actually shortlist: pricing, permit lifecycles, offline use and when each option makes sense.",
     dateLabel: "Apr 2026",
     publishedIso: "2026-04-16",
-    readTime: "9 min read",
+    readTime: "14 min read",
     image: "/blog/images/best-permit-to-work-software-uk-2026-hero.png",
   },
   {
@@ -220,6 +220,186 @@ const RAW_LANDING_BLOG_POSTS = [
     jsonLdDescription:
       "Electrical isolation permit UK: lock-out tag-out, proving dead, authorised person sign-off and live work controls under the Electricity at Work Regulations 1989.",
     image: "/blog/images/electrical-isolation-permit-uk-hero.png",
+  },
+  {
+    slug: "f10-notification-uk",
+    title: "F10 Notification UK: When and How to Submit to HSE",
+    excerpt:
+      "CDM 2015 F10 rules for UK construction: when to notify HSE, how to submit online, and what principal contractors must keep on file.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "8 min read",
+    image: "/blog/images/f10-notification-uk-hero.png",
+  },
+  {
+    slug: "hse-inspection-construction-uk",
+    title: "HSE Inspection Season: What UK Construction Sites Should Prepare",
+    excerpt:
+      "Summer HSE inspection blitzes on UK sites: what inspectors check, common failures, and how to keep permits, RAMS and records audit-ready.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "9 min read",
+    image: "/blog/images/hse-inspection-construction-uk-hero.png",
+  },
+  {
+    slug: "construction-safety-app-pricing-uk-2026",
+    title: "Construction Safety App Pricing UK 2026: Honest Cost Guide",
+    excerpt:
+      "Per-seat vs flat org pricing for UK construction safety apps: real cost bands, hidden fees, and what small and mid-size contractors should budget.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "10 min read",
+    image: "/blog/images/construction-safety-app-pricing-uk-2026-hero.png",
+  },
+  {
+    slug: "cdm-2015-compliance-software-uk",
+    title: "CDM 2015 Compliance Software: A Principal Contractor's Guide",
+    excerpt:
+      "CDM 2015 compliance software for UK construction: CPP, F10, inductions, permits and audit records in one system for principal contractors.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "11 min read",
+    image: "/blog/images/cdm-2015-compliance-software-uk-hero.png",
+  },
+  {
+    slug: "construction-phase-plan-template-uk",
+    title: "Construction Phase Plan Template UK: What CDM 2015 Actually Requires",
+    excerpt:
+      "Construction Phase Plan template for UK sites: what CDM 2015 requires in the CPP, common gaps, and how digital plans beat PDF folders.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "10 min read",
+    image: "/blog/images/construction-phase-plan-template-uk-hero.png",
+  },
+  {
+    slug: "summer-heat-safety-construction-uk",
+    title: "Summer Heat Safety on UK Construction Sites: Practical Guide",
+    excerpt:
+      "Heat stress on UK construction sites: HSE expectations, water, shade, work-rest cycles, and briefing records when temperatures rise.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "8 min read",
+    image: "/blog/images/summer-heat-safety-construction-uk-hero.png",
+  },
+  {
+    slug: "principal-contractor-duties-uk",
+    title: "Principal Contractor Duties UK: CDM 2015 Regulations 12-14 Explained",
+    excerpt:
+      "Principal contractor duties under CDM 2015 Regs 12-14: what UK PCs must do daily, common gaps, and how to evidence compliance on site.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "10 min read",
+    image: "/blog/images/principal-contractor-duties-uk-hero.png",
+  },
+  {
+    slug: "digital-rams-software-comparison-uk",
+    title: "Digital RAMS Software Comparison UK 2026",
+    excerpt:
+      "RAMS software compared for UK construction: HBXL, EcoOnline, SmartQHSE, MySafeOps and more on pricing, templates and site use.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "7 min read",
+    image: "/blog/images/digital-rams-software-comparison-uk-hero.png",
+  },
+  {
+    slug: "pre-construction-information-uk",
+    title: "Pre-Construction Information UK: What Clients Must Provide Under CDM",
+    excerpt:
+      "Pre-construction information under CDM 2015: what UK clients must supply, common gaps PCs should push back on, and how to use PCI in the CPP.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "9 min read",
+    image: "/blog/images/pre-construction-information-uk-hero.png",
+  },
+  {
+    slug: "construction-site-visitor-management-uk",
+    title: "Construction Site Visitor Management UK: Sign-In, GDPR and Safety",
+    excerpt:
+      "UK construction site visitor logs: GDPR, sign-in rules, contractor vs public visitors, and digital visitor management that ties to induction records.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "8 min read",
+    image: "/blog/images/construction-site-visitor-management-uk-hero.png",
+  },
+  {
+    slug: "ptw-software-offline-uk",
+    title: "Permit to Work Software Offline: What UK Sites Actually Need",
+    excerpt:
+      "Offline permit to work software for UK construction: what offline must do, sync risks, and how to evaluate PTW apps when site signal is poor.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "9 min read",
+    image: "/blog/images/ptw-software-offline-uk-hero.png",
+  },
+  {
+    slug: "subcontractor-management-software-uk",
+    title: "Subcontractor Management Software UK: RAMS, Inductions and Compliance",
+    excerpt:
+      "Subcontractor management for UK construction sites: RAMS approval, inductions, permits and audit trails principal contractors need from every trade.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "5 min read",
+    image: "/blog/images/subcontractor-management-software-uk-hero.png",
+  },
+  {
+    slug: "construction-site-security-uk",
+    title: "Construction Site Security UK: Fencing, Access and Theft Prevention",
+    excerpt:
+      "UK construction site security: perimeter fencing, access control, theft prevention, and linking visitor logs to CDM site rules.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "8 min read",
+    image: "/blog/images/construction-site-security-uk-hero.png",
+  },
+  {
+    slug: "digital-permit-board-construction-uk",
+    title: "Digital Permit Board UK: Replacing the Site Cabin Whiteboard",
+    excerpt:
+      "Digital permit boards for UK construction: live PTW status, shift handover, and why whiteboards fail when HSE or clients audit permits.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "8 min read",
+    image: "/blog/images/digital-permit-board-construction-uk-hero.png",
+  },
+  {
+    slug: "silica-dust-construction-uk",
+    title: "Silica Dust on UK Construction Sites: HSE Expectations and Controls",
+    excerpt:
+      "Respirable silica on UK construction sites: cutting, drilling, HSE focus, water suppression, RPE and exposure records for 2026.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "9 min read",
+    image: "/blog/images/silica-dust-construction-uk-hero.png",
+  },
+  {
+    slug: "asbestos-management-construction-uk",
+    title: "Asbestos on UK Construction Sites: Survey, Work and Records",
+    excerpt:
+      "Asbestos management on UK construction sites: survey types, notifiable work, licensed contractors, and records PCs must keep under CAR 2012.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "5 min read",
+    image: "/blog/images/asbestos-management-construction-uk-hero.png",
+  },
+  {
+    slug: "noise-at-work-construction-uk",
+    title: "Noise at Work on UK Construction Sites: Exposure Limits and Controls",
+    excerpt:
+      "Construction noise UK: exposure action values, hearing protection, tool rotation, and records HSE expects on busy sites.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "8 min read",
+    image: "/blog/images/noise-at-work-construction-uk-hero.png",
+  },
+  {
+    slug: "lone-worker-construction-uk",
+    title: "Lone Working on UK Construction Sites: Risk Assessment and Check-In",
+    excerpt:
+      "Lone working in UK construction: when it is allowed, check-in systems, permits, and what principal contractors must record.",
+    dateLabel: "Jul 2026",
+    publishedIso: "2026-07-08",
+    readTime: "8 min read",
+    image: "/blog/images/lone-worker-construction-uk-hero.png",
   },
 ];
 

@@ -21,7 +21,7 @@
 > - For small contractors, the core duties are: plan and manage the work, ensure competent workers, provide site induction, cooperate with others, and on single-contractor jobs, prepare a Construction Phase Plan.
 > - HSE prosecutes small contractors under CDM regularly. Most cases involve missing paperwork that would have taken 30 minutes to prepare.
 
-![Small UK building site — contractor planning and CDM paperwork](https://mysafeops.com/blog/images/cdm-2015-small-contractor-uk-hero.png)
+![CDM 2015 for Small Contractors: Plain English Guide + Free Template 2026](/blog/images/cdm-2015-small-contractor-uk-hero.png)
 
 ---
 
@@ -73,7 +73,7 @@ Pre-2015, many small projects had a CDM coordinator handling the paperwork on be
 Before 2015, domestic clients (homeowners paying for work on their own house) were largely exempt. Now, CDM applies to domestic projects. The twist: if the homeowner fails to appoint a Principal Designer or Principal Contractor, those duties **automatically transfer to the contractor doing the work**. A plumber replacing a boiler for a homeowner who "doesn't know what a CDM plan is" is legally responsible for both the contractor duties and the Principal Contractor duties.
 
 **Change 3: The "suitable and sufficient" risk assessment test got harder.**
-Risk assessments under CDM have to consider not just direct workers but anyone who might be affected, including members of the public, other trades, visitors, and the client. A [RAMS](https://mysafeops.com/blog/how-to-write-a-rams-uk) focused only on the operatives doing the work is incomplete under the 2015 test.
+Risk assessments under CDM have to consider not just direct workers but anyone who might be affected, including members of the public, other trades, visitors, and the client. A [RAMS](/blog/how-to-write-a-rams-uk) focused only on the operatives doing the work is incomplete under the 2015 test.
 
 ## Your duties as a contractor (2-person firm or sole trader)
 
@@ -125,14 +125,12 @@ Same as the contractor duties above, but with responsibility for everyone, not j
 **On projects involving more than one contractor,** the client appoints a Principal Contractor (usually the main builder). You only become the Principal Contractor if you're the only one, or if the client fails to make an appointment.
 
 > 💡 **CPP and RAMS in one place, exportable in the format clients recognise**
-> MySafeOps handles Construction Phase Plans, RAMS, permits, inductions and workforce records in one UK-focused platform. Worker accounts are free forever, so even your most occasional helper gets a proper induction trail. Mobile-first, built for small contractors who don't have a dedicated H&S department.
+> MySafeOps handles Construction Phase Plans, RAMS, permits, inductions and workforce records in one UK-focused platform. Worker accounts are free forever, so even your most occasional helper gets a proper induction trail. Mobile-first, built for small contractors who don't have a dedicated H&S department. When you outgrow paper, see our [CDM 2015 compliance software](/blog/cdm-2015-compliance-software-uk) guide for principal contractors.
 > [Start free at mysafeops.com →](https://mysafeops.com)
-
-![Construction Phase Plan folder and site briefing notes on a small UK job](/blog/images/cdm-2015-small-contractor-uk-inline.png "Caption: a CPP only works if the named site manager can find it on day one")
 
 ## What a Construction Phase Plan actually has to contain
 
-HSE guidance L153 is the definitive reference, but for small contractors the practical content of a CPP breaks down into seven sections.
+HSE guidance L153 is the definitive reference, but for small contractors the practical content of a CPP breaks down into seven sections. For a fuller template breakdown and digital options, see our [Construction Phase Plan template UK](/blog/construction-phase-plan-template-uk) guide.
 
 **Section 1: Project description and key dates**
 - Client name and address
@@ -157,8 +155,8 @@ HSE guidance L153 is the definitive reference, but for small contractors the pra
 **Section 4: Key health and safety risks and how they'll be controlled**
 - List the real hazards of the specific work
 - For each hazard, the control measure
-- Reference any [permits](https://mysafeops.com/blog/permit-to-work-app-uk) required (hot work, confined space, height)
-- Reference any specialist regulations (Work at Height 2005, Electricity at Work 1989, [COSHH 2002](https://mysafeops.com/blog/coshh-register-software-uk))
+- Reference any [permits](/blog/permit-to-work-app-uk) required (hot work, confined space, height)
+- Reference any specialist regulations (Work at Height 2005, Electricity at Work 1989, [COSHH 2002](/blog/coshh-register-software-uk))
 
 **Section 5: Emergency procedures**
 - First aid arrangements
@@ -177,6 +175,8 @@ HSE guidance L153 is the definitive reference, but for small contractors the pra
 - Who's responsible for updates
 
 A CPP for a 2-day domestic bathroom fit-out might be 3-4 pages. For a 6-month commercial refurbishment it might be 20-30 pages. The content scales to the project.
+
+![CPP sections marked up on UK site office desk beside induction register](/blog/images/cdm-2015-small-contractor-uk-inline.png "Caption: scale the CPP to the job; a bathroom fit-out needs fewer sections than a multi-trade refurbishment")
 
 ## The domestic client trap
 
@@ -322,7 +322,7 @@ The common misconception among small UK contractors is that CDM compliance is ei
 - HSE, INDG411 Need Building Work Done: https://www.hse.gov.uk/pubns/indg411.pdf
 - CITB, CDM 2015 Industry Guidance: https://www.citb.co.uk/
 
-**See also:** [How to write a RAMS UK](https://mysafeops.com/blog/how-to-write-a-rams-uk) · [Permit to work app UK](https://mysafeops.com/blog/permit-to-work-app-uk) · [COSHH register software UK](https://mysafeops.com/blog/coshh-register-software-uk) · [Site induction software UK](https://mysafeops.com/blog/site-induction-software-uk)
+**See also:** [Construction Phase Plan Template UK: What CDM 2015 Actually Requires](/blog/construction-phase-plan-template-uk) · [CDM 2015 Compliance Software: A Principal Contractor's Guide](/blog/cdm-2015-compliance-software-uk) · [F10 Notification UK: When and How to Submit to HSE](/blog/f10-notification-uk) · [How to Write a RAMS: UK Construction Guide + Free Template for 2026](/blog/how-to-write-a-rams-uk)
 
 **Disclaimer:** This article is general guidance for UK construction safety and does not constitute legal advice. The CPP template structure provided is a starting point and must be customised to specific projects and circumstances. Always verify current requirements with HSE publications or a qualified health and safety professional.
 

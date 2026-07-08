@@ -12,23 +12,22 @@
 
 # Permit to Work App UK: What Good Digital PTW Actually Looks Like
 
-*By the MySafeOps team · Last updated 7 June 2026 · 6 min read*
+*By the MySafeOps team · Last updated 16 April 2026 · 6 min read*
 
 > **Key takeaways**
-> - A permit to work (PTW) app should cover the high-risk permits UK sites use daily: hot work, height, confined space, excavation and lifting.
-> - Offline mobile use matters more than dashboards. If a supervisor cannot issue or close a permit without signal, the app fails where it counts.
+> - A permit to work (PTW) app should cover the four UK high-risk permits most sites need: hot work, height, confined space and electrical.
+> - Offline mobile use matters more than dashboards. If a supervisor can't issue or close a permit without signal, the app fails where it counts.
 > - Digital signatures, version history and permit close-out evidence are what an HSE inspector actually asks to see.
 > - Free worker accounts reduce friction. Operatives sign permits on their own phone without a per-seat licence.
 > - The test of a good PTW system is whether it works on a rainy Tuesday, not whether the sales demo looks tidy.
 
-![UK construction site, permits, documentation and controls at end of shift](/blog/images/permit-to-work-app-uk-hero.png)
+![Permit to Work App UK: What Good Digital PTW Actually Looks Like](/blog/images/permit-to-work-app-uk-hero.png)
 
 ---
 
 **Table of contents**
 - What a permit to work actually does on site
-- Paper PTW vs digital app
-- The permits most UK construction sites need
+- The four UK permits most construction sites need
 - What to look for in a permit to work app
 - Offline-first is not optional
 - Common mistakes when going digital with PTW
@@ -36,48 +35,33 @@
 
 ---
 
-07:05, raining. A subbie with a grinder is at the gate. The hot work permit is in a folder in the site cabin. The fire watch operative is not briefed yet. The supervisor's phone has one bar of signal and a PTW app that will not load without Wi‑Fi. That Tuesday tells you more about a **permit to work app UK** teams should buy than any feature checklist.
+Most site managers don't need convincing that paper permits are a problem. They've all had the moment where a hot work permit is in a folder in the site cabin, the subbie is at the gate with a grinder, and nobody can remember if the fire watch has been briefed. The question isn't whether to go digital. It's whether the app you pick actually helps on a live site or just moves the chaos onto a screen.
 
-Most site managers already know paper permits break. The question is whether the app you pick helps on a live site or just moves the chaos onto a screen.
+For deeper reads on two of the most-used permit types, see [hot work permits in the UK](/blog/hot-work-permit-uk) and [confined space permits in the UK](/blog/confined-space-permit-uk).
 
-For deeper reads on permit types, see [hot work](https://mysafeops.com/blog/hot-work-permit-uk), [confined space](https://mysafeops.com/blog/confined-space-permit-uk), [height work](https://mysafeops.com/blog/height-work-permit-uk), [electrical isolation](https://mysafeops.com/blog/electrical-isolation-permit-uk), [excavation](https://mysafeops.com/blog/excavation-permit-uk), and [lifting operations](https://mysafeops.com/blog/lifting-operations-permit-uk).
+A decent **permit to work app UK construction firms can rely on** does three things well. It issues permits fast enough that work isn't held up. It records enough detail that an audit is painless. And it survives patchy 4G in a basement plant room. The rest is marketing.
 
-A decent **permit to work app** does three things well. It issues permits fast enough that work is not held up. It records enough detail that an audit is painless. It survives patchy 4G in a basement plant room. The rest is marketing.
+If you're evaluating MySafeOps or any digital PTW platform, this piece walks through what matters and what doesn't.
 
 ## What a permit to work actually does on site
 
 A permit to work is a controlled authorisation for high-risk activity. It's not admin. It's the document that says: this work, at this location, by this person, with these controls in place, is safe to start now.
 
-On paper this sounds simple. In practice it's where site safety quietly breaks down. A permit gets issued on Monday and forgotten by Wednesday. A subcontractor changes scope without anyone re-validating the controls. The permit board hasn't been updated since the last inspection. And when something goes wrong, nobody can prove who authorised what.
+On paper this sounds simple. In practice it's where site safety quietly breaks down. A permit gets issued on Monday and forgotten by Wednesday. A subcontractor changes scope without anyone re-validating the controls. The permit board hasn't been updated since the last inspection. And when something goes wrong, nobody can prove who authorised what. A [digital permit board](/blog/digital-permit-board-construction-uk) fixes the stale whiteboard problem when it pulls live status from the same app.
 
-A digital permit does the same job but keeps the evidence trail alive. Every action is timestamped. Every signature is captured. Every close-out check either happened or did not. That is the real upgrade over paper, and it is why HSE accepts electronic PTW systems in UK construction when they are set up properly (HSG250).
+A digital permit does the same job but keeps the evidence trail alive. Every action is timestamped. Every signature is captured. Every close-out check either happened or didn't. That's the real upgrade over paper, and it's why the Health and Safety Executive accepts electronic PTW systems in UK construction when they're set up properly.
 
-## Paper PTW vs digital app
+## The four UK permits most construction sites need
 
-| | Paper permit board | Digital PTW app |
-| --- | --- | --- |
-| **Live status** | Tags go out of date | Dashboard shows open permits |
-| **Issue at point of work** | Walk to cabin | Phone in plant room or trench |
-| **Worker sign-off** | Clipboard chase | Operative signs on own device |
-| **Close-out** | Often skipped | Forced questions + photos |
-| **Client audit** | Pull folders | Export by date and permit type |
-| **Offline** | Always works | Must work offline or it fails |
+Every site's permit list looks slightly different, but four types come up on almost every UK construction job. A decent app covers all four out of the box.
 
-![Site office desk, permit folders, risk assessments and PPE paperwork](/blog/images/permit-to-work-app-uk-inline.png "Caption: a PTW system should mirror how permits actually move through the site office and cabin")
+[**Hot work permits**](/blog/hot-work-permit-uk) control anything that creates heat, sparks or flame. Welding, grinding, cutting, bitumen boilers, blow torches. The permit confirms the area is clear, fire watch is in place, and suitable extinguishers are to hand. Hot work is the single biggest cause of avoidable fire damage on construction sites, so this permit carries weight with insurers as well as the HSE.
 
-## The permits most UK construction sites need
+**Working at height permits** cover anything off ground level where a fall could cause injury. Scaffold access, MEWP operation, fragile roof work, leading edge work. The permit ties back to the Work at Height Regulations 2005 and forces the right questions: is the hierarchy of controls applied, is edge protection in place, is the operator trained and competent.
 
-Every site's permit list looks slightly different, but these types come up on almost every UK construction job. A decent app covers them out of the box with the right fields for each hazard.
+[**Confined space permits**](/blog/confined-space-permit-uk) apply to tanks, pits, deep excavations, roof voids, chambers and any enclosed space where the atmosphere might be dangerous. These carry the highest fatality rate of any UK construction permit category. The permit confirms atmospheric testing, rescue arrangements, communication plan and time limits.
 
-[**Hot work permits**](https://mysafeops.com/blog/hot-work-permit-uk) control anything that creates heat, sparks or flame. Welding, grinding, cutting, bitumen boilers, blow torches. The permit confirms the area is clear, fire watch is in place, and suitable extinguishers are to hand. Hot work is the single biggest cause of avoidable fire damage on construction sites, so this permit carries weight with insurers as well as HSE.
-
-[**Height work permits**](https://mysafeops.com/blog/height-work-permit-uk) cover anything off ground level where a fall could cause injury. Scaffold access, MEWP operation, fragile roof work, leading edge work. The permit ties back to the Work at Height Regulations 2005 and forces the right questions: hierarchy of controls, edge protection, competence.
-
-[**Confined space permits**](https://mysafeops.com/blog/confined-space-permit-uk) apply to tanks, pits, deep excavations, roof voids, chambers and any enclosed space where the atmosphere might be dangerous. These carry the highest fatality rate of any UK construction permit category. The permit confirms atmospheric testing, rescue arrangements, communication plan and time limits.
-
-[**Excavation**](https://mysafeops.com/blog/excavation-permit-uk) and [**lifting**](https://mysafeops.com/blog/lifting-operations-permit-uk) permits cover ground disturbance and crane work: utility checks, lift plans, LOLER examination status, exclusion zones.
-
-[**Electrical isolation permits**](https://mysafeops.com/blog/electrical-isolation-permit-uk) control work on or near live electrical systems. Lockout/tagout, isolation verification, competent person sign-off, proving dead with approved test equipment. These permits are where many sites under-document, because the work feels routine until someone proves dead on the wrong circuit.
+**Electrical permits** control work on or near live electrical systems. Lockout/tagout, isolation verification, competent person sign-off. These permits are where most sites under-document, because the work feels routine.
 
 A good permit to work app doesn't just digitise these four. It keeps the specifics of each, because a hot work permit needs different fields from a confined space one, and treating them identically is how controls get missed.
 
@@ -105,7 +89,7 @@ Not all PTW software is built the same, and a lot of it is sold by companies who
 
 This deserves its own point because it's where most PTW apps fall over.
 
-A permit to work app that needs full 4G to open isn't fit for construction. Think about the places permits get issued: inside plant rooms, below ground level, on rural civil sites, at 7am when every operative is hammering the masts. If the app can't let a supervisor issue a [confined space permit](https://mysafeops.com/blog/confined-space-permit-uk) standing next to the confined space, it's the wrong tool.
+A permit to work app that needs full 4G to open isn't fit for construction. Think about the places permits get issued: inside plant rooms, below ground level, on rural civil sites, at 7am when every operative is hammering the masts. If the app can't let a supervisor issue a [confined space permit](/blog/confined-space-permit-uk) standing next to the confined space, it's the wrong tool.
 
 Good PTW software stores permits locally on the device, lets them be completed offline, and syncs the whole record (with timestamps preserved) when connectivity returns. MySafeOps is built this way because the team spent time on actual UK sites before writing the first line of code.
 
@@ -138,6 +122,8 @@ Proper offline-capable PTW apps store permits locally on the device. The supervi
 **Do workers need their own licence to sign permits?**
 They shouldn't. Platforms that charge per-worker make digital adoption painful for large teams. MySafeOps keeps worker accounts free permanently, so everyone on site can sign briefings and acknowledge permits without a cost barrier.
 
+![Site office desk with permit folders and risk assessments](/blog/images/permit-to-work-app-uk-inline.png "Caption: digital PTW should replace the folder hunt, not duplicate it on a screen")
+
 ## One app, every permit, on the phone that's already in your pocket
 
 A permit to work app should make the high-risk moments on site safer and faster to document. Not add another layer of admin. MySafeOps is built around the four UK permits every construction firm uses, works offline, and gives worker accounts away for free so operatives can sign on their own device.
@@ -152,6 +138,6 @@ A permit to work app should make the high-risk moments on site safer and faster 
 - HSE, Work at Height Regulations 2005: https://www.hse.gov.uk/work-at-height/the-law.htm
 - HSE, Confined Spaces Regulations 1997: https://www.hse.gov.uk/confinedspace/
 
-**See also:** [Hot work permit UK](https://mysafeops.com/blog/hot-work-permit-uk) · [Electrical isolation permit UK](https://mysafeops.com/blog/electrical-isolation-permit-uk) · [Confined space permit UK](https://mysafeops.com/blog/confined-space-permit-uk) · [Height work permit UK](https://mysafeops.com/blog/height-work-permit-uk) · [Excavation permit UK](https://mysafeops.com/blog/excavation-permit-uk) · [Lifting operations permit UK](https://mysafeops.com/blog/lifting-operations-permit-uk) · [Free safety app for construction workers](https://mysafeops.com/blog/free-safety-app-construction-workers)
+**See also:** [Digital Permit Board UK: Replacing the Site Cabin Whiteboard](/blog/digital-permit-board-construction-uk) · [Electrical Isolation Permit UK: LOTO and Live Work in Practice](/blog/electrical-isolation-permit-uk) · [Excavation Permit UK: What to Check Before Breaking Ground](/blog/excavation-permit-uk) · [Height Work Permit UK: Work at Height Regulations 2005 in Practice](/blog/height-work-permit-uk)
 
 **Disclaimer:** This article is general guidance for UK construction safety and does not constitute legal advice. Always verify current requirements with HSE publications or a qualified health and safety professional.
