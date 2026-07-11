@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { computeFessRamsCompleteness, fessCompletenessBandStyle } from "../../utils/fessRamsCompleteness";
+import { computeFessRamsCompleteness, fessCompletenessBandStyle } from "../utils/fessRamsCompleteness";
 
 /**
  * FESS RAMS completeness badge for builder and client sites hub.
