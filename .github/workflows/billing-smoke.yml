@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: ${{ env.BILLING_DOCTOR_READY == 'true' }}
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - if: ${{ env.BILLING_DOCTOR_READY == 'true' }}
         run: npm ci
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: ${{ env.BILLING_E2E_READY == 'true' }}
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - if: ${{ env.BILLING_E2E_READY == 'true' }}
         run: npm ci

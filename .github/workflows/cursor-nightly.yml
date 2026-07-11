@@ -31,11 +31,10 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
+      - id: cursor-setup
+        uses: ./.github/actions/cursor-setup
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
 
       - name: Resolve nightly flags
         id: flags
@@ -57,18 +56,8 @@ jobs:
             *)        echo "args=--all" >> "$GITHUB_OUTPUT" ;;
           esac
 
-      - name: Check CURSOR_API_KEY
-        id: gate
-        env:
-          HAS_KEY: ${{ secrets.CURSOR_API_KEY != '' }}
-        run: |
-          if [ "$HAS_KEY" != "true" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::CURSOR_API_KEY not set — skipping nightly"
-          fi
-
       - name: Trigger Cursor nightly agents
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.cursor-setup.outputs.skip != 'true'
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

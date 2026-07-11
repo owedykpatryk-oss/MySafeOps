@@ -19,24 +19,13 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Check CURSOR_API_KEY
-        id: gate
+      - id: cursor-setup
+        uses: ./.github/actions/cursor-setup
         env:
-          HAS_KEY: ${{ secrets.CURSOR_API_KEY != '' }}
-        run: |
-          if [ "$HAS_KEY" != "true" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::CURSOR_API_KEY not set — skipping PR /fix"
-          fi
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
 
       - name: Trigger Cursor PR fix agent
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.cursor-setup.outputs.skip != 'true'
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           FIX_USER: ${{ github.event.comment.user.login }}
@@ -44,5 +33,6 @@ jobs:
           PR_URL: https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}
         run: |
           node scripts/cursor-cloud-agent.mjs pr-fix \
+            --skip-if-active \
             --pr-url "$PR_URL" \
             --message "Comment from @$FIX_USER: $FIX_COMMENT"

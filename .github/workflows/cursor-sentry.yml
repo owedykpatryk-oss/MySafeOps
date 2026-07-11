@@ -21,24 +21,13 @@ jobs:
   trigger-cursor:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Check CURSOR_API_KEY
-        id: gate
+      - id: cursor-setup
+        uses: ./.github/actions/cursor-setup
         env:
-          HAS_KEY: ${{ secrets.CURSOR_API_KEY != '' }}
-        run: |
-          if [ "$HAS_KEY" != "true" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::CURSOR_API_KEY not set — skipping Sentry auto-fix"
-          fi
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
 
       - name: Trigger Cursor Sentry agent
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.cursor-setup.outputs.skip != 'true'
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           ISSUE_URL: ${{ github.event.client_payload.issue_url || github.event.inputs.issue_url }}
@@ -46,4 +35,5 @@ jobs:
           ISSUE_LEVEL: ${{ github.event.client_payload.level || 'unknown' }}
         run: |
           node scripts/cursor-cloud-agent.mjs sentry \
+            --skip-if-active \
             --message "Sentry alert: $ISSUE_TITLE ($ISSUE_LEVEL) — $ISSUE_URL"

@@ -1,0 +1,32 @@
+name: Cursor agent setup
+description: Checkout, install Node deps, and gate on CURSOR_API_KEY secret.
+
+outputs:
+  skip:
+    description: "true when CURSOR_API_KEY is missing"
+    value: ${{ steps.gate.outputs.skip }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+        cache: npm
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Check CURSOR_API_KEY
+      id: gate
+      shell: bash
+      env:
+        CURSOR_API_KEY: ${{ env.CURSOR_API_KEY }}
+      run: |
+        if [ -z "${CURSOR_API_KEY:-}" ]; then
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::CURSOR_API_KEY not set — skipping Cursor agent"
+        fi

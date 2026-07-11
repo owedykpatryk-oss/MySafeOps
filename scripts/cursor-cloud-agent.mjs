@@ -16,10 +16,12 @@
 import {
   AGENT_TYPES,
   createCloudAgent,
+  findActiveAgentDuplicate,
   getCursorApiKey,
   loadCursorEnv,
   loadPrompt,
 } from "./cursor-agent-api.mjs";
+import { appendFileSync } from "node:fs";
 
 loadCursorEnv();
 
@@ -39,6 +41,7 @@ Options:
   --ref <branch>       Starting ref when no --pr-url (default: main)
   --name <label>       Agent display name (optional)
   --no-pr              Do not auto-open a PR when done
+  --skip-if-active     Skip when an agent with the same name is already active
   --dry-run            Print final prompt only`);
   process.exit(1);
 }
@@ -63,6 +66,7 @@ let startingRef = process.env.CURSOR_GITHUB_REF?.trim() || "main";
 let name = "";
 let autoCreatePR = true;
 let dryRun = false;
+let skipIfActive = false;
 
 for (let i = 1; i < args.length; i++) {
   const a = args[i];
@@ -72,6 +76,7 @@ for (let i = 1; i < args.length; i++) {
   else if (a === "--ref" && args[i + 1]) startingRef = args[++i];
   else if (a === "--name" && args[i + 1]) name = args[++i];
   else if (a === "--no-pr") autoCreatePR = false;
+  else if (a === "--skip-if-active") skipIfActive = true;
   else if (a === "--dry-run") dryRun = true;
   else usage();
 }
@@ -104,6 +109,14 @@ try {
 }
 
 try {
+  if (skipIfActive) {
+    const duplicate = await findActiveAgentDuplicate(displayName);
+    if (duplicate) {
+      console.log(`Skipped — active agent already running: ${duplicate.url ?? duplicate.id}`);
+      process.exit(0);
+    }
+  }
+
   const result = await createCloudAgent({
     promptText,
     name: displayName,
@@ -119,6 +132,11 @@ try {
   if (agent?.id) console.log(`Agent id: ${agent.id}`);
   if (run?.id) console.log(`Run id: ${run.id}`);
   if (run?.status) console.log(`Run status: ${run.status}`);
+
+  const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+  if (summaryFile && agent?.url) {
+    appendFileSync(summaryFile, `### Cursor ${type}\n\n- **Agent:** ${agent.url}\n`);
+  }
 } catch (err) {
   console.error(err.message);
   process.exit(1);

@@ -35,6 +35,7 @@ CI: workflow `.github/workflows/cursor-ci-fix.yml` odpala `ci-fix` gdy workflow 
 | Auto-fix po failu CI | od razu | `cursor-ci-fix.yml` |
 | Auto-fix po failu Billing Smoke | od razu | `cursor-billing-fix.yml` |
 | Sentry alert (webhook) | od razu | `cursor-sentry.yml` |
+| Slack ticket (`repository_dispatch`) | od razu | `cursor-slack-fix.yml` |
 | `/fix` w komentarzu PR (tylko collaborator) | na żądanie | `cursor-pr-fix.yml` |
 | Mobile z telefonu | ręcznie | `npm run fix:mobile` |
 
@@ -70,7 +71,9 @@ node scripts/cursor-nightly.mjs --dry-run --all
 
 Ręczny trigger w GitHub: **Actions → Cursor nightly → Run workflow**.
 
-Slack wymaga osobnej integracji (Slack Events / webhook URL) — na razie użyj `npm run fix:mobile` lub `cursor:agent -- slack --message "..."`.
+Slack: wyślij `repository_dispatch` z `event_type: slack-fix` i `client_payload: { "message": "...", "module": "permits", "urgency": "normal" }` — workflow `cursor-slack-fix.yml`. Ręczny test: **Actions → Cursor Slack auto-fix → Run workflow**.
+
+Alternatywa bez Slacka: `npm run fix:mobile` lub `cursor:agent -- slack --message "..."`.
 
 ---
 

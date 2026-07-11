@@ -1,0 +1,53 @@
+name: Cursor Slack auto-fix
+
+# Slack app or bridge → repository_dispatch:
+#   event_type: slack-fix
+#   client_payload: { "message": "...", "module": "permits|survey|rams", "urgency": "normal" }
+on:
+  repository_dispatch:
+    types: [slack-fix]
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "Problem description"
+        required: true
+        type: string
+      module:
+        description: "Module (optional)"
+        required: false
+        type: string
+      urgency:
+        description: "low | normal | high"
+        required: false
+        default: normal
+        type: string
+
+concurrency:
+  group: cursor-slack-${{ github.event.client_payload.message || github.event.inputs.message }}
+  cancel-in-progress: false
+
+jobs:
+  trigger-cursor:
+    runs-on: ubuntu-latest
+    steps:
+      - id: cursor-setup
+        uses: ./.github/actions/cursor-setup
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+
+      - name: Trigger Cursor Slack agent
+        if: steps.cursor-setup.outputs.skip != 'true'
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          SLACK_MESSAGE: ${{ github.event.client_payload.message || github.event.inputs.message }}
+          SLACK_MODULE: ${{ github.event.client_payload.module || github.event.inputs.module }}
+          SLACK_URGENCY: ${{ github.event.client_payload.urgency || github.event.inputs.urgency || 'normal' }}
+        run: |
+          TICKET="Problem: $SLACK_MESSAGE"
+          if [ -n "$SLACK_MODULE" ]; then
+            TICKET="$TICKET\nWhere: $SLACK_MODULE"
+          fi
+          TICKET="$TICKET\nUrgency: $SLACK_URGENCY\nSource: slack repository_dispatch"
+          node scripts/cursor-cloud-agent.mjs slack \
+            --skip-if-active \
+            --message "$(printf '%b' "$TICKET")"

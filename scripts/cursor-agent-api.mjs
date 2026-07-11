@@ -49,6 +49,54 @@ export function loadPrompt(type) {
   return readFileSync(join(PROMPTS_DIR, file), "utf8").trim();
 }
 
+function authHeader(apiKey) {
+  return `Basic ${Buffer.from(`${apiKey}:`).toString("base64")}`;
+}
+
+const ACTIVE_STATUSES = new Set(["ACTIVE", "RUNNING", "PENDING", "CREATED"]);
+
+/**
+ * @param {object} [opts]
+ * @param {number} [opts.limit]
+ * @param {string} [opts.apiKey]
+ */
+export async function listCloudAgents({ limit = 50, apiKey } = {}) {
+  const key = apiKey ?? getCursorApiKey();
+  const res = await fetch(`${API_BASE}/agents?limit=${Math.min(limit, 100)}&includeArchived=false`, {
+    headers: { Authorization: authHeader(key) },
+  });
+  const text = await res.text();
+  let json = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    /* non-JSON */
+  }
+  if (!res.ok) {
+    const detail = json?.error?.message ?? json?.message ?? text;
+    throw new Error(`Cursor API ${res.status}: ${detail}`);
+  }
+  return json?.items ?? [];
+}
+
+/**
+ * Skip launching when an agent with the same display name is already active.
+ * @param {string} displayName
+ * @param {object} [opts]
+ * @param {number} [opts.maxAgeMs]
+ * @param {string} [opts.apiKey]
+ */
+export async function findActiveAgentDuplicate(displayName, { maxAgeMs = 3 * 60 * 60 * 1000, apiKey } = {}) {
+  const items = await listCloudAgents({ apiKey });
+  const cutoff = Date.now() - maxAgeMs;
+  return items.find((agent) => {
+    if (agent.name !== displayName) return false;
+    if (!ACTIVE_STATUSES.has(String(agent.status || "").toUpperCase())) return false;
+    const updated = agent.updatedAt ? new Date(agent.updatedAt).getTime() : 0;
+    return updated >= cutoff;
+  });
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.promptText
