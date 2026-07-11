@@ -8,6 +8,12 @@ import {
   isCustomWorkspacePackId,
   resolveWorkspacePack,
 } from "./customWorkspaceProfiles";
+import { isFessOrg } from "./fessOrg";
+import {
+  FESS_GROUP_PACK_ID,
+  getFessGroupWorkspacePack,
+  isFessExclusivePackId,
+} from "./fessWorkspaceProfile";
 
 /** Built-in workspace profiles — any tenant can use; custom profiles are org-private. */
 export const INDUSTRY_PACKS = {
@@ -119,6 +125,7 @@ export function normalizeIndustryPackId(packKey) {
 export function isValidIndustryPackId(packKey) {
   const id = normalizeIndustryPackId(packKey);
   if (!id) return false;
+  if (isFessExclusivePackId(id)) return isFessOrg();
   return Object.prototype.hasOwnProperty.call(INDUSTRY_PACKS, id) || isCustomWorkspacePackId(id);
 }
 
@@ -126,6 +133,9 @@ export function isValidIndustryPackId(packKey) {
 export function getWorkspacePack(packKey) {
   const id = normalizeIndustryPackId(packKey);
   if (!id) return null;
+  if (isFessExclusivePackId(id)) {
+    return isFessOrg() ? getFessGroupWorkspacePack() : null;
+  }
   return resolveWorkspacePack(id);
 }
 
@@ -178,7 +188,8 @@ export function applyIndustryPack(packKey, options = {}) {
 
   let seeded = [];
   if (options.seedTemplates) {
-    const seedKey = pack.custom && pack.basedOn ? pack.basedOn : id;
+    const seedKey =
+      id === FESS_GROUP_PACK_ID ? FESS_GROUP_PACK_ID : pack.custom && pack.basedOn ? pack.basedOn : id;
     seeded = seedRegistersForIndustryPack(seedKey).seeded;
   }
 

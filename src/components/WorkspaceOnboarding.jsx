@@ -8,7 +8,8 @@ import {
   getBottomNavShortcutOptions,
   setBottomNavModuleId,
 } from "../utils/bottomNavShortcut";
-import { applyIndustryPack, INDUSTRY_PACKS } from "../utils/orgIndustryPacks";
+import { applyIndustryPack } from "../utils/orgIndustryPacks";
+import { listWorkspaceProfilesForOrg } from "../utils/customWorkspaceProfiles";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import { markOnboardingComplete } from "../utils/workspaceOnboarding";
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
@@ -27,7 +28,8 @@ export default function WorkspaceOnboarding({ onComplete }) {
   const [stepIndex, setStepIndex] = useState(0);
   const [packKey, setPackKey] = useState(() => {
     const id = loadOrgSettingsRaw().industryPackId;
-    if (id && INDUSTRY_PACKS[id]) return id;
+    const profiles = listWorkspaceProfilesForOrg();
+    if (id && profiles.some((p) => p.id === id)) return id;
     return trialStatus?.isActive ? "showEverything" : "generalContractor";
   });
   const [shortcutId, setShortcutId] = useState(() => getBottomNavModuleId() || "");
@@ -110,13 +112,13 @@ export default function WorkspaceOnboarding({ onComplete }) {
               <p className="app-onboarding-note">Ask an organisation admin to apply a profile, or continue with the default layout.</p>
             ) : null}
             <div className="app-onboarding-options">
-              {Object.entries(INDUSTRY_PACKS).map(([key, pack]) => (
+              {listWorkspaceProfilesForOrg().map((pack) => (
                 <button
-                  key={key}
+                  key={pack.id}
                   type="button"
-                  className={`app-onboarding-option${packKey === key ? " app-onboarding-option--active" : ""}`}
-                  onClick={() => setPackKey(key)}
-                  disabled={!canManage && key !== "showEverything"}
+                  className={`app-onboarding-option${packKey === pack.id ? " app-onboarding-option--active" : ""}`}
+                  onClick={() => setPackKey(pack.id)}
+                  disabled={!canManage && pack.id !== "showEverything"}
                 >
                   <span className="app-onboarding-option__title">{pack.label}</span>
                   <span className="app-onboarding-option__hint">{pack.hint}</span>

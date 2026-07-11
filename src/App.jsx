@@ -80,6 +80,7 @@ export default function App() {
           <Route path="/terms" element={<LegalPage docKey="terms" />} />
           <Route path="/cookies" element={<LegalPage docKey="cookies" />} />
           <Route path="/dpa" element={<LegalPage docKey="dpa" />} />
+          <Route path="/accessibility" element={<LegalPage docKey="accessibility" />} />
           <Route path="/docs" element={<DocsHubPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/security" element={<SecurityPosturePage />} />

@@ -6,6 +6,8 @@ import { normalizePrintSections, RAMS_SECTION_IDS, documentContentHash } from ".
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { openPrintWindow, safeCssColor, safeImageSrc, escapeAttr, writePrintWindowDocument } from "../../utils/htmlEscape.js";
 import { renderMySafeOpsMarkSvg } from "../../utils/pdfBranding.js";
+import { isFessOrg } from "../../utils/fessOrg.js";
+import { generateFessPrintHTML, buildFessRamsPrintBodyHTML } from "../../utils/fessRamsPrintHtml.js";
 
 const RL = {
   high: { bg: "#FCEBEB", color: "#791F1F" },
@@ -554,7 +556,7 @@ function ramsDocumentCss() {
   `;
 }
 
-function wrapRamsPrintDocument(pageTitle, bodyInner, extraHeadCss = "", footerMeta = "") {
+export function wrapRamsPrintDocument(pageTitle, bodyInner, extraHeadCss = "", footerMeta = "") {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${escHtml(pageTitle)}</title>
   <style>${ramsDocumentCss()}${extraHeadCss || ""}</style></head><body>${bodyInner}
   <div class="page-footer"><span>${escHtml(footerMeta)}</span><span style="display:inline-flex;align-items:center;gap:5px">${renderMySafeOpsMarkSvg(16)}<span class="page-num"></span></span></div>
@@ -570,7 +572,7 @@ function splitPermitDocumentHtml(fullHtml) {
   };
 }
 
-function buildSitePackSummaryHtml(sitePackMeta, permits = [], projectName = "") {
+export function buildSitePackSummaryHtml(sitePackMeta, permits = [], projectName = "") {
   if (!sitePackMeta) return "";
   const auditSummary = sitePackMeta.auditSummary || {};
   const contacts = Array.isArray(sitePackMeta.contacts) ? sitePackMeta.contacts : [];
@@ -627,7 +629,7 @@ function buildSitePackSummaryHtml(sitePackMeta, permits = [], projectName = "") 
 }
 
 /** RAMS body only (no html/head wrapper). */
-function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll) {
+export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll) {
   const rowList = rows || [];
   const opList = operatives || [];
   const pf = printFlags || normalizePrintSections({});
@@ -1171,6 +1173,16 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
         <td style="padding:6px;border:1px solid #e5e5e5;font-size:11px;color:#64748b">Approval date</td>
         <td style="padding:6px;border:1px solid #e5e5e5;font-size:12px">${escHtml(fmtDate(form.approvalDate))}</td>
       </tr>
+      ${
+        form.permitControllerName || form.permitControllerSignDate
+          ? `<tr>
+        <td style="padding:6px;border:1px solid #e5e5e5;font-size:11px;color:#64748b">Permit controller</td>
+        <td style="padding:6px;border:1px solid #e5e5e5;font-size:12px">${escHtml(form.permitControllerName || "—")}</td>
+        <td style="padding:6px;border:1px solid #e5e5e5;font-size:11px;color:#64748b">Sign-off date</td>
+        <td style="padding:6px;border:1px solid #e5e5e5;font-size:12px">${escHtml(fmtDate(form.permitControllerSignDate))}</td>
+      </tr>`
+          : ""
+      }
     </tbody>
   </table>
   ${(form.revisionSummary || "").trim()
@@ -1373,6 +1385,9 @@ function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, 
 }
 
 export function generatePrintHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll) {
+  if (isFessOrg()) {
+    return generateFessPrintHTML(form, rows, operatives, projectMap);
+  }
   const inner = buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll);
   const orgTheme = loadOrgPrintSettings();
   const footer = `${form.documentNo || "RAMS"} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
@@ -1387,7 +1402,9 @@ export async function generateRamsProjectPackHTML(form, rows, workers, projects,
   const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
   const pf = normalizePrintSections(form.printSections);
   const fp = computeRamsFingerprint(form, rows);
-  const ramsInner = buildRamsPrintBodyHTML(form, rows || [], operatives, projectMap, pf, fp, workers);
+  const ramsInner = isFessOrg()
+    ? buildFessRamsPrintBodyHTML(form, rows || [], operatives, projectMap)
+    : buildRamsPrintBodyHTML(form, rows || [], operatives, projectMap, pf, fp, workers);
   let permitExtraCss = "";
   const permitBlocks = [];
   for (const p of permits) {

@@ -15,6 +15,7 @@ export const PACK_DEFAULT_PERMIT_TYPES = {
   surveyingGeodesy: ["excavation", "ground_disturbance", "aerial_survey_coordination", "marine_hydrographic", "visitor_access", "general"],
   contractorPlusSurveying: ["hot_work", "excavation", "electrical", "work_at_height", "aerial_survey_coordination", "general"],
   foodPharma: ["hot_work", "line_clearance", "cold_work", "confined_space", "visitor_access", "general"],
+  fessGroup: ["hot_work", "line_clearance", "cold_work", "confined_space", "visitor_access", "loto", "general"],
   showEverything: [],
 };
 

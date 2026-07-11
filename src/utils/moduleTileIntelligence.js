@@ -59,6 +59,8 @@ export const MODULE_PREBUILDS = {
   "dynamic-ra": { shortLabel: "Field DRA", label: "Pre-built dynamic risk assessment", action: "create" },
   legislation: { shortLabel: "UK library", label: "Pre-built UK HSE legislation register", action: "seed" },
   "hygiene-setup": { shortLabel: "F&P setup", label: "Food & pharma onboarding checklist", action: "open" },
+  "fess-setup": { shortLabel: "FESS setup", label: "FESS workspace onboarding checklist", action: "open" },
+  "fess-sites": { shortLabel: "FESS sites", label: "Client sites — one-click job pack per food factory", action: "open" },
   "construction-setup": { shortLabel: "GC wizard", label: "Pre-built construction setup checklist", action: "open" },
   noise: { shortLabel: "Noise survey", label: "Pre-built noise exposure record", action: "create" },
   scaffold: { shortLabel: "Scaffold tag", label: "Pre-built scaffold inspection tag", action: "create" },

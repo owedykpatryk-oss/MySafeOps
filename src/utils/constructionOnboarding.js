@@ -8,9 +8,9 @@ import ALL from "../modules/rams/ramsAllHazards.js";
 import { ensureBuiltInConstructionPacks } from "../modules/rams/constructionQuickPacks.js";
 import { seedLegislationRegister } from "./ukLegislationLibrary";
 import { loadPublishedPortalTokens } from "./clientPortalPublished";
+import { loadRamsHazardPacks, saveRamsHazardPacks } from "./ramsHazardPacksStorage";
 
 const PROGRESS_KEY = "construction_onboarding_progress";
-const QUICK_PACKS_KEY = "rams_quick_packs";
 const LEGISLATION_KEY = "legislation_register";
 
 /** @typedef {{ id: string, label: string, hint: string, viewId?: string, autoCheck?: () => boolean }} SetupStep */
@@ -32,7 +32,7 @@ export const CONSTRUCTION_SETUP_STEPS = [
     hint: "Hot works, height, excavation, electrical — ready in RAMS Builder.",
     viewId: "rams",
     autoCheck: () => {
-      const packs = load(QUICK_PACKS_KEY, []);
+      const packs = loadRamsHazardPacks([]);
       return packs.some((p) => String(p.id || "").startsWith("builtin_"));
     },
   },
@@ -135,9 +135,9 @@ export function runConstructionSetupAction(stepId) {
       markConstructionStepDone(stepId);
       return { ok: true, message: "General contractor profile applied with register seeds." };
     case "hazard_packs": {
-      const existing = load(QUICK_PACKS_KEY, []);
+      const existing = loadRamsHazardPacks([]);
       const merged = ensureBuiltInConstructionPacks(existing, ALL);
-      save(QUICK_PACKS_KEY, merged);
+      saveRamsHazardPacks(merged);
       markConstructionStepDone(stepId);
       return { ok: true, message: `Construction quick packs ready (${merged.length} total).` };
     }

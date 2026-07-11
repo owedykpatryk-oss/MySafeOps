@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { isLocalWorkspaceOnly, hasPersistedSupabaseSession } from "../lib/authPrefs";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { ORG_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
+import { scrubFessExclusiveOrgStorage } from "../utils/fessExclusive";
+import { clearRamsHazardLibraryCache } from "../modules/rams/ramsHazardLibraryLoader";
 import { getBillingEntitlements, getTrialExtensionCount, getTrialStatus, refreshMembershipRoleFromSupabase } from "../utils/orgMembership";
 import {
   canExtendOrgTrial,
@@ -51,9 +53,15 @@ export function AppProvider({ children }) {
   }, [rk]);
 
   useEffect(() => {
+    scrubFessExclusiveOrgStorage(getOrgId());
+  }, []);
+
+  useEffect(() => {
     const onOrgChanged = (event) => {
       const next = event?.detail?.orgId || getOrgId();
       setOrgIdState(String(next || "default"));
+      scrubFessExclusiveOrgStorage(String(next || "default"));
+      clearRamsHazardLibraryCache();
     };
     window.addEventListener(ORG_CHANGED_EVENT, onOrgChanged);
     return () => window.removeEventListener(ORG_CHANGED_EVENT, onOrgChanged);

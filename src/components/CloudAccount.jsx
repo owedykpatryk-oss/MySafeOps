@@ -28,6 +28,7 @@ import {
   recordSignUpAttempt,
 } from "../lib/authLockout";
 import { isDisposableSignupEmail } from "../lib/disposableEmail";
+import { buildLegalAcceptanceMetadata } from "../lib/legalAcceptance";
 
 const ss = ms;
 const MIN_PASSWORD_LENGTH = MIN_PASSWORD_LENGTH_SIGNUP;
@@ -467,7 +468,10 @@ export default function CloudAccount() {
       const { data, error } = await client.auth.signUp({
         email: email.trim(),
         password,
-        options: wrapAuthOptions({ emailRedirectTo }),
+        options: wrapAuthOptions({
+          emailRedirectTo,
+          data: buildLegalAcceptanceMetadata(),
+        }),
       });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_up", entity: "auth", detail: email.trim() });

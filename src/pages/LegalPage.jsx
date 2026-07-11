@@ -27,6 +27,11 @@ const DOCS = {
     pageTitle: "Data processing — MySafeOps",
     iframeSrc: "/legal/dpa.html",
   },
+  accessibility: {
+    title: "Accessibility statement",
+    pageTitle: "Accessibility statement — MySafeOps",
+    iframeSrc: "/legal/accessibility.html",
+  },
 };
 
 /**
@@ -83,6 +88,7 @@ export default function LegalPage({ docKey }) {
             <Link to="/">Home</Link>
             <Link to="/privacy">Privacy</Link>
             <Link to="/terms">Terms</Link>
+            <Link to="/accessibility">Accessibility</Link>
             <Link to="/login">Sign in</Link>
           </nav>
         </div>

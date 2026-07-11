@@ -31,6 +31,7 @@ import { getRequiresMfaStep } from "../lib/mfaAal";
 import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { safeInternalPath } from "../utils/safeUrl";
 import MfaLoginChallenge from "../components/MfaLoginChallenge";
+import { buildLegalAcceptanceMetadata } from "../lib/legalAcceptance";
 
 const ss = ms;
 const teal = "#0d9488";
@@ -325,7 +326,10 @@ export default function LoginPage() {
       const { data, error } = await client.auth.signUp({
         email: email.trim(),
         password,
-        options: wrapAuthOptions({ emailRedirectTo }),
+        options: wrapAuthOptions({
+          emailRedirectTo,
+          data: buildLegalAcceptanceMetadata(),
+        }),
       });
       if (error) throw error;
       pushAudit({ action: "supabase_sign_up", entity: "auth", detail: email.trim() });

@@ -19,16 +19,18 @@ strong{color:#0f172a}
 <body>
 <a href="/" class="back">← Back to MySafeOps</a>
 <h1>Data processing overview</h1>
-<p class="updated">Last updated: April 2026</p>
+<p class="updated">Last updated: July 2026</p>
 
 <p>MySafeOps is designed so that <strong>your organisation</strong> decides what operational and personal data is entered into the system. When you use optional cloud features, we engage processors to deliver that infrastructure.</p>
 
 <h2>1. Subprocessors (cloud)</h2>
 <p>Depending on how your environment is configured, processing may include:</p>
 <ul>
+<li><strong>Vercel</strong> — static hosting and CDN for the web application</li>
 <li><strong>Supabase</strong> — authentication, database, storage, and related APIs for cloud-backed accounts and backups</li>
-<li><strong>Cloudflare</strong> — hosting, CDN, and (if enabled) R2 object storage for documents</li>
+<li><strong>Cloudflare</strong> — CDN, Turnstile bot protection, and (if enabled) Workers, D1, and R2 object storage</li>
 <li><strong>Stripe</strong> — payment processing when billing is enabled</li>
+<li><strong>Optional:</strong> Sentry (error monitoring) when configured for a deployment</li>
 </ul>
 <p>The exact list in your contract or order form takes precedence over this summary page.</p>
 
@@ -39,6 +41,6 @@ strong{color:#0f172a}
 <p>Where personal data is processed outside the UK, we rely on appropriate safeguards (for example the UK International Data Transfer Agreement / Addendum) as reflected in the DPA we agree with your organisation.</p>
 
 <h2>4. Related documents</h2>
-<p>See also our <a href="/legal/privacy-policy.html">Privacy policy</a> and <a href="/legal/terms.html">Terms of service</a> on this site.</p>
+<p>See also our <a href="/legal/privacy-policy.html">Privacy policy</a>, <a href="/legal/terms.html">Terms of service</a>, and <a href="/legal/accessibility.html">Accessibility statement</a> on this site.</p>
 </body>
 </html>

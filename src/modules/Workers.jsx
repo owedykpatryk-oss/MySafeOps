@@ -5,10 +5,10 @@ import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
 import {
-  PROJECT_PLAYBOOKS,
   applyAndPersistProjectPlaybook,
   getPlaybook,
 } from "../utils/projectPlaybooks";
+import { getPlaybooksForOrg } from "../utils/projectHubIndustry";
 import { isSuperAdminEmail } from "../utils/superAdmin";
 import { billingLimitMessage, checkBillingLimit } from "../utils/billingLimits";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -18,6 +18,7 @@ import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { getOrgId, orgScopedKey, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import { sanitizeProjectForOrg } from "../utils/fessExclusive";
 import {
   CERT_LIBRARY,
   certLabel,
@@ -325,6 +326,8 @@ export function WorkersModule({ mode = "all" }) {
         pushToast(e?.message || "Playbook could not be applied.", "warn");
       }
     }
+
+    saved = sanitizeProjectForOrg(saved, getOrgId());
 
     setProjects((prev) => {
       const i = prev.findIndex((x) => x.id === saved.id);
@@ -1020,6 +1023,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const missing = projectMissingItems(form, { soloMode });
   const health = projectHealthScore(form, { soloMode });
   const starterMeta = PROJECT_STARTERS.find((p) => p.id === form.industryStarter) || PROJECT_STARTERS[0];
+  const playbooks = useMemo(() => getPlaybooksForOrg(), []);
   const boundaryRing = parseProjectBoundaryRing(form);
 
   const importKmlBoundary = async (file) => {
@@ -1527,7 +1531,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
               One click on save: creates RAMS, survey, PTW and method statement drafts for this site type.
             </p>
             <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
-              {PROJECT_PLAYBOOKS.map((pb) => (
+              {playbooks.map((pb) => (
                 <label
                   key={pb.id}
                   style={{

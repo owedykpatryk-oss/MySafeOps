@@ -4,6 +4,8 @@
 import { loadOrgScoped, saveOrgScoped } from "./orgStorage";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { INDUSTRY_PACKS } from "./orgIndustryPacks";
+import { isFessOrg } from "./fessOrg";
+import { FESS_GROUP_PACK_ID, getFessGroupWorkspacePack } from "./fessWorkspaceProfile";
 import { MORE_TABS } from "../navigation/appModules";
 import { getRamsStarterLabel, isSurveyRamsStarterKey, isValidTradeRamsStarterKey } from "./ramsIndustryStarters";
 
@@ -94,12 +96,17 @@ export function resolveWorkspacePack(packKey) {
 /** Built-in + this org's custom profiles only (never cross-org). */
 export function listWorkspaceProfilesForOrg() {
   const builtIn = Object.entries(INDUSTRY_PACKS).map(([id, pack]) => ({ id, ...pack, custom: false }));
+  const fess =
+    isFessOrg() ?
+      [{ id: FESS_GROUP_PACK_ID, ...getFessGroupWorkspacePack(), custom: false, orgExclusive: true }]
+    : [];
   const custom = loadCustomWorkspaceProfiles().map((p) => ({ id: p.id, ...p }));
-  return [...builtIn, ...custom];
+  return [...builtIn, ...fess, ...custom];
 }
 
 /** Effective pack id for seeds, playbooks and readiness (custom → basedOn or survey). */
 export function resolveProfileBehaviorPackId(packId) {
+  if (packId === FESS_GROUP_PACK_ID) return FESS_GROUP_PACK_ID;
   if (!isCustomWorkspacePackId(packId)) return packId;
   const custom = getCustomWorkspaceProfile(packId);
   if (!custom) return "generalContractor";

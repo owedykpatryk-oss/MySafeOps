@@ -11,6 +11,8 @@ import { loadPublishedPortalTokens, markPortalPublished, unmarkPortalPublished }
 import { supabase as supabaseClient, isSupabaseConfigured } from "../lib/supabase";
 import { ms } from "../utils/moduleStyles";
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
+import { isFessOrg } from "../utils/fessOrg";
+import { canUseFessExclusiveFeatures } from "../utils/fessExclusive";
 import PageHero from "./PageHero";
 
 const genRowId = () => `portal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -63,6 +65,7 @@ function PortalView({ token, portals, cloudBundle }) {
       window.alert("Enter your name to approve this RAMS.");
       return;
     }
+    const signDate = new Date().toISOString().slice(0, 10);
     const next = ramsDocs.map((r) =>
       r.id === ramsId
         ? {
@@ -73,6 +76,12 @@ function PortalView({ token, portals, cloudBundle }) {
               notes: String(approveForm.notes || "").trim(),
               portalToken: token,
             },
+            ...(canUseFessExclusiveFeatures()
+              ? {
+                  permitControllerName: String(r.permitControllerName || by).trim() || by,
+                  permitControllerSignDate: r.permitControllerSignDate || signDate,
+                }
+              : {}),
           }
         : r
     );

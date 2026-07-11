@@ -130,6 +130,9 @@ export default function SecurityPosturePage() {
           Questions: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
         </p>
         <p style={{ marginTop: 16 }}>
+          <Link to="/accessibility" style={{ color: "#0d9488", fontWeight: 600, marginRight: 16 }}>
+            Accessibility statement
+          </Link>
           <Link to="/docs" style={{ color: "#0d9488", fontWeight: 600 }}>
             ← Documentation &amp; help
           </Link>

@@ -40,10 +40,19 @@ export const MS_STEP_TEMPLATES = {
     "Return all permits and confirm systems restored to normal operation",
     "Remove site compound; confirm all consumables correctly disposed",
   ],
+  foodFactoryMobilisation: [
+    "Arrive on site, sign in, wash hands and sanitise",
+    "Change into site-required PPE and complete hygiene checks",
+    "Review RAMS and method statement; confirm permit issued and work area shown",
+    "Secure the work area and prevent unauthorised access or vehicle movements",
+    "Carry out works within the controlled or high-care zone under supervisor control",
+    "Complete close-out checks, sign off permit, and hand back to site management",
+  ],
 };
 
 export const MS_TEMPLATE_DEFS = [
   { key: "mobilisation", label: "Mobilisation sequence" },
+  { key: "foodFactoryMobilisation", label: "Food factory mobilisation" },
   { key: "electrical", label: "Electrical isolation sequence" },
   { key: "mechanical", label: "Mechanical LOTO sequence" },
   { key: "height", label: "Work at height sequence" },

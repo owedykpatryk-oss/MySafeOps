@@ -7,6 +7,7 @@ import { isPaidSubscriptionActive } from "./billingAccess";
 import { getTrialStatus, isTrialUnlockActive } from "./orgMembership";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { RAMS_FEATURES } from "./ramsFeatureIds";
+import { isFessOrg } from "./fessOrg";
 
 export { RAMS_FEATURES };
 
@@ -106,10 +107,18 @@ export function hasFullModuleEntitlement() {
   return false;
 }
 
+/** Modules shown only for matching org tenants. */
+const ORG_GATED_MODULE_VISIBILITY = {
+  "fess-setup": () => isFessOrg(),
+  "fess-sites": () => isFessOrg(),
+};
+
 export function isModuleVisible(moduleId, { hiddenModules = getHiddenModuleIds() } = {}) {
   const id = String(moduleId || "");
   if (!id || MODULE_ALWAYS_VISIBLE.has(id)) return true;
   if (DEFERRED_MODULE_IDS.has(id)) return false;
+  if (ORG_GATED_MODULE_VISIBILITY[id] && !ORG_GATED_MODULE_VISIBILITY[id]()) return false;
+  if (id === "hygiene-setup" && isFessOrg()) return false;
   if (hasFullModuleEntitlement()) return true;
   return !hiddenModules.includes(id);
 }

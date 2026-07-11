@@ -41,4 +41,9 @@ describe("projectHubIndustry", () => {
     expect(getPlaybooksForOrg().some((p) => p.id === "utility_mapping")).toBe(true);
     expect(getHiddenModuleIds()).not.toContain("survey-report");
   });
+
+  it("never exposes FESS playbooks to non-FESS orgs", () => {
+    applyIndustryPack("generalContractor");
+    expect(getPlaybooksForOrg().some((p) => String(p.id || "").startsWith("fess_"))).toBe(false);
+  });
 });

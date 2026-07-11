@@ -1,0 +1,439 @@
+================================================================================
+FESS GROUP — MySafeOps IMPLEMENTATION SUMMARY
+================================================================================
+Prepared for: FESS Group (food factory M&E)
+Scope: FESS-only features — not visible to other MySafeOps organisations
+Reference material: DOCS/FESS/Rams (Excel/PDF templates) and DOCS/FESS/Rams/MC (22 job PDFs)
+Last updated: July 2026
+
+--------------------------------------------------------------------------------
+1. PURPOSE
+--------------------------------------------------------------------------------
+
+This work builds a dedicated FESS workspace inside MySafeOps, mapped from your
+real MC reference jobs (2SFG, Cranswick, Quorn, Butternut Box, Dovecoat, etc.).
+It is not generic food/pharma branding for all customers — it is org-exclusive
+for the FESS Group tenant (slug: fess-group).
+
+Day-one workflow supported:
+  • Pick client site → apply job starter → RAMS + Method Statement + PTW
+  • Standard site RA baseline (~21 M&E rows) on every job
+  • Line clearance / LOTO permits on live production lines
+  • Site permit controller sign-off (client portal + RAMS fields)
+  • FESS Site Pack PDF for site handover (RAMS + 5-page MS + registers + PTW)
+  • Mobilise site in one click (G&HP, LOTO, contacts, briefing)
+  • Publish client portals to cloud for permit controller RAMS approval
+
+--------------------------------------------------------------------------------
+2. ORG DETECTION & EXCLUSIVITY
+--------------------------------------------------------------------------------
+
+FESS features activate only when:
+  • Organisation slug is fess-group (or fess_group), OR
+  • Organisation name includes "FESS Group"
+
+Safeguards for other tenants:
+  • Modules fess-setup and fess-sites hidden from More menu and dashboard
+  • FESS playbooks, job starters, client sites, portal presets filtered out
+  • FESS RAMS/MS/project fields stripped on save for non-FESS orgs
+  • Org-exclusive quick packs not shown elsewhere
+  • fess_* hazard IDs hidden from RAMS library search for non-FESS orgs
+  • Storage scrub on org switch removes FESS presets (portals, briefings, packs)
+
+Key files:
+  src/utils/fessOrg.js
+  src/utils/fessExclusive.js
+  src/utils/hiddenModules.js
+
+--------------------------------------------------------------------------------
+3. WORKSPACE PROFILE & ONBOARDING
+--------------------------------------------------------------------------------
+
+FESS Group workspace profile (fessGroup):
+  • Food factory M&E layout
+  • Hygiene registers, LOTO, method statements visible
+  • Survey report and generic food/pharma setup hidden for FESS
+  • Industry sectors: construction, food_beverage, pharma, pet_food
+
+FESS workspace setup wizard (module: fess-setup):
+  Checklist with one-click "Run setup" for:
+  • Apply FESS workspace profile
+  • Seed RAMS quick packs (Standard site RA baseline + Excel verbatim baseline)
+  • Load food factory mobilisation method steps
+  • UK legislation register
+  • COSHH register starter substances
+  • G&HP register starter items (per client site)
+  • LOTO register starter isolation points (per client site)
+  • Seed FESS client site projects (6 sites) + site contacts
+  • Client portal presets per site (RAMS approval on)
+  • Publish FESS site portals to cloud (manual — sign in first)
+  • Today's FESS site briefing (food factory topics)
+
+Plus manual steps: job starters, baseline RAMS, line clearance PTW, etc.
+
+Dashboard banner shows setup progress until complete.
+
+Key files:
+  src/utils/fessWorkspaceProfile.js
+  src/utils/fessOnboarding.js
+  src/modules/FessSetupWizard.jsx
+
+--------------------------------------------------------------------------------
+4. CLIENT & SITE DIRECTORY (MAIN ENTRY POINT)
+--------------------------------------------------------------------------------
+
+Module: fess-sites (FESS client & sites)
+Also shown on Dashboard for FESS org only.
+
+Six food factory sites from MC references:
+  • 2SFG Scunthorpe — DOLAV/MEYN (typical job)
+  • 2SFG Flixton — grille M&E
+  • Cranswick Lazenby — pipe changeover
+  • Quorn Foods — unistrut / pipe supports
+  • Butternut Box — spiral conveyor
+  • Dovecoat Park — machine install
+
+Each site card shows:
+  • Typical job type, permit controller hint, doc stats (RAMS, PTW, drafts)
+  • RAMS completeness badge (% readiness on latest RAMS)
+  • Portal status: "on cloud" or "publish to cloud"
+  • Job type override dropdown (optional — before starting job pack)
+
+One-click actions per site:
+  • Start full job pack — project + RAMS + MS + PTW from playbook
+  • Repeat job — duplicate latest RAMS with new FESS job ref (e.g. FP1-DOLAV-2026-142)
+  • Site pack — FESS Site Pack PDF (RAMS + 5-page MS + G&HP + LOTO + allergen + PTW)
+  • Copy portal — client portal link for site permit controller
+  • Mobilise site — G&HP + LOTO + contacts + today's briefing
+  • Today briefing — mobilisation briefing for the site
+  • Line clearance — jump to permits for that project
+  • Project — open project hub
+
+Header actions (full directory):
+  • Seed site portals
+  • Publish portals (N pending) — batch publish to cloud when signed in
+  • FESS setup / Open full directory
+
+Key files:
+  src/utils/fessClientSites.js
+  src/utils/fessClientHub.js
+  src/utils/fessSiteActions.js
+  src/utils/fessSiteMobilisation.js
+  src/components/FessClientSitesHub.jsx
+  src/modules/FessSitesModule.jsx
+
+--------------------------------------------------------------------------------
+5. RAMS — JOB STARTERS, BASELINE & TEMPLATE LIBRARY
+--------------------------------------------------------------------------------
+
+Nineteen FESS job starters (RAMS Builder Step 2, FESS org only).
+All 22 MC reference PDFs in DOCS/FESS/Rams/MC are mapped (22/22 coverage).
+
+Core MC-mapped starters (8 original):
+  • DOLAV & MEYN station works (2SFG Scunthorpe)
+  • Machine installation / placement
+  • Spiral conveyor (Butternut Box)
+  • Roof void pipe changeover (Cranswick)
+  • Tank removal & relocation
+  • RO room / water treatment works
+  • Grille M&E (2SFG Flixton)
+  • Unistrut / pipe support (Quorn)
+
+Extended starters (8):
+  • Enabling works, Mapress ring main, wash station upgrade
+  • Compressor air drops, vacuum line install, cable containment
+  • Cold room services, panel & lighting replacement
+
+Additional MC parity starters (3):
+  • FP1 works on site (2SFG Scunthorpe)
+  • Various supplies (2SFG Scunthorpe)
+  • Butternut production equipment install
+
+Each starter includes:
+  • Scope, method statement text, supplemental hazards
+  • FESS job ref prefix (e.g. FP1-DOLAV-2026-xxx)
+  • Suggested permit types
+  • MC source PDF file references
+
+Org-exclusive quick packs:
+  • "Standard site RA baseline" — ~21 mapped M&E rows (pinned)
+  • "FESS Excel RA baseline (verbatim)" — fess_001…fess_021 from Excel master
+  • Five site-specific hazard add-on packs (2SFG, Cranswick, Quorn, Butternut, Dovecoat)
+
+Per-site configuration (fessClientSites.js):
+  • preferredBaselinePackId (Excel or mapped baseline per site)
+  • extraHazardIds merged into job starter hazard set
+
+RAMS Builder FESS features (Step 2 & 4):
+  • Job starter picker + RAMS template library (search by client, site, PDF name)
+  • Completeness badge — % score, missing expected hazards
+  • Completeness gate before APPROVED/ISSUED (confirm if score < 85%)
+  • FESS Excel RAMS print layout (auto for FESS org print/preview)
+
+RAMS FESS-only fields:
+  • fessJobStarterKey / fessJobStarterLabel
+  • permitControllerName / permitControllerSignDate
+
+MS auto-sync on RAMS save:
+  • Linked method statement created or updated from RAMS scope and method steps
+
+Key files:
+  src/utils/fessJobStarters.js
+  src/utils/fessMcPdfIndex.js
+  src/utils/fessRamsWorkflow.js
+  src/utils/fessRamsCompleteness.js
+  src/utils/fessRamsTemplateLibrary.js
+  src/utils/fessRamsPrintHtml.js
+  src/utils/fessMsSync.js
+  src/modules/rams/FessJobStarterSection.jsx
+  src/modules/rams/orgExclusiveQuickPacks.js
+  src/components/FessRamsCompletenessBadge.jsx
+  src/utils/fessSitePack.js
+
+--------------------------------------------------------------------------------
+6. PROJECT PLAYBOOKS
+--------------------------------------------------------------------------------
+
+Nineteen FESS project playbooks (fess_* ids), one per job starter — FESS org only:
+  • Creates RAMS draft with baseline + job hazards (site-aware)
+  • Method statement with RAMS method steps (not generic mobilisation only)
+  • Permit drafts per starter (line clearance, LOTO, hot work, etc.)
+  • Checklist extras: line clearance, hygiene, LOTO, permit controller sign-off
+  • Job ref continuity: same ref on RAMS (documentNo), MS (jobRef), PTW (notes)
+
+Key files:
+  src/utils/fessProjectPlaybooks.js
+  src/utils/projectPlaybooks.js (FESS branches)
+  src/utils/projectHubIndustry.js
+
+--------------------------------------------------------------------------------
+7. METHOD STATEMENT — 5-PAGE FESS LAYOUT
+--------------------------------------------------------------------------------
+
+FESS-only print layout (from MC reference structure):
+  Page 1 — Mobilisation & document control
+  Page 2 — Sequence of works
+  Page 3 — COSHH assessment (linked register)
+  Page 4 — Approvals & permit sign-off (FESS + site permit controller)
+  Page 5 — Briefing record with operative names, key certs, expiry alerts, signatures
+
+Briefing rows pull certifications from People module (CSCS, Food Hygiene L2, etc.).
+
+MS stays in sync when RAMS is saved (fessMsSync.js).
+
+Key files:
+  src/utils/fessMsPrintHtml.js
+  src/utils/fessMsWorkflow.js
+  src/utils/fessMsSync.js
+  src/utils/fessBriefingRecord.js
+  src/modules/MethodStatement.jsx (FESS print branch)
+
+--------------------------------------------------------------------------------
+8. FESS SITE PACK PDF
+--------------------------------------------------------------------------------
+
+Combined handover document (FESS org only):
+  1. RAMS — FESS Excel-style print layout
+  2. Method statement — 5-page FESS layout
+  3. Site registers — G&HP, LOTO, allergen changeover windows
+  4. Site pack summary
+  5. Permits (PTW) for the project
+
+Key file: src/utils/fessSitePack.js
+
+--------------------------------------------------------------------------------
+9. FESS PULSE (DASHBOARD)
+--------------------------------------------------------------------------------
+
+Live ops panel on Dashboard (FESS org only):
+  • Open line clearance PTW
+  • RAMS awaiting client portal approval
+  • Issued RAMS without permit controller
+  • Site portal(s) not published to cloud
+  • RAMS drafts below completeness target (< 85%)
+  • RAMS drafts on site
+  • RAMS without linked method statement
+  • PTW drafts to issue
+  • Operative certs expiring on FESS site projects (links to People)
+
+Key files:
+  src/utils/fessPulse.js
+  src/components/FessPulseCard.jsx
+
+--------------------------------------------------------------------------------
+10. CLIENT PORTAL & CLOUD PUBLISH
+--------------------------------------------------------------------------------
+
+One-click seed creates six read-only portals (one per FESS site):
+  • Sections: workers, RAMS, permits
+  • allowRamsApproval: true (site permit controller can approve RAMS)
+  • Linked to site project
+  • 180-day expiry default
+
+Cloud publish (signed-in users):
+  • "Publish portals (N pending)" in Client & sites — batch publish all FESS portals
+  • Per-site status on cards: "on cloud" vs "publish to cloud"
+  • Copy portal link from site card or Client portal module
+
+Key files:
+  src/utils/fessPortalPreset.js
+  src/utils/fessPortalPublish.js
+  src/components/ClientPortal.jsx (RAMS approval for FESS)
+
+--------------------------------------------------------------------------------
+11. SITE MOBILISATION REGISTERS & CONTACTS
+--------------------------------------------------------------------------------
+
+Per-site starter data (seeded via FESS setup or "Mobilise site"):
+
+G&HP register (fessGhpDefaults.js):
+  • Tools/parts brought into production zones per site
+
+LOTO register (fessLotoDefaults.js):
+  • Template isolation points per site (compressor, wash pump, conveyor drive, etc.)
+
+Emergency contacts (fessSiteContacts.js):
+  • Permit controller entry per site
+  • Nearest A&E hospital per site
+
+Mobilise site (fessSiteMobilisation.js):
+  • One click: G&HP + LOTO + contacts + today's briefing for a site
+
+--------------------------------------------------------------------------------
+12. DAILY BRIEFING PRESETS
+--------------------------------------------------------------------------------
+
+FESS food factory mobilisation topics (line clearance, hygiene, LOTO, RAMS scope,
+COSHH, PPE, stop-work, emergency/A&E).
+
+"Today briefing" on site card or FESS setup creates idempotent briefing per
+site/day with project-linked attendees.
+
+Key file: src/utils/fessBriefingRecord.js
+
+--------------------------------------------------------------------------------
+13. FILES ADDED (COMPLETE LIST)
+--------------------------------------------------------------------------------
+
+Core FESS:
+  src/utils/fessOrg.js
+  src/utils/fessWorkspaceProfile.js
+  src/utils/fessExclusive.js
+  src/utils/fessOnboarding.js
+  src/utils/fessJobStarters.js
+  src/utils/fessMcPdfIndex.js
+  src/utils/fessRamsWorkflow.js
+  src/utils/fessRamsCompleteness.js
+  src/utils/fessRamsTemplateLibrary.js
+  src/utils/fessRamsPrintHtml.js
+  src/utils/fessClientSites.js
+  src/utils/fessClientHub.js
+  src/utils/fessProjectPlaybooks.js
+  src/utils/fessMsPrintHtml.js
+  src/utils/fessMsWorkflow.js
+  src/utils/fessMsSync.js
+  src/utils/fessSitePack.js
+  src/utils/fessPortalPreset.js
+  src/utils/fessPortalPublish.js
+  src/utils/fessPulse.js
+  src/utils/fessBriefingRecord.js
+  src/utils/fessSiteActions.js
+  src/utils/fessSiteContacts.js
+  src/utils/fessSiteMobilisation.js
+  src/utils/fessGhpDefaults.js
+  src/utils/fessLotoDefaults.js
+  src/utils/fessCoshhDefaults.js
+
+UI modules & components:
+  src/modules/FessSetupWizard.jsx
+  src/modules/FessSitesModule.jsx
+  src/modules/rams/FessJobStarterSection.jsx
+  src/components/FessClientSitesHub.jsx
+  src/components/FessPulseCard.jsx
+  src/components/FessRamsCompletenessBadge.jsx
+
+Tests (vitest):
+  src/utils/fessExclusive.test.js
+  src/utils/fessJobStarters.test.js
+  src/utils/fessMcPdfIndex.test.js
+  src/utils/fessRamsCompleteness.test.js
+  src/utils/fessRamsTemplateLibrary.test.js
+  src/utils/fessRamsPrintHtml.test.js
+  src/utils/fessRamsWorkflow.test.js
+  src/utils/fessMsSync.test.js
+  src/utils/fessClientSites.test.js
+  src/utils/fessClientHub.test.js
+  src/utils/fessProjectPlaybooks.test.js
+  src/utils/fessWorkspaceProfile.test.js
+  src/utils/fessPortalPreset.test.js
+  src/utils/fessPortalPublish.test.js
+  src/utils/fessPulse.test.js
+  src/utils/fessBriefingRecord.test.js
+  src/utils/fessSiteContacts.test.js
+  src/utils/fessSiteRegisters.test.js
+  src/utils/fessPackExtras.test.js
+
+--------------------------------------------------------------------------------
+14. FILES MODIFIED (KEY TOUCH POINTS)
+--------------------------------------------------------------------------------
+
+  src/navigation/appModules.js
+  src/navigation/workspaceViews.js
+  src/utils/hiddenModules.js
+  src/utils/orgIndustryPacks.js
+  src/utils/customWorkspaceProfiles.js
+  src/utils/projectHubIndustry.js
+  src/utils/projectPlaybooks.js
+  src/utils/ramsHazardPacksStorage.js
+  src/modules/rams/ramsHazardLibraryLoader.js
+  src/modules/rams/ramsPrintHtml.js
+  src/modules/rams/RAMSTemplateBuilder.jsx
+  src/modules/rams/orgExclusiveQuickPacks.js
+  src/components/AnalyticsDashboard.jsx
+  src/components/ClientPortal.jsx
+  src/context/AppContext.jsx
+  src/modules/MethodStatement.jsx
+
+--------------------------------------------------------------------------------
+15. HOW TO VERIFY (FESS ORG)
+--------------------------------------------------------------------------------
+
+1. Log in as FESS Group organisation (fess-group).
+2. Dashboard — confirm "FESS pulse" and "Client & sites" panels appear.
+3. Switch to another org — confirm FESS panels and modules are hidden.
+4. FESS setup — run checklist (profile, packs, G&HP, LOTO, sites, portals).
+5. Client & sites — Seed site portals → Publish portals (when signed in).
+6. Pick 2SFG Scunthorpe → Mobilise site → check G&HP, LOTO, contacts, briefing.
+7. Optional: change job type → Start full job pack.
+8. RAMS Builder Step 2 — job starter, template library, completeness badge.
+9. RAMS Step 4 — completeness badge; print uses FESS Excel layout.
+10. Save RAMS as issued — MS auto-syncs; completeness gate if < 85%.
+11. FESS Site Pack — RAMS + MS + G&HP + LOTO + allergen + PTW in one PDF.
+12. Client portal — copy link; permit controller approves RAMS.
+
+Run tests:
+  npx vitest run src/utils/fessExclusive.test.js src/utils/fessJobStarters.test.js src/utils/fessMcPdfIndex.test.js src/utils/fessRamsCompleteness.test.js src/utils/fessRamsPrintHtml.test.js src/utils/fessMsSync.test.js src/utils/fessPortalPublish.test.js src/utils/fessSiteRegisters.test.js src/utils/fessPulse.test.js src/utils/fessClientHub.test.js src/utils/fessProjectPlaybooks.test.js
+
+--------------------------------------------------------------------------------
+16. NOT YET IMPLEMENTED (PHASE 2)
+--------------------------------------------------------------------------------
+
+  • Dedicated CRM with phone/email per permit controller
+  • Auto-publish portals immediately on seed (still one-click batch publish)
+  • Mobile / Slack webhook quick actions from dashboard
+  • Shared central RAMS database across devices (today: localStorage per org)
+  • Auto-sync MS on every field edit (today: sync on RAMS save)
+
+--------------------------------------------------------------------------------
+17. SUPPORT & PROVISIONING
+--------------------------------------------------------------------------------
+
+FESS org provisioning script: scripts/provision-fess-group.mjs
+Canonical slug: fess-group
+
+For questions about this build, refer to module Help or FESS workspace setup
+in the More → Site operations section.
+
+================================================================================
+END OF SUMMARY
+================================================================================

@@ -7,10 +7,13 @@ import { applyIndustryPack } from "./orgIndustryPacks";
 import ALL from "../modules/rams/ramsAllHazards.js";
 import { ensureBuiltInConstructionPacks } from "../modules/rams/constructionQuickPacks.js";
 import { seedLegislationRegister } from "./ukLegislationLibrary";
+import {
+  loadRamsHazardPacks,
+  saveRamsHazardPacks,
+} from "./ramsHazardPacksStorage";
 
 const PROGRESS_KEY = "food_pharma_onboarding_progress";
 const LEGACY_PROGRESS_KEY = "fess_onboarding_progress";
-const QUICK_PACKS_KEY = "rams_quick_packs";
 const LEGISLATION_KEY = "legislation_register";
 
 /** @typedef {{ id: string, label: string, hint: string, viewId?: string, autoCheck?: () => boolean }} SetupStep */
@@ -29,7 +32,7 @@ export const FOOD_PHARMA_SETUP_STEPS = [
     hint: "Food factory M&E, lifting, production line and hygiene packs.",
     viewId: "rams",
     autoCheck: () => {
-      const packs = load(QUICK_PACKS_KEY, []);
+      const packs = loadRamsHazardPacks([]);
       return packs.some((p) => {
         const id = String(p.id || "");
         return id.startsWith("builtin_food_") || id.startsWith("builtin_fess_");
@@ -141,9 +144,9 @@ export function runFoodPharmaSetupAction(stepId) {
       markFoodPharmaStepDone(stepId);
       return { ok: true, message: "Food & pharma profile applied with register seeds." };
     case "hazard_packs": {
-      const existing = load(QUICK_PACKS_KEY, []);
+      const existing = loadRamsHazardPacks([]);
       const merged = ensureBuiltInConstructionPacks(existing, ALL);
-      save(QUICK_PACKS_KEY, merged);
+      saveRamsHazardPacks(merged);
       markFoodPharmaStepDone(stepId);
       return { ok: true, message: `Quick packs ready (${merged.length} total).` };
     }

@@ -21,6 +21,13 @@ import { createDefaultChecklistItems, normalizeChecklistState } from "../modules
 import { getTemplateForType } from "../modules/permits/permitTemplateCatalog";
 import { PERMIT_TYPES } from "../modules/permits/permitTypes";
 import { getMsStepTemplate } from "./msOrgTemplates";
+import { buildFessJobStarterFormPatch } from "./fessRamsWorkflow";
+import { resolveFessStarterHazards } from "./fessJobStarters";
+import { buildMsStepsFromRams } from "./fessMsWorkflow";
+import { getFessPlaybook } from "./fessProjectPlaybooks";
+import { isFessOrg } from "./fessOrg";
+import { FESS_CLIENT_SITE_TEMPLATES } from "./fessClientSites";
+import ALL from "../modules/rams/ramsAllHazards.js";
 
 const genId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
@@ -222,7 +229,25 @@ export const PROJECT_PLAYBOOKS = [
 ];
 
 export function getPlaybook(playbookId) {
+  const fess = isFessOrg() ? getFessPlaybook(playbookId) : null;
+  if (fess) return fess;
   return PROJECT_PLAYBOOKS.find((p) => p.id === playbookId) || PROJECT_PLAYBOOKS.find((p) => p.id === "general");
+}
+
+function buildRamsRowsFromHazards(hazards) {
+  return (hazards || []).map((h) => ({
+    id: genId("row"),
+    sourceId: h.id,
+    category: h.category || "General",
+    activity: h.activity || "",
+    hazard: h.hazard || "",
+    initialRisk: h.initialRisk || { L: 3, S: 3, RF: 9 },
+    revisedRisk: h.revisedRisk || { L: 2, S: 3, RF: 6 },
+    controlMeasures: h.controlMeasures || [],
+    ppeRequired: h.ppeRequired || [],
+    regs: h.regs || [],
+    rowSource: "hazard_pack",
+  }));
 }
 
 export function projectHasRams(projectId, ramsDocs = []) {
@@ -238,7 +263,7 @@ export function docsForProject(projectId, rows = []) {
 export function createRamsDraftFromPlaybook(project, playbook) {
   const pack = playbook.ramsSurveyKey ? getPlaybookSurveyPack(playbook.ramsSurveyKey) : null;
   const location = String(project.address || project.site || project.name || "").trim();
-  return {
+  const base = {
     id: genId("rams"),
     title: `RAMS — ${project.name || "Site"}`,
     location,
@@ -259,6 +284,29 @@ export function createRamsDraftFromPlaybook(project, playbook) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+
+  if (playbook.fessJobStarterKey && isFessOrg()) {
+    const patch = buildFessJobStarterFormPatch(playbook.fessJobStarterKey, project);
+    const hazards = resolveFessStarterHazards(
+      playbook.fessJobStarterKey,
+      ALL,
+      project.fessSiteTemplateId || ""
+    );
+    const siteTmpl = project.fessSiteTemplateId
+      ? FESS_CLIENT_SITE_TEMPLATES.find((t) => t.id === project.fessSiteTemplateId)
+      : null;
+    return {
+      ...base,
+      ...patch,
+      title: patch?.title || base.title,
+      location: patch?.location || base.location,
+      documentNo: patch?.jobRef || base.documentNo,
+      permitControllerName: siteTmpl?.permitControllerContact || siteTmpl?.permitControllerHint || "",
+      rows: buildRamsRowsFromHazards(hazards),
+    };
+  }
+
+  return base;
 }
 
 export function createSurveyDraftFromPlaybook(project, playbook, existingReports = [], ramsDoc = null) {
@@ -313,13 +361,13 @@ export function createPermitDraftFromPlaybook(project, permitType, ramsDoc = nul
     signatures: [],
     extraFields: { dynamic: {} },
     createdAt: new Date().toISOString(),
-    notes: `(Created by project playbook)`,
+    notes: `(Created by project playbook)${ramsDoc?.jobRef ? ` · Job ref: ${ramsDoc.jobRef}` : ""}`,
   };
 }
 
 export function createMethodStatementFromPlaybook(project, playbook, ramsDoc = null) {
   const stepsPreset = getMsStepTemplate(playbook.msTemplate || "mobilisation");
-  const steps = stepsPreset.map((desc, i) => ({
+  let steps = stepsPreset.map((desc, i) => ({
     id: genId("msstep"),
     seq: i + 1,
     title: desc.split(" ").slice(0, 5).join(" ") + "…",
@@ -327,25 +375,43 @@ export function createMethodStatementFromPlaybook(project, playbook, ramsDoc = n
     responsible: "",
     duration: "",
   }));
+  if (playbook.fessJobStarterKey && isFessOrg() && ramsDoc) {
+    const fromRams = buildMsStepsFromRams(ramsDoc, () => genId("msstep"));
+    if (fromRams.length) steps = fromRams;
+  }
   const location = String(project.address || project.site || project.name || "").trim();
+  const fessScope =
+    playbook.fessJobStarterKey && isFessOrg()
+      ? buildFessJobStarterFormPatch(playbook.fessJobStarterKey, project)?.scope
+      : "";
+  const siteTmpl =
+    project.fessSiteTemplateId && isFessOrg()
+      ? FESS_CLIENT_SITE_TEMPLATES.find((t) => t.id === project.fessSiteTemplateId)
+      : null;
+  const jobRef = ramsDoc?.jobRef || ramsDoc?.documentNo || project.jobRef || "";
   return {
     id: genId("ms"),
     title: `Method statement — ${project.name || "Site"}`,
     location,
     projectId: project.id,
-    jobRef: project.jobRef || "",
+    jobRef,
     client: project.client || project.site || "",
     date: today(),
     revision: "1A",
-    scope: playbook.surveyType
-      ? getPlaybookSurveyPack(playbook.ramsSurveyKey || playbook.surveyType)?.scope || ""
-      : `Mobilisation and safe delivery of works at ${project.name || location}.`,
+    scope: fessScope
+      || (playbook.surveyType
+        ? getPlaybookSurveyPack(playbook.ramsSurveyKey || playbook.surveyType)?.scope || ""
+        : `Mobilisation and safe delivery of works at ${project.name || location}.`),
     steps,
     plant: [],
     materials: [],
     ppeRequired: ["Hard hat", "Safety footwear", "Hi-vis vest"],
     operativeIds: [],
     relatedRamsId: ramsDoc?.id || "",
+    permitControllerName: siteTmpl?.permitControllerContact || siteTmpl?.permitControllerHint || ramsDoc?.permitControllerName || "",
+    briefingNotes: playbook.fessJobStarterKey
+      ? "Operatives briefed on RAMS, method statement, line clearance / LOTO and emergency arrangements before work starts."
+      : "",
     status: "draft",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

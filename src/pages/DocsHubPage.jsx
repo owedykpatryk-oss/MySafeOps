@@ -79,6 +79,14 @@ export default function DocsHubPage() {
               High-level posture for procurement and Cyber Essentials–style questionnaires (not legal advice).
             </div>
           </li>
+          <li>
+            <Link to="/accessibility" style={{ fontWeight: 600, color: "#0d9488" }}>
+              Accessibility statement
+            </Link>
+            <div style={{ fontSize: 13, color: "var(--color-text-secondary, #64748b)", marginTop: 4 }}>
+              How we approach WCAG 2.2 AA and how to report accessibility issues.
+            </div>
+          </li>
         </ul>
         <h2 className="blog-article-toc-title" style={{ fontSize: 18, marginTop: 32, marginBottom: 10 }}>
           Legal
@@ -89,6 +97,10 @@ export default function DocsHubPage() {
           <Link to="/terms">Terms of service</Link>
           {" · "}
           <Link to="/cookies">Cookie policy</Link>
+          {" · "}
+          <Link to="/accessibility">Accessibility</Link>
+          {" · "}
+          <Link to="/dpa">Data processing</Link>
         </p>
         <h2 className="blog-article-toc-title" style={{ fontSize: 18, marginTop: 24, marginBottom: 10 }}>
           Support

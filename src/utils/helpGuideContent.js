@@ -153,6 +153,8 @@ export const MODULE_BLURBS_EXTRA = {
   "dynamic-ra": "Dynamic risk assessments for changing site conditions.",
   legislation: "Track applicable legislation and review dates for your organisation.",
   "hygiene-setup": "Food & pharma onboarding wizard — hygiene zones and starter registers.",
+  "fess-setup": "FESS Group onboarding — standard site RA baseline, LOTO and food factory method steps (FESS org only).",
+  "fess-sites": "FESS client & sites — one-click RAMS, method statement and permits per food factory site (FESS org only).",
   "construction-setup": "Construction onboarding wizard — CDM-oriented starter checklist.",
   "site-map": "Legacy label — use Drawings and Project Hub map tools.",
 };

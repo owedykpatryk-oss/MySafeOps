@@ -15,6 +15,12 @@ import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { MS_TEMPLATE_DEFS } from "./msStepTemplates";
 import { getMsStepTemplate } from "../utils/msOrgTemplates";
+import { isFessOrg } from "../utils/fessOrg";
+import { buildFessMethodStatementPackHtml } from "../utils/fessMsPrintHtml";
+import { buildFessBriefingOperativeRows } from "../utils/fessBriefingRecord";
+import { buildMsStepsFromRams } from "../utils/fessMsWorkflow";
+import { sanitizeMsDocForOrg } from "../utils/fessExclusive";
+import { getOrgId } from "../utils/orgStorage";
 
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
@@ -175,6 +181,8 @@ function MSForm({ ms, onSave, onClose }) {
     id: genId(), title:"", location:"", projectId:"",
     jobRef:"", client:"", date:today(), revision:"1A",
     leadEngineer:"", preparedBy:"", approvedBy:"",
+    permitControllerName:"", permitControllerSignDate:"",
+    briefingNotes:"",
     scope:"", restrictions:"",
     steps:[], plant:[], materials:[],
     ppeRequired:[], operativeIds:[],
@@ -192,6 +200,32 @@ function MSForm({ ms, onSave, onClose }) {
   const addPlant = () => { if (!newPlant.trim()) return; set("plant",[...form.plant,newPlant.trim()]); setNewPlant(""); };
   const addMat = () => { if (!newMat.trim()) return; set("materials",[...form.materials,newMat.trim()]); setNewMat(""); };
   const ramsDocs = load("rams_builder_docs", []);
+
+  useEffect(() => {
+    if (!isFessOrg() || ms || !form.projectId) return;
+    const docs = load("rams_builder_docs", []);
+    const projectRams = docs
+      .filter((r) => r.projectId === form.projectId)
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+    const linked = projectRams[0];
+    if (!linked) return;
+    setForm((f) => {
+      if (f.relatedRamsId || (f.steps || []).length > 0) return f;
+      const stepsFromRams = buildMsStepsFromRams(linked, genId);
+      return {
+        ...f,
+        relatedRamsId: linked.id,
+        title: f.title || linked.title?.replace(/^RAMS\s*—\s*/i, "Method statement — ") || f.title,
+        jobRef: f.jobRef || linked.jobRef || "",
+        client: f.client || linked.client || "",
+        location: f.location || linked.location || "",
+        scope: f.scope || linked.scope || "",
+        permitControllerName: f.permitControllerName || linked.permitControllerName || "",
+        permitControllerSignDate: f.permitControllerSignDate || linked.permitControllerSignDate || "",
+        steps: stepsFromRams,
+      };
+    });
+  }, [form.projectId, ms]);
 
   const valid = form.title?.trim() && form.location?.trim();
   const tabs = [["info","Document info"],["steps","Work sequence"],["resources","Plant & materials"],["ppe","PPE & safety"],["preview","Preview"]];
@@ -269,6 +303,28 @@ function MSForm({ ms, onSave, onClose }) {
                 <label style={ss.lbl}>Approved by</label>
                 <input value={form.approvedBy||""} onChange={e=>set("approvedBy",e.target.value)} placeholder="Name / position" style={ss.inp} />
               </div>
+              {isFessOrg() ? (
+                <>
+                  <div>
+                    <label style={ss.lbl}>Site permit controller</label>
+                    <input
+                      value={form.permitControllerName || ""}
+                      onChange={(e) => set("permitControllerName", e.target.value)}
+                      placeholder="Client permit controller"
+                      style={ss.inp}
+                    />
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>Permit controller sign-off</label>
+                    <input
+                      type="date"
+                      value={form.permitControllerSignDate || ""}
+                      onChange={(e) => set("permitControllerSignDate", e.target.value)}
+                      style={ss.inp}
+                    />
+                  </div>
+                </>
+              ) : null}
               <div style={{ gridColumn:"1/-1" }}>
                 <label style={ss.lbl}>Scope of works</label>
                 <textarea value={form.scope||""} onChange={e=>set("scope",e.target.value)} rows={3}
@@ -436,7 +492,36 @@ function printMS(form, workers, projects) {
   void (async () => {
   const he = escapeHtml;
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
-  const operatives = (form.operativeIds||[]).map(id=>workerMap[id]).filter(Boolean);
+  const operatives = isFessOrg()
+    ? buildFessBriefingOperativeRows(form, workers)
+    : (form.operativeIds || []).map((id) => workerMap[id]).filter(Boolean);
+  const linkedRams = form.relatedRamsId
+    ? (load("rams_builder_docs", []) || []).find((r) => r.id === form.relatedRamsId) || null
+    : null;
+
+  if (isFessOrg()) {
+    const coshhItems = load("coshh_register", []);
+    const win = openPrintWindow();
+    if (!win) return;
+    const org = getOrgSettings();
+    const bodyHtml = buildFessMethodStatementPackHtml(form, operatives, coshhItems, linkedRams);
+    await writePrintWindowDocument(
+      win,
+      wrapPrintHtmlDocument(org, {
+        pageTitle: `MS — ${form.title}`,
+        headerOpts: {
+          docTitle: form.title || "Method statement",
+          docSubtitle: `${form.location || "Site"} · Rev ${form.revision || "1A"} · FESS 5-page layout`,
+          docBadge: "METHOD STATEMENT",
+        },
+        metaFields: { recordNote: form.jobRef || form.client || "Food factory method statement" },
+        footerExtra: `Rev ${form.revision || "1A"} · ${fmtDate(form.date)}`,
+        bodyHtml,
+      })
+    );
+    win.print();
+    return;
+  }
 
   const stepsHTML = (form.steps||[]).map(s=>`
     <tr>
@@ -549,7 +634,8 @@ export default function MethodStatement() {
   }, [search, filterStatus]);
 
   const saveDoc = (doc) => {
-    setDocs(prev => prev.find(d=>d.id===doc.id) ? prev.map(d=>d.id===doc.id?doc:d) : [doc,...prev]);
+    const saved = sanitizeMsDocForOrg(doc, getOrgId());
+    setDocs(prev => prev.find(d=>d.id===saved.id) ? prev.map(d=>d.id===saved.id?saved:d) : [saved,...prev]);
     setModal(null);
   };
 

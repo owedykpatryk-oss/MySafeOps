@@ -3,6 +3,7 @@
  */
 
 import { todayIsoDate } from "./projectDashboard";
+import { isFessOrg } from "./fessOrg";
 
 /**
  * @param {string} moduleId
@@ -83,8 +84,11 @@ export function getRegisterSmartTips(moduleId, ctx = {}) {
       return ghpTips(enriched);
     case "dynamic-ra":
       return dynamicRaTips(enriched);
-    case "hygiene-setup":
     case "fess-setup":
+      return isFessOrg() ? fessSetupTips(enriched) : [];
+    case "fess-sites":
+      return isFessOrg() ? fessSitesTips(enriched) : [];
+    case "hygiene-setup":
       return foodPharmaSetupTips(enriched);
     case "construction-setup":
       return constructionSetupTips(enriched);
@@ -419,6 +423,26 @@ function dynamicRaTips({ count = 0 }) {
 
 function foodPharmaSetupTips() {
   return [{ id: "wizard", tone: "info", text: "Complete food & pharma setup — hazard packs, COSHH, G&HP and client portal in one afternoon.", viewId: "hygiene-setup", actionLabel: "Open wizard" }];
+}
+
+function fessSetupTips() {
+  return [{
+    id: "fess-wizard",
+    tone: "info",
+    text: "Complete FESS workspace setup — standard site RA baseline, food factory mobilisation steps, LOTO and client portal.",
+    viewId: "fess-setup",
+    actionLabel: "Open FESS setup",
+  }];
+}
+
+function fessSitesTips() {
+  return [{
+    id: "fess-sites-hub",
+    tone: "info",
+    text: "Pick a food factory client site — launch RAMS, method statement and permits in one click.",
+    viewId: "fess-sites",
+    actionLabel: "Open client & sites",
+  }];
 }
 
 function constructionSetupTips() {

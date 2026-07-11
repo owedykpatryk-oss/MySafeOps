@@ -4,6 +4,10 @@ import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 import { activeAllergenWindows, orgShowsIndustrialMoreModules } from "../utils/industrialSectors";
 import { getAppliedIndustryPackId } from "../utils/orgIndustryPacks";
 import { getFoodPharmaSetupStatus, isFoodPharmaPackActive } from "../utils/foodPharmaOnboarding";
+import { getFessSetupStatus, isFessSetupActive } from "../utils/fessOnboarding";
+import { canUseFessExclusiveFeatures } from "../utils/fessExclusive";
+import FessClientSitesHub from "./FessClientSitesHub";
+import FessPulseCard from "./FessPulseCard";
 import { getConstructionSetupStatus, isConstructionPackActive } from "../utils/constructionOnboarding";
 import { getGeospatialSetupStatus, isGeospatialPackActive } from "../utils/geospatialOnboarding";
 import { isSoloWorkspace } from "../utils/soloWorkspace";
@@ -262,6 +266,7 @@ export default function AnalyticsDashboard() {
   const allergenWindows = useMemo(() => load("allergen_changeover_windows", []), [dataRefreshTick]);
   const activeAllergens = useMemo(() => activeAllergenWindows(allergenWindows), [allergenWindows]);
   const foodPharmaSetup = useMemo(() => getFoodPharmaSetupStatus(), [dataRefreshTick, orgId]);
+  const fessSetup = useMemo(() => getFessSetupStatus(), [dataRefreshTick, orgId]);
   const constructionSetup = useMemo(() => getConstructionSetupStatus(), [dataRefreshTick, orgId]);
   const geospatialSetup = useMemo(() => getGeospatialSetupStatus(), [dataRefreshTick, orgId]);
 
@@ -968,7 +973,42 @@ export default function AnalyticsDashboard() {
           <span style={{ color: "#78350f" }}> and reference in RAMS Step 1.</span>
         </div>
       ) : null}
-      {isFoodPharmaPackActive() && foodPharmaSetup.pct < 100 ? (
+      {isFessSetupActive() && fessSetup.pct < 100 ? (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "12px 16px",
+            borderRadius: 10,
+            border: "1px solid #93c5fd",
+            background: "#eff6ff",
+            fontSize: 13,
+            lineHeight: 1.5,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 12,
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <strong style={{ color: "#1e40af" }}>
+              FESS workspace setup — {fessSetup.complete}/{fessSetup.total} complete ({fessSetup.pct}%)
+            </strong>
+            <span style={{ color: "#1e3a8a" }}>
+              {" "}
+              · Standard site RA baseline, hygiene registers, LOTO and method statements.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => openWorkspaceView({ viewId: "fess-setup" })}
+            style={{ ...ms.btnP, fontSize: 12, padding: "6px 12px" }}
+          >
+            Open FESS setup
+          </button>
+        </div>
+      ) : null}
+      {!isFessSetupActive() && isFoodPharmaPackActive() && foodPharmaSetup.pct < 100 ? (
         <div
           style={{
             marginBottom: 16,
@@ -1354,6 +1394,19 @@ export default function AnalyticsDashboard() {
       ) : null}
 
       <div className="app-dashboard-ordered" style={{ display: "flex", flexDirection: "column" }}>
+
+      {canUseFessExclusiveFeatures() ? (
+        <div style={{ order: -1 }}>
+          <FessPulseCard rams={rams} permits={permits} methodStatements={methodStatements} workers={workers} projects={projects} />
+          <FessClientSitesHub
+            projects={projects}
+            rams={rams}
+            permits={permits}
+            methodStatements={methodStatements}
+            variant="dashboard"
+          />
+        </div>
+      ) : null}
 
       {showWidget("project_command_center") ? (
         <div style={{ order: widgetSortOrder("project_command_center") }}>

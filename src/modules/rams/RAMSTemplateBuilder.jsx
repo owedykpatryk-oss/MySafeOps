@@ -59,7 +59,22 @@ import {
   CORE_RAMS_ACTIVITY_MODULES,
 } from "./constructionActivityCatalog";
 import { ensureBuiltInConstructionPacks } from "./constructionQuickPacks";
+import {
+  ensureOrgExclusiveQuickPacks,
+  filterQuickPacksForOrg,
+} from "./orgExclusiveQuickPacks";
+import { isFessOrg } from "../../utils/fessOrg";
+import { buildFessJobStarterFormPatch, getFessSiteBaselineHazards, getHazardsForFessJobStarter } from "../../utils/fessRamsWorkflow";
+import { getFessSitePlaybookSuggestion } from "../../utils/fessClientSites";
+import { getPlaybook } from "../../utils/projectPlaybooks";
+import { openFessSitePackWindow } from "../../utils/fessSitePack";
+import FessJobStarterSection from "./FessJobStarterSection";
+import { getOrgId, ORG_CHANGED_EVENT } from "../../utils/orgStorage";
 import { evaluateRamsCoshhGate, evaluateRamsHospitalGate } from "../../utils/ramsComplianceGates";
+import { sanitizeRamsDocForOrg } from "../../utils/fessExclusive";
+import { computeFessRamsCompleteness } from "../../utils/fessRamsCompleteness";
+import { syncFessMsFromRams } from "../../utils/fessMsSync";
+import FessRamsCompletenessBadge from "../../components/FessRamsCompletenessBadge";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
@@ -821,6 +836,10 @@ const RAMS_FORM_DEFAULTS = {
   printSections: {},
   allergenControlsNote: "",
   allergenChangeoverRef: "",
+  fessJobStarterKey: "",
+  fessJobStarterLabel: "",
+  permitControllerName: "",
+  permitControllerSignDate: "",
 };
 
 const RL = {
@@ -2076,6 +2095,28 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
             <label style={ss.lbl}>Approval date</label>
             <input type="date" value={form.approvalDate||""} onChange={e=>set("approvalDate",e.target.value)} style={ss.inp} />
           </div>
+          {isFessOrg() ? (
+            <>
+              <div>
+                <label style={ss.lbl}>Site permit controller</label>
+                <input
+                  value={form.permitControllerName || ""}
+                  onChange={(e) => set("permitControllerName", e.target.value)}
+                  placeholder="e.g. Client permit controller"
+                  style={ss.inp}
+                />
+              </div>
+              <div>
+                <label style={ss.lbl}>Permit controller sign-off date</label>
+                <input
+                  type="date"
+                  value={form.permitControllerSignDate || ""}
+                  onChange={(e) => set("permitControllerSignDate", e.target.value)}
+                  style={ss.inp}
+                />
+              </div>
+            </>
+          ) : null}
           {requiresCompetentReviewForRamsStatus(form.documentStatus) ? (
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", fontSize: 12, lineHeight: 1.45 }}>
@@ -2526,6 +2567,7 @@ function HazardPicker({
   form,
   selected,
   selectedRows,
+  projects = [],
   orgActivities,
   hazardLibrary,
   tradeCategories,
@@ -2559,6 +2601,8 @@ function HazardPicker({
   orgRamsStarterKey,
   industryPackLabel,
   onApplyIndustryStarter,
+  showFessJobStarters,
+  onApplyFessJobStarter,
   onNext,
   onBack,
 }) {
@@ -2592,7 +2636,7 @@ function HazardPicker({
   const categories = Array.isArray(tradeCategories) ? tradeCategories : [];
   const getByCategorySafe = typeof getByCategory === "function" ? getByCategory : () => [];
   const quickPacks = useMemo(() => {
-    const list = Array.isArray(hazardPacks) ? [...hazardPacks] : [];
+    const list = filterQuickPacksForOrg(Array.isArray(hazardPacks) ? [...hazardPacks] : [], getOrgId());
     return list.sort((a, b) => {
       const sa = String(a?.status || HAZARD_PACK_STATUS.CURRENT);
       const sb = String(b?.status || HAZARD_PACK_STATUS.CURRENT);
@@ -2958,6 +3002,17 @@ function HazardPicker({
           form={form}
           onApplySurveyPack={onApplySurveyPack}
           suggestedPackKey={surveySuggestedKey}
+        />
+      ) : null}
+
+      {showFessJobStarters ? (
+        <FessJobStarterSection
+          form={form}
+          rows={selectedRows}
+          projects={projects}
+          hazardLibrary={library}
+          onApplyFessJobStarter={onApplyFessJobStarter}
+          suggestedStarterKey={form.fessJobStarterKey || ""}
         />
       ) : null}
 
@@ -3882,7 +3937,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
 }
 
 // ─── Step 4 — Preview & save ─────────────────────────────────────────────────
-function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSave, onBack }) {
+function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSave, onBack, onPrintFessSitePack }) {
   const [fpCopied, setFpCopied] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
   const deferredForm = useDeferredValue(form);
@@ -4098,6 +4153,12 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
       <div style={{ fontSize:13, color:"var(--color-text-secondary)", marginBottom:12 }}>
         Review your completed RAMS before saving. Use the table of contents to jump within the preview; toggles control what appears in print.
       </div>
+
+      {isFessOrg() ? (
+        <div style={{ marginBottom: 12 }}>
+          <FessRamsCompletenessBadge form={form} rows={rows} projects={projects} />
+        </div>
+      ) : null}
 
       <PrintPreviewFrame
         html={previewHtml}
@@ -5003,6 +5064,13 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             <div><span style={{ color:"var(--color-text-secondary)" }}>Review due:</span> {fmtDate(form.reviewDate)}</div>
             <div><span style={{ color:"var(--color-text-secondary)" }}>Approved by:</span> {form.approvedBy || "—"}</div>
             <div><span style={{ color:"var(--color-text-secondary)" }}>Approval date:</span> {fmtDate(form.approvalDate)}</div>
+            {isFessOrg() && (form.permitControllerName || form.permitControllerSignDate) ? (
+              <div style={{ gridColumn: "1 / -1" }}>
+                <span style={{ color:"var(--color-text-secondary)" }}>Permit controller:</span>{" "}
+                {form.permitControllerName || "—"}
+                {form.permitControllerSignDate ? ` · ${fmtDate(form.permitControllerSignDate)}` : ""}
+              </div>
+            ) : null}
             {form.clientApproval?.at ? (
               <div style={{ gridColumn:"1 / -1" }}>
                 <span style={{ color:"var(--color-text-secondary)" }}>Client approval:</span>{" "}
@@ -5057,6 +5125,11 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="3" y="1" width="10" height="10" rx="1"/><path d="M1 8h14v6H1z"/><path d="M5 14v-3h6v3"/><circle cx="12" cy="11" r=".5" fill="currentColor"/></svg>
             Print / PDF
           </button>
+          {onPrintFessSitePack ? (
+            <button type="button" onClick={onPrintFessSitePack} style={ss.btn} title="RAMS + 5-page method statement + permits">
+              FESS Site Pack
+            </button>
+          ) : null}
           <button type="button" onClick={onSave} disabled={issueBlockedByCompetency} style={{ ...ss.btnO, opacity: issueBlockedByCompetency ? 0.55 : 1 }}>
             {issueBlockedByCompetency ? "Save blocked (competency)" : "Save RAMS"}
           </button>
@@ -5083,6 +5156,7 @@ function SavedList({
   onPreview,
   onPrint,
   onPrintProjectPack,
+  onPrintFessSitePack,
   onDuplicate,
   onDuplicateToProject,
   onBulkDuplicateToProject,
@@ -5342,11 +5416,11 @@ function SavedList({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onPrintProjectPack(doc)}
+                  onClick={() => (onPrintFessSitePack || onPrintProjectPack)(doc)}
                   style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}
-                  title="One-click Site Pack: RAMS + project permits + audit summary + key contacts (A4)"
+                  title={onPrintFessSitePack ? "FESS site pack: RAMS + 5-page MS + permits (A4)" : "One-click Site Pack: RAMS + project permits + audit summary + key contacts (A4)"}
                 >
-                  Site Pack
+                  {onPrintFessSitePack ? "FESS Site Pack" : "Site Pack"}
                 </button>
                 <button type="button" onClick={()=>onDuplicate(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Duplicate</button>
                 {onDuplicateToProject ? (
@@ -5513,7 +5587,8 @@ export default function RAMSTemplateBuilder() {
     builtInPacksSeededRef.current = true;
     loadRamsHazardLibrary().then(({ library }) => {
       setHazardPacks((prev) => {
-        const next = ensureBuiltInConstructionPacks(prev, library);
+        const withBuiltIn = ensureBuiltInConstructionPacks(prev, library);
+        const next = ensureOrgExclusiveQuickPacks(withBuiltIn, library, getOrgId());
         if (next.length !== prev.length || next.some((p, i) => p.id !== prev[i]?.id)) {
           save(RAMS_HAZARD_PACKS_KEY, next);
         }
@@ -5530,6 +5605,19 @@ export default function RAMSTemplateBuilder() {
       window.removeEventListener("mysafeops-org-settings-updated", refreshStarter);
       window.removeEventListener("mysafeops-hidden-modules-updated", refreshStarter);
     };
+  }, []);
+
+  useEffect(() => {
+    const onOrgChange = () => {
+      setHazardPacks((prev) => {
+        const next = filterQuickPacksForOrg(prev, getOrgId());
+        if (next.length !== prev.length) save(RAMS_HAZARD_PACKS_KEY, next);
+        return next;
+      });
+      builtInPacksSeededRef.current = false;
+    };
+    window.addEventListener(ORG_CHANGED_EVENT, onOrgChange);
+    return () => window.removeEventListener(ORG_CHANGED_EVENT, onOrgChange);
   }, []);
 
   const builderDirty = useMemo(
@@ -5673,7 +5761,21 @@ export default function RAMSTemplateBuilder() {
         projectName: p?.name || formInit.projectName || "",
         location: formInit.location || p?.address || p?.site || "",
       };
+      if (isFessOrg() && p) {
+        const playbook = p.playbookId ? getPlaybook(p.playbookId) : null;
+        const starterKey =
+          playbook?.fessJobStarterKey ||
+          p.fessSuggestedJobStarterKey ||
+          getFessSitePlaybookSuggestion(p.fessSiteTemplateId)?.jobStarterKey ||
+          "";
+        if (starterKey) {
+          const patch = buildFessJobStarterFormPatch(starterKey, p);
+          if (patch) formInit = { ...formInit, ...patch };
+        }
+      }
     }
+
+    fessAutoSeedRef.current = false;
 
     setForm(formInit);
     setSelectedHazards(selInit);
@@ -5704,6 +5806,7 @@ export default function RAMSTemplateBuilder() {
   };
 
   const navHandledRef = useRef(false);
+  const fessAutoSeedRef = useRef(false);
   useEffect(() => {
     if (navHandledRef.current) return;
     navHandledRef.current = true;
@@ -5734,6 +5837,59 @@ export default function RAMSTemplateBuilder() {
 
     startNew({ projectId: t.projectId });
   }, []);
+
+  useEffect(() => {
+    if (view !== "builder" || step !== 2 || !hazardLibReady || !isFessOrg()) return;
+    if (fessAutoSeedRef.current || selectedHazards.length > 0) return;
+    const library = hazardLibRef.current?.library;
+    if (!library?.length) return;
+    fessAutoSeedRef.current = true;
+
+    if (form.fessJobStarterKey) {
+      const project = projects.find((p) => p.id === form.projectId);
+      const patch = buildFessJobStarterFormPatch(form.fessJobStarterKey, project);
+      if (patch) {
+        setForm((prev) => ({ ...prev, ...patch, projectId: prev.projectId, projectName: prev.projectName }));
+      }
+      const hazards = getHazardsForFessJobStarter(
+        form.fessJobStarterKey,
+        library,
+        project?.fessSiteTemplateId || ""
+      );
+      if (hazards.length) {
+        setSelectedHazards(hazards.map((h) => ({ id: h.id })));
+        setEditedRows(hazards.map((h) => stampHazardRow(h, ROW_SOURCE.HAZARD_PACK)));
+        pushToast({
+          type: "success",
+          title: "Job starter loaded",
+          message: `${form.fessJobStarterLabel || form.fessJobStarterKey} — ${hazards.length} hazard rows.`,
+        });
+      }
+      return;
+    }
+
+    const project = projects.find((p) => p.id === form.projectId);
+    const baseline = getFessSiteBaselineHazards(library, project?.fessSiteTemplateId || "");
+    if (baseline.length) {
+      setSelectedHazards(baseline.map((h) => ({ id: h.id })));
+      setEditedRows(baseline.map((h) => stampHazardRow(h, ROW_SOURCE.HAZARD_PACK)));
+      pushToast({
+        type: "info",
+        title: "Standard site RA baseline",
+        message: `${baseline.length} core M&E hazard rows loaded automatically.`,
+      });
+    }
+  }, [
+    view,
+    step,
+    hazardLibReady,
+    selectedHazards.length,
+    form.fessJobStarterKey,
+    form.fessJobStarterLabel,
+    form.projectId,
+    projects,
+    pushToast,
+  ]);
 
   const goToList = () => {
     if (builderDirty && !window.confirm("Leave RAMS builder? Unsaved changes will be lost.")) return;
@@ -6172,6 +6328,39 @@ export default function RAMSTemplateBuilder() {
     trackEvent("rams_survey_pack_applied", { pack: pack.key, hazardsAdded: toAdd.length });
   };
 
+  const applyFessJobStarter = (starterKey) => {
+    if (!isFessOrg() || !starterKey) return;
+    const project = projects.find((p) => p.id === form.projectId);
+    const patch = buildFessJobStarterFormPatch(starterKey, project);
+    if (!patch) return;
+
+    setForm((prev) => ({
+      ...prev,
+      ...patch,
+      projectId: prev.projectId,
+      projectName: prev.projectName,
+    }));
+
+    const recommended = getHazardsForFessJobStarter(
+      starterKey,
+      hazardLibRef.current?.library,
+      project?.fessSiteTemplateId || ""
+    );
+    const existing = new Set(selectedHazards.map((s) => s.id));
+    const toAdd = recommended.filter((h) => h && !existing.has(h.id));
+    if (toAdd.length > 0) {
+      setSelectedHazards((prev) => [...prev, ...toAdd]);
+      setEditedRows((rows) => [...rows, ...toAdd.map((h) => stampHazardRow(h, ROW_SOURCE.HAZARD_PACK))]);
+    }
+
+    pushToast({
+      type: "success",
+      title: "Job starter applied",
+      message: `${patch.fessJobStarterLabel || starterKey} — scope, method and ${toAdd.length || recommended.length} hazard row(s) loaded.`,
+    });
+    trackEvent("rams_fess_job_starter_applied", { starter: starterKey, hazardsAdded: toAdd.length });
+  };
+
   const applyIndustryStarter = (starterKey) => {
     if (isSurveyRamsStarterKey(starterKey)) {
       applySurveyPack(starterKey);
@@ -6306,6 +6495,24 @@ export default function RAMSTemplateBuilder() {
         );
         return;
       }
+      if (isFessOrg()) {
+        const completeness = computeFessRamsCompleteness(form, editedRows, {
+          siteTemplateId: project?.fessSiteTemplateId || "",
+          library: hazardLibRef.current?.library || [],
+        });
+        if (completeness && completeness.score < 85) {
+          const missingHint = completeness.missing.slice(0, 3).map((m) => m.activity).join(", ");
+          if (
+            !window.confirm(
+              `FESS RAMS completeness is ${completeness.score}% (${completeness.presentCount}/${completeness.expectedCount} expected hazards).` +
+                (missingHint ? `\n\nMissing examples: ${missingHint}` : "") +
+                `\n\nSave as ${resolvedStatus.toUpperCase()} anyway?`
+            )
+          ) {
+            return;
+          }
+        }
+      }
     }
     let nextSignatureEvents = Array.isArray(form.signatureEvents) ? [...form.signatureEvents] : [];
     if (
@@ -6378,10 +6585,24 @@ export default function RAMSTemplateBuilder() {
     const doc = requiresCompetentReviewForRamsStatus(resolvedStatus)
       ? stampCompetentReview(docBase, { by: String(form.approvedBy || form.leadEngineer || "").trim() })
       : docBase;
+    const savedDoc = sanitizeRamsDocForOrg(doc, getOrgId());
     setRamsDocs(prev => editingDoc
-      ? prev.map(d=>d.id===doc.id?doc:d)
-      : [doc,...prev]
+      ? prev.map(d=>d.id===savedDoc.id?savedDoc:d)
+      : [savedDoc,...prev]
     );
+    if (isFessOrg() && savedDoc.projectId) {
+      const project = (projects || []).find((p) => p.id === savedDoc.projectId);
+      const msResult = syncFessMsFromRams(savedDoc, { createIfMissing: true, project });
+      if (msResult.ok) {
+        pushToast({
+          type: "info",
+          title: msResult.created ? "Method statement created" : "Method statement synced",
+          message: msResult.created
+            ? "5-page MS draft linked to this RAMS from method statement text."
+            : "Linked method statement updated from RAMS scope and steps.",
+        });
+      }
+    }
     setView("list");
   };
 
@@ -6482,6 +6703,26 @@ export default function RAMSTemplateBuilder() {
       print: false,
       permits: forProject,
       sitePackMeta,
+    });
+  };
+
+  const printFessSitePackForDoc = async (doc) => {
+    if (!isFessOrg()) {
+      printProjectPackForDoc(doc);
+      return;
+    }
+    const allPermits = load("permits_v2", []);
+    if (!doc.projectId) {
+      window.alert("Set the project on this RAMS before generating a FESS site pack.");
+      return;
+    }
+    const forProject = allPermits.filter((p) => p.projectId === doc.projectId);
+    const sitePackMeta = buildSitePackMeta(doc, forProject);
+    trackEvent("fess_site_pack_opened", { permitCount: forProject.length, hasPermits: forProject.length > 0 });
+    await openFessSitePackWindow(doc, doc.rows || [], workers, projects, {
+      permits: forProject,
+      sitePackMeta,
+      print: false,
     });
   };
 
@@ -6734,6 +6975,7 @@ export default function RAMSTemplateBuilder() {
           onPreview={previewSavedDoc}
           onPrint={printSavedDoc}
           onPrintProjectPack={printProjectPackForDoc}
+          onPrintFessSitePack={isFessOrg() ? printFessSitePackForDoc : undefined}
           onDuplicate={duplicateDoc}
           onDuplicateToProject={duplicateDocToProject}
           onBulkDuplicateToProject={bulkDuplicateToProject}
@@ -6864,6 +7106,7 @@ export default function RAMSTemplateBuilder() {
             form={form}
             selected={selectedHazards}
             selectedRows={editedRows}
+            projects={projects}
             orgActivities={orgActivities}
             hazardLibrary={hazardLibRef.current?.library || []}
             tradeCategories={hazardLibRef.current?.tradeCategories || []}
@@ -6899,6 +7142,8 @@ export default function RAMSTemplateBuilder() {
             orgRamsStarterKey={orgRamsStarterKey}
             industryPackLabel={getIndustryPackLabel()}
             onApplyIndustryStarter={applyIndustryStarter}
+            showFessJobStarters={isFessOrg()}
+            onApplyFessJobStarter={applyFessJobStarter}
             onNext={() => setStep(3)}
             onBack={() => setStep(1)}
           />
@@ -6914,6 +7159,11 @@ export default function RAMSTemplateBuilder() {
             editingDoc={editingDoc}
             onSave={handleSave}
             onBack={()=>setStep(3)}
+            onPrintFessSitePack={
+              isFessOrg()
+                ? () => printFessSitePackForDoc({ ...form, rows: editedRows, id: editingDoc?.id || form.id })
+                : undefined
+            }
           />
         )}
       </div>

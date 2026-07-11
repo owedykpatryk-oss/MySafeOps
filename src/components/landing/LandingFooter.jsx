@@ -83,6 +83,9 @@ export default function LandingFooter({ supportEmail }) {
               <li>
                 <Link to="/dpa">Data processing (DPA)</Link>
               </li>
+              <li>
+                <Link to="/accessibility">Accessibility</Link>
+              </li>
             </ul>
           </div>
         </div>

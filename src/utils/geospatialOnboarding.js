@@ -7,9 +7,9 @@ import { applyIndustryPack } from "./orgIndustryPacks";
 import ALL from "../modules/rams/ramsAllHazards.js";
 import { ensureBuiltInConstructionPacks } from "../modules/rams/constructionQuickPacks.js";
 import { seedLegislationRegister } from "./ukLegislationLibrary";
+import { loadRamsHazardPacks, saveRamsHazardPacks } from "./ramsHazardPacksStorage";
 
 const PROGRESS_KEY = "geospatial_onboarding_progress";
-const QUICK_PACKS_KEY = "rams_quick_packs";
 const LEGISLATION_KEY = "legislation_register";
 
 /** @typedef {{ id: string, label: string, hint: string, viewId?: string, autoCheck?: () => boolean }} SetupStep */
@@ -28,7 +28,7 @@ export const GEOSPATIAL_SETUP_STEPS = [
     hint: "Utility mapping, geospatial, site investigation (DCP, boreholes, coring) and related packs.",
     viewId: "rams",
     autoCheck: () => {
-      const packs = load(QUICK_PACKS_KEY, []);
+      const packs = loadRamsHazardPacks([]);
       return (
         packs.some((p) => String(p.id || "").startsWith("builtin_geospatial_")) &&
         packs.some((p) => String(p.id || "").startsWith("builtin_site_investigation_"))
@@ -134,9 +134,9 @@ export function runGeospatialSetupAction(stepId) {
       markGeospatialStepDone(stepId);
       return { ok: true, message: "Surveying & geodesy profile applied." };
     case "geospatial_packs": {
-      const existing = load(QUICK_PACKS_KEY, []);
+      const existing = loadRamsHazardPacks([]);
       const merged = ensureBuiltInConstructionPacks(existing, ALL);
-      save(QUICK_PACKS_KEY, merged);
+      saveRamsHazardPacks(merged);
       markGeospatialStepDone(stepId);
       return { ok: true, message: `Surveying & GI quick packs ready (${merged.length} total).` };
     }
