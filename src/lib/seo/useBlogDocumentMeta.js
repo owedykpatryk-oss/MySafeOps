@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { serializeJsonLd } from "../../utils/safeJsonLd.js";
 
 const MARK = "data-mysafeops-blog-meta";
 const JSON_LD_MARK = "data-mysafeops-blog-jsonld";
@@ -150,7 +151,7 @@ export function useBlogJsonLdScripts(graphs, enabled = true) {
       const el = document.createElement("script");
       el.type = "application/ld+json";
       el.setAttribute(JSON_LD_MARK, "1");
-      el.textContent = JSON.stringify(obj);
+      el.textContent = serializeJsonLd(obj);
       document.head.appendChild(el);
       return el;
     });

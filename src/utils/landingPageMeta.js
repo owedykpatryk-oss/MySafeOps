@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { serializeJsonLd } from "./safeJsonLd.js";
 
 const MARK = "data-mysafeops-landing-meta";
 const LD_MARK = "data-mysafeops-landing-ld";
@@ -78,7 +79,7 @@ export function useLandingHomeDocumentMeta(opts) {
     const script = doc.createElement("script");
     script.type = "application/ld+json";
     script.setAttribute(LD_MARK, "1");
-    script.textContent = JSON.stringify(jsonLd);
+    script.textContent = serializeJsonLd(jsonLd);
     doc.head.appendChild(script);
     stack.push({
       el: script,

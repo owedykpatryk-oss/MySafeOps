@@ -13,7 +13,7 @@ This document supports procurement and internal review. It is not a legal warran
 - **Support contact**: `getSupportEmail()` reads **`VITE_SUPPORT_EMAIL`** (validated shape); default **`support@mysafeops.com`**. Invite emails from Edge Functions use secret **`SUPPORT_CONTACT_EMAIL`** (default `support@mysafeops.com`).
 - **Platform owner**: **`VITE_PLATFORM_OWNER_EMAIL`** controls who sees the Owner dashboard in the app; database RPCs in `supabase/migrations/*superadmin*` must use the same allow-list after you migrate off the legacy address.
 - **Optional error monitoring**: set **`VITE_SENTRY_DSN`** (browser DSN only) to load `@sentry/react` at startup; omit in environments where third-party reporting is not allowed. When set, `RouteErrorBoundary` also calls **`Sentry.captureException`** for lazy-route load failures.
-- **CSP (Report-Only)**: `public/_headers` includes `Content-Security-Policy-Report-Only` for visibility into violations; tune `connect-src` to your real API hosts, then consider promoting to an enforced policy at the CDN.
+- **CSP (enforced)**: canonical policy in `src/config/contentSecurityPolicy.js`; `npm run csp:sync` writes it to `vercel.json` and `public/_headers`. `npm run security:doctor` fails on drift. Browser calls to Overpass and postcodes.io go through same-origin `/api/*` proxies in production; `connect-src` omits those upstream hosts.
 - **Platform owner (DB)**: superadmin RPCs use `public.platform_owner_email_allowlist` — add each owner email in Supabase SQL (in addition to **`VITE_PLATFORM_OWNER_EMAIL`** in the app).
 - **Insider hardening (D1)**: `DELETE /v1/kv` requires admin or supervisor (`user_can_delete_org_kv`); `PUT /v1/kv` checks `user_can_write_org_kv` (operative cannot overwrite workers/projects/training/CDM/timesheets namespaces); audit append validates `action`/`entity` and rate-limits per user; cloud UI role refreshes from `get_my_membership_role` every focus / 5 min; workspace banner on D1 403 (`D1WriteForbiddenBanner`).
 - **Session revoke**: Edge Function `revoke-org-member-sessions` — admins sign out a member globally after role change or removal (`OrgMembers`).
@@ -26,7 +26,7 @@ This document supports procurement and internal review. It is not a legal warran
 - **Secrets**: never commit `.env` / API keys. `VITE_*` variables are exposed to the browser by design — only **anon** Supabase keys belong there; service role keys must never appear in the front-end bundle.
 - **Supabase**: set password policy, MFA, and rate limits in the Supabase Dashboard; review RLS on every table.
 - **Stripe**: use Edge Functions or server routes only for the secret key; Hosted Checkout / Customer Portal as implemented.
-- **CSP**: a strict Content-Security-Policy with nonces is not in `_headers` yet because the app loads third-party APIs (maps, weather, optional AI proxy). Add a nonce-based CSP at the CDN or reverse proxy when you narrow `connect-src` to known origins.
+- **CSP**: enforced policy is maintained in `src/config/contentSecurityPolicy.js` (sync with `npm run csp:sync`). A stricter nonce-based CSP at the CDN remains a future option when `connect-src` can shrink further.
 
 ## Reporting
 

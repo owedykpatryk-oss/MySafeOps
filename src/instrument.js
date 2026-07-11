@@ -4,6 +4,7 @@
  */
 import { getDisplayAppVersion } from "./utils/appBuildInfo.js";
 import { getSentryDsnFromEnv, isValidSentryBrowserDsn } from "./utils/sentryDsn.js";
+import { SENTRY_IGNORE_ERROR_PATTERNS, shouldDropSentryEvent } from "./utils/sentryEventFilters.js";
 
 export const SENTRY_ENABLED = isValidSentryBrowserDsn(getSentryDsnFromEnv());
 
@@ -75,14 +76,11 @@ export async function bootSentryIfConfigured() {
       replaysSessionSampleRate: import.meta.env.PROD ? 0.05 : 0,
       replaysOnErrorSampleRate: import.meta.env.PROD ? 1.0 : 0,
       tracePropagationTargets: tracePropagationTargets(),
-      ignoreErrors: [
-        /ResizeObserver loop/i,
-        /Non-Error promise rejection/i,
-        /Loading chunk [\d]+ failed/i,
-        /Importing a module script failed/i,
-        /NetworkError when attempting to fetch resource/i,
-      ],
-      beforeSend: scrubEventRequest,
+      ignoreErrors: SENTRY_IGNORE_ERROR_PATTERNS,
+      beforeSend(event, hint) {
+        if (shouldDropSentryEvent(event, hint)) return null;
+        return scrubEventRequest(event);
+      },
     });
 
     if (typeof window !== "undefined") {

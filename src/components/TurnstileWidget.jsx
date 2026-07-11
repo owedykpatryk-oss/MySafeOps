@@ -5,6 +5,10 @@ const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render
 
 let scriptPromise = null;
 
+function resetTurnstileScriptPromise() {
+  scriptPromise = null;
+}
+
 function loadTurnstileScript() {
   if (typeof window === "undefined") return Promise.resolve(false);
   if (window.turnstile?.render) return Promise.resolve(true);
@@ -14,7 +18,10 @@ function loadTurnstileScript() {
     const existing = document.querySelector(`script[src^="${SCRIPT_SRC}"]`);
     if (existing) {
       existing.addEventListener("load", () => resolve(Boolean(window.turnstile?.render)));
-      existing.addEventListener("error", () => reject(new Error("Turnstile script failed to load")));
+      existing.addEventListener("error", () => {
+        resetTurnstileScriptPromise();
+        reject(new Error("Turnstile script failed to load"));
+      });
       return;
     }
     const script = document.createElement("script");
@@ -22,8 +29,16 @@ function loadTurnstileScript() {
     script.async = true;
     script.defer = true;
     script.onload = () => resolve(Boolean(window.turnstile?.render));
-    script.onerror = () => reject(new Error("Turnstile script failed to load"));
-    document.head.appendChild(script);
+    script.onerror = () => {
+      resetTurnstileScriptPromise();
+      reject(new Error("Turnstile script failed to load"));
+    };
+    try {
+      document.head.appendChild(script);
+    } catch (err) {
+      resetTurnstileScriptPromise();
+      reject(err instanceof Error ? err : new Error("Turnstile script failed to load"));
+    }
   });
 
   return scriptPromise;

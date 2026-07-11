@@ -43,7 +43,7 @@ export default function SecurityPosturePage() {
           <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.65, color: "var(--color-text-secondary, #64748b)" }}>
             <li>HTTPS for the marketing site and application (TLS terminated by the hosting / CDN provider).</li>
             <li>Security headers (including HSTS and frame protections) are defined in the repository for the static deployment (see <code>vercel.json</code> and <code>public/_headers</code> in the project).</li>
-            <li>Content-Security-Policy is staged as report-only in <code>public/_headers</code> where applicable.</li>
+            <li>Enforced <strong>Content-Security-Policy</strong> on the marketing site and app (see <code>src/config/contentSecurityPolicy.js</code>, synced to <code>vercel.json</code> and <code>public/_headers</code> via <code>npm run csp:sync</code>).</li>
           </ul>
         </section>
 

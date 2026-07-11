@@ -39,6 +39,7 @@
     "security:doctor": "node scripts/security-doctor.mjs",
     "security:doctor:prod": "node scripts/security-doctor.mjs --prod",
     "security:deploy": "node scripts/security-deploy.mjs",
+    "csp:sync": "node scripts/sync-csp-headers.mjs",
     "d1:import-backup": "node scripts/d1-import-backup.mjs",
     "verify:blog": "node scripts/verify-blog.mjs",
     "sync:blog": "node scripts/sync-blog-from-docs.mjs",

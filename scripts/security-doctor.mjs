@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { CONTENT_SECURITY_POLICY } from "../src/config/contentSecurityPolicy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -76,6 +77,27 @@ async function main() {
   else {
     fail("public/_headers missing Content-Security-Policy");
     issues += 1;
+  }
+
+  if (fileIncludes("vercel.json", CONTENT_SECURITY_POLICY)) {
+    ok("vercel.json CSP matches src/config/contentSecurityPolicy.js");
+  } else {
+    fail("vercel.json CSP drift — run npm run csp:sync");
+    issues += 1;
+  }
+
+  if (fileIncludes("public/_headers", CONTENT_SECURITY_POLICY)) {
+    ok("public/_headers CSP matches src/config/contentSecurityPolicy.js");
+  } else {
+    fail("public/_headers CSP drift — run npm run csp:sync");
+    issues += 1;
+  }
+
+  if (fileIncludes("src/config/contentSecurityPolicy.js", "overpass-api.de")) {
+    fail("canonical CSP still allows overpass-api.de — remove from config");
+    issues += 1;
+  } else {
+    ok("canonical CSP omits direct overpass-api.de (use /api/overpass)");
   }
 
   if (fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_delete_org_kv")) {

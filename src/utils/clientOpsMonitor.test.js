@@ -42,6 +42,15 @@ describe("clientOpsMonitor", () => {
     expect(plan.healAction).toBe("csp_connect");
   });
 
+  it("downgrades third-party script parse noise", () => {
+    const plan = classifyAndHeal(
+      "Failed to execute 'appendChild' on 'Node': Missing catch or finally after try"
+    );
+    expect(plan.level).toBe("warn");
+    expect(plan.healAction).toBe("third_party_script");
+    expect(plan.userMessage).toBeUndefined();
+  });
+
   it("stores ops log entries locally", () => {
     logOpsEvent({ level: "warn", source: "test", message: "hello" });
     expect(readOpsLog()).toHaveLength(1);

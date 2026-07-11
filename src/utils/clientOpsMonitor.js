@@ -141,6 +141,17 @@ export function classifyAndHeal(message, meta = {}) {
     };
   }
 
+  if (
+    /missing catch or finally after try/i.test(lower) ||
+    /failed to execute 'appendchild' on 'node'/i.test(lower) ||
+    /turnstile script failed to load/i.test(lower)
+  ) {
+    return {
+      level: "warn",
+      healAction: "third_party_script",
+    };
+  }
+
   return { level: meta.uncaught ? "critical" : "error" };
 }
 
