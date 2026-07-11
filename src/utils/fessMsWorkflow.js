@@ -13,7 +13,7 @@ export function parseRamsMethodSteps(methodText) {
   if (numbered.length > 1) return numbered;
   return raw
     .split(/\n+/)
-    .map((line) => line.replace(/^\d+[\).\s]+/, "").trim())
+    .map((line) => line.replace(/^\d+[).\s]+/, "").trim())
     .filter(Boolean);
 }
 
