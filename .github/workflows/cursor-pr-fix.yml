@@ -19,6 +19,8 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      - uses: actions/checkout@v4
+
       - id: cursor-setup
         uses: ./.github/actions/cursor-setup
         env:

@@ -66,7 +66,6 @@ export function sanitizePrintPreviewHtml(html) {
   if (typeof window !== "undefined") {
     try {
       // Sync path when DOMPurify already loaded (browser print flows).
-      // eslint-disable-next-line no-underscore-dangle
       const purify = window.__mysafeopsPurify;
       if (purify?.sanitize) {
         return purify.sanitize(raw, PRINT_PURIFY_CONFIG);

@@ -21,6 +21,8 @@ jobs:
   trigger-cursor:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - id: cursor-setup
         uses: ./.github/actions/cursor-setup
         env:
