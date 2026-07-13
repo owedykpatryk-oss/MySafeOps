@@ -22,6 +22,7 @@ import {
   getObjectLatLng,
 } from "./permits/projectDrawingGeo";
 import { geoAnchorFromProject } from "../utils/projectBoundary";
+import { loadDrawingEditorPrefs, saveDrawingEditorPrefs } from "./permits/projectDrawingEditorPrefs";
 import {
   validateDrawingImportJson,
   parseKmlPoints,
