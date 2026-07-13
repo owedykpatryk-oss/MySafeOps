@@ -39,8 +39,9 @@ import { openWorkspaceView, setWorkspaceNavTarget, consumeWorkspaceNavTarget } f
 import { getNearestHospital } from "../utils/nearestHospital";
 import { fetchWeatherSummary, fetchWeatherForDate } from "../utils/weatherSummary";
 import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDrawingImport";
-import { parseProjectBoundaryRing } from "../utils/projectBoundary";
+import { parseProjectBoundaryRing, centroidFromBoundaryRing } from "../utils/projectBoundary";
 import ProjectSitePreviewMap from "../components/ProjectSitePreviewMap";
+import ProjectKmlDropZone from "../components/ProjectKmlDropZone";
 import ProjectDashboard from "../components/ProjectDashboard";
 import {
   buildProjectActionContext,
@@ -78,6 +79,8 @@ const PROJECT_STARTERS = [
   {
     id: "general",
     label: "General construction",
+    hint: "New build, refurbishment, mixed trades",
+    icon: "🏗️",
     defaultPermitFlow: ["hot_work", "excavation", "electrical", "confined_space"],
     starterChecklist: [
       "Upload site drawing and mark key zones",
@@ -89,6 +92,8 @@ const PROJECT_STARTERS = [
   {
     id: "fitout",
     label: "Fit-out / interiors",
+    hint: "Occupied buildings, fire alarm isolations, out-of-hours works",
+    icon: "🏢",
     defaultPermitFlow: ["hot_work", "electrical", "loto", "work_at_height"],
     starterChecklist: [
       "Coordinate out-of-hours noisy works",
@@ -100,6 +105,8 @@ const PROJECT_STARTERS = [
   {
     id: "infrastructure",
     label: "Infrastructure / civils",
+    hint: "Roads, drainage, utilities, heavy plant segregation",
+    icon: "🛤️",
     defaultPermitFlow: ["excavation", "lifting", "confined_space", "dsear"],
     starterChecklist: [
       "Plan utility scans and trial holes",
@@ -111,6 +118,8 @@ const PROJECT_STARTERS = [
   {
     id: "maintenance",
     label: "Maintenance / shutdown",
+    hint: "LOTO, residual energy, handback and permit escalation",
+    icon: "🔧",
     defaultPermitFlow: ["loto", "electrical", "hot_work", "confined_space"],
     starterChecklist: [
       "Create lockout/tagout authority matrix",
@@ -120,6 +129,40 @@ const PROJECT_STARTERS = [
     riskHints: ["residual energy", "restart hazards", "restricted access"],
   },
 ];
+
+const PROJECT_WIZARD_STEPS = [
+  { id: 1, short: "Basics", title: "Name your project", lead: "Give the site a clear name and client reference for RAMS, permits and the project hub." },
+  { id: 2, short: "Team", title: "Team and industry", lead: "Pick a starter pack for permit defaults and tell us who owns HSE on site." },
+  { id: 3, short: "Location", title: "Where is the site?", lead: "Postcode or KML boundary — the map updates automatically and feeds weather and nearest A&E." },
+  { id: 4, short: "Timeline", title: "Schedule and risks", lead: "Set target dates, pull a start-date forecast, and tune industry risk hints." },
+  { id: 5, short: "Launch", title: "Ready to go live", lead: "Choose a playbook, confirm permit defaults, and review readiness before save." },
+];
+
+function wizardStepBlockers(step, form, soloMode) {
+  const missing = [];
+  if (step === 1) {
+    if (!String(form?.name || "").trim()) missing.push("project name");
+    if (!String(form?.site || "").trim()) missing.push("site / client");
+  }
+  if (step === 2) {
+    if (soloMode) {
+      if (!String(form?.soloLeadName || form?.owner || "").trim()) missing.push("your name / role");
+    } else {
+      if (!String(form?.owner || "").trim()) missing.push("project owner");
+      if (!String(form?.hseLead || "").trim()) missing.push("HSE lead");
+    }
+  }
+  if (step === 3) {
+    if (!String(form?.address || "").trim()) missing.push("address");
+  }
+  return missing;
+}
+
+function projectHasSiteCoords(form) {
+  const lat = parseFloat(String(form?.lat ?? "").trim());
+  const lng = parseFloat(String(form?.lng ?? "").trim());
+  return Number.isFinite(lat) && Number.isFinite(lng);
+}
 
 function inferProjectStarter(form) {
   const hay = `${form?.name || ""} ${form?.site || ""} ${form?.address || ""}`.toLowerCase();
@@ -1027,6 +1070,8 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const [enrichBusy, setEnrichBusy] = useState(false);
   const [kmlBusy, setKmlBusy] = useState(false);
   const [forecastBusy, setForecastBusy] = useState(false);
+  const [showAdvancedCoords, setShowAdvancedCoords] = useState(false);
+  const [previewBasemap, setPreviewBasemap] = useState("streets");
   const [step, setStep] = useState(1);
   const totalSteps = 5;
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -1036,6 +1081,99 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const starterMeta = PROJECT_STARTERS.find((p) => p.id === form.industryStarter) || PROJECT_STARTERS[0];
   const playbooks = useMemo(() => getPlaybooksForOrg(), []);
   const boundaryRing = parseProjectBoundaryRing(form);
+  const stepMeta = PROJECT_WIZARD_STEPS[step - 1] || PROJECT_WIZARD_STEPS[0];
+  const stepBlockers = wizardStepBlockers(step, form, soloMode);
+  const siteCoordsReady = projectHasSiteCoords(form);
+
+  const applyResolvedCoords = (resolved) => {
+    if (!resolved?.changed) return;
+    setForm((f) => ({
+      ...f,
+      lat: String(resolved.lat),
+      lng: String(resolved.lng),
+      postcode: resolved.postcode ?? f.postcode,
+      address: resolved.address ?? f.address,
+    }));
+  };
+
+  const ensureSiteCoordinates = async (draft = form) => {
+    const lat = parseFloat(String(draft.lat ?? "").trim());
+    const lng = parseFloat(String(draft.lng ?? "").trim());
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng, postcode: draft.postcode, address: draft.address, changed: false };
+    }
+
+    const postcodeQuery = resolveSitePostcodeInput(draft.postcode, draft.address, draft.site);
+    if (postcodeQuery) {
+      const pc = await lookupSitePostcode(postcodeQuery, orgMarketId);
+      if (pc) {
+        return {
+          lat: pc.lat,
+          lng: pc.lng,
+          postcode: pc.postcode,
+          address: draft.address?.trim()
+            ? draft.address
+            : [pc.adminDistrict, pc.region].filter(Boolean).join(", "),
+          changed: true,
+        };
+      }
+    }
+
+    const ring = parseProjectBoundaryRing(draft);
+    const centroid = ring ? centroidFromBoundaryRing(ring) : null;
+    if (centroid) {
+      return {
+        lat: centroid.lat,
+        lng: centroid.lng,
+        postcode: draft.postcode,
+        address: draft.address,
+        changed: true,
+      };
+    }
+
+    return { lat: null, lng: null, postcode: draft.postcode, address: draft.address, changed: false };
+  };
+
+  const lookupPostcodeOnBlur = async (rawPostcode) => {
+    const lat = parseFloat(String(form.lat ?? "").trim());
+    const lng = parseFloat(String(form.lng ?? "").trim());
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return;
+
+    const postcodeQuery = resolveSitePostcodeInput(rawPostcode, form.address, form.site);
+    if (!postcodeQuery) return;
+
+    setGeoBusy(true);
+    setGeoMsg("");
+    try {
+      const resolved = await ensureSiteCoordinates({ ...form, postcode: postcodeQuery });
+      if (resolved.changed) {
+        applyResolvedCoords(resolved);
+        setGeoMsg(geoLookupSuccessMsg(orgMarketId));
+      }
+    } catch (e) {
+      setGeoMsg(e?.message || "Postcode lookup failed.");
+    } finally {
+      setGeoBusy(false);
+    }
+  };
+
+  const goNext = async () => {
+    if (step === 3) {
+      setGeoBusy(true);
+      try {
+        const resolved = await ensureSiteCoordinates(form);
+        if (resolved.changed) {
+          applyResolvedCoords(resolved);
+          setGeoMsg(geoLookupSuccessMsg(orgMarketId));
+        }
+      } catch (e) {
+        setGeoMsg(e?.message || "Could not resolve site coordinates.");
+      } finally {
+        setGeoBusy(false);
+      }
+    }
+    setStep((s) => Math.min(totalSteps, s + 1));
+  };
 
   const importKmlBoundary = async (file) => {
     if (!file) return;
@@ -1049,16 +1187,25 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         setGeoMsg("No polygon found in KML — use a closed site boundary.");
         return;
       }
-      setForm((f) => ({
-        ...f,
-        ...boundary,
-        boundaryImportedAt: new Date().toISOString(),
-        mapEscapeRoutes: (geom.lineStrings || []).map((line, idx) => ({
-          id: `mer_${Date.now()}_${idx}`,
-          name: line.name || `Route ${idx + 1}`,
-          points: line.points.map((p) => ({ lat: p.lat, lng: p.lng })),
-        })),
-      }));
+      const centroid = centroidFromBoundaryRing(boundary.boundaryPoints);
+      setForm((f) => {
+        const hasCoords =
+          Number.isFinite(parseFloat(String(f.lat ?? "").trim())) &&
+          Number.isFinite(parseFloat(String(f.lng ?? "").trim()));
+        return {
+          ...f,
+          ...boundary,
+          boundaryImportedAt: new Date().toISOString(),
+          mapEscapeRoutes: (geom.lineStrings || []).map((line, idx) => ({
+            id: `mer_${Date.now()}_${idx}`,
+            name: line.name || `Route ${idx + 1}`,
+            points: line.points.map((p) => ({ lat: p.lat, lng: p.lng })),
+          })),
+          ...(hasCoords || !centroid
+            ? {}
+            : { lat: String(centroid.lat), lng: String(centroid.lng) }),
+        };
+      });
       const routeNote = geom.lineStrings?.length ? ` · ${geom.lineStrings.length} map route(s)` : "";
       setGeoMsg(`KML boundary imported (${boundary.boundaryPoints.length} points)${routeNote}.`);
     } catch (e) {
@@ -1293,370 +1440,513 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     }
   };
 
+  const fetchSiteData = async () => {
+    setEnrichBusy(true);
+    setGeoBusy(true);
+    setGeoMsg("");
+    try {
+      const resolved = await ensureSiteCoordinates(form);
+      let lat = resolved.lat;
+      let lng = resolved.lng;
+      if (resolved.changed) {
+        applyResolvedCoords(resolved);
+      } else if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        lat = parseFloat(String(form.lat ?? "").trim(), 10);
+        lng = parseFloat(String(form.lng ?? "").trim(), 10);
+      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        setGeoMsg("Enter a postcode or import a KML boundary first.");
+        return;
+      }
+      const [weather, hospital] = await Promise.all([
+        fetchWeatherSummary(lat, lng).catch(() => null),
+        getNearestHospital(lat, lng).catch(() => null),
+      ]);
+      setForm((f) => ({
+        ...f,
+        lat: String(lat),
+        lng: String(lng),
+        weatherSnapshot: weather?.text || f.weatherSnapshot || "",
+        weatherFetchedAt: weather?.fetchedAt || f.weatherFetchedAt || "",
+        nearestHospital: hospital?.summary || f.nearestHospital || "",
+        hospitalDirectionsUrl: hospital?.directions_url || f.hospitalDirectionsUrl || "",
+      }));
+      const bits = ["coordinates"];
+      if (weather) bits.push("weather");
+      if (hospital) bits.push(`nearest ${getEmergencyServicesLabel(orgMarketId)}`);
+      setGeoMsg(`Updated: ${bits.join(", ")}.`);
+    } catch (e) {
+      setGeoMsg(e?.message || "Site data fetch failed.");
+    } finally {
+      setEnrichBusy(false);
+      setGeoBusy(false);
+    }
+  };
+
+  const wizardMap = (
+    <ProjectSitePreviewMap
+      lat={form.lat}
+      lng={form.lng}
+      boundaryRing={boundaryRing}
+      escapeRoutes={form.mapEscapeRoutes || []}
+      label={form.name || "Site preview"}
+      height={step >= 3 ? 280 : 220}
+      showLegend
+      basemap={previewBasemap}
+      onBasemapChange={setPreviewBasemap}
+      showBasemapToggle
+      animateZoom
+      onKmlDrop={step === 3 ? importKmlBoundary : undefined}
+      kmlDropBusy={kmlBusy}
+    />
+  );
+
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
-        <h2 style={{ marginTop: 0 }}>{item ? "Edit project wizard" : "New project wizard"}</h2>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-          <span style={ss.chip}>Step {step}/{totalSteps}</span>
-          <span style={{ ...ss.chip, background: health >= 80 ? "#EAF3DE" : health >= 50 ? "#FAEEDA" : "#FCEBEB", color: health >= 80 ? "#27500A" : health >= 50 ? "#633806" : "#791F1F" }}>
-            Health score {health}%
-          </span>
-          <button type="button" style={{ ...ss.btn, marginLeft: "auto" }} onClick={applyAutoSuggest}>
+    <div className="project-wizard-overlay" role="dialog" aria-modal="true" aria-labelledby="project-wizard-title">
+      <div className={`project-wizard-panel${step >= 3 ? " project-wizard-panel--wide" : ""}`} style={ss.card}>
+        <div className="project-wizard-header">
+          <div>
+            <h2 id="project-wizard-title" className="project-wizard-header__title">
+              {item ? "Edit project" : "New project"}
+            </h2>
+            <p className="project-wizard-header__subtitle">
+              Step {step} of {totalSteps} · {stepMeta.short}
+            </p>
+          </div>
+          <button type="button" className="project-wizard-header__auto" style={ss.btn} onClick={applyAutoSuggest}>
             Auto-suggest
           </button>
         </div>
 
-        {step === 1 ? (
-          <>
-            <label style={ss.lbl}>Project name</label>
-            <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} />
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Site / client</label>
-            <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)} />
-          </>
-        ) : null}
-
-        {step === 2 ? (
-          <>
-            <label style={{ ...ss.lbl }}>Industry starter</label>
-            <select
-              style={ss.inp}
-              value={form.industryStarter || "general"}
-              onChange={(e) => {
-                const id = e.target.value;
-                const preset = PROJECT_STARTERS.find((p) => p.id === id) || PROJECT_STARTERS[0];
-                setForm((f) => ({
-                  ...f,
-                  industryStarter: id,
-                  permitDefaults: { ...(f.permitDefaults || {}), requiredPermitTypes: preset.defaultPermitFlow },
-                }));
+        <div className="project-wizard-progress" aria-label="Wizard progress">
+          {PROJECT_WIZARD_STEPS.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className={`project-wizard-progress__step${s.id === step ? " project-wizard-progress__step--active" : ""}${s.id < step ? " project-wizard-progress__step--done" : ""}`}
+              onClick={() => {
+                if (s.id < step) setStep(s.id);
               }}
+              disabled={s.id > step}
+              aria-current={s.id === step ? "step" : undefined}
+              title={s.title}
             >
-              {PROJECT_STARTERS.map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
-              ))}
-            </select>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 12, fontSize: 13, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={soloMode}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  const lead = form.soloLeadName || deriveUserDisplayName(user, orgSettings);
-                  setForm((f) =>
-                    checked
-                      ? applySoloProjectRoles({ ...f, soloMode: true }, lead)
-                      : { ...f, soloMode: false }
-                  );
-                }}
-                style={{ marginTop: 3 }}
-              />
-              <span>
-                <strong>Solo site — just me on this job</strong>
-                <span style={{ display: "block", fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2, lineHeight: 1.4 }}>
-                  One person can be project owner, HSE lead and permit approver. MySafeOps will add your profile automatically if needed.
-                </span>
-              </span>
-            </label>
-            {soloMode ? (
-              <>
-                <label style={{ ...ss.lbl, marginTop: 10 }}>Your name and role</label>
-                <input
-                  style={ss.inp}
-                  value={form.soloLeadName || ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setForm((f) => applySoloProjectRoles({ ...f, soloLeadName: v }, v));
-                  }}
-                  placeholder="e.g. Pat O — Principal contractor / HSE"
-                />
-              </>
-            ) : (
-              <>
-                <label style={{ ...ss.lbl, marginTop: 10 }}>Project owner</label>
-                <input style={ss.inp} value={form.owner || ""} onChange={(e) => set("owner", e.target.value)} placeholder="e.g. PM / contract manager" />
-                <label style={{ ...ss.lbl, marginTop: 10 }}>HSE lead</label>
-                <input style={ss.inp} value={form.hseLead || ""} onChange={(e) => set("hseLead", e.target.value)} />
-                <label style={{ ...ss.lbl, marginTop: 10 }}>Site manager</label>
-                <input style={ss.inp} value={form.siteManager || ""} onChange={(e) => set("siteManager", e.target.value)} />
-                <label style={{ ...ss.lbl, marginTop: 10 }}>Main contractor lead</label>
-                <input style={ss.inp} value={form.contractorLead || ""} onChange={(e) => set("contractorLead", e.target.value)} />
-              </>
-            )}
-          </>
+              <span className="project-wizard-progress__dot">{s.id < step ? "✓" : s.id}</span>
+              <span className="project-wizard-progress__label">{s.short}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="project-wizard-health">
+          <div className="project-wizard-health__meta">
+            <span className="project-wizard-health__label">Readiness</span>
+            <span className={`project-wizard-health__score project-wizard-health__score--${health >= 80 ? "good" : health >= 50 ? "mid" : "low"}`}>
+              {health}%
+            </span>
+          </div>
+          <div className="project-wizard-health__bar" aria-hidden>
+            <div className="project-wizard-health__fill" style={{ width: `${health}%` }} />
+          </div>
+        </div>
+
+        <div className="project-wizard-step-intro">
+          <h3 className="project-wizard-step-intro__title">{stepMeta.title}</h3>
+          <p className="project-wizard-step-intro__lead">{stepMeta.lead}</p>
+        </div>
+
+        {stepBlockers.length > 0 ? (
+          <div className="project-wizard-alert" role="status">
+            Complete before continuing: {stepBlockers.join(", ")}
+          </div>
         ) : null}
 
-        {step === 3 ? (
-          <>
-            <label style={ss.lbl}>Address</label>
-            <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)} />
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Postcode</label>
-            <input
-              style={ss.inp}
-              value={form.postcode || ""}
-              onChange={(e) => set("postcode", e.target.value)}
-              onBlur={(e) => {
-                const normalised = resolveSitePostcodeInput(e.target.value);
-                if (normalised && normalised !== form.postcode) set("postcode", normalised);
-              }}
-              placeholder={`e.g. ${sitePostcodeExample(orgMarketId)}`}
-              autoComplete="postal-code"
-            />
-            <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginTop: 4, marginBottom: 4 }}>
-              {getPostcodeHint(orgMarketId)} Weather + nearest {getEmergencyServicesLabel(orgMarketId)} feeds site safety docs and emergency contacts.
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-              <div>
-                <label style={ss.lbl}>Latitude (optional)</label>
-                <input style={ss.inp} inputMode="decimal" value={form.lat ?? ""} onChange={(e) => set("lat", e.target.value)} placeholder="e.g. 51.5" />
+        {step < 3 ? (
+          <div className="project-wizard-body">
+            {step === 1 ? (
+              <div className="project-wizard-section">
+                <label style={ss.lbl}>Project name</label>
+                <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus />
+                <label style={{ ...ss.lbl, marginTop: 10 }}>Site / client</label>
+                <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)} />
               </div>
-              <div>
-                <label style={ss.lbl}>Longitude (optional)</label>
-                <input style={ss.inp} inputMode="decimal" value={form.lng ?? ""} onChange={(e) => set("lng", e.target.value)} placeholder="e.g. -0.12" />
-              </div>
-            </div>
-            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-              <button type="button" style={ss.btn} disabled={geoBusy} onClick={geocode}>
-                {geoBusy ? "Looking up…" : "Lookup coordinates"}
-              </button>
-              <button type="button" style={ss.btnP} disabled={enrichBusy} onClick={enrichSite}>
-                {enrichBusy ? "Fetching…" : "Weather + nearest A&E"}
-              </button>
-              {geoMsg && <span style={{ fontSize: 12, color: "#b45309" }}>{geoMsg}</span>}
-            </div>
-            {(form.weatherSnapshot || form.nearestHospital) && (
-              <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: "#f0fdfa", border: "0.5px solid #99f6e4", fontSize: 12, lineHeight: 1.45 }}>
-                {form.weatherSnapshot ? <div style={{ marginBottom: 6 }}><strong>Weather:</strong> {form.weatherSnapshot}</div> : null}
-                {form.nearestHospital ? (
-                  <div>
-                    <strong>Nearest A&E:</strong> {form.nearestHospital}
-                    {form.hospitalDirectionsUrl ? (
-                      <>
-                        {" "}
-                        <a href={form.hospitalDirectionsUrl} target="_blank" rel="noreferrer" style={{ color: "#0d9488" }}>
-                          Directions
-                        </a>
-                      </>
+            ) : null}
+
+            {step === 2 ? (
+              <>
+                <div className="project-wizard-section">
+                  <div style={ss.lbl}>Industry starter</div>
+                  <div className="project-wizard-industry-grid">
+                    {PROJECT_STARTERS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={`project-wizard-industry-card${form.industryStarter === preset.id ? " project-wizard-industry-card--active" : ""}`}
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            industryStarter: preset.id,
+                            permitDefaults: { ...(f.permitDefaults || {}), requiredPermitTypes: preset.defaultPermitFlow },
+                          }))
+                        }
+                      >
+                        <span className="project-wizard-industry-card__icon" aria-hidden>{preset.icon}</span>
+                        <span className="project-wizard-industry-card__title">{preset.label}</span>
+                        <span className="project-wizard-industry-card__hint">{preset.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="project-wizard-section">
+                  <label className="project-wizard-solo-toggle">
+                    <input
+                      type="checkbox"
+                      checked={soloMode}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        const lead = form.soloLeadName || deriveUserDisplayName(user, orgSettings);
+                        setForm((f) =>
+                          checked
+                            ? applySoloProjectRoles({ ...f, soloMode: true }, lead)
+                            : { ...f, soloMode: false }
+                        );
+                      }}
+                    />
+                    <span>
+                      <strong>Solo site — just me on this job</strong>
+                      <span className="project-wizard-solo-toggle__hint">
+                        One person can be project owner, HSE lead and permit approver.
+                      </span>
+                    </span>
+                  </label>
+                  {soloMode ? (
+                    <>
+                      <label style={{ ...ss.lbl, marginTop: 10 }}>Your name and role</label>
+                      <input
+                        style={ss.inp}
+                        value={form.soloLeadName || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setForm((f) => applySoloProjectRoles({ ...f, soloLeadName: v }, v));
+                        }}
+                        placeholder="e.g. Pat O — Principal contractor / HSE"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <label style={{ ...ss.lbl, marginTop: 10 }}>Project owner</label>
+                      <input style={ss.inp} value={form.owner || ""} onChange={(e) => set("owner", e.target.value)} placeholder="e.g. PM / contract manager" />
+                      <label style={{ ...ss.lbl, marginTop: 10 }}>HSE lead</label>
+                      <input style={ss.inp} value={form.hseLead || ""} onChange={(e) => set("hseLead", e.target.value)} />
+                      <label style={{ ...ss.lbl, marginTop: 10 }}>Site manager</label>
+                      <input style={ss.inp} value={form.siteManager || ""} onChange={(e) => set("siteManager", e.target.value)} />
+                      <label style={{ ...ss.lbl, marginTop: 10 }}>Main contractor lead</label>
+                      <input style={ss.inp} value={form.contractorLead || ""} onChange={(e) => set("contractorLead", e.target.value)} />
+                    </>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : (
+          <div className="project-wizard-layout">
+            <div className="project-wizard-main">
+              {step === 3 ? (
+                <>
+                  <div className="project-wizard-section">
+                    <div className="project-wizard-section__head">
+                      <h4 className="project-wizard-section__title">Address and postcode</h4>
+                      {siteCoordsReady ? (
+                        <span className="project-wizard-status project-wizard-status--ok">Site located</span>
+                      ) : (
+                        <span className="project-wizard-status">Awaiting location</span>
+                      )}
+                    </div>
+                    <label style={ss.lbl}>Address</label>
+                    <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)} />
+                    <label style={{ ...ss.lbl, marginTop: 10 }}>Postcode</label>
+                    <input
+                      style={ss.inp}
+                      value={form.postcode || ""}
+                      onChange={(e) => set("postcode", e.target.value)}
+                      onBlur={(e) => {
+                        const normalised = resolveSitePostcodeInput(e.target.value);
+                        if (normalised && normalised !== form.postcode) set("postcode", normalised);
+                        lookupPostcodeOnBlur(normalised || e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        const normalised = resolveSitePostcodeInput(form.postcode);
+                        if (normalised && normalised !== form.postcode) set("postcode", normalised);
+                        lookupPostcodeOnBlur(normalised || form.postcode);
+                      }}
+                      placeholder={`e.g. ${sitePostcodeExample(orgMarketId)}`}
+                      autoComplete="postal-code"
+                    />
+                    {siteCoordsReady ? (
+                      <p className="project-wizard-location-resolved">
+                        <span className="project-wizard-location-resolved__pin" aria-hidden>📍</span>
+                        {[form.postcode, form.address?.split(",")[0]?.trim()].filter(Boolean).join(" · ") || "Site coordinates set"}
+                      </p>
+                    ) : null}
+                    <p className="project-wizard-hint">
+                      {getPostcodeHint(orgMarketId)} Map, weather and nearest {getEmergencyServicesLabel(orgMarketId)} use these details.
+                    </p>
+                    <div className="project-wizard-actions">
+                      <button type="button" style={ss.btnP} disabled={enrichBusy || geoBusy} onClick={fetchSiteData}>
+                        {enrichBusy || geoBusy ? "Fetching site data…" : "Fetch site data"}
+                      </button>
+                      <button
+                        type="button"
+                        className="project-wizard-link-btn"
+                        onClick={() => setShowAdvancedCoords((v) => !v)}
+                        aria-expanded={showAdvancedCoords}
+                      >
+                        {showAdvancedCoords ? "Hide advanced" : "Advanced coordinates"}
+                      </button>
+                    </div>
+                    {geoMsg ? <p className="project-wizard-msg">{geoMsg}</p> : null}
+                    {showAdvancedCoords ? (
+                      <div className="project-wizard-advanced">
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <div>
+                            <label style={ss.lbl}>Latitude</label>
+                            <input style={ss.inp} inputMode="decimal" value={form.lat ?? ""} onChange={(e) => set("lat", e.target.value)} placeholder="e.g. 51.5" />
+                          </div>
+                          <div>
+                            <label style={ss.lbl}>Longitude</label>
+                            <input style={ss.inp} inputMode="decimal" value={form.lng ?? ""} onChange={(e) => set("lng", e.target.value)} placeholder="e.g. -0.12" />
+                          </div>
+                        </div>
+                        <div className="project-wizard-actions" style={{ marginTop: 8 }}>
+                          <button type="button" style={ss.btn} disabled={geoBusy} onClick={geocode}>
+                            {geoBusy ? "Looking up…" : "Lookup coordinates only"}
+                          </button>
+                          <button type="button" style={ss.btn} disabled={enrichBusy} onClick={enrichSite}>
+                            {enrichBusy ? "Fetching…" : "Weather + A&E only"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    {(form.weatherSnapshot || form.nearestHospital) && (
+                      <div className="project-wizard-enrich-card">
+                        {form.weatherSnapshot ? <div><strong>Weather:</strong> {form.weatherSnapshot}</div> : null}
+                        {form.nearestHospital ? (
+                          <div>
+                            <strong>Nearest A&E:</strong> {form.nearestHospital}
+                            {form.hospitalDirectionsUrl ? (
+                              <>
+                                {" "}
+                                <a href={form.hospitalDirectionsUrl} target="_blank" rel="noreferrer">Directions</a>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="project-wizard-section">
+                    <h4 className="project-wizard-section__title">Site boundary (KML)</h4>
+                    <p className="project-wizard-hint">Import a polygon from survey/GIS — shown on the site map and incident hotspot map.</p>
+                    <ProjectKmlDropZone
+                      onFile={importKmlBoundary}
+                      busy={kmlBusy}
+                      buttonLabel="Import KML boundary"
+                      hint="Drop a .kml or .kmz site boundary here"
+                    >
+                      {boundaryRing ? (
+                        <div className="project-wizard-kml-meta">
+                          <span>
+                            Loaded: {form.boundaryName || "Site boundary"}
+                            {form.boundarySource ? ` · ${form.boundarySource}` : ""}
+                            {" "}({boundaryRing.length} pts)
+                          </span>
+                          <button type="button" className="project-wizard-link-btn" onClick={clearBoundary}>
+                            Clear boundary
+                          </button>
+                        </div>
+                      ) : null}
+                    </ProjectKmlDropZone>
+                    <button
+                      type="button"
+                      className="project-wizard-link-btn"
+                      style={{ marginTop: 8 }}
+                      onClick={() => {
+                        setWorkspaceNavTarget({ viewId: "project-drawings", projectId: form.id });
+                        openWorkspaceView({ viewId: "project-drawings" });
+                      }}
+                    >
+                      Open plan markup (PDF / escape routes)
+                    </button>
+                  </div>
+                </>
+              ) : null}
+
+              {step === 4 ? (
+                <>
+                  <div className="project-wizard-section">
+                    <h4 className="project-wizard-section__title">Target dates</h4>
+                    <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+                      <div>
+                        <label style={ss.lbl}>Target start</label>
+                        <input type="date" style={ss.inp} value={form.timelineStart || ""} onChange={(e) => set("timelineStart", e.target.value)} />
+                      </div>
+                      <div>
+                        <label style={ss.lbl}>Target end</label>
+                        <input type="date" style={ss.inp} value={form.timelineEnd || ""} onChange={(e) => set("timelineEnd", e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="project-wizard-actions" style={{ marginTop: 10 }}>
+                      <button type="button" style={ss.btnP} disabled={forecastBusy} onClick={fetchStartForecast}>
+                        {forecastBusy ? "Fetching…" : "Weather forecast for start date"}
+                      </button>
+                    </div>
+                    {geoMsg ? <p className="project-wizard-msg">{geoMsg}</p> : null}
+                    {form.weatherAtStartSnapshot ? (
+                      <div className="project-wizard-forecast-card">
+                        <strong>Start-date forecast</strong> ({form.weatherAtStartDate || form.timelineStart}): {form.weatherAtStartSnapshot}
+                      </div>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
-            )}
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--color-border-tertiary,#e2e8f0)" }}>
-              <label style={ss.lbl}>Site boundary (KML)</label>
-              <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginBottom: 8 }}>
-                Import a polygon from survey/GIS — shown on the site map and incident hotspot map.
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                <label style={{ ...ss.btn, cursor: "pointer", margin: 0 }}>
-                  {kmlBusy ? "Importing…" : "Import KML boundary"}
-                  <input
-                    type="file"
-                    accept=".kml,.kmz,application/vnd.google-earth.kml+xml,text/xml"
-                    hidden
-                    disabled={kmlBusy}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) importKmlBoundary(f);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                {boundaryRing ? (
-                  <button type="button" style={ss.btn} onClick={clearBoundary}>
-                    Clear boundary ({boundaryRing.length} pts)
-                  </button>
-                ) : null}
-              </div>
-              {form.boundaryName ? (
-                <div style={{ fontSize: 12, marginTop: 8, color: "var(--color-text-secondary)" }}>
-                  Loaded: {form.boundaryName}
-                  {form.boundarySource ? ` · ${form.boundarySource}` : ""}
-                </div>
+                  <div className="project-wizard-section">
+                    <label style={ss.lbl}>Risk hints (editable)</label>
+                    <textarea
+                      style={{ ...ss.inp, minHeight: 84, resize: "vertical" }}
+                      value={(form.riskRegister || []).join("\n")}
+                      onChange={(e) =>
+                        set(
+                          "riskRegister",
+                          e.target.value
+                            .split(/\r?\n/)
+                            .map((x) => x.trim())
+                            .filter(Boolean)
+                            .slice(0, 12)
+                        )
+                      }
+                      placeholder="One risk per line"
+                    />
+                  </div>
+                </>
               ) : null}
-              <ProjectSitePreviewMap
-                lat={form.lat}
-                lng={form.lng}
-                boundaryRing={boundaryRing}
-                escapeRoutes={form.mapEscapeRoutes || []}
-                label={form.name || "Site preview"}
-              />
-              <div style={{ marginTop: 8 }}>
-                <button
-                  type="button"
-                  style={{ ...ss.btn, fontSize: 12 }}
-                  onClick={() => {
-                    setWorkspaceNavTarget({ viewId: "project-drawings", projectId: form.id });
-                    openWorkspaceView({ viewId: "project-drawings" });
-                  }}
-                >
-                  Open plan markup (PDF / escape routes)
-                </button>
-              </div>
-            </div>
-          </>
-        ) : null}
 
-        {step === 4 ? (
-          <>
-            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-              <div>
-                <label style={ss.lbl}>Target start</label>
-                <input type="date" style={ss.inp} value={form.timelineStart || ""} onChange={(e) => set("timelineStart", e.target.value)} />
-              </div>
-              <div>
-                <label style={ss.lbl}>Target end</label>
-                <input type="date" style={ss.inp} value={form.timelineEnd || ""} onChange={(e) => set("timelineEnd", e.target.value)} />
-              </div>
-            </div>
-            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-              <button type="button" style={ss.btnP} disabled={forecastBusy} onClick={fetchStartForecast}>
-                {forecastBusy ? "Fetching…" : "Weather forecast for start date"}
-              </button>
-              {geoMsg && step === 4 ? <span style={{ fontSize: 12, color: "#b45309" }}>{geoMsg}</span> : null}
-            </div>
-            {form.weatherAtStartSnapshot ? (
-              <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: "#eff6ff", border: "0.5px solid #bfdbfe", fontSize: 12 }}>
-                <strong>Start-date forecast</strong> ({form.weatherAtStartDate || form.timelineStart}): {form.weatherAtStartSnapshot}
-              </div>
-            ) : null}
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Risk hints (editable)</label>
-            <textarea
-              style={{ ...ss.inp, minHeight: 84, resize: "vertical" }}
-              value={(form.riskRegister || []).join("\n")}
-              onChange={(e) =>
-                set(
-                  "riskRegister",
-                  e.target.value
-                    .split(/\r?\n/)
-                    .map((x) => x.trim())
-                    .filter(Boolean)
-                    .slice(0, 12)
-                )
-              }
-              placeholder="One risk per line"
-            />
-          </>
-        ) : null}
+              {step === 5 ? (
+                <>
+                  <div className="project-wizard-summary">
+                    <h4 className="project-wizard-summary__title">Project summary</h4>
+                    <dl className="project-wizard-summary__grid">
+                      <div><dt>Project</dt><dd>{form.name || "—"}</dd></div>
+                      <div><dt>Site / client</dt><dd>{form.site || "—"}</dd></div>
+                      <div><dt>Location</dt><dd>{[form.address, form.postcode].filter(Boolean).join(", ") || "—"}</dd></div>
+                      <div><dt>Industry</dt><dd>{starterMeta.label}</dd></div>
+                      <div><dt>Timeline</dt><dd>{form.timelineStart && form.timelineEnd ? `${form.timelineStart} → ${form.timelineEnd}` : "—"}</dd></div>
+                      <div><dt>Team</dt><dd>{soloMode ? (form.soloLeadName || "Solo mode") : [form.owner, form.hseLead].filter(Boolean).join(" · ") || "—"}</dd></div>
+                    </dl>
+                  </div>
 
-        {step === 5 ? (
-          <>
-            <label style={{ ...ss.lbl, marginTop: 4 }}>Project playbook</label>
-            <p style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", margin: "0 0 8px" }}>
-              One click on save: creates RAMS, survey, PTW and method statement drafts for this site type.
-            </p>
-            <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
-              {playbooks.map((pb) => (
-                <label
-                  key={pb.id}
-                  style={{
-                    display: "flex",
-                    gap: 10,
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border:
-                      form.playbookId === pb.id
-                        ? "1px solid #0d9488"
-                        : "1px solid var(--color-border-tertiary,#e5e5e5)",
-                    background: form.playbookId === pb.id ? "#E1F5EE" : "var(--color-background-primary,#fff)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="playbookId"
-                    checked={form.playbookId === pb.id}
-                    onChange={() => {
-                      const playbook = getPlaybook(pb.id);
-                      setForm((f) => ({
-                        ...f,
-                        playbookId: pb.id,
-                        industryStarter: playbook.industryStarter || f.industryStarter,
-                        permitDefaults: {
-                          ...(f.permitDefaults || {}),
-                          requiredPermitTypes: playbook.permitTypes || f.permitDefaults?.requiredPermitTypes,
-                        },
-                      }));
-                    }}
-                  />
-                  <span>
-                    <strong style={{ display: "block", fontSize: 13 }}>{pb.label}</strong>
-                    <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{pb.description}</span>
-                  </span>
-                </label>
-              ))}
+                  <div className="project-wizard-section">
+                    <label style={{ ...ss.lbl, marginTop: 4 }}>Project playbook</label>
+                    <p className="project-wizard-hint">On save: creates RAMS, survey, PTW and method statement drafts for this site type.</p>
+                    <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                      {playbooks.map((pb) => (
+                        <label
+                          key={pb.id}
+                          className={`project-wizard-playbook${form.playbookId === pb.id ? " project-wizard-playbook--active" : ""}`}
+                        >
+                          <input
+                            type="radio"
+                            name="playbookId"
+                            checked={form.playbookId === pb.id}
+                            onChange={() => {
+                              const playbook = getPlaybook(pb.id);
+                              setForm((f) => ({
+                                ...f,
+                                playbookId: pb.id,
+                                industryStarter: playbook.industryStarter || f.industryStarter,
+                                permitDefaults: {
+                                  ...(f.permitDefaults || {}),
+                                  requiredPermitTypes: playbook.permitTypes || f.permitDefaults?.requiredPermitTypes,
+                                },
+                              }));
+                            }}
+                          />
+                          <span>
+                            <strong>{pb.label}</strong>
+                            <span className="project-wizard-playbook__desc">{pb.description}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <label style={{ ...ss.lbl, marginTop: 10 }}>Required permit types (one per line)</label>
+                    <textarea
+                      style={{ ...ss.inp, minHeight: 72, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
+                      value={(form.permitDefaults?.requiredPermitTypes || starterMeta.defaultPermitFlow || []).join("\n")}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          permitDefaults: {
+                            ...(f.permitDefaults || {}),
+                            requiredPermitTypes: e.target.value
+                              .split(/\r?\n/)
+                              .map((x) => x.trim())
+                              .filter(Boolean)
+                              .slice(0, 12),
+                          },
+                        }))
+                      }
+                      placeholder="hot_work&#10;excavation&#10;electrical"
+                    />
+                    <div className="project-wizard-readiness">
+                      <strong>Missing before go-live:</strong>{" "}
+                      {missing.length === 0 ? (
+                        <span className="project-wizard-readiness--ok">none{soloMode ? " · solo mode" : ""}</span>
+                      ) : (
+                        <span className="project-wizard-readiness--warn">{missing.join(", ")}</span>
+                      )}
+                    </div>
+                    {soloMode ? (
+                      <p className="project-wizard-hint">Coordinates are recommended for weather and nearest A&E, but not required to save in solo mode.</p>
+                    ) : null}
+                    <div className="project-wizard-checklist">
+                      <div className="project-wizard-checklist__title">Generated startup checklist</div>
+                      <ul>
+                        {buildStartupChecklist(form, { soloMode, preset: starterMeta }).slice(0, 8).map((it) => (
+                          <li key={it.id}>{it.text}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </div>
-            <div style={{ fontSize: 13, marginBottom: 8 }}>
-              <strong>Starter:</strong> {starterMeta.label}
-            </div>
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Required permit types (one per line)</label>
-            <textarea
-              style={{ ...ss.inp, minHeight: 72, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
-              value={(form.permitDefaults?.requiredPermitTypes || starterMeta.defaultPermitFlow || []).join("\n")}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  permitDefaults: {
-                    ...(f.permitDefaults || {}),
-                    requiredPermitTypes: e.target.value
-                      .split(/\r?\n/)
-                      .map((x) => x.trim())
-                      .filter(Boolean)
-                      .slice(0, 12),
-                  },
-                }))
-              }
-              placeholder="hot_work&#10;excavation&#10;electrical"
-            />
-            <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginTop: 4 }}>
-              Used by dashboard and Permits to track missing PTWs for this site.
-            </div>
-            <div style={{ marginTop: 10, fontSize: 12 }}>
-              <strong>Missing before go-live:</strong>{" "}
-              {missing.length === 0 ? (
-                <span style={{ color: "#27500A" }}>none{soloMode ? " · solo mode" : ""}</span>
-              ) : (
-                <span style={{ color: "#791F1F" }}>{missing.join(", ")}</span>
-              )}
-            </div>
-            {soloMode ? (
-              <div style={{ marginTop: 8, fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
-                Coordinates are recommended for weather and nearest A&amp;E, but not required to save in solo mode.
-              </div>
-            ) : null}
-            <div style={{ marginTop: 10, border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, padding: 10 }}>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>Generated startup checklist</div>
-              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>
-                {buildStartupChecklist(form, { soloMode, preset: starterMeta }).slice(0, 8).map((it) => (
-                  <li key={it.id}>{it.text}</li>
-                ))}
-              </ul>
-            </div>
-          </>
-        ) : null}
 
-        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 10, lineHeight: 1.45 }}>
-          Wizard stores project defaults for permits and gives readiness insight before launch.
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginTop: 16 }}>
-          <div style={{ display: "flex", gap: 8 }}>
+            <aside className="project-wizard-map-col">
+              <div className="project-wizard-section project-wizard-section--map">
+                <h4 className="project-wizard-section__title">Site map</h4>
+                {wizardMap}
+              </div>
+            </aside>
+          </div>
+        )}
+
+        <div className="project-wizard-footer">
+          <div className="project-wizard-footer__nav">
             <button type="button" style={ss.btn} onClick={() => setStep((s) => Math.max(1, s - 1))} disabled={step <= 1}>
               Back
             </button>
-            <button type="button" style={ss.btn} onClick={() => setStep((s) => Math.min(totalSteps, s + 1))} disabled={step >= totalSteps}>
-              Next
+            <button
+              type="button"
+              style={ss.btn}
+              onClick={goNext}
+              disabled={step >= totalSteps || geoBusy || stepBlockers.length > 0}
+            >
+              {geoBusy && step === 3 ? "Resolving site…" : "Next"}
             </button>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
-            <button type="button" style={ss.btn} onClick={onClose}>
-              Cancel
-            </button>
-            <button type="button" style={ss.btnO} onClick={() => persist({ openDrawingEditor: true })}>
-              Save + drawing editor
-            </button>
-            <button type="button" style={ss.btnP} onClick={persist}>
-              Save
-            </button>
+          <div className="project-wizard-footer__save">
+            <button type="button" style={ss.btn} onClick={onClose}>Cancel</button>
+            <button type="button" style={ss.btnO} onClick={() => persist({ openDrawingEditor: true })}>Save + drawing editor</button>
+            <button type="button" style={ss.btnP} onClick={persist}>Save</button>
           </div>
         </div>
       </div>

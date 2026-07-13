@@ -11,7 +11,8 @@ import {
 } from "./permits/permitPlanOverlayRegistry";
 import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDrawingImport";
 import { rasterizePdfDataUrl } from "../utils/planPdfRaster";
-import { parseProjectBoundaryRing } from "../utils/projectBoundary";
+import { parseProjectBoundaryRing, centroidFromBoundaryRing } from "../utils/projectBoundary";
+import ProjectKmlDropZone from "../components/ProjectKmlDropZone";
 
 export default function ProjectSitePlanPanel({
   projectId,
@@ -26,7 +27,6 @@ export default function ProjectSitePlanPanel({
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const planInputRef = useRef(null);
-  const kmlInputRef = useRef(null);
 
   const plansForProject = useMemo(
     () => (projectId ? plans.filter((p) => p.projectId === projectId) : []),
@@ -103,6 +103,10 @@ export default function ProjectSitePlanPanel({
         setMsg("No polygon boundary found in KML. Use a closed site boundary polygon.");
         return;
       }
+      const centroid = centroidFromBoundaryRing(boundary.boundaryPoints);
+      const hasCoords =
+        Number.isFinite(parseFloat(String(project?.lat ?? "").trim())) &&
+        Number.isFinite(parseFloat(String(project?.lng ?? "").trim()));
       onProjectUpdate({
         ...project,
         ...boundary,
@@ -112,6 +116,7 @@ export default function ProjectSitePlanPanel({
           name: line.name || `Route ${idx + 1}`,
           points: line.points.map((p) => ({ lat: p.lat, lng: p.lng })),
         })),
+        ...(hasCoords || !centroid ? {} : { lat: String(centroid.lat), lng: String(centroid.lng) }),
       });
       const routeNote = geom.lineStrings?.length ? ` · ${geom.lineStrings.length} map route(s)` : "";
       setMsg(`Boundary imported (${boundary.boundaryPoints.length} points)${routeNote}. Visible on site map.`);
@@ -154,27 +159,15 @@ export default function ProjectSitePlanPanel({
         </div>
       </div>
 
-      <div className="site-plan-panel__actions">
-        <input
-          ref={kmlInputRef}
-          type="file"
-          accept=".kml,.kmz,application/vnd.google-earth.kml+xml,text/xml"
-          hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) importKmlBoundary(f);
-            e.target.value = "";
-          }}
-        />
-        <button type="button" disabled={busy} onClick={() => kmlInputRef.current?.click()}>
-          Import KML boundary
-        </button>
-        {boundaryRing ? (
-          <button type="button" className="ghost" onClick={clearBoundary}>
-            Clear boundary
-          </button>
-        ) : null}
+      <ProjectKmlDropZone
+        onFile={importKmlBoundary}
+        busy={busy}
+        compact
+        buttonLabel="Import KML boundary"
+        hint="Drop site boundary KML here"
+      />
 
+      <div className="site-plan-panel__actions">
         <input
           ref={planInputRef}
           type="file"
@@ -195,6 +188,10 @@ export default function ProjectSitePlanPanel({
         <div className="site-plan-panel__boundary-badge">
           Site boundary loaded · {boundaryRing.length} points
           {project?.boundaryName ? ` · ${project.boundaryName}` : ""}
+          {" "}
+          <button type="button" className="ghost" onClick={clearBoundary} style={{ marginLeft: 8 }}>
+            Clear
+          </button>
         </div>
       ) : (
         <div className="site-plan-panel__boundary-hint">No KML boundary yet — import a polygon from your survey or GIS export.</div>

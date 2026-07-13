@@ -49,6 +49,7 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
   const markersRef = useRef([]);
   const prevSig = useRef(null);
   const prevObjectCountRef = useRef(0);
+  const prevCenterRef = useRef(null);
   const groupDragRef = useRef(null);
   const selectedIdsRef = useRef(selectedIds);
   const objectsRef = useRef(objects);
@@ -108,6 +109,18 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
       prevObjectCountRef.current = 0;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const lat = Number(defaultCenter.lat);
+    const lng = Number(defaultCenter.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    if (prevCenterRef.current === key) return;
+    prevCenterRef.current = key;
+    map.setView([lat, lng], defaultZoom, { animate: false });
+  }, [defaultCenter.lat, defaultCenter.lng, defaultZoom]);
 
   useEffect(() => {
     const map = mapRef.current;

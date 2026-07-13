@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -8,6 +8,15 @@ import { asStorageArray } from "../utils/orgStorage";
 
 const EMPTY_ROUTES = [];
 const EMPTY_GEO = [];
+
+const OSM = {
+  url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+};
+const SAT = {
+  url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  attribution: "Tiles &copy; Esri",
+};
 
 function boundsKey(lat, lng, boundaryRing, escapeRoutes, geoPhotos) {
   const ring = Array.isArray(boundaryRing)
@@ -27,6 +36,16 @@ function boundsKey(lat, lng, boundaryRing, escapeRoutes, geoPhotos) {
   return `${lat ?? ""}|${lng ?? ""}|${ring}|${routes}|${geo}`;
 }
 
+function isKmlFile(file) {
+  if (!file) return false;
+  const name = String(file.name || "").toLowerCase();
+  return name.endsWith(".kml") || name.endsWith(".kmz");
+}
+
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 /**
  * Lightweight site preview — pin, KML boundary polygon, optional escape-route polylines.
  */
@@ -38,12 +57,22 @@ function ProjectSitePreviewMap({
   geoPhotos = EMPTY_GEO,
   height = 220,
   label = "Site preview",
+  showLegend = false,
+  basemap = "streets",
+  onBasemapChange = null,
+  showBasemapToggle = false,
+  animateZoom = false,
+  onKmlDrop = null,
+  kmlDropBusy = false,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
+  const tileRef = useRef(null);
   const lastBoundsKeyRef = useRef("");
+  const fitMapRef = useRef(() => {});
   const labelRef = useRef(label);
+  const [kmlDragOver, setKmlDragOver] = useState(false);
   labelRef.current = label;
 
   const geometryKey = useMemo(
@@ -51,20 +80,26 @@ function ProjectSitePreviewMap({
     [lat, lng, boundaryRing, escapeRoutes, geoPhotos]
   );
 
+  const hasBoundary = Array.isArray(boundaryRing) && boundaryRing.length >= 3;
+  const hasCoords = Number.isFinite(parseFloat(String(lat ?? ""))) && Number.isFinite(parseFloat(String(lng ?? "")));
+  const hasRoutes = (escapeRoutes || []).some((r) => (r.points || []).length >= 2);
+  const hasMapContent = hasBoundary || hasCoords || hasRoutes || asStorageArray(geoPhotos).length > 0;
+  const canDropKml = typeof onKmlDrop === "function";
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el || mapRef.current) return undefined;
     const map = L.map(el, { zoomControl: true, scrollWheelZoom: false, maxZoom: 18 });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-      maxZoom: 19,
-    }).addTo(map);
+    const tile = L.tileLayer(OSM.url, { attribution: OSM.attribution, maxZoom: 19 }).addTo(map);
+    tile.bringToBack();
+    tileRef.current = tile;
     mapRef.current = map;
     layerRef.current = L.layerGroup().addTo(map);
 
     const ro = typeof ResizeObserver !== "undefined"
       ? new ResizeObserver(() => {
           map.invalidateSize({ animate: false });
+          requestAnimationFrame(() => fitMapRef.current());
         })
       : null;
     ro?.observe(el);
@@ -74,18 +109,44 @@ function ProjectSitePreviewMap({
       map.remove();
       mapRef.current = null;
       layerRef.current = null;
+      tileRef.current = null;
       lastBoundsKeyRef.current = "";
     };
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map) return;
+    const next = basemap === "satellite" ? SAT : OSM;
+    if (tileRef.current) {
+      map.removeLayer(tileRef.current);
+      tileRef.current = null;
+    }
+    tileRef.current = L.tileLayer(next.url, { attribution: next.attribution, maxZoom: 19 }).addTo(map);
+    tileRef.current.bringToBack();
+  }, [basemap]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !hasMapContent) return;
+    requestAnimationFrame(() => {
+      map.invalidateSize({ animate: false });
+      fitMapRef.current();
+    });
+  }, [hasMapContent]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     const layer = layerRef.current;
-    if (!map || !layer) return;
+    if (!map || !layer || !hasMapContent) return;
+
+    if (lastBoundsKeyRef.current === geometryKey) return;
+    lastBoundsKeyRef.current = geometryKey;
 
     layer.clearLayers();
     const bounds = [];
     const accent = getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim() || "#0d9488";
+    const animate = animateZoom && !prefersReducedMotion();
 
     if (Array.isArray(boundaryRing) && boundaryRing.length >= 3) {
       L.polygon(boundaryRing, {
@@ -133,13 +194,7 @@ function ProjectSitePreviewMap({
         .bindPopup(`${preset.icon} ${preset.label}`);
       const end = bearingToEnd(plat, plng, photo.bearing);
       if (end) {
-        L.polyline(
-          [
-            [plat, plng],
-            end,
-          ],
-          { color, weight: 2, opacity: 0.85 }
-        ).addTo(layer);
+        L.polyline([[plat, plng], end], { color, weight: 2, opacity: 0.85 }).addTo(layer);
         bounds.push(end);
       }
       bounds.push([plat, plng]);
@@ -160,40 +215,112 @@ function ProjectSitePreviewMap({
       bounds.push([la, lo]);
     }
 
-    if (lastBoundsKeyRef.current === geometryKey) return;
-    lastBoundsKeyRef.current = geometryKey;
+    const fitMap = () => {
+      if (bounds.length === 1) {
+        if (animate) map.flyTo(bounds[0], 15, { duration: 0.55 });
+        else map.setView(bounds[0], 15, { animate: false });
+      } else if (bounds.length > 1) {
+        const opts = { padding: [24, 24], maxZoom: 17 };
+        if (animate && typeof map.flyToBounds === "function") {
+          map.flyToBounds(bounds, { ...opts, duration: 0.6 });
+        } else {
+          map.fitBounds(bounds, { ...opts, animate: false });
+        }
+      } else {
+        map.setView([54.5, -2.5], 6, { animate: false });
+      }
+    };
 
-    if (bounds.length === 1) {
-      map.setView(bounds[0], 15, { animate: false });
-    } else if (bounds.length > 1) {
-      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 17, animate: false });
-    } else {
-      map.setView([54.5, -2.5], 6, { animate: false });
-    }
-  }, [geometryKey, boundaryRing, escapeRoutes, geoPhotos, lat, lng]);
+    fitMapRef.current = fitMap;
+    fitMap();
+  }, [geometryKey, boundaryRing, escapeRoutes, geoPhotos, lat, lng, hasMapContent, animateZoom]);
 
-  const hasBoundary = Array.isArray(boundaryRing) && boundaryRing.length >= 3;
-  const hasCoords = Number.isFinite(parseFloat(String(lat ?? ""))) && Number.isFinite(parseFloat(String(lng ?? "")));
+  const handleKmlFile = (file) => {
+    if (!isKmlFile(file) || kmlDropBusy) return;
+    onKmlDrop?.(file);
+  };
 
-  if (!hasBoundary && !hasCoords && !(escapeRoutes || []).length && !(geoPhotos || []).length) {
-    return (
-      <div
-        className="project-site-preview-map project-site-preview-map--empty"
-        style={{ height }}
-        role="status"
-      >
-        Map preview appears after postcode lookup or KML import.
-      </div>
-    );
-  }
+  const dropHandlers = canDropKml
+    ? {
+        onDragEnter: (e) => {
+          e.preventDefault();
+          setKmlDragOver(true);
+        },
+        onDragOver: (e) => {
+          e.preventDefault();
+          setKmlDragOver(true);
+        },
+        onDragLeave: (e) => {
+          if (e.currentTarget.contains(e.relatedTarget)) return;
+          setKmlDragOver(false);
+        },
+        onDrop: (e) => {
+          e.preventDefault();
+          setKmlDragOver(false);
+          handleKmlFile(e.dataTransfer?.files?.[0]);
+        },
+      }
+    : {};
 
   return (
     <div
-      ref={containerRef}
-      className="project-site-preview-map"
-      style={{ height }}
-      aria-label={label}
-    />
+      className={`project-site-preview-map-wrap${kmlDragOver ? " project-site-preview-map-wrap--drop" : ""}`}
+      {...dropHandlers}
+    >
+      {showBasemapToggle && onBasemapChange ? (
+        <div className="project-site-preview-map__toolbar">
+          <div className="project-site-preview-map__basemap" role="group" aria-label="Map style">
+            <button
+              type="button"
+              className={`project-site-preview-map__basemap-btn${basemap === "streets" ? " project-site-preview-map__basemap-btn--active" : ""}`}
+              onClick={() => onBasemapChange("streets")}
+            >
+              Map
+            </button>
+            <button
+              type="button"
+              className={`project-site-preview-map__basemap-btn${basemap === "satellite" ? " project-site-preview-map__basemap-btn--active" : ""}`}
+              onClick={() => onBasemapChange("satellite")}
+            >
+              Satellite
+            </button>
+          </div>
+          {canDropKml ? (
+            <span className="project-site-preview-map__drop-hint">
+              {kmlDragOver ? "Drop KML to import" : "Drop KML here"}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      <div
+        ref={containerRef}
+        className="project-site-preview-map"
+        style={{ height, display: hasMapContent ? "block" : "none" }}
+        aria-label={hasMapContent ? label : undefined}
+      />
+      {!hasMapContent ? (
+        <div
+          className={`project-site-preview-map project-site-preview-map--empty${kmlDragOver ? " project-site-preview-map--empty-drop" : ""}`}
+          style={{ height }}
+          role="status"
+        >
+          <span className="project-site-preview-map__empty-icon" aria-hidden>📍</span>
+          <strong className="project-site-preview-map__empty-title">Site map preview</strong>
+          <p className="project-site-preview-map__empty-text">
+            {canDropKml
+              ? "Enter a postcode, drop a KML file, or browse below — the map will zoom to your site."
+              : "Enter a postcode or import a KML boundary — the map will zoom to your site automatically."}
+          </p>
+        </div>
+      ) : null}
+      {showLegend && hasMapContent ? (
+        <ul className="project-site-preview-legend" aria-label="Map legend">
+          {hasCoords ? <li><span className="project-site-preview-legend__swatch project-site-preview-legend__swatch--pin" /> Site centre</li> : null}
+          {hasBoundary ? <li><span className="project-site-preview-legend__swatch project-site-preview-legend__swatch--boundary" /> Site boundary</li> : null}
+          {hasRoutes ? <li><span className="project-site-preview-legend__swatch project-site-preview-legend__swatch--route" /> Escape route</li> : null}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 

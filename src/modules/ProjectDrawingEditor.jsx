@@ -21,7 +21,7 @@ import {
   buildDrawingObjectsKml,
   getObjectLatLng,
 } from "./permits/projectDrawingGeo";
-import { loadDrawingEditorPrefs, saveDrawingEditorPrefs } from "./permits/projectDrawingEditorPrefs";
+import { geoAnchorFromProject } from "../utils/projectBoundary";
 import {
   validateDrawingImportJson,
   parseKmlPoints,
@@ -475,10 +475,15 @@ export default function ProjectDrawingEditor() {
         spanLat: typeof saved.spanLat === "number" ? clamp(saved.spanLat, 0.0005, 5) : DEFAULT_GEO_ANCHOR.spanLat,
         spanLng: typeof saved.spanLng === "number" ? clamp(saved.spanLng, 0.0005, 5) : DEFAULT_GEO_ANCHOR.spanLng,
       });
-    } else {
-      setGeoAnchor({ ...DEFAULT_GEO_ANCHOR });
+      return;
     }
-  }, [projectId]);
+    const fromProject = geoAnchorFromProject(currentProject);
+    if (fromProject) {
+      setGeoAnchor(fromProject);
+      return;
+    }
+    setGeoAnchor({ ...DEFAULT_GEO_ANCHOR });
+  }, [projectId, currentProject]);
 
   useEffect(() => {
     if (!projectId || !planId) {
