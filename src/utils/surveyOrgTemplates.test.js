@@ -49,7 +49,7 @@ describe("surveyOrgTemplates", () => {
     saveSurveyTypeTemplateOverride("gpr_survey", { scope: "Org GPR only." });
     resetSurveyTypeTemplateOverride("gpr_survey");
     const t = getSurveyTypeTemplate("gpr_survey");
-    expect(t.scope).toMatch(/Ground penetrating radar/i);
+    expect(t.scope).toMatch(/GPR/i);
   });
 
   it("persists simple survey mode preference", () => {

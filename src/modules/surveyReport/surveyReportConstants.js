@@ -1,9 +1,31 @@
+import { blankQaChecklistState, GI_QA_CHECKLIST_ITEMS, QA_CHECKLIST_ITEMS } from "./surveyQaPack";
+import { blankSpecialistTablesState } from "./surveySpecialistFindings";
+
+export { QA_CHECKLIST_ITEMS, GI_QA_CHECKLIST_ITEMS };
+
+/** Site photo evidence categories — audit-friendly grouping in editor and PDF. */
+export const SURVEY_PHOTO_CATEGORIES = [
+  { key: "pre_start", label: "Pre-start / mobilisation" },
+  { key: "field_work", label: "Field work / mark-up" },
+  { key: "control", label: "Control / verification" },
+  { key: "findings", label: "Findings / anomalies" },
+  { key: "handover", label: "Client handover" },
+  { key: "other", label: "General" },
+];
+
+export function surveyPhotoCategoryLabel(key) {
+  return SURVEY_PHOTO_CATEGORIES.find((c) => c.key === key)?.label || "General";
+}
+
 /** Survey report types — aligned with RAMS surveying packs (manhole-specific types omitted). */
 export const SURVEY_TYPES = [
   { key: "utility_mapping_survey", label: "PAS128 utility mapping survey" },
   { key: "topographical_survey", label: "Topographical land survey" },
+  { key: "topo_plus_utility_survey", label: "Topographical + PAS128 utility survey" },
   { key: "gpr_survey", label: "GPR / multi-array survey" },
   { key: "cctv_drainage_survey", label: "CCTV drainage survey" },
+  { key: "drainage_connectivity_survey", label: "Drainage connectivity survey" },
+  { key: "service_clearance_survey", label: "Service clearance (pre-GI / intrusive)" },
   { key: "eml_cat_survey", label: "EML / CAT & Genny survey" },
   { key: "gnss_control", label: "GNSS / control survey" },
   { key: "laser_scanning", label: "Laser scanning / point cloud" },
@@ -11,6 +33,7 @@ export const SURVEY_TYPES = [
   { key: "setting_out", label: "Setting out / engineering survey" },
   { key: "general_site_survey", label: "General site survey" },
   { key: "site_investigation_campaign", label: "Site investigation & geotechnics" },
+  { key: "asbestos_survey", label: "Asbestos survey (management / refurbishment / demolition)" },
 ];
 
 export const PAS128_QUALITY_LEVELS = [
@@ -19,6 +42,15 @@ export const PAS128_QUALITY_LEVELS = [
   { key: "B2", label: "QL B2 — Single geophysical technique" },
   { key: "B1", label: "QL B1 — Multi-technique detection" },
   { key: "B0", label: "QL B0 — Verification / trial holes" },
+];
+
+/** PAS 128 survey method (M-series) — distinct from QL B0–B4. */
+export const PAS128_METHODS = [
+  { key: "M1", label: "M1 — Desktop utility search (Survey Type D)" },
+  { key: "M2", label: "M2 — EML + GPR (real-time on site)" },
+  { key: "M2P", label: "M2P — EML + GPR (2 m grid, post-processed)" },
+  { key: "M3P", label: "M3P — EML + HD GPR (1 m grid, post-processed)" },
+  { key: "M4P", label: "M4P — Full survey incl. MH/IC (1 m grid, post-processed)" },
 ];
 
 /** Limitation rule keys → generated prose (checkbox → paragraph engine). */
@@ -82,6 +114,11 @@ export const LIMITATION_RULES = [
     key: "client_scope_excluded",
     label: "Outside agreed scope",
     text: "Areas outside the agreed survey scope were not surveyed and are excluded from this report.",
+  },
+  {
+    key: "asbestos_concealed_areas",
+    label: "Concealed / inaccessible areas (asbestos)",
+    text: "Concealed voids, wall/floor cavities and other inaccessible areas were not opened up during this survey. Materials within them are presumed to contain asbestos unless confirmed otherwise by a further intrusive (refurbishment/demolition) survey.",
   },
 ];
 
@@ -148,6 +185,42 @@ export const UTILITY_RECORDS_GAPS = [
   { key: "other", label: "Other (explain below)" },
 ];
 
+/** LSBUD / DBYD desktop enquiry log (Records tab). */
+export const DBYD_ENQUIRY_PROVIDERS = [
+  { key: "lsbud", label: "LSBUD" },
+  { key: "dbyd", label: "DBYD (National Grid / regional)" },
+  { key: "statutory", label: "Direct statutory undertaker" },
+  { key: "client", label: "Client-supplied records pack" },
+  { key: "other", label: "Other" },
+];
+
+export const DBYD_ENQUIRY_STATUS = [
+  { key: "requested", label: "Requested" },
+  { key: "received", label: "Received" },
+  { key: "partial", label: "Partial response" },
+  { key: "not_requested", label: "Not requested" },
+  { key: "not_available", label: "Not available" },
+];
+
+/** M1 desktop search — per-undertaker response status (generic PAS 128 Type D). */
+export const UNDERTAKER_CATEGORIES = [
+  { key: "electricity", label: "Electricity" },
+  { key: "gas", label: "Gas" },
+  { key: "water", label: "Water supply" },
+  { key: "sewerage", label: "Water / sewerage" },
+  { key: "telecom", label: "Telecoms" },
+  { key: "fibre", label: "Fibre / data" },
+  { key: "highways", label: "Highways / local authority" },
+  { key: "rail", label: "Rail" },
+  { key: "other", label: "Other" },
+];
+
+export const UNDERTAKER_RESPONSE_STATUS = [
+  { key: "affected", label: "Affected — apparatus present" },
+  { key: "not_affected", label: "Not affected — no apparatus in area" },
+  { key: "no_response", label: "No response received" },
+];
+
 export const ACCESS_LIMITATION_TYPES = [
   { key: "access_restricted", label: "General access restricted" },
   { key: "locked_gate", label: "Locked gate / barrier" },
@@ -199,24 +272,6 @@ export const EQUIPMENT_CALIBRATION_STATUS = [
   { key: "due_soon", label: "Due within 30 days" },
   { key: "overdue", label: "Overdue" },
   { key: "not_applicable", label: "N/A" },
-];
-
-export const QA_CHECKLIST_ITEMS = [
-  { key: "catScanBeforeWork", label: "CAT scan / utility search before intrusive works" },
-  { key: "controlVerified", label: "Survey control verified against project grid / OS" },
-  { key: "markupReviewedOnSite", label: "Mark-up reviewed on site before demobilisation" },
-  { key: "clientWalkthrough", label: "Client / site walkthrough completed" },
-  { key: "trialHoles", label: "Trial holes / verification undertaken (if in scope)" },
-  { key: "independentCheck", label: "Independent check on critical dimensions / control" },
-];
-
-/** Extra QA items shown for site investigation & geotechnics reports. */
-export const GI_QA_CHECKLIST_ITEMS = [
-  { key: "utilityClearanceGi", label: "Utility search / permit-to-dig before intrusive GI" },
-  { key: "chainOfCustody", label: "Sample chain of custody completed on site" },
-  { key: "gasMonitoringGi", label: "Ground gas monitoring undertaken (if required by desk study)" },
-  { key: "boreholeAbandoned", label: "Boreholes capped / abandoned per specification" },
-  { key: "pitReinstated", label: "Trial pits backfilled and surface reinstated" },
 ];
 
 export const GI_METHOD_OPTIONS = [
@@ -273,6 +328,7 @@ export function blankSurveyReport(overrides = {}) {
     surveyor: "",
     surveyType: "",
     pas128Ql: "",
+    pas128Method: "",
     limitationKeys: [],
     limitationsText: "",
     weather: {
@@ -308,29 +364,36 @@ export function blankSurveyReport(overrides = {}) {
       controlSource: "",
       horizontalTolerance: "",
       verticalTolerance: "",
+      traverseClosure: "",
+      levelClosure: "",
       controlPointsNotes: "",
     },
     deliverables: [],
     recordsReferences: [],
+    dbydEnquiries: [],
+    undertakerResponses: [],
+    trialHolesTable: [],
+    ...blankSpecialistTablesState(),
     utilitiesTable: [],
     giLocationsTable: [],
-    qaChecklist: {
-      catScanBeforeWork: false,
-      controlVerified: false,
-      markupReviewedOnSite: false,
-      clientWalkthrough: false,
-      trialHoles: false,
-      independentCheck: false,
-      utilityClearanceGi: false,
-      chainOfCustody: false,
-      gasMonitoringGi: false,
-      boreholeAbandoned: false,
-      pitReinstated: false,
-    },
+    qaChecklist: blankQaChecklistState(),
+    standardsCited: [],
     hseRefs: {
       permitRef: "",
+      linkedPermitId: "",
       catScanRef: "",
       ramsExcerpt: "",
+    },
+    // UAV / aerial survey compliance — CAA authorisation and flight-safety references.
+    // Only shown/used for surveyType === "uav_aerial"; harmless no-op for other types.
+    uavCompliance: {
+      caaOperatorId: "",
+      flyerIds: "",
+      authorisationRef: "",
+      droneRegistration: "",
+      insurancePolicyRef: "",
+      notamRef: "",
+      groundExclusionPlanRef: "",
     },
     signatures: {
       surveyorName: "",
@@ -353,6 +416,7 @@ export function blankSurveyReport(overrides = {}) {
     accessLimitations: [],
     accessLimitationsNotes: "",
     sections: {
+      foreword: "",
       executiveSummary: "",
       scope: "",
       methodology: "",

@@ -45,16 +45,8 @@ function buildFileName(report) {
   return `${orgBit}-${ref}${rev}.pdf`.replace(/--+/g, "-");
 }
 
-/**
- * Render survey report HTML off-screen and save as multi-page A4 PDF.
- * @param {object} report
- * @param {object} [extras] — passed to buildSurveyReportHtml
- * @param {{ onProgress?: (phase: string) => void }} [opts]
- */
-export async function downloadSurveyReportPdf(report, extras = {}, opts = {}) {
-  const notify = (phase) => opts.onProgress?.(phase);
+async function renderSurveyReportCanvas(report, extras, notify) {
   const html = sanitizePrintPreviewHtml(buildSurveyReportHtml(report, extras));
-  const fileName = buildFileName(report);
 
   notify("prepare");
   const iframe = document.createElement("iframe");
@@ -97,7 +89,10 @@ export async function downloadSurveyReportPdf(report, extras = {}, opts = {}) {
     document.body.removeChild(iframe);
   }
 
-  notify("assemble");
+  return canvas;
+}
+
+function assembleSurveyReportPdf(report, canvas) {
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
   const r = normalizeSurveyReport(report);
   pdf.setProperties({
@@ -139,7 +134,40 @@ export async function downloadSurveyReportPdf(report, extras = {}, opts = {}) {
     heightLeft -= usableH;
   }
 
+  return { pdf, totalPages };
+}
+
+/**
+ * Render survey report HTML off-screen and return PDF blob (for ZIP packs).
+ * @param {object} report
+ * @param {object} [extras] — passed to buildSurveyReportHtml
+ * @param {{ onProgress?: (phase: string) => void }} [opts]
+ * @returns {Promise<{ blob: Blob, fileName: string, pages: number }>}
+ */
+export async function generateSurveyReportPdfBlob(report, extras = {}, opts = {}) {
+  const notify = (phase) => opts.onProgress?.(phase);
+  const fileName = buildFileName(report);
+  const canvas = await renderSurveyReportCanvas(report, extras, notify);
+  notify("assemble");
+  const { pdf, totalPages } = assembleSurveyReportPdf(report, canvas);
   notify("save");
-  pdf.save(fileName);
-  return { ok: true, fileName, pages: totalPages };
+  const blob = pdf.output("blob");
+  return { blob, fileName, pages: totalPages };
+}
+
+/**
+ * Render survey report HTML off-screen and save as multi-page A4 PDF.
+ * @param {object} report
+ * @param {object} [extras] — passed to buildSurveyReportHtml
+ * @param {{ onProgress?: (phase: string) => void }} [opts]
+ */
+export async function downloadSurveyReportPdf(report, extras = {}, opts = {}) {
+  const { blob, fileName, pages } = await generateSurveyReportPdfBlob(report, extras, opts);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+  return { ok: true, fileName, pages };
 }

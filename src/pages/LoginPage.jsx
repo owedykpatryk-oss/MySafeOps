@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { LockKeyhole, Mail, ShieldCheck, Sparkles } from "lucide-react";
+import "../styles/login.css";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
@@ -32,6 +33,8 @@ import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { safeInternalPath } from "../utils/safeUrl";
 import MfaLoginChallenge from "../components/MfaLoginChallenge";
 import { buildLegalAcceptanceMetadata } from "../lib/legalAcceptance";
+import { getMarket } from "../config/markets";
+import { resolvePreferredMarketId, setStoredMarketId } from "../utils/marketPref";
 
 const ss = ms;
 const teal = "#0d9488";
@@ -41,6 +44,32 @@ const SHOW_ADMIN_LOGIN_HINTS = showAdminLoginHints();
 const MIN_PASSWORD_LENGTH = MIN_PASSWORD_LENGTH_SIGNUP;
 const RESEND_COOLDOWN_SECONDS = 45;
 const LAST_AUTH_EMAIL_KEY = "mysafeops_last_auth_email";
+
+function LoginShell({ children }) {
+  return (
+    <div className="login-page">
+      <div className="login-page__bg" aria-hidden>
+        <div className="login-page__mesh" />
+        <div className="login-page__orb login-page__orb--a" />
+        <div className="login-page__orb login-page__orb--b" />
+      </div>
+      <div className="login-page__inner">{children}</div>
+    </div>
+  );
+}
+
+function LoginBrand() {
+  return (
+    <div className="login-page__brand">
+      <Link to="/" className="login-page__brand-link">
+        <span className="login-page__logo">
+          <ShieldCheck size={26} strokeWidth={2} aria-hidden />
+        </span>
+        <span className="login-page__brand-name">MySafeOps</span>
+      </Link>
+    </div>
+  );
+}
 
 function mapAuthErrorMessage(error, fallback = "Authentication request failed") {
   const raw = String(error?.message || "").trim();
@@ -92,6 +121,7 @@ export default function LoginPage() {
   const oauthError = searchParams.get("error_description") || searchParams.get("error") || "";
   const nextParam = searchParams.get("next") || "/app";
   const safeNextPath = useMemo(() => safeInternalPath(nextParam, "/app"), [nextParam]);
+  const signupMarket = useMemo(() => getMarket(resolvePreferredMarketId(searchParams.toString())), [searchParams]);
   const normalizedEmail = email.trim().toLowerCase();
   const lockout = getAuthLockoutState(normalizedEmail, Date.now());
   const signUpThrottle = getSignUpThrottleState(Date.now());
@@ -126,6 +156,10 @@ export default function LoginPage() {
       /* ignore */
     }
   }, []);
+
+  useEffect(() => {
+    setStoredMarketId(signupMarket.id);
+  }, [signupMarket.id]);
 
   useEffect(() => {
     if (!inviteToken) return;
@@ -328,7 +362,7 @@ export default function LoginPage() {
         password,
         options: wrapAuthOptions({
           emailRedirectTo,
-          data: buildLegalAcceptanceMetadata(),
+          data: buildLegalAcceptanceMetadata(undefined, signupMarket.id),
         }),
       });
       if (error) throw error;
@@ -480,32 +514,9 @@ export default function LoginPage() {
     }
     if (aalState === "mfa" && client) {
       return (
-        <div
-          style={{
-            minHeight: "100vh",
-            fontFamily: "DM Sans, system-ui, sans-serif",
-            padding: "1.5rem 1rem 2rem",
-            background:
-              "radial-gradient(130% 70% at 50% -8%, rgba(20,184,166,0.16), transparent 55%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%)",
-          }}
-        >
-          <div style={{ maxWidth: 420, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <span style={{ fontWeight: 700, fontSize: 20, color: navy, display: "inline-flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 44, height: 44, borderRadius: 10, background: teal, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-                  <ShieldCheck size={26} strokeWidth={2} aria-hidden />
-                </span>
-                MySafeOps
-              </span>
-            </div>
-            <div
-              style={{
-                ...ss.card,
-                border: "1px solid rgba(203,213,225,0.8)",
-                boxShadow: "0 12px 34px rgba(15,23,42,0.09)",
-                backdropFilter: "blur(3px)",
-              }}
-            >
+        <LoginShell>
+          <LoginBrand />
+          <div className="login-card app-surface-card" style={ss.card}>
               <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>Verify it&apos;s you</h1>
               <MfaLoginChallenge
                 client={client}
@@ -528,56 +539,20 @@ export default function LoginPage() {
                 }}
                 supportEmail={SUPPORT_EMAIL}
               />
-            </div>
-            <p style={{ textAlign: "center", marginTop: 20, fontSize: 13 }}>
-              <Link to="/" style={{ color: teal, fontWeight: 500 }}>
-                ← Back to home
-              </Link>
-            </p>
           </div>
-        </div>
+          <p style={{ textAlign: "center", marginTop: 20, fontSize: 13 }}>
+            <Link to="/" style={{ color: teal, fontWeight: 500 }}>
+              ← Back to home
+            </Link>
+          </p>
+        </LoginShell>
       );
     }
     if (aalState === "form_error" && client) {
       return (
-        <div
-          style={{
-            minHeight: "100vh",
-            fontFamily: "DM Sans, system-ui, sans-serif",
-            padding: "1.5rem 1rem 2rem",
-            background:
-              "radial-gradient(130% 70% at 50% -8%, rgba(20,184,166,0.16), transparent 55%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%)",
-          }}
-        >
-          <div style={{ maxWidth: 420, margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <span style={{ fontWeight: 700, fontSize: 20, color: navy, display: "inline-flex", alignItems: "center", gap: 10 }}>
-                <span
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 10,
-                    background: teal,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#fff",
-                  }}
-                >
-                  <ShieldCheck size={26} strokeWidth={2} aria-hidden />
-                </span>
-                MySafeOps
-              </span>
-            </div>
-            <div
-              className="app-surface-card"
-              style={{
-                ...ss.card,
-                border: "1px solid rgba(203,213,225,0.8)",
-                boxShadow: "0 12px 34px rgba(15,23,42,0.09)",
-                backdropFilter: "blur(3px)",
-              }}
-            >
+        <LoginShell>
+          <LoginBrand />
+          <div className="login-card app-surface-card" style={ss.card}>
               <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>Session check</h1>
               {msg ? (
                 <p id="login-session-check-msg" role="alert" style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
@@ -595,62 +570,23 @@ export default function LoginPage() {
               >
                 Start over
               </button>
-            </div>
-            <p style={{ textAlign: "center", marginTop: 20, fontSize: 13 }}>
-              <Link to="/" style={{ color: teal, fontWeight: 500 }}>
-                ← Back to home
-              </Link>
-            </p>
           </div>
-        </div>
+          <p style={{ textAlign: "center", marginTop: 20, fontSize: 13 }}>
+            <Link to="/" style={{ color: teal, fontWeight: 500 }}>
+              ← Back to home
+            </Link>
+          </p>
+        </LoginShell>
       );
     }
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        fontFamily: "DM Sans, system-ui, sans-serif",
-        padding: "1.5rem 1rem 2rem",
-        background:
-          "radial-gradient(130% 70% at 50% -8%, rgba(20,184,166,0.16), transparent 55%), linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%)",
-      }}
-    >
-      <div style={{ maxWidth: 420, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <Link to="/" style={{ textDecoration: "none", color: navy, display: "inline-flex", alignItems: "center", gap: 10 }}>
-            <span style={{ width: 44, height: 44, borderRadius: 10, background: teal, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-              <ShieldCheck size={26} strokeWidth={2} aria-hidden />
-            </span>
-            <span style={{ fontWeight: 700, fontSize: 20 }}>MySafeOps</span>
-          </Link>
-        </div>
+    <LoginShell>
+      <LoginBrand />
 
-        <div
-          data-login-next={safeNextPath}
-          style={{
-            ...ss.card,
-            border: "1px solid rgba(203,213,225,0.8)",
-            boxShadow: "0 12px 34px rgba(15,23,42,0.09)",
-            backdropFilter: "blur(3px)",
-          }}
-        >
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "5px 9px",
-              borderRadius: 999,
-              background: "rgba(13,148,136,0.08)",
-              border: "1px solid rgba(13,148,136,0.24)",
-              color: "#0f766e",
-              fontSize: 11,
-              fontWeight: 600,
-              marginBottom: 10,
-            }}
-          >
+        <div className="login-card app-surface-card" data-login-next={safeNextPath} style={ss.card}>
+          <div className="login-badge">
             <Sparkles size={13} aria-hidden />
             Site safety workspace
           </div>
@@ -802,11 +738,11 @@ export default function LoginPage() {
                 />
                 <span id="login-legal-hint">
                   I have read and agree to the{" "}
-                  <Link to="/terms" style={{ color: teal, fontWeight: 600 }}>
+                  <Link to={signupMarket.termsPath} style={{ color: teal, fontWeight: 600 }}>
                     Terms of service
                   </Link>{" "}
                   and{" "}
-                  <Link to="/privacy" style={{ color: teal, fontWeight: 600 }}>
+                  <Link to={signupMarket.privacyPath} style={{ color: teal, fontWeight: 600 }}>
                     Privacy policy
                   </Link>
                   .
@@ -852,7 +788,7 @@ export default function LoginPage() {
                 />
               )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 14 }}>
-                <button type="button" style={{ ...ss.btnP, width: "100%" }} disabled={busy || lockout.isLocked} onClick={signIn}>
+                <button type="button" className="login-btn-primary" style={{ ...ss.btnP, width: "100%" }} disabled={busy || lockout.isLocked} onClick={signIn}>
                   Sign in
                 </button>
                 <button
@@ -1043,7 +979,6 @@ export default function LoginPage() {
             ← Back to home
           </Link>
         </p>
-      </div>
-    </div>
+    </LoginShell>
   );
 }

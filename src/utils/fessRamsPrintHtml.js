@@ -17,6 +17,16 @@ const fmtDate = (iso) => {
   }
 };
 
+export function fessOrgPrintTheme() {
+  const org = loadOrgSettingsRaw();
+  return {
+    org,
+    primaryColor: org.primaryColor,
+    accentColor: org.accentColor,
+    complianceLine: org.pdfComplianceLine,
+  };
+}
+
 function riskScore(risk) {
   if (!risk || typeof risk !== "object") return 0;
   if (risk.RF != null) return Number(risk.RF) || 0;
@@ -144,6 +154,12 @@ export function buildFessRamsPrintBodyHTML(form, rows, operatives, projectMap) {
 
   <div class="fess-rams-h2">3. Risk assessment</div>
   <table class="fess-rams-ra">
+    <colgroup>
+      <col style="width:4%"/><col style="width:16%"/><col style="width:19%"/>
+      <col style="width:5%"/><col style="width:5%"/><col style="width:6%"/>
+      <col style="width:28%"/>
+      <col style="width:5%"/><col style="width:5%"/><col style="width:7%"/>
+    </colgroup>
     <thead>
       <tr>
         <th>Ref</th>
@@ -184,5 +200,5 @@ export function generateFessPrintHTML(form, rows, operatives, projectMap) {
   const inner = buildFessRamsPrintBodyHTML(form, rows, operatives, projectMap);
   const orgName = String(loadOrgSettingsRaw()?.name || "FESS Group");
   const footer = `${form.documentNo || "RAMS"} · FESS layout · ${fmtDate(form.issueDate)} · ${orgName}`;
-  return wrapRamsPrintDocument(form.title || "RAMS", inner, "", footer);
+  return wrapRamsPrintDocument(form.title || "RAMS", inner, "", footer, fessOrgPrintTheme());
 }

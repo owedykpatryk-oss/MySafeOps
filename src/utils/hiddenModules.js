@@ -3,39 +3,64 @@ import {
   MORE_SECTIONS,
   NAV_TAB_IDS,
 } from "../navigation/appModules";
+import {
+  CONSTRUCTION_SLIM_HIDDEN,
+  isFeatureAllowedForMarket,
+  isModuleAllowedForMarket,
+  MARKET_PACK_HINTS,
+} from "../config/marketModules";
 import { isPaidSubscriptionActive } from "./billingAccess";
 import { getTrialStatus, isTrialUnlockActive } from "./orgMembership";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { RAMS_FEATURES } from "./ramsFeatureIds";
+import { getModuleLabelForMarket } from "./marketLabels";
+import { getOrgMarketId } from "./orgMarket";
 import { isFessOrg } from "./fessOrg";
+import { applyMarketModuleDefaults } from "./marketModuleSync";
 
-export { RAMS_FEATURES };
+export { RAMS_FEATURES, CONSTRUCTION_SLIM_HIDDEN, MARKET_PACK_HINTS };
 
 export const HIDDEN_MODULES_UPDATED_EVENT = "mysafeops-hidden-modules-updated";
 
-const VALID_MODULE_IDS = new Set([
-  ...MORE_TABS.map((t) => t.id),
-  ...NAV_TAB_IDS.filter((t) => t.id !== "more").map((t) => t.id),
-]);
+// Computed lazily (not at module top level): this module sits in a long import cycle
+// (appModules → orgMarket → orgStorage → billingAccess → orgMembership →
+// orgBrandingCloudSync → orgIndustryPacks → hiddenModules → appModules), so MORE_TABS
+// can still be mid-initialization the first time this module is evaluated.
+let _validModuleIds = null;
+function getValidModuleIds() {
+  if (!_validModuleIds) {
+    _validModuleIds = new Set([
+      ...MORE_TABS.map((t) => t.id),
+      ...NAV_TAB_IDS.filter((t) => t.id !== "more").map((t) => t.id),
+    ]);
+  }
+  return _validModuleIds;
+}
 
 const VALID_FEATURE_IDS = new Set(Object.values(RAMS_FEATURES));
 
 /** Always reachable so admins can unhide from Settings. */
 export const MODULE_ALWAYS_VISIBLE = new Set(["settings", "help", "more"]);
 
-const MODULE_LABEL_BY_ID = Object.fromEntries([
-  ...MORE_TABS.map((t) => [t.id, t.label]),
-  ...NAV_TAB_IDS.map((t) => [t.id, t.label]),
-]);
+let _moduleLabelById = null;
+function getModuleLabelById() {
+  if (!_moduleLabelById) {
+    _moduleLabelById = Object.fromEntries([
+      ...MORE_TABS.map((t) => [t.id, t.label]),
+      ...NAV_TAB_IDS.map((t) => [t.id, t.label]),
+    ]);
+  }
+  return _moduleLabelById;
+}
 
 const FEATURE_LABELS = {
-  [RAMS_FEATURES.SURVEYING]: "RAMS — Surveying / PAS128 packs",
+  [RAMS_FEATURES.SURVEYING]: "RAMS — Surveying / PAS128 packs (UK)",
   [RAMS_FEATURES.ALLERGEN]: "RAMS — Allergen & food-production section",
 };
 
 function parseHiddenModules(raw) {
   if (!Array.isArray(raw)) return [];
-  return [...new Set(raw.filter((id) => typeof id === "string" && VALID_MODULE_IDS.has(id)))];
+  return [...new Set(raw.filter((id) => typeof id === "string" && getValidModuleIds().has(id)))];
 }
 
 function parseHiddenFeatures(raw) {
@@ -46,29 +71,16 @@ function parseHiddenFeatures(raw) {
 /** Hidden until Assist ships — routes kept for deep links only. */
 export const DEFERRED_MODULE_IDS = new Set(["ai-rams", "ai-toolbox", "ai-photo"]);
 
-/** Slim More menu for typical UK construction / surveying (bootstrap on first load). */
-export const CONSTRUCTION_SLIM_HIDDEN = [
-  "site-map",
-  "enterprise-readiness",
-  "client-acquisition",
-  "sales-enablement",
-  "high-care-access",
-  "cip-signoff",
-  "allergen-changeovers",
-  "gmp-deviations",
-  "incident-map",
-  "client-portal",
-  "subcontractor",
-  "analytics",
-  "monthly-report",
-  "templates",
-  "backup",
-  "audit",
-];
+/** Slim More menu for typical UK construction / surveying (bootstrap on first load) — re-exported above. */
 
 function bootstrapHiddenModulesIfNeeded() {
   if (typeof window === "undefined") return;
   const raw = loadOrgSettingsRaw();
+  const marketId = getOrgMarketId();
+  if (!raw.hiddenModulesBootstrapped || raw.marketModulePackApplied !== marketId) {
+    applyMarketModuleDefaults(marketId);
+    return;
+  }
   if (raw.hiddenModulesBootstrapped) return;
   const merged =
     raw.hiddenModules !== undefined
@@ -78,6 +90,7 @@ function bootstrapHiddenModulesIfNeeded() {
     ...raw,
     hiddenModules: merged,
     hiddenModulesBootstrapped: true,
+    marketModulePackApplied: marketId,
   });
 }
 
@@ -92,7 +105,9 @@ export function getHiddenFeatureIds() {
 }
 
 export function getModuleLabel(moduleId) {
-  return MODULE_LABEL_BY_ID[moduleId] || moduleId;
+  const marketLabel = getModuleLabelForMarket(moduleId, getOrgMarketId());
+  if (marketLabel) return marketLabel;
+  return getModuleLabelById()[moduleId] || moduleId;
 }
 
 export function getFeatureLabel(featureId) {
@@ -113,17 +128,19 @@ const ORG_GATED_MODULE_VISIBILITY = {
   "fess-sites": () => isFessOrg(),
 };
 
-export function isModuleVisible(moduleId, { hiddenModules = getHiddenModuleIds() } = {}) {
+export function isModuleVisible(moduleId, { hiddenModules = getHiddenModuleIds(), marketId = getOrgMarketId() } = {}) {
   const id = String(moduleId || "");
   if (!id || MODULE_ALWAYS_VISIBLE.has(id)) return true;
   if (DEFERRED_MODULE_IDS.has(id)) return false;
+  if (!isModuleAllowedForMarket(id, marketId)) return false;
   if (ORG_GATED_MODULE_VISIBILITY[id] && !ORG_GATED_MODULE_VISIBILITY[id]()) return false;
   if (id === "hygiene-setup" && isFessOrg()) return false;
   if (hasFullModuleEntitlement()) return true;
   return !hiddenModules.includes(id);
 }
 
-export function isFeatureVisible(featureId, { hiddenFeatures = getHiddenFeatureIds() } = {}) {
+export function isFeatureVisible(featureId, { hiddenFeatures = getHiddenFeatureIds(), marketId = getOrgMarketId() } = {}) {
+  if (!isFeatureAllowedForMarket(featureId, marketId)) return false;
   if (hasFullModuleEntitlement()) return true;
   return !hiddenFeatures.includes(featureId);
 }
@@ -138,7 +155,7 @@ export function filterVisibleModuleTabs(tabs, opts) {
 
 /** @param {string} moduleId */
 export function hideModule(moduleId) {
-  if (!VALID_MODULE_IDS.has(moduleId) || MODULE_ALWAYS_VISIBLE.has(moduleId)) {
+  if (!getValidModuleIds().has(moduleId) || MODULE_ALWAYS_VISIBLE.has(moduleId)) {
     return getHiddenModuleIds();
   }
   const hiddenModules = [...getHiddenModuleIds()];
@@ -231,14 +248,19 @@ export function applyHidePreset(presetKey) {
 }
 
 export function getModuleCatalogSections() {
+  const marketId = getOrgMarketId();
   const primaryIds = NAV_TAB_IDS.filter((t) => t.id !== "more").map((t) => t.id);
+  const filterIds = (ids) => ids.filter((id) => isModuleAllowedForMarket(id, marketId));
+  const features = Object.entries(FEATURE_LABELS)
+    .filter(([id]) => isFeatureAllowedForMarket(id, marketId))
+    .map(([id, label]) => ({ id, label }));
   return [
-    { title: "Main navigation", ids: primaryIds },
-    ...MORE_SECTIONS.map((s) => ({ title: s.title, ids: s.ids })),
+    { title: "Main navigation", ids: filterIds(primaryIds) },
+    ...MORE_SECTIONS.map((s) => ({ title: s.title, ids: filterIds(s.ids) })),
     {
-      title: "RAMS builder sections",
+      title: getOrgMarketId() === "au" ? "SWMS builder sections" : "RAMS builder sections",
       ids: [],
-      features: Object.entries(FEATURE_LABELS).map(([id, label]) => ({ id, label })),
+      features,
     },
   ];
 }

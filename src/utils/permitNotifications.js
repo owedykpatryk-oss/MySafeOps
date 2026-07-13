@@ -78,6 +78,9 @@ export async function sendPermitNotificationEmail(payload) {
       notes: payload?.permit?.notes,
     },
     recipients: uniqEmails(payload?.recipients || []),
+    roster: Array.isArray(payload?.roster)
+      ? payload.roster.map((w) => ({ name: w?.name, email: w?.email }))
+      : [],
     orgName: String(payload?.orgName || "MySafeOps"),
     message: String(payload?.message || ""),
     ramsDoc: payload?.ramsDoc

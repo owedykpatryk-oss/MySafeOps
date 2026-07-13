@@ -51,6 +51,7 @@
     "blog:links": "node scripts/blog-link-report.mjs",
     "blog:distribution": "node scripts/generate-distribution-pack.mjs",
     "lint": "eslint \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\" --max-warnings 165",
+    "check:survey-docs": "node scripts/check-survey-docs-guard.mjs",
     "lint:fix": "eslint \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\" --fix --max-warnings 165",
     "format": "prettier --write \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\"",

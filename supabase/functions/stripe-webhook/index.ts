@@ -10,6 +10,7 @@ import {
   stripeDiagnostics,
   type StripeMode,
 } from "../_shared/stripeConfig.ts";
+import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -69,6 +70,28 @@ async function applySubscription(
   const mapped = priceId ? planFromPriceId(priceId) : null;
   const plan = mapped?.plan ?? null;
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+
+  // Defend against a subscription whose `metadata.org_id` doesn't actually belong to the
+  // Stripe customer that owns it (metadata can be edited via the Stripe dashboard/API).
+  // Once an org has a bound customer id for this mode, any mismatch is rejected instead
+  // of silently repointing billing state at another org.
+  const { data: existingOrg, error: existingOrgErr } = await supabase
+    .from("organizations")
+    .select("id, stripe_customer_id, stripe_test_customer_id")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (existingOrgErr || !existingOrg) {
+    console.error("stripe-webhook: org not found for subscription", sub.id, orgId, existingOrgErr);
+    return;
+  }
+  const boundCustomerId = livemode ? existingOrg.stripe_customer_id : existingOrg.stripe_test_customer_id;
+  if (boundCustomerId && customerId && boundCustomerId !== customerId) {
+    console.error(
+      "stripe-webhook: customer/org binding mismatch — refusing to apply subscription",
+      { subscriptionId: sub.id, orgId, boundCustomerId, customerId, livemode },
+    );
+    return;
+  }
 
   const row: Record<string, unknown> = {
     stripe_subscription_id: sub.id,
@@ -274,12 +297,21 @@ Deno.serve(async (req) => {
   if (req.method === "GET") {
     const diagnostics = await buildDiagnostics(supabase, requestId);
     const liveReady = diagnostics.stripeLive.configured && diagnostics.stripeLive.configuredMap.webhookSecret;
+    const testReady = diagnostics.stripeTest.configured && diagnostics.stripeTest.configuredMap.webhookSecret;
     const allValid = Object.values(diagnostics.valid).every(Boolean);
+    const admin = await getBillingAdminUser(req, supabaseUrl, serviceKey);
+    if (!admin) {
+      const publicBody = publicStripeHealthBody("stripe-webhook", liveReady && allValid, testReady, requestId);
+      return new Response(JSON.stringify(publicBody), {
+        status: liveReady && allValid ? 200 : 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+      });
+    }
     return new Response(
       JSON.stringify({
         ...diagnostics,
         liveReady,
-        testReady: diagnostics.stripeTest.configured && diagnostics.stripeTest.configuredMap.webhookSecret,
+        testReady,
       }),
       {
         status: liveReady && allValid ? 200 : 503,

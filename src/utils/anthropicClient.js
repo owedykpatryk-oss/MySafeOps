@@ -2,7 +2,10 @@
  * Anthropic Messages API from the browser.
  * - Direct: VITE_ANTHROPIC_API_KEY (ships in bundle — dev only recommended).
  * - Production: set VITE_ANTHROPIC_PROXY_URL=/api/anthropic-messages and ANTHROPIC_API_KEY on Vercel (see api/anthropic-messages.js).
+ * - Signed-in users can send Authorization: Bearer <Supabase JWT> instead of the bundled shared secret.
  */
+
+import { supabase } from "../lib/supabase.js";
 
 let warnedClientKeyInProd = false;
 let proxyReadyCache = null;
@@ -12,15 +15,19 @@ const PROXY_ERROR_MESSAGES = {
   anthropic_not_configured:
     "AI is not configured on the server. Add ANTHROPIC_API_KEY to Vercel environment variables.",
   ai_proxy_secret_required:
-    "AI proxy secret is missing on the server. Add AI_PROXY_SHARED_SECRET on Vercel and matching VITE_AI_PROXY_SECRET in the production build.",
+    "AI proxy auth is missing on the server. Add AI_PROXY_SHARED_SECRET or SUPABASE_URL + SUPABASE_ANON_KEY for JWT auth.",
+  ai_proxy_auth_required:
+    "AI proxy auth is missing on the server. Add AI_PROXY_SHARED_SECRET or SUPABASE_URL + SUPABASE_ANON_KEY for JWT auth.",
   unauthorized:
-    "AI proxy secret mismatch. Ensure VITE_AI_PROXY_SECRET matches AI_PROXY_SHARED_SECRET on Vercel.",
+    "AI proxy rejected this request. Sign in with a cloud account or ensure VITE_AI_PROXY_SECRET matches AI_PROXY_SHARED_SECRET on Vercel.",
+  invalid_session: "Your sign-in session expired. Sign in again and retry.",
   forbidden_origin: "AI proxy rejected this request (origin check failed).",
   invalid_json: "AI proxy received invalid JSON.",
   invalid_body: "AI proxy rejected the request body.",
   payload_too_large: "AI request is too large for the proxy.",
   upstream_unreachable: "Could not reach Anthropic from the server. Try again shortly.",
   method_not_allowed: "AI proxy method not allowed.",
+  rate_limited: "Too many AI requests from this network right now. Wait a minute and try again.",
 };
 
 export function getAnthropicKey() {
@@ -141,6 +148,15 @@ async function postAnthropicMessagesBody(body) {
   } else {
     const secret = String(import.meta.env.VITE_AI_PROXY_SECRET || "").trim();
     if (secret) headers["x-mysafeops-ai-secret"] = secret;
+    if (supabase) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const jwt = data?.session?.access_token;
+        if (jwt) headers.Authorization = `Bearer ${jwt}`;
+      } catch {
+        /* session optional */
+      }
+    }
   }
 
   const res = await fetch(url, {

@@ -1,8 +1,10 @@
 /**
  * More tile intelligence — pre-built quick starts + smart one-liners for module grid.
  */
+import { getOrgMarketId } from "./orgMarket";
 import { getRegisterSmartTips } from "./registerModuleSmart";
 import { getModuleLabel } from "./moduleRegisterStats";
+import { isModuleAllowedForMarket } from "../config/marketModules";
 import { MODULE_PDF_REGISTRY } from "../navigation/moduleCatalogMeta";
 import { loadOrgScoped } from "./orgStorage";
 
@@ -20,6 +22,8 @@ export const MODULE_PREBUILDS = {
   "daily-briefing": { shortLabel: "Today’s briefing", label: "Pre-built mobilisation briefing with weather + attendance", action: "create" },
   "method-statement": { shortLabel: "Mobilisation MS", label: "Pre-built method statement template", action: "create" },
   cdm: { shortLabel: "CPP starter", label: "Pre-built CDM 2015 compliance pack", action: "create" },
+  "whs-plan": { shortLabel: "WHS plan", label: "Pre-built WHS management plan", action: "create" },
+  "bhp-plan": { shortLabel: "Plan BHP", label: "Pre-built construction BHP plan", action: "create" },
   snags: { shortLabel: "New snag", label: "Pre-built snag with photo + priority", action: "create" },
   timesheets: { shortLabel: "This week", label: "Pre-built weekly timesheet grid", action: "create" },
   "geo-photos": { shortLabel: "Site photo", label: "Pre-built geo-tagged site photo", action: "capture" },
@@ -30,6 +34,7 @@ export const MODULE_PREBUILDS = {
   incidents: { shortLabel: "Near miss", label: "Pre-built incident / near-miss form", action: "create" },
   "incident-actions": { shortLabel: "Corrective action", label: "Pre-built CAPA with owner + due date", action: "create" },
   riddor: { shortLabel: "RIDDOR check", label: "Pre-built F2508 assessment wizard", action: "create" },
+  "notifiable-incidents": { shortLabel: "Notifiable", label: "Pre-built WHS notifiable incident worksheet", action: "create" },
   emergency: { shortLabel: "Key contacts", label: "Pre-built emergency contact set", action: "create" },
   ppe: { shortLabel: "Issue PPE", label: "Pre-built PPE issue record", action: "create" },
   plant: { shortLabel: "Plant entry", label: "Pre-built PUWER plant register row", action: "create" },
@@ -70,6 +75,7 @@ export const MODULE_PREBUILDS = {
   "water-hygiene": { shortLabel: "Legionella", label: "Pre-built water hygiene temperature log", action: "create" },
   waste: { shortLabel: "Waste note", label: "Pre-built waste transfer note", action: "create" },
   "survey-report": { shortLabel: "PAS128 report", label: "Pre-built PAS128 utility mapping report", action: "create" },
+  "gpr-report": { shortLabel: "GPR report", label: "Advanced GPR report with BGS geology & weather impact", action: "create" },
   "monthly-report": { shortLabel: "Monthly HSE", label: "Pre-built monthly safety report", action: "create" },
   templates: { shortLabel: "Doc template", label: "Pre-built document template", action: "create" },
   "client-portal": { shortLabel: "Client link", label: "Pre-built read-only client portal", action: "create" },
@@ -86,7 +92,47 @@ export const MODULE_PREBUILDS = {
 };
 
 function resolvePrebuild(moduleId, stat) {
+  const marketId = getOrgMarketId();
+  if (!isModuleAllowedForMarket(moduleId, marketId)) return null;
   const def = MODULE_PREBUILDS[moduleId];
+  if (moduleId === "legislation") {
+    const libLabel =
+      marketId === "au"
+        ? "WHS legislation register"
+        : marketId === "pl"
+          ? "Rejestr przepisów BHP"
+          : "UK HSE legislation register";
+    return {
+      shortLabel: marketId === "au" ? "WHS library" : marketId === "pl" ? "BHP library" : "UK library",
+      label: `Pre-built ${libLabel}`,
+      viewId: "legislation",
+      action: "seed",
+    };
+  }
+  if (marketId === "au") {
+    const auOverrides = {
+      coshh: { shortLabel: "Add substance", label: "Pre-built hazardous substance row with SDS checklist", action: "create" },
+      inspections: { shortLabel: "Plant check", label: "Pre-built plant inspection record", action: "create" },
+      training: { shortLabel: "White Card", label: "Pre-built competency / White Card entry", action: "create" },
+      plant: { shortLabel: "Plant entry", label: "Pre-built WHS plant register row", action: "create" },
+      lifting: { shortLabel: "Lift plan", label: "Pre-built crane / lifting plan", action: "create" },
+      "electrical-pat": null,
+    };
+    if (auOverrides[moduleId] === null) return null;
+    if (auOverrides[moduleId]) return { ...auOverrides[moduleId], viewId: moduleId };
+  }
+  if (marketId === "pl") {
+    const plOverrides = {
+      coshh: { shortLabel: "Substancja", label: "Wiersz substancji niebezpiecznej z checklistą SDS", action: "create" },
+      inspections: { shortLabel: "Inspekcja", label: "Rekord inspekcji urządzenia / placu", action: "create" },
+      training: { shortLabel: "BHP", label: "Szkolenie BHP / uprawnienia", action: "create" },
+      plant: { shortLabel: "Urządzenie", label: "Wiersz rejestru urządzeń", action: "create" },
+      lifting: { shortLabel: "Plan podnoszenia", label: "Plan pracy żurawia / podnoszenia", action: "create" },
+      "electrical-pat": null,
+    };
+    if (plOverrides[moduleId] === null) return null;
+    if (plOverrides[moduleId]) return { ...plOverrides[moduleId], viewId: moduleId };
+  }
   if (typeof def === "function") return def(stat);
   if (def) return { ...def, viewId: def.viewId || moduleId };
   if (stat?.status === "empty") {
@@ -111,6 +157,9 @@ function resolvePrebuild(moduleId, stat) {
  */
 export function getModuleTilePresentation(moduleId, stat) {
   const prebuild = resolvePrebuild(moduleId, stat);
+  if (!prebuild) {
+    return { prebuild: null, smartText: "", smartTone: "info", smartAction: null };
+  }
   const items = loadRegisterItems(moduleId);
   const tips = getRegisterSmartTips(moduleId, {
     count: stat?.count ?? items.length,

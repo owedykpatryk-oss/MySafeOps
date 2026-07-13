@@ -9,6 +9,8 @@ import {
   pickIndustryMoreNextAction,
   pickIndustryProjectNextAction,
   getIndustryPackLabel,
+  getPackWorkflowHelp,
+  getIndustrySitePackTitle,
 } from "./industryPackProfile";
 
 describe("industryPackProfile", () => {
@@ -22,6 +24,22 @@ describe("industryPackProfile", () => {
     const preview = previewPackSwitch("generalContractor", "surveyingGeodesy");
     expect(preview.changes.some((c) => c.includes("Survey"))).toBe(true);
     expect(preview.label).toBe("Surveying & geodesy");
+  });
+
+  it("previewPackSwitch localizes RAMS/CDM for AU market", () => {
+    const preview = previewPackSwitch("showEverything", "generalContractor", "au");
+    expect(preview.changes.some((c) => /SWMS|WHS/i.test(c))).toBe(true);
+    expect(preview.changes.join(" ")).not.toMatch(/\bRAMS\b/);
+  });
+
+  it("getPackWorkflowHelp localizes electrical summary for AU", () => {
+    const help = getPackWorkflowHelp("electricalContractor", "au");
+    expect(help.summary).toMatch(/SWMS/i);
+  });
+
+  it("getIndustrySitePackTitle localizes for AU market", () => {
+    expect(getIndustrySitePackTitle("generalContractor", "uk")).toMatch(/RAMS|Contractor/i);
+    expect(getIndustrySitePackTitle("generalContractor", "au")).toMatch(/SWMS|Contractor/i);
   });
 
   it("electrical pack adds hot work readiness gate", () => {

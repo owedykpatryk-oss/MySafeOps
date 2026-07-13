@@ -19,11 +19,23 @@ import { loadEmergencySiteExtras, googleMapsSearchUrl } from "../../utils/emerge
 import { ms } from "../../utils/moduleStyles";
 import { safeHttpUrl } from "../../utils/safeUrl";
 import { fetchWeatherSummary } from "../../utils/weatherSummary";
-import { lookupUkPostcode, resolveUkPostcodeInput } from "../../utils/postcodeLookup";
+import {
+  lookupSitePostcode,
+  resolveSitePostcodeInput,
+} from "../../utils/siteAddressLookup";
+import { getOrgMarketId } from "../../utils/orgMarket";
+import { formatOrgDate, formatOrgDateTime } from "../../utils/orgLocale";
+import { getEmergencyHospitalHeading, getRamsShortLabel } from "../../utils/marketLabels";
+import { getLeaveRamsBuilderConfirm, getRamsBuilderTitle } from "../../utils/ramsUiLabels";
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
-import { mergeRamsPackFromCatalog } from "../../utils/surveyContentCatalog";
+import {
+  mergeRamsPackFromCatalog,
+  getSurveyPackMeta,
+  getSurveyDeliverablesProse,
+  getSurveyAssumptionsProse,
+} from "../../utils/surveyContentCatalog";
 import { isFeatureVisible, RAMS_FEATURES } from "../../utils/hiddenModules";
 import { useHiddenModulesRevision } from "../../hooks/useHiddenModulesRevision";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
@@ -35,6 +47,7 @@ import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import PageHero from "../../components/PageHero";
+import ConfettiCelebration from "../../components/ConfettiCelebration";
 import EmptyState from "../../components/EmptyState";
 import SimpleFormDialog from "../../components/SimpleFormDialog";
 import { geocodeAddressNominatim } from "../../utils/geocode";
@@ -90,17 +103,8 @@ const HAZARD_PACK_STATUS = {
 
 const genId = () => `rams_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
-const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
-const fmtDateTime = (iso) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
+const fmtDate = formatOrgDate;
+const fmtDateTime = formatOrgDateTime;
 const riskScore = (risk) => Number(risk?.L || 0) * Number(risk?.S || 0);
 const RISK_AXIS = [2, 4, 6];
 const RAMS_STATUS_OPTIONS = ["draft", "internal_review", "approved", "issued"];
@@ -867,6 +871,13 @@ const SURVEYING_PACKS_RAW = [
     hazardTokens: ["uneven ground", "slips", "trip", "adverse weather", "moving plant", "lone working", "work at height", "manual handling"],
   },
   {
+    key: "topo_plus_utility_survey",
+    label: "Topographical + PAS128 utility survey",
+    scope: "",
+    method: "",
+    hazardTokens: ["utility", "buried", "topo", "manhole", "traffic", "pedestrian", "electrical"],
+  },
+  {
     key: "gpr_survey",
     label: "GPR / multi-array survey",
     scope:
@@ -882,6 +893,20 @@ const SURVEYING_PACKS_RAW = [
     method:
       "1. Confirm permit interfaces and confined-space boundary before chamber opening.\n\n2. Inspect chamber condition and barriers before camera insertion.\n\n3. Run CCTV capture with tether and communication controls.\n\n4. Log defects, obstructions, and chainage in survey output.\n\n5. Reinstate chamber and complete close-out checks.",
     hazardTokens: ["cctv", "manhole", "chamber", "confined", "traffic", "slips", "contamination"],
+  },
+  {
+    key: "drainage_connectivity_survey",
+    label: "Drainage connectivity survey",
+    scope: "Drainage connectivity survey — sonde tracing, chamber records and CAD connectivity drawing.",
+    method: "",
+    hazardTokens: ["drainage", "manhole", "chamber", "sonde", "traffic", "slips", "contamination"],
+  },
+  {
+    key: "service_clearance_survey",
+    label: "Service clearance (pre-GI / intrusive)",
+    scope: "Targeted utility clearance around boreholes and trial pits before intrusive ground investigation.",
+    method: "",
+    hazardTokens: ["utility", "buried", "trial pit", "borehole", "permit-to-dig", "ground investigation"],
   },
   {
     key: "jetting_hpwj",
@@ -1081,8 +1106,11 @@ const SURVEYING_PACKS_RAW = [
     hazardTokens: ["hydrographic", "marine", "vessel", "tide", "mob", "bathymetry", "boat"],
   },
   {
-    key: "aerial_lidar_photomapping",
-    label: "Aerial LiDAR & photomapping",
+    // Aligned with survey report type `uav_aerial` (see surveyContentCatalog.js) so that
+    // survey report <-> RAMS sync and catalog enrichment resolve to the same pack.
+    // Covers UAV/drone as well as helicopter/fixed-wing corridor LiDAR/photomapping.
+    key: "uav_aerial",
+    label: "UAV / aerial survey (incl. helicopter & fixed-wing LiDAR)",
     scope:
       "Helicopter, fixed-wing or UAV corridor capture — flight planning, ground exclusion and data QA.",
     method:
@@ -1090,13 +1118,51 @@ const SURVEYING_PACKS_RAW = [
     hazardTokens: ["aerial", "lidar", "helicopter", "uav", "drone", "flight", "photomapping", "downwash"],
   },
   {
-    key: "laser_scanning_reality_capture",
+    // Aligned with survey report type `laser_scanning` (see surveyContentCatalog.js).
+    key: "laser_scanning",
     label: "Laser scanning & reality capture",
     scope:
       "Terrestrial laser scanning and point cloud capture for digital twin / BIM — laser safety and traffic interfaces.",
     method:
       "1. Scan exclusion zone cordoned; laser safety briefing.\n\n2. Control network verified before scan epoch.\n\n3. Capture scans with overlap and registration checks.\n\n4. QA point cloud density and registration RMS.\n\n5. Issue point cloud / mesh with coordinate metadata.",
     hazardTokens: ["laser", "scan", "tls", "point cloud", "digital twin", "bim", "tripod", "traffic"],
+  },
+  {
+    key: "eml_cat_survey",
+    label: "EML / CAT & Genny survey",
+    scope: "",
+    method: "",
+    hazardTokens: ["utility", "buried", "traffic", "pedestrian", "electrical", "slips", "trip", "manhole"],
+  },
+  {
+    key: "gnss_control",
+    label: "GNSS / control survey",
+    scope: "",
+    method: "",
+    hazardTokens: ["traffic", "pedestrian", "uneven ground", "lone working", "tripod"],
+  },
+  {
+    key: "setting_out",
+    label: "Setting out / engineering survey",
+    scope: "",
+    method: "",
+    hazardTokens: ["traffic", "moving plant", "pedestrian", "work at height"],
+  },
+  {
+    key: "general_site_survey",
+    label: "General site survey",
+    scope: "",
+    method: "",
+    hazardTokens: ["site_access_restricted"],
+  },
+  {
+    // Aligned with survey report type `asbestos_survey`. Uses existing asb_001/asb_002
+    // hazard library rows (see ramsHazardLibraryExtended.js) via hazardTokens below.
+    key: "asbestos_survey",
+    label: "Asbestos survey (management / refurbishment / demolition)",
+    scope: "",
+    method: "",
+    hazardTokens: ["asbestos survey", "acms", "non-licensed asbestos", "asb_001", "asb_002"],
   },
   {
     key: "mobile_mapping_slam",
@@ -1177,6 +1243,18 @@ const SURVEY_PACK_METADATA = {
     requiredCerts: ["Confined space awareness", "Drainage CCTV operator competence"],
     mandatoryEvidence: ["Chamber barrier photo", "CCTV run reference", "Defect log extract"],
     holdPoints: ["HP1 chamber safety check", "HP2 CCTV run quality check", "HP3 reinstatement/handover complete"],
+  },
+  drainage_connectivity_survey: {
+    permitDependencies: ["Traffic management (if highway)", "Confined space permit (if entry)"],
+    requiredCerts: ["CAT/Genny competence", "Drainage connectivity / sonde tracing awareness"],
+    mandatoryEvidence: ["Chamber detail record", "Sonde trace log", "Connectivity drawing extract"],
+    holdPoints: ["HP1 chamber access safe", "HP2 first trace complete", "HP3 drawing QA before issue"],
+  },
+  service_clearance_survey: {
+    permitDependencies: ["Excavation / permit-to-dig interface", "Ground disturbance permit (GI contractor)"],
+    requiredCerts: ["PAS128 / CAT-Genny competence", "GPR operator (where used)"],
+    mandatoryEvidence: ["Clearance mark-up photo", "Records search note", "GI handover briefing record"],
+    holdPoints: ["HP1 records and walkover complete", "HP2 clearance marks on ground", "HP3 GI contractor briefed"],
   },
   jetting_hpwj: {
     permitDependencies: ["Confined space permit (as required)", "Task risk briefing record"],
@@ -1274,17 +1352,47 @@ const SURVEY_PACK_METADATA = {
     mandatoryEvidence: ["Marine risk assessment", "Tide window confirmation", "MOB drill record"],
     holdPoints: ["HP1 vessel competency check", "HP2 tide/weather window", "HP3 data issue QA"],
   },
-  aerial_lidar_photomapping: {
+  uav_aerial: {
     permitDependencies: ["Aerial survey coordination permit", "Landowner notification"],
     requiredCerts: ["CAA A2 CofC or GVC (UAV)", "Aerial survey crew induction"],
     mandatoryEvidence: ["Flight plan", "NOTAM/airspace clearance", "Ground exclusion zone photo"],
     holdPoints: ["HP1 airspace clearance", "HP2 pre-flight checklist", "HP3 post-flight secure storage"],
   },
-  laser_scanning_reality_capture: {
+  laser_scanning: {
     permitDependencies: ["Work at height permit (as required)", "Night works permit (as required)"],
     requiredCerts: ["Laser scanning operator training", "TLS competency"],
     mandatoryEvidence: ["Control network check", "Scan exclusion zone photo", "Registration RMS report"],
     holdPoints: ["HP1 control verified", "HP2 scan session QA", "HP3 point cloud issue sign-off"],
+  },
+  eml_cat_survey: {
+    permitDependencies: ["Excavation / permit-to-dig interface"],
+    requiredCerts: ["CAT/Genny competence", "Manual handling"],
+    mandatoryEvidence: ["Records search note", "EML mark-up photo", "Residual uncertainty statement issued"],
+    holdPoints: ["HP1 records reviewed", "HP2 active/passive sweep complete", "HP3 marked outputs issued"],
+  },
+  gnss_control: {
+    permitDependencies: ["Traffic management (as required)"],
+    requiredCerts: ["GNSS/control survey competence"],
+    mandatoryEvidence: ["Redundant observation log", "Post-processing residuals", "Control schedule issued"],
+    holdPoints: ["HP1 control point locations agreed", "HP2 redundant observations captured", "HP3 residuals within spec"],
+  },
+  setting_out: {
+    permitDependencies: ["Permit-to-work interface with trades on site (as required)"],
+    requiredCerts: ["Total station/GNSS setting-out competence"],
+    mandatoryEvidence: ["Control verification record", "Independent check on critical points", "As-built completion sheet"],
+    holdPoints: ["HP1 control and drawing revision verified", "HP2 independent check before cover-up/pour", "HP3 as-built record issued"],
+  },
+  general_site_survey: {
+    permitDependencies: ["Check project permit interface before start"],
+    requiredCerts: ["Supervisor briefing completion", "Manual handling"],
+    mandatoryEvidence: ["Task photos and notes", "Close-out handover record"],
+    holdPoints: ["HP1 pre-start authorisation", "HP2 execution verification", "HP3 close-out confirmation"],
+  },
+  asbestos_survey: {
+    permitDependencies: ["Client asbestos register / management plan sign-off", "Permit-to-work interface with other trades (as required)"],
+    requiredCerts: ["P402 (management survey) or P403/P405 (refurbishment/demolition survey) competence", "Asbestos awareness training"],
+    mandatoryEvidence: ["Site plan with sampled/inspected locations", "Sample submission and UKAS lab results", "Draft asbestos register issued to client"],
+    holdPoints: ["HP1 access and management plan agreed", "HP2 sampling/inspection complete", "HP3 register issued and client briefed"],
   },
   tunnel_condition_scan: {
     permitDependencies: ["Rail corridor access permit", "Confined space permit"],
@@ -1300,12 +1408,36 @@ const SURVEY_PACK_METADATA = {
   },
 };
 
+// Legacy pack keys kept for backward compatibility with RAMS docs saved before the
+// aerial/laser survey packs were realigned to match the survey report + catalog keys
+// (`uav_aerial`, `laser_scanning`). Do not use these keys for new packs.
+const LEGACY_SURVEY_PACK_KEY_ALIASES = {
+  aerial_lidar_photomapping: "uav_aerial",
+  laser_scanning_reality_capture: "laser_scanning",
+};
+
+function resolveSurveyPackKey(packKey) {
+  const key = String(packKey || "").trim();
+  return LEGACY_SURVEY_PACK_KEY_ALIASES[key] || key;
+}
+
 function surveyPackMetaFor(packKey) {
-  return SURVEY_PACK_METADATA[packKey] || SURVEY_PACK_METADATA.default;
+  const key = resolveSurveyPackKey(packKey);
+  const fromCatalog = getSurveyPackMeta(key);
+  const local = SURVEY_PACK_METADATA[key];
+  if (!local) return fromCatalog;
+  return {
+    ...fromCatalog,
+    permitDependencies: local.permitDependencies?.length ? local.permitDependencies : fromCatalog.permitDependencies,
+    requiredCerts: local.requiredCerts?.length ? local.requiredCerts : fromCatalog.requiredCerts,
+    mandatoryEvidence: local.mandatoryEvidence?.length ? local.mandatoryEvidence : fromCatalog.mandatoryEvidence,
+    holdPoints: local.holdPoints?.length ? local.holdPoints : fromCatalog.holdPoints,
+  };
 }
 
 function findSurveyPackByKey(packKey) {
-  return SURVEYING_PACKS.find((p) => p.key === packKey) || null;
+  const key = resolveSurveyPackKey(packKey);
+  return SURVEYING_PACKS.find((p) => p.key === key) || null;
 }
 
 function findHazardsForSurveyPack(pack, hazardLibrary) {
@@ -1623,7 +1755,7 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
           return;
         }
         const d = JSON.parse(raw);
-        if (d.savedAt) setDraftSavedAtLabel(new Date(d.savedAt).toLocaleString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+        if (d.savedAt) setDraftSavedAtLabel(formatOrgDateTime(d.savedAt));
         else setDraftSavedAtLabel("");
       } catch {
         setDraftSavedAtLabel("");
@@ -1802,7 +1934,7 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
   const runWeatherLookup = async () => {
     setWeatherLoading(true);
     try {
-      const postcodeHint = resolveUkPostcodeInput("", form.location);
+      const postcodeHint = resolveSitePostcodeInput("", form.location);
       const hasCoords = String(form.siteLat || "").trim() && String(form.siteLng || "").trim();
       const snap = hasCoords
         ? await fetchWeatherSummary(form.siteLat, form.siteLng)
@@ -1810,11 +1942,15 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
           ? await fetchWeatherSummary("", "", { postcode: postcodeHint })
           : null;
       if (!snap) {
-        alert("Enter lat/lng or a UK postcode in the site location field.");
+        alert(
+          getOrgMarketId() === "au"
+            ? "Enter lat/lng or an Australian postcode in the site location field."
+            : "Enter lat/lng or a UK postcode in the site location field."
+        );
         return;
       }
       if (!hasCoords && postcodeHint) {
-        const pc = await lookupUkPostcode(postcodeHint);
+        const pc = await lookupSitePostcode(postcodeHint);
         if (pc) {
           setForm((f) => ({
             ...f,
@@ -1836,12 +1972,12 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
     if (!project) return;
     let lat = project.lat;
     let lng = project.lng;
-    const postcodeQuery = resolveUkPostcodeInput(project.postcode, project.address, project.site, project.location);
+    const postcodeQuery = resolveSitePostcodeInput(project.postcode, project.address, project.site, project.location);
     if ((lat == null || lat === "") || (lng == null || lng === "")) {
       if (postcodeQuery) {
         setProjectGeoLoading(true);
         try {
-          const pc = await lookupUkPostcode(postcodeQuery);
+          const pc = await lookupSitePostcode(postcodeQuery);
           if (pc) {
             lat = pc.lat;
             lng = pc.lng;
@@ -2334,8 +2470,8 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
         }}
       >
         <div style={{ fontSize: 12, color: "#0C447C", lineHeight: 1.45, flex: 1, minWidth: 220 }}>
-          <strong>Nearest A&amp;E / hospital</strong> — save postcode → hospital under{" "}
-          <strong>Emergency contacts</strong>, then import into this RAMS in one click.
+          <strong>{getEmergencyHospitalHeading(getOrgMarketId())}</strong> — save postcode → hospital under{" "}
+          <strong>Emergency contacts</strong>, then import into this {getRamsShortLabel(getOrgMarketId())} in one click.
           {emergencyExtras.nearestHospital ? (
             <span style={{ display: "block", marginTop: 4, color: "var(--color-text-secondary)" }}>
               Saved: {emergencyExtras.nearestHospital}
@@ -2509,7 +2645,7 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
           >
             {geoLoading ? "Getting location…" : "Use my location (lat / lng)"}
           </button>
-          <button type="button" disabled={weatherLoading || (!String(form.siteLat || "").trim() && !resolveUkPostcodeInput("", form.location))} onClick={runWeatherLookup} style={{ ...ss.btnP, fontSize:12, width:"100%", opacity: weatherLoading ? 0.7 : 1 }}>
+          <button type="button" disabled={weatherLoading || (!String(form.siteLat || "").trim() && !resolveSitePostcodeInput("", form.location))} onClick={runWeatherLookup} style={{ ...ss.btnP, fontSize:12, width:"100%", opacity: weatherLoading ? 0.7 : 1 }}>
             {weatherLoading ? "Loading…" : "Fetch weather"}
           </button>
         </div>
@@ -2524,7 +2660,7 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap:10, marginBottom:12 }}>
         <div>
-          <label style={ss.lbl}>Nearest A&amp;E / hospital</label>
+          <label style={ss.lbl}>{getEmergencyHospitalHeading(getOrgMarketId())}</label>
           <input value={form.nearestHospital || ""} onChange={(e) => set("nearestHospital", e.target.value)} placeholder="Hospital name and area" style={ss.inp} />
         </div>
         <div>
@@ -4689,7 +4825,7 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             <div style={{ fontSize:11, fontWeight:700, color:"#0f172a", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>
               4. Emergency response
             </div>
-            <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", marginBottom:6 }}>Nearest A&amp;E / hospital</div>
+            <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", marginBottom:6 }}>{getEmergencyHospitalHeading(getOrgMarketId())}</div>
             {form.nearestHospital && <div style={{ fontSize:12, marginBottom:4 }}>{form.nearestHospital}</div>}
             {(form.hospitalDirectionsUrl || "").trim() && (() => {
               const raw = (form.hospitalDirectionsUrl || "").trim();
@@ -5528,8 +5664,12 @@ function snapshotBuilderState(step, form, rows) {
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function RAMSTemplateBuilder() {
   const { pushToast } = useToast();
+  const orgMarketId = getOrgMarketId();
+  const ramsLabel = getRamsShortLabel(orgMarketId);
+  const ramsBuilderTitle = getRamsBuilderTitle(orgMarketId);
   const [view, setView] = useState("list"); // list | builder
   const [step, setStep] = useState(1);
+  const [celebrateRamsIssue, setCelebrateRamsIssue] = useState(false);
   const [ramsDocs, setRamsDocs] = useState(()=>load("rams_builder_docs",[]));
   const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
     storageKey: "rams_builder_docs",
@@ -5892,7 +6032,7 @@ export default function RAMSTemplateBuilder() {
   ]);
 
   const goToList = () => {
-    if (builderDirty && !window.confirm("Leave RAMS builder? Unsaved changes will be lost.")) return;
+    if (builderDirty && !window.confirm(getLeaveRamsBuilderConfirm(orgMarketId))) return;
     setView("list");
   };
 
@@ -6252,12 +6392,8 @@ export default function RAMSTemplateBuilder() {
         surveyWorkType: pack.key,
         surveyWorkTypeLabel: pack.label,
         surveyMethodStatement: pack.method,
-        surveyDeliverables:
-          prev.surveyDeliverables ||
-          "Issued RAMS PDF, hazard register, control summary, survey notes, and client handover record.",
-        surveyAssumptions:
-          prev.surveyAssumptions ||
-          "Utility records available before start, access to survey extents confirmed, and site induction completed by all operatives.",
+        surveyDeliverables: prev.surveyDeliverables || getSurveyDeliverablesProse(pack.key),
+        surveyAssumptions: prev.surveyAssumptions || getSurveyAssumptionsProse(pack.key),
         communicationPlan:
           prev.communicationPlan ||
           `Daily briefing before start; stop-work escalation via supervisor; permit coordination with site manager; end-of-day handover to client rep.\n\nPermit dependencies:\n- ${(meta.permitDependencies || []).join("\n- ")}`,
@@ -6491,7 +6627,7 @@ export default function RAMSTemplateBuilder() {
       const hospitalGate = evaluateRamsHospitalGate(form, project);
       if (hospitalGate.required && !hospitalGate.ok) {
         window.alert(
-          `Cannot save as ${resolvedStatus.toUpperCase()}: ${hospitalGate.message || "Nearest A&E hospital must be set when project has map coordinates."}\n\nUse Enrich site on the project or fill nearest hospital on the RAMS header.`
+          `Cannot save as ${resolvedStatus.toUpperCase()}: ${hospitalGate.message || `${getEmergencyHospitalHeading(orgMarketId)} must be set when project has map coordinates.`}\n\nUse Enrich site on the project or fill nearest hospital on the ${getRamsShortLabel(orgMarketId)} header.`
         );
         return;
       }
@@ -6545,6 +6681,7 @@ export default function RAMSTemplateBuilder() {
         revision: nextRevision,
         note: "Document moved to ISSUED status.",
       });
+      setCelebrateRamsIssue(true);
     }
     const docBase = {
       ...form,
@@ -6958,11 +7095,16 @@ export default function RAMSTemplateBuilder() {
   if (view==="list") {
     return (
       <div className="app-document-module" style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-        <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="RAMS" />
+        <ConfettiCelebration
+          active={celebrateRamsIssue}
+          label={`${ramsLabel} issued`}
+          onDone={() => setCelebrateRamsIssue(false)}
+        />
+        <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel={ramsLabel} />
         <PageHero
-          badgeText="RAMS"
-          title="RAMS builder"
-          lead="Build RAMS from the hazard library — export/import JSON, share read-only links, optional operative certificates from Workers, site weather and map links. Unsaved work is kept as a draft in this browser for up to a week — choose &quot;Resume&quot; when you start a new RAMS."
+          badgeText={ramsLabel}
+          title={ramsBuilderTitle}
+          lead={`Build ${ramsLabel} from the hazard library — export/import JSON, share read-only links, optional operative certificates from Workers, site weather and map links. Unsaved work is kept as a draft in this browser for up to a week — choose "Resume" when you start a new ${ramsLabel}.`}
         />
         <SavedList
           ramsDocs={ramsDocs}
@@ -6991,6 +7133,11 @@ export default function RAMSTemplateBuilder() {
 
   return (
     <div className="app-document-module" style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+      <ConfettiCelebration
+        active={celebrateRamsIssue}
+        label={`${ramsLabel} issued`}
+        onDone={() => setCelebrateRamsIssue(false)}
+      />
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="RAMS" />
       {/* header */}
       <div

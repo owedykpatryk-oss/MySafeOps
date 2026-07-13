@@ -29,6 +29,12 @@ describe("permitOrgPrefs", () => {
     expect(ids).toEqual(PACK_DEFAULT_PERMIT_TYPES.electricalContractor);
   });
 
+  it("civil earthworks pack defaults include excavation", () => {
+    const ids = getEnabledPermitTypeIds({ industryPackId: "civilEarthworks" });
+    expect(ids).toContain("excavation");
+    expect(ids).toContain("ground_disturbance");
+  });
+
   it("detects supervisor mode", () => {
     expect(isPermitSupervisorMode({ permitSupervisorMode: true })).toBe(true);
     expect(isPermitSupervisorMode({})).toBe(false);

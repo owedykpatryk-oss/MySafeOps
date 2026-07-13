@@ -846,6 +846,32 @@ export const FAQ_MAIN_ENTITY_BY_SLUG = {
       text: "Permits for confined space, hot work, height and isolation should require more than one person. Lone work policy must align.",
     },
   ],
+  "ior-pozwolenie-na-prace-polska": [
+    {
+      name: "Czy IOR zastępuje pozwolenie na pracę?",
+      text: "Nie. IOR opisuje organizację robót na inwestycji. Pozwolenie na pracę dotyczy konkretnej czynności szczególnie niebezpiecznej w danym miejscu i czasie.",
+    },
+    {
+      name: "Kto wydaje pozwolenie na pracę na budowie?",
+      text: "Osoba kompetentna wyznaczona przez kierownika budowy, z uprawnieniami do oceny ryzyka dla danego typu prac. Procedura i ślad w systemie są kluczowe.",
+    },
+    {
+      name: "Czy pozwolenie może być papierowe?",
+      text: "Tak, jeśli jest aktualne i czytelne na placu. Cyfrowe PTW ułatwia status na żywo i przypomnienia przed wygaśnięciem.",
+    },
+    {
+      name: "Co sprawdza PIP na budowie?",
+      text: "M.in. ocenę ryzyka, szkolenia BHP, dokumentację organizacji robót i warunki pracy. Dobrze prowadzone rejestry ułatwiają pokazanie codziennych kontroli.",
+    },
+    {
+      name: "Czy MySafeOps to porada prawna?",
+      text: "Nie. To narzędzie do IOR, pozwoleń i rejestrów. Za zgodność ustawową odpowiada pracodawca i kierownik budowy.",
+    },
+    {
+      name: "Czy system działa offline na budowie?",
+      text: "Rdzeń MySafeOps działa w przeglądarce offline na wiele zadań. Opcjonalna chmura dodaje logowanie i backup.",
+    },
+  ],
 };
 
 /** @param {string | undefined} slug */

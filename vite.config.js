@@ -67,6 +67,145 @@ export default defineConfig(({ mode }) => {
         },
       },
       {
+        name: "dev-au-postcode-api",
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            if (!req.url || (req.method !== "GET" && req.method !== "HEAD")) return next();
+            const pathOnly = req.url.split("?")[0];
+            const legacy = pathOnly.match(/^\/api\/au-postcode\/([^/]+)$/);
+            const isAuPostcode = pathOnly === "/api/au-postcode" || legacy;
+            if (!isAuPostcode) return next();
+
+            const search = req.url.includes("?") ? req.url.split("?")[1] : "";
+            const params = new URLSearchParams(search);
+            const code = String(legacy?.[1] || params.get("code") || params.get("postcode") || "").replace(/\D/g, "");
+            const n = Number(code);
+            if (!/^\d{4}$/.test(code) || n < 800 || n > 9999) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ error: "Invalid Australian postcode (4 digits)" }));
+              return;
+            }
+
+            try {
+              const url = new URL("https://nominatim.openstreetmap.org/search");
+              url.searchParams.set("postalcode", code);
+              url.searchParams.set("country", "Australia");
+              url.searchParams.set("format", "json");
+              url.searchParams.set("limit", "1");
+              const upstream = await fetch(url.toString(), {
+                headers: {
+                  Accept: "application/json",
+                  "User-Agent": "MySafeOps/1.0 (AU construction safety; support@mysafeops.com)",
+                },
+              });
+              const rows = await upstream.json();
+              const row = Array.isArray(rows) ? rows[0] : null;
+              if (!row?.lat || !row?.lon) {
+                res.statusCode = 404;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Postcode not found" }));
+                return;
+              }
+              const address = row.address || {};
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.setHeader("Cache-Control", "public, max-age=86400");
+              if (req.method === "HEAD") {
+                res.end();
+                return;
+              }
+              res.end(
+                JSON.stringify({
+                  status: 200,
+                  result: {
+                    postcode: code,
+                    latitude: Number(row.lat),
+                    longitude: Number(row.lon),
+                    locality: address.city || address.town || address.suburb || address.village || "",
+                    state: address.state || "",
+                    country: address.country || "Australia",
+                  },
+                })
+              );
+            } catch {
+              res.statusCode = 502;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ error: "Postcode lookup unavailable" }));
+            }
+          });
+        },
+      },
+      {
+        name: "dev-pl-postcode-api",
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            if (!req.url || (req.method !== "GET" && req.method !== "HEAD")) return next();
+            const pathOnly = req.url.split("?")[0];
+            const legacy = pathOnly.match(/^\/api\/pl-postcode\/([^/]+)$/);
+            const isPlPostcode = pathOnly === "/api/pl-postcode" || legacy;
+            if (!isPlPostcode) return next();
+
+            const search = req.url.includes("?") ? req.url.split("?")[1] : "";
+            const params = new URLSearchParams(search);
+            const raw = String(legacy?.[1] || params.get("code") || params.get("postcode") || "");
+            const digits = raw.replace(/\D/g, "");
+            const code = digits.length === 5 ? `${digits.slice(0, 2)}-${digits.slice(2)}` : null;
+            if (!code) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ error: "Invalid Polish postcode (format XX-XXX)" }));
+              return;
+            }
+
+            try {
+              const url = new URL("https://nominatim.openstreetmap.org/search");
+              url.searchParams.set("postalcode", code);
+              url.searchParams.set("country", "Poland");
+              url.searchParams.set("format", "json");
+              url.searchParams.set("limit", "1");
+              const upstream = await fetch(url.toString(), {
+                headers: {
+                  Accept: "application/json",
+                  "User-Agent": "MySafeOps/1.0 (PL construction safety; support@mysafeops.com)",
+                },
+              });
+              const rows = await upstream.json();
+              const row = Array.isArray(rows) ? rows[0] : null;
+              if (!row?.lat || !row?.lon) {
+                res.statusCode = 404;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Postcode not found" }));
+                return;
+              }
+              const address = row.address || {};
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.setHeader("Cache-Control", "public, max-age=86400");
+              if (req.method === "HEAD") {
+                res.end();
+                return;
+              }
+              res.end(
+                JSON.stringify({
+                  lat: Number(row.lat),
+                  lng: Number(row.lon),
+                  postcode: address.postcode || code,
+                  city: address.city || address.town || address.village || "",
+                  adminDistrict: address.city || address.county || "",
+                  region: address.state || address.voivodeship || "",
+                  country: address.country || "Poland",
+                })
+              );
+            } catch {
+              res.statusCode = 502;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ error: "Postcode lookup unavailable" }));
+            }
+          });
+        },
+      },
+      {
         name: "dev-health-api",
         configureServer(server) {
           server.middlewares.use("/api/health", (req, res, next) => {
@@ -173,6 +312,66 @@ export default defineConfig(({ mode }) => {
               res.statusCode = 502;
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ error: "weather_upstream_unreachable" }));
+            }
+          });
+        },
+      },
+      {
+        name: "dev-geology-api",
+        configureServer(server) {
+          server.middlewares.use("/api/geology", async (req, res, next) => {
+            if (req.method !== "GET" && req.method !== "HEAD") return next();
+            const q = req.url?.includes("?") ? req.url.slice(req.url.indexOf("?") + 1) : "";
+            const params = new URLSearchParams(q);
+            const lat = parseFloat(params.get("lat") || "");
+            const lng = parseFloat(params.get("lng") || params.get("lon") || "");
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "invalid_coordinates" }));
+              return;
+            }
+            const delta = 0.002;
+            const bbox = [lng - delta, lat - delta, lng + delta, lat + delta].join(",");
+            const collections = ["bgsgeology625kbedrock", "bgsgeology625ksuperficial"];
+            try {
+              const fetchLayer = async (id) => {
+                const u = `https://ogcapi.bgs.ac.uk/collections/${id}/items?bbox=${bbox}&limit=5&f=json`;
+                const r = await fetch(u, { headers: { Accept: "application/geo+json" } });
+                if (!r.ok) return null;
+                const j = await r.json();
+                const p = j.features?.[0]?.properties;
+                if (!p) return null;
+                return {
+                  lex: p.lex || "",
+                  lexDescription: p.lex_d || "",
+                  rock: p.rock || "",
+                  rockDescription: p.rock_d || "",
+                  maxSystem: p.max_system || "",
+                };
+              };
+              const [bedrock, superficial] = await Promise.all(collections.map(fetchLayer));
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json");
+              if (req.method === "HEAD") {
+                res.end();
+                return;
+              }
+              res.end(
+                JSON.stringify({
+                  lat,
+                  lng,
+                  fetchedAt: new Date().toISOString(),
+                  source: "bgs-ogcapi",
+                  scale: "1:625,000 (generalised)",
+                  bedrock,
+                  superficial,
+                })
+              );
+            } catch {
+              res.statusCode = 502;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "geology_upstream_unreachable" }));
             }
           });
         },
@@ -288,6 +487,7 @@ out body;`.trim();
             if (id.includes("pdfjs-dist") || id.includes("pdf.worker")) return "pdfjs";
             if (id.includes("dompurify")) return "dompurify";
             if (norm.includes("/modules/surveyReport/")) return "survey-report";
+            if (norm.includes("/modules/gprReport/")) return "gpr-report";
             if (id.includes("html2canvas") || id.includes("jspdf")) return "print-export";
             if (
               id.includes("/react/") ||

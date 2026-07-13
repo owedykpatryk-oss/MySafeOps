@@ -21,6 +21,7 @@ describe("orgIndustryPacks", () => {
       "contractorPlusSurveying",
       "facilitiesMaintenance",
       "demolitionStripout",
+      "civilEarthworks",
       "foodPharma",
       "showEverything",
     ]);
@@ -56,6 +57,13 @@ describe("orgIndustryPacks", () => {
     applyIndustryPack("foodPharma");
     expect(getHiddenModuleIds()).not.toContain("allergen-changeovers");
     expect(getHiddenModuleIds()).not.toContain("gmp-deviations");
+  });
+
+  it("civil earthworks pack surfaces excavation modules", () => {
+    applyIndustryPack("civilEarthworks");
+    expect(getAppliedIndustryPackId()).toBe("civilEarthworks");
+    expect(getHiddenModuleIds()).not.toContain("excavation");
+    expect(loadOrgSettingsRaw().ramsStarterKey).toBe("groundworks");
   });
 
   it("rejects invalid pack keys", () => {

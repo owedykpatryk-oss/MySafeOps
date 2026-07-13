@@ -10,6 +10,16 @@ import { isModuleVisible } from "./hiddenModules";
 import { loadOrgScoped, asStorageArray } from "./orgStorage";
 import { todayIsoDate } from "./projectDashboard";
 import { evaluateSurveyFinalGate } from "./surveyCompletenessGates";
+import { getOrgMarketId } from "./orgMarket";
+import { localizeIndustryTerminology } from "./marketLabels";
+
+function locPackCopy(text, marketId = getOrgMarketId()) {
+  return localizeIndustryTerminology(String(text || ""), marketId);
+}
+
+function locPackCopyList(lines, marketId = getOrgMarketId()) {
+  return (lines || []).map((line) => locPackCopy(line, marketId));
+}
 
 /** Surveying profiles share survey workflow behaviour (built-in or custom with surveyWorkflow). */
 export function isSurveyGeospatialPackId(packId) {
@@ -63,6 +73,7 @@ export const INDUSTRY_SITE_PACKS = {
     title: "Survey & geodesy site pack",
     focus: [
       "Survey reports",
+      "GPR reports",
       "PAS128 / AS5488 deliverables",
       "Aerial LiDAR & laser scan",
       "Method statements",
@@ -89,6 +100,10 @@ export const INDUSTRY_SITE_PACKS = {
   demolitionStripout: {
     title: "Demolition & strip-out site pack",
     focus: ["Excavation log", "Temporary works", "Gate book", "Asbestos register", "RAMS", "PTW"],
+  },
+  civilEarthworks: {
+    title: "Civil & earthworks site pack",
+    focus: ["Excavation log", "Temporary works", "Daily briefing", "RAMS", "Permits (PTW)", "Inspections"],
   },
 };
 
@@ -157,6 +172,15 @@ export const PACK_WORKFLOW_HELP = {
       "Asbestos register before intrusive work",
     ],
   },
+  civilEarthworks: {
+    summary: "Civils workflow — groundworks RAMS, excavation, temp works and PTW before start.",
+    steps: [
+      "Groundworks playbook on new sites",
+      "Log excavation and temp works registers",
+      "Issue PTW before intrusive civils",
+      "Daily briefing on multi-day earthworks",
+    ],
+  },
   foodPharma: {
     summary: "Hygiene-critical workflow — allergen windows, GMP and high-care access.",
     steps: [
@@ -176,21 +200,30 @@ export const PACK_WORKFLOW_HELP = {
   },
 };
 
-/** @param {string} [packId] */
-export function getPackWorkflowHelp(packId = getOrgIndustryPackId()) {
-  if (PACK_WORKFLOW_HELP[packId]) return PACK_WORKFLOW_HELP[packId];
-  const custom = getCustomWorkspaceProfile(packId);
-  if (custom) {
-    return {
-      summary: custom.hint,
-      steps: [
-        "Custom profile — modules tuned for your organisation only",
-        "Apply profile to update More grid and Project Hub",
-        "Trim individual modules in Settings if needed",
-      ],
-    };
+/** @param {string} [packId] @param {import("../config/markets").MarketId} [marketId] */
+export function getPackWorkflowHelp(packId = getOrgIndustryPackId(), marketId = getOrgMarketId()) {
+  /** @type {{ summary: string, steps: string[] }} */
+  let help;
+  if (PACK_WORKFLOW_HELP[packId]) help = PACK_WORKFLOW_HELP[packId];
+  else {
+    const custom = getCustomWorkspaceProfile(packId);
+    if (custom) {
+      help = {
+        summary: custom.hint,
+        steps: [
+          "Custom profile — modules tuned for your organisation only",
+          "Apply profile to update More grid and Project Hub",
+          "Trim individual modules in Settings if needed",
+        ],
+      };
+    } else {
+      help = PACK_WORKFLOW_HELP.generalContractor;
+    }
   }
-  return PACK_WORKFLOW_HELP.generalContractor;
+  return {
+    summary: locPackCopy(help.summary, marketId),
+    steps: locPackCopyList(help.steps, marketId),
+  };
 }
 
 const PACK_HIGHLIGHTS = {
@@ -239,6 +272,11 @@ const PACK_HIGHLIGHTS = {
     "Groundworks playbook featured",
     "Demolition site pack for handover evidence",
   ],
+  civilEarthworks: [
+    "Excavation and temp works registers prioritised",
+    "Groundworks RAMS starter in builder",
+    "Civils site pack for audit exports",
+  ],
 };
 
 /** @param {string} [packId] */
@@ -246,32 +284,40 @@ export function getIndustryPackLabel(packId = getOrgIndustryPackId()) {
   return getWorkspacePackLabel(packId) || INDUSTRY_PACKS.generalContractor.label;
 }
 
-/** @param {string} [packId] */
-export function getIndustrySitePackTitle(packId = getOrgIndustryPackId()) {
-  return INDUSTRY_SITE_PACKS[packId]?.title || INDUSTRY_SITE_PACKS.generalContractor.title;
+/** @param {string} [packId] @param {import("../config/markets").MarketId} [marketId] */
+export function getIndustrySitePackTitle(packId = getOrgIndustryPackId(), marketId = getOrgMarketId()) {
+  const title = INDUSTRY_SITE_PACKS[packId]?.title || INDUSTRY_SITE_PACKS.generalContractor.title;
+  return locPackCopy(title, marketId);
 }
 
-/** @param {string} packId */
-export function getPackHighlights(packId) {
-  if (PACK_HIGHLIGHTS[packId]) return PACK_HIGHLIGHTS[packId];
-  const custom = getCustomWorkspaceProfile(packId);
-  if (custom) {
-    const baseLabel = INDUSTRY_PACKS[custom.basedOn || "generalContractor"]?.label || "General";
-    return [
-      `Custom profile based on ${baseLabel}`,
-      custom.surveyWorkflow ? "Survey workflow and PAS128/geospatial packs" : "Construction-first Project Hub",
-      `${visibleModulesForProfile(custom).length} modules visible in More`,
-    ];
+/** @param {string} packId @param {import("../config/markets").MarketId} [marketId] */
+export function getPackHighlights(packId, marketId = getOrgMarketId()) {
+  /** @type {string[]} */
+  let lines;
+  if (PACK_HIGHLIGHTS[packId]) lines = PACK_HIGHLIGHTS[packId];
+  else {
+    const custom = getCustomWorkspaceProfile(packId);
+    if (custom) {
+      const baseLabel = INDUSTRY_PACKS[custom.basedOn || "generalContractor"]?.label || "General";
+      lines = [
+        `Custom profile based on ${baseLabel}`,
+        custom.surveyWorkflow ? "Survey workflow and PAS128/geospatial packs" : "Construction-first Project Hub",
+        `${visibleModulesForProfile(custom).length} modules visible in More`,
+      ];
+    } else {
+      lines = PACK_HIGHLIGHTS.generalContractor;
+    }
   }
-  return PACK_HIGHLIGHTS.generalContractor;
+  return locPackCopyList(lines, marketId);
 }
 
 /**
  * Human-readable preview when switching workspace profile.
  * @param {string | null} fromId
  * @param {string} toId
+ * @param {import("../config/markets").MarketId} [marketId]
  */
-export function previewPackSwitch(fromId, toId) {
+export function previewPackSwitch(fromId, toId, marketId = getOrgMarketId()) {
   if (!toId || fromId === toId) return { changes: [], pipelineLabel: null };
   const to = getWorkspacePack(toId) || INDUSTRY_PACKS.generalContractor;
   if (!to) return { changes: [], pipelineLabel: null };
@@ -310,6 +356,11 @@ export function previewPackSwitch(fromId, toId) {
   if (toId === "generalContractor" || toId === "buildingTrades") {
     changes.push("Readiness emphasises CDM, briefing, RAMS and snags");
   }
+  if (toId === "civilEarthworks") {
+    changes.push("Excavation and temp works registers surfaced in More");
+    changes.push("Groundworks RAMS starter suggested in builder");
+    changes.push("Readiness emphasises PTW and excavation evidence");
+  }
   if (toId === "showEverything") {
     changes.push("All modules and RAMS packs restored to visible");
   }
@@ -325,11 +376,11 @@ export function previewPackSwitch(fromId, toId) {
   }
 
   return {
-    changes: [...new Set(changes)],
+    changes: locPackCopyList([...new Set(changes)], marketId),
     pipelineLabel:
       surveyAfter && toId !== "showEverything" ? "Survey" : surveyAfter ? "Survey (if module visible)" : "Inspections",
     label: to.label,
-    highlights: getPackHighlights(toId),
+    highlights: getPackHighlights(toId, marketId),
   };
 }
 
@@ -525,7 +576,8 @@ export function applyIndustryReadinessGates(gates, project, dash, packId = getOr
       });
       break;
     }
-    case "demolitionStripout": {
+    case "demolitionStripout":
+    case "civilEarthworks": {
       patchGate(gates, "ptw", { max: 18, ok: gates.find((g) => g.key === "ptw")?.ok });
       replaceGate(gates, "plans", {
         key: "excavation",
@@ -922,6 +974,7 @@ export function getIndustrySitePackRows(packId = getOrgIndustryPackId(), registe
       break;
     case "surveyingGeodesy":
       rows.push({ label: "Survey reports", value: String(dash?.surveys?.length || 0) });
+      rows.push({ label: "GPR reports", value: String(dash?.gprReports?.length || 0) });
       rows.push({
         label: "Survey drafts",
         value: String((dash?.surveys || []).filter((s) => s.status !== "final").length),
@@ -940,6 +993,7 @@ export function getIndustrySitePackRows(packId = getOrgIndustryPackId(), registe
       rows.push({ label: "Inspections (project)", value: String(dash?.inspections?.length || 0) });
       break;
     case "demolitionStripout":
+    case "civilEarthworks":
       rows.push({ label: "Active PTW", value: String(dash?.totals?.activePermits || 0) });
       rows.push({ label: "RAMS documents", value: String(dash?.rams?.length || 0) });
       rows.push({ label: "CDM packs", value: String(dash?.cdmPacks?.length || 0) });
@@ -965,6 +1019,7 @@ export function getIndustrySitePackRows(packId = getOrgIndustryPackId(), registe
  */
 export function buildIndustrySitePackFocusHtml(packId, dash, registers, escapeFn) {
   const config = INDUSTRY_SITE_PACKS[packId] || INDUSTRY_SITE_PACKS.generalContractor;
+  const marketId = getOrgMarketId();
   const reg = resolveRegisters(registers);
   const counts = {
     "PAT / electrical": reg.pat.length,
@@ -980,6 +1035,7 @@ export function buildIndustrySitePackFocusHtml(packId, dash, registers, escapeFn
     "Snag register": dash?.snags?.length || 0,
     "Method statements": dash?.methodStatements?.length || 0,
     "Survey reports": dash?.surveys?.length || 0,
+    "GPR reports": dash?.gprReports?.length || 0,
     "PAS128 deliverables": (dash?.surveys || []).filter((s) => s.pas128Ql).length,
     "RAMS (surveying)": dash?.rams?.length || 0,
     Drawings: dash?.plans?.length || 0,
@@ -993,12 +1049,13 @@ export function buildIndustrySitePackFocusHtml(packId, dash, registers, escapeFn
   };
 
   const items = config.focus.map((label) => {
+    const displayLabel = localizeIndustryTerminology(label, marketId);
     const val = counts[label];
     let detail = "";
     if (label === "Daily briefing" && val === "today") detail = " — recorded today";
     else if (label === "Timesheets" && val != null) detail = ` — ${val}h this week`;
     else if (val != null && val !== "") detail = ` — ${val}`;
-    return `<li>${escapeFn(label)}${escapeFn(detail)}</li>`;
+    return `<li>${escapeFn(displayLabel)}${escapeFn(detail)}</li>`;
   });
 
   return `<div class="section">${escapeFn(config.title)} — audit focus</div><ul>${items.join("")}</ul>`;

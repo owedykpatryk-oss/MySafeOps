@@ -12,7 +12,7 @@ import {
 import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 import { buildFessMethodStatementPackHtml } from "./fessMsPrintHtml";
 import { buildFessBriefingOperativeRows } from "./fessBriefingRecord";
-import { buildFessRamsPrintBodyHTML } from "./fessRamsPrintHtml";
+import { buildFessRamsPrintBodyHTML, fessOrgPrintTheme } from "./fessRamsPrintHtml";
 import { escapeHtml as escHtml } from "./htmlEscape";
 
 const fmtDate = (iso) => {
@@ -106,7 +106,7 @@ export async function generateFessSitePackHTML(
   const pageTitle = `${form.title || "RAMS"} · FESS site pack (RAMS + MS + PTW)`;
   const orgTheme = { orgName: String(loadOrgSettingsRaw()?.name || "MySafeOps") };
   const footer = `${form.documentNo || "RAMS"} · FESS site pack · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
-  return wrapRamsPrintDocument(pageTitle, combinedBody, permitExtraCss, footer);
+  return wrapRamsPrintDocument(pageTitle, combinedBody, permitExtraCss, footer, fessOrgPrintTheme());
 }
 
 function buildFessSitePackRegistersHtml(projectId, { ghpItems = [], lotoItems = [], allergenWindows = [] } = {}) {

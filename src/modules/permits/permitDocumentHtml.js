@@ -12,17 +12,85 @@ import {
 } from "../../utils/pdfBranding.js";
 import { buildPermitStatusDeepLink, renderDigGuidancePrintHtml } from "./permitDigGuidance";
 import { renderGuidancePrintHtml } from "./permitGuidance/registry";
+import { formatOrgDateTime } from "../../utils/orgLocale.js";
 
 export { buildPermitStatusDeepLink };
 
-function fmtDateTime(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+const fmtDateTime = formatOrgDateTime;
+
+function permitStatusVisual(status) {
+  const s = String(status || "draft").toLowerCase();
+  const map = {
+    active: { bg: "#ecfdf5", fg: "#047857", border: "#6ee7b7", label: "ACTIVE" },
+    approved: { bg: "#eff6ff", fg: "#1d4ed8", border: "#93c5fd", label: "APPROVED" },
+    pending_review: { bg: "#fef3c7", fg: "#b45309", border: "#fcd34d", label: "PENDING REVIEW" },
+    draft: { bg: "#fffbeb", fg: "#b45309", border: "#fcd34d", label: "DRAFT" },
+    closed: { bg: "#f1f5f9", fg: "#475569", border: "#cbd5e1", label: "CLOSED" },
+    expired: { bg: "#fef2f2", fg: "#b91c1c", border: "#fca5a5", label: "EXPIRED" },
+    suspended: { bg: "#fef2f2", fg: "#991b1b", border: "#fca5a5", label: "SUSPENDED" },
+  };
+  return map[s] || map.draft;
+}
+
+function checklistProgressHtml(checkedCount, total, primaryColor) {
+  const safeTotal = Math.max(0, Number(total) || 0);
+  const pct = safeTotal ? Math.round((checkedCount / safeTotal) * 100) : 0;
+  return `<div class="ptw-checklist-progress" style="margin:0 0 12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:6px">
+      <strong>Pre-work checklist</strong>
+      <span style="color:#64748b">${checkedCount}/${safeTotal} confirmed (${pct}%)</span>
+    </div>
+    <div style="height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:linear-gradient(90deg, ${escapeHtml(primaryColor)}, #22c55e);border-radius:999px"></div>
+    </div>
+  </div>`;
+}
+
+function renderPermitCoverPage({
+  permit,
+  def,
+  org,
+  primaryColor,
+  checkedCount,
+  checklistTotal,
+  endIso,
+  qrHtml,
+  versionTag,
+}) {
+  const st = permitStatusVisual(permit.status);
+  const pct = checklistTotal ? Math.round((checkedCount / checklistTotal) * 100) : 0;
+  return `<div class="ptw-cover" style="page-break-after:always;min-height:240mm;display:flex;flex-direction:column;padding:4px 0 16px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:3px solid ${primaryColor};padding-bottom:14px;margin-bottom:18px">
+      <div style="min-width:0">
+        ${org.logo ? `<img src="${escapeAttr(safeImageSrc(org.logo) || "")}" alt="" style="max-height:52px;margin-bottom:10px"/>` : ""}
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Permit to work</div>
+        <div style="font-size:20pt;font-weight:800;color:${primaryColor};line-height:1.15;margin-top:6px">${escapeHtml(def.label)}</div>
+        <div style="font-size:11px;color:#64748b;margin-top:8px">${escapeHtml(org.name || "MySafeOps")}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <span style="display:inline-block;padding:6px 14px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:0.05em;background:${st.bg};color:${st.fg};border:1px solid ${st.border}">${st.label}</span>
+        <div style="font-size:10px;color:#94a3b8;margin-top:10px;font-family:monospace">${escapeHtml(permit.id || "—")}</div>
+        <div style="font-size:10px;color:#94a3b8">VER ${escapeHtml(versionTag)}</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-bottom:18px;font-size:12px">
+      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">Location</div><strong>${escapeHtml(permit.location || "—")}</strong></div>
+      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">Issued to</div><strong>${escapeHtml(permit.issuedTo || "—")}</strong></div>
+      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">Valid from</div>${escapeHtml(fmtDateTime(permit.startDateTime))}</div>
+      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">Expires</div><strong>${escapeHtml(fmtDateTime(endIso))}</strong></div>
+    </div>
+    <p style="font-size:12px;line-height:1.55;color:#334155;margin:0 0 16px">${escapeHtml(permit.description || "—")}</p>
+    <div style="margin-bottom:18px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:8px">
+        <strong>Checklist readiness</strong>
+        <span>${checkedCount}/${checklistTotal} · ${pct}%</span>
+      </div>
+      <div style="height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg, ${primaryColor}, #22c55e)"></div>
+      </div>
+    </div>
+    ${qrHtml || ""}
+  </div>`;
 }
 
 function loadOrgPrintSettings() {
@@ -159,7 +227,8 @@ export function renderPermitDocumentHtml(permit, options = {}) {
     })
     .join("");
 
-  const versionTag = escapeHtml(deriveVersionTag(versionPrefix, permit));
+  const versionTagRaw = deriveVersionTag(versionPrefix, permit);
+  const versionTag = escapeHtml(versionTagRaw);
   const docRef = escapeHtml(buildDocReference(org, def.label));
   const themeTypeColor = theme === "executive" ? primaryColor : def.color;
   const themeTypeBg = theme === "executive" ? `${primaryColor}1A` : def.bg;
@@ -197,7 +266,9 @@ export function renderPermitDocumentHtml(permit, options = {}) {
     p,li,span{overflow-wrap:anywhere}
     img,svg{max-width:100%;height:auto}
     .doc-top,.header,h2,.signatures{break-inside:avoid-page;page-break-inside:avoid}
+    table tr{break-inside:avoid-page;page-break-inside:avoid}
     .sig-box{height:50px;border:1px solid #ddd;border-radius:4px}
+    .ptw-cover,.ptw-checklist-progress div[style*="linear-gradient"]{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     @media print{
       body{padding:0}
       .doc-content{padding-bottom:0}
@@ -207,6 +278,17 @@ export function renderPermitDocumentHtml(permit, options = {}) {
   </style></head><body>
   <div class="watermark">${watermarkLabel}</div>
   <div class="doc-content">
+  ${renderPermitCoverPage({
+    permit,
+    def,
+    org,
+    primaryColor,
+    checkedCount,
+    checklistTotal: checklistItems.length,
+    endIso,
+    qrHtml,
+    versionTag: versionTagRaw,
+  })}
   ${renderPrintDocHeader(org, {
     docTitle: def.label,
     docSubtitle: "Permit to work · controlled site document",
@@ -220,7 +302,7 @@ export function renderPermitDocumentHtml(permit, options = {}) {
     docRef: buildDocReference(org, def.label),
   })}
   <div class="doc-top">
-    <span class="doc-chip">STATUS ${escapeHtml(String(permit.status || "draft").toUpperCase())}</span>
+    <span class="doc-chip" style="background:${permitStatusVisual(permit.status).bg};color:${permitStatusVisual(permit.status).fg};border-color:${permitStatusVisual(permit.status).border}">STATUS ${escapeHtml(String(permit.status || "draft").toUpperCase())}</span>
     <span class="doc-chip">ISSUED ${escapeHtml(fmtDateTime(permit.startDateTime))}</span>
   </div>
   <div class="ptw-type-row"><div class="ptw-type">${escapeHtml(def.label)}</div></div>
@@ -233,10 +315,10 @@ export function renderPermitDocumentHtml(permit, options = {}) {
     ${authHTML}
   </table>
   <h2>Pre-work checklist (${checkedCount}/${checklistItems.length || 0} confirmed)</h2>
+  ${checklistProgressHtml(checkedCount, checklistItems.length, primaryColor)}
   <table><tbody>${checklistHTML}</tbody></table>
   ${digGuidanceHtml}
   ${permit.notes ? `<h2>Conditions / restrictions</h2><p style="font-size:12px;line-height:1.6;padding:6px 8px;background:#fff8e6;border:0.5px solid #e5c060">${escapeHtml(permit.notes)}</p>` : ""}
-  ${qrHtml}
   ${legalRefsHtml}
   <h2>Signatures</h2>
   <table>
@@ -253,7 +335,7 @@ export function renderPermitDocumentHtml(permit, options = {}) {
       ? `<h2>Lessons learned</h2><p style="font-size:12px;line-height:1.6;padding:8px 10px;background:#e8f4fc;border:0.5px solid #cfe3f8;color:#0b4f7c;margin:0 0 10px">${escapeHtml(permit.lessonsLearned)}</p>`
       : ""
   }
-  ${renderPrintDocFooter(org, { extra: `${fmtDateTime(permit.createdAt)} · ${docRef}` })}
+  ${renderPrintDocFooter({ ...org, pdfComplianceLine: complianceLine }, { extra: `${fmtDateTime(permit.createdAt)} · ${docRef}` })}
   </div>
   </body></html>`;
 }

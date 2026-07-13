@@ -4,7 +4,7 @@
  * Keeps client CSP on connect-src 'self' — no third-party Overpass host required.
  */
 
-import { API_JSON_HEADERS, isSameSiteApiRequest, parseBoundedJson, readJsonBody, sendJson } from "./securityUtils.js";
+import { API_JSON_HEADERS, isSameSiteApiRequest, parseBoundedJson, readJsonBody, rejectIfRateLimited, sendJson } from "./securityUtils.js";
 import { parseLatLng } from "./coordUtils.js";
 
 const UPSTREAM = "https://overpass-api.de/api/interpreter";
@@ -37,6 +37,8 @@ export default async function handler(req, res) {
   if (!isSameSiteApiRequest(req)) {
     return sendJson(res, 403, { error: "forbidden_origin" });
   }
+
+  if (rejectIfRateLimited(req, res, "overpass", { max: 20, windowMs: 60_000 })) return;
 
   if (req.method === "HEAD") {
     res.writeHead(204, API_JSON_HEADERS);

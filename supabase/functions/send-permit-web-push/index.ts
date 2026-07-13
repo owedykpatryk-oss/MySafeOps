@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { assertOrgSlugAccess } from "../_shared/orgAccess.ts";
 
 /** Full CORS for browser + supabase-js (preflight sends apikey, authorization, content-type, x-client-info). */
 const corsHeaders: Record<string, string> = {
@@ -64,6 +65,10 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const orgSlug = cleanOrgSlug(body?.orgSlug);
+
+    const access = await assertOrgSlugAccess(supabase, user.id, orgSlug);
+    if (!access.ok) return json(access.status, { error: access.error });
+
     const permit = (body?.permit || {}) as Record<string, unknown>;
     const title = String(body?.title || "Permit update");
     const msg = String(body?.body || "").slice(0, 220);

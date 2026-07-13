@@ -10,7 +10,9 @@
  *
  * Optional:
  * - STRIPE_RETRY_LIMIT (default: 25)
- * - STRIPE_PRICE_STARTER, STRIPE_PRICE_TEAM, STRIPE_PRICE_BUSINESS, STRIPE_PRICE_ENTERPRISE (same ids as Supabase Edge secrets) so retried events map billing_plan correctly
+ * - STRIPE_PRICE_{STARTER,TEAM,BUSINESS,ENTERPRISE}[_TEST][_AUD|_PLN] (same ids as Supabase Edge
+ *   secrets) so retried events map billing_plan correctly across live/test and all markets
+ *   (UK, AU, PL) — mirrors supabase/functions/_shared/stripeConfig.ts planFromPriceId().
  */
 import { config } from "dotenv";
 import { resolve } from "node:path";
@@ -41,16 +43,27 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+const MARKET_PRICE_SUFFIX = { uk: "", au: "_AUD", pl: "_PLN" };
+const PLAN_IDS = ["starter", "team", "business", "enterprise"];
+
+/**
+ * Maps a Stripe price id back to a plan, checking live/test mode and all
+ * markets (UK/AU/PL) — same lookup the stripe-webhook edge function uses,
+ * so retries don't silently null out billing_plan for AU/PL subscriptions.
+ */
 function planFromPriceId(priceId) {
   const p = String(priceId || "").trim();
-  const s = (process.env.STRIPE_PRICE_STARTER || "").trim();
-  const t = (process.env.STRIPE_PRICE_TEAM || "").trim();
-  const b = (process.env.STRIPE_PRICE_BUSINESS || "").trim();
-  const e = (process.env.STRIPE_PRICE_ENTERPRISE || "").trim();
-  if (s && p === s) return "starter";
-  if (t && p === t) return "team";
-  if (b && p === b) return "business";
-  if (e && p === e) return "enterprise";
+  if (!p) return null;
+  for (const modeSuffix of ["", "_TEST"]) {
+    for (const marketKey of Object.keys(MARKET_PRICE_SUFFIX)) {
+      const marketSuffix = MARKET_PRICE_SUFFIX[marketKey];
+      for (const plan of PLAN_IDS) {
+        const envKey = `STRIPE_PRICE_${plan.toUpperCase()}${modeSuffix}${marketSuffix}`;
+        const value = (process.env[envKey] || "").trim();
+        if (value && value === p) return plan;
+      }
+    }
+  }
   return null;
 }
 

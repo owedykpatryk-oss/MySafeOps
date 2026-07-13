@@ -32,6 +32,7 @@ import {
   primaryBottomNavIdSet,
   PRIMARY_BOTTOM_NAV_IDS,
 } from "../navigation/appModules";
+import { getMoreSectionDisplayTitle } from "../data/appUiCopy";
 import { getPinnedModuleIds, togglePinnedModule } from "../utils/pinnedModules";
 import { getSectionTone, getModuleIcon, canExportModulePdf, preloadModuleIcons } from "../navigation/moduleCatalogMeta";
 import { recordRecentModule } from "../utils/recentModules";
@@ -51,6 +52,8 @@ import {
 } from "../utils/hiddenModules";
 import { ORG_SETTINGS_UPDATED_EVENT, loadOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import { isOnboardingWizardComplete } from "../utils/workspaceOnboarding";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getModuleLabelForMarket } from "../utils/marketLabels";
 import {
   filterTabsByRegisterStat,
   getRegisterStatsMap,
@@ -341,11 +344,13 @@ const NAV_ICONS = {
 };
 
 /** Base bottom bar (More is last). Platform owner tab is inserted in layout when `isSuperadmin`. */
-const NAV_TABS = NAV_TAB_IDS.map((t) => ({
-  id: t.id,
-  label: t.label,
-  icon: NAV_ICONS[t.id] || NAV_ICONS.more,
-}));
+function buildNavTabs(marketId = getOrgMarketId()) {
+  return NAV_TAB_IDS.map((t) => ({
+    id: t.id,
+    label: getModuleLabelForMarket(t.id, marketId) || t.label,
+    icon: NAV_ICONS[t.id] || NAV_ICONS.more,
+  }));
+}
 
 export default function MainAppLayout() {
   const { user } = useSupabaseAuth();
@@ -354,6 +359,12 @@ export default function MainAppLayout() {
   const orgBranding = useOrgBranding();
   const isSuperadmin = isSuperAdminEmail(user?.email);
   const [hiddenRev, setHiddenRev] = useState(0);
+  const [orgMarketRev, setOrgMarketRev] = useState(0);
+  const orgMarketId = useMemo(() => {
+    void orgMarketRev;
+    return getOrgMarketId();
+  }, [orgMarketRev]);
+  const navTabsBase = useMemo(() => buildNavTabs(orgMarketId), [orgMarketId]);
   const [bottomSlotId, setBottomSlotId] = useState(() => resolveBottomNavSlotId());
   const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingWizardComplete());
   const hiddenModules = useMemo(() => {
@@ -371,16 +382,19 @@ export default function MainAppLayout() {
 
   useEffect(() => {
     const bump = () => setHiddenRev((r) => r + 1);
+    const bumpMarket = () => setOrgMarketRev((r) => r + 1);
     const bumpSlot = () => setBottomSlotId(resolveBottomNavSlotId());
     const bumpOnboarding = () => setShowOnboarding(!isOnboardingWizardComplete());
     window.addEventListener(HIDDEN_MODULES_UPDATED_EVENT, bump);
     window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+    window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpMarket);
     window.addEventListener(BOTTOM_NAV_SHORTCUT_UPDATED_EVENT, bumpSlot);
     window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpSlot);
     window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpOnboarding);
     return () => {
       window.removeEventListener(HIDDEN_MODULES_UPDATED_EVENT, bump);
       window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+      window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpMarket);
       window.removeEventListener(BOTTOM_NAV_SHORTCUT_UPDATED_EVENT, bumpSlot);
       window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpSlot);
       window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bumpOnboarding);
@@ -389,7 +403,7 @@ export default function MainAppLayout() {
 
   const bottomNavTabs = useMemo(() => {
     const slotId = isBottomNavOccupiedId(bottomSlotId) ? DEFAULT_BOTTOM_NAV_FALLBACK_ID : bottomSlotId;
-    let tabs = NAV_TABS.map((t) =>
+    let tabs = navTabsBase.map((t) =>
       t.id === "bin"
         ? {
             ...t,
@@ -413,7 +427,7 @@ export default function MainAppLayout() {
       seen.add(t.id);
       return true;
     });
-  }, [isSuperadmin, visibilityOpts, bottomSlotId]);
+  }, [isSuperadmin, visibilityOpts, bottomSlotId, navTabsBase]);
   const primaryNavIdSet = useMemo(() => {
     const s = new Set(filterVisibleModuleIds(PRIMARY_BOTTOM_NAV_IDS, visibilityOpts));
     if (isSuperadmin) s.add("superadmin");
@@ -1017,7 +1031,7 @@ export default function MainAppLayout() {
                   <div className="app-more-section-head">
                     <div className="app-more-section-head__title">
                       <span className={`app-more-section-accent app-more-section-accent--${tone}`} aria-hidden />
-                      <span>{section.title}</span>
+                      <span>{getMoreSectionDisplayTitle(section.title, orgMarketId)}</span>
                       <span className="app-more-section-count">{allSectionTabs.length}</span>
                     </div>
                     {exportableCount > 0 && (

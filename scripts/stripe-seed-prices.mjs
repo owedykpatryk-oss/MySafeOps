@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Creates Stripe Products + monthly GBP Prices for MySafeOps plans (Solo / Team / Business / Enterprise).
+ * Creates Stripe Products + monthly Prices for MySafeOps plans (GBP + AUD + PLN).
  * Idempotent: reuses products/prices found by metadata `mysafeops_plan_id`.
  *
  * Requires in .env.local (or env):
@@ -14,17 +14,26 @@ import { config } from "dotenv";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import Stripe from "stripe";
+import { AU_PLAN_AMOUNT_CENTS, stripeEnvKeyForAuPlan } from "../src/config/auPricing.js";
+import { PL_PLAN_AMOUNT_GROSZE, stripeEnvKeyForPlPlan } from "../src/config/plPricing.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 config({ path: resolve(__dirname, "../.env.local") });
 config({ path: resolve(__dirname, "../.env") });
 
 const PLANS = [
-  { planId: "starter", productName: "MySafeOps — Solo", amountPence: 1900 },
-  { planId: "team", productName: "MySafeOps — Team", amountPence: 9900 },
-  { planId: "business", productName: "MySafeOps — Business", amountPence: 24900 },
-  { planId: "enterprise", productName: "MySafeOps — Enterprise", amountPence: 49900 },
+  { planId: "starter", productName: "MySafeOps — Solo", gbpPence: 1900, audCents: AU_PLAN_AMOUNT_CENTS.starter, plnGrosze: PL_PLAN_AMOUNT_GROSZE.starter },
+  { planId: "team", productName: "MySafeOps — Team", gbpPence: 9900, audCents: AU_PLAN_AMOUNT_CENTS.team, plnGrosze: PL_PLAN_AMOUNT_GROSZE.team },
+  { planId: "business", productName: "MySafeOps — Business", gbpPence: 24900, audCents: AU_PLAN_AMOUNT_CENTS.business, plnGrosze: PL_PLAN_AMOUNT_GROSZE.business },
+  { planId: "enterprise", productName: "MySafeOps — Enterprise", gbpPence: 49900, audCents: AU_PLAN_AMOUNT_CENTS.enterprise, plnGrosze: PL_PLAN_AMOUNT_GROSZE.enterprise },
 ];
+
+const GBP_ENV = {
+  starter: "STRIPE_PRICE_STARTER",
+  team: "STRIPE_PRICE_TEAM",
+  business: "STRIPE_PRICE_BUSINESS",
+  enterprise: "STRIPE_PRICE_ENTERPRISE",
+};
 
 const SECRET = process.env.STRIPE_SECRET_KEY?.trim();
 if (!SECRET) {
@@ -45,7 +54,31 @@ async function findProductByPlanId(planId) {
   }
 }
 
-async function getOrCreatePrice(plan) {
+async function getOrCreatePrice(product, planId, currency, unitAmount) {
+  const prices = await stripe.prices.list({ product: product.id, active: true, limit: 30 });
+  const existing = prices.data.find(
+    (p) =>
+      p.currency === currency &&
+      p.unit_amount === unitAmount &&
+      p.recurring?.interval === "month"
+  );
+  if (existing) {
+    console.log(`  Using existing ${currency.toUpperCase()} price: ${existing.id}`);
+    return existing.id;
+  }
+
+  const created = await stripe.prices.create({
+    product: product.id,
+    currency,
+    unit_amount: unitAmount,
+    recurring: { interval: "month" },
+    metadata: { mysafeops_plan_id: planId, mysafeops_currency: currency },
+  });
+  console.log(`  Created ${currency.toUpperCase()} price: ${created.id}`);
+  return created.id;
+}
+
+async function seedPlan(plan) {
   let product = await findProductByPlanId(plan.planId);
 
   if (!product) {
@@ -58,27 +91,10 @@ async function getOrCreatePrice(plan) {
     console.log(`Found product ${plan.planId}: ${product.id}`);
   }
 
-  const prices = await stripe.prices.list({ product: product.id, active: true, limit: 30 });
-  const existing = prices.data.find(
-    (p) =>
-      p.currency === "gbp" &&
-      p.unit_amount === plan.amountPence &&
-      p.recurring?.interval === "month"
-  );
-  if (existing) {
-    console.log(`  Using existing price: ${existing.id}`);
-    return { planId: plan.planId, priceId: existing.id, productId: product.id };
-  }
-
-  const created = await stripe.prices.create({
-    product: product.id,
-    currency: "gbp",
-    unit_amount: plan.amountPence,
-    recurring: { interval: "month" },
-    metadata: { mysafeops_plan_id: plan.planId },
-  });
-  console.log(`  Created price: ${created.id}`);
-  return { planId: plan.planId, priceId: created.id, productId: product.id };
+  const gbpPriceId = await getOrCreatePrice(product, plan.planId, "gbp", plan.gbpPence);
+  const audPriceId = await getOrCreatePrice(product, plan.planId, "aud", plan.audCents);
+  const plnPriceId = await getOrCreatePrice(product, plan.planId, "pln", plan.plnGrosze);
+  return { planId: plan.planId, gbpPriceId, audPriceId, plnPriceId, productId: product.id };
 }
 
 async function main() {
@@ -87,20 +103,26 @@ async function main() {
 
   const rows = [];
   for (const plan of PLANS) {
-    rows.push(await getOrCreatePrice(plan));
+    rows.push(await seedPlan(plan));
   }
 
-  console.log("\n--- Add these to Supabase Edge Function secrets (and match Edge env names) ---\n");
-  const map = {
-    starter: "STRIPE_PRICE_STARTER",
-    team: "STRIPE_PRICE_TEAM",
-    business: "STRIPE_PRICE_BUSINESS",
-    enterprise: "STRIPE_PRICE_ENTERPRISE",
-  };
+  console.log("\n--- GBP — Supabase Edge Function secrets ---\n");
   for (const r of rows) {
-    console.log(`${map[r.planId]}=${r.priceId}`);
+    console.log(`${GBP_ENV[r.planId]}=${r.gbpPriceId}`);
   }
-  console.log("\nDone.");
+
+  console.log("\n--- AUD — Supabase Edge Function secrets ---\n");
+  for (const r of rows) {
+    console.log(`${stripeEnvKeyForAuPlan(r.planId)}=${r.audPriceId}`);
+  }
+
+  console.log("\n--- PLN — Supabase Edge Function secrets ---\n");
+  for (const r of rows) {
+    console.log(`${stripeEnvKeyForPlPlan(r.planId)}=${r.plnPriceId}`);
+  }
+
+  console.log("\nAlso append AUD/PLN ids to .env.local, then: npm run stripe:sync-secrets");
+  console.log("Done.");
 }
 
 main().catch((e) => {

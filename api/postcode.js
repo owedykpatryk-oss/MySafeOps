@@ -3,7 +3,7 @@
  * GET /api/postcode?code=KT227SH — flat route (reliable on Vercel + Vite dev proxy).
  */
 
-import { parseBoundedJson, isSameSiteApiRequest } from "./securityUtils.js";
+import { parseBoundedJson, isSameSiteApiRequest, rejectIfRateLimited } from "./securityUtils.js";
 import { normaliseUkPostcodeCompact, isValidUkPostcodeCompact } from "./postcodeUtils.js";
 
 const UPSTREAM = "https://api.postcodes.io/postcodes";
@@ -46,6 +46,10 @@ export default async function handler(req, res) {
 
   if (!isSameSiteApiRequest(req)) {
     return sendJson(res, 403, { error: "forbidden_origin" });
+  }
+
+  if (rejectIfRateLimited(req, res, "postcode", { max: 60, windowMs: 60_000 })) {
+    return;
   }
 
   const raw = String(req.query?.code || req.query?.postcode || "").trim();

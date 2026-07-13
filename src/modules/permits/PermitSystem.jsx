@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, memo } from "react";
 import { useToast } from "../../context/ToastContext";
 import { copyTextToClipboard } from "../../utils/copyToClipboard";
 import { ms } from "../../utils/moduleStyles";
 import PageHero from "../../components/PageHero";
-import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import ConfettiCelebration from "../../components/ConfettiCelebration";
+import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey, ORG_DATA_CHANGED_EVENT, getOrgId } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { getTemplateForType, saveOrgTemplate } from "./permitTemplateCatalog";
 import { evaluatePermitCompliance } from "./permitComplianceChecks";
@@ -39,7 +40,6 @@ import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } f
 import GeoPhotoEvidencePicker from "../../components/geoPhotos/GeoPhotoEvidencePicker";
 import { pickGeoPhotoAsPermitEvidence } from "../../utils/geoPhotoIntegrations";
 import { permitHasSiteEvidence, suggestedGeoPhotoPresetForPermit } from "../../utils/geoPhotoFields";
-import { getOrgId } from "../../utils/orgStorage";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { mirrorPermitsToSupabase } from "../../utils/permitSupabaseMirror";
@@ -57,6 +57,8 @@ import { appendPermitAuditEntry } from "./permitAuditLog";
 import PermitEvidenceImage from "./components/PermitEvidenceImage";
 import { getTypeComplianceMeta } from "./ukComplianceMatrix";
 import { PERMIT_TYPES, checklistStringsForType } from "./permitTypes";
+import { getPermitTypesForMarket } from "./permitTypesMarket";
+import { getOrgMarketId } from "../../utils/orgMarket";
 import { renderPermitDocumentHtml } from "./permitDocumentHtml";
 import { safeOpaqueToken, openPrintWindow, writePrintWindowDocument } from "../../utils/htmlEscape.js";
 import { buildPermitEmailRecipients, parseManualEmails, sendPermitNotificationEmail, sendPermitNotificationWebPush } from "../../utils/permitNotifications";
@@ -139,14 +141,25 @@ import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 const genId = () => `ptw_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const genAckToken = () => `ack_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
 
+// Cheap in-memory cache — avoids a localStorage read + JSON.parse per date cell rendered
+// (permit board/list renders many date fields per permit, every render).
+let _orgLocaleCache = { value: "", ts: 0 };
+const ORG_LOCALE_CACHE_MS = 5000;
 function getOrgLocale() {
+  const nowTs = Date.now();
+  if (_orgLocaleCache.value && nowTs - _orgLocaleCache.ts < ORG_LOCALE_CACHE_MS) return _orgLocaleCache.value;
+  let resolved;
   try {
     const o = loadOrgSettingsRaw();
-    if (o.locale && typeof o.locale === "string") return o.locale.trim() || "en-GB";
+    resolved = o.locale && typeof o.locale === "string" ? (o.locale.trim() || "en-GB") : null;
   } catch {
-    /* ignore */
+    resolved = null;
   }
-  return typeof navigator !== "undefined" && navigator.language ? navigator.language : "en-GB";
+  if (!resolved) {
+    resolved = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en-GB";
+  }
+  _orgLocaleCache = { value: resolved, ts: nowTs };
+  return resolved;
 }
 
 const fmtDate = (iso) => {
@@ -460,9 +473,9 @@ function certificationDisplayLabel(cert) {
   return String(cert.label || cert.type || cert.name || cert.certification || cert.code || "").trim();
 }
 
-function loadSnippetList(key) {
+function loadSnippetList(baseKey) {
   try {
-    const rows = JSON.parse(localStorage.getItem(key) || "[]");
+    const rows = JSON.parse(localStorage.getItem(orgScopedKey(baseKey)) || "[]");
     if (!Array.isArray(rows)) return [];
     return rows.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 24);
   } catch {
@@ -470,10 +483,11 @@ function loadSnippetList(key) {
   }
 }
 
-function saveSnippetToList(key, text) {
+function saveSnippetToList(baseKey, text) {
   const clean = String(text || "").trim();
   if (!clean) return;
-  const next = [clean, ...loadSnippetList(key).filter((x) => x.toLowerCase() !== clean.toLowerCase())].slice(0, 24);
+  const key = orgScopedKey(baseKey);
+  const next = [clean, ...loadSnippetList(baseKey).filter((x) => x.toLowerCase() !== clean.toLowerCase())].slice(0, 24);
   localStorage.setItem(key, JSON.stringify(next));
 }
 
@@ -788,11 +802,24 @@ function PermitForm({
   conditionalRules = [],
   supervisorMode = false,
 }) {
-  const projects = load("mysafeops_projects",[]);
-  const workers = load("mysafeops_workers",[]);
-  const ramsDocs = load("rams_builder_docs", []);
-  const permitPrefs = load(PERMIT_PREFS_KEY, {});
-  const org = (() => { try { return loadOrgSettingsRaw(); } catch { return {}; } })();
+  const orgId = getOrgId();
+  const [formDataRev, setFormDataRev] = useState(0);
+  useEffect(() => {
+    const bump = () => setFormDataRev((n) => n + 1);
+    window.addEventListener(ORG_DATA_CHANGED_EVENT, bump);
+    window.addEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+    return () => {
+      window.removeEventListener(ORG_DATA_CHANGED_EVENT, bump);
+      window.removeEventListener(ORG_SETTINGS_UPDATED_EVENT, bump);
+    };
+  }, []);
+  const { projects, workers, ramsDocs, permitPrefs, org } = useMemo(() => ({
+    projects: load("mysafeops_projects", []),
+    workers: load("mysafeops_workers", []),
+    ramsDocs: load("rams_builder_docs", []),
+    permitPrefs: load(PERMIT_PREFS_KEY, {}),
+    org: (() => { try { return loadOrgSettingsRaw(); } catch { return {}; } })(),
+  }), [orgId, formDataRev]);
   const formDefaults = normalizePermitFormDefaults(orgPermitDefaults);
   const flags = isFeatureEnabled("permits_template_builder_v2");
 
@@ -3214,7 +3241,10 @@ function PermitForm({
 }
 
 // ─── Permit card ──────────────────────────────────────────────────────────────
-function PermitCard({
+const EMPTY_SIMOPS_CONFLICTS = Object.freeze([]);
+const EMPTY_INCIDENT_ROWS = Object.freeze([]);
+
+const PermitCard = memo(function PermitCard({
   permit,
   onEdit,
   onClose,
@@ -3343,13 +3373,11 @@ function PermitCard({
   return (
     <div
       id={`permit-row-${permit.id}`}
-      className="app-surface-card"
+      className={`app-surface-card app-permit-card app-permit-card--${derived}${highlight ? " app-permit-card--highlight" : ""}`}
       style={{
         ...ss.card,
         marginBottom:10,
         borderLeft:`3px solid ${def.color}`,
-        boxShadow: highlight ? "0 0 0 2px #0d9488, 0 4px 12px rgba(0,0,0,0.08)" : "0 1px 2px rgba(0,0,0,0.05)",
-        transition: "box-shadow 0.2s ease, transform 0.2s ease",
         contentVisibility: "auto",
         containIntrinsicSize: "0 120px",
       }}
@@ -3470,14 +3498,10 @@ function PermitCard({
           ) : null}
           {decisionBanner ? (
             <div
+              className={`app-permit-decision app-permit-decision--${decisionBanner.tone}`}
               style={{
                 marginTop:8,
                 fontSize:11,
-                padding:"7px 9px",
-                borderRadius:8,
-                background: permitDecisionTone(decisionBanner.tone).bg,
-                border: `1px solid ${permitDecisionTone(decisionBanner.tone).border}`,
-                color: permitDecisionTone(decisionBanner.tone).color,
                 lineHeight:1.4,
                 overflowWrap:"anywhere",
                 display:"flex",
@@ -3485,7 +3509,6 @@ function PermitCard({
                 gap:8,
                 alignItems:"center",
                 flexWrap:"wrap",
-                transition:"all 160ms ease",
               }}
             >
               <div style={{ minWidth:0 }}>
@@ -3770,7 +3793,8 @@ function PermitCard({
       )}
     </div>
   );
-}
+});
+PermitCard.displayName = "PermitCard";
 
 
 function openPermitDocument(permit, { autoPrint = false } = {}) {
@@ -3818,6 +3842,7 @@ export default function PermitSystem() {
   })();
   const permitActorLabel = String(org.defaultLeadEngineer || "").trim() || `role:${appRole}`;
   const [permits, setPermits] = useState(()=>load("permits_v2",[]));
+  const [celebratePermitApproval, setCelebratePermitApproval] = useState(false);
   const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
     storageKey: "permits_v2",
     namespace: "permits_v2",
@@ -3828,6 +3853,7 @@ export default function PermitSystem() {
     save,
   });
   const [modal, setModal] = useState(null);
+  const openEditModal = useCallback((p) => setModal({ type: "form", data: p }), []);
   const [filterType, setFilterType] = useState("");
   const [filterStatus, setFilterStatus] = useState("active");
   const [filterHandoverDue, setFilterHandoverDue] = useState(false);
@@ -3982,10 +4008,10 @@ export default function PermitSystem() {
     () => ({ ...PERMIT_CONFLICT_MATRIX, ...conflictMatrixOverrides }),
     [conflictMatrixOverrides]
   );
-  const effectivePermitTypes = useMemo(
-    () => mergePermitTypeOverrides(PERMIT_TYPES, permitTypeOverrides),
-    [permitTypeOverrides]
-  );
+  const effectivePermitTypes = useMemo(() => {
+    const base = getPermitTypesForMarket(getOrgMarketId());
+    return mergePermitTypeOverrides(base, permitTypeOverrides);
+  }, [permitTypeOverrides, orgSettingsTick]);
   const orgSettingsLive = useMemo(() => loadOrgSettingsRaw(), [orgSettingsTick]);
   const supervisorMode = isPermitSupervisorMode(orgSettingsLive);
   const permitQuickFavorites = useMemo(() => getPermitQuickFavorites(orgSettingsLive), [orgSettingsLive]);
@@ -4499,7 +4525,15 @@ export default function PermitSystem() {
       })
     );
   };
-  const now = new Date();
+  // Stable clock: recreating `new Date()` every render defeated memoization on every
+  // downstream useMemo/useCallback keyed by `now` (filters, war-room stats, gates) —
+  // every keystroke/modal toggle re-ran them. Ticking on an interval instead keeps `now`
+  // referentially stable between renders while still refreshing status/expiry classification.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(t);
+  }, []);
   const complianceForPermitGate = useCallback((p) => {
     const items = normalizeChecklistItems(p.type || "general", p, checklistStringsForType(p.type || "general"));
     return evaluatePermitCompliance(p, items);
@@ -4557,6 +4591,18 @@ export default function PermitSystem() {
     }
     return false;
   }, [now, activationGateForPermit]);
+  const permitCardContextById = useMemo(() => {
+    const map = new Map();
+    for (const p of permits) {
+      map.set(p.id, {
+        handoverState: handoverStateForPermit(p, now),
+        activationHandoverRequirement: handoverRequirementForActivation(p, now),
+        activationDependencyResult: evaluatePermitDependencies(p, permits, effectiveDependencyRules, { now }),
+      });
+    }
+    return map;
+  }, [permits, now, effectiveDependencyRules, handoverStateForPermit, handoverRequirementForActivation]);
+
   const ensureWorkflowTransitionAllowed = useCallback((permit, targetState, actionLabel = "action") => {
     if (canPermitWorkflowTransition(permit, targetState, effectiveWorkflowPolicy)) return true;
     const from = permitCurrentWorkflowState(permit);
@@ -4587,7 +4633,8 @@ export default function PermitSystem() {
     });
   }, []);
 
-  const approvePermit = (id) =>
+  const approvePermit = (id) => {
+    let didApprove = false;
     setPermits((prev) => {
       const p = prev.find((x) => x.id === id);
       if (!p) return prev;
@@ -4604,6 +4651,7 @@ export default function PermitSystem() {
         window.alert(gate.message || "Cannot approve this permit.");
         return prev;
       }
+      didApprove = true;
       return prev.map((row) => {
         if (row.id !== id) return row;
         let next = stampCompetentReview(
@@ -4616,6 +4664,8 @@ export default function PermitSystem() {
         return withLog;
       });
     });
+    if (didApprove) setCelebratePermitApproval(true);
+  };
   const activatePermit = async (id) => {
     const p = permits.find((x) => x.id === id);
     if (!p) return;
@@ -4764,38 +4814,55 @@ export default function PermitSystem() {
     });
   };
 
+  // Deferred so a fast typist doesn't force a full re-filter of `permits` (plus gate/
+  // dependency evaluation per row) on every keystroke — React can keep the input
+  // responsive and catch up the list render a beat later.
+  const deferredSearch = useDeferredValue(search);
+  const permitDerivedById = useMemo(() => {
+    const map = new Map();
+    for (const p of permits) {
+      const endIso = permitEndIso(p);
+      const endDate = endIso ? new Date(endIso) : null;
+      const derived = derivePermitStatus(p, now);
+      const typeLabel = (effectivePermitTypes[p.type] || effectivePermitTypes.general)?.label?.toLowerCase() || "";
+      const hay = [p.location, p.description, p.issuedTo, p.issuedBy, p.type, typeLabel, p.id]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      map.set(p.id, { derived, endIso, endDate, hay });
+    }
+    return map;
+  }, [permits, now, effectivePermitTypes]);
   const filtered = useMemo(() => {
     const tick = now;
+    const q = deferredSearch ? deferredSearch.toLowerCase() : "";
     return permits.filter((p) => {
-    const endIso = permitEndIso(p);
-    const endDate = endIso ? new Date(endIso) : null;
+    const meta = permitDerivedById.get(p.id);
+    const derived = meta?.derived ?? derivePermitStatus(p, tick);
+    const endDate = meta?.endDate ?? (permitEndIso(p) ? new Date(permitEndIso(p)) : null);
     if (filterType && p.type!==filterType) return false;
-    if (filterStatus==="active" && (p.status!=="active" || !endDate || endDate < tick)) return false;
-    if (filterStatus==="expired" && !(p.status==="active" && endDate && endDate < tick)) return false;
-    if (filterStatus==="closed" && p.status!=="closed") return false;
-    if (filterStatus==="draft" && p.status!=="draft") return false;
-    if (filterStatus==="pending_review" && p.status!=="pending_review" && p.status!=="ready_for_review") return false;
-    if (filterStatus==="approved" && p.status!=="approved") return false;
-    if (filterStatus==="suspended" && p.status!=="suspended") return false;
+    if (filterStatus==="active" && (derived!=="active" || !endDate || endDate < tick)) return false;
+    if (filterStatus==="expired" && !(derived==="active" && endDate && endDate < tick)) return false;
+    if (filterStatus==="closed" && derived!=="closed") return false;
+    if (filterStatus==="draft" && derived!=="draft") return false;
+    if (filterStatus==="pending_review" && derived!=="pending_review") return false;
+    if (filterStatus==="approved" && derived!=="approved") return false;
+    if (filterStatus==="suspended" && derived!=="suspended") return false;
     if (filterHandoverDue) {
       const hs = handoverStateForPermit(p, tick);
       if (!(hs.required && hs.missing)) return false;
     }
     if (filterBlockedNow && !blockedNowForPermit(p, permits, tick)) return false;
     if (filterBriefingPending) {
-      const status = derivePermitStatus(p, tick);
-      if (status !== "active" || !p.startDateTime || p.briefingConfirmedAt) return false;
+      if (derived !== "active" || !p.startDateTime || p.briefingConfirmedAt) return false;
       const ageMs = tick.getTime() - new Date(p.startDateTime).getTime();
       if (!(ageMs > 20 * 60 * 1000)) return false;
     }
     if (filterRamsMissing) {
-      const status = derivePermitStatus(p, tick);
-      if (status !== "active" || String(p.linkedRamsId || "").trim()) return false;
+      if (derived !== "active" || String(p.linkedRamsId || "").trim()) return false;
     }
-    if (search) {
-      const q = search.toLowerCase();
-      const typeLabel = (effectivePermitTypes[p.type] || effectivePermitTypes.general)?.label?.toLowerCase() || "";
-      const hay = [p.location, p.description, p.issuedTo, p.issuedBy, p.type, typeLabel, p.id].filter(Boolean).join(" ").toLowerCase();
+    if (q) {
+      const hay = meta?.hay ?? "";
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -4803,23 +4870,36 @@ export default function PermitSystem() {
   }, [
     permits,
     now,
+    permitDerivedById,
     filterType,
     filterStatus,
     filterHandoverDue,
     filterBlockedNow,
     filterBriefingPending,
     filterRamsMissing,
-    search,
-    effectivePermitTypes,
+    deferredSearch,
+    handoverStateForPermit,
+    blockedNowForPermit,
   ]);
+  const permitsByColumn = useMemo(() => {
+    const cols = { draft: [], pending_review: [], approved: [], active: [], expired: [], closed: [] };
+    for (const p of filtered) {
+      const status = permitDerivedById.get(p.id)?.derived ?? derivePermitStatus(p, now);
+      if (cols[status]) cols[status].push(p);
+    }
+    return cols;
+  }, [filtered, now, permitDerivedById]);
   const mobileQuickPermit = permits.find((p) => p.id === mobileQuickActionsPermitId) || null;
   useEffect(() => {
     if (!mobileQuickActionsPermitId) return;
     if (!mobileQuickPermit) setMobileQuickActionsPermitId("");
   }, [mobileQuickActionsPermitId, mobileQuickPermit]);
 
-  const stats = buildPermitWarRoomStats(permits, now);
-  const selectedPermits = permits.filter((p) => selectedPermitIds[p.id]);
+  const stats = useMemo(() => buildPermitWarRoomStats(permits, now), [permits, now]);
+  const selectedPermits = useMemo(
+    () => permits.filter((p) => selectedPermitIds[p.id]),
+    [permits, selectedPermitIds]
+  );
   const hasSelectedPermits = selectedPermits.length > 0;
   const selectedActivationSummary = useMemo(() => {
     let activatable = 0;
@@ -4836,25 +4916,37 @@ export default function PermitSystem() {
   }, [selectedPermits, permits, now, activationGateForPermit]);
   const allFilteredSelected = filtered.length > 0 && filtered.every((p) => selectedPermitIds[p.id]);
   const commandCounts = useMemo(() => {
-    const active = permits.filter((p) => derivePermitStatus(p, now) === "active").length;
-    const review = permits.filter((p) => derivePermitStatus(p, now) === "pending_review").length;
-    const approved = permits.filter((p) => derivePermitStatus(p, now) === "approved").length;
-    const expired = permits.filter((p) => derivePermitStatus(p, now) === "expired").length;
-    const handoverDue = permits.filter((p) => {
+    let active = 0;
+    let review = 0;
+    let approved = 0;
+    let expired = 0;
+    let handoverDue = 0;
+    let blockedNow = 0;
+    let briefingPending = 0;
+    let ramsMissing = 0;
+    for (const p of permits) {
+      const status = permitDerivedById.get(p.id)?.derived ?? derivePermitStatus(p, now);
+      if (status === "active") {
+        active += 1;
+        if (!String(p.linkedRamsId || "").trim()) ramsMissing += 1;
+        if (
+          p.startDateTime
+          && !p.briefingConfirmedAt
+          && now.getTime() - new Date(p.startDateTime).getTime() > 20 * 60 * 1000
+        ) {
+          briefingPending += 1;
+        }
+      } else if (status === "pending_review") review += 1;
+      else if (status === "approved") approved += 1;
+      else if (status === "expired") expired += 1;
       const hs = handoverStateForPermit(p, now);
-      return hs.required && hs.missing;
-    }).length;
-    const blockedNow = permits.filter((p) => blockedNowForPermit(p, permits, now)).length;
-    const briefingPending = permits.filter((p) => {
-      const status = derivePermitStatus(p, now);
-      if (status !== "active" || !p.startDateTime || p.briefingConfirmedAt) return false;
-      return now.getTime() - new Date(p.startDateTime).getTime() > 20 * 60 * 1000;
-    }).length;
-    const ramsMissing = permits.filter((p) => derivePermitStatus(p, now) === "active" && !String(p.linkedRamsId || "").trim()).length;
+      if (hs.required && hs.missing) handoverDue += 1;
+      if (blockedNowForPermit(p, permits, now)) blockedNow += 1;
+    }
     return { active, review, approved, expired, handoverDue, blockedNow, briefingPending, ramsMissing };
-  }, [permits, now, handoverStateForPermit, blockedNowForPermit]);
-  const heatmapRows = permitsHeatmap(permits, effectivePermitTypes);
-  const effectiveViewMode = (() => {
+  }, [permits, now, permitDerivedById, handoverStateForPermit, blockedNowForPermit]);
+  const heatmapRows = useMemo(() => permitsHeatmap(permits, effectivePermitTypes, now), [permits, effectivePermitTypes, now]);
+  const effectiveViewMode = useMemo(() => {
     if (viewMode === "quick") return "quick";
     if (viewMode === "wall" && !liveWallEnabled) return supervisorMode ? "quick" : "list";
     if (viewMode === "map" && !safetyMapEnabled) return supervisorMode ? "quick" : "list";
@@ -4862,7 +4954,7 @@ export default function PermitSystem() {
     if ((viewMode === "board" || viewMode === "timeline") && (!advancedViewsEnabled || supervisorMode)) return supervisorMode ? "quick" : "list";
     if (supervisorMode && !["quick", "list", "wall"].includes(viewMode)) return "quick";
     return viewMode;
-  })();
+  }, [viewMode, liveWallEnabled, supervisorMode, safetyMapEnabled, commandCentreEnabled, advancedViewsEnabled]);
   const viewModeLabels = {
     quick: "Quick issue",
     command: "Command",
@@ -4883,9 +4975,21 @@ export default function PermitSystem() {
         ...(safetyMapEnabled ? ["map"] : []),
       ];
   const showAdvancedPermitAdmin = !supervisorMode;
-  const warRoomAlerts = permits
-    .filter((p) => derivePermitStatus(p, now) === "expired" || (derivePermitStatus(p, now) === "active" && permitEndIso(p) && (new Date(permitEndIso(p)) - now) < 3600000))
-    .slice(0, 8);
+  const warRoomAlerts = useMemo(() => {
+    const soonMs = 3600000;
+    const result = [];
+    for (const p of permits) {
+      const meta = permitDerivedById.get(p.id);
+      const status = meta?.derived ?? derivePermitStatus(p, now);
+      if (status === "expired") {
+        result.push(p);
+      } else if (status === "active" && meta?.endDate && meta.endDate - now < soonMs) {
+        result.push(p);
+      }
+      if (result.length >= 8) break;
+    }
+    return result;
+  }, [permits, now, permitDerivedById]);
   const opsActionItems = useMemo(() => {
     const list = [];
     const push = (item) => {
@@ -4895,8 +4999,8 @@ export default function PermitSystem() {
       list.push(item);
     };
     permits.forEach((p) => {
-      const status = derivePermitStatus(p, now);
-      const endIso = permitEndIso(p);
+      const status = permitDerivedById.get(p.id)?.derived ?? derivePermitStatus(p, now);
+      const endIso = permitDerivedById.get(p.id)?.endIso ?? permitEndIso(p);
       const msToEnd = endIso ? new Date(endIso).getTime() - now.getTime() : null;
       if ((status === "pending_review" || status === "ready_for_review" || status === "approved" || status === "closed") && blockedNowForPermit(p, permits, now)) {
         push({
@@ -4999,7 +5103,11 @@ export default function PermitSystem() {
     return list
       .sort((a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3))
       .slice(0, 14);
-  }, [permits, now, effectivePermitTypes, handoverStateForPermit, blockedNowForPermit]);
+  }, [permits, now, permitDerivedById, effectivePermitTypes, handoverStateForPermit, blockedNowForPermit]);
+  const opsActionPermitIdSet = useMemo(
+    () => new Set(opsActionItems.map((item) => item.permitId)),
+    [opsActionItems]
+  );
   const incidentsByPermit = useMemo(() => {
     const map = new Map();
     incidents.forEach((i) => {
@@ -6120,6 +6228,7 @@ export default function PermitSystem() {
             orgName: org?.name || "MySafeOps",
             message,
             ramsDoc: linkedRams || null,
+            roster: (workers || []).map((w) => ({ name: w?.name, email: w?.email })),
           });
           const pushRes = await sendPermitNotificationWebPush({
             permit,
@@ -6451,6 +6560,200 @@ export default function PermitSystem() {
     }
   };
 
+  const timelineSortedPermits = useMemo(
+    () => filtered.slice().sort((a, b) => new Date(a.startDateTime || 0) - new Date(b.startDateTime || 0)),
+    [filtered]
+  );
+  const renderCommandPermitCard = useCallback((p) => {
+    const ctx = permitCardContextById.get(p.id);
+    return (
+      <PermitCard
+        key={p.id}
+        permit={p}
+        simopsConflicts={simopsMap.get(p.id) ?? EMPTY_SIMOPS_CONFLICTS}
+        conflictMatrix={effectiveConflictMatrix}
+        permitTypes={effectivePermitTypes}
+        handoverState={ctx?.handoverState}
+        activationHandoverRequirement={ctx?.activationHandoverRequirement}
+        activationDependencyResult={ctx?.activationDependencyResult}
+        onOpenHandover={openHandoverDialog}
+        cardDensity="comfort"
+        highlight={highlightPermitId === p.id}
+        compact={isNarrow}
+        onEdit={openEditModal}
+        onClose={requestClosePermit}
+        onPreview={previewPermit}
+        onPrint={exportPermitPdf}
+        onApprove={approvePermit}
+        onActivate={activatePermit}
+      />
+    );
+  }, [
+    permitCardContextById,
+    simopsMap,
+    effectiveConflictMatrix,
+    effectivePermitTypes,
+    openHandoverDialog,
+    highlightPermitId,
+    isNarrow,
+    openEditModal,
+    requestClosePermit,
+    previewPermit,
+    exportPermitPdf,
+    approvePermit,
+    activatePermit,
+  ]);
+  const renderBoardPermitCard = useCallback((p) => {
+    const ctx = permitCardContextById.get(p.id);
+    return (
+      <PermitCard
+        key={p.id}
+        permit={p}
+        simopsConflicts={simopsMap.get(p.id) ?? EMPTY_SIMOPS_CONFLICTS}
+        conflictMatrix={effectiveConflictMatrix}
+        permitTypes={effectivePermitTypes}
+        handoverState={ctx?.handoverState}
+        activationHandoverRequirement={ctx?.activationHandoverRequirement}
+        activationDependencyResult={ctx?.activationDependencyResult}
+        onOpenHandover={openHandoverDialog}
+        cardDensity={cardDensity}
+        onOpenMobileQuickActions={setMobileQuickActionsPermitId}
+        ultraCompact={isUltraNarrow}
+        highlight={highlightPermitId === p.id}
+        compact={isNarrow}
+        selectable
+        selected={!!selectedPermitIds[p.id]}
+        onToggleSelect={togglePermitSelection}
+        onNotify={permitNotifyEnabled ? notifyPermitTeam : undefined}
+        onShareAckLink={sharePermitAckLink}
+        onAcknowledge={acknowledgePermit}
+        onConfirmBriefing={confirmPermitBriefing}
+        incidents={incidentsByPermit.get(p.id) ?? EMPTY_INCIDENT_ROWS}
+        onReportIncident={reportPermitIncident}
+        onLoadCloudAudit={loadPermitCloudAudit}
+        onEdit={openEditModal}
+        onClose={requestClosePermit}
+        onReopen={reopenPermit}
+        onDelete={deletePermit}
+        onDuplicate={duplicatePermit}
+        onPreview={previewPermit}
+        onPrint={exportPermitPdf}
+        onApprove={approvePermit}
+        onActivate={activatePermit}
+        onSuspend={suspendPermit}
+        onResume={resumePermit}
+        onExtendRevalidate={extendAndRevalidatePermit}
+      />
+    );
+  }, [
+    permitCardContextById,
+    simopsMap,
+    effectiveConflictMatrix,
+    effectivePermitTypes,
+    openHandoverDialog,
+    cardDensity,
+    isUltraNarrow,
+    highlightPermitId,
+    isNarrow,
+    selectedPermitIds,
+    togglePermitSelection,
+    permitNotifyEnabled,
+    notifyPermitTeam,
+    sharePermitAckLink,
+    acknowledgePermit,
+    confirmPermitBriefing,
+    incidentsByPermit,
+    reportPermitIncident,
+    loadPermitCloudAudit,
+    openEditModal,
+    requestClosePermit,
+    reopenPermit,
+    deletePermit,
+    duplicatePermit,
+    previewPermit,
+    exportPermitPdf,
+    approvePermit,
+    activatePermit,
+    suspendPermit,
+    resumePermit,
+    extendAndRevalidatePermit,
+  ]);
+  const renderListPermitCard = useCallback((p) => {
+    const ctx = permitCardContextById.get(p.id);
+    return (
+      <PermitCard
+        key={p.id}
+        permit={p}
+        simopsConflicts={simopsMap.get(p.id) ?? EMPTY_SIMOPS_CONFLICTS}
+        conflictMatrix={effectiveConflictMatrix}
+        permitTypes={effectivePermitTypes}
+        handoverState={ctx?.handoverState}
+        activationHandoverRequirement={ctx?.activationHandoverRequirement}
+        activationDependencyResult={ctx?.activationDependencyResult}
+        onOpenHandover={openHandoverDialog}
+        cardDensity={cardDensity}
+        onOpenMobileQuickActions={setMobileQuickActionsPermitId}
+        ultraCompact={isUltraNarrow}
+        highlight={highlightPermitId === p.id}
+        compact={isNarrow}
+        selectable
+        selected={!!selectedPermitIds[p.id]}
+        onToggleSelect={togglePermitSelection}
+        onNotify={permitNotifyEnabled ? notifyPermitTeam : undefined}
+        onShareAckLink={sharePermitAckLink}
+        onAcknowledge={acknowledgePermit}
+        onConfirmBriefing={confirmPermitBriefing}
+        incidents={incidentsByPermit.get(p.id) ?? EMPTY_INCIDENT_ROWS}
+        onReportIncident={reportPermitIncident}
+        onLoadCloudAudit={loadPermitCloudAudit}
+        onEdit={openEditModal}
+        onClose={requestClosePermit}
+        onReopen={reopenPermit}
+        onDelete={deletePermit}
+        onDuplicate={duplicatePermit}
+        onPreview={previewPermit}
+        onPrint={exportPermitPdf}
+        onApprove={approvePermit}
+        onActivate={activatePermit}
+        onSuspend={suspendPermit}
+        onResume={resumePermit}
+        onExtendRevalidate={extendAndRevalidatePermit}
+      />
+    );
+  }, [
+    permitCardContextById,
+    simopsMap,
+    effectiveConflictMatrix,
+    effectivePermitTypes,
+    openHandoverDialog,
+    cardDensity,
+    isUltraNarrow,
+    highlightPermitId,
+    isNarrow,
+    selectedPermitIds,
+    togglePermitSelection,
+    permitNotifyEnabled,
+    notifyPermitTeam,
+    sharePermitAckLink,
+    acknowledgePermit,
+    confirmPermitBriefing,
+    incidentsByPermit,
+    reportPermitIncident,
+    loadPermitCloudAudit,
+    openEditModal,
+    requestClosePermit,
+    reopenPermit,
+    deletePermit,
+    duplicatePermit,
+    previewPermit,
+    exportPermitPdf,
+    approvePermit,
+    activatePermit,
+    suspendPermit,
+    resumePermit,
+    extendAndRevalidatePermit,
+  ]);
+
   return (
     <div
       className={`app-document-module${isNarrow && mobileQuickPermit ? " app-document-module--raised-bottom" : ""}`}
@@ -6465,6 +6768,11 @@ export default function PermitSystem() {
         transition:"background-color 180ms ease, color 180ms ease",
       }}
     >
+      <ConfettiCelebration
+        active={celebratePermitApproval}
+        label="Permit approved"
+        onDone={() => setCelebratePermitApproval(false)}
+      />
       {modal?.type==="form" && (
         <PermitForm
           permit={modal.data}
@@ -8573,30 +8881,9 @@ export default function PermitSystem() {
             />
           ) : (
             filtered
-              .filter((p) => opsActionItems.some((item) => item.permitId === p.id))
+              .filter((p) => opsActionPermitIdSet.has(p.id))
               .slice(0, 12)
-              .map((p) => (
-                <PermitCard
-                  key={p.id}
-                  permit={p}
-                  simopsConflicts={simopsMap.get(p.id) || []}
-                  conflictMatrix={effectiveConflictMatrix}
-                  permitTypes={effectivePermitTypes}
-                  handoverState={handoverStateForPermit(p, now)}
-                  activationHandoverRequirement={handoverRequirementForActivation(p, now)}
-                  activationDependencyResult={evaluatePermitDependencies(p, permits, effectiveDependencyRules, { now })}
-                  onOpenHandover={openHandoverDialog}
-                  cardDensity="comfort"
-                  highlight={highlightPermitId === p.id}
-                  compact={isNarrow}
-                  onEdit={(x) => setModal({ type: "form", data: x })}
-                  onClose={requestClosePermit}
-                  onPreview={previewPermit}
-                  onPrint={exportPermitPdf}
-                  onApprove={approvePermit}
-                  onActivate={activatePermit}
-                />
-              ))
+              .map(renderCommandPermitCard)
           )}
         </div>
       ) : effectiveViewMode === "wall" ? (
@@ -8626,58 +8913,15 @@ export default function PermitSystem() {
             { id: "expired", label: "Expired" },
             { id: "closed", label: "Closed" },
           ]}
-          permitsByColumn={{
-            draft: filtered.filter((p) => derivePermitStatus(p, now) === "draft"),
-            pending_review: filtered.filter((p) => derivePermitStatus(p, now) === "pending_review"),
-            approved: filtered.filter((p) => derivePermitStatus(p, now) === "approved"),
-            active: filtered.filter((p) => derivePermitStatus(p, now) === "active"),
-            expired: filtered.filter((p) => derivePermitStatus(p, now) === "expired"),
-            closed: filtered.filter((p) => derivePermitStatus(p, now) === "closed"),
-          }}
-          renderPermit={(p) => (
-            <PermitCard key={p.id} permit={p}
-              simopsConflicts={simopsMap.get(p.id) || []}
-              conflictMatrix={effectiveConflictMatrix}
-              permitTypes={effectivePermitTypes}
-              handoverState={handoverStateForPermit(p, now)}
-              activationHandoverRequirement={handoverRequirementForActivation(p, now)}
-              activationDependencyResult={evaluatePermitDependencies(p, permits, effectiveDependencyRules, { now })}
-              onOpenHandover={openHandoverDialog}
-              cardDensity={cardDensity}
-              onOpenMobileQuickActions={setMobileQuickActionsPermitId}
-              ultraCompact={isUltraNarrow}
-              highlight={highlightPermitId === p.id}
-              compact={isNarrow}
-              selectable={true}
-              selected={!!selectedPermitIds[p.id]}
-              onToggleSelect={togglePermitSelection}
-              onNotify={permitNotifyEnabled ? notifyPermitTeam : undefined}
-              onShareAckLink={sharePermitAckLink}
-              onAcknowledge={acknowledgePermit}
-              onConfirmBriefing={confirmPermitBriefing}
-              incidents={incidentsByPermit.get(p.id) || []}
-              onReportIncident={reportPermitIncident}
-              onLoadCloudAudit={loadPermitCloudAudit}
-              onEdit={(x)=>setModal({type:"form",data:x})}
-              onClose={requestClosePermit}
-              onReopen={reopenPermit}
-              onDelete={deletePermit}
-              onDuplicate={duplicatePermit}
-              onPreview={previewPermit}
-              onPrint={exportPermitPdf}
-              onApprove={approvePermit}
-              onActivate={activatePermit}
-              onSuspend={suspendPermit}
-              onResume={resumePermit}
-              onExtendRevalidate={extendAndRevalidatePermit}
-            />
-          )}
+          permitsByColumn={permitsByColumn}
+          renderPermit={renderBoardPermitCard}
         />
       ) : effectiveViewMode === "timeline" ? (
         <PermitTimelineView
-          permits={[...filtered].sort((a, b) => new Date(a.startDateTime || 0) - new Date(b.startDateTime || 0))}
+          permits={timelineSortedPermits}
           renderRow={(permit) => {
-            const sim = simopsMap.get(permit.id) || [];
+            const sim = simopsMap.get(permit.id) ?? EMPTY_SIMOPS_CONFLICTS;
+            const derived = permitDerivedById.get(permit.id)?.derived ?? derivePermitStatus(permit, now);
             return (
             <div
               id={`permit-row-${permit.id}`}
@@ -8704,7 +8948,7 @@ export default function PermitSystem() {
                 {sim.length > 0 ? (
                   <span style={{ padding:"2px 6px", borderRadius:12, fontSize:10, fontWeight:600, background:"#FCEBEB", color:"#791F1F" }}>SIMOPS ×{sim.length}</span>
                 ) : null}
-                <span style={{ ...ss.chip, fontSize:11 }}>{derivePermitStatus(permit, now)}</span>
+                <span style={{ ...ss.chip, fontSize:11 }}>{derived}</span>
                 <button type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={() => previewPermit(permit)}>Preview</button>
                 <button type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={() => setModal({type:"form",data:permit})}>Edit</button>
               </div>
@@ -8719,43 +8963,7 @@ export default function PermitSystem() {
               Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} permits
             </div>
           ) : null}
-          {listPg.visible(filtered).map((p) => (
-          <PermitCard key={p.id} permit={p}
-            simopsConflicts={simopsMap.get(p.id) || []}
-            conflictMatrix={effectiveConflictMatrix}
-            permitTypes={effectivePermitTypes}
-            handoverState={handoverStateForPermit(p, now)}
-            activationHandoverRequirement={handoverRequirementForActivation(p, now)}
-            activationDependencyResult={evaluatePermitDependencies(p, permits, effectiveDependencyRules, { now })}
-            onOpenHandover={openHandoverDialog}
-            cardDensity={cardDensity}
-            onOpenMobileQuickActions={setMobileQuickActionsPermitId}
-            ultraCompact={isUltraNarrow}
-            highlight={highlightPermitId === p.id}
-            compact={isNarrow}
-            selectable={true}
-            selected={!!selectedPermitIds[p.id]}
-            onToggleSelect={togglePermitSelection}
-            onNotify={permitNotifyEnabled ? notifyPermitTeam : undefined}
-            onShareAckLink={sharePermitAckLink}
-            onAcknowledge={acknowledgePermit}
-            onConfirmBriefing={confirmPermitBriefing}
-            incidents={incidentsByPermit.get(p.id) || []}
-            onReportIncident={reportPermitIncident}
-            onLoadCloudAudit={loadPermitCloudAudit}
-            onEdit={p=>setModal({type:"form",data:p})}
-            onClose={requestClosePermit} onReopen={reopenPermit}
-            onDelete={deletePermit}
-            onDuplicate={duplicatePermit}
-            onPreview={previewPermit}
-            onPrint={exportPermitPdf}
-            onApprove={approvePermit}
-            onActivate={activatePermit}
-            onSuspend={suspendPermit}
-            onResume={resumePermit}
-            onExtendRevalidate={extendAndRevalidatePermit}
-          />
-          ))}
+          {listPg.visible(filtered).map(renderListPermitCard)}
           {listPg.hasMore(filtered) ? (
             <div style={{ display: "flex", justifyContent: "center", marginTop: 8, marginBottom: 8 }}>
               <button type="button" style={ss.btn} onClick={listPg.showMore}>

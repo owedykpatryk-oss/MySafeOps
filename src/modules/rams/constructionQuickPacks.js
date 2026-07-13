@@ -388,6 +388,92 @@ const FOOD_PACK_LEGACY_IDS = {
   builtin_fess_cip_hygiene: "builtin_food_cip_hygiene",
 };
 
+const AU_EXCLUDED_BUILTIN_PACK_IDS = new Set([
+  "builtin_survey_core",
+  "builtin_rail_trackside",
+  "builtin_highways_traffic",
+]);
+
+/** @type {PackDef[]} */
+export const BUILTIN_AU_CONSTRUCTION_PACK_DEFS = [
+  {
+    id: "builtin_au_hrcw_core",
+    name: "AU — HRCW core (height, excavation, CS)",
+    sector: "construction",
+    pinned: true,
+    description: "High-risk construction work — WAH, excavation, confined space, plant interfaces.",
+    hazardIds: ["wah_001", "gnd_001", "gnd_002", "cs_001", "scaf_001", "scaf_002", "plant_003", "cst_site_002"],
+  },
+  {
+    id: "builtin_au_electrical_energised",
+    name: "AU — Electrical & energised work",
+    sector: "construction",
+    pinned: true,
+    description: "HV/LV isolation, OHPL, energised work — align SWMS with AS/NZS 3012.",
+    hazardIds: ["elec_001", "elec_002", "elec_003", "util_e001", "util_e002", "gas_001"],
+  },
+  {
+    id: "builtin_au_demolition_asbestos",
+    name: "AU — Demolition & hazardous materials",
+    sector: "construction",
+    pinned: false,
+    description: "Demolition, asbestos interfaces, silica — DBYD and isolation before disturbance.",
+    hazardIds: ["dem_001", "asb_001", "clr_001", "con_001", "gnd_002", "env_002"],
+  },
+  {
+    id: "builtin_au_civil_groundworks",
+    name: "AU — Civil & groundworks",
+    sector: "construction",
+    pinned: true,
+    description: "Excavation, services, concrete, temp works — core civils SWMS pack.",
+    hazardIds: ["gnd_001", "gnd_003", "gnd_004", "con_001", "con_002", "twx_001", "plant_001", "plant_004"],
+  },
+];
+
+const BUILTIN_PL_CONSTRUCTION_PACK_DEFS = [
+  {
+    id: "builtin_pl_bhp_core",
+    name: "PL — IOR core (wysokość, wykop, CS)",
+    sector: "construction",
+    pinned: true,
+    description: "Roboty szczególnie niebezpieczne — wysokość, wykop, przestrzeń zamknięta, maszyny.",
+    hazardIds: ["wah_001", "gnd_001", "gnd_002", "cs_001", "scaf_001", "scaf_002", "plant_003", "cst_site_002"],
+  },
+  {
+    id: "builtin_pl_electrical",
+    name: "PL — Prace elektryczne i SEP",
+    sector: "construction",
+    pinned: true,
+    description: "Izolacja, prace pod napięciem — zgodnie z wymaganiami SEP na budowie.",
+    hazardIds: ["elec_001", "elec_002", "elec_003", "util_e001", "util_e002", "gas_001"],
+  },
+  {
+    id: "builtin_pl_civil",
+    name: "PL — Roboty ziemne i drogowe",
+    sector: "construction",
+    pinned: true,
+    description: "Wykopy, uzbrojenie, beton, roboty tymczasowe — pakiet IOR dla budowy.",
+    hazardIds: ["gnd_001", "gnd_003", "gnd_004", "con_001", "con_002", "twx_001", "plant_001", "plant_004"],
+  },
+];
+
+function regionalConstructionPackDefs(marketId) {
+  const excluded = [...AU_EXCLUDED_BUILTIN_PACK_IDS];
+  const base = BUILTIN_CONSTRUCTION_PACK_DEFS.filter((d) => !excluded.has(d.id));
+  if (marketId === "au") {
+    return [...base, ...BUILTIN_AU_CONSTRUCTION_PACK_DEFS];
+  }
+  if (marketId === "pl") {
+    return [...base, ...BUILTIN_PL_CONSTRUCTION_PACK_DEFS];
+  }
+  return BUILTIN_CONSTRUCTION_PACK_DEFS;
+}
+
+/** @param {import("../config/markets").MarketId} [marketId] */
+export function getBuiltInConstructionPackDefs(marketId = "uk") {
+  return regionalConstructionPackDefs(marketId);
+}
+
 const ALL_BUILTIN_PACK_DEFS = [
   ...BUILTIN_CONSTRUCTION_PACK_DEFS,
   ...BUILTIN_GEOSPATIAL_PACK_DEFS,
@@ -429,16 +515,30 @@ export function buildPackFromDef(allHazards, def) {
  * Merge built-in packs into org storage when not yet present.
  * @param {object[]} existingPacks
  * @param {object[]} allHazards
+ * @param {import("../config/markets").MarketId} [marketId]
  * @returns {object[]}
  */
-export function ensureBuiltInConstructionPacks(existingPacks, allHazards) {
+export function ensureBuiltInConstructionPacks(existingPacks, allHazards, marketId) {
   const list = Array.isArray(existingPacks) ? [...existingPacks] : [];
   for (const pack of list) {
     const nextId = FOOD_PACK_LEGACY_IDS[pack.id];
     if (nextId) pack.id = nextId;
   }
   const existingIds = new Set(list.map((p) => p.id));
-  const missing = ALL_BUILTIN_PACK_DEFS.filter((d) => !existingIds.has(d.id));
+  let defs = ALL_BUILTIN_PACK_DEFS;
+  if (marketId === "au" || marketId === "pl") {
+    const seen = new Set();
+    const regional = marketId === "au" ? BUILTIN_AU_CONSTRUCTION_PACK_DEFS : BUILTIN_PL_CONSTRUCTION_PACK_DEFS;
+    defs = [
+      ...ALL_BUILTIN_PACK_DEFS.filter((d) => !AU_EXCLUDED_BUILTIN_PACK_IDS.has(d.id)),
+      ...regional,
+    ].filter((d) => {
+      if (seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
+  }
+  const missing = defs.filter((d) => !existingIds.has(d.id));
   if (missing.length === 0) return list;
   const built = missing
     .map((def) => buildPackFromDef(allHazards, def))

@@ -2,7 +2,7 @@ import { memo } from "react";
 import StatusChip from "../../components/StatusChip";
 import { getSurveyStatusMeta } from "../../utils/statusChipMeta";
 import { ms } from "../../utils/moduleStyles";
-import { surveyTypeLabel } from "./surveyReportHelpers";
+import { surveyTypeLabel, surveyTypeChipTone } from "./surveyReportHelpers";
 import SurveyProgressRing from "./SurveyProgressRing";
 
 const ss = ms;
@@ -31,12 +31,13 @@ function SurveyListRow({
   onRevision,
   onProjectHub,
   onDelete,
+  staggerIndex = 0,
 }) {
   const r = enriched.report;
   const q = enriched.quality;
 
   return (
-    <div>
+    <div className="app-survey-list-row-wrap" style={{ "--row-i": staggerIndex }}>
       {showGroupHeader ? (
         <div className="app-survey-list-group__title">
           {groupLabel}
@@ -68,14 +69,29 @@ function SurveyListRow({
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <strong style={{ fontSize: 15 }}>{r.title || r.ref || "Untitled"}</strong>
+                {r.surveyType ? (
+                  <span className={`app-survey-type-chip app-survey-type-chip--${surveyTypeChipTone(r.surveyType)}`}>
+                    {surveyTypeLabel(r.surveyType)}
+                  </span>
+                ) : null}
                 <StatusChip meta={getSurveyStatusMeta(r.status)} />
                 {enriched.ready ? (
                   <span className="app-survey-list-row__ready-pill">Ready to finalise</span>
                 ) : null}
+                {enriched.isFinal && enriched.exportPackReady ? (
+                  <span className="app-survey-list-row__pack-pill">Export pack ready</span>
+                ) : null}
+                {enriched.isFinal && enriched.exportBlocked ? (
+                  <span className="app-survey-list-row__pack-pill app-survey-list-row__pack-pill--blocked">Pack incomplete</span>
+                ) : null}
+                {enriched.qaLabel ? (
+                  <span className={`app-survey-list-row__qa-pill${enriched.qaComplete ? " app-survey-list-row__qa-pill--done" : ""}`}>
+                    QA {enriched.qaLabel}
+                  </span>
+                ) : null}
               </div>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
                 {r.ref} · {r.surveyDate}
-                {r.surveyType ? ` · ${surveyTypeLabel(r.surveyType)}` : ""}
               </div>
               <div className="app-survey-list-row__meter" aria-hidden>
                 <div className="app-survey-list-row__meter-fill" style={{ width: `${q.score}%` }} />

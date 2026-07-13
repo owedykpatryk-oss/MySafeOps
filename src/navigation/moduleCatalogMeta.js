@@ -61,6 +61,8 @@ export const MODULE_PDF_REGISTRY = {
     ],
   },
   cdm: { key: "cdm_packs" },
+  "whs-plan": { key: "cdm_packs" },
+  "bhp-plan": { key: "cdm_packs" },
   coshh: {
     key: "coshh_items",
     columns: [
@@ -101,6 +103,7 @@ export const MODULE_PDF_REGISTRY = {
   },
   "incident-map": { key: "mysafeops_incidents" },
   riddor: { key: "riddor_reports" },
+  "notifiable-incidents": { key: "riddor_reports" },
   emergency: {
     key: "emergency_contacts",
     columns: [
@@ -387,6 +390,16 @@ export const MODULE_PDF_REGISTRY = {
   },
   "survey-report": {
     key: "survey_reports",
+    columns: [
+      { k: "ref", l: "Ref" },
+      { k: "title", l: "Title" },
+      { k: "status", l: "Status" },
+      { k: "surveyDate", l: "Date" },
+      { k: "surveyor", l: "Surveyor" },
+    ],
+  },
+  "gpr-report": {
+    key: "gpr_reports",
     columns: [
       { k: "ref", l: "Ref" },
       { k: "title", l: "Title" },

@@ -2,6 +2,9 @@ import { useState } from "react";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import { openWorkspaceView } from "../utils/workspaceNavContext";
+import { getConstructionWizardCopy } from "../data/appUiCopy";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getRamsShortLabel } from "../utils/marketLabels";
 import {
   getConstructionSetupStatus,
   markConstructionStepDone,
@@ -17,7 +20,16 @@ import {
 const ss = ms;
 
 export default function ConstructionSetupWizard() {
+  const marketId = getOrgMarketId();
+  const ramsLabel = getRamsShortLabel(marketId);
+  const wizardCopy = getConstructionWizardCopy(marketId);
   const geospatial = isGeospatialPackActive();
+  const geospatialLead =
+    marketId === "au"
+      ? `Onboarding for surveying & geodesy teams — AS5488, aerial LiDAR, laser scan, hydrographic and rail corridor ${ramsLabel} packs.`
+      : marketId === "pl"
+      ? `Onboarding dla geodezji — PAS128/AS5488, LiDAR, skan laserowy i pakiety IOR geodezyjnych.`
+      : `Onboarding for surveying & geodesy teams — PAS128/AS5488, aerial LiDAR, laser scan, hydrographic and rail corridor ${ramsLabel} packs.`;
   const [status, setStatus] = useState(() => (geospatial ? getGeospatialSetupStatus() : getConstructionSetupStatus()));
   const [message, setMessage] = useState("");
 
@@ -36,19 +48,19 @@ export default function ConstructionSetupWizard() {
   return (
     <div>
       <PageHero
-        badgeText={geospatial ? "GEO" : "GC"}
-        title={geospatial ? "Geospatial setup" : "Setup in an afternoon"}
+        badgeText={geospatial ? "GEO" : wizardCopy.badge}
+        title={geospatial ? "Geospatial setup" : wizardCopy.title}
         lead={
           geospatial
-            ? "Onboarding for surveying & geodesy teams — PAS128/AS5488, aerial LiDAR, laser scan, hydrographic and rail corridor RAMS."
-            : "Onboarding checklist for UK general contractors — CDM, RAMS, permits, daily briefing and client portal in one session."
+            ? geospatialLead
+            : wizardCopy.lead
         }
       />
 
       <div style={{ ...ss.card, marginBottom: 16, padding: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Progress</div>
+            <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>{wizardCopy.progress}</div>
             <div style={{ fontSize: 28, fontWeight: 600, color: status.pct >= 80 ? "#27500A" : status.pct >= 50 ? "#633806" : "#0C447C" }}>
               {status.complete}/{status.total} · {status.pct}%
             </div>
@@ -95,7 +107,7 @@ export default function ConstructionSetupWizard() {
               <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
                 {autoSteps.includes(step.id) && !step.done ? (
                   <button type="button" style={{ ...ss.btnP, fontSize: 12, padding: "4px 10px" }} onClick={() => runAction(step.id)}>
-                    Run now
+                    {wizardCopy.runNow}
                   </button>
                 ) : null}
                 {step.viewId ? (
@@ -104,7 +116,7 @@ export default function ConstructionSetupWizard() {
                     style={{ ...ss.btn, fontSize: 12, padding: "4px 10px" }}
                     onClick={() => openWorkspaceView({ viewId: step.viewId })}
                   >
-                    Open
+                    {wizardCopy.open}
                   </button>
                 ) : null}
                 {!step.done ? (
@@ -117,7 +129,7 @@ export default function ConstructionSetupWizard() {
                       refresh();
                     }}
                   >
-                    Mark done
+                    {wizardCopy.markDone}
                   </button>
                 ) : null}
               </div>

@@ -6,6 +6,7 @@ export const PROJECT_DOC_KEYS = {
   rams: "rams_builder_docs",
   permits: "permits_v2",
   surveys: "survey_reports",
+  gprReports: "gpr_reports",
   geoPhotos: "geo_photos",
   snags: "snags",
   methodStatements: "method_statements",
@@ -80,6 +81,7 @@ export function buildProjectActivityFeed(projectId, data = {}) {
     rams = [],
     permits = [],
     surveyReports = [],
+    gprReports = [],
     geoPhotos = [],
     snags = [],
     methodStatements = [],
@@ -105,6 +107,9 @@ export function buildProjectActivityFeed(projectId, data = {}) {
   });
   filterByProject(projectId, surveyReports).forEach((s) => {
     push(s, "survey", `Survey: ${s.title || s.ref || "Report"}`, "survey-report", "edit", { reportId: s.id });
+  });
+  filterByProject(projectId, gprReports).forEach((g) => {
+    push(g, "gpr", `GPR: ${g.title || g.ref || "Report"}`, "gpr-report", "edit", { reportId: g.id });
   });
   filterByProject(projectId, geoPhotos).forEach((g) => {
     push(
@@ -165,6 +170,7 @@ export function collectProjectDashboard(project, workers = []) {
       rams: [],
       permits: [],
       surveys: [],
+      gprReports: [],
       geoPhotos: [],
       snags: [],
       methodStatements: [],
@@ -190,6 +196,7 @@ export function collectProjectDashboard(project, workers = []) {
   const rams = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.rams, [])));
   const permits = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.permits, [])));
   const surveys = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.surveys, [])));
+  const gprReports = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.gprReports, [])));
   const geoPhotos = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.geoPhotos, [])));
   const snags = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.snags, [])));
   const methodStatements = sortByRecent(filterByProject(projectId, load(PROJECT_DOC_KEYS.methodStatements, [])));
@@ -207,6 +214,7 @@ export function collectProjectDashboard(project, workers = []) {
     rams,
     permits,
     surveyReports: surveys,
+    gprReports,
     geoPhotos,
     snags,
     methodStatements,
@@ -225,6 +233,7 @@ export function collectProjectDashboard(project, workers = []) {
     rams.length +
     permits.length +
     surveys.length +
+    gprReports.length +
     geoPhotos.length +
     snags.length +
     methodStatements.length +
@@ -238,6 +247,7 @@ export function collectProjectDashboard(project, workers = []) {
     rams,
     permits,
     surveys,
+    gprReports,
     geoPhotos,
     snags,
     methodStatements,

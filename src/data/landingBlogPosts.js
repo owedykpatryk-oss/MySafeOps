@@ -401,6 +401,16 @@ const RAW_LANDING_BLOG_POSTS = [
     readTime: "8 min read",
     image: "/blog/images/lone-worker-construction-uk-hero.png",
   },
+  {
+    slug: "ior-pozwolenie-na-prace-polska",
+    title: "IOR i pozwolenie na pracę na budowie — co musi być w systemie",
+    excerpt:
+      "Praktyczny przewodnik po IOR, pozwoleniach na prace szczególnie niebezpieczne i dowodach BHP dla polskich wykonawców budowlanych.",
+    dateLabel: "Lip 2026",
+    publishedIso: "2026-07-12",
+    readTime: "7 min read",
+    image: "/blog/images/permit-to-work-app-uk-hero.png",
+  },
 ];
 
 /** @type {BlogPostMeta[]} */

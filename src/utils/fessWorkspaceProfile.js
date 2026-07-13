@@ -14,7 +14,7 @@ export function getFessGroupWorkspacePack() {
     label: "FESS Group — food factory M&E",
     hint: "M&E on live food sites — standard site RA baseline, hygiene registers, LOTO, line clearance and method statements.",
     hidePreset: "foodPharmaFocus",
-    hiddenModules: ["survey-report", "hygiene-setup"],
+    hiddenModules: ["survey-report", "gpr-report", "hygiene-setup"],
     showModules: [
       "fess-setup",
       "fess-sites",

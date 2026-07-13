@@ -3,7 +3,7 @@
 import { getOrgId } from "./orgStorage";
 import { GEOCODE_CACHE_STORAGE_KEY } from "./geocode";
 
-const GLOBAL_KEYS = ["mysafeops_org_settings", "mysafeops_orgId", "mysafeops_notif_prefs", "mysafeops_notif_seen"];
+const GLOBAL_KEYS = ["mysafeops_org_settings", "mysafeops_orgId", "mysafeops_notif_seen"];
 
 /**
  * Backs up every key that ends with `_${orgId}` (e.g. rams_builder_docs_default, mysafeops_site_presence_default)

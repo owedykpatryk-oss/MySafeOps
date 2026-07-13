@@ -1,7 +1,18 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect } from "vitest";
 import { blankSurveyReport } from "../modules/surveyReport/surveyReportConstants";
+import { getQaChecklistItemsForSurveyType } from "../modules/surveyReport/surveyQaPack";
 import { evaluateSurveyFinalGate, evaluateSurveyExportGate } from "./surveyCompletenessGates";
+
+function qaMeetingFinalGate(surveyType, extra = {}) {
+  const items = getQaChecklistItemsForSurveyType(surveyType);
+  const need = Math.max(1, Math.ceil(items.length * 0.5));
+  const qa = { ...extra };
+  items.slice(0, need).forEach((i) => {
+    qa[i.key] = true;
+  });
+  return qa;
+}
 
 describe("surveyCompletenessGates", () => {
   it("blocks final when QA, calibration, sign-off or photos missing", () => {
@@ -15,7 +26,7 @@ describe("surveyCompletenessGates", () => {
     const ready = blankSurveyReport({
       status: "draft",
       surveyType: "topographical_survey",
-      qaChecklist: { catScanBeforeWork: true },
+      qaChecklist: qaMeetingFinalGate("topographical_survey"),
       equipmentCalibration: [{ id: "eq_1", instrument: "TS" }],
       documentControl: { approvedBy: "HSE Lead" },
       photos: [{ id: "ph_1", dataUrl: "data:image/png;base64,abc", caption: "" }],
@@ -42,14 +53,16 @@ describe("surveyCompletenessGates", () => {
     const report = blankSurveyReport({
       status: "final",
       surveyType: "utility_mapping_survey",
-      pas128Ql: "QLB",
-      utilitiesTable: [{ id: "u1", utilityType: "Electric" }],
-      qaChecklist: { controlVerified: true },
+      pas128Ql: "B1",
+      utilitiesTable: [{ id: "u1", utilityType: "Electric", pas128Ql: "B2" }],
+      qaChecklist: qaMeetingFinalGate("utility_mapping_survey"),
       equipmentCalibration: [{ id: "eq_1" }],
       documentControl: { approvedBy: "Lead" },
       photos: [{ id: "ph_1" }],
     });
-    expect(evaluateSurveyExportGate(report).allowed).toBe(true);
+    const gate = evaluateSurveyExportGate(report);
+    expect(gate.missing, gate.missing.join("; ")).toEqual([]);
+    expect(gate.allowed).toBe(true);
   });
 
   it("blocks GI export without location schedule or utility clearance QA", () => {
@@ -71,7 +84,10 @@ describe("surveyCompletenessGates", () => {
       status: "final",
       surveyType: "site_investigation_campaign",
       giLocationsTable: [{ id: "gi1", locationId: "BH01", method: "Borehole" }],
-      qaChecklist: { utilityClearanceGi: true, chainOfCustody: true },
+      qaChecklist: qaMeetingFinalGate("site_investigation_campaign", {
+        utilityClearanceGi: true,
+        catScanBeforeWork: true,
+      }),
       equipmentCalibration: [{ id: "eq_1" }],
       documentControl: { approvedBy: "Lead" },
       photos: [{ id: "ph_1" }],

@@ -91,6 +91,14 @@
       "destination": "/api/postcode?code=:code"
     },
     {
+      "source": "/api/au-postcode/:code",
+      "destination": "/api/au-postcode?code=:code"
+    },
+    {
+      "source": "/api/pl-postcode/:code",
+      "destination": "/api/pl-postcode?code=:code"
+    },
+    {
       "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }

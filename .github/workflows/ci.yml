@@ -32,6 +32,8 @@ jobs:
         run: npm ci
       - name: ESLint
         run: npm run lint
+      - name: Survey docs guard
+        run: npm run check:survey-docs
 
   test:
     runs-on: ubuntu-latest

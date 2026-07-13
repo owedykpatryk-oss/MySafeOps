@@ -14,13 +14,21 @@ import { billingLimitMessage, checkBillingLimit } from "../utils/billingLimits";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { ms } from "../utils/moduleStyles";
 import { geocodeAddressNominatim } from "../utils/geocode";
-import PageHero from "../components/PageHero";
+import { getCompetencyCardHint, getEmergencyServicesLabel, getPostcodeHint } from "../utils/marketLabels";
+import { getOrgMarketId } from "../utils/orgMarket";
+import {
+  geoLookupSuccessMsg,
+  lookupSitePostcode,
+  resolveSitePostcodeInput,
+  sitePostcodeExample,
+} from "../utils/siteAddressLookup";
 import EmptyState from "../components/EmptyState";
+import PageHero from "../components/PageHero";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { getOrgId, orgScopedKey, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { sanitizeProjectForOrg } from "../utils/fessExclusive";
 import {
-  CERT_LIBRARY,
+  getCertLibraryForMarket,
   certLabel,
   addMonthsIso,
   normalizeWorkerCertifications,
@@ -28,7 +36,6 @@ import {
 } from "../utils/certifications";
 import { pushRecycleBinItem } from "../utils/recycleBin";
 import { openWorkspaceView, setWorkspaceNavTarget, consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
-import { lookupUkPostcode, resolveUkPostcodeInput } from "../utils/postcodeLookup";
 import { getNearestHospital } from "../utils/nearestHospital";
 import { fetchWeatherSummary, fetchWeatherForDate } from "../utils/weatherSummary";
 import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDrawingImport";
@@ -759,8 +766,9 @@ export default function Workers() {
 }
 
 function workerFormShape(w) {
+  const certLibrary = getCertLibraryForMarket(getOrgMarketId());
   const baseMatrix = Object.fromEntries(
-    CERT_LIBRARY.map((c) => [
+    certLibrary.map((c) => [
       c.code,
       { enabled: false, expiryDate: "", certNumber: "", provider: "" },
     ])
@@ -803,6 +811,8 @@ function workerFormShape(w) {
 }
 
 function WorkerForm({ item, onSave, onClose }) {
+  const orgMarketId = getOrgMarketId();
+  const certLibrary = getCertLibraryForMarket(orgMarketId);
   const [form, setForm] = useState(() => workerFormShape(item));
   const [certFilter, setCertFilter] = useState("");
   useEffect(() => {
@@ -822,7 +832,7 @@ function WorkerForm({ item, onSave, onClose }) {
   const toggleCert = (code, enabled) => {
     setForm((f) => {
       const prev = f.certMatrix?.[code] || {};
-      const lib = CERT_LIBRARY.find((x) => x.code === code);
+      const lib = certLibrary.find((x) => x.code === code);
       return {
         ...f,
         certMatrix: {
@@ -848,7 +858,7 @@ function WorkerForm({ item, onSave, onClose }) {
       .filter(([, v]) => v?.enabled)
       .map(([code, v]) => ({
         certCode: code,
-        certType: certLabel(code),
+        certType: certLabel(code, orgMarketId),
         expiryDate: String(v.expiryDate || "").slice(0, 10),
         certNumber: String(v.certNumber || ""),
         provider: String(v.provider || ""),
@@ -865,7 +875,7 @@ function WorkerForm({ item, onSave, onClose }) {
     onSave({ ...form, certifications: uniqueAll });
   };
 
-  const visibleCatalog = CERT_LIBRARY.filter((c) => c.label.toLowerCase().includes(certFilter.trim().toLowerCase()));
+  const visibleCatalog = certLibrary.filter((c) => c.label.toLowerCase().includes(certFilter.trim().toLowerCase()));
 
   return (
     <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
@@ -880,7 +890,7 @@ function WorkerForm({ item, onSave, onClose }) {
         <label style={{ ...ss.lbl, marginTop: 10 }}>Email</label>
         <input style={ss.inp} value={form.email} onChange={(e) => set("email", e.target.value)} />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Primary certificate (for dashboard expiry)</label>
-        <input style={ss.inp} value={form.certType || ""} onChange={(e) => set("certType", e.target.value)} placeholder="e.g. CSCS, IPAF" />
+        <input style={ss.inp} value={form.certType || ""} onChange={(e) => set("certType", e.target.value)} placeholder={getCompetencyCardHint(getOrgMarketId())} />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Certificate expiry</label>
         <input type="date" style={ss.inp} value={form.certExpiry || ""} onChange={(e) => set("certExpiry", e.target.value)} />
         <div style={{ marginTop: 12, border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, padding: "10px 10px 8px" }}>
@@ -1010,6 +1020,7 @@ function projectFormShape(p, { workers = [], user, orgSettings } = {}) {
 
 function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const orgSettings = useMemo(() => getOrgSettings(), []);
+  const orgMarketId = getOrgMarketId();
   const [form, setForm] = useState(() => projectFormShape(item, { workers, user, orgSettings }));
   const [geoBusy, setGeoBusy] = useState(false);
   const [geoMsg, setGeoMsg] = useState("");
@@ -1071,10 +1082,10 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const fetchStartForecast = async () => {
     let lat = parseFloat(String(form.lat ?? "").trim(), 10);
     let lng = parseFloat(String(form.lng ?? "").trim(), 10);
-    const postcodeQuery = resolveUkPostcodeInput(form.postcode, form.address, form.site);
+    const postcodeQuery = resolveSitePostcodeInput(form.postcode, form.address, form.site);
     const start = String(form.timelineStart || "").trim().slice(0, 10);
     if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && postcodeQuery) {
-      const pc = await lookupUkPostcode(postcodeQuery);
+      const pc = await lookupSitePostcode(postcodeQuery, orgMarketId);
       if (pc) {
         lat = pc.lat;
         lng = pc.lng;
@@ -1187,7 +1198,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   };
 
   const geocode = async () => {
-    const postcodeQuery = resolveUkPostcodeInput(form.postcode, form.address, form.site);
+    const postcodeQuery = resolveSitePostcodeInput(form.postcode, form.address, form.site);
     const q = [postcodeQuery || form.postcode, form.address, form.site].filter(Boolean).join(", ").trim();
     if (!q) {
       setGeoMsg("Enter postcode or address first.");
@@ -1197,7 +1208,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     setGeoMsg("");
     try {
       if (postcodeQuery) {
-        const pc = await lookupUkPostcode(postcodeQuery);
+        const pc = await lookupSitePostcode(postcodeQuery, orgMarketId);
         if (pc) {
           setForm((f) => ({
             ...f,
@@ -1206,7 +1217,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
             postcode: pc.postcode,
             address: f.address?.trim() ? f.address : [pc.adminDistrict, pc.region].filter(Boolean).join(", "),
           }));
-          setGeoMsg("Coordinates from UK postcode lookup.");
+          setGeoMsg(geoLookupSuccessMsg(orgMarketId));
           return;
         }
         setGeoMsg(`Postcode "${postcodeQuery}" not found — check spelling or try a fuller address.`);
@@ -1214,7 +1225,11 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
       }
       const c = await geocodeAddressNominatim(`${q}, United Kingdom`);
       if (!c) {
-        setGeoMsg("No coordinates found — try a UK postcode (e.g. KT22 7SH) or fuller address.");
+        setGeoMsg(
+          orgMarketId === "au"
+            ? "No coordinates found — try an Australian postcode (e.g. 2000) or fuller address."
+            : "No coordinates found — try a UK postcode (e.g. KT22 7SH) or fuller address."
+        );
         return;
       }
       setForm((f) => ({ ...f, lat: String(c.lat), lng: String(c.lng) }));
@@ -1229,12 +1244,12 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const enrichSite = async () => {
     let lat = parseFloat(String(form.lat ?? "").trim(), 10);
     let lng = parseFloat(String(form.lng ?? "").trim(), 10);
-    const postcodeQuery = resolveUkPostcodeInput(form.postcode, form.address, form.site);
+    const postcodeQuery = resolveSitePostcodeInput(form.postcode, form.address, form.site);
     setEnrichBusy(true);
     setGeoMsg("");
     try {
       if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && postcodeQuery) {
-        const pc = await lookupUkPostcode(postcodeQuery);
+        const pc = await lookupSitePostcode(postcodeQuery, orgMarketId);
         if (pc) {
           lat = pc.lat;
           lng = pc.lng;
@@ -1381,14 +1396,14 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
               value={form.postcode || ""}
               onChange={(e) => set("postcode", e.target.value)}
               onBlur={(e) => {
-                const normalised = resolveUkPostcodeInput(e.target.value);
+                const normalised = resolveSitePostcodeInput(e.target.value);
                 if (normalised && normalised !== form.postcode) set("postcode", normalised);
               }}
-              placeholder="e.g. KT22 7SH or KT227SH"
+              placeholder={`e.g. ${sitePostcodeExample(orgMarketId)}`}
               autoComplete="postal-code"
             />
             <div style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginTop: 4, marginBottom: 4 }}>
-              Enter a UK postcode, then use Lookup coordinates. Weather + nearest A&amp;E feeds RAMS and emergency contacts.
+              {getPostcodeHint(orgMarketId)} Weather + nearest {getEmergencyServicesLabel(orgMarketId)} feeds site safety docs and emergency contacts.
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
               <div>

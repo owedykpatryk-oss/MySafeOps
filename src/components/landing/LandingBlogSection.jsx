@@ -1,28 +1,36 @@
 import { Link } from "react-router-dom";
 import BlogPostsGrid from "./BlogPostsGrid";
 import { LANDING_BLOG_POSTS } from "../../data/landingBlogPosts";
+import { getLandingBlogTag, getLandingSectionsCopy } from "../../data/landingSectionsCopy";
+import { queryBlogPosts } from "../../lib/blog/getPosts";
 
-export default function LandingBlogSection() {
+/** @param {{ marketId?: import("../../config/markets").MarketId }} props */
+export default function LandingBlogSection({ marketId = "uk" }) {
+  const copy = getLandingSectionsCopy(marketId);
+  const tag = getLandingBlogTag(marketId);
+  const taggedCount = queryBlogPosts({ tag }).length;
+  const postCount = taggedCount > 0 ? taggedCount : LANDING_BLOG_POSTS.length;
+
   return (
     <section className="landing-blog-section" id="blog" aria-labelledby="landing-blog-heading">
       <div className="ctn">
         <div className="sh fu landing-blog-intro">
           <div className="badge" style={{ background: "rgba(13,148,136,.1)", color: "var(--teal)" }}>
-            Insights
+            {copy.blog.badge}
           </div>
-          <h2 id="landing-blog-heading">From the blog</h2>
+          <h2 id="landing-blog-heading">{copy.blog.title}</h2>
           <p className="landing-blog-lead">
-            UK construction safety guides — permits, RAMS, inductions and compliance.{" "}
+            {copy.blog.lead(postCount)}{" "}
             <Link to="/blog" className="landing-blog-index-link">
-              Browse all {LANDING_BLOG_POSTS.length} articles
+              {copy.blog.browseAll}
             </Link>
             .
           </p>
         </div>
-        <BlogPostsGrid variant="landing" featuredOnly limit={4} />
+        <BlogPostsGrid variant="landing" tag={tag} limit={4} />
         <p className="landing-blog-more fu">
           <Link to="/blog" className="landing-blog-more-link">
-            See all guides →
+            {copy.blog.seeAll}
           </Link>
         </p>
       </div>

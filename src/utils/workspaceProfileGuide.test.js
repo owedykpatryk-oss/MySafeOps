@@ -6,6 +6,7 @@ import {
   getProfileGuideEntry,
   getActiveProfileGuideSummary,
   listProfileGuideCatalogue,
+  getWorkspaceProfileOverview,
 } from "./workspaceProfileGuide";
 import { INDUSTRY_PACKS } from "./orgIndustryPacks";
 import { saveOrgSettingsRaw } from "./orgSettingsStorage";
@@ -44,5 +45,16 @@ describe("workspaceProfileGuide", () => {
 
   it("listProfileGuideCatalogue matches pack count", () => {
     expect(listProfileGuideCatalogue()).toHaveLength(Object.keys(INDUSTRY_PACKS).length);
+  });
+
+  it("getWorkspaceProfileOverview uses SWMS for AU", () => {
+    const overview = getWorkspaceProfileOverview("au");
+    expect(overview.whatItDoes.join(" ")).toMatch(/SWMS/i);
+    expect(overview.whatItDoes.join(" ")).not.toMatch(/\bRAMS\b/);
+  });
+
+  it("getProfileGuideEntry localizes hub focus for AU", () => {
+    const entry = getProfileGuideEntry("generalContractor", "au");
+    expect(entry.hubFocus).toMatch(/WHS|SWMS/i);
   });
 });

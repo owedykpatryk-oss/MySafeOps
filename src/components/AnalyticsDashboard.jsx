@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCountUp } from "../hooks/useCountUp";
 import { loadOrgScoped as load, ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT, getOrgId, ORG_ID_KEY } from "../utils/orgStorage";
 import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 import { activeAllergenWindows, orgShowsIndustrialMoreModules } from "../utils/industrialSectors";
@@ -10,6 +11,10 @@ import FessClientSitesHub from "./FessClientSitesHub";
 import FessPulseCard from "./FessPulseCard";
 import { getConstructionSetupStatus, isConstructionPackActive } from "../utils/constructionOnboarding";
 import { getGeospatialSetupStatus, isGeospatialPackActive } from "../utils/geospatialOnboarding";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getOrgLocale } from "../utils/orgLocale";
+import { getRamsShortLabel, getRegistersLabel } from "../utils/marketLabels";
+import { getAppUiCopy } from "../data/appUiCopy";
 import { isSoloWorkspace } from "../utils/soloWorkspace";
 import { invalidateRegisterStatsCache, buildHseDashboardSummary, emptyHseDashboardSummary } from "../utils/moduleRegisterStats";
 import { ms } from "../utils/moduleStyles";
@@ -22,6 +27,7 @@ import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { openWorkspaceSettings, openWorkspaceView, openWorkspaceMoreSection, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { getTrialExtensionCount } from "../utils/orgMembership";
 import { canExtendOrgTrial, shouldShowTrialExtensionOffer, TRIAL_EXTENSION_DAYS } from "../utils/billingAccess";
+import { getPlanDisplayPriceLabel } from "../lib/billingPlans";
 import HseRegistersCard from "./HseRegistersCard";
 import {
   DASHBOARD_WIDGETS,
@@ -45,10 +51,12 @@ import { readAudit, pushAudit } from "../utils/auditLog";
 import { sanitizePdfFileSegment } from "../utils/pdfFileName";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
 
-const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short" }); };
+// Locale-aware (not hardcoded en-GB) so AU/PL organisations see their own date
+// conventions instead of UK formatting on the dashboard they use every day.
+const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString(getOrgLocale(), { day:"2-digit", month:"short" }); };
 const fmtDateTime = (iso) => {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString(getOrgLocale(), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 const daysUntil = (iso) => { if (!iso) return null; return Math.ceil((new Date(iso)-new Date())/(1000*60*60*24)); };
 const permitEndIso = (permit) => permit?.endDateTime || permit?.expiryDate || "";
@@ -194,6 +202,23 @@ function ExpiryRow({ name, role, certType, expiryDate }) {
 
 const ROLE_LABEL = { admin: "Organisation admin", supervisor: "Supervisor", operative: "Operative" };
 
+/** Overview metric tile with a smooth count-up when its value changes. */
+function DashboardMetricTile({ label, value, sub, viewId, tone, onOpen }) {
+  const display = useCountUp(value);
+  return (
+    <button
+      type="button"
+      className={`app-dashboard-metric app-dashboard-metric--${tone}`}
+      aria-label={`Open ${label}`}
+      onClick={onOpen}
+    >
+      <span className="app-dashboard-metric__label">{label}</span>
+      <span className="app-dashboard-metric__value">{display}</span>
+      <span className="app-dashboard-metric__sub">{sub}</span>
+    </button>
+  );
+}
+
 export default function AnalyticsDashboard() {
   const { role, caps, trialStatus, billing, orgId } = useApp();
   const { supabase } = useSupabaseAuth();
@@ -261,6 +286,7 @@ export default function AnalyticsDashboard() {
   const trainingRecords = useMemo(() => load("training_matrix", []), [dataRefreshTick]);
   const hotWork = useMemo(() => load("hot_work_register", []), [dataRefreshTick]);
   const surveyReports = useMemo(() => load("survey_reports", []), [dataRefreshTick]);
+  const gprReports = useMemo(() => load("gpr_reports", []), [dataRefreshTick]);
   const methodStatements = useMemo(() => load("method_statements", []), [dataRefreshTick]);
   const geoPhotos = useMemo(() => load("geo_photos", []), [dataRefreshTick]);
   const allergenWindows = useMemo(() => load("allergen_changeover_windows", []), [dataRefreshTick]);
@@ -269,6 +295,12 @@ export default function AnalyticsDashboard() {
   const fessSetup = useMemo(() => getFessSetupStatus(), [dataRefreshTick, orgId]);
   const constructionSetup = useMemo(() => getConstructionSetupStatus(), [dataRefreshTick, orgId]);
   const geospatialSetup = useMemo(() => getGeospatialSetupStatus(), [dataRefreshTick, orgId]);
+  const dashboardUi = getAppUiCopy(getOrgMarketId()).dashboard;
+  // Market-aware copy so AU (WHS/SWMS) and PL (BHP/IOR) orgs don't see UK-only
+  // regulatory terminology on the dashboard they open every day.
+  const marketId = getOrgMarketId();
+  const ramsShortLabel = getRamsShortLabel(marketId);
+  const registersLabel = getRegistersLabel(marketId);
 
   // compliance score calculation
   const { score: complianceScore, issues: complianceIssues } = useMemo(() => {
@@ -287,7 +319,7 @@ export default function AnalyticsDashboard() {
     const unsignedRams = rams.filter((r) => !r.signed && r.status !== "draft");
     if (unsignedRams.length) {
       score -= Math.min(15, unsignedRams.length * 3);
-      issues.push(`${unsignedRams.length} unsigned RAMS`);
+      issues.push(`${unsignedRams.length} unsigned ${ramsShortLabel}`);
     }
 
     const overdueSnags = snags.filter((s) => s.dueDate && s.status === "open" && new Date(s.dueDate) < now);
@@ -306,8 +338,9 @@ export default function AnalyticsDashboard() {
     }
 
     return { score: Math.max(0, score), issues };
-  }, [workers, rams, snags, permits]);
+  }, [workers, rams, snags, permits, ramsShortLabel]);
   const complianceColor = complianceScore >= 80 ? "#27500A" : complianceScore >= 60 ? "#633806" : "#791F1F";
+  const complianceScoreDisplay = useCountUp(complianceScore);
 
   const expiringCerts = useMemo(() => {
     const in30 = new Date();
@@ -477,7 +510,7 @@ export default function AnalyticsDashboard() {
       items.push({
         key: "rams-unsigned",
         severity: "med",
-        text: `${unsignedRams} issued RAMS document(s) are not signed — complete sign-off in RAMS.`,
+        text: `${unsignedRams} issued ${ramsShortLabel} document(s) are not signed — complete sign-off in ${ramsShortLabel}.`,
         viewId: "rams",
       });
     }
@@ -518,7 +551,7 @@ export default function AnalyticsDashboard() {
       items.push({
         key: "hse-attention",
         severity: "med",
-        text: `${hseDashboard.summary.attention} HSE register(s) have overdue items or open actions — review in More.`,
+        text: `${hseDashboard.summary.attention} ${registersLabel} register(s) have overdue items or open actions — review in More.`,
         openMore: true,
       });
     }
@@ -526,23 +559,24 @@ export default function AnalyticsDashboard() {
       items.push({
         key: "hse-empty",
         severity: "calm",
-        text: `${hseDashboard.summary.empty} HSE registers are still empty — use Seed templates in More or the dashboard HSE card.`,
+        text: `${hseDashboard.summary.empty} ${registersLabel} registers are still empty — use Seed templates in More or the dashboard ${registersLabel} card.`,
         openMore: true,
         registerFilter: "empty",
       });
     }
     return items;
-  }, [workers, permits, rams, snags, trainingExpiring60, projects, hseDashboard]);
+  }, [workers, permits, rams, snags, trainingExpiring60, projects, hseDashboard, registersLabel, ramsShortLabel]);
 
   const projectsAttention = useMemo(() => {
     const ctx = buildProjectActionContext({
       rams,
       surveys: surveyReports,
+      gprReports,
       permits,
       methodStatements,
     });
     return listProjectsWithNextActions(projects, ctx).slice(0, 8);
-  }, [projects, rams, surveyReports, permits, methodStatements]);
+  }, [projects, rams, surveyReports, gprReports, permits, methodStatements]);
 
   const hotWorkActive = hotWork.filter((h) => h.status === "active").length;
   const org = getOrgSettings();
@@ -576,7 +610,7 @@ export default function AnalyticsDashboard() {
         items: [
           { label: "People", value: String(workers.length) },
           { label: "Active projects", value: String(activeProjects) },
-          { label: "RAMS documents", value: String(rams.length) },
+          { label: `${ramsShortLabel} documents`, value: String(rams.length) },
           { label: "Permits (total)", value: String(permits.length) },
           { label: "Permits active (in date)", value: String(permitStats.active) },
           { label: "Permits past end (still active)", value: String(permitStats.expired) },
@@ -617,7 +651,7 @@ export default function AnalyticsDashboard() {
 
     const hse = hseDashboard.summary;
     const hseItems = [
-      { label: "HSE health score", value: `${hse.healthScore}%` },
+      { label: `${registersLabel} health score`, value: `${hse.healthScore}%` },
       { label: "Registers tracked", value: String(hse.tracked) },
       { label: "Empty registers", value: String(hse.empty) },
       { label: "Active (no attention flag)", value: String(hse.active) },
@@ -640,7 +674,7 @@ export default function AnalyticsDashboard() {
             : `${emptyLabels.slice(0, 8).join("; ")} (+${emptyLabels.length - 8} more)`,
       });
     }
-    sections.push({ title: "HSE register health", items: hseItems });
+    sections.push({ title: `${registersLabel} register health`, items: hseItems });
 
     return sections;
   }, [
@@ -666,6 +700,8 @@ export default function AnalyticsDashboard() {
     trialStatus,
     hseDashboard,
     geoPhotos,
+    ramsShortLabel,
+    registersLabel,
   ]);
 
   const checklist = useMemo(
@@ -688,7 +724,7 @@ export default function AnalyticsDashboard() {
         next: "People → Add person",
         cta: "people",
       },
-      { label: "Create first RAMS or permit", done: rams.length > 0 || permits.length > 0, next: "RAMS or Permits tab" },
+      { label: `Create first ${ramsShortLabel} or permit`, done: rams.length > 0 || permits.length > 0, next: `${ramsShortLabel} or Permits tab` },
       {
         label: isSoloWorkspace(workers)
           ? "Solo mode — one profile is enough (invite later optional)"
@@ -698,7 +734,7 @@ export default function AnalyticsDashboard() {
         cta: isSoloWorkspace(workers) ? null : "invites",
       },
     ],
-    [orgProfileDone, projects.length, workers.length, rams.length, permits.length]
+    [orgProfileDone, projects.length, workers.length, rams.length, permits.length, ramsShortLabel]
   );
   const completedChecklist = checklist.filter((x) => x.done).length;
   const checklistDone = completedChecklist === checklist.length;
@@ -742,7 +778,7 @@ export default function AnalyticsDashboard() {
         items.push({
           key: "trial-ended-billing",
           tone: "info",
-          text: "Resume editing with Solo from £19/mo — flat org pricing, not per seat.",
+          text: `Resume editing with Solo from ${getPlanDisplayPriceLabel("starter", marketId)}/mo — flat org pricing, not per seat.`,
           cta: "Open billing",
           onCta: () => openWorkspaceSettings({ tab: "billing" }),
         });
@@ -847,21 +883,21 @@ export default function AnalyticsDashboard() {
     if (role === "supervisor") {
       return (
         <>
-          <strong>Supervisor view</strong> — prioritise <strong>Action needed</strong>, permits, RAMS sign-off, and snags.{dataNote}
+          <strong>Supervisor view</strong> — prioritise <strong>Action needed</strong>, permits, {ramsShortLabel} sign-off, and snags.{dataNote}
         </>
       );
     }
     return (
       <>
-        <strong>Field view</strong> — jump to Permits, RAMS, or Timesheets; use the shortcuts below.{dataNote}
+        <strong>Field view</strong> — jump to Permits, {ramsShortLabel}, or Timesheets; use the shortcuts below.{dataNote}
       </>
     );
-  }, [role]);
+  }, [role, ramsShortLabel]);
 
   const shortcutRows = useMemo(() => {
     const site = [
       { viewId: "permits", label: "Permits" },
-      { viewId: "rams", label: "RAMS" },
+      { viewId: "rams", label: ramsShortLabel },
       { viewId: "people", label: "People" },
       { viewId: "projects", label: "Projects" },
       { viewId: "timesheets", label: "Timesheets" },
@@ -885,7 +921,7 @@ export default function AnalyticsDashboard() {
       { title: "Quality & safety", items: hseq },
       ...(isLead ? [{ title: "Reporting & records", items: lead }] : []),
     ];
-  }, [role, isLead]);
+  }, [role, isLead, ramsShortLabel]);
 
   const runDashboardPdfExport = useCallback(
     async (preset) => {
@@ -901,7 +937,7 @@ export default function AnalyticsDashboard() {
         const result = await exportDashboardToPdf(dashboardPdfRef.current, {
           preset,
           title: orgName,
-          subtitle: `${t.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} · ${roleLabel}`,
+          subtitle: `${t.toLocaleString(getOrgLocale(), { dateStyle: "medium", timeStyle: "short" })} · ${roleLabel}`,
           fileNamePrefix: sanitizePdfFileSegment(
             orgId && String(orgId).trim() && String(orgId) !== "default" ? String(orgId) : orgName,
             44
@@ -912,7 +948,7 @@ export default function AnalyticsDashboard() {
             offline ? "Browser reported offline when exporting — figures are still from this device only." : null,
             `UTC export: ${t.toISOString()}`,
             orgId && String(orgId).trim() && String(orgId) !== "default" ? `Organisation: ${orgId}` : null,
-            `HSE register health score: ${hseDashboard.summary.healthScore}% (${hseDashboard.summary.attention} need attention · ${hseDashboard.summary.empty} empty)`,
+            `${registersLabel} register health score: ${hseDashboard.summary.healthScore}% (${hseDashboard.summary.attention} need attention · ${hseDashboard.summary.empty} empty)`,
             "Numbers: device-local aggregates only (not a live cloud replica).",
           ].filter(Boolean),
           coverLogoSrc: pdfCoverLogoSrc,
@@ -941,7 +977,7 @@ export default function AnalyticsDashboard() {
         setPdfExportPhase(null);
       }
     },
-    [orgName, roleLabel, orgId, pdfCoverLogoSrc, pdfSummarySections, hseDashboard]
+    [orgName, roleLabel, orgId, pdfCoverLogoSrc, pdfSummarySections, hseDashboard, registersLabel]
   );
 
   return (
@@ -970,7 +1006,7 @@ export default function AnalyticsDashboard() {
           >
             Allergen changeovers
           </button>
-          <span style={{ color: "#78350f" }}> and reference in RAMS Step 1.</span>
+          <span style={{ color: "#78350f" }}> and reference in {ramsShortLabel} Step 1.</span>
         </div>
       ) : null}
       {isFessSetupActive() && fessSetup.pct < 100 ? (
@@ -1086,15 +1122,17 @@ export default function AnalyticsDashboard() {
           }}
         >
           <div>
-            <strong style={{ color: "#0f766e" }}>Construction setup — {constructionSetup.complete}/{constructionSetup.total} complete ({constructionSetup.pct}%)</strong>
-            <span style={{ color: "#115e59" }}> · CDM, RAMS, permits, daily briefing and client portal in one afternoon.</span>
+            <strong style={{ color: "#0f766e" }}>
+              {dashboardUi.constructionBannerTitle(constructionSetup.complete, constructionSetup.total, constructionSetup.pct)}
+            </strong>
+            <span style={{ color: "#115e59" }}>{dashboardUi.constructionBannerLead}</span>
           </div>
           <button
             type="button"
             onClick={() => openWorkspaceView({ viewId: "construction-setup" })}
             style={{ ...ms.btnP, fontSize: 12, padding: "6px 12px" }}
           >
-            Open setup wizard
+            {dashboardUi.openWizard}
           </button>
         </div>
       ) : null}
@@ -1538,7 +1576,7 @@ export default function AnalyticsDashboard() {
           {[
             { label: "People", value: workers.length, sub: "registered", viewId: "people", tone: "teal" },
             { label: "Active projects", value: projects.filter((p) => !p.closed).length, sub: "projects", viewId: "projects", tone: "sky" },
-            { label: "RAMS total", value: rams.length, sub: "documents", viewId: "rams", tone: "teal" },
+            { label: `${ramsShortLabel} total`, value: rams.length, sub: "documents", viewId: "rams", tone: "teal" },
             { label: "Permits", value: permits.length, sub: `${permitStats.active} active`, viewId: "permits", tone: "amber" },
             { label: "Open snags", value: snagStats.open, sub: `${snagStats.in_progress} in progress`, viewId: "snags", tone: "rose" },
             { label: "Hours (month)", value: Math.round(monthHours), sub: `${tsEntries.length} entries`, viewId: "timesheets", tone: "indigo" },
@@ -1547,17 +1585,14 @@ export default function AnalyticsDashboard() {
             { label: "Hot work active", value: hotWorkActive, sub: `${hotWork.length} total records`, viewId: "hot-work", tone: "amber" },
             { label: "On site today", value: todayInductions, sub: "sign-ins", viewId: "induction", tone: "sky" },
           ].map((m) => (
-            <button
+            <DashboardMetricTile
               key={m.label}
-              type="button"
-              className={`app-dashboard-metric app-dashboard-metric--${m.tone}`}
-              aria-label={`Open ${m.label}`}
-              onClick={() => openWorkspaceView({ viewId: m.viewId })}
-            >
-              <span className="app-dashboard-metric__label">{m.label}</span>
-              <span className="app-dashboard-metric__value">{m.value}</span>
-              <span className="app-dashboard-metric__sub">{m.sub}</span>
-            </button>
+              label={m.label}
+              value={m.value}
+              sub={m.sub}
+              tone={m.tone}
+              onOpen={() => openWorkspaceView({ viewId: m.viewId })}
+            />
           ))}
         </div>
       </Section>
@@ -1572,7 +1607,7 @@ export default function AnalyticsDashboard() {
           <div className="app-dashboard-card__title">Compliance score</div>
           <div className="app-dashboard-score">
             <div className="app-dashboard-score__ring" style={{ "--score-pct": complianceScore, "--score-color": complianceColor }}>
-              <span className="app-dashboard-score__value">{complianceScore}</span>
+              <span className="app-dashboard-score__value">{complianceScoreDisplay}</span>
             </div>
             <div className="app-dashboard-score__label" style={{ color: complianceColor }}>
               {complianceScore >= 80 ? "Good standing" : complianceScore >= 60 ? "Needs attention" : "Action required"}
@@ -1603,7 +1638,7 @@ export default function AnalyticsDashboard() {
             </div>
           ) : (
             expiringCerts.slice(0, 5).map((c, i) => (
-              <ExpiryRow key={i} name={c.workerName} role={c.workerRole} certType={c.type || c.name || "Certificate"} expiryDate={c.expiryDate} />
+              <ExpiryRow key={i} name={c.workerName} role={c.workerRole} certType={c.certType || c.certCode || "Certificate"} expiryDate={c.expiryDate} />
             ))
           )}
           {expiringCerts.length > 5 ? (
@@ -1765,7 +1800,7 @@ export default function AnalyticsDashboard() {
       >
         {projects.length === 0 ? (
           <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-            No projects yet — add a site under <strong>Projects</strong>, then open the hub for RAMS, survey and PTW drafts.
+            No projects yet — add a site under <strong>Projects</strong>, then open the hub for {ramsShortLabel}, survey and PTW drafts.
           </p>
         ) : (
           <div className="app-dashboard-project-grid">
@@ -2120,8 +2155,8 @@ export default function AnalyticsDashboard() {
       </div>
 
       <div className="app-panel-surface app-dashboard-footnote">
-        All metrics are calculated live from your organisation&apos;s data. No data is shared between organisations. Dates and short dates follow your browser
-        locale — choose United Kingdom in system or browser settings for British (en-GB) formatting.
+        All metrics are calculated live from your organisation&apos;s data. No data is shared between organisations. Dates and short dates follow your
+        organisation&apos;s locale (Settings → Organisation), defaulting to your market&apos;s convention.
       </div>
     </div>
   );

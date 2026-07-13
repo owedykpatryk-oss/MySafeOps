@@ -14,8 +14,12 @@ import {
   buildDefaultDeliverables,
 } from "../modules/surveyReport/surveyReportSmart";
 import { nextSurveyRef } from "../modules/surveyReport/surveyReportHelpers";
+import { blankGprReport } from "../modules/gprReport/gprReportConstants";
+import { nextGprRef } from "../modules/gprReport/gprReportHelpers";
+import { prefillGprFromProject } from "../modules/gprReport/gprReportSmart";
 import { buildPermitDraftFromProject } from "../modules/permits/permitProjectDefaults";
-import { getPlaybookSurveyPack } from "./surveyContentCatalog";
+import { getPlaybookSurveyPack, getSurveyPackMeta } from "./surveyContentCatalog";
+import { applyPas128MethodToReport } from "../modules/surveyReport/pas128MethodPresets";
 import { checklistStringsForType } from "../modules/permits/permitTypes";
 import { createDefaultChecklistItems, normalizeChecklistState } from "../modules/permits/permitChecklistUtils";
 import { getTemplateForType } from "../modules/permits/permitTemplateCatalog";
@@ -47,15 +51,64 @@ export const PROJECT_PLAYBOOKS = [
     description: "RAMS + PAS128 survey draft + excavation PTW + mobilisation MS",
     industryStarter: "infrastructure",
     surveyType: "utility_mapping_survey",
-    pas128Ql: "QLB",
+    pas128Ql: "B1",
     ramsSurveyKey: "utility_mapping_survey",
+    gprPlaybook: true,
     permitTypes: ["excavation", "general"],
     msTemplate: "mobilisation",
     checklistExtras: [
       "Confirm utility records received and reviewed",
       "Plan trial holes and safe dig zones",
       "Brief team on PAS128 quality level and deliverables",
+      "Draft GPR report — BGS geology and weather enrichment",
       "Capture site entrance, access route and hazard geo-photos before mobilisation",
+    ],
+  },
+  {
+    id: "topo_plus_utility",
+    label: "Topo + utility (combined PAS128)",
+    description: "Combined topo and PAS128 RAMS + survey draft + excavation PTW",
+    industryStarter: "infrastructure",
+    surveyType: "topo_plus_utility_survey",
+    pas128Ql: "B1",
+    ramsSurveyKey: "topo_plus_utility_survey",
+    permitTypes: ["excavation", "general"],
+    msTemplate: "mobilisation",
+    checklistExtras: [
+      "Control network plan agreed for combined deliverable",
+      "Utility records and topo base context reviewed",
+      "MH/IC lifting sequence and gas monitor checked",
+      "Combined CAD QC hold point before issue",
+    ],
+  },
+  {
+    id: "drainage_connectivity",
+    label: "Drainage connectivity (sonde)",
+    description: "RAMS + drainage connectivity survey + confined space / excavation PTW",
+    industryStarter: "infrastructure",
+    surveyType: "drainage_connectivity_survey",
+    ramsSurveyKey: "drainage_connectivity_survey",
+    permitTypes: ["excavation", "confined_space", "general"],
+    msTemplate: "mobilisation",
+    checklistExtras: [
+      "Chamber access and barrier plan agreed",
+      "Sonde / duct rod and EML locator checked",
+      "Trace log template ready for each connection",
+    ],
+  },
+  {
+    id: "service_clearance_gi",
+    label: "Service clearance (pre-GI)",
+    description: "Utility clearance RAMS before boreholes / trial pits + GI survey draft",
+    industryStarter: "infrastructure",
+    surveyType: "service_clearance_survey",
+    ramsSurveyKey: "service_clearance_survey",
+    permitTypes: ["excavation", "ground_disturbance", "general"],
+    msTemplate: "mobilisation",
+    checklistExtras: [
+      "GI intrusive locations marked on layout",
+      "Clearance zones agreed per hole",
+      "Handover briefing to GI contractor scheduled",
     ],
   },
   {
@@ -76,13 +129,14 @@ export const PROJECT_PLAYBOOKS = [
   {
     id: "site_investigation",
     label: "Site investigation & geotechnics",
-    description: "GI RAMS + window sampling / boreholes / DCP + excavation & ground disturbance PTW",
+    description: "GI RAMS + service clearance + window sampling / boreholes / DCP + excavation & ground disturbance PTW",
     industryStarter: "infrastructure",
     surveyType: "site_investigation_campaign",
     ramsSurveyKey: "site_investigation_campaign",
     permitTypes: ["excavation", "ground_disturbance", "confined_space", "general"],
     msTemplate: "mobilisation",
     checklistExtras: [
+      "Service clearance / utility scan completed for each intrusive location",
       "Desk study and contamination/gas assessment reviewed",
       "Utility search and permit-to-dig issued before intrusive works",
       "Sample chain-of-custody forms and lab instructions confirmed",
@@ -325,11 +379,43 @@ export function createSurveyDraftFromPlaybook(project, playbook, existingReports
     base.equipmentCalibration = buildDefaultEquipmentCalibration(playbook.surveyType);
   }
   let draft = prefillReportFromProject(base, project, ramsDoc);
-  if (playbook.surveyType) draft = applyDefaultRecordsPreset(draft);
+  if (playbook.surveyType) {
+    draft = applyDefaultRecordsPreset(draft);
+    const meta = getSurveyPackMeta(playbook.surveyType);
+    if (meta.defaultPas128Method && !draft.pas128Method) {
+      draft = applyPas128MethodToReport(draft, meta.defaultPas128Method, { overwrite: false });
+    }
+  }
   draft.playbookId = playbook.id;
   draft.createdAt = new Date().toISOString();
   draft.updatedAt = draft.createdAt;
   return draft;
+}
+
+export function createGprDraftFromPlaybook(project, playbook, existingGpr = [], ramsDoc = null) {
+  const ref = nextGprRef(existingGpr);
+  let base = blankGprReport({
+    ref,
+    title: `GPR report — ${project.name || ref}`,
+    projectId: project.id,
+  });
+  base = prefillGprFromProject(base, project);
+  if (playbook.surveyType === "utility_mapping_survey" || playbook.gprPlaybook) {
+    base.equipment = [
+      {
+        ...base.equipment[0],
+        presetKey: "gssi_sir4000_400",
+        manufacturer: "GSSI",
+        model: "SIR 4000",
+        antennaFrequencyMhz: 400,
+      },
+    ];
+  }
+  base.playbookId = playbook.id;
+  base.createdAt = new Date().toISOString();
+  base.updatedAt = base.createdAt;
+  if (ramsDoc?.id) base.linkedSurveyReportId = "";
+  return base;
 }
 
 export function createPermitDraftFromPlaybook(project, permitType, ramsDoc = null, { allPermits = [], surveys = [] } = {}) {
@@ -431,6 +517,7 @@ export function buildMissingDocChecklist(dash) {
   };
   if (!dash?.rams?.length) push("Create RAMS for this site", "create_rams");
   if (isSurveyWorkflowEnabled() && !dash?.surveys?.length) push("Create survey report draft", "create_survey");
+  if (isSurveyWorkflowEnabled() && !dash?.gprReports?.length) push("Create GPR report draft", "create_gpr");
   if (!dash?.permits?.length) push("Issue permit to work (PTW)", "create_permit");
   if (!dash?.methodStatements?.length) push("Create method statement", "create_ms");
   if (!dash?.plans?.length) push("Upload site plan / drawing", "upload_plan");
@@ -474,10 +561,11 @@ export function applyProjectPlaybook(project, playbookId, existing = {}) {
 
   const rams = [...(existing.rams || [])];
   const surveys = [...(existing.surveys || [])];
+  const gprReports = [...(existing.gprReports || [])];
   const permits = [...(existing.permits || [])];
   const methodStatements = [...(existing.methodStatements || [])];
 
-  const created = { rams: [], surveys: [], permits: [], methodStatements: [] };
+  const created = { rams: [], surveys: [], gprReports: [], permits: [], methodStatements: [] };
   const summary = [];
 
   let ramsDoc = docsForProject(project.id, rams)[0];
@@ -493,6 +581,13 @@ export function applyProjectPlaybook(project, playbookId, existing = {}) {
     surveys.unshift(survey);
     created.surveys.push(survey);
     summary.push(`Survey draft: ${survey.ref}`);
+  }
+
+  if (playbook.gprPlaybook && !docsForProject(project.id, gprReports).length) {
+    const gpr = createGprDraftFromPlaybook(project, playbook, gprReports, ramsDoc);
+    gprReports.unshift(gpr);
+    created.gprReports.push(gpr);
+    summary.push(`GPR draft: ${gpr.ref}`);
   }
 
   const existingPermitTypes = new Set(docsForProject(project.id, permits).map((p) => p.type));
@@ -515,6 +610,7 @@ export function applyProjectPlaybook(project, playbookId, existing = {}) {
   const dashLike = {
     rams: docsForProject(project.id, rams),
     surveys: docsForProject(project.id, surveys),
+    gprReports: docsForProject(project.id, gprReports),
     permits: docsForProject(project.id, permits),
     methodStatements: docsForProject(project.id, methodStatements),
     plans: existing.plans || [],
@@ -541,7 +637,7 @@ export function applyProjectPlaybook(project, playbookId, existing = {}) {
 
   return {
     project: updatedProject,
-    store: { rams, surveys, permits, methodStatements },
+    store: { rams, surveys, gprReports, permits, methodStatements },
     created,
     summary,
     applied,
@@ -553,6 +649,7 @@ export function applyAndPersistProjectPlaybook(project, playbookId) {
   const existing = {
     rams: load(PROJECT_DOC_KEYS.rams, []),
     surveys: load(PROJECT_DOC_KEYS.surveys, []),
+    gprReports: load(PROJECT_DOC_KEYS.gprReports, []),
     permits: load(PROJECT_DOC_KEYS.permits, []),
     methodStatements: load(PROJECT_DOC_KEYS.methodStatements, []),
     plans: [],
@@ -560,6 +657,7 @@ export function applyAndPersistProjectPlaybook(project, playbookId) {
   const result = applyProjectPlaybook(project, playbookId, existing);
   if (result.created.rams.length) save(PROJECT_DOC_KEYS.rams, result.store.rams);
   if (result.created.surveys.length) save(PROJECT_DOC_KEYS.surveys, result.store.surveys);
+  if (result.created.gprReports.length) save(PROJECT_DOC_KEYS.gprReports, result.store.gprReports);
   if (result.created.permits.length) save(PROJECT_DOC_KEYS.permits, result.store.permits);
   if (result.created.methodStatements.length) save(PROJECT_DOC_KEYS.methodStatements, result.store.methodStatements);
   return result;

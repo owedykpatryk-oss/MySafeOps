@@ -4,40 +4,41 @@ import LandingFooter from "../components/landing/LandingFooter";
 import { getSupportEmail } from "../config/supportContact";
 import "../styles/landing.css";
 
+import { getMarket, legalDocIframeSrc } from "../config/markets";
+
 const SUPPORT_EMAIL = getSupportEmail();
 
-const DOCS = {
-  privacy: {
-    title: "Privacy policy",
-    pageTitle: "Privacy Policy — MySafeOps",
-    iframeSrc: "/legal/privacy-policy.html",
-  },
-  terms: {
-    title: "Terms of service",
-    pageTitle: "Terms of Service — MySafeOps",
-    iframeSrc: "/legal/terms.html",
-  },
-  cookies: {
-    title: "Cookie policy",
-    pageTitle: "Cookie policy — MySafeOps",
-    iframeSrc: "/legal/cookies.html",
-  },
-  dpa: {
-    title: "Data processing",
-    pageTitle: "Data processing — MySafeOps",
-    iframeSrc: "/legal/dpa.html",
-  },
-  accessibility: {
-    title: "Accessibility statement",
-    pageTitle: "Accessibility statement — MySafeOps",
-    iframeSrc: "/legal/accessibility.html",
-  },
-};
+/** @param {{ docKey: string; marketId?: import("../config/markets").MarketId }} props */
+export default function LegalPage({ docKey, marketId = "uk" }) {
+  const market = getMarket(marketId);
+  const DOCS = {
+    privacy: {
+      title: "Privacy policy",
+      pageTitle: `Privacy Policy — MySafeOps (${market.label})`,
+      iframeSrc: legalDocIframeSrc(market.id, "privacy-policy.html"),
+    },
+    terms: {
+      title: "Terms of service",
+      pageTitle: `Terms of Service — MySafeOps (${market.label})`,
+      iframeSrc: legalDocIframeSrc(market.id, "terms.html"),
+    },
+    cookies: {
+      title: "Cookie policy",
+      pageTitle: `Cookie policy — MySafeOps (${market.label})`,
+      iframeSrc: legalDocIframeSrc(market.id, "cookies.html"),
+    },
+    dpa: {
+      title: "Data processing",
+      pageTitle: `Data processing — MySafeOps (${market.label})`,
+      iframeSrc: legalDocIframeSrc(market.id, "dpa.html"),
+    },
+    accessibility: {
+      title: "Accessibility statement",
+      pageTitle: `Accessibility statement — MySafeOps (${market.label})`,
+      iframeSrc: legalDocIframeSrc(market.id, "accessibility.html"),
+    },
+  };
 
-/**
- * @param {{ docKey: keyof typeof DOCS }} props
- */
-export default function LegalPage({ docKey }) {
   const meta = DOCS[docKey];
 
   useEffect(() => {
@@ -67,7 +68,7 @@ export default function LegalPage({ docKey }) {
       </a>
       <header className="blog-index-header" role="banner">
         <div className="ctn blog-index-header-inner">
-          <Link to="/" className="logo">
+          <Link to={market.homePath} className="logo">
             <svg viewBox="0 0 44 50" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
               <path
                 d="M2 14C2 10.5 4 8.5 6 7.8L20 2C21.2 1.6 22.8 1.6 24 2L38 7.8C40 8.5 42 10.5 42 14V30C42 42 24 50 22 51C20 50 2 42 2 30V14Z"
@@ -108,7 +109,7 @@ export default function LegalPage({ docKey }) {
         />
       </main>
 
-      <LandingFooter supportEmail={SUPPORT_EMAIL} />
+      <LandingFooter supportEmail={SUPPORT_EMAIL} market={market} />
     </div>
   );
 }

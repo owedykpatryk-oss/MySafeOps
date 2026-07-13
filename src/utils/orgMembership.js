@@ -1,13 +1,49 @@
 import { pushAudit } from "./auditLog";
 import { syncOrgBrandingFromCloud } from "./orgBrandingCloudSync";
+import { syncOrgMarketFromAuth } from "./orgMarket";
 import { getOrgId, setOrgId } from "./orgStorage";
 
 const MEMBERSHIP_ROLES = new Set(["admin", "supervisor", "operative"]);
 import { clearPendingInvite, peekPendingInvite } from "../lib/inviteToken";
 
+export const ORG_TRIAL_ENDS_AT_KEY = "mysafeops_trial_ends_at";
 export const ORG_BILLING_PLAN_KEY = "mysafeops_billing_plan";
 export const ORG_SUBSCRIPTION_STATUS_KEY = "mysafeops_subscription_status";
 export const ORG_TRIAL_EXTENSION_COUNT_KEY = "mysafeops_trial_extension_count";
+
+// Billing/trial state is scoped per org slug (like `mysafeops_role_${slug}`) so a shared
+// device (e.g. a site tablet) switching between organisations can't show one org's trial
+// countdown, plan, or read-only gate using another org's cached billing state. The
+// unscoped legacy key is kept as a read fallback so upgrades don't lose current state.
+function scopedBillingKey(baseKey, slug = getOrgId()) {
+  return slug && slug !== "default" ? `${baseKey}_${slug}` : baseKey;
+}
+
+function readScopedBilling(baseKey, slug = getOrgId()) {
+  try {
+    const scoped = localStorage.getItem(scopedBillingKey(baseKey, slug));
+    if (scoped != null) return scoped;
+    return localStorage.getItem(baseKey);
+  } catch {
+    return null;
+  }
+}
+
+function writeScopedBilling(baseKey, value, slug = getOrgId()) {
+  try {
+    localStorage.setItem(scopedBillingKey(baseKey, slug), String(value));
+  } catch {
+    /* ignore */
+  }
+}
+
+function removeScopedBilling(baseKey, slug = getOrgId()) {
+  try {
+    localStorage.removeItem(scopedBillingKey(baseKey, slug));
+  } catch {
+    /* ignore */
+  }
+}
 
 export function persistOrgRow(row) {
   const slug = getOrgId();
@@ -20,18 +56,18 @@ export function persistOrgRow(row) {
     }
   }
   if (row.trial_ends_at) {
-    localStorage.setItem("mysafeops_trial_ends_at", String(row.trial_ends_at));
+    writeScopedBilling(ORG_TRIAL_ENDS_AT_KEY, row.trial_ends_at, slug);
   }
   if (row.trial_extension_count != null && row.trial_extension_count !== "") {
-    localStorage.setItem(ORG_TRIAL_EXTENSION_COUNT_KEY, String(row.trial_extension_count));
+    writeScopedBilling(ORG_TRIAL_EXTENSION_COUNT_KEY, row.trial_extension_count, slug);
   }
   if (row.billing_plan != null && row.billing_plan !== "") {
-    localStorage.setItem(ORG_BILLING_PLAN_KEY, String(row.billing_plan));
+    writeScopedBilling(ORG_BILLING_PLAN_KEY, row.billing_plan, slug);
   } else {
-    localStorage.removeItem(ORG_BILLING_PLAN_KEY);
+    removeScopedBilling(ORG_BILLING_PLAN_KEY, slug);
   }
   if (row.subscription_status) {
-    localStorage.setItem(ORG_SUBSCRIPTION_STATUS_KEY, String(row.subscription_status));
+    writeScopedBilling(ORG_SUBSCRIPTION_STATUS_KEY, row.subscription_status, slug);
   }
   window.dispatchEvent(new CustomEvent("mysafeops-org-updated"));
 }
@@ -76,6 +112,11 @@ export async function refreshOrgFromSupabase(supabase) {
   } catch {
     /* non-fatal — local branding still works */
   }
+  try {
+    await syncOrgMarketFromAuth(supabase);
+  } catch {
+    /* non-fatal */
+  }
   return row;
 }
 
@@ -116,12 +157,17 @@ export async function ensureUserOrgContext(supabase) {
   } catch {
     /* non-fatal */
   }
+  try {
+    await syncOrgMarketFromAuth(supabase);
+  } catch {
+    /* non-fatal */
+  }
   pushAudit({ action: "org_context_sync", entity: "org", detail: row.org_slug });
   return row;
 }
 
 export function getTrialExtensionCount() {
-  const raw = localStorage.getItem(ORG_TRIAL_EXTENSION_COUNT_KEY);
+  const raw = readScopedBilling(ORG_TRIAL_EXTENSION_COUNT_KEY);
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? Math.trunc(n) : 0;
 }
@@ -132,17 +178,17 @@ export async function extendOrgTrial(supabase) {
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
   if (row?.trial_ends_at) {
-    localStorage.setItem("mysafeops_trial_ends_at", String(row.trial_ends_at));
+    writeScopedBilling(ORG_TRIAL_ENDS_AT_KEY, row.trial_ends_at);
   }
   if (row?.trial_extension_count != null) {
-    localStorage.setItem(ORG_TRIAL_EXTENSION_COUNT_KEY, String(row.trial_extension_count));
+    writeScopedBilling(ORG_TRIAL_EXTENSION_COUNT_KEY, row.trial_extension_count);
   }
   window.dispatchEvent(new CustomEvent("mysafeops-org-updated"));
   return row;
 }
 
 export function getTrialStatus(now = Date.now()) {
-  const raw = localStorage.getItem("mysafeops_trial_ends_at");
+  const raw = readScopedBilling(ORG_TRIAL_ENDS_AT_KEY);
   if (!raw) return null;
   const endsAt = new Date(raw).getTime();
   if (!Number.isFinite(endsAt)) return null;
@@ -161,8 +207,8 @@ export function isTrialUnlockActive(now = Date.now()) {
 }
 
 export function getBillingEntitlements() {
-  const sub = localStorage.getItem(ORG_SUBSCRIPTION_STATUS_KEY) || "none";
-  const paid = localStorage.getItem(ORG_BILLING_PLAN_KEY);
+  const sub = readScopedBilling(ORG_SUBSCRIPTION_STATUS_KEY) || "none";
+  const paid = readScopedBilling(ORG_BILLING_PLAN_KEY);
   const paidPlanId =
     paid && ["starter", "team", "business", "enterprise", "enterprise_plus"].includes(paid) ? paid : null;
   return { subscriptionStatus: sub, paidPlanId };

@@ -6,7 +6,8 @@ import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 import { applyIndustryPack } from "./orgIndustryPacks";
 import ALL from "../modules/rams/ramsAllHazards.js";
 import { ensureBuiltInConstructionPacks } from "../modules/rams/constructionQuickPacks.js";
-import { seedLegislationRegister } from "./ukLegislationLibrary";
+import { seedLegislationRegisterForMarket } from "./legislationLibrary";
+import { getOrgMarketId } from "./orgMarket";
 import { loadRamsHazardPacks, saveRamsHazardPacks } from "./ramsHazardPacksStorage";
 
 const PROGRESS_KEY = "geospatial_onboarding_progress";
@@ -80,6 +81,13 @@ export const GEOSPATIAL_SETUP_STEPS = [
     autoCheck: () => load("survey_reports", []).length > 0,
   },
   {
+    id: "gpr_deliverable",
+    label: "First GPR report drafted",
+    hint: "GPR report — equipment preset, BGS geology and radargram evidence.",
+    viewId: "gpr-report",
+    autoCheck: () => load("gpr_reports", []).length > 0,
+  },
+  {
     id: "excavation_permit",
     label: "Permit-to-dig / field campaign permit issued",
     hint: "PTW → excavation, marine, aerial coordination or rail corridor as required.",
@@ -143,7 +151,7 @@ export function runGeospatialSetupAction(stepId) {
     case "legislation": {
       const existing = load(LEGISLATION_KEY, []);
       if (existing.length === 0) {
-        save(LEGISLATION_KEY, seedLegislationRegister());
+        save(LEGISLATION_KEY, seedLegislationRegisterForMarket(getOrgMarketId()));
       }
       markGeospatialStepDone(stepId);
       return { ok: true, message: "Legislation register seeded." };

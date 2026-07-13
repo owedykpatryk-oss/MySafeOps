@@ -47,4 +47,12 @@ describe("orgSettingsStorage", () => {
     saveOrgSettingsRaw({ name: "Still Configurable Ltd" });
     expect(loadOrgSettingsRaw().name).toBe("Still Configurable Ltd");
   });
+
+  it("persists and resolves Poland market id", () => {
+    saveOrgSettingsRaw({ name: "Budex Sp. z o.o.", market: "pl" });
+    expect(loadOrgSettingsRaw().market).toBe("pl");
+    expect(getOrgSettings().market).toBe("pl");
+    const payload = pickCloudBrandingPayload(loadOrgSettingsRaw());
+    expect(payload.market).toBe("pl");
+  });
 });

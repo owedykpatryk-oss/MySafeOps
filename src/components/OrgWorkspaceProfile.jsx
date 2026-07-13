@@ -37,6 +37,9 @@ import { getRamsStarterLabel } from "../utils/ramsIndustryStarters";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import { resetOnboardingWizard } from "../utils/workspaceOnboarding";
 import { openWorkspaceView } from "../utils/workspaceNavContext";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getRamsShortLabel, localizeIndustryTerminology } from "../utils/marketLabels";
+import { ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { ms } from "../utils/moduleStyles";
 
 const ss = ms;
@@ -58,6 +61,9 @@ export default function OrgWorkspaceProfile() {
   const [customLabel, setCustomLabel] = useState("");
   const [customBasedOn, setCustomBasedOn] = useState("generalContractor");
   const [profileList, setProfileList] = useState(() => listWorkspaceProfilesForOrg());
+  const marketId = getOrgMarketId();
+  const ramsLabel = getRamsShortLabel(marketId);
+  const loc = (text) => localizeIndustryTerminology(text, marketId);
 
   const refreshProfiles = () => setProfileList(listWorkspaceProfilesForOrg());
 
@@ -171,7 +177,7 @@ export default function OrgWorkspaceProfile() {
               {pack.label}
               {pack.custom ? <span style={{ fontSize: 11, marginLeft: 6, opacity: 0.7 }}>· Custom</span> : null}
             </span>
-            <span className="app-onboarding-option__hint">{pack.hint}</span>
+            <span className="app-onboarding-option__hint">{loc(pack.hint)}</span>
             {appliedId === pack.id ? (
               <span className="app-org-profile__applied">Current profile</span>
             ) : null}
@@ -222,7 +228,7 @@ export default function OrgWorkspaceProfile() {
           <p className="app-org-profile__preview-title">If you apply {preview.label}</p>
           <ul className="app-org-profile__preview-list">
             {preview.changes.map((line) => (
-              <li key={line}>{line}</li>
+              <li key={line}>{loc(line)}</li>
             ))}
           </ul>
         </div>
@@ -230,15 +236,15 @@ export default function OrgWorkspaceProfile() {
 
       <div className="app-org-profile__workflow">
         <p className="app-org-profile__workflow-title">Typical workflow</p>
-        <p className="app-org-profile__workflow-summary">{workflowHelp.summary}</p>
+        <p className="app-org-profile__workflow-summary">{loc(workflowHelp.summary)}</p>
         {getWorkspacePack(draftId)?.ramsStarterKey !== null ? (
           <p className="app-org-profile__workflow-summary" style={{ marginTop: 8 }}>
-            RAMS builder starter: <strong>{getRamsStarterLabel(getWorkspacePack(draftId)?.ramsStarterKey || "general")}</strong>
+            {ramsLabel} builder starter: <strong>{getRamsStarterLabel(getWorkspacePack(draftId)?.ramsStarterKey || "general")}</strong>
           </p>
         ) : null}
         <ol className="app-org-profile__workflow-steps">
           {workflowHelp.steps.map((step) => (
-            <li key={step}>{step}</li>
+            <li key={step}>{loc(step)}</li>
           ))}
         </ol>
       </div>
@@ -246,7 +252,7 @@ export default function OrgWorkspaceProfile() {
       {!dirty && getPackHighlights(appliedId).length ? (
         <ul className="app-org-profile__highlights">
           {getPackHighlights(appliedId).map((line) => (
-            <li key={line}>{line}</li>
+            <li key={line}>{loc(line)}</li>
           ))}
         </ul>
       ) : null}

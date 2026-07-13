@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { checkEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -90,6 +91,26 @@ Deno.serve(async (req) => {
     if (inv.status !== "pending") {
       return new Response(JSON.stringify({ error: `Invite is ${inv.status}; only pending invites can be emailed` }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!checkEdgeRateLimit(`org-invite:user:${user.id}`, 12, 60 * 60_000)) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: orgAttempts, error: orgRateErr } = await supabase
+      .from("org_invites")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", inv.org_id)
+      .gte("email_delivery_attempted_at", oneHourAgo);
+    if (!orgRateErr && typeof orgAttempts === "number" && orgAttempts >= 40) {
+      return new Response(JSON.stringify({ error: "Organisation invite email rate limit exceeded." }), {
+        status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

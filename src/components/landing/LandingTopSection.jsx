@@ -4,35 +4,19 @@ import { Menu, X } from "lucide-react";
 import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
 import { LANDING_RAMS_PACK_COUNT } from "./landingShowcaseData";
 import LandingHeroMockup from "./LandingHeroMockup";
+import LandingHeroLiveStrip from "./LandingHeroLiveStrip";
+import LandingMarketRibbon from "./LandingMarketRibbon";
 import LandingSectorMarquee from "./LandingSectorMarquee";
+import { getLandingNavLinks } from "../../data/landingMarketContent";
+import { getLandingSectionsCopy } from "../../data/landingSectionsCopy";
 
-const MOBILE_DRAWER_LINKS = [
-  { href: "#workflow", label: "How it works" },
-  { href: "#profiles", label: "Profiles & RAMS" },
-  { href: "#features", label: "Features" },
-  { href: "#readiness", label: "Readiness check" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#faq", label: "FAQ" },
-  { href: "/blog", label: "Blog", spa: true },
-  { href: "#missing", label: "Request a feature" },
-];
-
-const NAV_LINKS = [
-  { href: "#workflow", label: "Workflow" },
-  { href: "#features", label: "Features" },
-  { href: "#profiles", label: "Profiles & RAMS" },
-  { href: "#modules", label: "Modules" },
-  { href: "#readiness", label: "Readiness check", compactHide: true },
-  { href: "#roi", label: "Value", compactHide: true },
-  { href: "#roles", label: "How it works", compactHide: true },
-  { href: "#pricing", label: "Pricing" },
-  { href: "/blog", label: "Blog", spa: true },
-  { href: "#faq", label: "FAQ" },
-  { href: "#missing", label: "Request feature", compactHide: true },
-];
-
-export default function LandingTopSection({ navScrolled, cloud }) {
+export default function LandingTopSection({ navScrolled, cloud, market, copy }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const loginTo = market.loginPath;
+  const nav = getLandingNavLinks(market.id);
+  const sections = getLandingSectionsCopy(market.id);
+  const mobileLinks = nav.mobile;
+  const desktopLinks = nav.desktop;
 
   useEffect(() => {
     if (!mobileOpen) return undefined;
@@ -55,7 +39,7 @@ export default function LandingTopSection({ navScrolled, cloud }) {
       <nav className={`landing-top-nav${navScrolled ? " sc" : ""}`} aria-label="Primary">
         <div className="ctn">
           <div className="ni">
-            <Link to="/" className="logo">
+            <Link to={market.homePath} className="logo">
               <svg viewBox="0 0 44 50" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                 <path
                   d="M2 14C2 10.5 4 8.5 6 7.8L20 2C21.2 1.6 22.8 1.6 24 2L38 7.8C40 8.5 42 10.5 42 14V30C42 42 24 50 22 51C20 50 2 42 2 30V14Z"
@@ -71,9 +55,14 @@ export default function LandingTopSection({ navScrolled, cloud }) {
                 <span>Safe</span>
                 <span>Ops</span>
               </div>
+              {market.id !== "uk" && (
+                <span className={`landing-nav-market-pill${navScrolled ? " landing-nav-market-pill--sc" : ""}`}>
+                  {market.flag} {market.label}
+                </span>
+              )}
             </Link>
             <div className="nl">
-              {NAV_LINKS.map((item) =>
+              {desktopLinks.map((item) =>
                 item.spa ? (
                   <Link key={item.href} to={item.href} className={item.compactHide ? "nl-link--compact-hide" : undefined}>
                     {item.label}
@@ -84,11 +73,11 @@ export default function LandingTopSection({ navScrolled, cloud }) {
                   </a>
                 )
               )}
-              <Link to="/login" className="btn btn-o nc" {...loginLinkPrefetchProps}>
-                Sign in
+              <Link to={loginTo} className="btn btn-o nc" {...loginLinkPrefetchProps}>
+                {nav.signIn}
               </Link>
-              <Link to="/login" className="btn btn-p nc" {...loginLinkPrefetchProps}>
-                Get started
+              <Link to={loginTo} className="btn btn-p nc" {...loginLinkPrefetchProps}>
+                {nav.getStarted}
               </Link>
             </div>
             <button
@@ -125,7 +114,7 @@ export default function LandingTopSection({ navScrolled, cloud }) {
               </button>
             </div>
             <div className="landing-mobile-links">
-              {MOBILE_DRAWER_LINKS.map((item) =>
+              {mobileLinks.map((item) =>
                 item.spa ? (
                   <Link
                     key={item.href}
@@ -149,20 +138,20 @@ export default function LandingTopSection({ navScrolled, cloud }) {
                 )
               )}
               <Link
-                to="/login"
+                to={loginTo}
                 className="landing-mobile-cta"
                 {...loginLinkPrefetchProps}
                 onClick={() => setMobileOpen(false)}
               >
-                Sign in
+                {nav.signIn}
               </Link>
               <Link
-                to="/login"
+                to={loginTo}
                 className="landing-mobile-cta landing-mobile-cta-primary"
                 {...loginLinkPrefetchProps}
                 onClick={() => setMobileOpen(false)}
               >
-                Get started
+                {nav.getStarted}
               </Link>
             </div>
           </div>
@@ -173,68 +162,71 @@ export default function LandingTopSection({ navScrolled, cloud }) {
         <div className="hero-mesh" aria-hidden />
         <div className="hero-orb hero-orb--teal" aria-hidden />
         <div className="hero-orb hero-orb--org" aria-hidden />
+        {market.id === "pl" && <div className="hero-orb hero-orb--pl" aria-hidden />}
+        <LandingMarketRibbon market={market} />
         <div className="ctn">
           <div className="hg">
             <div className="hero-copy fu vi">
-              <div className="badge hb landing-badge-pulse">🇬🇧 UK site teams — construction to survey</div>
+              <div className="badge hb landing-badge-pulse">{copy.heroBadge}</div>
               <h1 id="landing-hero-heading">
-                Site safety,
+                {sections.hero.titleLine1}
                 <br />
-                <span className="hl landing-hl-shimmer">with real depth.</span>
+                <span className="hl landing-hl-shimmer">{sections.hero.titleLine2}</span>
               </h1>
               <p className="hero-lead">
                 <span className="hero-lead-full">
-                  RAMS quick packs, permits, PAS128 survey workflows, geo evidence and hygiene registers — one workspace tuned to your
-                  trade. Offline-first core
+                  {copy.heroLeadFull}
                   {cloud ? " with cloud sign-in and backup enabled on this deployment." : " with optional cloud backup when Supabase is configured."}
                 </span>
                 <span className="hero-lead-short">
-                  RAMS packs, PAS128 surveys, permits and registers — one workspace for your trade. Offline-first
+                  {copy.heroLeadShort}
                   {cloud ? ", cloud backup enabled." : "."}
                 </span>
               </p>
               <div className="hbs">
-                <Link to="/login" className="btn btn-p landing-btn-glow" {...loginLinkPrefetchProps}>
-                  Get started →
+                <Link to={loginTo} className="btn btn-p landing-btn-glow" {...loginLinkPrefetchProps}>
+                  {nav.heroGetStarted}
                 </Link>
                 <a href="#profiles" className="btn btn-o hero-btn-secondary">
-                  See profiles
+                  {nav.heroSeeProfiles}
                 </a>
                 <a href="#readiness" className="btn btn-o hero-btn-tertiary">
-                  2-min check
+                  {nav.heroQuickCheck}
                 </a>
               </div>
               <div className="landing-trust-strip landing-trust-pills" role="note">
-                <span>Offline-capable</span>
-                <span>UK registers</span>
-                <span>Flat org pricing</span>
-                <span className="landing-trust-pill--hide-sm">Optional cloud backup</span>
+                {copy.trustPills.map((pill) => (
+                  <span key={pill} className={pill.includes("backup") ? "landing-trust-pill--hide-sm" : undefined}>
+                    {pill}
+                  </span>
+                ))}
               </div>
               <div className="hs" aria-label="Product highlights">
                 <div>
                   <strong>40+</strong>
-                  <span>Modules</span>
+                  <span>{sections.hero.modulesStat}</span>
                 </div>
                 <div>
                   <strong>{LANDING_RAMS_PACK_COUNT}+</strong>
-                  <span>RAMS quick packs</span>
+                  <span>{copy.ramsLabel}</span>
                 </div>
                 <div>
                   <strong>9</strong>
-                  <span>Workspace profiles</span>
+                  <span>{sections.hero.profilesStat}</span>
                 </div>
                 <div>
                   <strong>14d</strong>
-                  <span>Full evaluation</span>
+                  <span>{sections.hero.trialStat}</span>
                 </div>
               </div>
+              <LandingHeroLiveStrip marketId={market.id} />
             </div>
             <div className="pw fu vi">
-              <LandingHeroMockup />
+              <LandingHeroMockup marketId={market.id} />
             </div>
           </div>
         </div>
-        <LandingSectorMarquee />
+        <LandingSectorMarquee marketId={market.id} />
       </section>
     </>
   );

@@ -27,10 +27,21 @@ const LEGACY_SCOPED_KEY = "custom_workspace_profiles";
  *   updatedAt: string,
  * }} CustomWorkspaceProfile */
 
-/** Module ids available in profile editor (More grid, excl. settings/superadmin). */
-export const PROFILE_EDITABLE_MODULE_IDS = MORE_TABS.map((t) => t.id).filter(
-  (id) => !["settings", "superadmin", "help"].includes(id)
-);
+/**
+ * Module ids available in profile editor (More grid, excl. settings/superadmin).
+ * Computed lazily (not at module top level) because this module sits in an import
+ * cycle with orgIndustryPacks.js — evaluating MORE_TABS.map() eagerly can run before
+ * navigation/appModules.js has finished initializing, depending on import order.
+ */
+let _profileEditableModuleIds = null;
+export function getProfileEditableModuleIds() {
+  if (!_profileEditableModuleIds) {
+    _profileEditableModuleIds = MORE_TABS.map((t) => t.id).filter(
+      (id) => !["settings", "superadmin", "help"].includes(id)
+    );
+  }
+  return _profileEditableModuleIds;
+}
 
 function normalizeProfile(raw) {
   if (!raw || typeof raw !== "object" || !raw.custom || typeof raw.id !== "string" || !raw.id.startsWith("custom_")) {
@@ -123,7 +134,7 @@ export function moduleListsFromVisible(profile, visibleModuleIds) {
   const baseHidden = new Set(base.hiddenModules || []);
   const showModules = [];
   const hiddenModules = [];
-  for (const id of PROFILE_EDITABLE_MODULE_IDS) {
+  for (const id of getProfileEditableModuleIds()) {
     const on = visible.has(id);
     if (on && (baseHidden.has(id) || !baseShow.has(id))) showModules.push(id);
     if (!on && (baseShow.has(id) || !baseHidden.has(id))) hiddenModules.push(id);
@@ -136,7 +147,7 @@ export function visibleModulesForProfile(profile) {
   const base = INDUSTRY_PACKS[profile.basedOn || "generalContractor"] || INDUSTRY_PACKS.generalContractor;
   const hidden = new Set([...(base.hiddenModules || []), ...(profile.hiddenModules || [])]);
   const show = new Set([...(base.showModules || []), ...(profile.showModules || [])]);
-  return PROFILE_EDITABLE_MODULE_IDS.filter((id) => {
+  return getProfileEditableModuleIds().filter((id) => {
     if (show.has(id)) return true;
     if (hidden.has(id)) return false;
     return !base.hiddenModules?.includes(id);

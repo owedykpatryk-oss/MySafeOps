@@ -12,13 +12,30 @@ const LD_MARK = "data-mysafeops-landing-ld";
  *   description: string;
  *   jsonLd: Record<string, unknown>;
  *   ogImageAbsoluteUrl?: string;
+ *   canonicalPath?: string;
+ *   locale?: string;
+ *   ogLocale?: string;
+ *   ogImageAlt?: string;
+ *   alternateLocale?: { hreflang: string; href: string };
+ *   alternateLocales?: { hreflang: string; href: string }[];
  * }} opts ogImageAbsoluteUrl — full URL for og:image and twitter:image
  */
 export function useLandingHomeDocumentMeta(opts) {
-  const { title, description, jsonLd, ogImageAbsoluteUrl } = opts;
+  const {
+    title,
+    description,
+    jsonLd,
+    ogImageAbsoluteUrl,
+    canonicalPath = "/",
+    locale = "en-GB",
+    ogLocale = "en_GB",
+    ogImageAlt = "MySafeOps — construction RAMS, permits, and site safety workspace",
+    alternateLocale,
+    alternateLocales,
+  } = opts;
 
   useEffect(() => {
-    const canonicalUrl = `${window.location.origin}/`;
+    const canonicalUrl = `${window.location.origin}${canonicalPath.startsWith("/") ? canonicalPath : `/${canonicalPath}`}`;
 
     const doc = document;
     const prevTitle = doc.title;
@@ -32,6 +49,7 @@ export function useLandingHomeDocumentMeta(opts) {
       if (tag === "meta" && attrs.property) sel = `meta[property="${attrs.property}"]`;
       else if (tag === "meta" && attrs.name) sel = `meta[name="${attrs.name}"]`;
       else if (tag === "link" && attrs.rel === "canonical") sel = `link[rel="canonical"]`;
+      else if (tag === "link" && attrs.rel === "alternate" && attrs.hreflang) sel = `link[rel="alternate"][hreflang="${attrs.hreflang}"]`;
 
       let el = sel ? doc.head.querySelector(sel) : null;
       const created = !el;
@@ -57,24 +75,29 @@ export function useLandingHomeDocumentMeta(opts) {
     ensure("meta", { property: "og:url", content: canonicalUrl });
     ensure("meta", { property: "og:type", content: "website" });
     ensure("meta", { property: "og:site_name", content: "MySafeOps" });
-    ensure("meta", { property: "og:locale", content: "en_GB" });
+    ensure("meta", { property: "og:locale", content: ogLocale });
+
+    if (alternateLocales?.length) {
+      for (const alt of alternateLocales) {
+        ensure("link", { rel: "alternate", hreflang: alt.hreflang, href: alt.href });
+      }
+    } else if (alternateLocale) {
+      ensure("link", { rel: "alternate", hreflang: alternateLocale.hreflang, href: alternateLocale.href });
+    }
 
     if (ogImageAbsoluteUrl) {
       ensure("meta", { property: "og:image", content: ogImageAbsoluteUrl });
-      ensure("meta", {
-        property: "og:image:alt",
-        content: "MySafeOps — UK construction RAMS, permits, and site safety workspace",
-      });
+      ensure("meta", { property: "og:image:alt", content: ogImageAlt });
       ensure("meta", { name: "twitter:image", content: ogImageAbsoluteUrl });
-      ensure("meta", {
-        name: "twitter:image:alt",
-        content: "MySafeOps — UK construction RAMS, permits, and site safety workspace",
-      });
+      ensure("meta", { name: "twitter:image:alt", content: ogImageAlt });
     }
 
     ensure("meta", { name: "twitter:card", content: "summary_large_image" });
     ensure("meta", { name: "twitter:title", content: title });
     ensure("meta", { name: "twitter:description", content: description });
+
+    const prevHtmlLang = doc.documentElement.getAttribute("lang");
+    doc.documentElement.setAttribute("lang", locale);
 
     const script = doc.createElement("script");
     script.type = "application/ld+json";
@@ -89,6 +112,8 @@ export function useLandingHomeDocumentMeta(opts) {
 
     return () => {
       doc.title = prevTitle;
+      if (prevHtmlLang === null) doc.documentElement.removeAttribute("lang");
+      else doc.documentElement.setAttribute("lang", prevHtmlLang);
       for (const { el, created, prev } of stack.reverse()) {
         if (created) {
           el.remove();
@@ -101,5 +126,5 @@ export function useLandingHomeDocumentMeta(opts) {
         el.removeAttribute(MARK);
       }
     };
-  }, [title, description, jsonLd, ogImageAbsoluteUrl]);
+  }, [title, description, jsonLd, ogImageAbsoluteUrl, canonicalPath, locale, ogLocale, ogImageAlt, alternateLocale, alternateLocales]);
 }

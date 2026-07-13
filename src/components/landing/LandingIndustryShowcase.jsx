@@ -2,17 +2,28 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
 import {
-  getLandingRamsPacksForTab,
-  LANDING_PROFILE_SITE_FOCUS,
+  getLandingProfileFocus,
+  getLandingRamsPacksForTabMarket,
+  getLandingRamsSectorTabs,
+  getLandingWorkspaceProfiles,
   LANDING_RAMS_PACK_COUNT,
-  LANDING_RAMS_SECTOR_TABS,
-  LANDING_WORKSPACE_PROFILES,
   loadLandingRamsPackCatalog,
 } from "./landingShowcaseData";
+import { getIndustryShowcaseUiCopy } from "../../data/appUiCopy";
+import { getLandingSectionsCopy } from "../../data/landingSectionsCopy";
+import { getRamsShortLabel } from "../../utils/marketLabels";
+import { getMarket } from "../../config/markets";
 
-function LandingIndustryShowcase() {
+/** @param {{ marketId?: import("../../config/markets").MarketId }} props */
+function LandingIndustryShowcase({ marketId = "uk" }) {
+  const market = getMarket(marketId);
+  const sectionCopy = getLandingSectionsCopy(marketId);
+  const ui = getIndustryShowcaseUiCopy(marketId);
+  const ramsShort = getRamsShortLabel(marketId);
+  const profiles = useMemo(() => getLandingWorkspaceProfiles(marketId), [marketId]);
+  const sectorTabs = useMemo(() => getLandingRamsSectorTabs(marketId), [marketId]);
   const [ramsTab, setRamsTab] = useState("construction");
-  const [activeProfile, setActiveProfile] = useState("surveyingGeodesy");
+  const [activeProfile, setActiveProfile] = useState(marketId === "pl" ? "generalContractor" : "surveyingGeodesy");
   const [ramsCatalog, setRamsCatalog] = useState(null);
 
   useEffect(() => {
@@ -30,52 +41,48 @@ function LandingIndustryShowcase() {
   }, []);
 
   const ramsPacks = useMemo(
-    () => (ramsCatalog ? getLandingRamsPacksForTab(ramsTab, ramsCatalog) : []),
-    [ramsTab, ramsCatalog]
+    () => (ramsCatalog ? getLandingRamsPacksForTabMarket(ramsTab, ramsCatalog, marketId) : []),
+    [ramsTab, ramsCatalog, marketId]
   );
-  const profile = LANDING_WORKSPACE_PROFILES.find((p) => p.id === activeProfile) || LANDING_WORKSPACE_PROFILES[0];
-  const profileFocus =
-    LANDING_PROFILE_SITE_FOCUS[activeProfile] || LANDING_PROFILE_SITE_FOCUS.generalContractor;
+  const profile = profiles.find((p) => p.id === activeProfile) || profiles[0];
+  const profileFocus = getLandingProfileFocus(activeProfile, marketId);
 
   return (
     <section className="landing-industry" id="profiles">
       <div className="ctn">
         <div className="sh fu">
           <div className="badge" style={{ background: "rgba(139,92,246,.12)", color: "#6d28d9" }}>
-            Depth beyond generic HSE apps
+            {sectionCopy.industry.badge}
           </div>
-          <h2>Pick your workspace profile — unlock the right modules</h2>
-          <p>
-            Nine built-in profiles tailor RAMS libraries, registers and dashboards to how you actually work — from civils contractors
-            and PAS128 survey teams to food/pharma hygiene and demolition.
-          </p>
+          <h2>{sectionCopy.industry.title}</h2>
+          <p>{sectionCopy.industry.intro}</p>
         </div>
 
         <div className="landing-industry-stats fu" aria-label="Product library scale">
           <div>
-            <strong>{LANDING_WORKSPACE_PROFILES.length}</strong>
-            <span>Workspace profiles</span>
+            <strong>{profiles.length}</strong>
+            <span>{sectionCopy.industry.profilesStat}</span>
           </div>
           <div>
             <strong>{LANDING_RAMS_PACK_COUNT}+</strong>
-            <span>Built-in RAMS quick packs</span>
+            <span>{marketId === "pl" ? `Pakiety ${ramsShort}` : marketId === "au" ? `Built-in ${ramsShort} quick packs` : "Built-in RAMS quick packs"}</span>
           </div>
           <div>
-            <strong>PAS128</strong>
-            <span>Survey &amp; AS5488 workflows</span>
+            <strong>{marketId === "pl" ? "BHP" : marketId === "au" ? "WHS" : "PAS128"}</strong>
+            <span>{marketId === "pl" ? "Plan i rejestry BHP" : marketId === "au" ? "WHS & model codes" : "Survey & AS5488 workflows"}</span>
           </div>
           <div>
             <strong>Geo</strong>
-            <span>Evidence photos with direction</span>
+            <span>{marketId === "pl" ? "Zdjęcia z kierunkiem" : "Evidence photos with direction"}</span>
           </div>
         </div>
 
         <div className="landing-profile-scroll-wrap fu">
           <p className="landing-scroll-hint" aria-hidden>
-            Swipe profiles →
+            {ui.swipeProfiles}
           </p>
           <div className="landing-profile-grid landing-scroll-row" role="tablist" aria-label="Workspace profiles">
-            {LANDING_WORKSPACE_PROFILES.filter((p) => p.id !== "showEverything").map((p) => {
+            {profiles.filter((p) => p.id !== "showEverything").map((p) => {
               const active = activeProfile === p.id;
               return (
                 <button
@@ -92,8 +99,8 @@ function LandingIndustryShowcase() {
                   </span>
                   <strong>{p.label}</strong>
                   <small>{p.hint}</small>
-                  {p.survey ? <span className="landing-profile-card__tag">Survey workflow</span> : null}
-                  {p.food ? <span className="landing-profile-card__tag landing-profile-card__tag--food">Hygiene registers</span> : null}
+                  {p.survey ? <span className="landing-profile-card__tag">{ui.surveyTag}</span> : null}
+                  {p.food ? <span className="landing-profile-card__tag landing-profile-card__tag--food">{ui.hygieneTag}</span> : null}
                 </button>
               );
             })}
@@ -101,7 +108,7 @@ function LandingIndustryShowcase() {
         </div>
 
         <aside className="landing-profile-detail fu landing-profile-detail--glow" aria-live="polite">
-          <p className="landing-profile-detail__kicker">Selected profile</p>
+          <p className="landing-profile-detail__kicker">{ui.selectedProfile}</p>
           <h3>
             {profile.icon} {profile.label}
           </h3>
@@ -113,8 +120,8 @@ function LandingIndustryShowcase() {
               ))}
             </ul>
           ) : null}
-          <Link to="/login" className="btn btn-p landing-btn-glow" {...loginLinkPrefetchProps}>
-            Start evaluation with this profile →
+          <Link to={market.loginPath} className="btn btn-p landing-btn-glow" {...loginLinkPrefetchProps}>
+            {ui.cta}
           </Link>
         </aside>
       </div>
@@ -123,21 +130,18 @@ function LandingIndustryShowcase() {
         <div className="ctn">
           <div className="sh fu">
             <div className="badge" style={{ background: "rgba(13,148,136,.1)", color: "var(--teal)" }}>
-              RAMS quick packs
+              {ui.ramsBadge}
             </div>
-            <h2>Trade libraries you can seed in one click</h2>
-            <p>
-              Pre-built hazard rows with controls, PPE, regs and permit links — groundworks, utilities, PAS128 utility intelligence,
-              site investigation, food factory M&amp;E and more. Not blank templates.
-            </p>
+            <h2>{ui.ramsTitle}</h2>
+            <p>{ui.ramsIntro}</p>
           </div>
 
           <div className="landing-rams-tabs-wrap fu">
             <p className="landing-scroll-hint landing-scroll-hint--dark" aria-hidden>
-              Swipe sectors →
+              {ui.swipeSectors}
             </p>
-            <div className="landing-rams-tabs landing-scroll-row" role="tablist" aria-label="RAMS pack sectors">
-              {LANDING_RAMS_SECTOR_TABS.map((tab) => (
+            <div className="landing-rams-tabs landing-scroll-row" role="tablist" aria-label={ui.ramsSectorsAria}>
+              {sectorTabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
@@ -166,19 +170,17 @@ function LandingIndustryShowcase() {
             ) : (
               ramsPacks.slice(0, 8).map((pack, i) => (
                 <article key={pack.id} className="landing-rams-card" style={{ animationDelay: `${i * 50}ms` }}>
-                  {pack.pinned ? <span className="landing-rams-card__pin">Core pack</span> : null}
+                  {pack.pinned ? <span className="landing-rams-card__pin">{ui.corePack}</span> : null}
                   <h4>{pack.name}</h4>
                   <p>{pack.description}</p>
-                  <span className="landing-rams-card__meta">{pack.hazardCount} hazard rows</span>
+                  <span className="landing-rams-card__meta">{ui.hazardRows(pack.hazardCount)}</span>
                 </article>
               ))
             )}
           </div>
 
           {ramsCatalog && ramsPacks.length > 8 ? (
-            <p className="landing-rams-more fu">
-              + {ramsPacks.length - 8} more in this sector — full library unlocked during your 14-day evaluation.
-            </p>
+            <p className="landing-rams-more fu">{ui.moreInSector(ramsPacks.length - 8)}</p>
           ) : null}
         </div>
       </div>

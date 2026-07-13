@@ -1,6 +1,9 @@
 /**
  * Single source for main nav + More menu labels and section grouping.
  */
+import { getModuleLabelForMarket } from "../utils/marketLabels";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getAppUiCopy } from "../data/appUiCopy";
 
 export const NAV_TAB_IDS = [
   { id: "dashboard", label: "Dashboard" },
@@ -35,6 +38,8 @@ export const MORE_TABS = [
   { id: "project-drawings", label: "Drawings" },
   { id: "method-statement", label: "Method statement" },
   { id: "cdm", label: "CDM compliance" },
+  { id: "whs-plan", label: "WHS management plan" },
+  { id: "bhp-plan", label: "Plan BHP" },
   { id: "daily-briefing", label: "Daily briefing" },
   { id: "induction", label: "QR induction" },
   { id: "signatures", label: "Signatures" },
@@ -47,6 +52,7 @@ export const MORE_TABS = [
   { id: "incident-actions", label: "Incident actions" },
   { id: "incident-map", label: "Incident map" },
   { id: "riddor", label: "RIDDOR" },
+  { id: "notifiable-incidents", label: "Notifiable incidents" },
   { id: "emergency", label: "Emergency" },
   { id: "ppe", label: "PPE" },
   { id: "plant", label: "Plant" },
@@ -88,6 +94,7 @@ export const MORE_TABS = [
   { id: "analytics", label: "Analytics" },
   { id: "monthly-report", label: "Monthly report" },
   { id: "survey-report", label: "Survey report" },
+  { id: "gpr-report", label: "GPR report" },
   { id: "waste", label: "Waste register" },
   { id: "templates", label: "Templates" },
   { id: "client-portal", label: "Client portal" },
@@ -109,11 +116,14 @@ const NAV_LABEL_BY_ID = Object.fromEntries(NAV_TAB_IDS.map((t) => [t.id, t.label
 const MORE_LABEL_BY_ID = Object.fromEntries(MORE_TABS.map((t) => [t.id, t.label]));
 
 /** Human-readable screen title for the workspace top bar */
-export function getWorkspaceTitle(viewId, navTab) {
-  const label = NAV_LABEL_BY_ID[viewId] || MORE_LABEL_BY_ID[viewId];
+export function getWorkspaceTitle(viewId, navTab, marketId) {
+  const market = marketId ?? getOrgMarketId();
+  const marketLabel = getModuleLabelForMarket(viewId, market);
+  const label = marketLabel || NAV_LABEL_BY_ID[viewId] || MORE_LABEL_BY_ID[viewId];
   if (label) return label;
-  if (navTab === "more") return "More modules";
-  return "Workspace";
+  const ui = getAppUiCopy(market);
+  if (navTab === "more") return ui.workspace.moreModules;
+  return ui.workspace.workspace;
 }
 
 /** Grouped sections for the More screen (easier to scan on mobile) */
@@ -124,6 +134,8 @@ export const MORE_SECTIONS = [
       "project-drawings",
       "method-statement",
       "cdm",
+      "whs-plan",
+      "bhp-plan",
       "daily-briefing",
       "induction",
       "signatures",
@@ -150,6 +162,7 @@ export const MORE_SECTIONS = [
       "incident-actions",
       "incident-map",
       "riddor",
+      "notifiable-incidents",
       "emergency",
       "ppe",
       "plant",
@@ -190,7 +203,7 @@ export const MORE_SECTIONS = [
   },
   {
     title: "Insights & reports",
-    ids: ["analytics", "monthly-report", "survey-report", "templates"],
+    ids: ["analytics", "monthly-report", "survey-report", "gpr-report", "templates"],
   },
   {
     title: "Data & app",

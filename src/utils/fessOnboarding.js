@@ -10,7 +10,8 @@ import { isFessOrg } from "./fessOrg";
 import ALL from "../modules/rams/ramsAllHazards.js";
 import { ensureBuiltInConstructionPacks } from "../modules/rams/constructionQuickPacks.js";
 import { ensureOrgExclusiveQuickPacks } from "../modules/rams/orgExclusiveQuickPacks.js";
-import { seedLegislationRegister } from "./ukLegislationLibrary";
+import { seedLegislationRegisterForMarket } from "./legislationLibrary";
+import { getOrgMarketId } from "./orgMarket";
 import { saveMsStepTemplateOverride } from "./msOrgTemplates";
 import { seedFessClientSiteProjects } from "./fessClientSites";
 import { seedFessCoshhRegister } from "./fessCoshhDefaults";
@@ -250,7 +251,7 @@ export function runFessSetupAction(stepId) {
     case "legislation": {
       const existing = load(LEGISLATION_KEY, []);
       if (existing.length === 0) {
-        save(LEGISLATION_KEY, seedLegislationRegister());
+        save(LEGISLATION_KEY, seedLegislationRegisterForMarket(getOrgMarketId()));
       }
       markFessStepDone(stepId);
       return { ok: true, message: "Legislation register seeded." };

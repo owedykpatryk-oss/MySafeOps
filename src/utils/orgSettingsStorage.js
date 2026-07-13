@@ -1,4 +1,5 @@
 import { getOrgId, loadOrgScoped, orgScopedKey, saveOrgScoped } from "./orgStorage";
+import { resolveMarketId, isValidMarketId } from "../config/markets";
 
 export const ORG_SETTINGS_BASE_KEY = "mysafeops_org_settings";
 export const ORG_SETTINGS_UPDATED_EVENT = "mysafeops-org-settings-updated";
@@ -63,6 +64,7 @@ export function getOrgSettings(orgId = getOrgId()) {
     customFields: s.customFields || [],
     industrySectors:
       Array.isArray(s.industrySectors) && s.industrySectors.length ? s.industrySectors : ["construction"],
+    market: resolveMarketId(s.market),
   };
 }
 
@@ -107,6 +109,9 @@ export function pickCloudBrandingPayload(raw) {
   }
   if (typeof s.industryPackId === "string" && s.industryPackId) {
     out.industryPackId = s.industryPackId;
+  }
+  if (isValidMarketId(s.market)) {
+    out.market = s.market;
   }
   if (s.onboardingWizardCompleted) {
     out.onboardingWizardCompleted = true;

@@ -11,4 +11,8 @@ supabase/.temp
 playwright-report
 test-results
 
+# Third-party survey imports — local disk only; may contain client/site data (never commit)
+DOCS/Survey/**
+!DOCS/Survey/README.local-only.md
+
 .vercel

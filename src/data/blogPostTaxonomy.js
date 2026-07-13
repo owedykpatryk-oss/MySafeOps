@@ -183,6 +183,11 @@ export const BLOG_POST_TAXONOMY = {
     tags: ["lone-working", "check-in", "welfare", "risk"],
     featured: false,
   },
+  "ior-pozwolenie-na-prace-polska": {
+    category: "permits",
+    tags: ["pl", "ior", "ptw", "bhp", "pip"],
+    featured: true,
+  },
 };
 
 /** @param {string} slug */

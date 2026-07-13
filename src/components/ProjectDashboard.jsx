@@ -3,7 +3,8 @@ import ProjectSitePreviewMap from "./ProjectSitePreviewMap";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { collectProjectDashboard, fmtProjectDay, fmtProjectWhen, healthTone } from "../utils/projectDashboard";
-import { assessCdmF10Notification, f10StatusLabel } from "../utils/cdmF10Assessment";
+import { assessComplianceNotification, getCompliancePackContent } from "../config/compliancePackContent";
+import { f10StatusLabel } from "../utils/cdmF10Assessment";
 import { buildHealthSafetyFileInventory } from "../utils/hsFileAccumulator";
 import { getPlaybook, buildMissingDocChecklist } from "../utils/projectPlaybooks";
 import { buildProjectActionContext, pickNextActionForProject } from "../utils/projectNextAction";
@@ -15,6 +16,12 @@ import { PERMIT_TYPES } from "../modules/permits/permitTypes";
 import { buildPermitDraftFromProject, requiredPermitTypesForProject } from "../modules/permits/permitProjectDefaults";
 import { filterPermitTypesForOrg, getEnabledPermitTypeIds } from "../modules/permits/permitOrgPrefs";
 import { loadOrgSettingsRaw } from "../utils/orgSettingsStorage";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getRamsShortLabel } from "../utils/marketLabels";
+import { getProjectHubCopy } from "../data/appUiCopy";
+import { isModuleAllowedForMarket } from "../config/marketModules";
+import { surveyReportQuality, surveyTypeLabel } from "../modules/surveyReport/surveyReportHelpers";
+import { gprReportQuality } from "../modules/gprReport/gprReportHelpers";
 
 const EMPTY_ROUTES = [];
 
@@ -112,10 +119,16 @@ export default function ProjectDashboard({
   onCloneDocuments,
 }) {
   const dash = useMemo(() => collectProjectDashboard(project, workers), [project, workers]);
+  const orgMarketId = getOrgMarketId();
+  const hub = getProjectHubCopy(orgMarketId);
+  const ramsLabel = getRamsShortLabel(orgMarketId);
+  const compliancePack = getCompliancePackContent(orgMarketId);
+  const complianceViewId = compliancePack.moduleId;
+  const showCompliancePack = compliancePack.viewIds.some((id) => isModuleAllowedForMarket(id, orgMarketId));
 
   const f10Assessment = useMemo(
-    () => (dash.cdmPacks[0] ? assessCdmF10Notification(dash.cdmPacks[0]) : null),
-    [dash.cdmPacks]
+    () => (showCompliancePack && dash.cdmPacks[0] ? assessComplianceNotification(dash.cdmPacks[0], orgMarketId) : null),
+    [dash.cdmPacks, showCompliancePack, orgMarketId]
   );
 
   const hsFile = useMemo(
@@ -189,11 +202,12 @@ export default function ProjectDashboard({
     const actionMap = {
       create_rams: () => go("rams", "create"),
       create_survey: () => go("survey-report", "createReport"),
+      create_gpr: () => go("gpr-report"),
       create_permit: () => go("permits", "issueFromDefaults"),
       create_ms: () => go("method-statement", "create"),
       upload_plan: () => go("project-drawings"),
       create_daily_briefing: () => go("daily-briefing", "create"),
-      create_cdm: () => go("cdm", "create"),
+      create_cdm: () => go(complianceViewId, "create"),
       capture_geo_photos: () => go("geo-photos", "capture"),
     };
     const fn = actionMap[item.actionType];
@@ -203,7 +217,8 @@ export default function ProjectDashboard({
   const playbookMeta = project?.playbookId ? getPlaybook(project.playbookId) : null;
   const missingDocItems = buildMissingDocChecklist(dash);
   const showApplyPlaybook = missingDocItems.length > 0 && onApplyPlaybook;
-  const showSurvey = isSurveyWorkflowEnabled();
+  const showSurvey = isSurveyWorkflowEnabled() && isModuleAllowedForMarket("survey-report", orgMarketId);
+  const showGpr = isSurveyWorkflowEnabled() && isModuleAllowedForMarket("gpr-report", orgMarketId);
   const featuredPlaybooks = useMemo(() => getFeaturedPlaybooksForOrg(3), []);
 
   const permitShortcuts = useMemo(() => {
@@ -255,13 +270,13 @@ export default function ProjectDashboard({
     <div className={`app-project-dashboard${embedded ? " app-project-dashboard--embedded" : ""}`}>
       <header className="app-project-dashboard__header">
         <div className="app-project-dashboard__header-main">
-          <p className="app-project-dashboard__eyebrow">{embedded ? "Project hub" : "Project dashboard"}</p>
+          <p className="app-project-dashboard__eyebrow">{embedded ? hub.eyebrowHub || "Project hub" : hub.eyebrowDashboard || "Project dashboard"}</p>
           <h1 id="project-dashboard-title" className="app-project-dashboard__title">
-            {project.name || "Untitled project"}
+            {project.name || hub.untitled || "Untitled project"}
           </h1>
           <p className="app-project-dashboard__lead">
             {[project.site, project.address, project.postcode].filter(Boolean).join(" · ") ||
-              "Add site details in project settings."}
+              hub.addSiteDetails || "Add site details in project settings."}
           </p>
           <div className="app-project-dashboard__chips">
             <span
@@ -270,14 +285,16 @@ export default function ProjectDashboard({
               }`}
             >
               {getIndustryPackLabel()}
-              {isIndustryPackPreviewActive() ? " · preview" : ""}
+              {isIndustryPackPreviewActive() ? hub.preview || " · preview" : ""}
             </span>
             <span className={`app-project-dashboard__chip app-project-dashboard__chip--${tone}`}>
-              Live readiness {healthPct}%
+              {typeof hub.liveReadiness === "function" ? hub.liveReadiness(healthPct) : `Live readiness ${healthPct}%`}
             </span>
             {hubPulse ? (
               <span className="app-project-dashboard__chip">
-                Pipeline {hubPulse.pipelineDone}/{hubPulse.pipelineTotal}
+                {typeof hub.pipeline === "function"
+                  ? hub.pipeline(hubPulse.pipelineDone, hubPulse.pipelineTotal)
+                  : `Pipeline ${hubPulse.pipelineDone}/${hubPulse.pipelineTotal}`}
               </span>
             ) : null}
             {project.timelineStart || project.timelineEnd ? (
@@ -285,7 +302,7 @@ export default function ProjectDashboard({
                 {project.timelineStart || "—"} → {project.timelineEnd || "—"}
               </span>
             ) : null}
-            {project.closed ? <span className="app-project-dashboard__chip">Closed</span> : null}
+            {project.closed ? <span className="app-project-dashboard__chip">{hub.closed || "Closed"}</span> : null}
             {playbookMeta ? <span className="app-project-dashboard__chip">Playbook: {playbookMeta.label}</span> : null}
             {dash.permitReady.required > 0 ? (
               <span
@@ -293,11 +310,15 @@ export default function ProjectDashboard({
                   dash.permitReady.complete ? "app-project-dashboard__chip--good" : "app-project-dashboard__chip--warn"
                 }`}
               >
-                Permits {dash.permitReady.issued}/{dash.permitReady.required}
+                {typeof hub.permits === "function"
+                  ? hub.permits(dash.permitReady.issued, dash.permitReady.required)
+                  : `Permits ${dash.permitReady.issued}/${dash.permitReady.required}`}
               </span>
             ) : null}
             {checklist.length > 0 ? (
-              <span className="app-project-dashboard__chip">Checklist {checklistOpen} open</span>
+              <span className="app-project-dashboard__chip">
+                {typeof hub.checklistOpen === "function" ? hub.checklistOpen(checklistOpen) : `Checklist ${checklistOpen} open`}
+              </span>
             ) : null}
             {f10Assessment?.notifiable ? (
               <span
@@ -319,7 +340,7 @@ export default function ProjectDashboard({
             className="app-project-dashboard__btn app-project-dashboard__btn--accent"
             onClick={() => printProjectSitePack(project, dash, workers)}
           >
-            Print site pack
+            {hub.printSitePack || "Print site pack"}
           </button>
           <button type="button" className="app-project-dashboard__btn" onClick={() => go("site-map")}>
             Site map
@@ -368,7 +389,7 @@ export default function ProjectDashboard({
         >
           {nextAction ? (
             <>
-              <p className="app-project-dashboard__next-eyebrow">Do this now</p>
+              <p className="app-project-dashboard__next-eyebrow">{hub.doThisNow || "Do this now"}</p>
               <p className="app-project-dashboard__next-label">{nextAction.label}</p>
               <button type="button" className="app-project-dashboard__next-cta" onClick={runNextAction}>
                 Go →
@@ -457,6 +478,12 @@ export default function ProjectDashboard({
               <span className="app-project-dashboard__stat-val">{dash.surveys.length}</span>
               <span className="app-project-dashboard__stat-lbl">Surveys</span>
             </div>
+            {showGpr ? (
+              <div className="app-project-dashboard__stat">
+                <span className="app-project-dashboard__stat-val">{dash.gprReports.length}</span>
+                <span className="app-project-dashboard__stat-lbl">GPR</span>
+              </div>
+            ) : null}
             <div className="app-project-dashboard__stat">
               <span className="app-project-dashboard__stat-val">{dash.totals.documents}</span>
               <span className="app-project-dashboard__stat-lbl">All docs</span>
@@ -491,7 +518,7 @@ export default function ProjectDashboard({
           + Briefing
         </button>
         <button type="button" onClick={() => go("rams", "create")}>
-          + RAMS
+          + {ramsLabel}
         </button>
         <button type="button" onClick={() => go("permits", "issueFromDefaults")}>
           + Permit
@@ -500,14 +527,22 @@ export default function ProjectDashboard({
           <button type="button" onClick={() => go("survey-report", "createReport")}>
             + Survey
           </button>
-        ) : (
+        ) : null}
+        {showGpr ? (
+          <button type="button" onClick={() => go("gpr-report")}>
+            + GPR
+          </button>
+        ) : null}
+        {!showSurvey ? (
           <button type="button" onClick={() => go("inspections")}>
             Inspections
           </button>
-        )}
-        <button type="button" onClick={() => go("cdm", "create")}>
-          + CDM
-        </button>
+        ) : null}
+        {showCompliancePack ? (
+          <button type="button" onClick={() => go(complianceViewId, "create")}>
+            + {compliancePack.planShort}
+          </button>
+        ) : null}
         <button type="button" onClick={() => go("timesheets", "create")}>
           + Timesheet
         </button>
@@ -556,7 +591,7 @@ export default function ProjectDashboard({
 
       {dash.totals.permitsMissingRams > 0 ? (
         <div className="app-project-dashboard__alert app-project-dashboard__alert--warn">
-          <strong>{dash.totals.permitsMissingRams} active PTW</strong> without linked RAMS — review before handover.
+          <strong>{dash.totals.permitsMissingRams} active PTW</strong> without linked {ramsLabel} — review before handover.
           <button type="button" className="app-project-dashboard__alert-action" onClick={() => go("permits")}>
             Open permits
           </button>
@@ -656,54 +691,31 @@ export default function ProjectDashboard({
           ))}
         </DocSection>
 
-        <DocSection
-          title="CDM compliance"
-          count={dash.cdmPacks.length}
-          emptyHint="No CDM pack yet — add Construction Phase Plan and dutyholder checklist."
-          actionLabel="+ CDM pack"
-          onAction={() => go("cdm", "create")}
-        >
-          {dash.cdmPacks.map((c) => {
-            const checked = Object.values(c.dutyholderChecks || {}).filter(Boolean).length;
-            return (
-              <DocRow
-                key={c.id}
-                title={c.projectTitle || "CDM pack"}
-                meta={[c.clientName, c.startDate ? `Start ${fmtProjectDay(c.startDate)}` : ""]
-                  .filter(Boolean)
-                  .join(" · ")}
-                badge={checked ? `${checked}/10 checks` : c.status || "draft"}
-                onClick={() => go("cdm", "view", { cdmPackId: c.id })}
-              />
-            );
-          })}
-        </DocSection>
-
-        <DocSection
-          title="Health & Safety File"
-          count={hsFile.total}
-          emptyHint="Issue RAMS and permits for this project — they appear here for CDM handover."
-          actionLabel="Open CDM"
-          onAction={() => go("cdm", dash.cdmPacks.length ? "view" : "create", dash.cdmPacks[0] ? { cdmPackId: dash.cdmPacks[0].id } : {})}
-        >
-          {hsFile.items.slice(0, 10).map((it) => (
-            <DocRow
-              key={`${it.type}-${it.id}`}
-              title={it.title}
-              meta={[it.type, it.status, fmtProjectWhen(it.updatedAt)].filter(Boolean).join(" · ")}
-              badge={it.type}
-              onClick={() => {
-                if (it.type === "RAMS") go("rams", "edit", { ramsId: it.id });
-                else if (it.type === "PTW") go("permits", "view", { permitId: it.id });
-                else if (it.type === "Survey report") go("survey-report", "view", { surveyReportId: it.id });
-                else if (it.type === "CDM / CPP") go("cdm", "view", { cdmPackId: it.id });
-                else if (it.type === "Method statement") go("method-statement", "view", { methodStatementId: it.id });
-                else if (it.type === "Briefing") go("daily-briefing", "view", { briefingId: it.id });
-                else if (it.type === "Inspection") go("inspections", "view", { inspectionId: it.id });
-              }}
-            />
-          ))}
-        </DocSection>
+        {showCompliancePack ? (
+          <DocSection
+            title={compliancePack.title}
+            count={dash.cdmPacks.length}
+            emptyHint={`No ${compliancePack.packNoun} yet — ${compliancePack.lead.split(".")[0].toLowerCase()}.`}
+            actionLabel={compliancePack.newPackLabel}
+            onAction={() => go(complianceViewId, "create")}
+          >
+            {dash.cdmPacks.map((c) => {
+              const checked = Object.values(c.dutyholderChecks || {}).filter(Boolean).length;
+              const checkTotal = compliancePack.dutyholderChecks.length;
+              return (
+                <DocRow
+                  key={c.id}
+                  title={c.projectTitle || compliancePack.packNoun}
+                  meta={[c.clientName, c.startDate ? `Start ${fmtProjectDay(c.startDate)}` : ""]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  badge={checked ? `${checked}/${checkTotal} checks` : c.status || "draft"}
+                  onClick={() => go(complianceViewId, "view", { cdmPackId: c.id })}
+                />
+              );
+            })}
+          </DocSection>
+        ) : null}
 
         <DocSection
           title="Timesheets"
@@ -727,21 +739,50 @@ export default function ProjectDashboard({
         </DocSection>
 
         <DocSection
-          title="RAMS"
+          title={ramsLabel}
           count={dash.rams.length}
-          emptyHint="No RAMS linked yet — create one for this site."
-          actionLabel="+ New RAMS"
+          emptyHint={`No ${ramsLabel} linked yet — create one for this site.`}
+          actionLabel={`+ New ${ramsLabel}`}
           onAction={() => go("rams", "create")}
         >
           {dash.rams.map((doc) => (
             <DocRow
               key={doc.id}
-              title={doc.title || doc.documentNo || "RAMS document"}
+              title={doc.title || doc.documentNo || `${ramsLabel} document`}
               meta={[doc.documentNo, fmtProjectWhen(doc.updatedAt || doc.createdAt)].filter(Boolean).join(" · ")}
               onClick={() => go("rams", "edit", { ramsId: doc.id })}
             />
           ))}
         </DocSection>
+
+        {showCompliancePack ? (
+          <DocSection
+            title="Health & Safety File"
+            count={hsFile.total}
+            emptyHint={`Issue ${ramsLabel} and permits for this project — they appear here for handover.`}
+            actionLabel={`Open ${compliancePack.planShort}`}
+            onAction={() => go(complianceViewId, dash.cdmPacks.length ? "view" : "create", dash.cdmPacks[0] ? { cdmPackId: dash.cdmPacks[0].id } : {})}
+          >
+            {hsFile.items.slice(0, 10).map((it) => (
+              <DocRow
+                key={`${it.type}-${it.id}`}
+                title={it.title}
+                meta={[it.type, it.status, fmtProjectWhen(it.updatedAt)].filter(Boolean).join(" · ")}
+                badge={it.type}
+                onClick={() => {
+                  if (it.type === "RAMS") go("rams", "edit", { ramsId: it.id });
+                  else if (it.type === "PTW") go("permits", "view", { permitId: it.id });
+                  else if (it.type === "Survey report") go("survey-report", "view", { surveyReportId: it.id });
+                  else if (it.kind === "gpr") go("gpr-report", "edit", { reportId: it.reportId });
+                  else if (it.type === "CDM / CPP" || it.type === "WHS plan") go(complianceViewId, "view", { cdmPackId: it.id });
+                  else if (it.type === "Method statement") go("method-statement", "view", { methodStatementId: it.id });
+                  else if (it.type === "Briefing") go("daily-briefing", "view", { briefingId: it.id });
+                  else if (it.type === "Inspection") go("inspections", "view", { inspectionId: it.id });
+                }}
+              />
+            ))}
+          </DocSection>
+        ) : null}
 
         <DocSection
           title="Permits (PTW)"
@@ -755,7 +796,7 @@ export default function ProjectDashboard({
               key={p.id}
               title={`${p.type || "Permit"}${p.location ? ` — ${p.location}` : ""}`}
               meta={fmtProjectWhen(p.updatedAt || p.createdAt)}
-              badge={!p.linkedRamsId && p.status === "active" ? "no RAMS" : p.status || "draft"}
+              badge={!p.linkedRamsId && p.status === "active" ? `no ${ramsLabel}` : p.status || "draft"}
               onClick={() => go("permits", "view", { permitId: p.id })}
             />
           ))}
@@ -769,16 +810,57 @@ export default function ProjectDashboard({
             actionLabel="+ New report"
             onAction={() => go("survey-report", "createReport")}
           >
-            {dash.surveys.map((s) => (
+            {dash.surveys.map((s) => {
+              const q = surveyReportQuality(s);
+              const typeLabel = surveyTypeLabel(s.surveyType);
+              const badge =
+                s.status === "final"
+                  ? "Final"
+                  : q.score >= 80
+                    ? `${q.score}% · Ready`
+                    : `${q.score}% · Draft`;
+              return (
               <DocRow
                 key={s.id}
                 title={s.title || s.ref || "Survey report"}
-                meta={[s.ref, fmtProjectWhen(s.updatedAt || s.createdAt)].filter(Boolean).join(" · ")}
+                meta={[typeLabel, s.ref, fmtProjectWhen(s.updatedAt || s.createdAt)].filter(Boolean).join(" · ")}
+                badge={badge}
                 onClick={() => go("survey-report", "edit", { reportId: s.id })}
               />
-            ))}
+              );
+            })}
           </DocSection>
-        ) : (
+        ) : null}
+
+        {showGpr ? (
+          <DocSection
+            title="GPR reports"
+            count={dash.gprReports.length}
+            emptyHint="No GPR reports yet — BGS geology and weather enrichment."
+            actionLabel="+ New GPR report"
+            onAction={() => go("gpr-report")}
+          >
+            {dash.gprReports.map((g) => {
+              const q = gprReportQuality(g);
+              const badge =
+                g.status === "final" ? "Final" : q.score >= 80 ? `${q.score}% · Ready` : `${q.score}% · Draft`;
+              const freq = g.equipment?.[0]?.antennaFrequencyMhz;
+              return (
+                <DocRow
+                  key={g.id}
+                  title={g.title || g.ref || "GPR report"}
+                  meta={[freq ? `${freq} MHz` : null, g.ref, fmtProjectWhen(g.updatedAt || g.createdAt)]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  badge={badge}
+                  onClick={() => go("gpr-report", "edit", { reportId: g.id })}
+                />
+              );
+            })}
+          </DocSection>
+        ) : null}
+
+        {!showSurvey ? (
           <DocSection
             title="Inspections"
             count={dash.inspections.length}
@@ -796,7 +878,7 @@ export default function ProjectDashboard({
               />
             ))}
           </DocSection>
-        )}
+        ) : null}
 
         <DocSection
           title="Geo-photos"

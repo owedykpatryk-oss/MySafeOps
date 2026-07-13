@@ -14,10 +14,13 @@ import {
   runNotificationCheckNow,
   sendCloudPermitPush,
   showLocalNotification,
+  loadNotificationPrefs,
+  saveNotificationPrefs,
 } from "./pushNotifications";
 import { workspaceDeepLink } from "../utils/appDeepLinks";
 import PageHero from "../components/PageHero";
 import { useToast } from "../context/ToastContext";
+import { ORG_CHANGED_EVENT } from "../utils/orgStorage";
 
 const ss = {
   btn:  { padding:"7px 14px", borderRadius:6, border:"0.5px solid var(--color-border-secondary,#ccc)", background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", display:"inline-flex", alignItems:"center", gap:6 },
@@ -51,16 +54,19 @@ export default function NotificationSettings() {
   const [loading, setLoading] = useState(false);
   const [cloudTestBusy, setCloudTestBusy] = useState(false);
   const [lastCloudPush, setLastCloudPush] = useState(() => getLastCloudPushResult());
-  const [prefs, setPrefs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("mysafeops_notif_prefs") || "{}"); }
-    catch { return {}; }
-  });
+  const [prefs, setPrefs] = useState(() => loadNotificationPrefs());
 
   const savePref = (key, val) => {
     const next = { ...prefs, [key]: val };
     setPrefs(next);
-    localStorage.setItem("mysafeops_notif_prefs", JSON.stringify(next));
+    saveNotificationPrefs(next);
   };
+
+  useEffect(() => {
+    const onOrgChange = () => setPrefs(loadNotificationPrefs());
+    window.addEventListener(ORG_CHANGED_EVENT, onOrgChange);
+    return () => window.removeEventListener(ORG_CHANGED_EVENT, onOrgChange);
+  }, []);
 
   useEffect(() => {
     getNotificationStatus().then(setStatus);

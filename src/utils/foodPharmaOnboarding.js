@@ -6,7 +6,8 @@ import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 import { applyIndustryPack } from "./orgIndustryPacks";
 import ALL from "../modules/rams/ramsAllHazards.js";
 import { ensureBuiltInConstructionPacks } from "../modules/rams/constructionQuickPacks.js";
-import { seedLegislationRegister } from "./ukLegislationLibrary";
+import { seedLegislationRegisterForMarket } from "./legislationLibrary";
+import { getOrgMarketId } from "./orgMarket";
 import {
   loadRamsHazardPacks,
   saveRamsHazardPacks,
@@ -153,7 +154,7 @@ export function runFoodPharmaSetupAction(stepId) {
     case "legislation": {
       const existing = load(LEGISLATION_KEY, []);
       if (existing.length === 0) {
-        save(LEGISLATION_KEY, seedLegislationRegister());
+        save(LEGISLATION_KEY, seedLegislationRegisterForMarket(getOrgMarketId()));
       }
       markFoodPharmaStepDone(stepId);
       return { ok: true, message: "Legislation register seeded." };

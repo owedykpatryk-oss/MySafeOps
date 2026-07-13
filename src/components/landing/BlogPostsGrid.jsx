@@ -4,12 +4,16 @@ import { queryBlogPosts } from "../../lib/blog/getPosts";
 import BlogArticleCard from "../blog/BlogArticleCard";
 
 /**
- * @param {{ variant?: "landing" | "page", className?: string, featuredOnly?: boolean, limit?: number }} props
+ * @param {{ variant?: "landing" | "page", className?: string, featuredOnly?: boolean, limit?: number, tag?: string }} props
  */
-export default function BlogPostsGrid({ variant = "landing", className = "", featuredOnly = false, limit }) {
+export default function BlogPostsGrid({ variant = "landing", className = "", featuredOnly = false, limit, tag }) {
   const isPage = variant === "page";
 
   const posts = useMemo(() => {
+    if (tag) {
+      const tagged = queryBlogPosts({ tag });
+      if (tagged.length) return tagged.slice(0, limit ?? 4);
+    }
     if (featuredOnly) {
       return queryBlogPosts({ featuredOnly: true }).slice(0, limit ?? 4);
     }
@@ -17,7 +21,7 @@ export default function BlogPostsGrid({ variant = "landing", className = "", fea
       return limit ? queryBlogPosts({}).slice(0, limit) : queryBlogPosts({});
     }
     return queryBlogPosts({});
-  }, [isPage, featuredOnly, limit]);
+  }, [isPage, featuredOnly, limit, tag]);
 
   if (isPage) {
     return null;

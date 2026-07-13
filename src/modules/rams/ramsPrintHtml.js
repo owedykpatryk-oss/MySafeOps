@@ -5,9 +5,12 @@ import { getRiskLevel } from "./ramsRiskLevel.js";
 import { normalizePrintSections, RAMS_SECTION_IDS, documentContentHash } from "./ramsSectionConfig";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { openPrintWindow, safeCssColor, safeImageSrc, escapeAttr, writePrintWindowDocument } from "../../utils/htmlEscape.js";
-import { renderMySafeOpsMarkSvg } from "../../utils/pdfBranding.js";
+import { renderMySafeOpsMarkSvg, printDocTheme } from "../../utils/pdfBranding.js";
 import { isFessOrg } from "../../utils/fessOrg.js";
 import { generateFessPrintHTML, buildFessRamsPrintBodyHTML } from "../../utils/fessRamsPrintHtml.js";
+import { getRamsPrintLabels } from "../../utils/ramsUiLabels.js";
+import { getOrgMarketId } from "../../utils/orgMarket.js";
+import { formatOrgDate, formatOrgDateTime } from "../../utils/orgLocale.js";
 
 const RL = {
   high: { bg: "#FCEBEB", color: "#791F1F" },
@@ -15,21 +18,8 @@ const RL = {
   low: { bg: "#EAF3DE", color: "#27500A" },
 };
 
-function fmtDate(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function fmtDateTime(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const fmtDate = formatOrgDate;
+const fmtDateTime = formatOrgDateTime;
 
 function riskScore(risk) {
   const l = Number(risk?.L || 0);
@@ -470,21 +460,54 @@ export function computeRamsFingerprint(form, rows) {
   return documentContentHash(ramsHashPayload(form, rows));
 }
 
-function ramsDocumentCss() {
+function staticSiteMapUrl(lat, lng) {
+  const la = Number(lat);
+  const lo = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) return "";
+  return `https://staticmap.openstreetmap.de/staticmap.php?center=${la},${lo}&zoom=15&size=520x220&markers=${la},${lo},red-pushpin`;
+}
+
+function ramsPrintTheme(themeOrPrimary) {
+  if (themeOrPrimary && typeof themeOrPrimary === "object") {
+    const orgLike = themeOrPrimary.org || themeOrPrimary;
+    const themed = orgLike.primaryColor || orgLike.accentColor ? printDocTheme(orgLike) : null;
+    return {
+      primary: safeCssColor(themed?.primary ?? themeOrPrimary.primaryColor, "#0C447C"),
+      accent: safeCssColor(themed?.accent ?? themeOrPrimary.accentColor, "#f97316"),
+      complianceLine: String(
+        themeOrPrimary.complianceLine ??
+          orgLike.pdfComplianceLine ??
+          ""
+      ).trim(),
+    };
+  }
+  return {
+    primary: safeCssColor(themeOrPrimary, "#0C447C"),
+    accent: "#f97316",
+    complianceLine: "",
+  };
+}
+
+function ramsDocumentCss(themeOrPrimary = "#0C447C") {
+  const { primary } = ramsPrintTheme(themeOrPrimary);
   return `
-    @page { size: A4; margin: 12mm; }
+    /* Bottom @page margin reserves room for the fixed .page-footer on every
+       printed page — body padding only affects the very last page since the
+       body is one continuous flow, so it cannot clear a repeating footer. */
+    @page { size: A4; margin: 12mm 12mm 20mm; }
     *{box-sizing:border-box}
-    body{font-family:Arial,sans-serif;font-size:12px;line-height:1.45;color:#000;margin:0;padding:16px 16px 52px;position:relative}
+    body{font-family:"Segoe UI",Arial,sans-serif;font-size:12px;line-height:1.45;color:#0f172a;margin:0;padding:16px 16px 52px;position:relative}
     p,li,span,td,th{overflow-wrap:anywhere;word-break:break-word}
     img,svg{max-width:100%;height:auto}
     a{word-break:break-all}
-    h1{font-size:16px;font-weight:bold;text-align:center;background:#f97316;color:#fff;padding:10px;margin:0 0 16px}
+    h1{font-size:16px;font-weight:bold;text-align:center;background:${primary};color:#fff;padding:10px;margin:0 0 16px}
     .header-table{width:100%;border-collapse:collapse;margin-bottom:16px}
     .header-table td{padding:4px 8px;font-size:11px;border:0.5px solid #ccc}
-    .header-table .lbl{color:#666;font-weight:bold}
+    .header-table .lbl{color:${primary};font-weight:bold}
     table{table-layout:fixed}
     table.ra{width:100%;border-collapse:collapse;margin-bottom:20px}
-    table.ra th{background:#0f172a;color:#fff;padding:8px;font-size:11px;text-align:left;border:1px solid #0f172a}
+    table.ra th{background:${primary};color:#fff;padding:8px;font-size:11px;text-align:left;border:1px solid ${primary}}
+    table.ra tr,table.fess-rams-ra tr{break-inside:avoid-page;page-break-inside:avoid}
     .rams-watermark{
       position:fixed;
       inset:0;
@@ -533,11 +556,12 @@ function ramsDocumentCss() {
       padding:6px 16px 8px;
       font-size:10px;
       color:#64748b;
-      border-top:1px solid #e5e7eb;
+      border-top:2px solid ${primary};
       background:#fff;
       display:flex;
       justify-content:space-between;
       align-items:center;
+      z-index:9998;
     }
     .page-footer .page-num::after{
       content:"Page " counter(page);
@@ -545,9 +569,10 @@ function ramsDocumentCss() {
     h1,h2,h3{break-after:avoid-page;page-break-after:avoid}
     .header-table,.cover-page,.pack-site-summary{break-inside:avoid-page;page-break-inside:avoid}
     @media print{
-      body{padding:0 0 16mm 0}
-      .rams-content{padding-bottom:0}
+      body{padding:0}
+      .rams-content{padding-bottom:6mm}
       .cover-page{min-height:248mm;page-break-after:always}
+      .cover-page,.cover-page div[style*="linear-gradient"]{-webkit-print-color-adjust:exact;print-color-adjust:exact}
       .pack-rams{page-break-after:always}
       .pack-permit-wrap{page-break-before:always}
       .pack-site-summary-grid{grid-template-columns:1fr}
@@ -556,10 +581,14 @@ function ramsDocumentCss() {
   `;
 }
 
-export function wrapRamsPrintDocument(pageTitle, bodyInner, extraHeadCss = "", footerMeta = "") {
+export function wrapRamsPrintDocument(pageTitle, bodyInner, extraHeadCss = "", footerMeta = "", themeOrPrimary = "#0C447C") {
+  const theme = ramsPrintTheme(themeOrPrimary);
+  const complianceHtml = theme.complianceLine
+    ? `<div style="font-size:9px;color:#94a3b8;margin-top:2px;max-width:72vw">${escHtml(theme.complianceLine)}</div>`
+    : "";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${escHtml(pageTitle)}</title>
-  <style>${ramsDocumentCss()}${extraHeadCss || ""}</style></head><body>${bodyInner}
-  <div class="page-footer"><span>${escHtml(footerMeta)}</span><span style="display:inline-flex;align-items:center;gap:5px">${renderMySafeOpsMarkSvg(16)}<span class="page-num"></span></span></div>
+  <style>${ramsDocumentCss(themeOrPrimary)}${extraHeadCss || ""}</style></head><body>${bodyInner}
+  <div class="page-footer"><span>${escHtml(footerMeta)}${complianceHtml}</span><span style="display:inline-flex;align-items:center;gap:5px">${renderMySafeOpsMarkSvg(16)}<span class="page-num"></span></span></div>
   </body></html>`;
 }
 
@@ -570,6 +599,18 @@ function splitPermitDocumentHtml(fullHtml) {
     style: styleM ? styleM[1].trim() : "",
     body: bodyM ? bodyM[1].trim() : "",
   };
+}
+
+/**
+ * When a permit's full-document body is embedded inside a RAMS+permits pack,
+ * its own fixed watermark and in-flow doc footer would duplicate/stack on top
+ * of the pack's single RAMS watermark and shared page footer. Strip them so
+ * only one watermark and one footer render for the whole combined document.
+ */
+function stripPermitPackDuplicates(bodyHtml) {
+  return bodyHtml
+    .replace(/<div class="watermark">[\s\S]*?<\/div>/i, "")
+    .replace(/<footer class="print-doc-footer">[\s\S]*?<\/footer>/i, "");
 }
 
 export function buildSitePackSummaryHtml(sitePackMeta, permits = [], projectName = "") {
@@ -630,6 +671,8 @@ export function buildSitePackSummaryHtml(sitePackMeta, permits = [], projectName
 
 /** RAMS body only (no html/head wrapper). */
 export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll) {
+  const printLabels = getRamsPrintLabels(getOrgMarketId());
+  const docShort = printLabels.docShort;
   const rowList = rows || [];
   const opList = operatives || [];
   const pf = printFlags || normalizePrintSections({});
@@ -743,18 +786,23 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   const mapBlock =
     pf[RAMS_SECTION_IDS.MAP] &&
     ((form.siteMapUrl || "").trim() || ((form.siteLat || "").trim() && (form.siteLng || "").trim()))
-      ? `<h2 style="font-size:13px;margin:18px 0 8px">3. Site map / location</h2>
+      ? (() => {
+          const thumbUrl = staticSiteMapUrl(form.siteLat, form.siteLng);
+          return `<h2 style="font-size:13px;margin:18px 0 8px">3. Site map / location</h2>
+         ${thumbUrl ? `<img src="${escHtml(thumbUrl)}" alt="Site location map" style="width:100%;max-height:220px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;margin:0 0 10px"/>` : ""}
          ${(form.siteMapUrl || "").trim() ? `<p style="font-size:12px;word-break:break-all"><a href="${escHtml(form.siteMapUrl)}">${escHtml(form.siteMapUrl)}</a></p>` : ""}
          ${(form.siteLat || "").trim() && (form.siteLng || "").trim()
         ? `<p style="font-size:12px">Coordinates: ${escHtml(form.siteLat)}, ${escHtml(form.siteLng)}</p>`
-        : ""}`
+        : ""}`;
+        })()
       : "";
 
   const hospitalBlock =
     pf[RAMS_SECTION_IDS.HOSPITAL] &&
     ((form.nearestHospital || "").trim() || (form.hospitalDirectionsUrl || "").trim())
       ? `<h2 style="font-size:13px;margin:18px 0 8px">4. Emergency response</h2>
-         <p style="font-size:11px;color:#64748b;margin:0 0 6px">Nearest A&amp;E / hospital</p>
+         <p style="font-size:11px;color:#64748b;margin:0 0 6px">${printLabels.hospitalHeading}</p>
+         ${printLabels.emergencyLine ? `<p style="font-size:11px;color:#64748b;margin:0 0 6px">${printLabels.emergencyLine}</p>` : ""}
          ${(form.nearestHospital || "").trim() ? `<p style="font-size:12px;margin:4px 0">${escHtml(form.nearestHospital)}</p>` : ""}
          ${(form.hospitalDirectionsUrl || "").trim()
         ? `<p style="font-size:12px;word-break:break-all"><a href="${escHtml(form.hospitalDirectionsUrl)}">Directions</a></p>`
@@ -1223,7 +1271,9 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   ${(form.surveyWorkType || "").trim()
     ? `<p style="font-size:10px;color:#0C447C;margin:0 0 8px">Work type: ${escHtml(form.surveyWorkTypeLabel || form.surveyWorkType)}</p>`
     : ""}
-  <p style="font-size:12px;line-height:1.55;white-space:pre-wrap;margin:0 0 12px">${escHtml(form.surveyMethodStatement)}</p>`
+  <div style="font-size:12px;line-height:1.55;white-space:pre-wrap;margin:0 0 12px">${escHtml(form.surveyMethodStatement)
+    .replace(/^(\d+\.0[^\n]*)/gm, "<strong style=\"display:block;margin-top:10px;color:#0C447C\">$1</strong>")
+    .replace(/^(\d+\.\d+[^\n]*)/gm, "<strong style=\"color:#334155\">$1</strong>")}</div>`
       : "";
 
   const deliveryControlsBlock =
@@ -1278,16 +1328,19 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   const emergencyQuickUrl = String(form.hospitalDirectionsUrl || form.siteMapUrl || "").trim();
   const primaryQrText =
     liveShareUrl ||
-    `RAMS ${form.documentNo || "NO-DOC"} | ${form.title || "Untitled"} | Rev ${form.revision || "1A"} | ${statusLabel}`;
+    `${docShort} ${form.documentNo || "NO-DOC"} | ${form.title || "Untitled"} | Rev ${form.revision || "1A"} | ${statusLabel}`;
   const emergencyQrText =
     emergencyQuickUrl ||
-    `Emergency quick card | ${form.location || "Site"} | Hospital ${form.nearestHospital || "See section 4"}`;
+    `Emergency quick card | ${form.location || "Site"} | Hospital ${form.nearestHospital || `See ${docShort} section 4`}`;
   const primaryQrSrc = buildQrSrc(primaryQrText, 132);
   const emergencyQrSrc = buildQrSrc(emergencyQrText, 132);
+  const coverMapUrl = staticSiteMapUrl(form.siteLat, form.siteLng);
+  const accentColor = orgTheme.accentColor;
 
   const coverPage = `<div class="cover-page">
+    <div style="height:4px;border-radius:999px;background:linear-gradient(90deg, ${escHtml(badgeColor)}, ${escHtml(accentColor)});margin-bottom:16px"></div>
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
-      <div>
+      <div style="flex:1;min-width:240px">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           ${
             logoSrc
@@ -1296,8 +1349,9 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
           }
           <div style="font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#475569;font-weight:700;margin-bottom:6px">${escHtml(orgName)}</div>
         </div>
-        <div style="font-size:24px;line-height:1.15;font-weight:800;color:#0f172a;margin-bottom:4px">${escHtml(form.title || "Risk Assessment & Method Statement")}</div>
-        <div style="font-size:12px;color:#334155;max-width:520px">${escHtml(form.scope || "Detailed RAMS pack generated for field execution and compliance review.")}</div>
+        <div style="font-size:24px;line-height:1.15;font-weight:800;color:${escHtml(badgeColor)};margin-bottom:4px">${escHtml(form.title || printLabels.defaultTitle)}</div>
+        <div style="font-size:12px;color:#334155;max-width:520px">${escHtml(form.scope || printLabels.defaultScope)}</div>
+        ${coverMapUrl ? `<img src="${escHtml(coverMapUrl)}" alt="Site location" style="width:100%;max-height:150px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;margin-top:12px"/>` : ""}
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
         <div style="padding:6px 10px;border-radius:999px;background:${escHtml(badgeBg)};color:${escHtml(badgeColor)};font-size:11px;font-weight:700">${escHtml(statusLabel)}</div>
@@ -1352,7 +1406,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
     <td><span class="lbl">Issue date:</span> ${escHtml(fmtDate(form.issueDate) || "—")}</td>
     <td colspan="2"><span class="lbl">Status:</span> ${escHtml(statusLabel)}</td>
   </tr></table>
-  <h1>1. ${escHtml(form.title)}</h1>
+  <h1 style="background:${orgTheme.primaryColor}">1. ${escHtml(form.title)}</h1>
   ${form.scope ? `<p style="font-size:12px;margin-bottom:16px">${escHtml(form.scope)}</p>` : ""}
   ${surveyingMethodBlock}
   ${deliveryControlsBlock}
@@ -1388,10 +1442,11 @@ export function generatePrintHTML(form, rows, operatives, projectMap, printFlags
   if (isFessOrg()) {
     return generateFessPrintHTML(form, rows, operatives, projectMap);
   }
+  const printLabels = getRamsPrintLabels(getOrgMarketId());
   const inner = buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll);
   const orgTheme = loadOrgPrintSettings();
-  const footer = `${form.documentNo || "RAMS"} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
-  return wrapRamsPrintDocument(form.title || "RAMS", inner, "", footer);
+  const footer = `${form.documentNo || printLabels.docShort} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
+  return wrapRamsPrintDocument(form.title || printLabels.docShort, inner, "", footer, orgTheme);
 }
 
 /** Single HTML document: RAMS plus permit pages (same project). Uses permit module styling. */
@@ -1411,14 +1466,14 @@ export async function generateRamsProjectPackHTML(form, rows, workers, projects,
     const full = renderPermitDocumentHtml(p);
     const { style, body } = splitPermitDocumentHtml(full);
     if (!permitExtraCss && style) permitExtraCss = `\n${style}\n`;
-    if (body) permitBlocks.push(`<div class="pack-permit-wrap">${body}</div>`);
+    if (body) permitBlocks.push(`<div class="pack-permit-wrap">${stripPermitPackDuplicates(body)}</div>`);
   }
   const siteSummary = buildSitePackSummaryHtml(sitePackMeta, permits, form.projectId ? projectMap[form.projectId] : "");
   const combinedBody = `<div class="pack-rams">${ramsInner}</div>${siteSummary}${permitBlocks.join("")}`;
   const pageTitle = `${form.title || "RAMS"} · RAMS + permits (A4)`;
   const orgTheme = loadOrgPrintSettings();
   const footer = `${form.documentNo || "RAMS"} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
-  return wrapRamsPrintDocument(pageTitle, combinedBody, permitExtraCss, footer);
+  return wrapRamsPrintDocument(pageTitle, combinedBody, permitExtraCss, footer, orgTheme);
 }
 
 /**

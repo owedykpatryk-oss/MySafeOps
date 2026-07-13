@@ -71,6 +71,8 @@ export default function App() {
       <Suspense fallback={<ViewFallback />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/au" element={<LandingPage marketId="au" />} />
+          <Route path="/pl" element={<LandingPage marketId="pl" />} />
           <Route path="/blog" element={<BlogIndexPage />} />
           <Route path="/blog/:slug" element={<BlogArticlePage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -81,6 +83,16 @@ export default function App() {
           <Route path="/cookies" element={<LegalPage docKey="cookies" />} />
           <Route path="/dpa" element={<LegalPage docKey="dpa" />} />
           <Route path="/accessibility" element={<LegalPage docKey="accessibility" />} />
+          <Route path="/au/privacy" element={<LegalPage docKey="privacy" marketId="au" />} />
+          <Route path="/au/terms" element={<LegalPage docKey="terms" marketId="au" />} />
+          <Route path="/au/cookies" element={<LegalPage docKey="cookies" marketId="au" />} />
+          <Route path="/au/dpa" element={<LegalPage docKey="dpa" marketId="au" />} />
+          <Route path="/au/accessibility" element={<LegalPage docKey="accessibility" marketId="au" />} />
+          <Route path="/pl/privacy" element={<LegalPage docKey="privacy" marketId="pl" />} />
+          <Route path="/pl/terms" element={<LegalPage docKey="terms" marketId="pl" />} />
+          <Route path="/pl/cookies" element={<LegalPage docKey="cookies" marketId="pl" />} />
+          <Route path="/pl/dpa" element={<LegalPage docKey="dpa" marketId="pl" />} />
+          <Route path="/pl/accessibility" element={<LegalPage docKey="accessibility" marketId="pl" />} />
           <Route path="/docs" element={<DocsHubPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/security" element={<SecurityPosturePage />} />

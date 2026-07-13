@@ -157,3 +157,96 @@ export function getLandingRamsPacksForTab(tabId, catalog) {
   const tab = LANDING_RAMS_SECTOR_TABS.find((t) => t.id === tabId) || LANDING_RAMS_SECTOR_TABS[0];
   return catalog.filter(tab.match).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
 }
+
+const LANDING_PROFILES_PL = {
+  generalContractor: {
+    label: "Budownictwo ogólne",
+    hint: "Wykonawcy, podwykonawcy, roboty ziemne — IOR, PTW, Plan BHP, odprawy. Bez modułu geodezji.",
+  },
+  electricalContractor: {
+    label: "Elektryka i instalacje",
+    hint: "PTW elektryczne, prace gorące, IOR i kontrole — bez raportów geodezyjnych.",
+  },
+  buildingTrades: {
+    label: "Budowa i remonty",
+    hint: "Remonty, fit-out, usterki — BHP na budowie bez raportów pomiarowych.",
+  },
+  surveyingGeodesy: {
+    label: "Geodezja i pomiary",
+    hint: "Mapowanie uzbrojenia, skanowanie, hydrografia — raporty i pakiety IOR geodezyjne.",
+  },
+  contractorPlusSurveying: {
+    label: "Wykonawca + geodezja",
+    hint: "Głównie budowa z okazjonalnymi zleceniami pomiarowymi.",
+  },
+  facilitiesMaintenance: {
+    label: "Utrzymanie i serwis",
+    hint: "Kontrole PPM, urządzenia i elektryka — mniej nacisku na CDM/geodezję.",
+  },
+  demolitionStripout: {
+    label: "Demontaż i rozbiórka",
+    hint: "Wykopy, roboty tymczasowe, księga bramy i azbest — BHP rozbiórek.",
+  },
+  foodPharma: {
+    label: "Żywność i pharma",
+    hint: "Rejestry higieny przemysłowej — bez pakietów geodezyjnych.",
+  },
+  showEverything: {
+    label: "Pokaż wszystkie moduły",
+    hint: "Pełna biblioteka — ogranicz później w Ustawieniach.",
+  },
+};
+
+const LANDING_PROFILE_FOCUS_PL = {
+  electricalContractor: ["Elektryka / PAT", "Rejestr prac gorących", "LOTO / izolacja", "Kontrole", "IOR", "Pozwolenia (PTW)"],
+  generalContractor: ["Odprawa dzienna", "Plan BHP", "IOR", "Otwarte usterki", "Karty pracy", "Pozwolenia (PTW)"],
+  buildingTrades: ["Odprawa dzienna", "IOR", "Rejestr usterek", "Kontrole", "Instrukcje techniczne", "PTW"],
+  surveyingGeodesy: ["Raporty pomiarowe", "Dostawy geodezyjne", "Skanowanie i LiDAR", "Instrukcje techniczne", "IOR (geodezja)", "Zdjęcia geo"],
+  foodPharma: ["Przełączenia alergenów", "Odchylenia GMP", "Dostęp high-care", "IOR", "Odprawa dzienna", "PTW"],
+  showEverything: ["Plan BHP", "IOR", "PTW", "Odprawy", "Kontrole lub pomiary", "Powiązane dokumenty"],
+  contractorPlusSurveying: ["Odprawa dzienna", "IOR", "Raporty pomiarowe", "Dostawy geodezyjne", "Kontrole lub pomiary", "PTW"],
+  facilitiesMaintenance: ["Kontrole", "Elektryka / PAT", "Rejestr urządzeń", "Odprawa dzienna", "IOR", "PTW"],
+  demolitionStripout: ["Dziennik wykopów", "Roboty tymczasowe", "Księga bramy", "Rejestr azbestu", "IOR", "PTW"],
+};
+
+const LANDING_RAMS_SECTOR_TABS_PL = [
+  { id: "construction", label: "Budownictwo i roboty ziemne", match: (p) => p.sector === "construction" },
+  { id: "utilities", label: "Instalacje", match: (p) => p.sector === "utilities" || p.sector === "highways" || p.sector === "rail" },
+  { id: "surveying", label: "Geodezja", match: (p) => p.sector === "surveying" },
+  {
+    id: "industrial",
+    label: "Przemysł i energetyka",
+    match: (p) => ["industrial", "energy", "environmental", "maintenance", "me"].includes(p.sector),
+  },
+  { id: "food_pharma", label: "Żywność i pharma", match: (p) => p.sector === "food_pharma" },
+];
+
+/** @param {import("../../config/markets").MarketId} [marketId] */
+export function getLandingWorkspaceProfiles(marketId = "uk") {
+  if (marketId !== "pl") return LANDING_WORKSPACE_PROFILES;
+  return LANDING_WORKSPACE_PROFILES.map((p) => {
+    const pl = LANDING_PROFILES_PL[p.id];
+    return pl ? { ...p, label: pl.label, hint: pl.hint } : p;
+  });
+}
+
+/** @param {import("../../config/markets").MarketId} marketId @param {string} profileId */
+export function getLandingProfileFocus(profileId, marketId = "uk") {
+  if (marketId === "pl") {
+    return LANDING_PROFILE_FOCUS_PL[profileId] || LANDING_PROFILE_FOCUS_PL.generalContractor;
+  }
+  return LANDING_PROFILE_SITE_FOCUS[profileId] || LANDING_PROFILE_SITE_FOCUS.generalContractor;
+}
+
+/** @param {import("../../config/markets").MarketId} [marketId] */
+export function getLandingRamsSectorTabs(marketId = "uk") {
+  return marketId === "pl" ? LANDING_RAMS_SECTOR_TABS_PL : LANDING_RAMS_SECTOR_TABS;
+}
+
+/** @param {string} tabId @param {LandingRamsPack[]} catalog @param {import("../../config/markets").MarketId} [marketId] */
+export function getLandingRamsPacksForTabMarket(tabId, catalog, marketId = "uk") {
+  const tabs = getLandingRamsSectorTabs(marketId);
+  const tab = tabs.find((t) => t.id === tabId) || tabs[0];
+  return catalog.filter(tab.match).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
+}
+

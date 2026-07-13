@@ -5,9 +5,11 @@ import {
   surveyEditorGroupForTab,
 } from "./surveyReportEditorNav";
 import { surveyGroupCompletion, surveyTabIsComplete } from "./surveyReportListUtils";
+import { getQaChecklistProgress } from "./surveyQaPack";
 
 function SurveyEditorStepNav({ tab, report, onTabChange }) {
   const activeGroup = surveyEditorGroupForTab(tab);
+  const qaProgress = useMemo(() => getQaChecklistProgress(report?.qaChecklist, report?.surveyType), [report]);
 
   const completion = useMemo(() => {
     const groups = {};
@@ -61,6 +63,7 @@ function SurveyEditorStepNav({ tab, report, onTabChange }) {
       <div className="app-survey-editor-nav__tabs">
         {SURVEY_EDITOR_TABS.filter((t) => t.group === activeGroup).map((t) => {
           const done = completion.tabs[t.id];
+          const qaBadge = t.id === "professional" && !done && qaProgress.total > 0 ? ` · ${qaProgress.checked}/${qaProgress.total}` : "";
           return (
             <button
               key={t.id}
@@ -70,6 +73,7 @@ function SurveyEditorStepNav({ tab, report, onTabChange }) {
             >
               {done ? <span className="app-survey-editor-nav__tab-dot" aria-hidden /> : null}
               {t.label}
+              {qaBadge ? <span className="app-survey-editor-nav__tab-qa">{qaBadge}</span> : null}
             </button>
           );
         })}

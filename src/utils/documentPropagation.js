@@ -5,7 +5,9 @@
 import { loadOrgScoped as load, saveOrgScoped as save } from "./orgStorage";
 import { PROJECT_DOC_KEYS } from "./projectDashboard";
 import { pickRamsForProject } from "../modules/surveyReport/surveyReportSmart";
+import { mergeRamsWithSurveyReport } from "../modules/surveyReport/surveyRamsSync";
 import { surveyTypeLabel } from "../modules/surveyReport/surveyReportHelpers";
+import { getSurveyPackMeta } from "./surveyContentCatalog";
 
 const genId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
@@ -18,7 +20,10 @@ export function buildSurveyAppendixText(report) {
   if (report.surveyDate) lines.push(`Survey date: ${report.surveyDate}`);
   if (report.surveyType) lines.push(`Type: ${surveyTypeLabel(report.surveyType)}`);
   if (report.pas128Ql) lines.push(`PAS128 QL: ${report.pas128Ql}`);
+  if (report.pas128Method) lines.push(`PAS128 method: ${report.pas128Method}`);
   if (report.status) lines.push(`Status: ${report.status}`);
+  const meta = report.surveyType ? getSurveyPackMeta(report.surveyType) : null;
+  if (meta?.holdPoints?.length) lines.push(`Hold points: ${meta.holdPoints.join("; ")}`);
   if (report.sections?.executiveSummary?.trim()) {
     lines.push(`Executive summary: ${report.sections.executiveSummary.trim().slice(0, 600)}`);
   }
@@ -80,6 +85,19 @@ export function resolveRamsForSurvey(report, ramsDocs = []) {
   const linked = (ramsDocs || []).find((d) => d.id === report?.linkedRamsId);
   if (linked) return linked;
   return pickRamsForProject(ramsDocs, report?.projectId);
+}
+
+/** Push survey pack metadata onto linked (or project) RAMS. */
+export function persistRamsSyncFromSurvey(report, ramsDocs) {
+  const rams = resolveRamsForSurvey(report, ramsDocs);
+  if (!rams) throw new Error("No RAMS on this project — create or link RAMS first.");
+  if (!report?.surveyType) throw new Error("Select a survey type before pushing to RAMS.");
+  const next = mergeRamsWithSurveyReport(rams, report);
+  const list = load(PROJECT_DOC_KEYS.rams, []);
+  const idx = list.findIndex((d) => d.id === next.id);
+  const updated = idx >= 0 ? list.map((d, i) => (i === idx ? next : d)) : [next, ...list];
+  save(PROJECT_DOC_KEYS.rams, updated);
+  return next;
 }
 
 /** Persist survey appendix onto linked (or project) RAMS. */

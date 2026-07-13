@@ -5,7 +5,7 @@
     <link>https://mysafeops.com/blog</link>
     <description>Practical articles for site managers and H&amp;S leads: permits, inductions, toolbox talks, COSHH, and compliance.</description>
     <language>en-gb</language>
-    <lastBuildDate>Wed, 08 Jul 2026 13:50:17 GMT</lastBuildDate>
+    <lastBuildDate>Mon, 13 Jul 2026 02:58:16 GMT</lastBuildDate>
     <atom:link href="https://mysafeops.com/blog/rss.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>Permit to Work App UK: What Good Digital PTW Actually Looks Like</title>
@@ -258,6 +258,13 @@
       <guid isPermaLink="true">https://mysafeops.com/blog/lone-worker-construction-uk</guid>
       <pubDate>Wed, 08 Jul 2026 12:00:00 GMT</pubDate>
       <description>Lone working in UK construction: when it is allowed, check-in systems, permits, and what principal contractors must record.</description>
+    </item>
+    <item>
+      <title>IOR i pozwolenie na pracę na budowie — co musi być w systemie</title>
+      <link>https://mysafeops.com/blog/ior-pozwolenie-na-prace-polska</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/ior-pozwolenie-na-prace-polska</guid>
+      <pubDate>Sun, 12 Jul 2026 12:00:00 GMT</pubDate>
+      <description>Praktyczny przewodnik po IOR, pozwoleniach na prace szczególnie niebezpieczne i dowodach BHP dla polskich wykonawców budowlanych.</description>
     </item>
   </channel>
 </rss>

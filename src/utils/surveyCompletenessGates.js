@@ -4,6 +4,7 @@
  */
 
 import { normalizeSurveyReport } from "../modules/surveyReport/surveyReportHelpers";
+import { getQaChecklistProgress } from "../modules/surveyReport/surveyQaPack";
 import { isAutomationEnabled } from "./orgAutomationRules";
 
 const PASS_THROUGH = { allowed: true, missing: [], message: "" };
@@ -14,7 +15,11 @@ export function evaluateSurveyFinalGate(report) {
   const missing = [];
 
   const qa = r.qaChecklist || {};
+  const qaProgress = getQaChecklistProgress(qa, r.surveyType);
   if (!Object.values(qa).some(Boolean)) missing.push("QA checklist (at least one item ticked)");
+  if (qaProgress.total >= 8 && qaProgress.pct < 50) {
+    missing.push(`QA checklist at least 50% (${qaProgress.checked}/${qaProgress.total})`);
+  }
 
   if (!(r.equipmentCalibration || []).length) missing.push("Equipment calibration records");
 
@@ -51,6 +56,23 @@ export function evaluateSurveyExportGate(report) {
   if (r.surveyType === "utility_mapping_survey" || r.surveyType === "eml_cat_survey") {
     if (!String(r.pas128Ql || "").trim()) missing.push("PAS128 quality level (QL)");
     if (!(r.utilitiesTable || []).length) missing.push("Utility schedule (utilities table)");
+    else {
+      const missingQl = (r.utilitiesTable || []).filter((row) => !String(row.pas128Ql || "").trim()).length;
+      if (missingQl > 0) missing.push(`PAS128 QL on each utility row (${missingQl} missing)`);
+    }
+  }
+
+  if (r.surveyType === "cctv_drainage_survey" && !(r.cctvRunsTable || []).length) {
+    missing.push("CCTV run log (at least one run)");
+  }
+  if (r.surveyType === "uav_aerial" && !(r.uavFlightsTable || []).length) {
+    missing.push("UAV flight log (at least one sortie)");
+  }
+  if (r.surveyType === "laser_scanning" && !(r.laserScansTable || []).length) {
+    missing.push("Laser scan session log (at least one station)");
+  }
+  if (r.surveyType === "asbestos_survey" && !(r.acmRegisterTable || []).length) {
+    missing.push("ACM register (at least one sample/item)");
   }
 
   if (r.surveyType === "site_investigation_campaign") {

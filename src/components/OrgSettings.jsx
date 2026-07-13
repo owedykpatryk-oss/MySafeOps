@@ -13,6 +13,9 @@ import { CUSTOM_FIELD_PRESETS } from "../utils/orgCustomFields";
 import { resetSectorBannerDismiss } from "../utils/sectorBannerDismiss";
 import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw, ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
+import { setOrgMarketId } from "../utils/orgMarket";
+import { MARKET_PACK_HINTS } from "../config/marketModules";
+import { MARKET_IDS, getMarket, isValidMarketId, resolveMarketId } from "../config/markets";
 import { syncOrgBrandingFromCloud } from "../utils/orgBrandingCloudSync";
 import OrgModuleVisibility from "./OrgModuleVisibility";
 import OrgWorkspaceProfile from "./OrgWorkspaceProfile";
@@ -102,6 +105,9 @@ export default function OrgSettings() {
 
   const persistSettings = async (next, auditAction) => {
     saveOrgSettingsRaw(next);
+    if (isValidMarketId(next.market)) {
+      setOrgMarketId(next.market);
+    }
     const sectors = Array.isArray(next.industrySectors) ? next.industrySectors : [];
     if (!sectors.includes("pharma") && !sectors.includes("medical_devices")) {
       resetSectorBannerDismiss("pharma");
@@ -225,6 +231,33 @@ export default function OrgSettings() {
             </div>
           </Section>
         </>
+      )}
+
+      {tab==="sectors" && (
+        <Section title="Region & compliance pack">
+          <Field
+            label="Primary market"
+            hint="Controls SWMS vs RAMS labels, legislation library seeds, and billing currency hints. Change before seeding registers."
+          >
+            <select
+              value={isValidMarketId(form.market) ? form.market : "uk"}
+              onChange={(e) => set("market", resolveMarketId(e.target.value))}
+              style={ss.inp}
+            >
+              {MARKET_IDS.map((id) => {
+                const m = getMarket(id);
+                return (
+                  <option key={id} value={id}>
+                    {m.flag} {m.label}
+                  </option>
+                );
+              })}
+            </select>
+          </Field>
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0, lineHeight: 1.5 }}>
+            {MARKET_PACK_HINTS[isValidMarketId(form.market) ? form.market : "uk"]}
+          </p>
+        </Section>
       )}
 
       {tab==="sectors" && (

@@ -1,4 +1,6 @@
 import { getBillingEntitlements } from "../utils/orgMembership";
+import { AU_PLAN_PRICE_LABELS } from "../config/auPricing";
+import { PL_PLAN_PRICE_LABELS } from "../config/plPricing";
 
 /** Effectively unlimited limits for the platform owner login — client-side UX only (`VITE_PLATFORM_OWNER_EMAIL`). */
 export const PLATFORM_OWNER_PLAN = {
@@ -252,4 +254,12 @@ export function formatLimitCount(n) {
 export function formatStorageLimit(bytes) {
   if (!Number.isFinite(bytes) || bytes >= 9e15) return "Unlimited";
   return formatBytes(bytes);
+}
+
+/** Display price for billing UI — AUD labels for AU orgs when configured. */
+export function getPlanDisplayPriceLabel(planId, marketId = "uk") {
+  if (marketId === "au" && AU_PLAN_PRICE_LABELS[planId]) return AU_PLAN_PRICE_LABELS[planId];
+  if (marketId === "pl" && PL_PLAN_PRICE_LABELS[planId]) return PL_PLAN_PRICE_LABELS[planId];
+  const plan = planId === "trial" ? TRIAL_PLAN : BILLING_PLANS[planId];
+  return plan?.priceLabel ?? "—";
 }

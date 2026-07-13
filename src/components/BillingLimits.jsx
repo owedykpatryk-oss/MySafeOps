@@ -15,8 +15,13 @@ import {
   formatStorageLimit,
   getEffectivePlan,
   getPlanByComparisonId,
+  getPlanDisplayPriceLabel,
   PRICE_ADJUSTMENT_SHORT,
 } from "../lib/billingPlans";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getMarketCurrencySymbol } from "../utils/marketLabels";
+import { AU_PRICING_FOOTNOTE } from "../config/auPricing";
+import { PL_PRICING_FOOTNOTE } from "../config/plPricing";
 import { trackBillingError, trackBillingEvent } from "../lib/billingTelemetry";
 import {
   extendOrgTrial,
@@ -93,6 +98,8 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const isPlatformOwner = isSuperAdminEmail(user?.email);
   const showDevHints = showAdminLoginHints() || isPlatformOwner;
   const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner });
+  const orgMarketId = getOrgMarketId(orgId);
+  const planPriceLabel = getPlanDisplayPriceLabel(plan.id, orgMarketId) || plan.priceLabel;
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
@@ -158,13 +165,22 @@ export default function BillingLimits({ checkoutReturn = null }) {
       try {
         const base = String(getSupabaseUrl() || "").replace(/\/$/, "");
         if (!base) throw new Error("Missing Supabase URL");
+        const { data: { session } } = await supabase.auth.getSession();
+        const probeHeaders = {};
+        if (session?.access_token) {
+          probeHeaders.Authorization = `Bearer ${session.access_token}`;
+        }
         const results = await Promise.all(
           STRIPE_FN_KEYS.map(async (fn) => {
             try {
               // Use a simple GET existence check to avoid browser/CORS false negatives from custom-header OPTIONS probes.
               const controller = new AbortController();
               const timer = setTimeout(() => controller.abort(), EDGE_FN_TIMEOUT_MS);
-              const res = await fetch(`${base}/functions/v1/${fn}`, { method: "GET", signal: controller.signal }).finally(
+              const res = await fetch(`${base}/functions/v1/${fn}`, {
+                method: "GET",
+                headers: probeHeaders,
+                signal: controller.signal,
+              }).finally(
                 () => clearTimeout(timer)
               );
               if (res.status === 404) return [fn, "missing"];
@@ -292,10 +308,19 @@ export default function BillingLimits({ checkoutReturn = null }) {
     }
     setCheckoutLoading(testMode ? `test:${planId}` : planId);
     try {
-      const { data, error } = await invokeStripeFunctionWithRecovery("stripe-checkout", { planId, testMode });
+      const { data, error } = await invokeStripeFunctionWithRecovery("stripe-checkout", { planId, testMode, market: orgMarketId });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.requestId) setLastActionRequestId(String(data.requestId));
+      if ((orgMarketId === "au" || orgMarketId === "pl") && data?.priceMarket === "uk") {
+        pushToast({
+          type: "warn",
+          message:
+            orgMarketId === "pl"
+              ? "Ceny PLN nie są skonfigurowane na serwerze — checkout może pokazać GBP. Dodaj STRIPE_PRICE_*_PLN do Supabase Edge secrets."
+              : "AUD Stripe prices are not configured on the server — checkout may show GBP. Add STRIPE_PRICE_*_AUD to Supabase Edge secrets.",
+        });
+      }
       if (data?.url) {
         trackBillingEvent("stripe_checkout_redirect", { planId });
         window.location.href = data.url;
@@ -420,7 +445,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
   return (
     <>
       <PageHero
-        badgeText="£"
+        badgeText={getMarketCurrencySymbol(orgMarketId)}
         title="Billing & limits"
         lead="Transparent plan, usage, and limits per organisation. Subscribe with Stripe when you are ready."
       />
@@ -541,12 +566,18 @@ export default function BillingLimits({ checkoutReturn = null }) {
       <div style={{ ...ss.card, marginBottom: 16 }}>
         <div style={{ fontWeight: 600, marginBottom: 8 }}>Current plan</div>
         <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--color-text-secondary)" }}>
-          <strong>{plan.name}</strong> — {plan.priceLabel} / {plan.interval}
+          <strong>{plan.name}</strong> — {planPriceLabel} / {plan.interval}
           {trialStatus?.isActive && !paidActive
             ? ` · ${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left in trial`
             : ""}
           {paidActive ? ` · Stripe: ${billing.subscriptionStatus}` : ""}
         </p>
+        {orgMarketId === "au" && (
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{AU_PRICING_FOOTNOTE}</p>
+        )}
+        {orgMarketId === "pl" && (
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{PL_PRICING_FOOTNOTE}</p>
+        )}
         {!trialStatus?.isActive && !paidActive && trialStatus && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>
             {expiredReadOnly
@@ -590,7 +621,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
                       opacity: (!stripeCheckoutEnabled || (checkoutLoading && !loading)) ? 0.6 : 1,
                     }}
                   >
-                    {loading ? "Redirecting…" : `${p.name} (${p.priceLabel}/mo)`}
+                    {loading ? "Redirecting…" : `${p.name} (${getPlanDisplayPriceLabel(id, orgMarketId) || p.priceLabel}/mo)`}
                   </button>
                 );
               })}
@@ -772,7 +803,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
                   <tr key={p.id}>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>{p.name}</td>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>
-                      {p.priceLabel}/{p.interval}
+                      {(getPlanDisplayPriceLabel(p.id, orgMarketId) || p.priceLabel)}/{p.interval}
                     </td>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>
                       {formatLimitCount(p.limits.workers)}

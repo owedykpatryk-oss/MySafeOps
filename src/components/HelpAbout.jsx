@@ -8,10 +8,12 @@ import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { getAppliedIndustryPackId } from "../utils/orgIndustryPacks";
 import { isIndustryPackPreviewActive } from "../utils/industryPackPreview";
 import {
-  WORKSPACE_PROFILE_OVERVIEW,
+  getWorkspaceProfileOverview,
   getActiveProfileGuideSummary,
   listProfileGuideCatalogue,
 } from "../utils/workspaceProfileGuide";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getRamsShortLabel } from "../utils/marketLabels";
 import { MORE_SECTIONS, getMoreTabsForSection, NAV_TAB_IDS } from "../navigation/appModules";
 import { WORKSPACE_SETTINGS_TABS } from "../config/workspaceSettingsTabs";
 import {
@@ -207,6 +209,7 @@ const MODULE_BLURBS = {
   analytics: "Charts and compliance metrics across modules.",
   "monthly-report": "Monthly H&S summary report builder.",
   "survey-report": "Professional survey reports — scope, findings, plans, geo-photos, PDF export.",
+  "gpr-report": "Advanced GPR reports — equipment presets, BGS geology, weather impact on penetration, anomaly log, PDF.",
   waste: "Waste transfer and consignment notes register.",
   templates: "Reusable document templates for exports.",
   "client-portal": "Generate read-only client portal links.",
@@ -268,7 +271,7 @@ function ModuleIndexList({ tabs }) {
 
 function ProfileGuideCatalogue({ activePackId }) {
   const [openId, setOpenId] = useState(activePackId || null);
-  const catalogue = listProfileGuideCatalogue();
+  const catalogue = listProfileGuideCatalogue(getOrgMarketId());
 
   return (
     <div className="app-help-profile-catalogue">
@@ -320,8 +323,11 @@ function ProfileGuideCatalogue({ activePackId }) {
 }
 
 export default function HelpAbout() {
+  const marketId = getOrgMarketId();
+  const profileOverview = getWorkspaceProfileOverview(marketId);
+  const ramsLabel = getRamsShortLabel(marketId);
   const activePackId = getAppliedIndustryPackId() || "generalContractor";
-  const profileSummary = getActiveProfileGuideSummary();
+  const profileSummary = getActiveProfileGuideSummary(marketId);
   const bottomNavTabs = BOTTOM_NAV_IDS.map((id) => {
     const nav = NAV_TAB_IDS.find((t) => t.id === id);
     return nav || { id, label: id };
@@ -534,9 +540,9 @@ export default function HelpAbout() {
       <HelpAnchor id="workspace-profiles">
       <div className="app-surface-card" style={ss.card} id="workspace-profiles">
         <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          {WORKSPACE_PROFILE_OVERVIEW.title}
+          {profileOverview.title}
         </h2>
-        <p style={ss.p}>{WORKSPACE_PROFILE_OVERVIEW.lead}</p>
+        <p style={ss.p}>{profileOverview.lead}</p>
 
         <div className="app-help-profile-active">
           <p className="app-help-profile-active__label">Your active profile</p>
@@ -547,7 +553,7 @@ export default function HelpAbout() {
           <p className="app-help-profile-active__tagline">{profileSummary.tagline}</p>
           <ul className="app-help-profile-meta">
             <li>Site pack: {profileSummary.sitePackTitle}</li>
-            {profileSummary.ramsStarter ? <li>RAMS starter: {profileSummary.ramsStarter}</li> : null}
+            {profileSummary.ramsStarter ? <li>{ramsLabel} starter: {profileSummary.ramsStarter}</li> : null}
           </ul>
         </div>
 
@@ -569,26 +575,26 @@ export default function HelpAbout() {
             Open Project Hub
           </button>
           <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "rams" })}>
-            RAMS builder
+            {ramsLabel} builder
           </button>
         </div>
 
         <h3 style={ss.h3}>What a profile changes</h3>
         <ul style={ss.ul}>
-          {WORKSPACE_PROFILE_OVERVIEW.whatItDoes.map((line) => (
+          {profileOverview.whatItDoes.map((line) => (
             <li key={line} style={ss.moduleLi}>
               {line}
             </li>
           ))}
         </ul>
-        <p style={ss.note}>{WORKSPACE_PROFILE_OVERVIEW.whatItDoesNot}</p>
+        <p style={ss.note}>{profileOverview.whatItDoesNot}</p>
 
-        <h3 style={ss.h3}>{WORKSPACE_PROFILE_OVERVIEW.previewTitle}</h3>
-        <p style={{ ...ss.p, marginBottom: 8 }}>{WORKSPACE_PROFILE_OVERVIEW.previewBody}</p>
+        <h3 style={ss.h3}>{profileOverview.previewTitle}</h3>
+        <p style={{ ...ss.p, marginBottom: 8 }}>{profileOverview.previewBody}</p>
 
         <h3 style={ss.h3}>How to change profile</h3>
         <ol style={ss.ol}>
-          {WORKSPACE_PROFILE_OVERVIEW.changeSteps.map((step) => (
+          {profileOverview.changeSteps.map((step) => (
             <li key={step} style={{ marginBottom: 6 }}>
               {step}
             </li>

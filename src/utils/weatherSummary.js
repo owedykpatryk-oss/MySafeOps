@@ -2,7 +2,9 @@
  * Site weather snapshot — OpenWeather via same-origin proxy (prod) or Open-Meteo (free fallback).
  */
 
-import { lookupUkPostcode, resolveUkPostcodeInput } from "./postcodeLookup.js";
+import { getMarket, resolveMarketId } from "../config/markets";
+import { getOrgMarketId } from "./orgMarket.js";
+import { lookupSitePostcode, resolveSitePostcodeInput } from "./siteAddressLookup.js";
 
 const WEATHER_PROXY_PATH = "/api/weather";
 
@@ -70,19 +72,26 @@ async function fetchOpenWeatherViaProxy(lat, lng, when, postcode) {
   return formatOpenWeatherSnapshot(j, when);
 }
 
+function resolveWeatherMarketId(explicit) {
+  if (explicit === "au" || explicit === "uk") return explicit;
+  if (typeof window === "undefined") return "uk";
+  return getOrgMarketId();
+}
+
 /**
- * Resolve lat/lng from explicit coords or UK postcode (client-side postcodes.io proxy).
+ * Resolve lat/lng from explicit coords or site postcode (UK or AU).
  * @returns {Promise<{ lat: number, lng: number, postcode?: string } | null>}
  */
-export async function resolveSiteCoordinates(lat, lng, postcodeHint) {
+export async function resolveSiteCoordinates(lat, lng, postcodeHint, marketId) {
+  const market = resolveWeatherMarketId(marketId);
   const la = parseFloat(String(lat ?? "").trim(), 10);
   const lo = parseFloat(String(lng ?? "").trim(), 10);
   if (Number.isFinite(la) && Number.isFinite(lo)) {
     return { lat: la, lng: lo };
   }
-  const pc = resolveUkPostcodeInput(postcodeHint);
+  const pc = resolveSitePostcodeInput(postcodeHint);
   if (!pc) return null;
-  const hit = await lookupUkPostcode(pc);
+  const hit = await lookupSitePostcode(pc, market);
   if (!hit) return null;
   return { lat: hit.lat, lng: hit.lng, postcode: hit.postcode };
 }
@@ -143,13 +152,20 @@ export async function fetchWeatherSummary(lat, lng, opts = {}) {
   const la = parseFloat(String(lat ?? "").trim(), 10);
   const lo = parseFloat(String(lng ?? "").trim(), 10);
   const hasCoords = Number.isFinite(la) && Number.isFinite(lo);
-  const pcCompact = resolveUkPostcodeInput(opts.postcode)?.replace(/\s/g, "") || "";
+  const marketId = resolveWeatherMarketId(opts.marketId);
+  const pcResolved = resolveSitePostcodeInput(opts.postcode);
+  const pcCompact = pcResolved?.replace(/\s/g, "") || "";
 
   if (!hasCoords && !pcCompact) throw new Error("Invalid coordinates or postcode");
 
   const when =
     opts.whenLabel ||
-    new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    new Date().toLocaleString(getMarket(marketId).locale, {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
   if (isWeatherProxyPreferred()) {
     try {
@@ -163,13 +179,13 @@ export async function fetchWeatherSummary(lat, lng, opts = {}) {
   } else {
     const devKey = String(import.meta.env.VITE_OPENWEATHER_API_KEY || "").trim();
     if (devKey) {
-      const coords = hasCoords ? { lat: la, lng: lo } : await resolveSiteCoordinates("", "", opts.postcode);
+      const coords = hasCoords ? { lat: la, lng: lo } : await resolveSiteCoordinates("", "", opts.postcode, marketId);
       if (!coords) throw new Error("Postcode not found");
       return fetchOpenWeatherDirect(coords.lat, coords.lng, when, devKey);
     }
   }
 
-  const coords = hasCoords ? { lat: la, lng: lo } : await resolveSiteCoordinates("", "", opts.postcode);
+  const coords = hasCoords ? { lat: la, lng: lo } : await resolveSiteCoordinates("", "", opts.postcode, marketId);
   if (!coords) throw new Error("Postcode not found");
   return fetchOpenMeteoCurrent(coords.lat, coords.lng, when);
 }
@@ -195,10 +211,11 @@ const WMO_DAILY = {
   95: "Thunderstorm",
 };
 
-function formatIsoDateLabel(isoDate) {
+function formatIsoDateLabel(isoDate, marketId = getOrgMarketId()) {
   const d = new Date(`${isoDate}T12:00:00`);
   if (Number.isNaN(d.getTime())) return isoDate;
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+  const locale = getMarket(resolveMarketId(marketId)).locale;
+  return d.toLocaleDateString(locale, { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
 }
 
 /**
@@ -208,7 +225,8 @@ function formatIsoDateLabel(isoDate) {
  * @param {string} isoDate YYYY-MM-DD
  */
 export async function fetchWeatherForDate(lat, lng, isoDate, opts = {}) {
-  const resolved = await resolveSiteCoordinates(lat, lng, opts.postcode);
+  const marketId = resolveWeatherMarketId(opts.marketId);
+  const resolved = await resolveSiteCoordinates(lat, lng, opts.postcode, marketId);
   if (!resolved) throw new Error("Invalid coordinates or postcode");
   const la = resolved.lat;
   const lo = resolved.lng;
@@ -238,7 +256,7 @@ export async function fetchWeatherForDate(lat, lng, isoDate, opts = {}) {
   const w = j.daily?.wind_speed_10m_max?.[i];
   const code = j.daily?.weather_code?.[i];
   const desc = WMO_DAILY[code] ?? `Weather code ${code}`;
-  const when = formatIsoDateLabel(date);
+  const when = formatIsoDateLabel(date, marketId);
   const tempBand =
     tMin != null && tMax != null ? `~${tMin}–${tMax}°C` : tMax != null ? `~${tMax}°C` : "—";
   return {

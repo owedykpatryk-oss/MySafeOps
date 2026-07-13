@@ -21,7 +21,24 @@ import {
   projectGeoPhotosForReport,
 } from "../../utils/geoPhotoIntegrations.js";
 import { getSurveyTypeTemplate } from "../../utils/surveyOrgTemplates";
-import { catalogDefaultDeliverables } from "../../utils/surveyContentCatalog";
+import {
+  catalogDefaultDeliverables,
+  enrichMethodologyWithPas128,
+  getSurveyCatalogEntry,
+  getSurveyPackMeta,
+  isUtilitySurveyType,
+} from "../../utils/surveyContentCatalog";
+import { buildPas128Foreword } from "./pas128ReportBoilerplate";
+import { applyPas128MethodToReport, defaultPas128MethodForSurveyType, pas128MethodAppliesToSurveyType } from "./pas128MethodPresets";
+import { buildFindingsDraft } from "./pas128FindingsBuilder";
+import {
+  applyMobilisationQaPrefill,
+  getQaChecklistProgress,
+  mergeStandardsCited,
+} from "./surveyQaPack";
+import { syncSurveyReportFromRams } from "./surveyRamsSync";
+
+export { syncSurveyReportFromRams, buildRamsPatchFromSurveyReport, mergeRamsWithSurveyReport } from "./surveyRamsSync";
 
 function applySurveyTemplatePlaceholders(template, report) {
   if (!template?.trim()) return "";
@@ -120,9 +137,19 @@ export function pickRamsForProject(ramsDocs, projectId) {
 export function buildSurveyTypeDefaults(surveyType, pas128Ql = "") {
   const base = getSurveyTypeTemplate(surveyType);
   if (!base) return null;
-  const qlLabel = PAS128_QUALITY_LEVELS.find((q) => q.key === pas128Ql)?.label;
+  const entry = getSurveyCatalogEntry(surveyType);
+  const ql = pas128Ql || entry?.defaultPas128Ql || "";
+  const qlLabel = PAS128_QUALITY_LEVELS.find((q) => q.key === ql)?.label;
   const scope = qlLabel ? `${base.scope}\n\nTarget quality level: ${qlLabel}.` : base.scope;
-  return { ...base, scope };
+  const methodology = enrichMethodologyWithPas128(surveyType, base.methodology);
+  const meta = getSurveyPackMeta(surveyType);
+  return {
+    ...base,
+    scope,
+    methodology,
+    defaultPas128Ql: ql,
+    defaultPas128Method: meta.defaultPas128Method || "",
+  };
 }
 
 /** Rule-based limitation keys from weather, records and access notes. */
@@ -365,6 +392,13 @@ export function smartFillNextSteps(report, { project, projectPlans = [], geoPhot
   if (!report.sections?.executiveSummary?.trim()) steps.push({ id: "summary", label: "Draft executive summary", tab: "details" });
   if (!report.documentControl?.checkedBy?.trim()) steps.push({ id: "doc-control", label: "Document control (checked / approved)", tab: "details" });
   if (!Object.values(report.qaChecklist || {}).some(Boolean)) steps.push({ id: "qa", label: "Complete QA checklist", tab: "professional" });
+  else {
+    const qa = getQaChecklistProgress(report.qaChecklist, report.surveyType);
+    if (qa.total >= 8 && qa.pct < 50) steps.push({ id: "qa-half", label: `QA checklist ${qa.checked}/${qa.total} — reach 50%`, tab: "professional" });
+  }
+  if (report.surveyType && !(report.standardsCited || []).length) {
+    steps.push({ id: "standards", label: "Cite applicable UK standards", tab: "professional" });
+  }
   if (!report.deliverables?.length) steps.push({ id: "deliverables", label: "Add deliverables schedule", tab: "scope" });
   if (!report.equipmentCalibration?.length) steps.push({ id: "calibration", label: "Equipment calibration records", tab: "professional" });
   return steps;
@@ -417,7 +451,16 @@ export async function runSmartFillAll(report, ctx = {}) {
       if (!r.sections.scope?.trim()) r.sections.scope = defaults.scope;
       if (!r.sections.methodology?.trim()) r.sections.methodology = defaults.methodology;
       if (!r.sections.equipmentUsed?.trim()) r.sections.equipmentUsed = defaults.equipmentUsed;
+      if (!r.pas128Ql?.trim() && defaults.defaultPas128Ql) r.pas128Ql = defaults.defaultPas128Ql;
+      if (!r.pas128Method?.trim() && defaults.defaultPas128Method) r.pas128Method = defaults.defaultPas128Method;
     }
+    if (isUtilitySurveyType(r.surveyType) && !r.sections.foreword?.trim()) {
+      r.sections.foreword = buildPas128Foreword(r);
+    }
+  }
+
+  if (r.pas128Method) {
+    r = applyPas128MethodToReport(r, r.pas128Method, { overwrite: false });
   }
 
   r = applyDefaultRecordsPreset(r);
@@ -478,7 +521,31 @@ export async function runSmartFillAll(report, ctx = {}) {
 
   r = prefillProfessionalFields(r, { project, ramsDoc: rams, permits });
 
+  if (r.surveyType) {
+    r.standardsCited = mergeStandardsCited(r.standardsCited, r.surveyType);
+    r.qaChecklist = applyMobilisationQaPrefill(r.qaChecklist, r.surveyType);
+  }
+
   r.smartFillAt = new Date().toISOString();
+  return r;
+}
+
+/**
+ * One-click PAS 128 pack: default method → smart fill → auto findings from tables.
+ */
+export async function applyPas128CompletePack(report, ctx = {}) {
+  let r = { ...report, sections: { ...(report.sections || {}) } };
+  if (pas128MethodAppliesToSurveyType(r.surveyType)) {
+    const method = r.pas128Method || defaultPas128MethodForSurveyType(r.surveyType);
+    if (method) {
+      r = applyPas128MethodToReport(r, method, { overwrite: false });
+    }
+  }
+  r = await runSmartFillAll(r, ctx);
+  const findings = buildFindingsDraft(r, { overwrite: Boolean(ctx.overwriteFindings) });
+  if (findings && (ctx.overwriteFindings || !r.sections.findings?.trim())) {
+    r.sections = { ...r.sections, findings };
+  }
   return r;
 }
 
@@ -570,33 +637,61 @@ export function prefillReportFromProject(report, project, ramsDoc = null) {
   }
 
   if (ramsDoc) {
-    next.linkedRamsId = ramsDoc.id;
-    if (ramsDoc.surveyWorkType && !next.surveyType) next.surveyType = ramsDoc.surveyWorkType;
-    if (ramsDoc.surveyDeliverables && !next.sections.scope?.trim()) next.sections.scope = ramsDoc.surveyDeliverables;
-    if (ramsDoc.surveyMethodStatement && !next.sections.methodology?.trim()) {
-      next.sections.methodology = ramsDoc.surveyMethodStatement;
-    }
+    const synced = syncSurveyReportFromRams(next, ramsDoc, { overwrite: false });
+    Object.assign(next, synced);
+    if (synced.sections) next.sections = synced.sections;
+    if (synced.hseRefs) next.hseRefs = synced.hseRefs;
   }
 
   return prefillProfessionalFields(next, { project, ramsDoc });
 }
 
+/** Apply catalog template when user changes survey type (fills empty fields only). */
+export function applySurveyTypeChange(report, surveyType) {
+  const key = String(surveyType || "").trim();
+  if (!key) return { ...report, surveyType: "" };
+
+  const defaults = buildSurveyTypeDefaults(key, report.pas128Ql);
+  let next = {
+    ...report,
+    surveyType: key,
+    sections: { ...(report.sections || {}) },
+  };
+
+  if (defaults) {
+    if (!next.sections.scope?.trim()) next.sections.scope = defaults.scope;
+    if (!next.sections.methodology?.trim()) next.sections.methodology = defaults.methodology;
+    if (!next.sections.equipmentUsed?.trim()) next.sections.equipmentUsed = defaults.equipmentUsed;
+    if (!next.pas128Ql?.trim() && defaults.defaultPas128Ql) next.pas128Ql = defaults.defaultPas128Ql;
+    if (!next.pas128Method?.trim() && defaults.defaultPas128Method) {
+      next.pas128Method = defaults.defaultPas128Method;
+    }
+  }
+
+  if (isUtilitySurveyType(key) && !next.sections.foreword?.trim()) {
+    next.sections.foreword = buildPas128Foreword(next);
+  }
+
+  if (next.pas128Method) {
+    next = applyPas128MethodToReport(next, next.pas128Method, { overwrite: false });
+  }
+
+  if (!next.deliverables?.length) next.deliverables = buildDefaultDeliverables(key);
+  if (!next.equipmentCalibration?.length) next.equipmentCalibration = buildDefaultEquipmentCalibration(key);
+
+  const standards = new Set(next.standardsCited || []);
+  if (isUtilitySurveyType(key)) {
+    standards.add("pas128");
+    standards.add("hsg47");
+  }
+  next.standardsCited = [...standards];
+
+  return next;
+}
+
 /** One-click pull scope, method and HSE excerpt from linked RAMS (explicit, undoable via save). */
 export function pullScopeFromRams(report, ramsDoc) {
-  if (!ramsDoc) throw new Error("No RAMS document linked — select RAMS first.");
-  const next = {
-    ...report,
-    linkedRamsId: ramsDoc.id,
-    sections: { ...(report.sections || {}) },
-    hseRefs: { ...(report.hseRefs || {}) },
-    scopeFromRamsAt: new Date().toISOString(),
-  };
-  if (ramsDoc.surveyWorkType) next.surveyType = ramsDoc.surveyWorkType;
-  if (ramsDoc.surveyDeliverables?.trim()) next.sections.scope = ramsDoc.surveyDeliverables.trim();
-  if (ramsDoc.surveyMethodStatement?.trim()) next.sections.methodology = ramsDoc.surveyMethodStatement.trim();
-  const ramsLabel = ramsDoc.title || ramsDoc.documentNo || ramsDoc.documentTitle || "";
-  if (ramsLabel) next.hseRefs.ramsExcerpt = ramsLabel;
-  return next;
+  return syncSurveyReportFromRams(report, ramsDoc, { overwrite: true });
 }
 
 /** Fetch live/historical weather for survey date and merge into report weather fields. */
@@ -651,17 +746,29 @@ export function buildDefaultEquipmentCalibration(surveyType) {
     calibrationDue: "",
     status,
   });
-  if (surveyType === "utility_mapping_survey" || surveyType === "eml_cat_survey") {
+  if (surveyType === "utility_mapping_survey" || surveyType === "topo_plus_utility_survey" || surveyType === "eml_cat_survey") {
     return [mk("RD8000 / cable locator"), mk("CAT & Genny"), mk("GNSS rover")];
   }
   if (surveyType === "gpr_survey") {
     return [mk("GPR system"), mk("GNSS / total station")];
   }
-  if (surveyType === "topographical_survey" || surveyType === "setting_out") {
+  if (surveyType === "topographical_survey" || surveyType === "topo_plus_utility_survey" || surveyType === "setting_out") {
     return [mk("Robotic total station"), mk("GNSS rover")];
   }
   if (surveyType === "cctv_drainage_survey") {
     return [mk("CCTV crawler"), mk("Winch / sonde locator")];
+  }
+  if (surveyType === "drainage_connectivity_survey") {
+    return [mk("Sonde / duct rods"), mk("EML locator"), mk("GNSS / total station")];
+  }
+  if (surveyType === "service_clearance_survey") {
+    return [mk("RD8000 / cable locator"), mk("GPR system"), mk("GNSS / total station")];
+  }
+  if (surveyType === "uav_aerial") {
+    return [mk("UAV platform"), mk("RTK / PPK module"), mk("Ground control targets")];
+  }
+  if (surveyType === "laser_scanning") {
+    return [mk("Terrestrial laser scanner"), mk("GNSS / total station")];
   }
   if (surveyType === "site_investigation_campaign") {
     return [
@@ -670,6 +777,9 @@ export function buildDefaultEquipmentCalibration(surveyType) {
       mk("DCP / dynamic probe kit"),
       mk("Drilling rig / window sampler (as required)"),
     ];
+  }
+  if (surveyType === "asbestos_survey") {
+    return [mk("Sampling kit (bagging, water spray)"), mk("FFP3 respirator"), mk("Camera / borescope")];
   }
   return [mk("Primary survey instrument")];
 }
@@ -710,6 +820,60 @@ export function pickPermitRefForProject(permits, projectId) {
   return any?.permitNo || any?.ref || any?.id || "";
 }
 
+const SURVEY_PERMIT_TYPES = new Set(["excavation", "ground_disturbance", "utility", "general"]);
+
+/** Permits on the same project — dig / ground disturbance first. */
+export function listPermitsForSurveyProject(permits, projectId) {
+  if (!projectId || !permits?.length) return [];
+  return permits
+    .filter((p) => p.projectId === projectId)
+    .sort((a, b) => {
+      const digA = SURVEY_PERMIT_TYPES.has(a.type) ? 0 : 1;
+      const digB = SURVEY_PERMIT_TYPES.has(b.type) ? 0 : 1;
+      if (digA !== digB) return digA - digB;
+      return String(a.permitNo || a.ref || "").localeCompare(String(b.permitNo || b.ref || ""), undefined, {
+        sensitivity: "base",
+      });
+    });
+}
+
+function permitExtraField(permit, key) {
+  const ef = permit?.extraFields || {};
+  return ef[key] || ef.dynamic?.[key] || "";
+}
+
+/** Link PTW and pull DBYD / CAT refs where stored on the permit. */
+export function applyLinkedPermitToReport(report, permit) {
+  if (!permit) return report;
+  const dbyd = permitExtraField(permit, "dbydRef");
+  const cat = permitExtraField(permit, "catScanRef");
+  return {
+    ...report,
+    hseRefs: {
+      ...(report.hseRefs || {}),
+      linkedPermitId: permit.id,
+      permitRef: permit.permitNo || permit.ref || permit.id || "",
+      catScanRef: cat || report.hseRefs?.catScanRef || "",
+    },
+    ...(dbyd && !(report.dbydEnquiries || []).some((r) => r.reference === dbyd)
+      ? {
+          dbydEnquiries: [
+            ...(report.dbydEnquiries || []),
+            {
+              id: `dbyd_${Date.now()}`,
+              provider: "dbyd",
+              reference: dbyd,
+              enquiryDate: report.surveyDate || "",
+              undertakers: "",
+              status: "received",
+              notes: `Imported from linked permit ${permit.permitNo || permit.ref || ""}`,
+            },
+          ],
+        }
+      : {}),
+  };
+}
+
 /** Prefill document control, deliverables, HSE and control fields. */
 export function prefillProfessionalFields(report, { project, ramsDoc, permits = [] } = {}) {
   const next = { ...report };
@@ -736,7 +900,7 @@ export function prefillProfessionalFields(report, { project, ramsDoc, permits = 
   next.hseRefs = hse;
 
   const ctrl = { ...(next.controlAccuracy || {}) };
-  if (!ctrl.controlSource?.trim() && (next.surveyType === "utility_mapping_survey" || next.surveyType === "topographical_survey")) {
+  if (!ctrl.controlSource?.trim() && (next.surveyType === "utility_mapping_survey" || next.surveyType === "topographical_survey" || next.surveyType === "topo_plus_utility_survey")) {
     ctrl.controlSource = "GNSS rover / total station tied to project grid or OSGB36 as agreed.";
   }
   if (!ctrl.controlSource?.trim() && next.surveyType === "site_investigation_campaign") {
@@ -744,7 +908,9 @@ export function prefillProfessionalFields(report, { project, ramsDoc, permits = 
   }
   if (!ctrl.horizontalTolerance?.trim()) {
     ctrl.horizontalTolerance =
-      next.surveyType === "utility_mapping_survey" ? "±0.05 m relative to survey control (indicative)." : "";
+      next.surveyType === "utility_mapping_survey" || next.surveyType === "topo_plus_utility_survey"
+        ? "±0.05 m relative to survey control (indicative)."
+        : "";
   }
   next.controlAccuracy = ctrl;
 
@@ -754,6 +920,11 @@ export function prefillProfessionalFields(report, { project, ramsDoc, permits = 
 
   if (!next.equipmentCalibration?.length && next.surveyType) {
     next.equipmentCalibration = buildDefaultEquipmentCalibration(next.surveyType);
+  }
+
+  if (next.surveyType) {
+    next.standardsCited = mergeStandardsCited(next.standardsCited, next.surveyType);
+    next.qaChecklist = applyMobilisationQaPrefill(next.qaChecklist, next.surveyType);
   }
 
   if (!next.revisionHistory?.length) {

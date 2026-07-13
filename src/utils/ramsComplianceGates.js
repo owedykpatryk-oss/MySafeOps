@@ -1,7 +1,20 @@
 /**
- * COSHH compliance gate for RAMS approval/issue — blocks when substances in scope lack SDS.
+ * COSHH / hazardous substances compliance gate for RAMS/SWMS approval/issue.
  */
 import { loadOrgScoped as load } from "./orgStorage";
+import { getOrgMarketId } from "./orgMarket";
+import { getEmergencyHospitalHeading, getRamsShortLabel } from "./marketLabels";
+
+function gateMarketId() {
+  if (typeof window === "undefined") return "uk";
+  return getOrgMarketId();
+}
+
+function substanceRegisterLabel(marketId) {
+  if (marketId === "pl") return "rejestr substancji niebezpiecznych";
+  if (marketId === "au") return "hazardous substances register";
+  return "COSHH register";
+}
 
 const COSHH_KEY = "coshh_register";
 
@@ -25,6 +38,9 @@ function textBlob(form, rows) {
 
 /** @returns {{ required: boolean, missing: { name: string, reason: string }[], ok: boolean, message?: string }} */
 export function evaluateRamsCoshhGate(form, rows, { coshhItems = null, strict = true } = {}) {
+  const marketId = gateMarketId();
+  const registerLabel = substanceRegisterLabel(marketId);
+  const docLabel = getRamsShortLabel(marketId);
   const items = coshhItems ?? load(COSHH_KEY, []);
   const blob = textBlob(form, rows);
   const mentionsCoshh = SUBSTANCE_HINTS.some((h) => blob.includes(h));
@@ -34,9 +50,9 @@ export function evaluateRamsCoshhGate(form, rows, { coshhItems = null, strict = 
   if (!items.length) {
     return {
       required: true,
-      missing: [{ name: "(COSHH register empty)", reason: "Add substances used on this job with SDS links before approving RAMS." }],
+      missing: [{ name: `(${registerLabel} empty)`, reason: `Add substances used on this job with SDS links before approving ${docLabel}.` }],
       ok: !strict,
-      message: "COSHH register is empty but RAMS scope references chemicals/sealants/lubricants.",
+      message: `${registerLabel} is empty but ${docLabel} scope references chemicals/sealants/lubricants.`,
     };
   }
   const missing = items
@@ -49,14 +65,14 @@ export function evaluateRamsCoshhGate(form, rows, { coshhItems = null, strict = 
     })
     .map((i) => ({
       name: i.name,
-      reason: "Missing SDS URL in COSHH register",
+      reason: "Missing SDS URL in hazardous substances register",
     }));
   if (missing.length === 0 && items.every((i) => !String(i.sdsUrl || "").trim())) {
     return {
       required: true,
       missing: items.slice(0, 5).map((i) => ({ name: i.name || "Unnamed substance", reason: "No SDS URL on file" })),
       ok: !strict,
-      message: "COSHH substances exist but none have SDS URLs attached.",
+      message: "Substances exist but none have SDS URLs attached.",
     };
   }
   return {
@@ -67,8 +83,9 @@ export function evaluateRamsCoshhGate(form, rows, { coshhItems = null, strict = 
   };
 }
 
-/** Nearest A&E gate when project has coordinates. */
+/** Nearest hospital gate when project has coordinates. */
 export function evaluateRamsHospitalGate(form, project) {
+  const hospitalHeading = getEmergencyHospitalHeading(gateMarketId());
   const lat = Number(project?.lat ?? form?.siteLat);
   const lng = Number(project?.lng ?? form?.siteLng);
   const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
@@ -77,6 +94,6 @@ export function evaluateRamsHospitalGate(form, project) {
   return {
     required: true,
     ok: hospital.length > 2,
-    message: hospital ? undefined : "Project has map coordinates but nearest A&E is not set — use Enrich site on the project.",
+    message: hospital ? undefined : `Project has map coordinates but ${hospitalHeading.toLowerCase()} is not set — use Enrich site on the project.`,
   };
 }

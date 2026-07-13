@@ -58,6 +58,9 @@ async function main() {
   const migrations = [
     "supabase/migrations/20260706140000_insider_hardening_rpcs.sql",
     "supabase/migrations/20260706150000_d1_kv_namespace_write.sql",
+    "supabase/migrations/20260711200000_supabase_linter_hardening.sql",
+    "supabase/migrations/20260712230000_permit_notification_rate_limit.sql",
+    "supabase/migrations/20260713020000_org_permits_rls_membership.sql",
   ];
   for (const m of migrations) {
     if (existsSync(resolve(root, m))) ok(`migration present — ${m}`);
@@ -146,6 +149,48 @@ async function main() {
     warn("config.toml still has Turnstile TEST secret — run npm run setup:turnstile:all for production");
   } else {
     ok("config.toml Turnstile secret is not the Cloudflare test placeholder");
+  }
+
+  if (fileIncludes("cloudflare/workers/r2-upload/index.mjs", "org uploads require sign-in")) {
+    ok("R2 Worker requires JWT for org-scoped uploads");
+  } else {
+    fail("R2 Worker missing org-scoped JWT gate");
+    issues += 1;
+  }
+
+  if (fileIncludes("supabase/functions/send-permit-notification/index.ts", "buildRosterLinkedEmailSet")) {
+    ok("Permit notification relay validates roster emails against permit people");
+  } else {
+    fail("Permit notification missing roster-linked recipient validation");
+    issues += 1;
+  }
+
+  if (fileIncludes("api/anthropic-messages.js", "if (!sessionUser)")) {
+    ok("Anthropic proxy requires Supabase session in production");
+  } else {
+    warn("Anthropic proxy may still allow bundled shared secret in production");
+    issues += 1;
+  }
+
+  if (fileIncludes("api/postcode.js", "rejectIfRateLimited")) {
+    ok("Postcode API routes are rate limited");
+  } else {
+    warn("Postcode API missing rate limits");
+    issues += 1;
+  }
+
+  if (fileIncludes("cloudflare/workers/d1-api/index.mjs", "D1_RATE_LIMIT_FAIL_OPEN")) {
+    ok("D1 Worker rate limits fail closed by default");
+  } else {
+    warn("D1 Worker may fail open when org_api_rate is missing");
+    issues += 1;
+  }
+
+  if (fileIncludes("src/lib/supabase.js", "allowDevFallback")) {
+    ok("Supabase bundled fallbacks disabled in production builds");
+  } else {
+    warn("Supabase fallbacks may still ship in production bundle");
+    issues += 1;
   }
 
   const audit = spawnSync("npm", ["audit", "--audit-level=high", "--json"], {

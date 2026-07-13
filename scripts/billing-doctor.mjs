@@ -65,6 +65,7 @@ async function checkFunction(fnName) {
         validMap: body.valid || {},
         pendingFailures: Number.isFinite(body?.pendingFailures) ? Number(body.pendingFailures) : null,
         lastProcessedAt: body?.lastProcessedAt || null,
+        marketBilling: body?.marketBilling || null,
         rawStatus: res.status,
       };
     }
@@ -117,6 +118,10 @@ async function main() {
       if (result.fnName === "stripe-webhook" && result.lastProcessedAt) {
         console.log(`    - lastProcessedAt: ${result.lastProcessedAt}`);
       }
+      if (result.fnName === "stripe-checkout" && result.marketBilling) {
+        const mb = result.marketBilling;
+        console.log(`    - marketBilling: uk=${mb.uk ? "ok" : "missing"} au=${mb.au ? "ok" : "missing"} pl=${mb.pl ? "ok" : "missing"}`);
+      }
       continue;
     }
 
@@ -137,11 +142,30 @@ async function main() {
 }
 
 function printStripePriceGuide() {
+  const plnOk = ["STARTER", "TEAM", "BUSINESS", "ENTERPRISE"].every((p) =>
+    String(process.env[`STRIPE_PRICE_${p}_PLN`] || "").startsWith("price_")
+  );
+  const audOk = ["STARTER", "TEAM", "BUSINESS", "ENTERPRISE"].every((p) =>
+    String(process.env[`STRIPE_PRICE_${p}_AUD`] || "").startsWith("price_")
+  );
+
   console.log("\nStripe GBP monthly (billingPlans.js / seed script):");
   console.log("  Solo (starter)     £19  → STRIPE_PRICE_STARTER");
   console.log("  Team               £99  → STRIPE_PRICE_TEAM");
   console.log("  Business          £249  → STRIPE_PRICE_BUSINESS");
   console.log("  Enterprise        £499  → STRIPE_PRICE_ENTERPRISE");
+  console.log("\nStripe AUD monthly (ex GST):");
+  console.log("  Solo (starter)    A$59  → STRIPE_PRICE_STARTER_AUD");
+  console.log("  Team             A$229  → STRIPE_PRICE_TEAM_AUD");
+  console.log("  Business         A$579  → STRIPE_PRICE_BUSINESS_AUD");
+  console.log("  Enterprise      A$1099  → STRIPE_PRICE_ENTERPRISE_AUD");
+  console.log(`  Local .env.local: ${audOk ? "all four AUD ids set" : "AUD ids incomplete"}`);
+  console.log("\nStripe PLN monthly (net):");
+  console.log("  Solo (starter)     79 zł → STRIPE_PRICE_STARTER_PLN");
+  console.log("  Team              399 zł → STRIPE_PRICE_TEAM_PLN");
+  console.log("  Business          999 zł → STRIPE_PRICE_BUSINESS_PLN");
+  console.log("  Enterprise       1899 zł → STRIPE_PRICE_ENTERPRISE_PLN");
+  console.log(`  Local .env.local: ${plnOk ? "all four PLN ids set" : "PLN ids incomplete"}`);
   console.log("  Seed: npm run stripe:seed-prices  |  Sync secrets: npm run stripe:sync-secrets");
   console.log("  QA test mode: npm run stripe:setup-test  (STRIPE_SECRET_KEY_TEST in .env.local)");
   console.log("  Secrets live in Supabase Edge only (not Vercel).\n");

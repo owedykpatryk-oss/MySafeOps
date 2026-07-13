@@ -160,7 +160,7 @@
   .landing-mobile-panel{animation:none}
   .landing-faq-skeleton-line{animation:none!important;background:var(--sl2)!important}
   .fc:hover,.rc:hover,.pcard:hover,.pcard.pop{transform:none!important}
-  .landing-hero-mockup__float,.hero-orb,.landing-hl-shimmer,.landing-badge-pulse,.landing-btn-glow,.landing-rams-grid--animate .landing-rams-card{animation:none!important}
+  .landing-hero-mockup__float,.hero-orb,.landing-hl-shimmer,.landing-badge-pulse,.landing-btn-glow,.landing-rams-grid--animate .landing-rams-card,.landing-market-ribbon__pulse,.landing-live-chip[data-tone="live"] .landing-live-chip__dot,.wow-panel--celebrate,.wow-ring--complete{animation:none!important}
   .landing-hero-mockup__card{animation:none!important}
   .landing-mobile-cta-bar{transition:none!important}
   .landing-mobile-jump,.landing-scroll-top{transition:none!important}
@@ -287,6 +287,93 @@
   box-shadow:0 1px 4px rgba(15,23,42,.04);
 }
 @keyframes landingMarquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+/* Market ribbon (PL/AU hero) */
+.landing-market-ribbon{
+  position:relative;z-index:2;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;
+  margin:0 auto clamp(12px,2vw,18px);padding:8px 18px;max-width:min(640px,92vw);
+  border-radius:999px;border:1px solid rgba(13,148,136,.22);
+  background:linear-gradient(90deg,rgba(255,255,255,.95),rgba(240,253,250,.9),rgba(255,255,255,.95));
+  font-size:12px;font-weight:700;color:var(--sl6);letter-spacing:.02em;
+  box-shadow:0 4px 20px rgba(15,23,42,.06);
+}
+.landing-market-ribbon__pulse{
+  width:8px;height:8px;border-radius:50%;background:var(--teal);
+  box-shadow:0 0 0 0 rgba(13,148,136,.45);animation:landingRibbonPulse 2.2s ease-in-out infinite;
+}
+.landing-market-ribbon--pl{border-color:rgba(220,38,38,.22);background:linear-gradient(90deg,rgba(255,255,255,.96),rgba(254,242,242,.85),rgba(255,255,255,.96))}
+.landing-market-ribbon--pl .landing-market-ribbon__pulse{background:#dc2626;box-shadow:0 0 0 0 rgba(220,38,38,.4)}
+.landing-market-ribbon--au .landing-market-ribbon__pulse{background:#f59e0b}
+.landing-market-ribbon__sep{opacity:.45;font-weight:500}
+.landing-market-ribbon__beta{
+  padding:2px 8px;border-radius:999px;background:rgba(249,115,22,.12);color:var(--org-d);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+}
+@keyframes landingRibbonPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(13,148,136,.35)}
+  50%{box-shadow:0 0 0 6px rgba(13,148,136,0)}
+}
+
+/* Hero live strip */
+.landing-live-strip{
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin-top:18px;padding:12px 14px;
+  border-radius:14px;border:1px solid rgba(226,232,240,.95);background:rgba(255,255,255,.72);
+  box-shadow:0 2px 12px rgba(15,23,42,.04);
+}
+.landing-live-strip__beacon{
+  width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;
+  animation:landingLiveBeacon 1.8s ease-in-out infinite;
+}
+.landing-live-strip__label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--sl4)}
+.landing-live-strip__chips{display:flex;flex-wrap:wrap;gap:8px;min-height:28px}
+.landing-live-chip{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;
+  font-size:11px;font-weight:700;color:var(--sl6);background:var(--sl1);border:1px solid var(--sl2);
+  opacity:0;transform:translateY(4px);transition:opacity .35s var(--ease-out),transform .35s var(--ease-out);
+}
+.landing-live-chip[data-active="true"]{opacity:1;transform:translateY(0)}
+.landing-live-chip__dot{width:6px;height:6px;border-radius:50%;background:var(--sl4);flex-shrink:0}
+.landing-live-chip[data-tone="live"] .landing-live-chip__dot{background:#22c55e;animation:landingLiveBeacon 1.8s ease-in-out infinite}
+.landing-live-chip[data-tone="warn"] .landing-live-chip__dot{background:#f59e0b}
+.landing-live-chip[data-tone="ok"] .landing-live-chip__dot{background:var(--teal)}
+@keyframes landingLiveBeacon{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* Nav market pill */
+.landing-nav-market-pill{
+  margin-left:8px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;
+  color:var(--sl6);background:rgba(15,23,42,.04);border:1px solid rgba(226,232,240,.9);
+  transition:opacity .2s var(--ease-out),transform .2s var(--ease-out);
+}
+.landing-nav-market-pill--sc{background:rgba(13,148,136,.08);border-color:rgba(13,148,136,.2);color:var(--teal-d)}
+.landing-page--pl .landing-nav-market-pill--sc{background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.18);color:#b91c1c}
+
+/* PL market theme accents */
+.landing-page--pl .hero h1 .hl{
+  background:linear-gradient(120deg,#b91c1c 0%,var(--teal-d) 42%,var(--teal) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.hero-orb--pl{
+  top:8%;right:18%;width:min(280px,45vw);height:min(280px,45vw);
+  background:radial-gradient(circle,rgba(220,38,38,.1) 0%,transparent 68%);
+  animation:landingOrbDrift 20s ease-in-out infinite alternate;
+}
+.landing-page--pl .landing-marquee--pl .landing-marquee-chip{border-color:rgba(220,38,38,.14)}
+.landing-page--pl .landing-marquee-wrap{background:linear-gradient(90deg,rgba(255,255,255,.92),rgba(254,242,242,.5),rgba(255,255,255,.92))}
+.landing-page--pl .pcard.pop::before{content:'POLECANY DLA EKIP'}
+.landing-page--pl .pcard.pop{border-color:#dc2626;box-shadow:0 16px 48px rgba(220,38,38,.12)}
+.landing-page--pl .wow-panel--celebrate{border-color:rgba(220,38,38,.35)}
+
+/* Readiness celebrate */
+.wow-panel--celebrate{animation:landingCelebrateGlow 2.4s ease-in-out infinite}
+.wow-ring--complete{animation:landingRingPop .5s var(--ease-out)}
+@keyframes landingRingPop{
+  0%{transform:scale(1)}
+  40%{transform:scale(1.06)}
+  100%{transform:scale(1)}
+}
+@keyframes landingCelebrateGlow{
+  0%,100%{box-shadow:var(--shadow-lg),0 0 0 0 rgba(13,148,136,0)}
+  50%{box-shadow:var(--shadow-lg),0 0 28px rgba(13,148,136,.22)}
+}
 
 /* Workflow bento */
 .landing-bento{

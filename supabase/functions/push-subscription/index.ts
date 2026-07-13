@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { assertOrgSlugAccess } from "../_shared/orgAccess.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +54,10 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const action = String(body?.action || "upsert").trim().toLowerCase();
     const orgSlug = cleanOrgSlug(body?.orgSlug);
+
+    const access = await assertOrgSlugAccess(supabase, user.id, orgSlug);
+    if (!access.ok) return json(access.status, { error: access.error });
+
     const sub = (body?.subscription || {}) as PushSubPayload;
     const endpoint = String(sub?.endpoint || body?.endpoint || "").trim();
 

@@ -6,6 +6,12 @@ import { INDUSTRY_PACKS } from "./orgIndustryPacks";
 import { getOrgIndustryPackId } from "./projectHubIndustry";
 import { getIndustryPackLabel, getPackWorkflowHelp, getIndustrySitePackTitle } from "./industryPackProfile";
 import { getRamsStarterLabel } from "./ramsIndustryStarters";
+import { getOrgMarketId } from "./orgMarket";
+import { localizeIndustryTerminology } from "./marketLabels";
+
+function locGuide(text, marketId = getOrgMarketId()) {
+  return localizeIndustryTerminology(String(text || ""), marketId);
+}
 
 /** @typedef {{ tagline: string, whoFor: string, adjusts: string[], hubFocus: string, ramsNote: string }} ProfileGuideEntry */
 
@@ -33,6 +39,20 @@ export const WORKSPACE_PROFILE_OVERVIEW = {
     "Click Apply workspace profile — admins only.",
   ],
 };
+
+/** Market-localized copy for Help and onboarding (RAMS/CDM → SWMS/WHS etc.). */
+export function getWorkspaceProfileOverview(marketId = getOrgMarketId()) {
+  const loc = (text) => locGuide(text, marketId);
+  return {
+    title: WORKSPACE_PROFILE_OVERVIEW.title,
+    lead: loc(WORKSPACE_PROFILE_OVERVIEW.lead),
+    whatItDoes: WORKSPACE_PROFILE_OVERVIEW.whatItDoes.map(loc),
+    whatItDoesNot: loc(WORKSPACE_PROFILE_OVERVIEW.whatItDoesNot),
+    previewTitle: WORKSPACE_PROFILE_OVERVIEW.previewTitle,
+    previewBody: loc(WORKSPACE_PROFILE_OVERVIEW.previewBody),
+    changeSteps: WORKSPACE_PROFILE_OVERVIEW.changeSteps.map(loc),
+  };
+}
 
 /** Per-profile guide entries keyed like INDUSTRY_PACKS. */
 export const PROFILE_GUIDE_ENTRIES = {
@@ -110,6 +130,17 @@ export const PROFILE_GUIDE_ENTRIES = {
     hubFocus: "Demolition site pack — excavation, temp works, gate book, asbestos, RAMS, PTW.",
     ramsNote: "Groundworks starter — excavation, buried services, plant, and collapse hazards.",
   },
+  civilEarthworks: {
+    tagline: "Civil engineering, utilities, and earthworks sites.",
+    whoFor: "Civils contractors, utility installers, and groundworks teams with permit-to-dig and temporary works.",
+    adjusts: [
+      "Excavation and temp works registers surfaced in More.",
+      "Groundworks RAMS starter suggested in builder.",
+      "Readiness emphasises PTW and excavation evidence.",
+    ],
+    hubFocus: "Civil & earthworks site pack — excavation, temp works, briefings, RAMS, PTW.",
+    ramsNote: "Groundworks starter — buried services, plant, collapse, and permit-to-dig hazards.",
+  },
   foodPharma: {
     tagline: "Hygiene-critical manufacturing and contractor access controls.",
     whoFor: "Food, beverage, pharma, and pet food sites with allergen, GMP, and high-care requirements.",
@@ -134,24 +165,29 @@ export const PROFILE_GUIDE_ENTRIES = {
   },
 };
 
-/** @param {string} [packId] @returns {ProfileGuideEntry & { id: string, label: string, hint: string }} */
-export function getProfileGuideEntry(packId = getOrgIndustryPackId()) {
+/** @param {string} [packId] @param {import("../config/markets").MarketId} [marketId] */
+export function getProfileGuideEntry(packId = getOrgIndustryPackId(), marketId = getOrgMarketId()) {
   const id = packId && INDUSTRY_PACKS[packId] ? packId : "generalContractor";
   const pack = INDUSTRY_PACKS[id];
   const guide = PROFILE_GUIDE_ENTRIES[id] || PROFILE_GUIDE_ENTRIES.generalContractor;
+  const loc = (text) => locGuide(text, marketId);
   return {
     id,
     label: pack.label,
-    hint: pack.hint,
-    ...guide,
+    hint: loc(pack.hint),
+    tagline: loc(guide.tagline),
+    whoFor: loc(guide.whoFor),
+    adjusts: guide.adjusts.map(loc),
+    hubFocus: loc(guide.hubFocus),
+    ramsNote: loc(guide.ramsNote),
   };
 }
 
 /** Active profile summary for Help and Settings headers. */
-export function getActiveProfileGuideSummary() {
+export function getActiveProfileGuideSummary(marketId = getOrgMarketId()) {
   const id = getOrgIndustryPackId();
-  const entry = getProfileGuideEntry(id);
-  const workflow = getPackWorkflowHelp(id);
+  const entry = getProfileGuideEntry(id, marketId);
+  const workflow = getPackWorkflowHelp(id, marketId);
   const pack = INDUSTRY_PACKS[id];
   const ramsStarter =
     pack?.ramsStarterKey === null ? null : getRamsStarterLabel(pack?.ramsStarterKey || "general");
@@ -168,6 +204,6 @@ export function getActiveProfileGuideSummary() {
 }
 
 /** All profiles for catalogue rendering (stable order). */
-export function listProfileGuideCatalogue() {
-  return Object.keys(INDUSTRY_PACKS).map((id) => getProfileGuideEntry(id));
+export function listProfileGuideCatalogue(marketId = getOrgMarketId()) {
+  return Object.keys(INDUSTRY_PACKS).map((id) => getProfileGuideEntry(id, marketId));
 }

@@ -4,6 +4,23 @@
 
 import { todayIsoDate } from "./projectDashboard";
 import { isFessOrg } from "./fessOrg";
+import { getLegislationSeedLabel, getRamsShortLabel } from "./marketLabels";
+import { getCompliancePackContent } from "../config/compliancePackContent";
+import { getNotifiableIncidentsContent } from "../config/notifiableIncidentsContent";
+import { getOrgMarketId } from "./orgMarket";
+import { isModuleAllowedForMarket } from "../config/marketModules";
+
+function isAuMarket() {
+  return getOrgMarketId() === "au";
+}
+
+/** Three-way market copy — AU/PL branches instead of falling through to UK-only text. */
+function marketText(ukText, auText, plText) {
+  const marketId = getOrgMarketId();
+  if (marketId === "au") return auText;
+  if (marketId === "pl") return plText ?? auText ?? ukText;
+  return ukText;
+}
 
 /**
  * @param {string} moduleId
@@ -11,6 +28,8 @@ import { isFessOrg } from "./fessOrg";
  * @returns {Array<{ id: string, tone: 'warn'|'info'|'good', text: string, actionLabel?: string, viewId?: string, action?: string }>}
  */
 export function getRegisterSmartTips(moduleId, ctx = {}) {
+  const marketId = getOrgMarketId();
+  if (!isModuleAllowedForMarket(moduleId, marketId)) return [];
   const items =
     ctx.items ??
     ctx.list ??
@@ -35,6 +54,8 @@ export function getRegisterSmartTips(moduleId, ctx = {}) {
     case "timesheets":
       return timesheetTips(enriched);
     case "cdm":
+    case "whs-plan":
+    case "bhp-plan":
       return cdmTips(enriched);
     case "inspections":
       return inspectionTips(enriched);
@@ -77,6 +98,7 @@ export function getRegisterSmartTips(moduleId, ctx = {}) {
     case "emergency":
       return emergencyTips(enriched);
     case "riddor":
+    case "notifiable-incidents":
       return riddorTips(enriched);
     case "legislation":
       return legislationTips(enriched);
@@ -190,33 +212,40 @@ function timesheetTips({ entries = [], weekKey = "" }) {
 }
 
 function cdmTips({ packs = [] }) {
+  const pack = getCompliancePackContent(getOrgMarketId());
+  const viewId = pack.moduleId;
   if (!packs.length) {
     return [
       {
         id: "cpp",
         tone: "info",
-        text: "Create a CDM pack before work starts — Construction Phase Plan and dutyholder checklist for UK sites.",
-        actionLabel: "New CDM pack",
-        viewId: "cdm",
+        text: marketText(
+          "Create a CDM pack before work starts — Construction Phase Plan and dutyholder checklist for UK sites.",
+          "Create a WHS management plan before work starts — site rules, HRCW coordination and emergency arrangements.",
+          "Utwórz plan BHP przed rozpoczęciem prac — zasady placu budowy i procedury awaryjne."
+        ),
+        actionLabel: pack.newPackLabel.replace("+ ", ""),
+        viewId,
         action: "create",
       },
     ];
   }
+  const checkCount = pack.dutyholderChecks.length;
   const incomplete = packs.filter((p) => {
     const n = Object.values(p.dutyholderChecks || {}).filter(Boolean).length;
-    return n < 10;
+    return n < checkCount;
   });
   if (incomplete.length) {
     return [
       {
         id: "checks",
         tone: "warn",
-        text: `${incomplete.length} CDM pack(s) have an incomplete dutyholder checklist — review before site start.`,
-        viewId: "cdm",
+        text: `${incomplete.length} ${pack.packNoun}(s) have an incomplete dutyholder checklist — review before site start.`,
+        viewId,
       },
     ];
   }
-  return [{ id: "ok", tone: "good", text: "CDM checklist complete on file." }];
+  return [{ id: "ok", tone: "good", text: `${pack.checklistLabel} complete on file.` }];
 }
 
 function inspectionTips({ items = [] }) {
@@ -225,7 +254,11 @@ function inspectionTips({ items = [] }) {
       {
         id: "schedule",
         tone: "info",
-        text: "Schedule LOLER, PUWER or weekly site inspections — overdue items show under Needs attention in More.",
+        text: marketText(
+          "Schedule LOLER, PUWER or weekly site inspections — overdue items show under Needs attention in More.",
+          "Schedule plant pre-starts and WHS inspections — overdue items show under Needs attention in More.",
+          "Zaplanuj przeglądy sprzętu i kontrole BHP — zaległe pozycje zobaczysz w Wymaga uwagi."
+        ),
         viewId: "inspections",
       },
     ];
@@ -236,7 +269,7 @@ function inspectionTips({ items = [] }) {
       {
         id: "overdue",
         tone: "warn",
-        text: `${overdue.length} inspection(s) past due — book thorough examination before equipment goes back on site.`,
+        text: `${overdue.length} inspection(s) past due — book ${marketText("thorough examination", "service or competent person", "przegląd przez osobę uprawnioną")} before equipment goes back on site.`,
         viewId: "inspections",
       },
     ];
@@ -264,7 +297,11 @@ function toolboxTips({ items = [] }) {
       {
         id: "first",
         tone: "info",
-        text: "Log toolbox talks here — topic, date, lead and attendees for HSE evidence.",
+        text: marketText(
+          "Log toolbox talks here — topic, date, lead and attendees for HSE evidence.",
+          "Log toolbox talks here — topic, date, lead and attendees for WHS evidence.",
+          "Rejestruj odprawy tu — temat, data, prowadzący i obecni jako dowód BHP."
+        ),
         viewId: "toolbox-reg",
       },
     ];
@@ -289,20 +326,55 @@ function snagTips({ items = [] }) {
 
 function coshhTips({ items = [] }) {
   if (!items.length) {
-    return [{ id: "start", tone: "info", text: "Add substances used on site — include SDS link, PPE and spill procedure for COSHH 2002 compliance.", actionLabel: "Add substance", viewId: "coshh" }];
+    return [{
+      id: "start",
+      tone: "info",
+      text: marketText(
+        "Add substances used on site — include SDS link, PPE and spill procedure for COSHH 2002 compliance.",
+        "Add hazardous substances used on site — include SDS link, PPE and spill procedure (GHS/WHS).",
+        "Dodaj substancje niebezpieczne używane na budowie — karta charakterystyki, ŚOI i procedura wycieku."
+      ),
+      actionLabel: "Add substance",
+      viewId: "coshh",
+    }];
   }
   const high = items.filter((i) => i.riskLevel === "high").length;
   const noSds = items.filter((i) => !i.sdsUrl?.trim()).length;
   const tips = [];
-  if (high) tips.push({ id: "high", tone: "warn", text: `${high} high-risk substance(s) — verify COSHH assessment and storage segregation on site.` });
+  if (high) {
+    tips.push({
+      id: "high",
+      tone: "warn",
+      text: `${high} high-risk substance(s) — verify ${marketText("COSHH", "WHS", "BHP")} assessment and storage segregation on site.`,
+    });
+  }
   if (noSds) tips.push({ id: "sds", tone: "warn", text: `${noSds} substance(s) missing SDS URL — upload or link safety data sheets.` });
-  if (!tips.length) tips.push({ id: "ok", tone: "good", text: "COSHH register complete — export PDF from header for site audits." });
+  if (!tips.length) {
+    tips.push({
+      id: "ok",
+      tone: "good",
+      text: marketText(
+        "COSHH register complete — export PDF from header for site audits.",
+        "Hazardous substances register complete — export PDF from header for site audits.",
+        "Rejestr substancji niebezpiecznych kompletny — wyeksportuj PDF z nagłówka do audytów."
+      ),
+    });
+  }
   return tips.slice(0, 3);
 }
 
 function fireTips({ items = [] }) {
   if (!items.length) {
-    return [{ id: "start", tone: "info", text: "Log weekly fire extinguisher checks, alarm tests and emergency lighting — HSE expects a written record.", viewId: "fire" }];
+    return [{
+      id: "start",
+      tone: "info",
+      text: marketText(
+        "Log weekly fire extinguisher checks, alarm tests and emergency lighting — HSE expects a written record.",
+        "Log weekly fire extinguisher checks, alarm tests and emergency lighting — keep a written WHS record.",
+        "Rejestruj tygodniowe kontrole gaśnic, testy alarmów i oświetlenia awaryjnego — prowadź pisemny rejestr BHP."
+      ),
+      viewId: "fire",
+    }];
   }
   const bad = items.filter((i) => i.satisfactory === false).length;
   if (bad) return [{ id: "bad", tone: "warn", text: `${bad} check(s) flagged unsatisfactory — raise actions and re-check before next shift.` }];
@@ -311,7 +383,16 @@ function fireTips({ items = [] }) {
 
 function visitorTips({ items = [] }) {
   if (!items.length) {
-    return [{ id: "start", tone: "info", text: "Sign visitors in and out — induction briefed flag supports CDM contractor coordination.", viewId: "visitors" }];
+    return [{
+      id: "start",
+      tone: "info",
+      text: marketText(
+        "Sign visitors in and out — induction briefed flag supports CDM contractor coordination.",
+        "Sign visitors in and out — induction briefed flag supports WHS contractor coordination.",
+        "Rejestruj wejścia i wyjścia gości — flaga instruktażu wspiera koordynację BHP wykonawców."
+      ),
+      viewId: "visitors",
+    }];
   }
   const onSite = items.filter((i) => !i.timeOut && !i.signedOutAt).length;
   if (onSite) return [{ id: "onsite", tone: "info", text: `${onSite} visitor(s) may still be on site — confirm sign-out at end of day.` }];
@@ -324,12 +405,34 @@ function ppeTips({ items = [] }) {
 }
 
 function plantTips({ items = [] }) {
-  if (!items.length) return [{ id: "start", tone: "info", text: "Register plant and equipment with next inspection dates — ties to Inspections module for LOLER/PSSR.", viewId: "plant" }];
+  if (!items.length) {
+    return [{
+      id: "start",
+      tone: "info",
+      text: marketText(
+        "Register plant and equipment with next inspection dates — ties to Inspections module for LOLER/PSSR.",
+        "Register plant and equipment with next inspection dates — ties to Inspections module for WHS plant records.",
+        "Zarejestruj sprzęt i maszyny z terminami przeglądów — powiązane z modułem Inspekcje."
+      ),
+      viewId: "plant",
+    }];
+  }
   return [{ id: "ok", tone: "good", text: "Plant register active — keep asset tags aligned with inspection records." }];
 }
 
 function trainingTips({ items = [] }) {
-  if (!items.length) return [{ id: "start", tone: "info", text: "Track CSCS, IPAF, asbestos awareness and expiry dates — expired certs show under Needs attention.", viewId: "training" }];
+  if (!items.length) {
+    return [{
+      id: "start",
+      tone: "info",
+      text: marketText(
+        "Track CSCS, IPAF, asbestos awareness and expiry dates — expired certs show under Needs attention.",
+        "Track White Card, HRWL, EWPA and expiry dates — expired certs show under Needs attention.",
+        "Śledź uprawnienia i terminy ważności — wygasłe certyfikaty zobaczysz w Wymaga uwagi."
+      ),
+      viewId: "training",
+    }];
+  }
   const expiring = items.filter((i) => {
     const d = i.certExpiry || i.expiryDate;
     if (!d) return false;
@@ -341,7 +444,18 @@ function trainingTips({ items = [] }) {
 }
 
 function firstAidTips({ items = [] }) {
-  if (!items.length) return [{ id: "start", tone: "info", text: "List qualified first aiders and cert expiry — site CPP should name who is on duty.", viewId: "first-aid" }];
+  if (!items.length) {
+    return [{
+      id: "start",
+      tone: "info",
+      text: marketText(
+        "List qualified first aiders and cert expiry — site CPP should name who is on duty.",
+        "List qualified first aiders and cert expiry — site WHS plan should name who is on duty.",
+        "Wypisz uprawnionych ratowników i terminy ważności certyfikatów — plan BHP powinien wskazać dyżurujących."
+      ),
+      viewId: "first-aid",
+    }];
+  }
   return [{ id: "ok", tone: "good", text: "First aider register on file." }];
 }
 
@@ -349,13 +463,21 @@ function incidentTips({ items = [] }) {
   if (!items.length) return [{ id: "start", tone: "info", text: "Report near misses and incidents early — link actions in Incident actions module.", viewId: "incidents" }];
   const open = items.filter((i) => !/closed|resolved/i.test(String(i.status || ""))).length;
   if (open) return [{ id: "open", tone: "warn", text: `${open} open incident(s) — complete investigation and close-out notes.` }];
-  return [{ id: "ok", tone: "good", text: "Incident log reviewed — use RIDDOR wizard if reportable criteria met." }];
+  return [{
+    id: "ok",
+    tone: "good",
+    text: marketText(
+      "Incident log reviewed — use RIDDOR wizard if reportable criteria met.",
+      "Incident log reviewed — confirm notifiable incident criteria with your state regulator.",
+      "Rejestr incydentów sprawdzony — potwierdź kryteria zgłoszenia z PIP jeśli dotyczy."
+    ),
+  }];
 }
 
 function incidentActionTips({ items = [] }) {
   if (!items.length) return [{ id: "start", tone: "info", text: "Assign corrective actions from incidents, inspections or audits with owners and due dates.", viewId: "incident-actions" }];
   const open = items.filter((i) => !/closed|done|complete/i.test(String(i.status || ""))).length;
-  if (open) return [{ id: "open", tone: "warn", text: `${open} action(s) still open — chase owners before client or HSE review.` }];
+  if (open) return [{ id: "open", tone: "warn", text: `${open} action(s) still open — chase owners before client or ${marketText("HSE", "regulator", "PIP")} review.` }];
   return [{ id: "ok", tone: "good", text: "All actions closed." }];
 }
 
@@ -390,7 +512,16 @@ function environmentalTips({ items = [] }) {
 }
 
 function methodStatementTips({ items = [] }) {
-  if (!items.length) return [{ id: "start", tone: "info", text: "Create method statements before high-risk tasks — link to RAMS and project hub.", viewId: "method-statement" }];
+  if (!items.length) {
+    return [{
+      id: "start",
+      tone: "info",
+      text: isAuMarket() || getOrgMarketId() === "pl"
+        ? `Create method statements before high-risk tasks — link to ${getRamsShortLabel(getOrgMarketId())} and project hub.`
+        : "Create method statements before high-risk tasks — link to RAMS and project hub.",
+      viewId: "method-statement",
+    }];
+  }
   const draft = items.filter((i) => /draft/i.test(String(i.status || ""))).length;
   if (draft) return [{ id: "draft", tone: "warn", text: `${draft} method statement(s) still in draft — issue to site team before work starts.` }];
   return [{ id: "ok", tone: "good", text: "Method statements on file." }];
@@ -398,16 +529,37 @@ function methodStatementTips({ items = [] }) {
 
 function emergencyTips({ items = [] }) {
   if (!items.length) return [{ id: "start", tone: "info", text: "Add emergency contacts — site manager, first aider, client, out-of-hours.", viewId: "emergency" }];
-  return [{ id: "ok", tone: "good", text: "Emergency contacts published — display on site boards and CPP." }];
+  return [{
+    id: "ok",
+    tone: "good",
+    text: marketText(
+      "Emergency contacts published — display on site boards and CPP.",
+      "Emergency contacts published — display on site boards and WHS plan.",
+      "Kontakty alarmowe opublikowane — wyświetl na tablicach budowy i w planie BHP."
+    ),
+  }];
 }
 
 function riddorTips({ items = [] }) {
-  if (!items.length) return [{ id: "start", tone: "info", text: "Use RIDDOR wizard when reportable injury, disease or dangerous occurrence criteria met.", viewId: "riddor" }];
-  return [{ id: "ok", tone: "good", text: "RIDDOR assessments on file — keep F2508 deadline tracking current." }];
+  const content = getNotifiableIncidentsContent(getOrgMarketId());
+  if (!items.length) {
+    return [{
+      id: "start",
+      tone: "info",
+      text: marketText(
+        "Use RIDDOR wizard when reportable injury, disease or dangerous occurrence criteria met.",
+        "Use the notifiable incidents wizard when death, serious injury/illness or dangerous incident criteria may apply.",
+        "Użyj kreatora zdarzeń PIP przy wypadku śmiertelnym, ciężkim lub zdarzeniu potencjalnie wypadkowym."
+      ),
+      viewId: content.moduleId,
+    }];
+  }
+  return [{ id: "ok", tone: "good", text: `${content.title} on file — keep notification deadline tracking current.` }];
 }
 
 function legislationTips({ count = 0 }) {
-  if (count === 0) return [{ id: "seed", tone: "info", text: "Load UK HSE + food safety legislation library — one click in the module.", viewId: "legislation", actionLabel: "Open register" }];
+  const seedLabel = getLegislationSeedLabel(getOrgMarketId());
+  if (count === 0) return [{ id: "seed", tone: "info", text: `${seedLabel} — one click in the module.`, viewId: "legislation", actionLabel: "Open register" }];
   return [{ id: "review", tone: "info", text: "Review applicability and next review dates before client or BRC audit." }];
 }
 
@@ -417,8 +569,24 @@ function ghpTips({ count = 0 }) {
 }
 
 function dynamicRaTips({ count = 0 }) {
-  if (count === 0) return [{ id: "start", tone: "info", text: "Use Dynamic RA when site conditions change beyond the written RAMS.", viewId: "dynamic-ra", actionLabel: "New DRA" }];
-  return [{ id: "ok", tone: "good", text: "Field DRAs on file — link to RAMS for audit traceability." }];
+  if (count === 0) {
+    return [{
+      id: "start",
+      tone: "info",
+      text: isAuMarket() || getOrgMarketId() === "pl"
+        ? `Use Dynamic RA when site conditions change beyond the written ${getRamsShortLabel(getOrgMarketId())}.`
+        : "Use Dynamic RA when site conditions change beyond the written RAMS.",
+      viewId: "dynamic-ra",
+      actionLabel: "New DRA",
+    }];
+  }
+  return [{
+    id: "ok",
+    tone: "good",
+    text: isAuMarket() || getOrgMarketId() === "pl"
+      ? `Field DRAs on file — link to ${getRamsShortLabel(getOrgMarketId())} for audit traceability.`
+      : "Field DRAs on file — link to RAMS for audit traceability.",
+  }];
 }
 
 function foodPharmaSetupTips() {
@@ -446,7 +614,17 @@ function fessSitesTips() {
 }
 
 function constructionSetupTips() {
-  return [{ id: "wizard", tone: "info", text: "Complete construction setup — CDM, RAMS, permits, briefing and client portal in one afternoon.", viewId: "construction-setup", actionLabel: "Open wizard" }];
+  return [{
+    id: "wizard",
+    tone: "info",
+    text: marketText(
+      "Complete construction setup — CDM, RAMS, permits, briefing and client portal in one afternoon.",
+      "Complete construction setup — WHS legislation, SWMS, permits, briefing and client portal in one afternoon.",
+      "Uzupełnij konfigurację budowy — BHP, IOR, uprawnienia, odprawa i portal klienta w jedno popołudnie."
+    ),
+    viewId: "construction-setup",
+    actionLabel: "Open wizard",
+  }];
 }
 
 function genericRegisterTips(moduleId, { count = 0, attentionCount = 0 }) {
@@ -455,7 +633,11 @@ function genericRegisterTips(moduleId, { count = 0, attentionCount = 0 }) {
       {
         id: "empty",
         tone: "info",
-        text: "No records yet — tap Quick start on this tile for a pre-built template, or seed empty registers in the HSE spotlight.",
+        text: marketText(
+          "No records yet — tap Quick start on this tile for a pre-built template, or seed empty registers in the HSE spotlight.",
+          "No records yet — tap Quick start on this tile for a pre-built template, or seed empty registers from Construction setup.",
+          "Brak rekordów — użyj Szybki start na tej kafelce lub uzupełnij puste rejestry w Konfiguracji budowy."
+        ),
       },
     ];
   }

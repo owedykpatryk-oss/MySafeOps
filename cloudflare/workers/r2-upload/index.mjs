@@ -1,6 +1,6 @@
 /**
  * POST /upload — multipart form: file (required), key (optional path inside bucket)
- * Header: X-Upload-Token must match secret UPLOAD_TOKEN
+ * Auth: Supabase JWT (preferred when SUPABASE_URL + SUPABASE_ANON_KEY are set) or legacy X-Upload-Token.
  */
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -18,6 +18,88 @@ function timingSafeEqual(expected, received) {
   return out === 0;
 }
 
+// X-Upload-Token ships inside the client bundle (VITE_STORAGE_UPLOAD_TOKEN),
+// so it isn't a true secret once deployed. This isolate-local sliding-window
+// limiter bounds sustained abuse (bad-token brute force and storage-cost
+// abuse with a valid token) as a second layer of defence.
+const rateLimitBuckets = new Map();
+function checkRateLimit(key, max, windowMs) {
+  const now = Date.now();
+  let entry = rateLimitBuckets.get(key);
+  if (!entry || now - entry.start > windowMs) {
+    entry = { start: now, count: 0 };
+    rateLimitBuckets.set(key, entry);
+  }
+  entry.count += 1;
+  if (rateLimitBuckets.size > 5000) {
+    for (const [k, v] of rateLimitBuckets) {
+      if (now - v.start > windowMs) rateLimitBuckets.delete(k);
+    }
+  }
+  return entry.count <= max;
+}
+
+function parseBearer(request) {
+  const raw = String(request.headers.get("Authorization") || "").trim();
+  if (!raw.toLowerCase().startsWith("bearer ")) return "";
+  return raw.slice(7).trim();
+}
+
+async function verifySupabaseJwt(env, token) {
+  const url = String(env.SUPABASE_URL || "").trim().replace(/\/$/, "");
+  const anon = String(env.SUPABASE_ANON_KEY || "").trim();
+  if (!url || !anon || !token) return null;
+  try {
+    const res = await fetch(`${url}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: anon },
+    });
+    if (!res.ok) return null;
+    const user = await res.json();
+    return user?.id ? user : null;
+  } catch {
+    return null;
+  }
+}
+
+function orgSlugFromStorageKey(key) {
+  const m = String(key || "").match(/\/org_([\w-]+)\//);
+  return m?.[1] ? m[1] : null;
+}
+
+async function verifyOrgSlugAccess(env, authHeader, orgSlug) {
+  const url = String(env.SUPABASE_URL || "").trim().replace(/\/$/, "");
+  const anon = String(env.SUPABASE_ANON_KEY || "").trim();
+  if (!url || !anon || !orgSlug || !authHeader) {
+    return { ok: false, error: "Server misconfiguration" };
+  }
+  if (orgSlug === "default") return { ok: true };
+
+  const res = await fetch(`${url}/rest/v1/rpc/user_can_access_org_slug`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: anon,
+      Authorization: authHeader,
+    },
+    body: JSON.stringify({ p_org_slug: orgSlug }),
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, error: "Unauthorized" };
+  }
+  if (!res.ok) {
+    return { ok: false, error: `Supabase error ${res.status}` };
+  }
+
+  const data = await res.json();
+  const allowed = data === true || data === "true";
+  return allowed ? { ok: true } : { ok: false, error: "Forbidden: not a member of this organisation" };
+}
+
+function clientIp(request) {
+  return request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
+}
+
 function json(body, status = 200, extra = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -33,7 +115,7 @@ function corsHeaders(request, env) {
     .filter(Boolean);
   const base = {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Upload-Token",
+    "Access-Control-Allow-Headers": "Content-Type, X-Upload-Token, Authorization",
     "Access-Control-Max-Age": "86400",
   };
   if (allowed.length === 0) {
@@ -93,9 +175,27 @@ export default {
       return json({ error: "Not found" }, 404, c);
     }
 
-    const token = request.headers.get("X-Upload-Token") || "";
-    if (!env.UPLOAD_TOKEN || !timingSafeEqual(env.UPLOAD_TOKEN, token)) {
+    const ip = clientIp(request);
+    if (!checkRateLimit(`auth:${ip}`, 30, 5 * 60_000)) {
+      return json({ error: "Too many requests" }, 429, { ...c, "Retry-After": "60" });
+    }
+
+    const bearer = parseBearer(request);
+    const sessionUser = bearer ? await verifySupabaseJwt(env, bearer) : null;
+    const uploadToken = request.headers.get("X-Upload-Token") || "";
+    const tokenOk = Boolean(env.UPLOAD_TOKEN && timingSafeEqual(env.UPLOAD_TOKEN, uploadToken));
+    const hasSupabaseAuth = Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY);
+
+    if (hasSupabaseAuth) {
+      if (!sessionUser) {
+        return json({ error: "Unauthorized — sign in required" }, 401, c);
+      }
+    } else if (!tokenOk) {
       return json({ error: "Unauthorized" }, 401, c);
+    }
+
+    if (!checkRateLimit(`upload:${ip}`, 15, 60_000)) {
+      return json({ error: "Too many requests" }, 429, { ...c, "Retry-After": "60" });
     }
 
     let form;
@@ -121,6 +221,17 @@ export default {
     key = key.replace(/^\/+/, "").slice(0, 900);
     if (!KEY_RE.test(key) || key.includes("..") || !ORG_KEY_RE.test(key)) {
       return json({ error: "Invalid key" }, 400, c);
+    }
+
+    const orgSlug = orgSlugFromStorageKey(key);
+    if (orgSlug) {
+      if (!sessionUser || !bearer) {
+        return json({ error: "Unauthorized — org uploads require sign-in" }, 401, c);
+      }
+      const access = await verifyOrgSlugAccess(env, `Bearer ${bearer}`, orgSlug);
+      if (!access.ok) {
+        return json({ error: access.error || "Forbidden" }, 403, c);
+      }
     }
 
     await env.BUCKET.put(key, file.stream(), {

@@ -1,117 +1,142 @@
 /**
- * Construction "Setup in an afternoon" onboarding — CDM, RAMS, PTW, briefing, client portal.
+ * Construction "Setup in an afternoon" onboarding — CDM/WHS, RAMS/SWMS, PTW, briefing, client portal.
  */
 import { loadOrgScoped as load, saveOrgScoped as save } from "./orgStorage";
 import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 import { applyIndustryPack } from "./orgIndustryPacks";
 import ALL from "../modules/rams/ramsAllHazards.js";
 import { ensureBuiltInConstructionPacks } from "../modules/rams/constructionQuickPacks.js";
-import { seedLegislationRegister } from "./ukLegislationLibrary";
+import { seedLegislationRegisterForMarket } from "./legislationLibrary";
 import { loadPublishedPortalTokens } from "./clientPortalPublished";
 import { loadRamsHazardPacks, saveRamsHazardPacks } from "./ramsHazardPacksStorage";
+import { getOrgMarketId } from "./orgMarket";
+import { getAppUiCopy } from "../data/appUiCopy";
+import { getCompliancePackContent } from "../config/compliancePackContent";
+import {
+  getCdmStepHint,
+  getCdmStepLabel,
+  getEmergencyServicesLabel,
+  getFirstRamsStepHint,
+  getFirstRamsStepLabel,
+  getHazardPacksStepLabel,
+  getLegislationSeedHint,
+  getLegislationSeedLabel,
+  getPermitStepLabel,
+  getPermitStepHint,
+  getBriefingStepLabel,
+  getBriefingStepHint,
+} from "./marketLabels";
 
 const PROGRESS_KEY = "construction_onboarding_progress";
 const LEGISLATION_KEY = "legislation_register";
 
 /** @typedef {{ id: string, label: string, hint: string, viewId?: string, autoCheck?: () => boolean }} SetupStep */
 
-/** @type {SetupStep[]} */
-export const CONSTRUCTION_SETUP_STEPS = [
-  {
-    id: "workspace_profile",
-    label: "Apply General contractor workspace profile",
-    hint: "Shows daily briefing, inspections, snags and hides food/pharma modules.",
-    autoCheck: () => {
-      const id = loadOrgSettingsRaw().industryPackId;
-      return id === "generalContractor" || id === "buildingTrades";
+/** @param {import("../config/markets").MarketId} [marketId] */
+export function buildConstructionSetupSteps(marketId = getOrgMarketId()) {
+  const edLabel = getEmergencyServicesLabel(marketId);
+  const ui = getAppUiCopy(marketId);
+  const steps = ui.constructionSteps;
+  return [
+    {
+      id: "workspace_profile",
+      label: steps.workspaceProfile || "Apply General contractor workspace profile",
+      hint: steps.workspaceProfileHint || "Shows daily briefing, inspections, snags and hides food/pharma modules.",
+      autoCheck: () => {
+        const id = loadOrgSettingsRaw().industryPackId;
+        return id === "generalContractor" || id === "buildingTrades";
+      },
     },
-  },
-  {
-    id: "hazard_packs",
-    label: "Seed construction RAMS quick packs",
-    hint: "Hot works, height, excavation, electrical — ready in RAMS Builder.",
-    viewId: "rams",
-    autoCheck: () => {
-      const packs = loadRamsHazardPacks([]);
-      return packs.some((p) => String(p.id || "").startsWith("builtin_"));
+    {
+      id: "hazard_packs",
+      label: getHazardPacksStepLabel(marketId),
+      hint: steps.hazardPacksHint || "Hot works, height, excavation, electrical — ready in RAMS Builder.",
+      viewId: "rams",
+      autoCheck: () => {
+        const packs = loadRamsHazardPacks([]);
+        return packs.some((p) => String(p.id || "").startsWith("builtin_"));
+      },
     },
-  },
-  {
-    id: "legislation",
-    label: "Load UK legislation register",
-    hint: "CDM 2015, HASAWA, PUWER, COSHH — review applicability.",
-    viewId: "legislation",
-    autoCheck: () => load(LEGISLATION_KEY, []).length >= 10,
-  },
-  {
-    id: "first_project",
-    label: "First project with nearest A&E",
-    hint: "Enrich site on project — blocks RAMS issue without hospital details.",
-    viewId: "projects",
-    autoCheck: () => {
-      const projects = load("mysafeops_projects", []);
-      return projects.some((p) => String(p.nearestHospital || "").trim().length > 2);
+    {
+      id: "legislation",
+      label: getLegislationSeedLabel(marketId),
+      hint: getLegislationSeedHint(marketId),
+      viewId: "legislation",
+      autoCheck: () => load(LEGISLATION_KEY, []).length >= 10,
     },
-  },
-  {
-    id: "cdm_pack",
-    label: "CDM compliance pack started",
-    hint: "CDM module → create CPP / pre-construction pack for your project.",
-    viewId: "cdm",
-    autoCheck: () => load("cdm_packs", []).length > 0,
-  },
-  {
-    id: "first_rams",
-    label: "First site RAMS issued",
-    hint: "RAMS Builder → apply construction quick pack and issue to site.",
-    viewId: "rams",
-    autoCheck: () => {
-      const docs = load("rams_builder_docs", []);
-      return docs.some((d) => d.status === "issued" || d.status === "approved" || d.signed);
+    {
+      id: "first_project",
+      label: typeof steps.firstProject === "function" ? steps.firstProject(edLabel) : `First project with ${edLabel}`,
+      hint: steps.firstProjectHint || `Enrich site on project — blocks RAMS/SWMS issue without emergency hospital details.`,
+      viewId: "projects",
+      autoCheck: () => {
+        const projects = load("mysafeops_projects", []);
+        return projects.some((p) => String(p.nearestHospital || "").trim().length > 2);
+      },
     },
-  },
-  {
-    id: "daily_briefing",
-    label: "Daily briefing recorded",
-    hint: "Capture weather, scope and signed attendance before work starts.",
-    viewId: "daily-briefing",
-    autoCheck: () => load("daily_briefings", []).length > 0,
-  },
-  {
-    id: "first_permit",
-    label: "First permit to work issued",
-    hint: "Permits → hot work, height or excavation — link to project RAMS.",
-    viewId: "permits",
-    autoCheck: () => {
-      const permits = load("permits_v2", []);
-      return permits.some((p) => p.status === "active" || p.status === "issued");
+    {
+      id: "cdm_pack",
+      label: getCdmStepLabel(marketId),
+      hint: getCdmStepHint(marketId),
+      viewId: getCompliancePackContent(marketId).moduleId,
+      autoCheck: () => load("cdm_packs", []).length > 0,
     },
-  },
-  {
-    id: "client_portal",
-    label: "Client portal published",
-    hint: "Share read-only compliance view — publish cloud for any device.",
-    viewId: "client-portal",
-    autoCheck: () => loadPublishedPortalTokens().size > 0 || load("client_portals", []).length > 0,
-  },
-  {
-    id: "inspections",
-    label: "Equipment inspection register started",
-    hint: "LOLER, scaffold or plant pre-use checks on site.",
-    viewId: "inspections",
-    autoCheck: () => load("inspection_records", []).length > 0,
-  },
-];
+    {
+      id: "first_rams",
+      label: getFirstRamsStepLabel(marketId),
+      hint: getFirstRamsStepHint(marketId),
+      viewId: "rams",
+      autoCheck: () => {
+        const docs = load("rams_builder_docs", []);
+        return docs.some((d) => d.status === "issued" || d.status === "approved" || d.signed);
+      },
+    },
+    {
+      id: "daily_briefing",
+      label: getBriefingStepLabel(marketId),
+      hint: getBriefingStepHint(marketId),
+      viewId: "daily-briefing",
+      autoCheck: () => load("daily_briefings", []).length > 0,
+    },
+    {
+      id: "first_permit",
+      label: getPermitStepLabel(marketId),
+      hint: getPermitStepHint(marketId),
+      viewId: "permits",
+      autoCheck: () => {
+        const permits = load("permits_v2", []);
+        return permits.some((p) => p.status === "active" || p.status === "issued");
+      },
+    },
+    {
+      id: "client_portal",
+      label: steps.clientPortal || "Client portal published",
+      hint: steps.clientPortalHint || "Share read-only compliance view — publish cloud for any device.",
+      viewId: "client-portal",
+      autoCheck: () => loadPublishedPortalTokens().size > 0 || load("client_portals", []).length > 0,
+    },
+    {
+      id: "inspections",
+      label: steps.inspections || "Equipment inspection register started",
+      hint: marketId === "pl" ? "UDT, rusztowania lub kontrole przed użyciem na budowie." : marketId === "au" ? "Plant, scaffold or pre-use checks on site." : "LOLER, scaffold or plant pre-use checks on site.",
+      viewId: "inspections",
+      autoCheck: () => load("inspection_records", []).length > 0,
+    },
+  ];
+}
+
+/** @deprecated use buildConstructionSetupSteps() */
+export const CONSTRUCTION_SETUP_STEPS = buildConstructionSetupSteps("uk");
 
 function loadProgress() {
   const raw = load(PROGRESS_KEY, {});
   return typeof raw === "object" && raw ? raw : {};
 }
 
-/** @returns {{ steps: Array<SetupStep & { done: boolean, manual: boolean }>, pct: number, complete: number, total: number }} */
-export function getConstructionSetupStatus() {
+/** @param {import("../config/markets").MarketId} [marketId] */
+export function getConstructionSetupStatus(marketId = getOrgMarketId()) {
   const manual = loadProgress();
-  const steps = CONSTRUCTION_SETUP_STEPS.map((step) => {
+  const steps = buildConstructionSetupSteps(marketId).map((step) => {
     const autoDone = step.autoCheck ? step.autoCheck() : false;
     const manualDone = !!manual[step.id];
     return { ...step, done: autoDone || manualDone, manual: manualDone && !autoDone };
@@ -129,28 +154,31 @@ export function markConstructionStepDone(stepId) {
 
 /** One-click actions for setup steps */
 export function runConstructionSetupAction(stepId) {
+  const marketId = getOrgMarketId();
+  const actions = getAppUiCopy(marketId).constructionActions;
   switch (stepId) {
     case "workspace_profile":
       applyIndustryPack("generalContractor", { seedTemplates: true });
       markConstructionStepDone(stepId);
-      return { ok: true, message: "General contractor profile applied with register seeds." };
+      return { ok: true, message: actions.workspaceProfile || "General contractor profile applied with register seeds." };
     case "hazard_packs": {
       const existing = loadRamsHazardPacks([]);
-      const merged = ensureBuiltInConstructionPacks(existing, ALL);
+      const merged = ensureBuiltInConstructionPacks(existing, ALL, marketId);
       saveRamsHazardPacks(merged);
       markConstructionStepDone(stepId);
-      return { ok: true, message: `Construction quick packs ready (${merged.length} total).` };
+      const msg = typeof actions.hazardPacks === "function" ? actions.hazardPacks(merged.length) : `Construction quick packs ready (${merged.length} total).`;
+      return { ok: true, message: msg };
     }
     case "legislation": {
       const existing = load(LEGISLATION_KEY, []);
       if (existing.length === 0) {
-        save(LEGISLATION_KEY, seedLegislationRegister());
+        save(LEGISLATION_KEY, seedLegislationRegisterForMarket(marketId));
       }
       markConstructionStepDone(stepId);
-      return { ok: true, message: "Legislation register seeded." };
+      return { ok: true, message: actions.legislation || "Legislation register seeded." };
     }
     default:
-      return { ok: false, message: "Open the linked module to complete this step." };
+      return { ok: false, message: actions.default || "Open the linked module to complete this step." };
   }
 }
 

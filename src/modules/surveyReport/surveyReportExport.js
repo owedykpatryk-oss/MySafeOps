@@ -65,31 +65,38 @@ export async function downloadSurveyReportCadPack(report, allGeoPhotos = []) {
 }
 
 /**
- * Download HTML + optional GeoJSON + PDF in sequence.
+ * Download client handover ZIP (PDF + HTML + CSV + README).
+ * Falls back to sequential downloads if ZIP build fails.
  */
 export async function downloadSurveyReportPack(report, extras = {}, geoPhotos = [], opts = {}) {
   const onProgress = opts.onProgress || (() => {});
-  onProgress("HTML…");
-  downloadSurveyReportHtml(report, extras);
+  try {
+    onProgress("Handover ZIP…");
+    const { downloadSurveyHandoverZip } = await import("./surveyHandoverPack");
+    return downloadSurveyHandoverZip(report, extras, geoPhotos, opts);
+  } catch (e) {
+    onProgress("Fallback export…");
+    downloadSurveyReportHtml(report, extras);
 
-  if (opts.includeGeoJson !== false && report.projectId) {
-    try {
-      onProgress("GeoJSON…");
-      downloadSurveyReportGeoJson(report, geoPhotos);
-    } catch {
-      /* optional */
+    if (opts.includeGeoJson !== false && report.projectId) {
+      try {
+        onProgress("GeoJSON…");
+        downloadSurveyReportGeoJson(report, geoPhotos);
+      } catch {
+        /* optional */
+      }
     }
-  }
 
-  if (opts.includeKmz !== false && report.projectId) {
-    try {
-      onProgress("KMZ…");
-      await downloadSurveyReportKmz(report, geoPhotos);
-    } catch {
-      /* optional */
+    if (opts.includeKmz !== false && report.projectId) {
+      try {
+        onProgress("KMZ…");
+        await downloadSurveyReportKmz(report, geoPhotos);
+      } catch {
+        /* optional */
+      }
     }
-  }
 
-  onProgress("PDF…");
-  return downloadSurveyReportPdf(report, extras, { onProgress: (p) => onProgress(`PDF: ${p}`) });
+    onProgress("PDF…");
+    return downloadSurveyReportPdf(report, extras, { onProgress: (p) => onProgress(`PDF: ${p}`) });
+  }
 }

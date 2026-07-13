@@ -9,20 +9,30 @@ import LandingTopSection from "../components/landing/LandingTopSection";
 import LandingContentSections from "../components/landing/LandingContentSections";
 import LandingFooter from "../components/landing/LandingFooter";
 import LandingMobileChrome from "../components/landing/LandingMobileChrome";
-import { BILLING_PLANS } from "../lib/billingPlans";
 import { useLandingHomeDocumentMeta } from "../utils/landingPageMeta";
+import { getMarket, getAlternateMarkets, resolveMarketId } from "../config/markets";
+import { getLandingMarketContent, getLandingNavLinks } from "../data/landingMarketContent";
+import { setStoredMarketId } from "../utils/marketPref";
 
 const SUPPORT_EMAIL = getSupportEmail();
-const LANDING_TITLE = "MySafeOps — RAMS, permits & site safety for UK construction & surveying";
-const LANDING_DESCRIPTION =
-  "RAMS quick packs, permits to work, PAS128 survey workflows, geo evidence and 40+ registers — browser-first for UK construction, utilities and surveying teams. Flat organisation pricing. 14-day full evaluation.";
 
-export default function LandingPage() {
+/**
+ * @param {{ marketId?: import("../config/markets").MarketId }} props
+ */
+export default function LandingPage({ marketId = "uk" }) {
+  const market = getMarket(marketId);
+  const copy = getLandingMarketContent(market.id);
+  const navUi = getLandingNavLinks(market.id);
+
   const cloud = isSupabaseConfigured();
   const { user, ready } = useSupabaseAuth();
   const [navScrolled, setNavScrolled] = useState(false);
   const [featureForm, setFeatureForm] = useState({ email: "", name: "", desc: "" });
   const [ctaEmail, setCtaEmail] = useState("");
+
+  useEffect(() => {
+    setStoredMarketId(market.id);
+  }, [market.id]);
 
   useEffect(() => {
     const onScroll = () => setNavScrolled(window.scrollY > 50);
@@ -72,7 +82,6 @@ export default function LandingPage() {
           if (e.isIntersecting) e.target.classList.add("vi");
         });
       },
-      // threshold 0: reveal as soon as any pixel is visible; rootMargin nudges “near viewport” items
       { threshold: 0, rootMargin: "0px 0px 15% 0px" }
     );
 
@@ -85,7 +94,6 @@ export default function LandingPage() {
       }
     };
 
-    /** One-shot fallback if IO fires late on first paint (keeps .fu from staying opacity:0). */
     const revealInViewport = () => {
       const vh = window.innerHeight || document.documentElement.clientHeight;
       root.querySelectorAll(".fu:not(.vi)").forEach((el) => {
@@ -102,8 +110,6 @@ export default function LandingPage() {
     const t1 = window.setTimeout(revealInViewport, 120);
     const t2 = window.setTimeout(revealInViewport, 450);
 
-    // Lazy-loaded sections append new `.fu` nodes after first paint.
-    // Observe those nodes too so they don't stay invisible.
     const mutationObs = new MutationObserver((mutations) => {
       mutations.forEach((m) => {
         m.addedNodes.forEach((node) => {
@@ -121,15 +127,24 @@ export default function LandingPage() {
     };
   }, []);
 
+  const alternateLocales = useMemo(() => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    return getAlternateMarkets(market.id).map((alt) => ({
+      hreflang: alt.locale,
+      href: `${origin}${alt.homePath}`,
+    }));
+  }, [market.id]);
+
   const landingJsonLd = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const siteId = `${origin}/#website`;
+    const siteId = `${origin}${market.homePath}#website`;
     const orgId = `${origin}/#org`;
-    const appId = `${origin}/#software`;
+    const appId = `${origin}${market.homePath}#software`;
     const paidPlanIds = ["starter", "team", "business", "enterprise"];
-    const highGbp = Math.max(
+    const highPrice = Math.max(
       ...paidPlanIds.map((id) => {
-        const digits = String(BILLING_PLANS[id]?.priceLabel || "").replace(/\D/g, "");
+        const priceStr = copy.pricing[id]?.price || "";
+        const digits = String(priceStr).replace(/\D/g, "");
         const n = parseInt(digits, 10);
         return Number.isFinite(n) ? n : 0;
       })
@@ -141,9 +156,9 @@ export default function LandingPage() {
           "@type": "WebSite",
           "@id": siteId,
           name: "MySafeOps",
-          url: `${origin}/`,
-          inLanguage: "en-GB",
-          description: LANDING_DESCRIPTION,
+          url: `${origin}${market.homePath}`,
+          inLanguage: market.locale,
+          description: copy.description,
           publisher: { "@id": orgId },
         },
         {
@@ -160,24 +175,24 @@ export default function LandingPage() {
           applicationCategory: "BusinessApplication",
           applicationSubCategory: "Construction safety software",
           operatingSystem: "Web browser",
-          description: LANDING_DESCRIPTION,
-          inLanguage: "en-GB",
-          url: `${origin}/`,
+          description: copy.description,
+          inLanguage: market.locale,
+          url: `${origin}${market.homePath}`,
           isAccessibleForFree: true,
           offers: {
             "@type": "AggregateOffer",
-            priceCurrency: "GBP",
+            priceCurrency: market.currency,
             lowPrice: "0",
-            highPrice: String(highGbp),
+            highPrice: String(highPrice),
             offerCount: String(paidPlanIds.length + 1),
             availability: "https://schema.org/InStock",
-            url: `${origin}/#pricing`,
+            url: `${origin}${market.homePath}#pricing`,
           },
           publisher: { "@id": orgId },
         },
       ],
     };
-  }, []);
+  }, [market, copy]);
 
   const ogImageAbsoluteUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -185,10 +200,15 @@ export default function LandingPage() {
   }, []);
 
   useLandingHomeDocumentMeta({
-    title: LANDING_TITLE,
-    description: LANDING_DESCRIPTION,
+    title: copy.title,
+    description: copy.description,
     jsonLd: landingJsonLd,
     ogImageAbsoluteUrl: ogImageAbsoluteUrl || undefined,
+    canonicalPath: market.homePath,
+    locale: market.locale,
+    ogLocale: market.ogLocale,
+    ogImageAlt: copy.title,
+    alternateLocales,
   });
 
   const submitFeature = () => {
@@ -199,32 +219,33 @@ export default function LandingPage() {
       window.alert("Please enter your email and describe the feature you need.");
       return;
     }
-    const subject = encodeURIComponent("MySafeOps feature request");
-    const body = encodeURIComponent(`Name / company: ${name || "(not provided)"}\nEmail: ${email}\n\n${desc}`);
+    const subject = encodeURIComponent(`MySafeOps feature request (${market.label})`);
+    const body = encodeURIComponent(`Name / company: ${name || "(not provided)"}\nEmail: ${email}\nMarket: ${market.label}\n\n${desc}`);
     window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
   };
 
   const ctaGo = () => {
-    const q = ctaEmail.trim() ? `?email=${encodeURIComponent(ctaEmail.trim())}` : "";
-    window.location.assign(`/login${q}`);
+    const params = new URLSearchParams();
+    if (ctaEmail.trim()) params.set("email", ctaEmail.trim());
+    if (market.id !== "uk") params.set("market", market.id);
+    const q = params.toString();
+    window.location.assign(`/login${q ? `?${q}` : ""}`);
   };
-
-  // Do not block the marketing page on Supabase session bootstrap. Previously we showed a
-  // full-page spinner until `ready`, but the fade-up observer effect ([]) ran once with no
-  // `.landing-page` in the DOM and never re-ran — leaving `.fu` sections at opacity:0 until refresh.
 
   if (cloud && ready && user) {
     return <Navigate to="/app?view=dashboard" replace />;
   }
 
   return (
-    <div className="landing-page">
+    <div className={`landing-page landing-page--${market.id}`}>
       <a href="#landing-main" className="landing-skip-link">
-        Skip to main content
+        {navUi.skipToMain}
       </a>
       <main id="landing-main" tabIndex={-1}>
-        <LandingTopSection navScrolled={navScrolled} cloud={cloud} />
+        <LandingTopSection navScrolled={navScrolled} cloud={cloud} market={market} copy={copy} />
         <LandingContentSections
+          market={market}
+          copy={copy}
           supportEmail={SUPPORT_EMAIL}
           featureForm={featureForm}
           onChangeFeature={(k, v) => setFeatureForm((f) => ({ ...f, [k]: v }))}
@@ -233,9 +254,19 @@ export default function LandingPage() {
           onCtaEmailChange={setCtaEmail}
           onCtaGo={ctaGo}
         />
-        <LandingFooter supportEmail={SUPPORT_EMAIL} />
+        <LandingFooter supportEmail={SUPPORT_EMAIL} market={market} copy={copy} />
       </main>
-      <LandingMobileChrome />
+      <LandingMobileChrome marketId={market.id} loginTo={market.loginPath} />
     </div>
   );
+}
+
+/** @param {{ marketId?: import("../config/markets").MarketId }} props */
+export function AuLandingPage(props) {
+  return <LandingPage marketId={resolveMarketId(props.marketId ?? "au")} />;
+}
+
+/** @param {{ marketId?: import("../config/markets").MarketId }} props */
+export function PlLandingPage(props) {
+  return <LandingPage marketId={resolveMarketId(props.marketId ?? "pl")} />;
 }

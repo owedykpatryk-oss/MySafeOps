@@ -1,72 +1,28 @@
-import { useEffect, useRef, useState } from "react";
-
-const SCREENS = [
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    icon: "📊",
-    kpis: [
-      { v: "12", l: "RAMS", c: "#f97316" },
-      { v: "8", l: "Permits", c: "#a78bfa" },
-      { v: "2", l: "Incidents", c: "#ef4444" },
-      { v: "24", l: "Workers", c: "#06b6d4" },
-    ],
-    cards: [
-      { t: "⚠️ RAMS — Welding/Hot Works", s: "RAMS-003 · Zone B · Approved ✅", p: 95, c: "#f97316" },
-      { t: "🏗️ Height PTW — Roof Access", s: "PTW-007 · 6h remaining", p: 70, c: "#3b82f6" },
-      { t: "🚨 Near Miss Reported", s: "INC-004 · Pending review", p: 40, c: "#ef4444" },
-    ],
-  },
-  {
-    id: "survey",
-    label: "PAS128 Survey",
-    icon: "📐",
-    kpis: [
-      { v: "PAS128", l: "Standard", c: "#2dd4bf" },
-      { v: "4", l: "Utilities", c: "#818cf8" },
-      { v: "98%", l: "Complete", c: "#22c55e" },
-      { v: "12", l: "Geo photos", c: "#38bdf8" },
-    ],
-    cards: [
-      { t: "🗺️ Utility mapping — Zone A", s: "M4 · Gas · Confirmed · QL-B", p: 88, c: "#2dd4bf" },
-      { t: "📸 Geo evidence — chamber 14", s: "GPS locked · bearing 247°", p: 100, c: "#38bdf8" },
-      { t: "📋 Survey report draft", s: "AS5488 deliverable · 3 gaps", p: 62, c: "#a78bfa" },
-    ],
-  },
-  {
-    id: "ptw",
-    label: "Permits live",
-    icon: "🔥",
-    kpis: [
-      { v: "5", l: "Live", c: "#22c55e" },
-      { v: "2", l: "Expiring", c: "#eab308" },
-      { v: "1", l: "Overdue", c: "#ef4444" },
-      { v: "3", l: "SIMOPS", c: "#f97316" },
-    ],
-    cards: [
-      { t: "🔥 Hot work — Fabrication bay", s: "Fire watch · 2h 14m left", p: 55, c: "#f97316" },
-      { t: "⚡ Electrical isolation", s: "LOTO verified · Issuer signed", p: 90, c: "#eab308" },
-      { t: "⛑️ Confined space entry", s: "Gas test OK · Rescue plan linked", p: 75, c: "#3b82f6" },
-    ],
-  },
-];
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getHeroMockupScreens } from "../../data/landingSectionsCopy";
 
 const ROTATE_MS = 4500;
 
-export default function LandingHeroMockup() {
+/** @param {{ marketId?: import("../../config/markets").MarketId }} props */
+export default function LandingHeroMockup({ marketId = "uk" }) {
+  const screens = useMemo(() => getHeroMockupScreens(marketId), [marketId]);
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const touchStartX = useRef(null);
 
   useEffect(() => {
+    setActive(0);
+  }, [marketId]);
+
+  useEffect(() => {
     if (paused) return undefined;
     const id = window.setInterval(() => {
-      setActive((i) => (i + 1) % SCREENS.length);
+      setActive((i) => (i + 1) % screens.length);
     }, ROTATE_MS);
     return () => window.clearInterval(id);
-  }, [paused]);
+  }, [paused, screens.length]);
 
-  const screen = SCREENS[active];
+  const screen = screens[active] ?? screens[0];
 
   return (
     <div
@@ -83,7 +39,7 @@ export default function LandingHeroMockup() {
         if (start == null) return;
         const dx = (e.changedTouches[0]?.clientX ?? start) - start;
         if (Math.abs(dx) >= 48) {
-          setActive((i) => (dx < 0 ? (i + 1) % SCREENS.length : (i + SCREENS.length - 1) % SCREENS.length));
+          setActive((i) => (dx < 0 ? (i + 1) % screens.length : (i + screens.length - 1) % screens.length));
         }
         setPaused(false);
       }}
@@ -127,7 +83,7 @@ export default function LandingHeroMockup() {
               </div>
             </div>
             <div className="pn">
-              {["📊 Home", "📄 Docs", "👷 Workers", "🔧 Equip", "⚙️ More"].map((item, i) => (
+              {screen.nav.map((item, i) => (
                 <div key={item} style={{ color: i === 0 ? "#f97316" : undefined }}>
                   <span>{item.split(" ")[0]}</span>
                   {item.split(" ").slice(1).join(" ")}
@@ -138,7 +94,7 @@ export default function LandingHeroMockup() {
         </div>
       </div>
       <div className="landing-hero-mockup__tabs landing-scroll-row" role="tablist" aria-label="Preview screens">
-        {SCREENS.map((s, i) => (
+        {screens.map((s, i) => (
           <button
             key={s.id}
             type="button"

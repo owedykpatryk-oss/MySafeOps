@@ -30,7 +30,7 @@ describe("projectPlaybooks", () => {
     const rams = createRamsDraftFromPlaybook(project, pb);
     expect(rams.projectId).toBe("proj_1");
     expect(rams.surveyWorkType).toBe("utility_mapping_survey");
-    expect(rams.surveyDeliverables).toMatch(/PAS128/i);
+    expect(rams.surveyDeliverables).toMatch(/PAS ?128/i);
     expect(rams.documentNo).toMatch(/^RAMS-/);
   });
 
@@ -46,6 +46,7 @@ describe("projectPlaybooks", () => {
     const result = applyProjectPlaybook(project, pb.id, {
       rams: [],
       surveys: [],
+      gprReports: [],
       permits: [],
       methodStatements: [],
     });
@@ -53,7 +54,9 @@ describe("projectPlaybooks", () => {
     expect(result.created.rams).toHaveLength(1);
     expect(result.created.surveys).toHaveLength(1);
     expect(result.created.surveys[0].surveyType).toBe("utility_mapping_survey");
-    expect(result.created.surveys[0].pas128Ql).toBe("QLB");
+    expect(result.created.surveys[0].pas128Ql).toBe("B1");
+    expect(result.created.gprReports).toHaveLength(1);
+    expect(result.created.gprReports[0].ref).toMatch(/^GPR-/);
     expect(result.created.permits.length).toBeGreaterThan(0);
     expect(result.created.methodStatements).toHaveLength(1);
     expect(result.project.playbookId).toBe("utility_mapping");

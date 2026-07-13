@@ -7,6 +7,7 @@ import {
   buildLimitationsFromKeys,
   buildPas128SummaryStats,
   buildQaChecklistNarrative,
+  buildStandardsCitedNarrative,
   buildSurveyProgrammeNarrative,
   buildUtilityRecordsNarrative,
   buildWeatherNarrative,
@@ -20,9 +21,32 @@ import {
 } from "./surveyReportHelpers";
 import {
   PAS128_QUALITY_LEVELS,
-  QA_CHECKLIST_ITEMS,
-  GI_QA_CHECKLIST_ITEMS,
+  DBYD_ENQUIRY_PROVIDERS,
+  DBYD_ENQUIRY_STATUS,
+  SURVEY_PHOTO_CATEGORIES,
+  surveyPhotoCategoryLabel,
+  UNDERTAKER_CATEGORIES,
+  UNDERTAKER_RESPONSE_STATUS,
 } from "./surveyReportConstants";
+import {
+  buildPas128LimitationsHtml,
+  buildPas128WorkflowNarrative,
+  includesPas128MethodLimitations,
+  pas128MethodAppliesToSurveyType,
+  pas128MethodLabel,
+} from "./pas128MethodPresets";
+import { buildPas128QlBarsHtml, buildPas128WorkflowSvg } from "./pas128WorkflowDiagram";
+import { getSurveyReportDisclaimer } from "./pas128ReportBoilerplate";
+import { isUtilitySurveyType, pas128QlToleranceHtmlTable } from "../../utils/surveyContentCatalog";
+import { getQaChecklistGroupsForSurveyType } from "./surveyQaPack";
+import {
+  MSCC_PIPE_GRADES,
+  UAV_WIND_BANDS,
+  LASER_REGISTRATION_STATUS,
+  ACM_SAMPLE_RESULTS,
+  ACM_RECOMMENDATIONS,
+  ACM_MATERIAL_RISK_SCORE,
+} from "./surveySpecialistFindings";
 import { geoPhotoPreset, GEO_PHOTO_GROUP_ORDER } from "../../utils/geoPhotoPresets";
 import { geoPhotosStaticMapUrl, geoPhotosStaticMapCaption } from "../../utils/geoPhotoIntegrations";
 import { formatLengthM } from "../../utils/surveyDxfAnalyzer";
@@ -112,15 +136,34 @@ function staticSiteMapUrl(lat, lng) {
   return `https://staticmap.openstreetmap.de/staticmap.php?center=${la},${lo}&zoom=15&size=520x220&markers=${la},${lo},red-pushpin`;
 }
 
-function pas128SummaryBlock(report) {
+function pas128SummaryBlock(report, primary = "#0d9488") {
   const stats = buildPas128SummaryStats(report);
   if (!stats) return "";
-  const qlRows = Object.entries(stats.byQl).map(([ql, n]) => [pas128Short(ql), String(n)]);
+  const qlBars = buildPas128QlBarsHtml(stats.byQl, { total: stats.total });
   return `<div class="sr-pas128-summary">
-    <div class="sr-pas128-stat"><span class="sr-pas128-num">${stats.total}</span><span>utilities logged</span></div>
-    <div class="sr-pas128-stat"><span class="sr-pas128-num">${stats.withDepth}</span><span>with depth</span></div>
-    <div class="sr-pas128-stat"><span class="sr-pas128-num">${stats.withGeoPhoto}</span><span>photo linked</span></div>
-    ${qlRows.length ? dataTable(["PAS128 QL", "Count"], qlRows) : ""}
+    <div class="sr-pas128-summary-head">
+      <div class="sr-pas128-stat"><span class="sr-pas128-num">${stats.total}</span><span>utilities logged</span></div>
+      <div class="sr-pas128-stat"><span class="sr-pas128-num">${stats.withDepth}</span><span>with depth</span></div>
+      <div class="sr-pas128-stat"><span class="sr-pas128-num">${stats.withGeoPhoto}</span><span>photo linked</span></div>
+    </div>
+    ${qlBars ? `<div class="sr-pas128-ql-wrap"><div class="sr-pas128-ql-title">Quality level mix</div>${qlBars}</div>` : ""}
+  </div>`;
+}
+
+function undertakerCoverStrip(report) {
+  const rows = report?.undertakerResponses || [];
+  if (!rows.length) return "";
+  const summary = { affected: 0, not_affected: 0, no_response: 0 };
+  rows.forEach((r) => {
+    if (summary[r.status] != null) summary[r.status] += 1;
+  });
+  return `<div class="sr-undertaker-cover">
+    <div class="sr-undertaker-cover__title">Desktop search — undertaker responses</div>
+    <div class="sr-undertaker-cover__stats">
+      <span class="sr-undertaker-pill sr-undertaker-pill--affected">Affected ${summary.affected}</span>
+      <span class="sr-undertaker-pill sr-undertaker-pill--clear">Not affected ${summary.not_affected}</span>
+      <span class="sr-undertaker-pill sr-undertaker-pill--pending">No response ${summary.no_response}</span>
+    </div>
   </div>`;
 }
 
@@ -161,9 +204,13 @@ function coverPage(report, org, primary, accent, extras) {
   const qlBadge = report.pas128Ql
     ? `<span class="sr-ql-badge">PAS 128 ${esc(pas128Short(report.pas128Ql))}</span>`
     : "";
+  const methodBadge = report.pas128Method
+    ? `<span class="sr-ql-badge sr-ql-badge--method">${esc(report.pas128Method)}</span>`
+    : "";
   const quality = surveyReportQuality(report);
   const qualityColour = quality.score >= 80 ? primary : quality.score >= 50 ? "#f59e0b" : "#ea580c";
-  const pas128Summary = pas128SummaryBlock(report);
+  const pas128Summary = pas128SummaryBlock(report, primary);
+  const undertakerStrip = undertakerCoverStrip(report);
 
   return `<div class="sr-cover">
     <div class="sr-cover-top">
@@ -182,6 +229,7 @@ function coverPage(report, org, primary, accent, extras) {
     <div class="sr-cover-main">
       <span class="sr-badge sr-badge--cover">${report.status === "final" ? "Final report" : "Draft"}</span>
       ${qlBadge}
+      ${methodBadge}
       <div class="sr-quality-badge" style="border-color:${qualityColour};color:${qualityColour}">Report completeness: ${quality.score}%</div>
       <h1 class="sr-cover-title">${esc(report.title || "Survey Report")}</h1>
       <div class="sr-cover-meta">
@@ -200,6 +248,7 @@ function coverPage(report, org, primary, accent, extras) {
       ${coverPhoto ? `<figure class="sr-cover-photo"><img src="${coverPhoto}" alt="Site"/><figcaption>Site overview</figcaption></figure>` : ""}
       ${mapUrl ? `<figure class="sr-cover-map"><img src="${escapeAttr(mapUrl)}" alt="Site location map"/><figcaption>Site location (${Number(extras.projectLat).toFixed(5)}, ${Number(extras.projectLng).toFixed(5)})</figcaption></figure>` : ""}
       ${report.cadImport?.summary?.length ? cadCoverStrip(report.cadImport) : ""}
+      ${undertakerStrip}
       ${pas128Summary}
     </div>
     <div class="sr-cover-footer">${esc(org.pdfFooter || "Generated by MySafeOps")}</div>
@@ -479,11 +528,140 @@ function recordsReferencesBlock(rows) {
   );
 }
 
+function dbydEnquiriesBlock(rows) {
+  if (!rows?.length) return "";
+  const prov = (k) => DBYD_ENQUIRY_PROVIDERS.find((o) => o.key === k)?.label || k;
+  const stat = (k) => DBYD_ENQUIRY_STATUS.find((o) => o.key === k)?.label || k;
+  return dataTable(
+    ["Provider", "Reference", "Date", "Undertakers", "Status", "Notes"],
+    rows.map((r) => [
+      prov(r.provider),
+      r.reference || "",
+      r.enquiryDate ? new Date(r.enquiryDate).toLocaleDateString("en-GB") : "",
+      r.undertakers || "",
+      stat(r.status),
+      r.notes || "",
+    ])
+  );
+}
+
+function undertakerResponsesBlock(rows) {
+  if (!rows?.length) return "";
+  const cat = (k) => UNDERTAKER_CATEGORIES.find((o) => o.key === k)?.label || k;
+  const stat = (k) => UNDERTAKER_RESPONSE_STATUS.find((o) => o.key === k)?.label || k;
+  const summary = { affected: 0, not_affected: 0, no_response: 0 };
+  rows.forEach((r) => {
+    if (summary[r.status] != null) summary[r.status] += 1;
+  });
+  const summaryHtml = `<div class="sr-callout sr-callout--records"><div class="sr-callout-title">Response summary</div><p>Affected: ${summary.affected} · Not affected: ${summary.not_affected} · No response: ${summary.no_response}</p></div>`;
+  return `${summaryHtml}${dataTable(
+    ["Undertaker", "Category", "Status", "Response date", "Notes"],
+    rows.map((r) => [
+      r.undertaker || "",
+      cat(r.category),
+      stat(r.status),
+      r.responseDate ? new Date(r.responseDate).toLocaleDateString("en-GB") : "",
+      r.notes || "",
+    ])
+  )}`;
+}
+
+function trialHolesBlock(rows) {
+  if (!rows?.length) return "";
+  return dataTable(
+    ["ID", "Location", "Depth", "Utility", "PAS128 QL", "Result", "Notes"],
+    rows.map((r) => [
+      r.holeId || "",
+      r.location || "",
+      r.depth || "",
+      utilityTypeLabel(r.utilityVerified),
+      r.pas128Ql || "",
+      r.result || "",
+      r.notes || "",
+    ])
+  );
+}
+
+function cctvRunsBlock(rows) {
+  if (!rows?.length) return "";
+  const grade = (k) => MSCC_PIPE_GRADES.find((o) => o.key === k)?.label || k;
+  return dataTable(
+    ["Run", "Upstream", "Downstream", "Size", "Length", "Direction", "MSCC grade", "Notes"],
+    rows.map((r) => [
+      r.runId || "",
+      r.upstreamMH || "",
+      r.downstreamMH || "",
+      r.pipeSize || "",
+      r.lengthM || "",
+      r.direction || "",
+      grade(r.msccGrade),
+      r.defectsNotes || "",
+    ])
+  );
+}
+
+function uavFlightsBlock(rows) {
+  if (!rows?.length) return "";
+  const wind = (k) => UAV_WIND_BANDS.find((o) => o.key === k)?.label || k;
+  return dataTable(
+    ["Flight", "Date", "Duration", "Altitude", "Overlap", "GCPs", "Wind", "Notes"],
+    rows.map((r) => [
+      r.flightId || "",
+      r.flightDate ? new Date(r.flightDate).toLocaleDateString("en-GB") : "",
+      r.durationMin || "",
+      r.altitudeM || "",
+      r.overlapPct || "",
+      r.gcpCount || "",
+      wind(r.windBand),
+      r.notes || "",
+    ])
+  );
+}
+
+function laserScansBlock(rows) {
+  if (!rows?.length) return "";
+  const stat = (k) => LASER_REGISTRATION_STATUS.find((o) => o.key === k)?.label || k;
+  return dataTable(
+    ["Scan", "Location", "Scanner", "Points", "RMSE (mm)", "Status", "Notes"],
+    rows.map((r) => [
+      r.scanId || "",
+      r.location || "",
+      r.scannerModel || "",
+      r.pointCount || "",
+      r.registrationRmse || "",
+      stat(r.registrationStatus),
+      r.notes || "",
+    ])
+  );
+}
+
+function acmRegisterBlock(rows) {
+  if (!rows?.length) return "";
+  const risk = (k) => ACM_MATERIAL_RISK_SCORE.find((o) => o.key === k)?.label || k;
+  const result = (k) => ACM_SAMPLE_RESULTS.find((o) => o.key === k)?.label || k;
+  const rec = (k) => ACM_RECOMMENDATIONS.find((o) => o.key === k)?.label || k;
+  return dataTable(
+    ["Sample/item", "Location", "Material", "Product type", "Extent", "Condition", "Risk", "Sample result", "Recommendation"],
+    rows.map((r) => [
+      r.sampleRef || "",
+      r.location || "",
+      r.materialDescription || "",
+      r.productType || "",
+      r.extentM2 || "",
+      r.condition || "",
+      risk(r.riskScore),
+      result(r.sampleResult),
+      rec(r.recommendation),
+    ])
+  );
+}
+
 function qaChecklistBlock(qa, surveyType = "") {
   if (!qa) return "";
-  const items =
-    surveyType === "site_investigation_campaign" ? [...QA_CHECKLIST_ITEMS, ...GI_QA_CHECKLIST_ITEMS] : QA_CHECKLIST_ITEMS;
-  const rows = items.map(({ key, label }) => [label, qa[key] ? "Yes" : "No"]);
+  const groups = getQaChecklistGroupsForSurveyType(surveyType);
+  const rows = groups.flatMap((g) =>
+    g.items.map(({ key, label }) => [`${g.label} — ${label}`, qa[key] ? "Yes" : "No"])
+  );
   return dataTable(["Check", "Result"], rows);
 }
 
@@ -514,11 +692,12 @@ function photoGrid(photos) {
 
   const grouped = new Map();
   GEO_PHOTO_GROUP_ORDER.forEach((g) => grouped.set(g, []));
+  SURVEY_PHOTO_CATEGORIES.forEach((c) => grouped.set(c.label, []));
   grouped.set("Other", []);
 
   photos.forEach((p, idx) => {
     const type = p.geoPhotoType || p.type;
-    const group = type ? geoPhotoPreset(type).group : "Other";
+    let group = type ? geoPhotoPreset(type).group : surveyPhotoCategoryLabel(p.category || "field_work");
     if (!grouped.has(group)) grouped.set(group, []);
     grouped.get(group).push({ ...p, figureNum: idx + 1 });
   });
@@ -582,12 +761,25 @@ export function buildSurveyReportHtml(report, extras = {}) {
   const accessText = buildAccessLimitationsText(r.accessLimitations, r.accessLimitationsNotes);
   const programmeText = buildSurveyProgrammeNarrative(r.surveyProgramme);
   const controlText = buildControlAccuracyNarrative(r.controlAccuracy);
-  const qaText = buildQaChecklistNarrative(r.qaChecklist);
+  const qaText = buildQaChecklistNarrative(r.qaChecklist, r.surveyType);
+  const standardsText = buildStandardsCitedNarrative(r.standardsCited);
 
   const hseParts = [];
   if (extras.ramsTitle) hseParts.push(`Linked RAMS: ${extras.ramsTitle}.`);
   if (r.hseRefs?.permitRef?.trim()) hseParts.push(`Permit reference: ${r.hseRefs.permitRef.trim()}.`);
   if (r.hseRefs?.catScanRef?.trim()) hseParts.push(`CAT scan reference: ${r.hseRefs.catScanRef.trim()}.`);
+  if (r.surveyType === "uav_aerial" && r.uavCompliance) {
+    const uc = r.uavCompliance;
+    const uavParts = [];
+    if (uc.caaOperatorId?.trim()) uavParts.push(`CAA Operator ID ${uc.caaOperatorId.trim()}`);
+    if (uc.flyerIds?.trim()) uavParts.push(`Flyer ID ${uc.flyerIds.trim()}`);
+    if (uc.authorisationRef?.trim()) uavParts.push(`Authorisation ${uc.authorisationRef.trim()}`);
+    if (uc.droneRegistration?.trim()) uavParts.push(`Aircraft reg. ${uc.droneRegistration.trim()}`);
+    if (uc.insurancePolicyRef?.trim()) uavParts.push(`Insurance ${uc.insurancePolicyRef.trim()}`);
+    if (uc.notamRef?.trim()) uavParts.push(`NOTAM ${uc.notamRef.trim()}`);
+    if (uavParts.length) hseParts.push(`UAV compliance — ${uavParts.join("; ")}.`);
+    if (uc.groundExclusionPlanRef?.trim()) hseParts.push(uc.groundExclusionPlanRef.trim());
+  }
   if (r.hseRefs?.ramsExcerpt?.trim()) hseParts.push(r.hseRefs.ramsExcerpt.trim());
 
   const sections = [];
@@ -620,6 +812,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     ["Site", r.siteAddress || "—"],
     ["Survey type", surveyTypeLabel(r.surveyType) || "—"],
     ["PAS128 QL", r.pas128Ql ? pas128Label(r.pas128Ql) : "—"],
+    ["PAS128 method", r.pas128Method ? pas128MethodLabel(r.pas128Method) : "—"],
     ["Surveyor / author", r.surveyor || "—"],
     ["Linked RAMS", extras.ramsTitle || "—"],
   ]);
@@ -629,12 +822,30 @@ export function buildSurveyReportHtml(report, extras = {}) {
     pushSection("Executive summary", "exec", nl2p(r.sections.executiveSummary));
   }
 
+  if (r.sections?.foreword?.trim()) {
+    pushSection("Foreword", "foreword", nl2p(r.sections.foreword));
+  }
+
   if (programmeText) {
     pushSection("Survey programme", "programme", nl2p(programmeText));
   }
 
   pushSection("Scope of works", "scope", nl2p(r.sections?.scope));
   pushSection("Methodology", "method", nl2p(r.sections?.methodology));
+
+  if (isUtilitySurveyType(r.surveyType)) {
+    pushSection(
+      "PAS 128 quality levels",
+      "pas128-ql-tolerances",
+      `<p class="sr-narrative">Quality levels assigned to detected utilities in this report:</p>${pas128QlToleranceHtmlTable()}`
+    );
+  }
+
+  const workflowText = buildPas128WorkflowNarrative(r.pas128Method);
+  const workflowSvg = r.pas128Method ? buildPas128WorkflowSvg(r.pas128Method, { primary, accent }) : "";
+  if (workflowSvg || workflowText?.trim()) {
+    pushSection("Survey workflow", "workflow", `${workflowSvg}${workflowText?.trim() && !workflowSvg ? nl2p(workflowText) : ""}`);
+  }
 
   if (r.sections?.equipmentUsed?.trim()) {
     pushSection("Equipment used", "equipment", nl2p(r.sections.equipmentUsed));
@@ -673,10 +884,31 @@ export function buildSurveyReportHtml(report, extras = {}) {
     toc.push({ num, title: "Records references", id: "records-refs" });
   }
 
+  const dbydBlock = dbydEnquiriesBlock(r.dbydEnquiries);
+  if (dbydBlock) {
+    const num = nextNum();
+    sections.push(section("LSBUD / DBYD enquiry log", dbydBlock, "dbyd-log", num));
+    toc.push({ num, title: "LSBUD / DBYD enquiry log", id: "dbyd-log" });
+  }
+
+  const undertakerBlock = undertakerResponsesBlock(r.undertakerResponses);
+  if (undertakerBlock) {
+    const num = nextNum();
+    sections.push(section("Undertaker response status", undertakerBlock, "undertaker-status", num));
+    toc.push({ num, title: "Undertaker response status", id: "undertaker-status" });
+  }
+
   const photoBundle = photoGrid(r.photos);
   const photoIndexByGeoId = photoBundle.indexByGeoId || {};
 
   let findingsBody = "";
+  if (r.cctvRunsTable?.length) findingsBody += cctvRunsBlock(r.cctvRunsTable);
+  if (r.uavFlightsTable?.length) findingsBody += uavFlightsBlock(r.uavFlightsTable);
+  if (r.laserScansTable?.length) findingsBody += laserScansBlock(r.laserScansTable);
+  if (r.acmRegisterTable?.length) findingsBody += acmRegisterBlock(r.acmRegisterTable);
+  if (r.trialHolesTable?.length) {
+    findingsBody += trialHolesBlock(r.trialHolesTable);
+  }
   if (r.giLocationsTable?.length) {
     findingsBody += giLocationsTableBlock(r.giLocationsTable, photoIndexByGeoId);
     findingsBody += `<div class="sr-narrative">${nl2p(r.sections?.findings)}</div>`;
@@ -686,7 +918,15 @@ export function buildSurveyReportHtml(report, extras = {}) {
   } else {
     findingsBody = nl2p(r.sections?.findings);
   }
-  if (r.sections?.findings?.trim() || r.utilitiesTable?.length) {
+  if (
+    r.sections?.findings?.trim() ||
+    r.utilitiesTable?.length ||
+    r.cctvRunsTable?.length ||
+    r.uavFlightsTable?.length ||
+    r.laserScansTable?.length ||
+    r.acmRegisterTable?.length ||
+    r.trialHolesTable?.length
+  ) {
     const callout = keyFindingsCallout(r.sections?.findings);
     pushSection("Findings & results", "findings", `${callout}${findingsBody}`);
   }
@@ -716,6 +956,15 @@ export function buildSurveyReportHtml(report, extras = {}) {
     pushSection("Limitations", "limitations", nl2p(limitations));
   }
 
+  if (
+    includesPas128MethodLimitations(r.pas128Method) &&
+    pas128MethodAppliesToSurveyType(r.surveyType)
+  ) {
+    const methodLimits = buildPas128LimitationsHtml();
+    pushSection("Limitations of EML", "limitations-eml", methodLimits.eml);
+    pushSection("Limitations of GPR", "limitations-gpr", methodLimits.gpr);
+  }
+
   if (accessText) {
     pushSection("Site access limitations", "access", nl2p(accessText));
   }
@@ -727,6 +976,10 @@ export function buildSurveyReportHtml(report, extras = {}) {
 
   if (r.sections?.recommendations?.trim()) {
     pushSection("Recommendations", "recommendations", nl2p(r.sections.recommendations));
+  }
+
+  if (standardsText) {
+    pushSection("Standards referenced", "standards", nl2p(standardsText));
   }
 
   if (qaText) {
@@ -750,6 +1003,12 @@ export function buildSurveyReportHtml(report, extras = {}) {
   const dc = r.documentControl || {};
   const footerRef = [r.ref, dc.revision ? `Rev ${dc.revision}` : ""].filter(Boolean).join(" · ");
 
+  const disclaimer = getSurveyReportDisclaimer(org);
+  const draftNote = r.status !== "final" ? " <strong>Draft — not for construction use until marked final.</strong>" : "";
+  // Same diagonal watermark convention as permits/RAMS/GPR so a printed survey
+  // report can't be mistaken for final while still in draft.
+  const watermarkText = String(org.pdfWatermarkText || "").trim() || (r.status === "final" ? "FINAL" : "DRAFT");
+
   return `<!DOCTYPE html>
 <html lang="en-GB">
 <head>
@@ -759,11 +1018,6 @@ export function buildSurveyReportHtml(report, extras = {}) {
   @page {
     size: A4;
     margin: 16mm 14mm 28mm;
-    @bottom-right {
-      content: "Page " counter(page);
-      font-size: 8pt;
-      color: #9ca3af;
-    }
   }
   * { box-sizing: border-box; }
   body {
@@ -911,7 +1165,20 @@ export function buildSurveyReportHtml(report, extras = {}) {
     color: ${accent};
     border: 1px solid ${primary};
     margin-bottom: 10px;
+    margin-right: 6px;
   }
+  .sr-ql-badge--method {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #93c5fd;
+  }
+  .sr-limit-list {
+    margin: 0 0 8px;
+    padding-left: 1.25rem;
+    font-size: 10pt;
+    line-height: 1.5;
+  }
+  .sr-limit-list li { margin-bottom: 6px; }
   .sr-quality-badge {
     display: inline-block;
     padding: 4px 12px;
@@ -943,6 +1210,30 @@ export function buildSurveyReportHtml(report, extras = {}) {
     color: ${primary};
     line-height: 1.2;
   }
+  .sr-pas128-summary-head { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-bottom: 8px; }
+  .sr-pas128-ql-wrap { margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb; }
+  .sr-pas128-ql-title { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #6b7280; margin-bottom: 8px; }
+  .sr-ql-bars { display: flex; flex-direction: column; gap: 6px; }
+  .sr-ql-bar-row { display: grid; grid-template-columns: 36px 1fr 28px; gap: 8px; align-items: center; font-size: 9pt; }
+  .sr-ql-bar-label { font-weight: 700; color: #374151; }
+  .sr-ql-bar-track { height: 8px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+  .sr-ql-bar-fill { height: 100%; border-radius: 999px; min-width: 4px; }
+  .sr-ql-bar-count { text-align: right; color: #6b7280; font-weight: 600; }
+  .sr-workflow-diagram { margin: 0 0 12px; }
+  .sr-workflow-caption { font-size: 8.5pt; color: #6b7280; margin-top: 6px; text-align: center; }
+  .sr-undertaker-cover {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #eff6ff 0%, #f0fdfa 100%);
+    border: 1px solid #bfdbfe;
+  }
+  .sr-undertaker-cover__title { font-size: 8.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #1d4ed8; margin-bottom: 8px; }
+  .sr-undertaker-cover__stats { display: flex; flex-wrap: wrap; gap: 8px; }
+  .sr-undertaker-pill { font-size: 9pt; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
+  .sr-undertaker-pill--affected { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+  .sr-undertaker-pill--clear { background: #ecfdf5; color: #047857; border: 1px solid #6ee7b7; }
+  .sr-undertaker-pill--pending { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
   .sr-section { margin-bottom: 16px; page-break-inside: auto; }
   .sr-section h2 {
     font-size: 11.5pt;
@@ -974,6 +1265,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
   .sr-meta-val { font-size: 10pt; margin-top: 2px; overflow-wrap: anywhere; }
   .sr-data-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 9.5pt;
     margin-bottom: 10px;
@@ -1176,6 +1468,21 @@ export function buildSurveyReportHtml(report, extras = {}) {
     z-index: 9998;
   }
   .sr-print-footer span { overflow-wrap: anywhere; max-width: 48%; }
+  .sr-watermark {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    font-size: 84px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    color: rgba(100, 116, 139, 0.09);
+    transform: rotate(-28deg);
+    z-index: 0;
+    text-transform: uppercase;
+  }
   @media print {
     .sr-cover, .sr-badge, .sr-ql-badge, .sr-ql-pill, .sr-cad-comp-seg, .sr-cad-bar-fill, .sr-cad-stat--accent, .sr-cad-cover-strip, .sr-section h2, .sr-callout, .sr-data-table th {
       -webkit-print-color-adjust: exact;
@@ -1186,6 +1493,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
 </style>
 </head>
 <body>
+  <div class="sr-watermark">${esc(watermarkText)}</div>
   ${cover}
   ${tocHtml}
   <div class="sr-running-header"><span>${esc(r.ref || "")}${dc.revision ? ` · Rev ${esc(dc.revision)}` : ""}</span><span>${esc(r.title || "Survey Report")}</span></div>
@@ -1196,12 +1504,11 @@ export function buildSurveyReportHtml(report, extras = {}) {
     </div>
     ${sections.join("")}
     <div class="sr-disclaimer">
-      This report is issued for the agreed survey scope only. Detected utilities and subsurface features are indicative unless verified by trial excavation or statutory undertaker confirmation. The client remains responsible for safe digging practices and permit-to-dig procedures on site.
-      ${r.status !== "final" ? " <strong>Draft — not for construction use until marked final.</strong>" : ""}
+      ${esc(disclaimer)}${draftNote}
     </div>
   </div>
   <div class="sr-print-footer">
-    <span>${esc(org.pdfFooter || "Generated by MySafeOps")} · mysafeops.com</span>
+    <span>${esc(org.pdfFooter || "Generated by MySafeOps")} · mysafeops.com${org.pdfComplianceLine ? ` · ${esc(org.pdfComplianceLine)}` : ""}</span>
     <span>${esc(footerRef)}</span>
   </div>
 </body>

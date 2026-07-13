@@ -1,6 +1,25 @@
 import { useMemo } from "react";
+import { useCountUp } from "../../../hooks/useCountUp";
 
 const SEVERITY_RANK = { critical: 0, warning: 1, info: 2 };
+
+/** Live ops metric tile with a smooth count-up when its value changes. */
+function CommandCentreMetric({ label, value, alert }) {
+  const display = useCountUp(value);
+  return (
+    <div
+      style={{
+        borderRadius: 10,
+        padding: "10px 12px",
+        background: alert ? "rgba(127,29,29,0.55)" : "rgba(15,23,42,0.55)",
+        border: `1px solid ${alert ? "#b91c1c" : "#334155"}`,
+      }}
+    >
+      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8" }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{display}</div>
+    </div>
+  );
+}
 
 function toneForSeverity(severity) {
   if (severity === "critical") {
@@ -133,18 +152,7 @@ export default function PermitCommandCentre({
         }}
       >
         {heroMetrics.map((m) => (
-          <div
-            key={m.label}
-            style={{
-              borderRadius: 10,
-              padding: "10px 12px",
-              background: m.alert ? "rgba(127,29,29,0.55)" : "rgba(15,23,42,0.55)",
-              border: `1px solid ${m.alert ? "#b91c1c" : "#334155"}`,
-            }}
-          >
-            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8" }}>{m.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 800, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>{m.value}</div>
-          </div>
+          <CommandCentreMetric key={m.label} label={m.label} value={m.value} alert={m.alert} />
         ))}
       </div>
 

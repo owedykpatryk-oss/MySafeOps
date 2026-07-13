@@ -9,14 +9,15 @@ import {
   UTILITY_RECORDS_GAPS,
   ACCESS_LIMITATION_TYPES,
   SURVEY_TYPES,
-  QA_CHECKLIST_ITEMS,
-  GI_QA_CHECKLIST_ITEMS,
   UTILITY_TYPE_OPTIONS,
   UTILITY_CONFIDENCE_LEVELS,
   DELIVERABLE_FORMAT_OPTIONS,
   RECORD_REF_STATUS_OPTIONS,
   blankSurveyReport,
+  SURVEY_PHOTO_CATEGORIES,
 } from "./surveyReportConstants";
+import { getQaChecklistItemsForSurveyType, getQaChecklistProgress, SURVEY_PUBLIC_STANDARDS } from "./surveyQaPack";
+import { mergeSpecialistTables } from "./surveySpecialistFindings";
 import { safeImageSrc } from "../../utils/htmlEscape.js";
 import { safeHttpUrl } from "../../utils/safeUrl.js";
 
@@ -26,10 +27,13 @@ function sanitizeSurveyPhoto(photo) {
   if (!photo || typeof photo !== "object") return photo;
   const dataUrl = safeImageSrc(photo.dataUrl);
   const url = safeHttpUrl(photo.url);
+  const rawCategory = photo.category || "field_work";
+  const category = SURVEY_PHOTO_CATEGORIES.some((c) => c.key === rawCategory) ? rawCategory : "field_work";
   return {
     ...photo,
     dataUrl: dataUrl || "",
     url: url || "",
+    category,
   };
 }
 
@@ -48,11 +52,16 @@ export function normalizeSurveyReport(report) {
     surveyProgramme: { ...blank.surveyProgramme, ...(report.surveyProgramme || {}) },
     controlAccuracy: { ...blank.controlAccuracy, ...(report.controlAccuracy || {}) },
     qaChecklist: { ...blank.qaChecklist, ...(report.qaChecklist || {}) },
+    standardsCited: Array.isArray(report.standardsCited) ? report.standardsCited : [],
     hseRefs: { ...blank.hseRefs, ...(report.hseRefs || {}) },
+    uavCompliance: { ...blank.uavCompliance, ...(report.uavCompliance || {}) },
     signatures: { ...blank.signatures, ...(report.signatures || {}) },
     equipmentCalibration: report.equipmentCalibration || [],
     deliverables: report.deliverables || [],
     recordsReferences: report.recordsReferences || [],
+    dbydEnquiries: report.dbydEnquiries || [],
+    undertakerResponses: report.undertakerResponses || [],
+    trialHolesTable: report.trialHolesTable || [],
     utilitiesTable: report.utilitiesTable || [],
     giLocationsTable: report.giLocationsTable || [],
     revisionHistory: report.revisionHistory || [],
@@ -60,6 +69,7 @@ export function normalizeSurveyReport(report) {
     parentReportId: report.parentReportId || "",
     parentRevision: report.parentRevision || "",
     cadImport: report.cadImport || null,
+    ...mergeSpecialistTables(report),
   };
 }
 
@@ -105,13 +115,33 @@ export function buildWeatherNarrative(weather) {
 
 export function buildQaChecklistNarrative(qa, surveyType = "") {
   if (!qa) return "";
-  const items =
-    surveyType === "site_investigation_campaign" ? [...QA_CHECKLIST_ITEMS, ...GI_QA_CHECKLIST_ITEMS] : QA_CHECKLIST_ITEMS;
+  const items = getQaChecklistItemsForSurveyType(surveyType);
   const lines = items.map(({ key, label }) => {
     const ok = Boolean(qa[key]);
     return `${ok ? "Yes" : "No"} — ${label}`;
   });
   return lines.join("\n");
+}
+
+export function buildStandardsCitedNarrative(keys = []) {
+  const cited = (keys || [])
+    .map((k) => SURVEY_PUBLIC_STANDARDS.find((s) => s.key === k)?.label)
+    .filter(Boolean);
+  if (!cited.length) return "";
+  return `This report has been prepared with reference to: ${cited.join("; ")}. Applicability is stated in the scope and methodology sections.`;
+}
+
+/** Photo evidence coverage by category — for nudges and list badges. */
+export function surveyPhotoCategoryCoverage(photos = []) {
+  const used = new Set((photos || []).map((p) => p.category || "field_work"));
+  const covered = SURVEY_PHOTO_CATEGORIES.filter((c) => used.has(c.key));
+  const missing = SURVEY_PHOTO_CATEGORIES.filter((c) => !used.has(c.key));
+  return {
+    covered: covered.length,
+    total: SURVEY_PHOTO_CATEGORIES.length,
+    missingLabels: missing.map((c) => c.label),
+    hasPhotos: (photos || []).length > 0,
+  };
 }
 
 export function utilityTypeLabel(key) {
@@ -149,6 +179,8 @@ export function buildControlAccuracyNarrative(control) {
   if (control.controlSource?.trim()) parts.push(`Control source: ${control.controlSource.trim()}.`);
   if (control.horizontalTolerance?.trim()) parts.push(`Horizontal tolerance: ${control.horizontalTolerance.trim()}.`);
   if (control.verticalTolerance?.trim()) parts.push(`Vertical tolerance: ${control.verticalTolerance.trim()}.`);
+  if (control.traverseClosure?.trim()) parts.push(`Traverse closure: ${control.traverseClosure.trim()}.`);
+  if (control.levelClosure?.trim()) parts.push(`Level closure: ${control.levelClosure.trim()}.`);
   if (control.controlPointsNotes?.trim()) parts.push(control.controlPointsNotes.trim());
   return parts.join(" ");
 }
@@ -183,6 +215,23 @@ export function surveyTypeLabel(key) {
   return labelOf(SURVEY_TYPES, key);
 }
 
+/** CSS tone for survey type chips in list / hero. */
+export function surveyTypeChipTone(surveyType) {
+  const map = {
+    utility_mapping_survey: "utility",
+    eml_cat_survey: "utility",
+    gpr_survey: "gpr",
+    topographical_survey: "topo",
+    setting_out: "topo",
+    gnss_control: "topo",
+    cctv_drainage_survey: "drainage",
+    site_investigation_campaign: "gi",
+    uav_aerial: "uav",
+    laser_scanning: "scan",
+  };
+  return map[String(surveyType || "").trim()] || "general";
+}
+
 /** Small static map thumbnail for editor hero (OpenStreetMap.de). */
 export function surveyStaticMapThumbUrl(lat, lng) {
   const la = Number(lat);
@@ -207,7 +256,7 @@ export function surveyReportQuality(report) {
   add(!!r.sections?.findings?.trim(), "Findings / results");
   add(!!r.sections?.executiveSummary?.trim(), "Executive summary");
   add(!!r.sections?.recommendations?.trim(), "Recommendations");
-  add((r.utilityRecords?.sourcesConsulted?.length || 0) > 0, "Records review");
+  add((r.utilityRecords?.sourcesConsulted?.length || 0) > 0 || (r.dbydEnquiries || []).length > 0, "Records review");
   add((r.limitationKeys?.length || 0) > 0 || !!r.limitationsText?.trim(), "Limitations");
   add(
     buildWeatherNarrative(r.weather).length > 0 || r.weather?.conditionsNarrative?.trim(),
@@ -217,10 +266,17 @@ export function surveyReportQuality(report) {
   const hasFindingsData =
     (r.utilitiesTable?.length || 0) > 0 ||
     (r.giLocationsTable?.length || 0) > 0 ||
+    (r.trialHolesTable || []).length > 0 ||
+    (r.cctvRunsTable || []).length > 0 ||
+    (r.uavFlightsTable || []).length > 0 ||
+    (r.laserScansTable || []).length > 0 ||
     !!r.sections?.findings?.trim();
   add(hasFindingsData, r.surveyType === "site_investigation_campaign" ? "GI location schedule or findings" : "Utility schedule or findings");
   add(Boolean(r.cadImport?.summary?.length) || r.surveyType !== "utility_mapping_survey", "CAD length summary");
   add(Object.values(r.qaChecklist || {}).some(Boolean), "QA checklist");
+  const qaProg = getQaChecklistProgress(r.qaChecklist, r.surveyType);
+  add(!r.surveyType || qaProg.pct >= 50 || qaProg.total < 8, "QA checklist (50%+)");
+  add((r.standardsCited || []).length > 0, "Standards referenced");
   add((r.equipmentCalibration || []).length > 0, "Equipment calibration");
 
   const passed = checks.filter((c) => c.ok).length;
@@ -339,6 +395,7 @@ const DIFF_FIELDS = [
   { key: "surveyDate", label: "Survey date" },
   { key: "surveyor", label: "Surveyor" },
   { key: "pas128Ql", label: "PAS128 QL" },
+  { key: "pas128Method", label: "PAS128 method" },
   { key: "sections.executiveSummary", label: "Executive summary" },
   { key: "sections.scope", label: "Scope" },
   { key: "sections.methodology", label: "Methodology" },

@@ -28,7 +28,7 @@ function currentRateWindowStart() {
   return d.toISOString();
 }
 
-/** Sliding 60s window per bucket key; fails open if org_api_rate table missing. */
+/** Sliding 60s window per bucket key; fails closed unless D1_RATE_LIMIT_FAIL_OPEN=true. */
 async function consumeRateLimit(env, bucketKey, maxPerMinute) {
   try {
     const windowStart = currentRateWindowStart();
@@ -49,7 +49,7 @@ async function consumeRateLimit(env, bucketKey, maxPerMinute) {
     }
     return true;
   } catch {
-    return true;
+    return String(env?.D1_RATE_LIMIT_FAIL_OPEN || "").toLowerCase() === "true";
   }
 }
 

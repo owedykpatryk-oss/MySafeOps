@@ -1,7 +1,7 @@
 // MySafeOps — Push Notifications Manager
 // No external libraries needed — uses Web Push API + Notification API
 
-import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import { loadOrgScoped, saveOrgScoped, getOrgId } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
 import { workspaceDeepLink } from "../utils/appDeepLinks";
 import { staleSurveyReminderDays, isAutomationEnabled } from "../utils/orgAutomationRules";
@@ -9,14 +9,41 @@ import { todayIsoDate } from "../utils/projectDashboard";
 
 const VAPID_PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "").trim();
 const NOTIF_PREFS_KEY = "mysafeops_notif_prefs";
+const LEGACY_NOTIF_PREFS_KEY = NOTIF_PREFS_KEY;
 const LAST_CLOUD_PUSH_KEY = "mysafeops_last_cloud_push_result";
 
-function readNotifPrefsObject() {
+function migrateLegacyNotifPrefsOnce() {
   try {
-    return JSON.parse(localStorage.getItem(NOTIF_PREFS_KEY) || "{}");
+    const scoped = loadOrgScoped(NOTIF_PREFS_KEY, null);
+    if (scoped && typeof scoped === "object" && Object.keys(scoped).length > 0) return;
+    const legacyRaw = localStorage.getItem(LEGACY_NOTIF_PREFS_KEY);
+    if (!legacyRaw) return;
+    const legacy = JSON.parse(legacyRaw);
+    if (!legacy || typeof legacy !== "object" || !Object.keys(legacy).length) return;
+    saveOrgScoped(NOTIF_PREFS_KEY, legacy, { bypassBillingGuard: true });
+  } catch {
+    /* ignore */
+  }
+}
+
+function readNotifPrefsObject() {
+  migrateLegacyNotifPrefsOnce();
+  try {
+    const scoped = loadOrgScoped(NOTIF_PREFS_KEY, {});
+    return scoped && typeof scoped === "object" ? scoped : {};
   } catch {
     return {};
   }
+}
+
+/** @param {Record<string, unknown>} prefs */
+export function saveNotificationPrefs(prefs) {
+  saveOrgScoped(NOTIF_PREFS_KEY, prefs && typeof prefs === "object" ? prefs : {});
+}
+
+/** @returns {Record<string, unknown>} */
+export function loadNotificationPrefs() {
+  return readNotifPrefsObject();
 }
 
 /** When true, scheduled local reminders should not pop (browser still allows explicit tests). */
@@ -69,16 +96,8 @@ const PERMIT_TYPES_REQUIRING_BRIEFING = new Set([
   "electrical_isolation",
 ]);
 
-function loadNotificationPrefs() {
-  try {
-    return JSON.parse(localStorage.getItem(NOTIF_PREFS_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
 function isNotificationTypeEnabled(typeKey) {
-  const prefs = loadNotificationPrefs();
+  const prefs = readNotifPrefsObject();
   return prefs?.[typeKey] !== false;
 }
 
@@ -87,7 +106,7 @@ function hasVapidPublicKey() {
 }
 
 function getOrgSlug() {
-  const v = String(localStorage.getItem("mysafeops_orgId") || "default").trim().toLowerCase();
+  const v = String(getOrgId() || "default").trim().toLowerCase();
   return v || "default";
 }
 

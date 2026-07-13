@@ -1,3 +1,4 @@
+/** @vitest-environment jsdom */
 import { describe, it, expect } from "vitest";
 import { renderPermitDocumentHtml, buildPermitStatusDeepLink } from "./permitDocumentHtml";
 
@@ -44,6 +45,8 @@ describe("renderPermitDocumentHtml", () => {
     expect(html).toContain("Scan for live status");
     expect(html).toContain("api.qrserver.com");
     expect(html).toContain(encodeURIComponent("https://mysafeops.com/app?view=permits&permitId=p-live-1"));
+    expect(html).toContain("ptw-cover");
+    expect(html).toContain("Checklist readiness");
   });
 });
 

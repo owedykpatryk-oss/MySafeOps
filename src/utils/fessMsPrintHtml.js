@@ -22,9 +22,10 @@ const pageStyle = `
   .fess-ms-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
   .fess-ms-cell { border: 0.5px solid #e2e8f0; padding: 8px 10px; border-radius: 8px; background: #fff; font-size: 12px; }
   .fess-ms-cell .l { font-size: 10px; color: #64748b; font-weight: 700; margin-bottom: 2px; }
-  table.fess-ms { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  table.fess-ms { width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 12px; }
   table.fess-ms th { background: #0f172a; color: #fff; padding: 6px 8px; font-size: 11px; text-align: left; border: 1px solid #0f172a; }
-  table.fess-ms td { padding: 6px 8px; border: 1px solid #e5e5e5; font-size: 11px; vertical-align: top; }
+  table.fess-ms td { padding: 6px 8px; border: 1px solid #e5e5e5; font-size: 11px; vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+  table.fess-ms tr { break-inside: avoid-page; page-break-inside: avoid; }
 `;
 
 /**
@@ -46,8 +47,8 @@ export function buildFessMethodStatementPackHtml(form, operatives = [], coshhIte
       <td style="text-align:center;font-weight:700;width:36px">${he(String(s.seq || ""))}</td>
       <td style="font-weight:600;width:22%">${he(s.title || "")}</td>
       <td>${he(s.description || "")}</td>
-      <td style="white-space:nowrap">${he(s.responsible || "")}</td>
-      <td style="white-space:nowrap">${he(s.duration || "")}</td>
+      <td>${he(s.responsible || "")}</td>
+      <td>${he(s.duration || "")}</td>
     </tr>`
     )
     .join("");
@@ -79,7 +80,7 @@ export function buildFessMethodStatementPackHtml(form, operatives = [], coshhIte
           (r) => `<tr style="height:40px">
         <td>${he(r.name || "—")}</td>
         <td style="font-size:10px">${he(r.certs || "—")}</td>
-        <td style="font-size:10px;white-space:nowrap">${he(r.certExpiry || "—")}${r.certAlert ? `<br><span style="color:#b45309">${he(r.certAlert)}</span>` : ""}</td>
+        <td style="font-size:10px">${he(r.certExpiry || "—")}${r.certAlert ? `<br><span style="color:#b45309">${he(r.certAlert)}</span>` : ""}</td>
         <td></td>
         <td></td>
       </tr>`

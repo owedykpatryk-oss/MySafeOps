@@ -4,6 +4,7 @@ import {
   surveyReportQuality,
   surveyTypeLabel,
 } from "./surveyReportHelpers";
+import { getQaChecklistProgress } from "./surveyQaPack";
 import {
   SURVEY_EDITOR_GROUPS,
   SURVEY_EDITOR_TABS,
@@ -24,21 +25,29 @@ export function surveyTabIsComplete(report, tabId) {
       );
     case "scope":
       return !!(r.sections?.scope?.trim() && r.sections?.methodology?.trim());
-    case "professional":
-      return (
-        Object.values(r.qaChecklist || {}).some(Boolean) &&
-        !!(r.documentControl?.preparedBy?.trim() || r.surveyor?.trim())
-      );
+    case "professional": {
+      const qa = getQaChecklistProgress(r.qaChecklist, r.surveyType);
+      const signed = !!(r.documentControl?.preparedBy?.trim() || r.surveyor?.trim());
+      const cal = (r.equipmentCalibration || []).length > 0;
+      return signed && cal && (qa.complete || qa.pct >= 40);
+    }
     case "weather":
       return (
         buildWeatherNarrative(r.weather).length > 0 || !!r.weather?.conditionsNarrative?.trim()
       );
     case "records":
-      return (r.utilityRecords?.sourcesConsulted?.length || 0) > 0;
+      return (r.utilityRecords?.sourcesConsulted?.length || 0) > 0 || (r.dbydEnquiries || []).length > 0;
     case "limitations":
       return (r.limitationKeys?.length || 0) > 0 || !!r.limitationsText?.trim();
     case "findings":
-      return !!(r.sections?.findings?.trim()) || (r.utilitiesTable?.length || 0) > 0;
+      return (
+        !!(r.sections?.findings?.trim()) ||
+        (r.utilitiesTable?.length || 0) > 0 ||
+        (r.trialHolesTable || []).length > 0 ||
+        (r.cctvRunsTable || []).length > 0 ||
+        (r.uavFlightsTable || []).length > 0 ||
+        (r.laserScansTable || []).length > 0
+      );
     case "photos":
       return (r.photos?.length || 0) > 0 || !!r.geoPhotoImportAt;
     case "preview":

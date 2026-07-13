@@ -29,4 +29,24 @@ test.describe("Landing page", () => {
     await expect(page).toHaveURL(/\/privacy$/);
     await expect(page.locator('iframe[title="Privacy policy"]')).toBeVisible();
   });
+
+  test("AU landing shows SWMS copy and AUD pricing", async ({ page }) => {
+    await page.goto("/au");
+    await expect(page.getByRole("heading", { name: /Site safety/i })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/Australian site teams/i)).toBeVisible();
+    await page.locator("#pricing").scrollIntoViewIfNeeded();
+    await expect(page.getByText("A$59")).toBeVisible();
+    await expect(page.getByRole("contentinfo").getByRole("link", { name: /🇬🇧 United Kingdom/i })).toBeVisible();
+  });
+
+  test("PL landing shows IOR copy and PLN pricing", async ({ page }) => {
+    await page.goto("/pl");
+    await expect(page.getByRole("heading", { name: /BHP na budowie/i })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/Polskie ekipy budowlane/i)).toBeVisible();
+    await page.locator("#pricing").scrollIntoViewIfNeeded();
+    await expect(page.getByText("79 zł")).toBeVisible();
+    await expect(page.getByRole("contentinfo").getByRole("link", { name: /🇬🇧 United Kingdom/i })).toBeVisible();
+    await page.locator("#faq").scrollIntoViewIfNeeded();
+    await expect(page.getByRole("heading", { name: /Najczęstsze pytania/i })).toBeVisible();
+  });
 });

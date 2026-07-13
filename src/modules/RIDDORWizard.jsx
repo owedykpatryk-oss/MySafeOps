@@ -9,10 +9,17 @@ import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
+import {
+  defaultIncidentTypeKey,
+  getIncidentTypeDef,
+  getNotifiableIncidentsContent,
+} from "../config/notifiableIncidentsContent";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { formatOrgDate } from "../utils/orgLocale";
 
 const genId = () => `riddor_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = () => new Date().toISOString().slice(0,10);
-const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}); };
+const fmtDate = formatOrgDate;
 const addDays = (iso, days) => { const d=new Date(iso); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); };
 
 const ss = {
@@ -57,16 +64,16 @@ const DANGEROUS_OCCURRENCES = [
   "Contact with overhead power line",
 ];
 
-export function printRiddorF2508(form) {
+export function printNotifiableWorksheet(form, content) {
   void (async () => {
   const org = getOrgSettings();
-  const def = RIDDOR_TYPES[form.riddorType] || {};
+  const def = getIncidentTypeDef(content, form.riddorType);
   const win = openPrintWindow();
   if (!win) return;
   const he = escapeHtml;
   const row = (a, b) => `<tr><td style="border:1px solid #e2e8f0;padding:8px;width:32%;font-weight:600;background:#f8fafc">${he(a)}</td><td style="border:1px solid #e2e8f0;padding:8px">${he(b ?? "—")}</td></tr>`;
   const bodyHtml = `
-  <p class="noPrint" style="background:#FAEEDA;padding:10px;border-radius:8px;border:1px solid #FAC775">This is a local worksheet mirroring F2508 fields. Official reporting: <a href="https://www.hse.gov.uk/riddor/report.htm">hse.gov.uk/riddor/report.htm</a></p>
+  <p class="noPrint" style="background:#FAEEDA;padding:10px;border-radius:8px;border:1px solid #FAC775">${escapeHtml(content.printBanner)} — <a href="${escapeHtml(content.regulatorUrl)}">${escapeHtml(content.regulatorName)}</a></p>
   <div class="print-section-title">Incident / dangerous occurrence — draft record</div>
   <table style="width:100%;border-collapse:collapse;margin-top:10px">
     ${row("Form type", def.form || "F2508")}
@@ -98,12 +105,12 @@ export function printRiddorF2508(form) {
   await writePrintWindowDocument(
     win,
     wrapPrintHtmlDocument(org, {
-      pageTitle: "RIDDOR F2508 — draft worksheet",
+      pageTitle: content.printTitle,
       extraCss: `.noPrint{} @media print{.noPrint{display:none}}`,
       headerOpts: {
-        docTitle: "RIDDOR report worksheet",
-        docSubtitle: `${def.form || "F2508"} · submit via HSE online`,
-        docBadge: "RIDDOR",
+        docTitle: content.title,
+        docSubtitle: `${def.form || "Worksheet"} · ${content.regulatorName}`,
+        docBadge: content.badgeText,
       },
       metaFields: { recordNote: def.label || form.riddorType || "Draft worksheet" },
       bodyHtml,
@@ -113,7 +120,10 @@ export function printRiddorF2508(form) {
   })();
 }
 
-function DeadlineAlert({ reportDate, deadlineDays }) {
+/** @deprecated use printNotifiableWorksheet */
+export const printRiddorF2508 = (form) => printNotifiableWorksheet(form, getNotifiableIncidentsContent("uk"));
+
+function DeadlineAlert({ reportDate, deadlineDays, content }) {
   if (!reportDate || !deadlineDays) return null;
   const deadline = addDays(reportDate, deadlineDays);
   const daysLeft = Math.ceil((new Date(deadline)-new Date())/(1000*60*60*24));
@@ -127,25 +137,26 @@ function DeadlineAlert({ reportDate, deadlineDays }) {
       color:overdue?"#791F1F":urgent?"#633806":"#0C447C",
     }}>
       <div style={{ fontWeight:500, marginBottom:2 }}>
-        {overdue ? `RIDDOR deadline MISSED — was ${fmtDate(deadline)}` : `RIDDOR reporting deadline: ${fmtDate(deadline)}`}
+        {overdue ? `${content.deadlinePrefix} deadline MISSED — was ${fmtDate(deadline)}` : `${content.deadlinePrefix} deadline: ${fmtDate(deadline)}`}
       </div>
       <div style={{ fontSize:12 }}>
-        {overdue ? `Report is ${Math.abs(daysLeft)} days overdue. Report immediately via HSE online.` : `${daysLeft} day${daysLeft!==1?"s":""} remaining. Report via HSE online portal.`}
+        {overdue ? `Report is ${Math.abs(daysLeft)} days overdue. Notify ${content.regulatorName} immediately.` : `${daysLeft} day${daysLeft!==1?"s":""} remaining — confirm notification requirements.`}
       </div>
-      <a href="https://www.hse.gov.uk/riddor/report.htm" target="_blank" rel="noopener noreferrer"
+      <a href={content.regulatorUrl} target="_blank" rel="noopener noreferrer"
         style={{ fontSize:12, color:"inherit", display:"inline-block", marginTop:6, textDecoration:"underline" }}>
-        Report on HSE website →
+        {content.regulatorLinkText}
       </a>
     </div>
   );
 }
 
-function RIDDORForm({ report, onSave, onClose }) {
+function RIDDORForm({ report, onSave, onClose, content, marketId }) {
   const org = getOrgSettings();
   const projects = load("mysafeops_projects",[]);
+  const defaultType = defaultIncidentTypeKey(marketId);
 
   const blank = {
-    id:genId(), riddorType:"specified", projectId:"",
+    id:genId(), riddorType: defaultType, projectId:"",
     incidentDate:today(), incidentTime:"",
     location:"", siteAddress:"",
     injuredName:"", injuredDob:"", injuredGender:"", injuredJobTitle:"",
@@ -162,7 +173,9 @@ function RIDDORForm({ report, onSave, onClose }) {
   const [form, setForm] = useState(report?{...report}:blank);
   const [step, setStep] = useState(0);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
-  const def = RIDDOR_TYPES[form.riddorType]||RIDDOR_TYPES.specified;
+  const def = getIncidentTypeDef(content, form.riddorType);
+  const isSeriousInjuryType = form.riddorType === "specified" || form.riddorType === "serious_injury";
+  const isDangerousType = form.riddorType === "dangerous_occurrence" || form.riddorType === "dangerous_incident";
 
   const STEPS = ["Incident type","Incident details","Injured person","Employer","Injury & treatment","Actions & reporting","Review"];
 
@@ -171,14 +184,14 @@ function RIDDORForm({ report, onSave, onClose }) {
       <div style={{ ...ss.card, width:"100%", maxWidth:600 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
-            <div style={{ fontWeight:500, fontSize:16 }}>RIDDOR report wizard</div>
-            <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>Reporting of Injuries, Diseases and Dangerous Occurrences Regulations 2013</div>
+            <div style={{ fontWeight:500, fontSize:16 }}>{content.wizardTitle}</div>
+            <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>{content.wizardSubtitle}</div>
           </div>
           <button onClick={onClose} style={{ ...ss.btn, padding:"4px 8px" }}>×</button>
         </div>
 
         {def.urgent && form.incidentDate && (
-          <DeadlineAlert reportDate={form.incidentDate} deadlineDays={def.deadline} />
+          <DeadlineAlert reportDate={form.incidentDate} deadlineDays={def.deadline} content={content} />
         )}
 
         {/* step progress */}
@@ -194,9 +207,9 @@ function RIDDORForm({ report, onSave, onClose }) {
         {/* step 0 — incident type */}
         {step===0 && (
           <div>
-            <label style={ss.lbl}>RIDDOR reportable event type *</label>
+            <label style={ss.lbl}>Reportable event type *</label>
             <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:16 }}>
-              {Object.entries(RIDDOR_TYPES).map(([k,v])=>(
+              {Object.entries(content.types).map(([k,v])=>(
                 <label key={k} style={{ display:"flex", gap:12, padding:"10px 12px", borderRadius:8, cursor:"pointer",
                   background:form.riddorType===k?"#E1F5EE":"var(--color-background-secondary,#f7f7f5)",
                   border:`0.5px solid ${form.riddorType===k?"#0d9488":"var(--color-border-secondary,#ccc)"}` }}>
@@ -242,21 +255,21 @@ function RIDDORForm({ report, onSave, onClose }) {
                 {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
-            {form.riddorType==="specified" && (
+            {isSeriousInjuryType && (
               <div style={{ gridColumn:"1/-1" }}>
-                <label style={ss.lbl}>Type of specified injury</label>
+                <label style={ss.lbl}>Type of serious / specified injury</label>
                 <select value={form.specifiedInjuryType||""} onChange={e=>set("specifiedInjuryType",e.target.value)} style={ss.inp}>
                   <option value="">— Select —</option>
-                  {SPECIFIED_INJURIES.map((i,idx)=><option key={idx} value={i}>{i}</option>)}
+                  {content.specifiedInjuries.map((i,idx)=><option key={idx} value={i}>{i}</option>)}
                 </select>
               </div>
             )}
-            {form.riddorType==="dangerous_occurrence" && (
+            {isDangerousType && (
               <div style={{ gridColumn:"1/-1" }}>
-                <label style={ss.lbl}>Type of dangerous occurrence</label>
+                <label style={ss.lbl}>Type of dangerous incident / occurrence</label>
                 <select value={form.dangerousOccurrenceType||""} onChange={e=>set("dangerousOccurrenceType",e.target.value)} style={ss.inp}>
                   <option value="">— Select —</option>
-                  {DANGEROUS_OCCURRENCES.map((i,idx)=><option key={idx} value={i}>{i}</option>)}
+                  {content.dangerousOccurrences.map((i,idx)=><option key={idx} value={i}>{i}</option>)}
                 </select>
               </div>
             )}
@@ -367,23 +380,23 @@ function RIDDORForm({ report, onSave, onClose }) {
               <textarea value={form.immediateActions||""} onChange={e=>set("immediateActions",e.target.value)} rows={3} style={{ ...ss.ta, minHeight:60 }} placeholder="Describe immediate actions taken: first aid given, area made safe, equipment isolated, emergency services called…" />
             </div>
             <div style={{ padding:"10px 14px", background:"#E6F1FB", borderRadius:8, fontSize:12, color:"#0C447C", marginBottom:14 }}>
-              Report online at: <a href="https://www.hse.gov.uk/riddor/report.htm" target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>hse.gov.uk/riddor/report.htm</a>
+              Official guidance: <a href={content.regulatorUrl} target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>{content.regulatorUrl.replace(/^https:\/\//, "")}</a>
             </div>
             <div style={{ marginBottom:12 }}>
               <label style={{ display:"flex", gap:10, alignItems:"center", cursor:"pointer", fontSize:13 }}>
                 <input type="checkbox" checked={form.reportedToHSE||false} onChange={e=>set("reportedToHSE",e.target.checked)}
                   style={{ accentColor:"#0d9488", width:15, height:15 }} />
-                RIDDOR report submitted to HSE
+                {content.reportedLabel}
               </label>
             </div>
             {form.reportedToHSE && (
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
                 <div>
-                  <label style={ss.lbl}>HSE report reference number</label>
-                  <input value={form.hseReportRef||""} onChange={e=>set("hseReportRef",e.target.value)} placeholder="Reference from HSE confirmation" style={ss.inp} />
+                  <label style={ss.lbl}>Regulator reference number</label>
+                  <input value={form.hseReportRef||""} onChange={e=>set("hseReportRef",e.target.value)} placeholder="Reference from regulator confirmation" style={ss.inp} />
                 </div>
                 <div>
-                  <label style={ss.lbl}>Date reported to HSE</label>
+                  <label style={ss.lbl}>Date reported</label>
                   <input type="date" value={form.hseReportDate||""} onChange={e=>set("hseReportDate",e.target.value)} style={ss.inp} />
                 </div>
               </div>
@@ -395,16 +408,16 @@ function RIDDORForm({ report, onSave, onClose }) {
         {step===6 && (
           <div>
             <div style={{ ...ss.card, border:"0.5px solid #9FE1CB", marginBottom:14 }}>
-              <div style={{ fontWeight:500, fontSize:14, marginBottom:12 }}>RIDDOR report summary</div>
+              <div style={{ fontWeight:500, fontSize:14, marginBottom:12 }}>{content.title} — summary</div>
               {[
-                ["Type", RIDDOR_TYPES[form.riddorType]?.label],
+                ["Type", def?.label],
                 ["Date", fmtDate(form.incidentDate)],
                 ["Location", form.location||"—"],
                 ["Injured person", form.injuredName||"—"],
                 ["Employer", form.employerName||"—"],
-                ["HSE form", RIDDOR_TYPES[form.riddorType]?.form],
-                ["Deadline", form.incidentDate&&RIDDOR_TYPES[form.riddorType]?.deadline ? `${fmtDate(addDays(form.incidentDate,RIDDOR_TYPES[form.riddorType].deadline))}` : "—"],
-                ["Reported to HSE", form.reportedToHSE ? `Yes — Ref: ${form.hseReportRef||"—"}` : "Not yet reported"],
+                ["Form", def?.form],
+                ["Deadline", form.incidentDate&&def?.deadline ? `${fmtDate(addDays(form.incidentDate, def.deadline))}` : "—"],
+                [content.reportedLabel, form.reportedToHSE ? `Yes — Ref: ${form.hseReportRef||"—"}` : "Not yet reported"],
               ].map(([l,v])=>(
                 <div key={l} style={{ display:"flex", gap:10, padding:"5px 0", borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)", fontSize:13 }}>
                   <span style={{ color:"var(--color-text-secondary)", minWidth:130 }}>{l}</span>
@@ -414,11 +427,11 @@ function RIDDORForm({ report, onSave, onClose }) {
             </div>
             {!form.reportedToHSE && (
               <div style={{ padding:"10px 14px", background:"#FCEBEB", borderRadius:8, fontSize:12, color:"#791F1F", marginBottom:14 }}>
-                This incident has not yet been reported to HSE. Please report at hse.gov.uk/riddor/report.htm
+                {content.notReportedBanner}
               </div>
             )}
             <div style={{ marginTop:12 }}>
-              <button type="button" onClick={()=>printRiddorF2508(form)} style={{ ...ss.btn, fontSize:12 }}>Print F2508-style worksheet</button>
+              <button type="button" onClick={()=>printNotifiableWorksheet(form, content)} style={{ ...ss.btn, fontSize:12 }}>Print worksheet</button>
             </div>
           </div>
         )}
@@ -430,7 +443,7 @@ function RIDDORForm({ report, onSave, onClose }) {
             {step>0 && <button onClick={()=>setStep(s=>s-1)} style={ss.btn}>← Back</button>}
             {step<STEPS.length-1
               ? <button onClick={()=>setStep(s=>s+1)} style={ss.btnP}>Next →</button>
-              : <button onClick={()=>onSave({...form,status:form.reportedToHSE?"reported":"pending"})} style={ss.btnP}>Save RIDDOR record</button>
+              : <button onClick={()=>onSave({...form,status:form.reportedToHSE?"reported":"pending"})} style={ss.btnP}>{content.saveLabel}</button>
             }
           </div>
         </div>
@@ -440,6 +453,8 @@ function RIDDORForm({ report, onSave, onClose }) {
 }
 
 export default function RIDDORRegister() {
+  const marketId = getOrgMarketId();
+  const content = getNotifiableIncidentsContent(marketId);
   const [reports, setReports] = useState(()=>load("riddor_reports",[]));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(40);
@@ -452,11 +467,11 @@ export default function RIDDORRegister() {
   };
 
   const getDeadlineStatus = (r) => {
-    const def = RIDDOR_TYPES[r.riddorType];
+    const def = getIncidentTypeDef(content, r.riddorType);
     if (!def?.deadline||!r.incidentDate) return null;
     const deadline = new Date(addDays(r.incidentDate, def.deadline));
     const daysLeft = Math.ceil((deadline-new Date())/(1000*60*60*24));
-    if (r.reportedToHSE) return { bg:"#EAF3DE", color:"#27500A", label:"Reported to HSE" };
+    if (r.reportedToHSE) return { bg:"#EAF3DE", color:"#27500A", label: content.reportedLabel };
     if (daysLeft<0) return { bg:"#FCEBEB", color:"#791F1F", label:`${Math.abs(daysLeft)}d OVERDUE` };
     if (daysLeft<=2) return { bg:"#FCEBEB", color:"#791F1F", label:`${daysLeft}d left` };
     return { bg:"#FAEEDA", color:"#633806", label:`${daysLeft}d to report` };
@@ -464,65 +479,65 @@ export default function RIDDORRegister() {
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
-      {modal?.type==="form" && <RIDDORForm report={modal.data} onSave={saveReport} onClose={()=>setModal(null)} />}
+      {modal?.type==="form" && <RIDDORForm report={modal.data} onSave={saveReport} onClose={()=>setModal(null)} content={content} marketId={marketId} />}
 
       <PageHero
-        badgeText="RID"
-        title="RIDDOR register"
-        lead="Reporting of Injuries, Diseases and Dangerous Occurrences Regulations 2013. Deadlines and HSE reporting links below."
-        exportModuleId="riddor"
-        exportModuleLabel="RIDDOR register"
+        badgeText={content.badgeText}
+        title={content.title}
+        lead={content.lead}
+        exportModuleId={content.moduleId}
+        exportModuleLabel={content.exportModuleLabel}
         right={
           <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnR}>
-            + New RIDDOR report
+            {content.newReportLabel}
           </button>
         }
       />
 
       <RegisterModuleShell
-        moduleId="riddor"
+        moduleId={content.moduleId}
         smartContext={{ items: reports, reports }}
         pdfExportRows={reports}
-        stats={buildRegisterModuleStats("riddor", reports)}
+        stats={buildRegisterModuleStats(content.moduleId, reports)}
       >
       <div style={{ padding:"10px 14px", background:"#E6F1FB", border:"0.5px solid #B5D4F4", borderRadius:8, fontSize:12, color:"#0C447C", marginBottom:20, lineHeight:1.6 }}>
-        RIDDOR requires employers to report work-related deaths, specified injuries and over-7-day injuries within 10–15 days. Report at <a href="https://www.hse.gov.uk/riddor/report.htm" target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>hse.gov.uk/riddor/report.htm</a>
+        {content.lead} <a href={content.regulatorUrl} target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>{content.regulatorLinkText.replace(" →", "")}</a>
       </div>
 
       {reports.length===0 ? (
         <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No RIDDOR reports recorded.</p>
-          <button onClick={()=>setModal({type:"form"})} style={ss.btnR}>+ Report an incident</button>
+          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>{content.emptyLabel}</p>
+          <button onClick={()=>setModal({type:"form"})} style={ss.btnR}>{content.newReportLabel}</button>
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {listPg.visible(reports).map(r=>{
-            const def = RIDDOR_TYPES[r.riddorType]||{};
+            const def = getIncidentTypeDef(content, r.riddorType);
             const status = getDeadlineStatus(r);
             return (
               <div key={r.id} style={{ ...ss.card, display:"flex", gap:12, alignItems:"center", borderLeft:"3px solid #E24B4A" }}>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-                    <span style={{ fontWeight:500, fontSize:14 }}>{def.label||r.riddorType}</span>
+                    <span style={{ fontWeight:500, fontSize:14 }}>{def?.label||r.riddorType}</span>
                     {status && <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:500, background:status.bg, color:status.color }}>{status.label}</span>}
-                    {def.form && <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, background:"#F1EFE8", color:"#444441" }}>{def.form}</span>}
+                    {def?.form && <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, background:"#F1EFE8", color:"#444441" }}>{def.form}</span>}
                   </div>
                   <div style={{ fontSize:12, color:"var(--color-text-secondary)", display:"flex", gap:12, flexWrap:"wrap" }}>
                     <span>{fmtDate(r.incidentDate)}</span>
                     {r.location && <span>{r.location}</span>}
                     {r.injuredName && <span>{r.injuredName}</span>}
-                    {r.hseReportRef && <span>HSE ref: {r.hseReportRef}</span>}
+                    {r.hseReportRef && <span>Ref: {r.hseReportRef}</span>}
                   </div>
                 </div>
                 <div style={{ display:"flex", gap:6, flexShrink:0, flexWrap:"wrap" }}>
-                  <button type="button" onClick={()=>printRiddorF2508(r)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print F2508</button>
+                  <button type="button" onClick={()=>printNotifiableWorksheet(r, content)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print</button>
                   <button onClick={()=>setModal({type:"form",data:r})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
                   <button onClick={()=>{
                     if (softDeleteToRecycleBin({
-                      moduleId: "riddor",
-                      moduleLabel: "RIDDOR",
+                      moduleId: content.moduleId,
+                      moduleLabel: content.title,
                       itemType: "riddor_report",
-                      itemLabel: (RIDDOR_TYPES[r.riddorType]?.label) || r.injuredName || r.id,
+                      itemLabel: def?.label || r.injuredName || r.id,
                       sourceKey: "riddor_reports",
                       payload: r,
                     })) setReports(prev=>prev.filter(x=>x.id!==r.id));

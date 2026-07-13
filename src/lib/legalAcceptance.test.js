@@ -9,7 +9,14 @@ describe("buildLegalAcceptanceMetadata", () => {
 
     expect(meta.terms_accepted_at).toBe("2026-07-09T12:00:00.000Z");
     expect(meta.privacy_accepted_at).toBe("2026-07-09T12:00:00.000Z");
-    expect(meta.terms_version).toBe(LEGAL_VERSIONS.terms);
-    expect(meta.privacy_version).toBe(LEGAL_VERSIONS.privacy);
+    expect(meta.terms_version).toBe(LEGAL_VERSIONS.uk.terms);
+    expect(meta.privacy_version).toBe(LEGAL_VERSIONS.uk.privacy);
+  });
+
+  it("records AU legal versions when market is au", () => {
+    const meta = buildLegalAcceptanceMetadata(new Date("2026-07-09T12:00:00.000Z"), "au");
+    expect(meta.market).toBe("au");
+    expect(meta.terms_version).toBe(LEGAL_VERSIONS.au.terms);
+    expect(meta.privacy_version).toBe(LEGAL_VERSIONS.au.privacy);
   });
 });

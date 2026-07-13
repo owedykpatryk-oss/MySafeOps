@@ -41,6 +41,7 @@ export function loadProjectActionContext() {
   return buildProjectActionContext({
     rams: load(PROJECT_DOC_KEYS.rams, []),
     surveys: load(PROJECT_DOC_KEYS.surveys, []),
+    gprReports: load(PROJECT_DOC_KEYS.gprReports, []),
     permits: load(PROJECT_DOC_KEYS.permits, []),
     methodStatements: load(PROJECT_DOC_KEYS.methodStatements, []),
     dailyBriefings,
@@ -51,6 +52,7 @@ export function loadProjectActionContext() {
 export function buildProjectActionContext({
   rams = [],
   surveys = [],
+  gprReports = [],
   permits = [],
   methodStatements = [],
   dailyBriefings = [],
@@ -61,6 +63,7 @@ export function buildProjectActionContext({
   return {
     ramsByProject: groupByProject(rams),
     surveysByProject: groupByProject(surveys),
+    gprReportsByProject: groupByProject(gprReports),
     permitsByProject: groupByProject(permits),
     methodStatementsByProject: groupByProject(methodStatements),
     dailyBriefingsByProject: groupByProject(dailyBriefings),
@@ -80,6 +83,7 @@ export function pickNextActionForProject(project, ctx) {
   const pid = project.id;
   const rams = ctx.ramsByProject[pid] || [];
   const surveys = ctx.surveysByProject[pid] || [];
+  const gprReports = ctx.gprReportsByProject[pid] || [];
   const permits = ctx.permitsByProject[pid] || [];
   const plans = ctx.plansByProject[pid] || [];
   const methodStatements = ctx.methodStatementsByProject[pid] || [];
@@ -154,6 +158,20 @@ export function pickNextActionForProject(project, ctx) {
       label: "Create survey draft",
       viewId: "survey-report",
       action: "createReport",
+      projectId: pid,
+      tone: "info",
+    };
+  }
+
+  if (
+    isSurveyWorkflowEnabled() &&
+    surveys.length &&
+    !gprReports.length &&
+    (project.playbookId === "utility_mapping" || project.playbookId === "site_investigation")
+  ) {
+    return {
+      label: "Create GPR report draft",
+      viewId: "gpr-report",
       projectId: pid,
       tone: "info",
     };

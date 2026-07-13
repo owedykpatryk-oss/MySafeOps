@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { assertOrgSlugAccess } from "../_shared/orgAccess.ts";
+import { checkEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -82,11 +84,27 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const orgSlug = String(body?.orgSlug || "default").slice(0, 200);
+
+    const access = await assertOrgSlugAccess(supabase, user.id, orgSlug);
+    if (!access.ok) {
+      return new Response(JSON.stringify({ error: access.error }), {
+        status: access.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!checkEdgeRateLimit(`permit-audit-export:${user.id}`, 8, 60 * 60_000)) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const permitId = body?.permitId ? String(body.permitId) : "";
     const fromDate = body?.fromDate ? String(body.fromDate) : "";
     const toDate = body?.toDate ? String(body.toDate) : "";
     const actions = Array.isArray(body?.actions) ? body.actions.map((a: unknown) => String(a)) : [];
-    const maxRows = Math.max(100, Math.min(50000, Number(body?.maxRows || 10000)));
+    const maxRows = Math.max(100, Math.min(20000, Number(body?.maxRows || 10000)));
     const pageSize = 1000;
     const out: AuditRow[] = [];
     let page = 0;

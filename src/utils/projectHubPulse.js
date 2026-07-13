@@ -16,6 +16,9 @@ import {
   getIndustrySitePackTitle,
 } from "./industryPackProfile";
 import { getOrgIndustryPackId } from "./projectHubIndustry";
+import { getOrgMarketId } from "./orgMarket";
+import { getCompliancePackContent } from "../config/compliancePackContent";
+import { getRamsShortLabel } from "./marketLabels";
 
 const he = escapeHtml;
 
@@ -25,7 +28,9 @@ const he = escapeHtml;
  * Weighted readiness from live linked documents (not stored healthScore alone).
  * @returns {{ score: number, tone: string, gates: Array<{ key: string, label: string, points: number, max: number, ok: boolean }> }}
  */
-export function computeProjectReadiness(project, dash, industryCtx) {
+export function computeProjectReadiness(project, dash, industryCtx, marketId = getOrgMarketId()) {
+  const pack = getCompliancePackContent(marketId);
+  const ramsLabel = getRamsShortLabel(marketId);
   const gates = [];
   const add = (key, label, max, ok) => {
     gates.push({ key, label, points: ok ? max : 0, max, ok });
@@ -41,8 +46,8 @@ export function computeProjectReadiness(project, dash, industryCtx) {
   ) || Boolean(project?.boundaryPoints?.length || project?.boundaryGeoJson);
   add("location", "Map / boundary", 5, hasLocation);
 
-  add("cdm", "CDM pack", 10, (dash?.cdmPacks?.length || 0) > 0);
-  add("rams", "RAMS", 20, (dash?.rams?.length || 0) > 0);
+  add("cdm", pack.planShort, 10, (dash?.cdmPacks?.length || 0) > 0);
+  add("rams", ramsLabel, 20, (dash?.rams?.length || 0) > 0);
 
   const permitReady = dash?.permitReady || { required: 0, issued: 0, complete: true };
   const permitsOk =
@@ -89,7 +94,9 @@ export function todayBriefingStats(dailyBriefings = [], projectId, dateIso = tod
 /**
  * Visual workflow pipeline for the hub hero.
  */
-export function buildProjectPipeline(project, dash) {
+export function buildProjectPipeline(project, dash, marketId = getOrgMarketId()) {
+  const pack = getCompliancePackContent(marketId);
+  const ramsLabel = getRamsShortLabel(marketId);
   const permitReady = dash?.permitReady || { required: 0, issued: 0, complete: true };
   const missingPt = missingRequiredPermits(project, dash?.permits || []);
 
@@ -99,7 +106,13 @@ export function buildProjectPipeline(project, dash) {
       key: "intel",
       icon: "🌦️",
       label: "Intel",
-      hint: project?.weatherSnapshot ? "Weather on file" : "Add weather & A&E",
+      hint: project?.weatherSnapshot
+        ? "Weather on file"
+        : marketId === "pl"
+          ? "Dodaj pogodę i SOR"
+          : marketId === "au"
+            ? "Add weather & ED"
+            : "Add weather & A&E",
       status: project?.weatherSnapshot || project?.nearestHospital ? "done" : "todo",
       viewId: "projects",
       action: "editProject",
@@ -107,17 +120,23 @@ export function buildProjectPipeline(project, dash) {
     {
       key: "cdm",
       icon: "🏗️",
-      label: "CDM",
-      hint: dash?.cdmPacks?.length ? `${dash.cdmPacks.length} pack(s)` : "Create CPP",
+      label: pack.badgeText,
+      hint: dash?.cdmPacks?.length
+        ? `${dash.cdmPacks.length} pack(s)`
+        : marketId === "pl"
+          ? "Utwórz plan BHP"
+          : marketId === "au"
+            ? "Create WHS plan"
+            : "Create CPP",
       status: dash?.cdmPacks?.length ? "done" : "todo",
-      viewId: "cdm",
+      viewId: pack.moduleId,
       action: dash?.cdmPacks?.length ? undefined : "create",
     },
     {
       key: "rams",
       icon: "⚠️",
-      label: "RAMS",
-      hint: dash?.rams?.length ? `${dash.rams.length} doc(s)` : "Draft RAMS",
+      label: ramsLabel,
+      hint: dash?.rams?.length ? `${dash.rams.length} doc(s)` : `Draft ${ramsLabel}`,
       status: dash?.rams?.length ? "done" : "todo",
       viewId: "rams",
       action: dash?.rams?.length ? undefined : "create",

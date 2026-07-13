@@ -2,21 +2,26 @@ import { openWorkspaceMoreSection, openWorkspaceView } from "../utils/workspaceN
 import { HSE_SECTION_TITLE } from "../utils/moduleRegisterStats";
 import { modulesWithSeedTemplates, seedEmptyRegisters } from "../utils/registerSeedTemplates";
 import { useToast } from "../context/ToastContext";
+import { useCountUp } from "../hooks/useCountUp";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getRegistersLabel } from "../utils/marketLabels";
 
 /**
- * Dashboard widget — HSE register health, attention list, seed empty registers.
+ * Dashboard widget — HSE/WHS/BHP register health, attention list, seed empty registers.
  */
 export default function HseRegistersCard({ summary, attentionModules = [], emptyModules = [], onSeeded }) {
   const { pushToast } = useToast();
   const score = summary?.healthScore ?? 0;
+  const scoreDisplay = useCountUp(score);
   const scoreColour = score >= 75 ? "#0d9488" : score >= 45 ? "#d97706" : "#dc2626";
   const seedableEmpty = modulesWithSeedTemplates(emptyModules.map((m) => m.id));
+  const registersLabel = getRegistersLabel(getOrgMarketId());
 
   const handleSeed = () => {
     if (!seedableEmpty.length) return;
     if (
       !window.confirm(
-        `Add a starter template row to ${seedableEmpty.length} empty HSE register(s)? You can edit or delete these rows in each module.`
+        `Add a starter template row to ${seedableEmpty.length} empty ${registersLabel} register(s)? You can edit or delete these rows in each module.`
       )
     ) {
       return;
@@ -24,7 +29,7 @@ export default function HseRegistersCard({ summary, attentionModules = [], empty
     const { seeded } = seedEmptyRegisters(seedableEmpty);
     onSeeded?.(seeded.length);
     if (seeded.length) {
-      pushToast({ type: "success", message: `Added starter records to ${seeded.length} register(s). Open More → HSE to review.` });
+      pushToast({ type: "success", message: `Added starter records to ${seeded.length} register(s). Open More → ${registersLabel} to review.` });
     }
   };
 
@@ -32,13 +37,13 @@ export default function HseRegistersCard({ summary, attentionModules = [], empty
     <div className="app-hse-registers-card">
       <div className="app-hse-registers-card__head">
         <div>
-          <div className="app-dashboard-card__title">HSE registers</div>
+          <div className="app-dashboard-card__title">{registersLabel} registers</div>
           <p className="app-hse-registers-card__lead">
             {summary?.records?.toLocaleString() ?? 0} records · {summary?.tracked ?? 0} registers tracked
           </p>
         </div>
         <div className="app-hse-registers-card__score" style={{ borderColor: scoreColour }}>
-          <span style={{ color: scoreColour }}>{score}%</span>
+          <span style={{ color: scoreColour }}>{scoreDisplay}%</span>
           <small>Health</small>
         </div>
       </div>
@@ -71,7 +76,7 @@ export default function HseRegistersCard({ summary, attentionModules = [], empty
           ))}
         </ul>
       ) : (
-        <div className="app-dashboard-empty">No HSE registers flagged for attention right now.</div>
+        <div className="app-dashboard-empty">No {registersLabel} registers flagged for attention right now.</div>
       )}
 
       <div className="app-hse-registers-card__actions">
@@ -85,7 +90,7 @@ export default function HseRegistersCard({ summary, attentionModules = [], empty
             })
           }
         >
-          Open HSE registers
+          Open {registersLabel} registers
         </button>
         {seedableEmpty.length > 0 ? (
           <button type="button" className="app-hse-registers-card__btn" onClick={handleSeed}>

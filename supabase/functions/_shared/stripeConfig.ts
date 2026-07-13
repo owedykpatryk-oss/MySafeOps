@@ -1,12 +1,22 @@
+export type StripeMarketId = "uk" | "au" | "pl";
+
 export type StripeMode = "live" | "test";
 
 export type StripePricePlanId = "starter" | "team" | "business" | "enterprise";
+
+const MARKET_PRICE_SUFFIX: Record<StripeMarketId, string> = {
+  uk: "",
+  au: "_AUD",
+  pl: "_PLN",
+};
 
 export interface StripeEnvConfig {
   mode: StripeMode;
   secretKey: string;
   prices: Record<StripePricePlanId, string>;
   webhookSecret?: string;
+  /** Price IDs actually used (may be UK when AUD secrets are missing). */
+  billingMarket?: StripeMarketId;
 }
 
 function envTrim(key: string): string {
@@ -44,18 +54,19 @@ export function hasTestStripeConfig(): boolean {
   return secret.startsWith("sk_test_");
 }
 
-export function resolveStripeConfig(mode: StripeMode): StripeEnvConfig | null {
+export function resolveStripeConfig(mode: StripeMode, market: StripeMarketId = "uk"): StripeEnvConfig | null {
   const secretKey =
     mode === "test" ? envTrim("STRIPE_SECRET_KEY_TEST") : envTrim("STRIPE_SECRET_KEY");
   if (!isValidStripeSecret(secretKey)) return null;
   if (mode === "test" && !secretKey.startsWith("sk_test_")) return null;
   if (mode === "live" && secretKey.startsWith("sk_test_")) return null;
 
+  const marketSuffix = MARKET_PRICE_SUFFIX[market] ?? "";
   const priceKeys: Record<StripePricePlanId, string> = {
-    starter: mode === "test" ? "STRIPE_PRICE_STARTER_TEST" : "STRIPE_PRICE_STARTER",
-    team: mode === "test" ? "STRIPE_PRICE_TEAM_TEST" : "STRIPE_PRICE_TEAM",
-    business: mode === "test" ? "STRIPE_PRICE_BUSINESS_TEST" : "STRIPE_PRICE_BUSINESS",
-    enterprise: mode === "test" ? "STRIPE_PRICE_ENTERPRISE_TEST" : "STRIPE_PRICE_ENTERPRISE",
+    starter: mode === "test" ? `STRIPE_PRICE_STARTER_TEST${marketSuffix}` : `STRIPE_PRICE_STARTER${marketSuffix}`,
+    team: mode === "test" ? `STRIPE_PRICE_TEAM_TEST${marketSuffix}` : `STRIPE_PRICE_TEAM${marketSuffix}`,
+    business: mode === "test" ? `STRIPE_PRICE_BUSINESS_TEST${marketSuffix}` : `STRIPE_PRICE_BUSINESS${marketSuffix}`,
+    enterprise: mode === "test" ? `STRIPE_PRICE_ENTERPRISE_TEST${marketSuffix}` : `STRIPE_PRICE_ENTERPRISE${marketSuffix}`,
   };
 
   const prices = {
@@ -65,12 +76,19 @@ export function resolveStripeConfig(mode: StripeMode): StripeEnvConfig | null {
     enterprise: envTrim(priceKeys.enterprise),
   };
 
+  // Fall back to GBP price IDs when market-specific prices are not configured yet.
+  if (market !== "uk" && !Object.values(prices).every(isValidPriceId)) {
+    const uk = resolveStripeConfig(mode, "uk");
+    if (!uk) return null;
+    return { ...uk, billingMarket: "uk" };
+  }
+
   if (!Object.values(prices).every(isValidPriceId)) return null;
 
   const webhookSecret =
     mode === "test" ? envTrim("STRIPE_WEBHOOK_SECRET_TEST") : envTrim("STRIPE_WEBHOOK_SECRET");
 
-  return { mode, secretKey, prices, webhookSecret: webhookSecret || undefined };
+  return { mode, secretKey, prices, webhookSecret: webhookSecret || undefined, billingMarket: market };
 }
 
 export function priceForPlan(config: StripeEnvConfig, planId: StripePricePlanId): string | undefined {
@@ -78,16 +96,24 @@ export function priceForPlan(config: StripeEnvConfig, planId: StripePricePlanId)
   return priceId && isValidPriceId(priceId) ? priceId : undefined;
 }
 
-export function planFromPriceId(priceId: string): { plan: StripePricePlanId; mode: StripeMode } | null {
+export function planFromPriceId(priceId: string): { plan: StripePricePlanId; mode: StripeMode; market: StripeMarketId } | null {
   const p = priceId.trim();
   for (const mode of ["live", "test"] as const) {
-    const config = resolveStripeConfig(mode);
-    if (!config) continue;
-    for (const plan of ["starter", "team", "business", "enterprise"] as const) {
-      if (config.prices[plan] === p) return { plan, mode };
+    for (const market of ["uk", "au", "pl"] as const) {
+      const config = resolveStripeConfig(mode, market);
+      if (!config) continue;
+      for (const plan of ["starter", "team", "business", "enterprise"] as const) {
+        if (config.prices[plan] === p) return { plan, mode, market };
+      }
     }
   }
   return null;
+}
+
+/** Whether all four plan price IDs are configured for the requested market (no GBP fallback). */
+export function stripeMarketReady(mode: StripeMode, market: StripeMarketId): boolean {
+  const config = resolveStripeConfig(mode, market);
+  return config !== null && (config.billingMarket ?? market) === market;
 }
 
 export function stripeDiagnostics(mode: StripeMode) {

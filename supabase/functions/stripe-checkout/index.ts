@@ -7,8 +7,10 @@ import {
   priceForPlan,
   resolveStripeConfig,
   stripeDiagnostics,
+  stripeMarketReady,
   type StripePricePlanId,
 } from "../_shared/stripeConfig.ts";
+import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -32,6 +34,11 @@ Deno.serve(async (req) => {
       deployed: true,
       stripeLive: live,
       stripeTest: test,
+      marketBilling: {
+        uk: stripeMarketReady("live", "uk"),
+        au: stripeMarketReady("live", "au"),
+        pl: stripeMarketReady("live", "pl"),
+      },
       configured: {
         stripeSecretKey: hasLiveStripeConfig(),
         stripePriceStarter: live.configuredMap.priceStarter,
@@ -54,6 +61,14 @@ Deno.serve(async (req) => {
     };
     const liveReady = live.configured;
     const allValid = Object.values(diagnostics.valid).every(Boolean);
+    const admin = await getBillingAdminUser(req, supabaseUrl, serviceKey);
+    if (!admin) {
+      const publicBody = publicStripeHealthBody("stripe-checkout", liveReady && allValid, test.configured, requestId);
+      return new Response(JSON.stringify(publicBody), {
+        status: liveReady && allValid ? 200 : 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+      });
+    }
     return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady: test.configured }), {
       status: liveReady && allValid ? 200 : 503,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
@@ -112,6 +127,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const planId = body?.planId as StripePricePlanId | undefined;
     const testMode = Boolean(body?.testMode);
+    const marketRaw = String(body?.market || "uk").trim().toLowerCase();
+    const market = marketRaw === "au" ? "au" : marketRaw === "pl" ? "pl" : "uk";
     if (!planId || !["starter", "team", "business", "enterprise"].includes(planId)) {
       return new Response(JSON.stringify({ error: "planId must be starter, team, business, or enterprise" }), {
         status: 400,
@@ -119,7 +136,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const stripeConfig = resolveStripeConfig(testMode ? "test" : "live");
+    const stripeConfig = resolveStripeConfig(testMode ? "test" : "live", market);
     if (!stripeConfig) {
       return new Response(
         JSON.stringify({
@@ -200,6 +217,8 @@ Deno.serve(async (req) => {
       }
     }
 
+    const automaticTax = (market === "pl" || market === "uk") && Deno.env.get("STRIPE_AUTOMATIC_TAX") === "true";
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
@@ -207,13 +226,20 @@ Deno.serve(async (req) => {
       success_url: `${siteUrl}/app?checkout=success&settingsTab=billing${testMode ? "&stripeMode=test" : ""}`,
       cancel_url: `${siteUrl}/app?checkout=canceled&settingsTab=billing${testMode ? "&stripeMode=test" : ""}`,
       client_reference_id: orgId,
-      metadata: { org_id: orgId, plan_id: planId, stripe_mode: stripeConfig.mode },
+      metadata: { org_id: orgId, plan_id: planId, stripe_mode: stripeConfig.mode, market },
       subscription_data: {
-        metadata: { org_id: orgId, plan_id: planId, stripe_mode: stripeConfig.mode },
+        metadata: { org_id: orgId, plan_id: planId, stripe_mode: stripeConfig.mode, market },
       },
+      ...(automaticTax
+        ? {
+            automatic_tax: { enabled: true },
+            billing_address_collection: "required",
+            customer_update: { address: "auto" },
+          }
+        : {}),
     });
 
-    return new Response(JSON.stringify({ url: session.url, requestId, stripeMode: stripeConfig.mode }), {
+    return new Response(JSON.stringify({ url: session.url, requestId, stripeMode: stripeConfig.mode, priceMarket: stripeConfig.billingMarket ?? market }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });

@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { buildRosterLinkedEmailSet } from "../_shared/permitNotificationRecipients.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -62,20 +63,109 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Only real org members can send permit notifications — closes an open-relay gap where any
+    // authenticated (even org-less) account could email arbitrary addresses with a spoofed org name.
+    const { data: mem, error: memErr } = await supabase
+      .from("org_memberships")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (memErr || !mem?.org_id) {
+      return new Response(JSON.stringify({ error: "Forbidden: no organisation membership" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const body = await req.json().catch(() => ({}));
     const recipients = Array.isArray(body?.recipients) ? body.recipients.map((x: unknown) => String(x).trim()) : [];
-    const validRecipients = recipients.filter((e: string) => e.includes("@")).slice(0, 30);
-    if (validRecipients.length === 0) {
+    const requestedRecipients = recipients.filter((e: string) => e.includes("@")).slice(0, 15);
+    if (requestedRecipients.length === 0) {
       return new Response(JSON.stringify({ error: "No valid recipients." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const norm = (e: unknown) => String(e || "").trim().toLowerCase();
+    const allowlist = new Set<string>();
+    const addAllowed = (e: unknown) => {
+      const x = norm(e);
+      if (x.includes("@")) allowlist.add(x);
+    };
+    addAllowed(user.email);
+
+    const { data: memberships } = await supabase
+      .from("org_memberships")
+      .select("user_id")
+      .eq("org_id", mem.org_id);
+    if (Array.isArray(memberships)) {
+      await Promise.all(
+        memberships.map(async ({ user_id }) => {
+          try {
+            const { data: authUser } = await supabase.auth.admin.getUserById(user_id);
+            if (authUser?.user?.email) addAllowed(authUser.user.email);
+          } catch {
+            /* skip */
+          }
+        })
+      );
+    }
+
+    const { data: invites } = await supabase.from("org_invites").select("email").eq("org_id", mem.org_id);
+    if (Array.isArray(invites)) {
+      for (const inv of invites) addAllowed(inv.email);
+    }
+
     const permit = body?.permit || {};
+    const roster = Array.isArray(body?.roster)
+      ? body.roster
+          .map((row: unknown) => {
+            const r = row as { name?: unknown; email?: unknown };
+            return { name: r?.name, email: r?.email };
+          })
+          .slice(0, 200)
+      : [];
+    const rosterLinked = buildRosterLinkedEmailSet(permit, roster);
+
+    const validRecipients = requestedRecipients.filter(
+      (e: string) => allowlist.has(norm(e)) || rosterLinked.has(norm(e))
+    );
+    if (validRecipients.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Recipients must be organisation members, pending invites, or worker roster emails linked to this permit's holder/issuer.",
+        }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Rate limit: cap sends per user in a rolling hour so the notification relay can't be
+    // used to blast large volumes of email (open-relay abuse / spam / Resend reputation risk).
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { data: recentSends, error: rateErr } = await supabase
+      .from("permit_notification_log")
+      .select("recipient_count")
+      .eq("user_id", user.id)
+      .gte("created_at", oneHourAgo);
+    if (!rateErr && Array.isArray(recentSends)) {
+      const sendsInWindow = recentSends.length;
+      const recipientsInWindow = recentSends.reduce((sum, r) => sum + (Number(r.recipient_count) || 0), 0);
+      if (sendsInWindow >= 20 || recipientsInWindow >= 120) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const permitId = String(permit?.id || "UNKNOWN");
     const permitType = String(permit?.type || "permit");
-    const orgName = String(body?.orgName || "MySafeOps");
+    // Resolve the org name server-side instead of trusting the client-supplied value, so
+    // notification emails can't be spoofed to impersonate an unrelated organisation.
+    const { data: org } = await supabase.from("organizations").select("name").eq("id", mem.org_id).maybeSingle();
+    const orgName = String(org?.name || body?.orgName || "MySafeOps");
     const message = String(body?.message || "").slice(0, 4000);
     const ramsDoc = body?.ramsDoc || null;
 
@@ -129,6 +219,12 @@ ${customMessage}
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    await supabase.from("permit_notification_log").insert({
+      user_id: user.id,
+      org_id: mem.org_id,
+      recipient_count: validRecipients.length,
+    });
 
     return new Response(
       JSON.stringify({

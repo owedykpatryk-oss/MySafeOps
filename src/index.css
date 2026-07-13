@@ -45,6 +45,10 @@
   --workspace-header-offset: calc(56px + env(safe-area-inset-top, 0px));
   --focus-ring: 2px solid var(--color-accent);
   --focus-ring-offset: 3px;
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-blur: 16px;
+  --status-active-glow: 0 0 0 1px rgba(13, 148, 136, 0.22), 0 8px 24px rgba(13, 148, 136, 0.12);
 }
 
 /* Mobile / touch: darker muted text for outdoor readability (small labels were too pale) */

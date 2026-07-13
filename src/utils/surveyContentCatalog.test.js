@@ -6,6 +6,11 @@ import {
   catalogDefaultDeliverables,
   getPlaybookSurveyPack,
   isSurveySimpleMode,
+  buildSurveyRamsMethod,
+  PAS128_QL_TOLERANCES,
+  formatPas128QlToleranceProse,
+  pas128QlToleranceHtmlTable,
+  getSurveyPackMeta,
 } from "./surveyContentCatalog";
 
 describe("surveyContentCatalog", () => {
@@ -21,9 +26,41 @@ describe("surveyContentCatalog", () => {
       scope: "Old scope",
       method: "Old method",
     });
-    expect(merged.scope).toMatch(/PAS128 QLB/i);
-    expect(merged.method).toMatch(/pre-start/i);
+    expect(merged.scope).toMatch(/PAS 128 QL-B/i);
+    expect(merged.method).toMatch(/pre-project meeting/i);
+    expect(merged.method).toMatch(/Management arrangements/i);
     expect(merged.hazardTokens).toContain("utility");
+  });
+
+  it("includes new drainage connectivity and service clearance types", () => {
+    expect(getSurveyCatalogEntry("drainage_connectivity_survey")?.scope).toMatch(/sonde/i);
+    expect(getSurveyCatalogEntry("service_clearance_survey")?.scope).toMatch(/clearance/i);
+    expect(SURVEY_CATALOG.drainage_connectivity_survey.defaultDeliverables?.length).toBeGreaterThan(0);
+  });
+
+  it("appends shared RAMS management block to playbook packs", () => {
+    const pack = getPlaybookSurveyPack("gpr_survey");
+    expect(pack?.method).toMatch(/4\.0 Work procedure/i);
+    expect(pack?.method).toMatch(/5\.0 Management arrangements/i);
+    expect(pack?.packMeta?.holdPoints?.length).toBeGreaterThan(0);
+  });
+
+  it("exposes PAS128 QL tolerance reference", () => {
+    expect(PAS128_QL_TOLERANCES.some((r) => r.key === "B1")).toBe(true);
+    expect(formatPas128QlToleranceProse()).toMatch(/QL B1/i);
+    expect(pas128QlToleranceHtmlTable()).toMatch(/<table/i);
+  });
+
+  it("includes topo plus utility combined type", () => {
+    const entry = getSurveyCatalogEntry("topo_plus_utility_survey");
+    expect(entry?.scope).toMatch(/Combined topographical/i);
+    expect(getSurveyPackMeta("topo_plus_utility_survey").defaultPas128Method).toBe("M2P");
+  });
+
+  it("buildSurveyRamsMethod uses structured UMG sections", () => {
+    const method = buildSurveyRamsMethod("1. Task step.");
+    expect(method).toMatch(/4\.5 Safe work procedure/i);
+    expect(method).toMatch(/1\. Task step\./);
   });
 
   it("builds deliverable rows with ids", () => {

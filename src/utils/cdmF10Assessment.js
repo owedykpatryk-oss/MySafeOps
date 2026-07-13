@@ -3,7 +3,7 @@
  * Not legal advice — figures must be confirmed against current HSE guidance.
  */
 
-/** @typedef {{ notifiable: boolean, personDays: number, workingDays: number, maxWorkers: number, reasons: string[], f10Required: boolean, f10Submitted: boolean, f10Date: string | null }} F10Assessment */
+/** @typedef {{ notifiable: boolean, personDays: number, calendarDays: number, maxWorkers: number, reasons: string[], f10Required: boolean, f10Submitted: boolean, f10Date: string | null }} F10Assessment */
 
 function num(value) {
   const n = parseInt(String(value ?? "").trim(), 10);
@@ -17,14 +17,16 @@ function num(value) {
 export function assessCdmF10Notification(input = {}) {
   const personDays = num(input.estimatedPersonDays);
   const maxWorkers = num(input.estimatedWorkers);
-  const workingDays = num(input.calendarPhaseDays);
+  // Field captures calendar days on the form (not working days per CDM 2015 reg 6) —
+  // treated as a cautious proxy for review, so label it accurately rather than as "working days".
+  const calendarDays = num(input.calendarPhaseDays);
   const reasons = [];
 
   if (personDays > 500) {
     reasons.push(`${personDays} person-days exceeds 500`);
   }
-  if (workingDays > 30 && maxWorkers > 20) {
-    reasons.push(`${workingDays} working days with ${maxWorkers} workers on site (>30 days and >20 workers)`);
+  if (calendarDays > 30 && maxWorkers > 20) {
+    reasons.push(`${calendarDays} calendar days with ${maxWorkers} workers on site (>30 days and >20 workers — verify actual working days for CDM 2015 reg 6)`);
   }
 
   const notifiable = reasons.length > 0;
@@ -34,7 +36,7 @@ export function assessCdmF10Notification(input = {}) {
   return {
     notifiable,
     personDays,
-    workingDays,
+    calendarDays,
     maxWorkers,
     reasons,
     f10Required: notifiable,

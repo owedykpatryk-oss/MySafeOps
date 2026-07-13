@@ -1,15 +1,57 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronUp } from "lucide-react";
 import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
+import { getLandingNavLinks } from "../../data/landingMarketContent";
 
-const JUMP_LINKS = [
-  { href: "#workflow", label: "Flow" },
-  { href: "#profiles", label: "Profiles" },
-  { href: "#readiness", label: "Check" },
-  { href: "#pricing", label: "Pricing" },
-  { href: "#faq", label: "FAQ" },
-];
+/** @typedef {import("../../config/markets").MarketId} MarketId */
+
+/** @type {Record<MarketId, { href: string; label: string }[]>} */
+const JUMP_HREFS = {
+  uk: [
+    { href: "#workflow", label: "Flow" },
+    { href: "#profiles", label: "Profiles" },
+    { href: "#readiness", label: "Check" },
+    { href: "#pricing", label: "Pricing" },
+    { href: "#faq", label: "FAQ" },
+  ],
+  au: [
+    { href: "#workflow", label: "Flow" },
+    { href: "#profiles", label: "Profiles" },
+    { href: "#readiness", label: "Check" },
+    { href: "#pricing", label: "Pricing" },
+    { href: "#faq", label: "FAQ" },
+  ],
+  pl: [
+    { href: "#workflow", label: "Proces" },
+    { href: "#profiles", label: "Profile" },
+    { href: "#readiness", label: "Gotowość" },
+    { href: "#pricing", label: "Cennik" },
+    { href: "#faq", label: "FAQ" },
+  ],
+};
+
+/** @type {Record<MarketId, { primary: string; secondary: string; scrollTop: string; jumpNav: string }>} */
+const CHROME_COPY = {
+  uk: {
+    primary: "Start evaluation →",
+    secondary: "Plans",
+    scrollTop: "Back to top",
+    jumpNav: "Jump to section",
+  },
+  au: {
+    primary: "Start evaluation →",
+    secondary: "Plans",
+    scrollTop: "Back to top",
+    jumpNav: "Jump to section",
+  },
+  pl: {
+    primary: "Wypróbuj →",
+    secondary: "Cennik",
+    scrollTop: "Do góry",
+    jumpNav: "Skocz do sekcji",
+  },
+};
 
 function useMobileLandingChrome() {
   const [heroVisible, setHeroVisible] = useState(true);
@@ -75,9 +117,15 @@ function useMobileLandingChrome() {
   return { showJumpNav, showCtaBar, showTop };
 }
 
-/** Mobile-only jump nav, sticky CTA, and scroll-to-top — avoids stacking on hero/footer. */
-export default function LandingMobileChrome() {
+/**
+ * Mobile-only jump nav, sticky CTA, and scroll-to-top — avoids stacking on hero/footer.
+ * @param {{ marketId?: MarketId; loginTo?: string; copy?: ReturnType<typeof import("../../data/landingMarketContent").getLandingMarketContent> }} props
+ */
+export default function LandingMobileChrome({ marketId = "uk", loginTo = "/login" }) {
   const { showJumpNav, showCtaBar, showTop } = useMobileLandingChrome();
+  const nav = getLandingNavLinks(marketId);
+  const chrome = CHROME_COPY[marketId] ?? CHROME_COPY.uk;
+  const jumpLinks = useMemo(() => JUMP_HREFS[marketId] ?? JUMP_HREFS.uk, [marketId]);
 
   const scrollTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -87,10 +135,10 @@ export default function LandingMobileChrome() {
     <>
       <nav
         className={`landing-mobile-jump${showJumpNav ? " landing-mobile-jump--visible" : ""}`}
-        aria-label="Jump to section"
+        aria-label={chrome.jumpNav}
       >
         <div className="landing-mobile-jump__track landing-scroll-row">
-          {JUMP_LINKS.map((item) => (
+          {jumpLinks.map((item) => (
             <a key={item.href} href={item.href} className="landing-mobile-jump__chip">
               {item.label}
             </a>
@@ -101,7 +149,7 @@ export default function LandingMobileChrome() {
       <button
         type="button"
         className={`landing-scroll-top${showTop ? " landing-scroll-top--visible" : ""}`}
-        aria-label="Back to top"
+        aria-label={chrome.scrollTop}
         onClick={scrollTop}
       >
         <ChevronUp size={22} strokeWidth={2.5} aria-hidden />
@@ -109,14 +157,14 @@ export default function LandingMobileChrome() {
 
       <aside
         className={`landing-mobile-cta-bar${showCtaBar ? "" : " landing-mobile-cta-bar--hidden"}`}
-        aria-label="Quick actions"
+        aria-label={nav.getStarted}
         aria-hidden={!showCtaBar}
       >
-        <Link to="/login" className="btn btn-p landing-btn-glow landing-mobile-cta-bar__primary" {...loginLinkPrefetchProps}>
-          Start evaluation →
+        <Link to={loginTo} className="btn btn-p landing-btn-glow landing-mobile-cta-bar__primary" {...loginLinkPrefetchProps}>
+          {chrome.primary}
         </Link>
         <a href="#pricing" className="landing-mobile-cta-bar__secondary">
-          Plans
+          {chrome.secondary}
         </a>
       </aside>
     </>

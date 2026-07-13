@@ -7,6 +7,7 @@ import {
   resolveStripeConfig,
   stripeDiagnostics,
 } from "../_shared/stripeConfig.ts";
+import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -45,6 +46,14 @@ Deno.serve(async (req) => {
     };
     const liveReady = live.configured;
     const allValid = Object.values(diagnostics.valid).every(Boolean);
+    const admin = await getBillingAdminUser(req, supabaseUrl, serviceKey);
+    if (!admin) {
+      const publicBody = publicStripeHealthBody("stripe-portal", liveReady && allValid, test.configured, requestId);
+      return new Response(JSON.stringify(publicBody), {
+        status: liveReady && allValid ? 200 : 503,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+      });
+    }
     return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady: test.configured }), {
       status: liveReady && allValid ? 200 : 503,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },

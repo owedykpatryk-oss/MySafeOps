@@ -201,22 +201,26 @@ describe("surveyReportPrintHtml", () => {
     expect(html).toContain("HV cable");
     expect(html).toContain("Sign-off");
     expect(html).toContain("staticmap.openstreetmap.de");
+    expect(html).toContain('class="sr-watermark"');
+    expect(html).toContain("DRAFT");
   });
 
-  it("pullScopeFromRams copies scope and method from RAMS", async () => {
+  it("pullScopeFromRams copies catalog scope and method from RAMS work type", async () => {
     const { pullScopeFromRams } = await import("./surveyReportSmart.js");
     const report = blankSurveyReport({ sections: { scope: "", methodology: "" } });
     const rams = {
       id: "rams_1",
       surveyWorkType: "utility_mapping_survey",
       surveyDeliverables: "PAS128 scope text",
-      surveyMethodStatement: "Method steps",
+      surveyMethodStatement: "4.0 Work procedure — should not land in report methodology",
       title: "Site RAMS",
+      surveyHoldPoints: ["HP1 records review complete"],
     };
     const next = pullScopeFromRams(report, rams);
-    expect(next.sections.scope).toBe("PAS128 scope text");
-    expect(next.sections.methodology).toBe("Method steps");
-    expect(next.hseRefs.ramsExcerpt).toBe("Site RAMS");
+    expect(next.sections.scope).toMatch(/PAS 128 utility mapping/i);
+    expect(next.sections.methodology).toMatch(/PAS 128 Type B/i);
+    expect(next.sections.methodology).not.toMatch(/4\.0 Work procedure/);
+    expect(next.hseRefs.ramsExcerpt).toMatch(/Site RAMS/);
     expect(next.scopeFromRamsAt).toBeTruthy();
   });
 });

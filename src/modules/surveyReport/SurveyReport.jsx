@@ -3,6 +3,7 @@ import { isAnthropicConfigured, checkAnthropicProxyReady } from "../../utils/ant
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { useApp } from "../../context/AppContext";
+import { useToast } from "../../context/ToastContext";
 import { pushAudit } from "../../utils/auditLog";
 import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
@@ -15,6 +16,7 @@ import {
   LIMITATION_RULES,
   METHODS_AFFECTED,
   PAS128_QUALITY_LEVELS,
+  PAS128_METHODS,
   RAIN_DURING_SURVEY,
   SURVEY_TYPES,
   UTILITY_RECORDS_GAPS,
@@ -22,15 +24,19 @@ import {
   UTILITY_RECORDS_PRESETS,
   UTILITY_RECORDS_SOURCES,
   WEATHER_PHENOMENA,
-  QA_CHECKLIST_ITEMS,
-  GI_QA_CHECKLIST_ITEMS,
+  DBYD_ENQUIRY_PROVIDERS,
+  DBYD_ENQUIRY_STATUS,
+  UNDERTAKER_CATEGORIES,
+  UNDERTAKER_RESPONSE_STATUS,
   GI_METHOD_OPTIONS,
   UTILITY_TYPE_OPTIONS,
   UTILITY_CONFIDENCE_LEVELS,
   DELIVERABLE_FORMAT_OPTIONS,
   RECORD_REF_STATUS_OPTIONS,
   EQUIPMENT_CALIBRATION_STATUS,
+  SURVEY_PHOTO_CATEGORIES,
 } from "./surveyReportConstants";
+import { getQaChecklistGroupsForSurveyType, getQaChecklistProgress, getQaGroupProgress, patchQaGroup, mergeStandardsCited, applyMobilisationQaPrefill, suggestStandardsCitedForSurveyType, SURVEY_PUBLIC_STANDARDS } from "./surveyQaPack";
 import {
   buildLimitationsFromKeys,
   nextSurveyRef,
@@ -41,6 +47,7 @@ import {
   buildDuplicateReportPayload,
   compareSurveyReports,
   buildPas128SummaryStats,
+  surveyPhotoCategoryCoverage,
 } from "./surveyReportHelpers";
 import { evaluateSurveyFinalGate, evaluateSurveyExportGate } from "../../utils/surveyCompletenessGates";
 import { defaultProjectIdForCreate, ensureProjectLinked } from "../../utils/projectRequiredGate";
@@ -59,9 +66,21 @@ import {
   projectsMissingReports,
   pullScopeFromRams,
   runSmartFillAll,
+  applyPas128CompletePack,
   smartFillNextSteps,
   suggestLimitationKeys,
+  listPermitsForSurveyProject,
+  applyLinkedPermitToReport,
 } from "./surveyReportSmart";
+import SurveyBlockersPanel from "./SurveyBlockersPanel";
+import SurveyHandoverModal from "./SurveyHandoverModal";
+import SurveyPas128Dashboard from "./SurveyPas128Dashboard";
+import { applySurveyAutofix } from "./surveyAutofix";
+import { getSpecialistFindingsConfig } from "./surveySpecialistFindings";
+import { applyPas128MethodToReport, pas128MethodAppliesToSurveyType } from "./pas128MethodPresets";
+import { buildPas128Foreword } from "./pas128ReportBoilerplate";
+import { buildFindingsDraft } from "./pas128FindingsBuilder";
+import Pas128WorkflowStrip from "./Pas128WorkflowStrip";
 import { listProjectPlans, plansForProject } from "../permits/permitPlanOverlayRegistry";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
@@ -76,14 +95,18 @@ import SurveyEditorStepNav from "./SurveyEditorStepNav";
 import SurveySimpleStepNav from "./SurveySimpleStepNav";
 import { adjacentSimpleStep, simpleStepForTab, tabsForSimpleStep } from "./surveySimpleEditorNav";
 import { isSurveySimpleMode } from "../../utils/surveyOrgTemplates";
+import { catalogDefaultDeliverables } from "../../utils/surveyContentCatalog";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import SurveyEditorHero from "./SurveyEditorHero";
 import SurveyListStatsBar from "./SurveyListStatsBar";
 import SurveyRevisionTimeline from "./SurveyRevisionTimeline";
 import SurveyLivePreviewDock from "./SurveyLivePreviewDock";
+import SurveyHandoverStrip from "./SurveyHandoverStrip";
+import SurveyKeyboardHints from "./SurveyKeyboardHints";
 import SurveyListRow from "./SurveyListRow";
 import { useSurveyPreviewHtml } from "./useSurveyPreviewHtml";
 import { enrichSurveyListRows, surveyListGroupMeta } from "./surveyReportListRows";
+import { surveyListFilterCounts } from "./surveyListFilterCounts";
 import { burstSurveyCelebration } from "../../utils/surveyCelebration";
 import {
   groupSurveyReportsByProject,
@@ -98,6 +121,7 @@ import {
   batchAppendFinalSurveysToRams,
   batchAssignSurveysToProject,
   persistSurveyAppendixToRams,
+  persistRamsSyncFromSurvey,
 } from "../../utils/documentPropagation";
 
 const STORAGE_KEY = "survey_reports";
@@ -438,6 +462,21 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
             {assistBtn(
+              "PAS128 complete pack",
+              !pas128MethodAppliesToSurveyType(form.surveyType),
+              async () =>
+                applyPas128CompletePack(form, {
+                  project,
+                  ramsDocs,
+                  projectPlans: plansWithMarkup,
+                  linkedRams,
+                  useAi: useAiOnFill,
+                  geoPhotos,
+                  permits,
+                }),
+              true
+            )}
+            {assistBtn(
               "Smart fill all",
               !project && !form.surveyType,
               async () =>
@@ -450,7 +489,7 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
                   geoPhotos,
                   permits,
                 }),
-              true
+              false
             )}
             {hasAi && (
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, cursor: "pointer" }}>
@@ -624,6 +663,7 @@ function ReportEditor({
   onPrint,
   onOpenReport,
 }) {
+  const { pushToast } = useToast();
   const [form, setForm] = useState(() => normalizeSurveyReport({ ...report }));
   const [tab, setTab] = useState("details");
   const simpleMode = useMemo(() => isSurveySimpleMode(loadOrgSettingsRaw()), []);
@@ -639,6 +679,10 @@ function ReportEditor({
   const [pdfBusy, setPdfBusy] = useState(false);
   const [cadBusy, setCadBusy] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
+  const [handoverOpen, setHandoverOpen] = useState(false);
+  const [packProgress, setPackProgress] = useState("");
+  const [savedFlash, setSavedFlash] = useState(false);
+  const savedFlashTimer = useRef(null);
   const [livePreviewOpen, setLivePreviewOpen] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 1100px)").matches
   );
@@ -731,6 +775,24 @@ function ReportEditor({
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v, updatedAt: new Date().toISOString() }));
+  const onSurveyTypeChange = (surveyType) => {
+    setForm((f) => {
+      const next = {
+        ...f,
+        surveyType,
+        standardsCited: mergeStandardsCited(f.standardsCited, surveyType),
+        updatedAt: new Date().toISOString(),
+      };
+      if (surveyType && !(f.deliverables || []).length) {
+        const dels = catalogDefaultDeliverables(surveyType);
+        if (dels?.length) next.deliverables = dels;
+      }
+      if (surveyType && !Object.values(f.qaChecklist || {}).some(Boolean)) {
+        next.qaChecklist = applyMobilisationQaPrefill(f.qaChecklist, surveyType);
+      }
+      return next;
+    });
+  };
   const setSection = (k, v) =>
     setForm((f) => ({
       ...f,
@@ -771,6 +833,24 @@ function ReportEditor({
     setForm((f) => ({
       ...f,
       qaChecklist: { ...f.qaChecklist, [k]: v },
+      updatedAt: new Date().toISOString(),
+    }));
+  const setQaGroup = (groupId, checked) =>
+    setForm((f) => ({
+      ...f,
+      qaChecklist: patchQaGroup(f.qaChecklist, groupId, f.surveyType, checked),
+      updatedAt: new Date().toISOString(),
+    }));
+  const toggleStandardCited = (key) =>
+    setForm((f) => ({
+      ...f,
+      standardsCited: toggleArray(f.standardsCited || [], key),
+      updatedAt: new Date().toISOString(),
+    }));
+  const setUavCompliance = (k, v) =>
+    setForm((f) => ({
+      ...f,
+      uavCompliance: { ...f.uavCompliance, [k]: v },
       updatedAt: new Date().toISOString(),
     }));
   const setHse = (k, v) =>
@@ -824,28 +904,51 @@ function ReportEditor({
   const syncScopeFromRams = () => {
     const rams = linkedRams || pickRamsForProject(ramsDocs, form.projectId);
     if (!rams) {
-      window.alert("Link a RAMS document first, or create one from the project hub.");
+      pushToast({ type: "warn", title: "No RAMS linked", message: "Link a RAMS document first, or create one from the project hub." });
       return;
     }
     try {
       const next = pullScopeFromRams(form, rams);
       setForm({ ...next, updatedAt: new Date().toISOString() });
+      pushToast({ type: "success", title: "Scope synced", message: "Pulled scope from linked RAMS." });
     } catch (e) {
-      window.alert(e?.message || "Could not pull scope from RAMS.");
+      pushToast({ type: "error", title: "Sync failed", message: e?.message || "Could not pull scope from RAMS." });
+    }
+  };
+
+  const pushSurveyPackToRams = () => {
+    if (!form.surveyType) {
+      pushToast({ type: "warn", title: "No survey type", message: "Select a survey type before pushing to RAMS." });
+      return;
+    }
+    const allRams = load("rams_builder_docs", []);
+    try {
+      persistRamsSyncFromSurvey(form, allRams);
+      pushToast({
+        type: "success",
+        title: "Pushed to RAMS",
+        message: "Survey pack (method, permits, certs, hold points) merged into the linked RAMS document.",
+      });
+    } catch (e) {
+      pushToast({ type: "error", title: "Push failed", message: e?.message || "Could not push survey pack to RAMS." });
     }
   };
 
   const appendSummaryToRams = () => {
     if (form.status !== "final") {
-      window.alert("Mark the report final before appending findings to RAMS handover notes.");
+      pushToast({ type: "warn", title: "Not final", message: "Mark the report final before appending findings to RAMS handover notes." });
       return;
     }
     const allRams = load("rams_builder_docs", []);
     try {
       persistSurveyAppendixToRams(form, allRams);
-      window.alert("Survey summary appended to RAMS handover notes — open RAMS to review the client handover appendix.");
+      pushToast({
+        type: "success",
+        title: "Appended to RAMS",
+        message: "Survey summary added to RAMS handover notes — open RAMS to review the client handover appendix.",
+      });
     } catch (e) {
-      window.alert(e?.message || "Could not append to RAMS.");
+      pushToast({ type: "error", title: "Append failed", message: e?.message || "Could not append to RAMS." });
     }
   };
 
@@ -878,7 +981,7 @@ function ReportEditor({
     reader.onload = () => {
       setForm((f) => ({
         ...f,
-        photos: [...(f.photos || []), { id: `ph_${Date.now()}`, dataUrl: reader.result, caption: "" }],
+        photos: [...(f.photos || []), { id: `ph_${Date.now()}`, dataUrl: reader.result, caption: "", category: "field_work" }],
         updatedAt: new Date().toISOString(),
       }));
     };
@@ -902,7 +1005,7 @@ function ReportEditor({
       setForm({ ...next, updatedAt: new Date().toISOString() });
       pushAudit({ action: "survey_report_cad_import", entity: "survey_report", detail: file.name });
     } catch (err) {
-      alert(err?.message || "CAD import failed.");
+      pushToast({ type: "error", title: "CAD import failed", message: err?.message || "Could not read CAD file." });
     } finally {
       setCadBusy(false);
       e.target.value = "";
@@ -932,11 +1035,49 @@ function ReportEditor({
   };
 
   const linkedRams = ramsDocs.find((d) => d.id === form.linkedRamsId);
+  const geoPhotoCount = useMemo(
+    () => (form.projectId ? countGeoPhotosForReport(geoPhotos, form.projectId) : 0),
+    [geoPhotos, form.projectId]
+  );
   const pas128Stats = useMemo(() => buildPas128SummaryStats(form), [form]);
+  const editorQuality = useMemo(() => surveyReportQuality(form), [form]);
   const isGiReport = form.surveyType === "site_investigation_campaign";
-  const qaChecklistOptions = useMemo(
-    () => (isGiReport ? [...QA_CHECKLIST_ITEMS, ...GI_QA_CHECKLIST_ITEMS] : QA_CHECKLIST_ITEMS),
-    [isGiReport]
+  const qaProgress = useMemo(() => getQaChecklistProgress(form.qaChecklist, form.surveyType), [form.qaChecklist, form.surveyType]);
+  const qaChecklistGroups = useMemo(() => getQaChecklistGroupsForSurveyType(form.surveyType), [form.surveyType]);
+  const qaGroupProgress = useMemo(() => getQaGroupProgress(form.qaChecklist, form.surveyType), [form.qaChecklist, form.surveyType]);
+  const prevQaComplete = useRef(qaProgress.complete);
+  useEffect(() => {
+    if (qaProgress.complete && !prevQaComplete.current && form.status !== "final") {
+      burstSurveyCelebration(0.42);
+    }
+    prevQaComplete.current = qaProgress.complete;
+  }, [qaProgress.complete, form.status]);
+  const finalGate = useMemo(() => evaluateSurveyFinalGate(form), [form]);
+  const exportGate = useMemo(() => evaluateSurveyExportGate(form), [form]);
+  const projectPermits = useMemo(
+    () => listPermitsForSurveyProject(permits, form.projectId),
+    [permits, form.projectId]
+  );
+  const blockersContext = useMemo(
+    () => ({ project: formProject, projectPlans: projectPlansForForm, geoPhotos }),
+    [formProject, projectPlansForForm, geoPhotos]
+  );
+  const showTrialHolesTable =
+    form.surveyType === "utility_mapping_survey" ||
+    form.surveyType === "eml_cat_survey" ||
+    form.surveyType === "gpr_survey" ||
+    form.pas128Ql === "B0";
+  const specialistConfig = useMemo(() => getSpecialistFindingsConfig(form.surveyType), [form.surveyType]);
+  const photoCoverage = useMemo(() => surveyPhotoCategoryCoverage(form.photos), [form.photos]);
+  const showTopoClosure = ["topographical_survey", "setting_out", "gnss_control"].includes(form.surveyType);
+  const blockersPanelRef = useRef(null);
+
+  const handleSurveyAutofix = useCallback(
+    (fixId) => {
+      const next = applySurveyAutofix(fixId, form);
+      if (next) setForm(next);
+    },
+    [form]
   );
   const prevTab = adjacentSurveyTab(tab, "prev");
   const nextTabNav = adjacentSurveyTab(tab, "next");
@@ -959,9 +1100,27 @@ function ReportEditor({
       await downloadSurveyReportPdf(form, printExtras);
       pushAudit({ action: "survey_report_pdf", entity: "survey_report", detail: form.ref || form.id });
     } catch (e) {
-      alert(e?.message || "PDF export failed.");
+      pushToast({ type: "error", title: "PDF export failed", message: e?.message || "Could not generate PDF." });
     } finally {
       setPdfBusy(false);
+    }
+  };
+
+  const downloadHandoverPack = async () => {
+    setPdfBusy(true);
+    setPackProgress("Starting…");
+    try {
+      const { downloadSurveyHandoverZip } = await import("./surveyHandoverPack");
+      await downloadSurveyHandoverZip(form, printExtras, geoPhotos, {
+        onProgress: (phase) => setPackProgress(phase),
+      });
+      pushAudit({ action: "survey_handover_pack", entity: "survey_report", detail: form.ref || form.id });
+      pushToast({ type: "success", title: "Handover pack", message: "ZIP download started." });
+    } catch (e) {
+      pushToast({ type: "error", title: "Handover pack failed", message: e?.message || "Could not build handover pack." });
+    } finally {
+      setPdfBusy(false);
+      setPackProgress("");
     }
   };
 
@@ -989,7 +1148,12 @@ function ReportEditor({
         const finalGate = evaluateSurveyFinalGate(payload);
         if (!finalGate.allowed) {
           setSaving(false);
-          window.alert(finalGate.message || "Cannot mark final — complete required items first.");
+          pushToast({
+            type: "warn",
+            title: "Cannot mark final",
+            message: finalGate.message || "Complete required items first.",
+            durationMs: 5000,
+          });
           return;
         }
       }
@@ -1047,7 +1211,19 @@ function ReportEditor({
         return;
       }
       onSave(payload);
-      if (wasDraft && payload.status === "final") burstSurveyCelebration();
+      if (wasDraft && payload.status === "final") {
+        burstSurveyCelebration();
+        setHandoverOpen(true);
+      }
+      setSavedFlash(true);
+      if (savedFlashTimer.current) window.clearTimeout(savedFlashTimer.current);
+      savedFlashTimer.current = window.setTimeout(() => setSavedFlash(false), 2500);
+      pushToast({
+        type: "success",
+        title: payload.status === "final" ? "Report issued" : "Saved",
+        message: payload.ref || payload.title || "Survey report updated.",
+        durationMs: 2200,
+      });
       try {
         sessionStorage.removeItem(SURVEY_DRAFT_KEY);
       } catch {
@@ -1101,6 +1277,18 @@ function ReportEditor({
 
   return (
     <ModuleOverlay>
+      <SurveyHandoverModal
+        open={handoverOpen}
+        celebrate={handoverOpen}
+        report={form}
+        linkedRams={linkedRams}
+        packBusy={pdfBusy}
+        packProgress={packProgress}
+        onClose={() => setHandoverOpen(false)}
+        onDownloadPack={downloadHandoverPack}
+        onPrint={() => onPrint(form, linkedRams)}
+        onAppendRams={appendSummaryToRams}
+      />
       <div
         className={`app-module-overlay__panel app-survey-report-editor${livePreviewOpen ? " app-survey-report-editor--split" : ""}`}
         style={{ ...ss.card, maxWidth: livePreviewOpen ? 1280 : 920 }}
@@ -1116,6 +1304,14 @@ function ReportEditor({
 
         <SurveyRevisionTimeline report={form} allReports={reports} onOpenReport={onOpenReport} />
 
+        <SurveyHandoverStrip
+          form={form}
+          linkedRams={linkedRams}
+          projectPermits={projectPermits}
+          geoPhotoCount={geoPhotoCount}
+          onGoToTab={setTab}
+        />
+
         <SmartAssistPanel
           form={form}
           projects={projects}
@@ -1128,6 +1324,15 @@ function ReportEditor({
           simpleMode={simpleMode}
           onApply={(next) => setForm({ ...next, updatedAt: new Date().toISOString() })}
         />
+
+        <div ref={blockersPanelRef}>
+          <SurveyBlockersPanel
+            report={form}
+            context={blockersContext}
+            onGoToTab={setTab}
+            onAutofix={handleSurveyAutofix}
+          />
+        </div>
 
         {simpleMode ? (
           <SurveySimpleStepNav tab={tab} report={form} onTabChange={setTab} />
@@ -1238,7 +1443,7 @@ function ReportEditor({
               ) : null}
               <div>
                 <label style={ss.lbl}>Survey type *</label>
-                <select style={ss.inp} value={form.surveyType} onChange={(e) => set("surveyType", e.target.value)}>
+                <select style={ss.inp} value={form.surveyType} onChange={(e) => onSurveyTypeChange(e.target.value)}>
                   <option value="">— Select —</option>
                   {SURVEY_TYPES.map((t) => (
                     <option key={t.key} value={t.key}>
@@ -1258,6 +1463,55 @@ function ReportEditor({
                   ))}
                 </select>
               </div>
+              {pas128MethodAppliesToSurveyType(form.surveyType) ? (
+                <div>
+                  <label style={ss.lbl}>PAS128 method (M-series)</label>
+                  <select
+                    style={ss.inp}
+                    value={form.pas128Method || ""}
+                    onChange={(e) => {
+                      const key = e.target.value;
+                      if (!key) {
+                        set("pas128Method", "");
+                        return;
+                      }
+                      setForm((f) => {
+                        const next = applyPas128MethodToReport(f, key, { overwrite: false });
+                        return {
+                          ...next,
+                          limitationsText: buildLimitationsFromKeys(next.limitationKeys, next.limitationsText),
+                          updatedAt: new Date().toISOString(),
+                        };
+                      });
+                    }}
+                  >
+                    <option value="">— Optional —</option>
+                    {PAS128_METHODS.map((m) => (
+                      <option key={m.key} value={m.key}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  {form.pas128Method ? (
+                    <button
+                      type="button"
+                      style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, marginTop: 6 }}
+                      onClick={() =>
+                        setForm((f) => {
+                          const next = applyPas128MethodToReport(f, f.pas128Method, { overwrite: true });
+                          return {
+                            ...next,
+                            limitationsText: buildLimitationsFromKeys(next.limitationKeys, next.limitationsText),
+                            updatedAt: new Date().toISOString(),
+                          };
+                        })
+                      }
+                    >
+                      Re-apply method template
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             {ramsDocs.length > 0 && (
               <div style={{ marginTop: 14 }}>
@@ -1282,6 +1536,15 @@ function ReportEditor({
                     <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32 }} onClick={syncScopeFromRams}>
                       Sync from RAMS
                     </button>
+                    {form.surveyType ? (
+                      <button
+                        type="button"
+                        style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, borderColor: "#0C447C", color: "#0C447C" }}
+                        onClick={pushSurveyPackToRams}
+                      >
+                        Push pack to RAMS
+                      </button>
+                    ) : null}
                     {form.status === "final" ? (
                       <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, borderColor: "#0d9488", color: "#0f766e" }} onClick={appendSummaryToRams}>
                         Append to RAMS
@@ -1303,6 +1566,26 @@ function ReportEditor({
                 ) : null}
               </div>
             )}
+            <div style={{ marginTop: 14 }}>
+              <label style={ss.lbl}>Foreword</label>
+              <textarea
+                style={{ ...ss.ta, minHeight: 56 }}
+                value={form.sections.foreword || ""}
+                onChange={(e) => setSection("foreword", e.target.value)}
+                placeholder="PAS 128 foreword — auto-filled when you select a method, or write your own."
+              />
+              {form.pas128Method ? (
+                <button
+                  type="button"
+                  style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, marginTop: 6 }}
+                  onClick={() =>
+                    setSection("foreword", buildPas128Foreword(form))
+                  }
+                >
+                  Insert PAS128 foreword
+                </button>
+              ) : null}
+            </div>
             <div style={{ marginTop: 14 }}>
               <label style={ss.lbl}>Executive summary</label>
               <textarea
@@ -1390,6 +1673,28 @@ function ReportEditor({
                 <label style={ss.lbl}>Vertical tolerance</label>
                 <input style={ss.inp} value={form.controlAccuracy.verticalTolerance} onChange={(e) => setControl("verticalTolerance", e.target.value)} />
               </div>
+              {showTopoClosure ? (
+                <>
+                  <div>
+                    <label style={ss.lbl}>Traverse closure</label>
+                    <input
+                      style={ss.inp}
+                      value={form.controlAccuracy.traverseClosure}
+                      onChange={(e) => setControl("traverseClosure", e.target.value)}
+                      placeholder="e.g. 1:50,000 / 8 mm"
+                    />
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>Level closure</label>
+                    <input
+                      style={ss.inp}
+                      value={form.controlAccuracy.levelClosure}
+                      onChange={(e) => setControl("levelClosure", e.target.value)}
+                      placeholder="e.g. ±3 mm"
+                    />
+                  </div>
+                </>
+              ) : null}
             </div>
             <label style={ss.lbl}>Control points / notes</label>
             <textarea
@@ -1444,15 +1749,114 @@ function ReportEditor({
               value={form.surveyProgramme.siteAccessNotes}
               onChange={(e) => setProgramme("siteAccessNotes", e.target.value)}
             />
-            <div style={ss.sectionHead}>QA & verification</div>
+            <div style={ss.sectionHead}>QA & verification ({qaProgress.checked}/{qaProgress.total})</div>
+            <div
+              className={`app-survey-qa-meter${qaProgress.complete ? " app-survey-qa-meter--complete" : ""}`}
+              aria-label={`QA checklist ${qaProgress.pct} percent complete`}
+            >
+              <div className="app-survey-qa-meter__bar">
+                <div className="app-survey-qa-meter__fill" style={{ width: `${qaProgress.pct}%` }} />
+              </div>
+              <span className="app-survey-qa-meter__label">
+                {qaProgress.complete ? "All checks complete — ready for sign-off" : `${qaProgress.pct}% complete for this survey type`}
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 0, marginBottom: 10, lineHeight: 1.45 }}>
+              Generic UK surveying checks — align with PAS 128 / HSG47 where applicable. Not a substitute for your RAMS or client brief.
+            </p>
+            {qaChecklistGroups.map((group) => {
+              const gp = qaGroupProgress.find((g) => g.id === group.id);
+              return (
+              <div key={group.id} className="app-survey-qa-group" style={{ marginBottom: 12 }}>
+                <div className="app-survey-qa-group__head">
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)" }}>
+                    {group.label}
+                    {gp ? (
+                      <span className={`app-survey-qa-group__badge${gp.complete ? " app-survey-qa-group__badge--done" : ""}`}>
+                        {gp.checked}/{gp.total}
+                      </span>
+                    ) : null}
+                  </div>
+                  {gp && !gp.complete ? (
+                    <button type="button" className="app-survey-qa-group__action" onClick={() => setQaGroup(group.id, true)}>
+                      Mark all
+                    </button>
+                  ) : gp?.complete ? (
+                    <button type="button" className="app-survey-qa-group__action app-survey-qa-group__action--muted" onClick={() => setQaGroup(group.id, false)}>
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+                <CheckboxGrid
+                  options={group.items}
+                  selected={Object.entries(form.qaChecklist || {})
+                    .filter(([, v]) => v)
+                    .map(([k]) => k)}
+                  onToggle={(key) => setQa(key, !form.qaChecklist?.[key])}
+                />
+              </div>
+            );
+            })}
+            <div style={ss.sectionHead}>Standards referenced</div>
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 0, marginBottom: 8, lineHeight: 1.45 }}>
+              Tick standards cited in this report — they appear in the PDF issue pack.
+            </p>
             <CheckboxGrid
-              options={qaChecklistOptions}
-              selected={Object.entries(form.qaChecklist || {})
-                .filter(([, v]) => v)
-                .map(([k]) => k)}
-              onToggle={(key) => setQa(key, !form.qaChecklist?.[key])}
+              options={SURVEY_PUBLIC_STANDARDS}
+              selected={form.standardsCited || []}
+              onToggle={toggleStandardCited}
             />
             <div style={ss.sectionHead}>Health & safety cross-reference</div>
+            {form.projectId ? (
+              <div style={{ marginBottom: 10 }}>
+                <label style={ss.lbl}>Link permit to dig (PTW)</label>
+                <select
+                  style={ss.inp}
+                  value={form.hseRefs.linkedPermitId || ""}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id) {
+                      setForm((f) => ({
+                        ...f,
+                        hseRefs: { ...f.hseRefs, linkedPermitId: "", permitRef: "" },
+                        updatedAt: new Date().toISOString(),
+                      }));
+                      return;
+                    }
+                    const permit = projectPermits.find((p) => p.id === id);
+                    if (permit) {
+                      setForm((f) => ({
+                        ...applyLinkedPermitToReport(f, permit),
+                        updatedAt: new Date().toISOString(),
+                      }));
+                    }
+                  }}
+                >
+                  <option value="">— Select project permit —</option>
+                  {projectPermits.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {(p.permitNo || p.ref || p.id) + (p.type ? ` · ${p.type.replace(/_/g, " ")}` : "")}
+                    </option>
+                  ))}
+                </select>
+                {form.hseRefs.linkedPermitId ? (
+                  <button
+                    type="button"
+                    style={{ ...ss.btn, fontSize: 11, marginTop: 6 }}
+                    onClick={() =>
+                      openWorkspaceView({ viewId: "permits", permitId: form.hseRefs.linkedPermitId, mode: "view" })
+                    }
+                  >
+                    Open linked permit
+                  </button>
+                ) : null}
+                {projectPermits.length === 0 ? (
+                  <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "6px 0 0" }}>
+                    No permits on this project — create a permit to dig under Permits, then link here.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={ss.lbl}>Permit reference</label>
@@ -1470,6 +1874,75 @@ function ReportEditor({
               onChange={(e) => setHse("ramsExcerpt", e.target.value)}
               placeholder="Short method statement excerpt for the PDF."
             />
+            {form.surveyType === "uav_aerial" ? (
+              <>
+                <div style={ss.sectionHead}>UAV / CAA compliance</div>
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 0, marginBottom: 10, lineHeight: 1.45 }}>
+                  Operator authorisation and flight-safety references shown in the report and handover pack.
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))", gap: 10, marginBottom: 14 }}>
+                  <div>
+                    <label style={ss.lbl}>CAA Operator ID</label>
+                    <input
+                      style={ss.inp}
+                      value={form.uavCompliance.caaOperatorId}
+                      onChange={(e) => setUavCompliance("caaOperatorId", e.target.value)}
+                      placeholder="GBR-OP-XXXXXXXX"
+                    />
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>Flyer ID(s)</label>
+                    <input
+                      style={ss.inp}
+                      value={form.uavCompliance.flyerIds}
+                      onChange={(e) => setUavCompliance("flyerIds", e.target.value)}
+                      placeholder="GBR-FLY-XXXXXXXX"
+                    />
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>GVC / A2 CofC reference</label>
+                    <input
+                      style={ss.inp}
+                      value={form.uavCompliance.authorisationRef}
+                      onChange={(e) => setUavCompliance("authorisationRef", e.target.value)}
+                      placeholder="Operational authorisation ref"
+                    />
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>Drone registration / serial</label>
+                    <input
+                      style={ss.inp}
+                      value={form.uavCompliance.droneRegistration}
+                      onChange={(e) => setUavCompliance("droneRegistration", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>Insurance policy reference</label>
+                    <input
+                      style={ss.inp}
+                      value={form.uavCompliance.insurancePolicyRef}
+                      onChange={(e) => setUavCompliance("insurancePolicyRef", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>NOTAM reference</label>
+                    <input
+                      style={ss.inp}
+                      value={form.uavCompliance.notamRef}
+                      onChange={(e) => setUavCompliance("notamRef", e.target.value)}
+                      placeholder="If filed for this flight"
+                    />
+                  </div>
+                </div>
+                <label style={ss.lbl}>Ground exclusion / emergency landing plan (optional)</label>
+                <textarea
+                  style={{ ...ss.ta, minHeight: 48, marginBottom: 14 }}
+                  value={form.uavCompliance.groundExclusionPlanRef}
+                  onChange={(e) => setUavCompliance("groundExclusionPlanRef", e.target.value)}
+                  placeholder="Ground crew exclusion zone and emergency landing plan reference."
+                />
+              </>
+            ) : null}
             <div style={ss.sectionHead}>Equipment calibration</div>
             <RowTableEditor
               rows={form.equipmentCalibration}
@@ -1642,6 +2115,41 @@ function ReportEditor({
               <label style={ss.lbl}>Gap explanation</label>
               <textarea style={{ ...ss.ta, minHeight: 48 }} value={form.utilityRecords.gapExplanation} onChange={(e) => setRecords("gapExplanation", e.target.value)} />
             </div>
+            <div style={ss.sectionHead}>LSBUD / DBYD enquiry log</div>
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+              Structured desktop utility records enquiries — supports HSG47 / PAS128 records review traceability.
+            </p>
+            <RowTableEditor
+              rows={form.dbydEnquiries || []}
+              onChange={(dbydEnquiries) => setForm((f) => ({ ...f, dbydEnquiries, updatedAt: new Date().toISOString() }))}
+              emptyLabel="No LSBUD / DBYD enquiries logged yet."
+              addLabel="+ Add enquiry"
+              columns={[
+                { key: "provider", label: "Provider", options: DBYD_ENQUIRY_PROVIDERS },
+                { key: "reference", label: "Reference", placeholder: "LSBUD-12345" },
+                { key: "enquiryDate", label: "Date", type: "date" },
+                { key: "undertakers", label: "Undertakers", placeholder: "DNO, water company…" },
+                { key: "status", label: "Status", options: DBYD_ENQUIRY_STATUS },
+                { key: "notes", label: "Notes", placeholder: "Partial pack — gas missing" },
+              ]}
+            />
+            <div style={ss.sectionHead}>Undertaker response status</div>
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+              Per-undertaker desktop search outcomes (PAS 128 Survey Type D / M1). Status: Affected, Not affected, or No response.
+            </p>
+            <RowTableEditor
+              rows={form.undertakerResponses || []}
+              onChange={(undertakerResponses) => setForm((f) => ({ ...f, undertakerResponses, updatedAt: new Date().toISOString() }))}
+              emptyLabel="No undertaker responses logged yet."
+              addLabel="+ Add undertaker"
+              columns={[
+                { key: "undertaker", label: "Undertaker", placeholder: "Statutory undertaker name" },
+                { key: "category", label: "Category", options: UNDERTAKER_CATEGORIES },
+                { key: "status", label: "Status", options: UNDERTAKER_RESPONSE_STATUS },
+                { key: "responseDate", label: "Response date", type: "date" },
+                { key: "notes", label: "Notes", placeholder: "Optional notes" },
+              ]}
+            />
             <div style={ss.sectionHead}>Records references</div>
             <RowTableEditor
               rows={form.recordsReferences}
@@ -1699,19 +2207,23 @@ function ReportEditor({
 
         {showTab("findings") && (
           <>
-            {pas128Stats ? (
-              <div className="app-survey-pas128-summary">
-                <strong>Utility schedule summary</strong>
-                <span>{pas128Stats.total} utilities</span>
-                <span>{pas128Stats.withDepth} with depth</span>
-                <span>{pas128Stats.withGeoPhoto} geo-linked</span>
-                {Object.entries(pas128Stats.byQl).map(([ql, n]) => (
-                  <span key={ql}>
-                    {ql}: {n}
-                  </span>
-                ))}
-              </div>
+            {specialistConfig ? (
+              <>
+                <div style={ss.sectionHead}>{specialistConfig.title}</div>
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>{specialistConfig.hint}</p>
+                <RowTableEditor
+                  rows={form[specialistConfig.tableKey] || []}
+                  onChange={(rows) =>
+                    setForm((f) => ({ ...f, [specialistConfig.tableKey]: rows, updatedAt: new Date().toISOString() }))
+                  }
+                  emptyLabel={`No ${specialistConfig.title.toLowerCase()} yet.`}
+                  addLabel="+ Add row"
+                  columns={specialistConfig.columns}
+                />
+              </>
             ) : null}
+            {pas128Stats ? <SurveyPas128Dashboard stats={pas128Stats} /> : null}
+            {form.pas128Method ? <Pas128WorkflowStrip methodKey={form.pas128Method} className="app-survey-workflow-strip--findings" /> : null}
             <CadImportPanel
               cadImport={form.cadImport}
               utilitiesTable={form.utilitiesTable}
@@ -1776,6 +2288,29 @@ function ReportEditor({
                 { key: "notes", label: "Notes", placeholder: "Near substation" },
               ]}
             />
+            {showTrialHolesTable ? (
+              <>
+                <div style={ss.sectionHead}>Trial holes / Type B0 verification log</div>
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
+                  Record intrusive verification where PAS128 Type B0 or client brief requires exposed confirmation.
+                </p>
+                <RowTableEditor
+                  rows={form.trialHolesTable || []}
+                  onChange={(trialHolesTable) => setForm((f) => ({ ...f, trialHolesTable, updatedAt: new Date().toISOString() }))}
+                  emptyLabel="No trial holes logged — add rows when verification is in scope."
+                  addLabel="+ Add trial hole"
+                  columns={[
+                    { key: "holeId", label: "ID", placeholder: "TH01" },
+                    { key: "location", label: "Location", placeholder: "Grid ref / chainage" },
+                    { key: "depth", label: "Depth", placeholder: "1.2 m" },
+                    { key: "utilityVerified", label: "Utility", options: UTILITY_TYPE_OPTIONS },
+                    { key: "pas128Ql", label: "PAS128 QL", options: PAS128_QUALITY_LEVELS },
+                    { key: "result", label: "Result", placeholder: "Gas main confirmed" },
+                    { key: "notes", label: "Notes", placeholder: "Hand dig, 0.5 m buffer" },
+                  ]}
+                />
+              </>
+            ) : null}
             {form.projectId && countGeoPhotosForReport(geoPhotos, form.projectId) > 0 && (
               <button
                 type="button"
@@ -1795,6 +2330,25 @@ function ReportEditor({
               </button>
             )}
             <label style={ss.lbl}>Findings & results *</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+              <button
+                type="button"
+                style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32 }}
+                disabled={!(form.utilitiesTable?.length || form.undertakerResponses?.length)}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    sections: {
+                      ...f.sections,
+                      findings: buildFindingsDraft(f, { overwrite: true }),
+                    },
+                    updatedAt: new Date().toISOString(),
+                  }))
+                }
+              >
+                Build findings from schedule
+              </button>
+            </div>
             <textarea
               style={{ ...ss.ta, minHeight: 120 }}
               value={form.sections.findings}
@@ -1879,6 +2433,21 @@ function ReportEditor({
               + Add photo
               <input type="file" accept="image/*" style={{ display: "none" }} onChange={addPhoto} />
             </label>
+            {photoCoverage.hasPhotos ? (
+              <div className="app-survey-photo-coverage" style={{ marginTop: 10, marginBottom: 4 }}>
+                <span className="app-survey-photo-coverage__label">
+                  Evidence categories: {photoCoverage.covered}/{photoCoverage.total}
+                </span>
+                {photoCoverage.missingLabels.length ? (
+                  <span className="app-survey-photo-coverage__hint">
+                    Missing: {photoCoverage.missingLabels.slice(0, 3).join(", ")}
+                    {photoCoverage.missingLabels.length > 3 ? ` +${photoCoverage.missingLabels.length - 3}` : ""}
+                  </span>
+                ) : (
+                  <span className="app-survey-photo-coverage__hint app-survey-photo-coverage__hint--done">All categories covered</span>
+                )}
+              </div>
+            ) : null}
             {(form.photos || []).length === 0 ? (
               <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 12 }}>No photos yet.</div>
             ) : (
@@ -1887,6 +2456,23 @@ function ReportEditor({
                   <div key={ph.id || idx} style={{ display: "flex", gap: 12, alignItems: "flex-start", border: "0.5px solid #e5e7eb", borderRadius: 8, padding: 10 }}>
                     <img src={ph.dataUrl} alt="" style={{ width: 100, height: 75, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
                     <div style={{ flex: 1 }}>
+                      <label style={ss.lbl}>Category</label>
+                      <select
+                        style={{ ...ss.inp, marginBottom: 6 }}
+                        value={ph.category || "field_work"}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            photos: f.photos.map((p, i) => (i === idx ? { ...p, category: e.target.value } : p)),
+                          }))
+                        }
+                      >
+                        {SURVEY_PHOTO_CATEGORIES.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
                       <input
                         style={ss.inp}
                         value={ph.caption}
@@ -1914,7 +2500,32 @@ function ReportEditor({
         )}
 
         {showTab("preview") && (
-          livePreviewOpen ? (
+          <>
+            {form.status !== "final" && !finalGate.allowed && finalGate.missing.length > 0 ? (
+              <div className="app-survey-gate-callout app-survey-gate-callout--warn" role="status">
+                <strong>Before marking final</strong>
+                <ul>
+                  {finalGate.missing.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+                <button type="button" className="app-survey-gate-callout__action" onClick={() => setTab("professional")}>
+                  Open Professional tab
+                </button>
+              </div>
+            ) : null}
+            {form.status === "final" && !exportGate.allowed && exportGate.missing.length > 0 ? (
+              <div className="app-survey-gate-callout app-survey-gate-callout--info" role="status">
+                <strong>Export pack</strong>
+                <p>PDF print is available; batch export pack needs:</p>
+                <ul>
+                  {exportGate.missing.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {livePreviewOpen ? (
             <div className="app-survey-preview-hint">
               <p>Live preview is docked on the right.</p>
               <button type="button" style={ss.btn} onClick={() => setLivePreviewOpen(false)}>
@@ -1929,11 +2540,13 @@ function ReportEditor({
               onPrint={() => onPrint(form, linkedRams)}
               printLabel="Print / save PDF"
             />
-          )
+          )}
+          </>
         )}
         </div>
 
-        <div className="app-sticky-footer app-sticky-footer--actions app-survey-editor-shortcuts" title="Ctrl+S save · Alt+←/→ tabs · Ctrl+Shift+P preview">
+        <div className="app-sticky-footer app-sticky-footer--actions app-survey-editor-shortcuts">
+          <SurveyKeyboardHints />
           {simpleMode ? (
             prevSimpleStep ? (
               <button type="button" style={ss.btn} onClick={() => setTab(prevSimpleStep.tabs[0])}>
@@ -1973,19 +2586,21 @@ function ReportEditor({
             type="button"
             style={ss.btnP}
             disabled={saving}
+            className={savedFlash ? "app-survey-save-btn--flash" : undefined}
             onClick={() => handleSave()}
           >
-            {saving ? "Saving…" : "Save report"}
+            {saving ? "Saving…" : savedFlash ? "Saved ✓" : "Save report"}
           </button>
           {form.status !== "final" && (
             <button
               type="button"
+              className={`app-survey-mark-final-btn${editorQuality.score >= 80 ? " app-survey-mark-final-btn--ready" : ""}`}
               style={{ ...ss.btn, borderColor: "#0d9488", color: "#0d9488" }}
               disabled={saving}
               onClick={() => {
                 const gate = evaluateSurveyFinalGate(form);
                 if (!gate.allowed) {
-                  window.alert(gate.message || "Complete QA, calibration, sign-off and photos before marking final.");
+                  blockersPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
                   return;
                 }
                 setConfirmDialog({
@@ -2010,6 +2625,8 @@ function ReportEditor({
             html={previewHtml}
             onPrint={() => onPrint(form, linkedRams)}
             height={520}
+            qualityScore={editorQuality.score}
+            exportReady={form.status === "final" ? exportGate.allowed : null}
           />
         </div>
         <ConfirmDialog
@@ -2028,6 +2645,7 @@ function ReportEditor({
 
 export default function SurveyReport() {
   const { caps } = useApp();
+  const { pushToast } = useToast();
   const [reports, setReports] = useState(() => load(STORAGE_KEY, []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [ramsDocs] = useState(() => load("rams_builder_docs", []));
@@ -2104,6 +2722,7 @@ export default function SurveyReport() {
   }, [reports, filter, projectFilter, listSearch, listSort]);
 
   const listSummary = useMemo(() => summarizeSurveyReportList(reports), [reports]);
+  const filterCounts = useMemo(() => surveyListFilterCounts(reports), [reports]);
 
   const groupedReports = useMemo(
     () => groupSurveyReportsByProject(filtered, projects),
@@ -2159,16 +2778,16 @@ export default function SurveyReport() {
       });
       pushAudit({ action: "survey_report_pdf", entity: "survey_report", detail: report.ref || report.id });
     } catch (e) {
-      alert(e?.message || "PDF export failed.");
+      pushToast({ type: "error", title: "PDF export failed", message: e?.message || "Could not generate PDF." });
     } finally {
       setPdfBusyId("");
     }
-  }, [projectById, ramsById]);
+  }, [projectById, ramsById, pushToast]);
 
   const exportPackForReport = useCallback(async (report) => {
     const exportGate = evaluateSurveyExportGate(report);
     if (!exportGate.allowed) {
-      alert(exportGate.message || "Export pack is not ready yet.");
+      pushToast({ type: "warn", title: "Export not ready", message: exportGate.message || "Export pack is not ready yet.", durationMs: 5000 });
       return;
     }
     const rams = ramsById[report.linkedRamsId];
@@ -2187,7 +2806,7 @@ export default function SurveyReport() {
       );
       pushAudit({ action: "survey_report_pack", entity: "survey_report", detail: report.ref || report.id });
     } catch (e) {
-      alert(e?.message || "Export pack failed.");
+      pushToast({ type: "error", title: "Export pack failed", message: e?.message || "Could not build export pack." });
     } finally {
       setPdfBusyId("");
     }
@@ -2226,7 +2845,12 @@ export default function SurveyReport() {
     const finals = reports.filter((r) => r.status === "final");
     const eligible = finals.filter((r) => evaluateSurveyExportGate(r).allowed);
     if (!eligible.length) {
-      alert("No final reports meet export pack requirements (PAS128 QL, utilities, QA, photos).");
+      pushToast({
+        type: "warn",
+        title: "Nothing to export",
+        message: "No final reports meet export pack requirements (PAS128 QL, utilities, QA, photos).",
+        durationMs: 5000,
+      });
       return;
     }
     if (
@@ -2254,28 +2878,33 @@ export default function SurveyReport() {
     const ok = results.filter((r) => r.ok).length;
     const skipped = results.filter((r) => !r.ok).length;
     if (!ok) {
-      window.alert("No final reports could be appended — each needs a RAMS on its project.");
+      pushToast({ type: "warn", title: "Nothing appended", message: "No final reports could be appended — each needs a RAMS on its project." });
       return;
     }
-    window.alert(`Appended ${ok} survey summary(ies) to RAMS.${skipped ? ` ${skipped} skipped (no RAMS).` : ""}`);
-  }, [reports, ramsDocs]);
+    pushToast({
+      type: "success",
+      title: "Appended to RAMS",
+      message: `Appended ${ok} survey summary(ies) to RAMS.${skipped ? ` ${skipped} skipped (no RAMS).` : ""}`,
+    });
+  }, [reports, ramsDocs, pushToast]);
 
   const batchAssignSelectedToProject = useCallback(() => {
     const ids = [...selectedReportIds];
     if (!ids.length) {
-      window.alert("Select reports first (turn on bulk select).");
+      pushToast({ type: "warn", title: "Nothing selected", message: "Select reports first (turn on bulk select)." });
       return;
     }
     const targetId = projectFilter || window.prompt("Project ID to assign selected reports to:");
     if (!targetId) return;
     if (!projects.some((p) => p.id === targetId)) {
-      window.alert("Project not found.");
+      pushToast({ type: "error", title: "Project not found", message: "Check the project ID and try again." });
       return;
     }
     setReports((prev) => batchAssignSurveysToProject(ids, targetId, prev));
     setSelectedReportIds(new Set());
     setListBulkMode(false);
-  }, [selectedReportIds, projectFilter, projects]);
+    pushToast({ type: "success", title: "Assigned", message: `${ids.length} report(s) linked to project.` });
+  }, [selectedReportIds, projectFilter, projects, pushToast]);
 
   const batchCreateForProjects = () => {
     if (!missingProjectCount) return;
@@ -2340,45 +2969,45 @@ export default function SurveyReport() {
       const { downloadSurveyReportGeoJson } = await import("./surveyReportExport");
       downloadSurveyReportGeoJson(r, geoPhotos);
     } catch (e) {
-      alert(e?.message || "GeoJSON export failed.");
+      pushToast({ type: "error", title: "GeoJSON export failed", message: e?.message || "Could not export GeoJSON." });
     }
-  }, [geoPhotos]);
+  }, [geoPhotos, pushToast]);
 
   const handleKmlExport = useCallback(async (r) => {
     try {
       const { downloadSurveyReportKml } = await import("./surveyReportExport");
       downloadSurveyReportKml(r, geoPhotos);
     } catch (e) {
-      alert(e?.message || "KML export failed.");
+      pushToast({ type: "error", title: "KML export failed", message: e?.message || "Could not export KML." });
     }
-  }, [geoPhotos]);
+  }, [geoPhotos, pushToast]);
 
   const handleKmzExport = useCallback(async (r) => {
     try {
       const { downloadSurveyReportKmz } = await import("./surveyReportExport");
       await downloadSurveyReportKmz(r, geoPhotos);
     } catch (e) {
-      alert(e?.message || "KMZ export failed.");
+      pushToast({ type: "error", title: "KMZ export failed", message: e?.message || "Could not export KMZ." });
     }
-  }, [geoPhotos]);
+  }, [geoPhotos, pushToast]);
 
   const handleGpxExport = useCallback(async (r) => {
     try {
       const { downloadSurveyReportGpx } = await import("./surveyReportExport");
       downloadSurveyReportGpx(r, geoPhotos);
     } catch (e) {
-      alert(e?.message || "GPX export failed.");
+      pushToast({ type: "error", title: "GPX export failed", message: e?.message || "Could not export GPX." });
     }
-  }, [geoPhotos]);
+  }, [geoPhotos, pushToast]);
 
   const handleCadPackExport = useCallback(async (r) => {
     try {
       const { downloadSurveyReportCadPack } = await import("./surveyReportExport");
       await downloadSurveyReportCadPack(r, geoPhotos);
     } catch (e) {
-      alert(e?.message || "CAD pack export failed.");
+      pushToast({ type: "error", title: "CAD pack failed", message: e?.message || "Could not export CAD pack." });
     }
-  }, [geoPhotos]);
+  }, [geoPhotos, pushToast]);
 
   const handleRevision = useCallback((r) => {
     duplicateReport(r, { asRevision: true });
@@ -2468,7 +3097,7 @@ export default function SurveyReport() {
         </select>
       </div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="app-survey-list-filters">
         {[
           ["all", "All"],
           ["draft", "Drafts"],
@@ -2478,21 +3107,18 @@ export default function SurveyReport() {
           <button
             key={k}
             type="button"
+            className={`app-survey-list-filter-pill${filter === k ? " app-survey-list-filter-pill--active" : ""}`}
             onClick={() => setFilter(k)}
-            style={{
-              ...ss.btn,
-              background: filter === k ? "#E6F1FB" : undefined,
-              color: filter === k ? "#0C447C" : undefined,
-              fontSize: 12,
-            }}
           >
             {l}
+            <span className="app-survey-list-filter-pill__count">{filterCounts[k] ?? 0}</span>
           </button>
         ))}
         <select
           value={projectFilter}
           onChange={(e) => setProjectFilter(e.target.value)}
-          style={{ ...ss.inp, fontSize: 12, minWidth: 160, marginLeft: 4 }}
+          className="app-survey-list-filters__project"
+          style={{ ...ss.inp, fontSize: 12, minWidth: 160 }}
           aria-label="Filter by project"
         >
           <option value="">All projects</option>
@@ -2566,6 +3192,7 @@ export default function SurveyReport() {
             </div>
           )}
           {(() => {
+            let rowIndex = 0;
             let lastGroup = null;
             return listPg.visible(enrichedRows).map((row) => {
               const r = row.report;
@@ -2574,9 +3201,11 @@ export default function SurveyReport() {
               const showGroupHeader = !projectFilter && groupKey !== lastGroup;
               lastGroup = groupKey;
               const hasGeo = r.projectId && countGeoPhotosForReport(geoPhotos, r.projectId) > 0;
+              const staggerIndex = rowIndex++;
               return (
                 <SurveyListRow
                   key={r.id}
+                  staggerIndex={staggerIndex}
                   enriched={row}
                   showGroupHeader={showGroupHeader}
                   groupLabel={meta?.label || "No project"}

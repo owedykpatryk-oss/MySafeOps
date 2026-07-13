@@ -1,7 +1,9 @@
 /**
  * Cloudflare R2 uploads via a small Worker (see cloudflare/workers/r2-upload).
- * Secrets stay on the Worker; only URL + optional upload token are exposed to the client.
+ * Prefer Supabase session JWT when signed in; static upload token is legacy fallback.
  */
+
+import { supabase } from "./supabase.js";
 
 export function isR2StorageConfigured() {
   return Boolean(String(import.meta.env.VITE_STORAGE_API_URL || "").trim());
@@ -19,6 +21,25 @@ export function getStorageUploadToken() {
   return String(import.meta.env.VITE_STORAGE_UPLOAD_TOKEN || "").trim();
 }
 
+async function buildUploadHeaders() {
+  const headers = {};
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const jwt = data?.session?.access_token;
+      if (jwt) {
+        headers.Authorization = `Bearer ${jwt}`;
+        return headers;
+      }
+    } catch {
+      /* session optional */
+    }
+  }
+  const token = getStorageUploadToken();
+  if (token) headers["X-Upload-Token"] = token;
+  return headers;
+}
+
 /**
  * @param {File} file
  * @param {{ orgId: string, subPath?: string }} opts
@@ -33,7 +54,6 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
     throw new Error("File exceeds 25 MB upload limit.");
   }
 
-  const token = getStorageUploadToken();
   const safeName = (file.name || "file").replace(/[^\w.-]+/g, "_").slice(0, 180);
   const key = `${subPath.replace(/^\/+|\/+$/g, "")}/org_${orgId}/${Date.now()}_${safeName}`;
 
@@ -41,8 +61,7 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   fd.append("file", file);
   fd.append("key", key);
 
-  const headers = {};
-  if (token) headers["X-Upload-Token"] = token;
+  const headers = await buildUploadHeaders();
 
   const res = await fetch(`${base}/upload`, {
     method: "POST",
