@@ -13,7 +13,7 @@ import { isSuperAdminEmail } from "../utils/superAdmin";
 import { billingLimitMessage, checkBillingLimit } from "../utils/billingLimits";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { ms } from "../utils/moduleStyles";
-import { geocodeAddressNominatim } from "../utils/geocode";
+import { geocodeAddressNominatim, geocodeCountryLabel } from "../utils/geocode";
 import { getCompetencyCardHint, getEmergencyServicesLabel, getPostcodeHint } from "../utils/marketLabels";
 import { getOrgMarketId } from "../utils/orgMarket";
 import {
@@ -153,7 +153,10 @@ function wizardStepBlockers(step, form, soloMode) {
     }
   }
   if (step === 3) {
-    if (!String(form?.address || "").trim()) missing.push("address");
+    const hasAddress = Boolean(String(form?.address || "").trim());
+    if (!hasAddress && !projectHasSiteLocation(form)) {
+      missing.push("address or site location (postcode / KML)");
+    }
   }
   return missing;
 }
@@ -162,6 +165,12 @@ function projectHasSiteCoords(form) {
   const lat = parseFloat(String(form?.lat ?? "").trim());
   const lng = parseFloat(String(form?.lng ?? "").trim());
   return Number.isFinite(lat) && Number.isFinite(lng);
+}
+
+function projectHasSiteLocation(form) {
+  if (projectHasSiteCoords(form)) return true;
+  const ring = parseProjectBoundaryRing(form);
+  return Array.isArray(ring) && ring.length >= 3;
 }
 
 function inferProjectStarter(form) {
@@ -1192,6 +1201,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         const hasCoords =
           Number.isFinite(parseFloat(String(f.lat ?? "").trim())) &&
           Number.isFinite(parseFloat(String(f.lng ?? "").trim()));
+        const hasAddress = Boolean(String(f.address ?? "").trim());
         return {
           ...f,
           ...boundary,
@@ -1204,6 +1214,9 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
           ...(hasCoords || !centroid
             ? {}
             : { lat: String(centroid.lat), lng: String(centroid.lng) }),
+          ...(!hasAddress && boundary.boundaryName
+            ? { address: boundary.boundaryName }
+            : {}),
         };
       });
       const routeNote = geom.lineStrings?.length ? ` · ${geom.lineStrings.length} map route(s)` : "";
@@ -1370,11 +1383,13 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         setGeoMsg(`Postcode "${postcodeQuery}" not found — check spelling or try a fuller address.`);
         return;
       }
-      const c = await geocodeAddressNominatim(`${q}, United Kingdom`);
+      const c = await geocodeAddressNominatim(`${q}, ${geocodeCountryLabel(orgMarketId)}`, orgMarketId);
       if (!c) {
         setGeoMsg(
           orgMarketId === "au"
             ? "No coordinates found — try an Australian postcode (e.g. 2000) or fuller address."
+            : orgMarketId === "pl"
+            ? "No coordinates found — try a Polish postcode (e.g. 00-001) or fuller address."
             : "No coordinates found — try a UK postcode (e.g. KT22 7SH) or fuller address."
         );
         return;

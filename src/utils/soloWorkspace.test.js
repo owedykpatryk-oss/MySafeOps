@@ -34,6 +34,21 @@ describe("soloWorkspace", () => {
     expect(projectHealthScore(form)).toBeGreaterThanOrEqual(70);
   });
 
+  it("accepts KML boundary without street address", () => {
+    const form = {
+      name: "Site",
+      site: "Client",
+      lat: 51.5,
+      lng: -0.1,
+      boundaryPoints: "51.5,-0.1;51.51,-0.1;51.51,-0.09",
+      soloLeadName: "Pat",
+      timelineStart: "2026-07-01",
+      timelineEnd: "2026-08-01",
+      soloMode: true,
+    };
+    expect(projectMissingItems(form)).not.toContain("Address or site location");
+  });
+
   it("builds solo-friendly startup checklist", () => {
     const items = buildStartupChecklist(
       { soloMode: true, industryStarter: "general" },

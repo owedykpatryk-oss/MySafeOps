@@ -86,20 +86,25 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
       const m = mapRef.current;
       const layer = layerRef.current;
       if (!m || !layer) return;
-      if (typeof layer.getBounds === "function") {
-        const b = layer.getBounds();
-        if (b?.isValid?.()) {
-          m.fitBounds(b, { padding: [40, 40], maxZoom: 19 });
-          return;
+      try {
+        m.invalidateSize({ animate: false });
+        if (typeof layer.getBounds === "function") {
+          const b = layer.getBounds();
+          if (b?.isValid?.()) {
+            m.fitBounds(b, { padding: [40, 40], maxZoom: 19 });
+            return;
+          }
         }
+        const bounds = [];
+        layer.eachLayer((ly) => {
+          const ll = ly.getLatLng?.();
+          if (ll) bounds.push([ll.lat, ll.lng]);
+        });
+        if (bounds.length === 0) return;
+        m.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
+      } catch {
+        /* map not ready */
       }
-      const bounds = [];
-      layer.eachLayer((ly) => {
-        const ll = ly.getLatLng?.();
-        if (ll) bounds.push([ll.lat, ll.lng]);
-      });
-      if (bounds.length === 0) return;
-      m.fitBounds(bounds, { padding: [40, 40], maxZoom: 19 });
     },
   }));
 
@@ -255,7 +260,12 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
       const wasEmpty = prevObjectCountRef.current === 0;
       prevObjectCountRef.current = n;
       if (bounds.length > 0 && wasEmpty) {
-        map.fitBounds(bounds, { padding: [36, 36], maxZoom: 19 });
+        try {
+          map.invalidateSize({ animate: false });
+          map.fitBounds(bounds, { padding: [36, 36], maxZoom: 19 });
+        } catch {
+          /* map not ready */
+        }
       }
       if (n === 0) {
         prevObjectCountRef.current = 0;

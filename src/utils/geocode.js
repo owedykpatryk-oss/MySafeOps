@@ -11,6 +11,30 @@ const CACHE_KEY = GEOCODE_CACHE_STORAGE_KEY;
 const MAX_ENTRIES = 64;
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** @type {Record<string, string>} Nominatim ISO 3166-1 alpha-2 */
+const MARKET_COUNTRY_CODES = {
+  uk: "gb",
+  au: "au",
+  pl: "pl",
+};
+
+/** @type {Record<string, string>} */
+const MARKET_COUNTRY_LABELS = {
+  uk: "United Kingdom",
+  au: "Australia",
+  pl: "Poland",
+};
+
+function marketCountryCode(marketId) {
+  const id = String(marketId || "uk").toLowerCase();
+  return MARKET_COUNTRY_CODES[id] || MARKET_COUNTRY_CODES.uk;
+}
+
+export function geocodeCountryLabel(marketId) {
+  const id = String(marketId || "uk").toLowerCase();
+  return MARKET_COUNTRY_LABELS[id] || MARKET_COUNTRY_LABELS.uk;
+}
+
 function normaliseQuery(q) {
   return String(q || "")
     .trim()
@@ -48,17 +72,19 @@ function pruneCache(entries) {
   return next;
 }
 
-export async function geocodeAddressNominatim(address) {
+export async function geocodeAddressNominatim(address, marketId = "uk") {
   const q = normaliseQuery(address);
   if (!q) return null;
 
+  const countryCode = marketCountryCode(marketId);
+  const cacheKey = `${countryCode}|${q}`;
   const cache = loadCache();
-  const hit = cache.entries[q];
+  const hit = cache.entries[cacheKey];
   if (hit && typeof hit.lat === "number" && typeof hit.lng === "number" && Date.now() - (hit.t || 0) < TTL_MS) {
     return { lat: hit.lat, lng: hit.lng };
   }
 
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=gb&q=${encodeURIComponent(q)}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=${countryCode}&q=${encodeURIComponent(q)}`;
   const res = await fetch(url, {
     headers: {
       Accept: "application/json",
@@ -72,7 +98,7 @@ export async function geocodeAddressNominatim(address) {
   const lng = Number.parseFloat(data[0].lon);
   if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
 
-  cache.entries[q] = { lat, lng, t: Date.now() };
+  cache.entries[cacheKey] = { lat, lng, t: Date.now() };
   cache.entries = pruneCache(cache.entries);
   saveCache(cache);
 

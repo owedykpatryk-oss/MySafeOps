@@ -2,6 +2,8 @@
  * Solo workspace helpers — one person can run PM, HSE, permits and site records.
  */
 
+import { parseProjectBoundaryRing } from "./projectBoundary.js";
+
 export function deriveUserDisplayName(user, orgSettings = {}) {
   const meta = user?.user_metadata || {};
   const fromMeta = meta.full_name || meta.name;
@@ -39,6 +41,12 @@ function hasCoords(form) {
   return form?.lat != null && form?.lat !== "" && form?.lng != null && form?.lng !== "";
 }
 
+function hasSiteLocation(form) {
+  if (hasCoords(form)) return true;
+  const ring = parseProjectBoundaryRing(form);
+  return Array.isArray(ring) && ring.length >= 3;
+}
+
 /**
  * @param {Record<string, unknown>} form
  * @param {{ soloMode?: boolean }} [opts]
@@ -48,7 +56,7 @@ export function projectMissingItems(form, opts = {}) {
   const missing = [];
   if (!String(form?.name || "").trim()) missing.push("Project name");
   if (!String(form?.site || "").trim()) missing.push("Site / client");
-  if (!String(form?.address || "").trim()) missing.push("Address");
+  if (!String(form?.address || "").trim() && !hasSiteLocation(form)) missing.push("Address or site location");
   if (soloMode) {
     const lead = String(form?.soloLeadName || form?.owner || "").trim();
     if (!lead) missing.push("Your name / role");
@@ -71,7 +79,7 @@ export function projectHealthScore(form, opts = {}) {
   const checks = [
     Boolean(String(form?.name || "").trim()),
     Boolean(String(form?.site || "").trim()),
-    Boolean(String(form?.address || "").trim()),
+    Boolean(String(form?.address || "").trim() || hasSiteLocation(form)),
     soloMode
       ? Boolean(String(form?.soloLeadName || form?.owner || "").trim())
       : Boolean(String(form?.owner || "").trim()),

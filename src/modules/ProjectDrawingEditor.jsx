@@ -290,6 +290,7 @@ export default function ProjectDrawingEditor() {
     return b === "satellite" ? "satellite" : "streets";
   });
   const mapCanvasRef = useRef(null);
+  const geoAnchorSeedRef = useRef("");
   const mapContentRef = useRef(null);
   const viewportRef = useRef(null);
   const listItemRefs = useRef({});
@@ -465,7 +466,13 @@ export default function ProjectDrawingEditor() {
   }, [plansForCurrentProject, projectId]);
 
   useEffect(() => {
-    if (!projectId) return;
+    if (!projectId) {
+      geoAnchorSeedRef.current = "";
+      return;
+    }
+    if (geoAnchorSeedRef.current === projectId) return;
+    geoAnchorSeedRef.current = projectId;
+
     const orgSaved = loadDrawingEditorPrefs().geoAnchorByProject?.[projectId];
     const sessSaved = loadPdeSession().geoAnchorByProject?.[projectId];
     const saved = orgSaved || sessSaved;
@@ -485,6 +492,16 @@ export default function ProjectDrawingEditor() {
     }
     setGeoAnchor({ ...DEFAULT_GEO_ANCHOR });
   }, [projectId, currentProject]);
+
+  useEffect(() => {
+    if (!projectId || workSurface !== "map") return undefined;
+    const fromProject = geoAnchorFromProject(currentProject);
+    if (!fromProject) return undefined;
+    const t = window.setTimeout(() => {
+      mapCanvasRef.current?.flyTo(fromProject.lat, fromProject.lng, 17);
+    }, 180);
+    return () => window.clearTimeout(t);
+  }, [projectId, workSurface, currentProject?.lat, currentProject?.lng, currentProject?.boundaryPoints]);
 
   useEffect(() => {
     if (!projectId || !planId) {
