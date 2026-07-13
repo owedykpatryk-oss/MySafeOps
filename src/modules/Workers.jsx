@@ -25,7 +25,7 @@ import {
 import EmptyState from "../components/EmptyState";
 import PageHero from "../components/PageHero";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
-import { getOrgId, orgScopedKey, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import { getOrgId, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { sanitizeProjectForOrg } from "../utils/fessExclusive";
 import {
   getCertLibraryForMarket,
@@ -42,6 +42,7 @@ import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDraw
 import { parseProjectBoundaryRing, centroidFromBoundaryRing } from "../utils/projectBoundary";
 import ProjectSitePreviewMap from "../components/ProjectSitePreviewMap";
 import ProjectKmlDropZone from "../components/ProjectKmlDropZone";
+import ConfettiCelebration from "../components/ConfettiCelebration";
 import ProjectDashboard from "../components/ProjectDashboard";
 import {
   buildProjectActionContext,
@@ -63,6 +64,8 @@ import {
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
+const PROJECT_WIZARD_DRAFT_KEY = "project_wizard_draft";
+const PROJECT_WIZARD_DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const load = (key) => loadOrgScoped(key, []);
 const save = (key, data) => saveOrgScoped(key, data);
@@ -171,6 +174,71 @@ function projectHasSiteLocation(form) {
   if (projectHasSiteCoords(form)) return true;
   const ring = parseProjectBoundaryRing(form);
   return Array.isArray(ring) && ring.length >= 3;
+}
+
+function formatSiteLocationSummary(form) {
+  const address = String(form?.address || "").trim();
+  const postcode = String(form?.postcode || "").trim();
+  if (address && postcode) return `${address}, ${postcode}`;
+  if (address) return address;
+  if (postcode) return postcode;
+  const ring = parseProjectBoundaryRing(form);
+  if (Array.isArray(ring) && ring.length >= 3) {
+    const name = String(form?.boundaryName || "").trim() || "KML site boundary";
+    return `${name} (${ring.length} points)`;
+  }
+  if (projectHasSiteCoords(form)) {
+    const lat = parseFloat(String(form.lat ?? "").trim());
+    const lng = parseFloat(String(form.lng ?? "").trim());
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  }
+  return "";
+}
+
+function formatWizardDraftAge(savedAt) {
+  if (!savedAt) return "recently";
+  const ms = Date.now() - new Date(savedAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "recently";
+  const mins = Math.round(ms / 60000);
+  if (mins < 2) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} hr ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function loadProjectWizardDraft() {
+  const draft = loadOrgScoped(PROJECT_WIZARD_DRAFT_KEY, null);
+  if (!draft || typeof draft !== "object" || !draft.form) return null;
+  const savedAt = draft.savedAt ? new Date(draft.savedAt).getTime() : 0;
+  if (savedAt && Date.now() - savedAt > PROJECT_WIZARD_DRAFT_TTL_MS) {
+    saveOrgScoped(PROJECT_WIZARD_DRAFT_KEY, null, { bypassBillingGuard: true });
+    return null;
+  }
+  return draft;
+}
+
+function saveProjectWizardDraft(payload) {
+  saveOrgScoped(
+    PROJECT_WIZARD_DRAFT_KEY,
+    { ...payload, savedAt: new Date().toISOString() },
+    { bypassBillingGuard: true }
+  );
+}
+
+function clearProjectWizardDraft() {
+  saveOrgScoped(PROJECT_WIZARD_DRAFT_KEY, null, { bypassBillingGuard: true });
+}
+
+function wizardFormHasDraftContent(form) {
+  return Boolean(
+    String(form?.name || "").trim() ||
+      String(form?.site || "").trim() ||
+      String(form?.address || "").trim() ||
+      String(form?.postcode || "").trim() ||
+      projectHasSiteLocation(form)
+  );
 }
 
 function inferProjectStarter(form) {
@@ -1073,7 +1141,10 @@ function projectFormShape(p, { workers = [], user, orgSettings } = {}) {
 function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const orgSettings = useMemo(() => getOrgSettings(), []);
   const orgMarketId = getOrgMarketId();
-  const [form, setForm] = useState(() => projectFormShape(item, { workers, user, orgSettings }));
+  const initialDraft = useMemo(() => (!item?.id ? loadProjectWizardDraft() : null), [item?.id]);
+  const [form, setForm] = useState(() =>
+    projectFormShape(initialDraft?.form || item, { workers, user, orgSettings })
+  );
   const [geoBusy, setGeoBusy] = useState(false);
   const [geoMsg, setGeoMsg] = useState("");
   const [enrichBusy, setEnrichBusy] = useState(false);
@@ -1081,7 +1152,12 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const [forecastBusy, setForecastBusy] = useState(false);
   const [showAdvancedCoords, setShowAdvancedCoords] = useState(false);
   const [previewBasemap, setPreviewBasemap] = useState("streets");
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => {
+    const draftStep = Number(initialDraft?.step);
+    return draftStep >= 1 && draftStep <= 5 ? draftStep : 1;
+  });
+  const [draftRestored, setDraftRestored] = useState(Boolean(initialDraft?.form));
+  const [celebrateReady, setCelebrateReady] = useState(false);
   const totalSteps = 5;
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const soloMode = form.soloMode !== false;
@@ -1092,7 +1168,8 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const boundaryRing = parseProjectBoundaryRing(form);
   const stepMeta = PROJECT_WIZARD_STEPS[step - 1] || PROJECT_WIZARD_STEPS[0];
   const stepBlockers = wizardStepBlockers(step, form, soloMode);
-  const siteCoordsReady = projectHasSiteCoords(form);
+  const siteLocationReady = projectHasSiteLocation(form);
+  const siteLocationLabel = formatSiteLocationSummary(form);
 
   const applyResolvedCoords = (resolved) => {
     if (!resolved?.changed) return;
@@ -1167,11 +1244,20 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   };
 
   const goNext = async () => {
+    let nextForm = form;
     if (step === 3) {
       setGeoBusy(true);
+      setGeoMsg("");
       try {
         const resolved = await ensureSiteCoordinates(form);
         if (resolved.changed) {
+          nextForm = {
+            ...form,
+            lat: String(resolved.lat),
+            lng: String(resolved.lng),
+            postcode: resolved.postcode ?? form.postcode,
+            address: resolved.address ?? form.address,
+          };
           applyResolvedCoords(resolved);
           setGeoMsg(geoLookupSuccessMsg(orgMarketId));
         }
@@ -1180,6 +1266,13 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
       } finally {
         setGeoBusy(false);
       }
+    }
+    const blockers = wizardStepBlockers(step, nextForm, soloMode);
+    if (blockers.length > 0) {
+      if (step === 3) {
+        setGeoMsg(`Complete location first: ${blockers.join(", ")}.`);
+      }
+      return;
     }
     setStep((s) => Math.min(totalSteps, s + 1));
   };
@@ -1285,9 +1378,53 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   };
 
   useEffect(() => {
-    setForm(projectFormShape(item, { workers, user, orgSettings }));
+    if (item?.id) {
+      setForm(projectFormShape(item, { workers, user, orgSettings }));
+      setStep(1);
+      setDraftRestored(false);
+      return;
+    }
+    const draft = loadProjectWizardDraft();
+    if (draft?.form) {
+      setForm(projectFormShape(draft.form, { workers, user, orgSettings }));
+      const draftStep = Number(draft.step);
+      setStep(draftStep >= 1 && draftStep <= 5 ? draftStep : 1);
+      setDraftRestored(true);
+      return;
+    }
+    setForm(projectFormShape(null, { workers, user, orgSettings }));
     setStep(1);
-  }, [item?.id, workers.length, user?.id, orgSettings]);
+    setDraftRestored(false);
+  }, [item?.id, user?.id]);
+
+  useEffect(() => {
+    if (item?.id || !wizardFormHasDraftContent(form)) return undefined;
+    const t = window.setTimeout(() => {
+      saveProjectWizardDraft({ form, step });
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [form, step, item?.id]);
+
+  useEffect(() => {
+    if (step === 5 && health >= 100 && missing.length === 0) {
+      setCelebrateReady(true);
+    }
+  }, [step, health, missing.length]);
+
+  const discardDraft = () => {
+    clearProjectWizardDraft();
+    setForm(projectFormShape(null, { workers, user, orgSettings }));
+    setStep(1);
+    setDraftRestored(false);
+    setGeoMsg("Draft discarded.");
+  };
+
+  const handleClose = () => {
+    if (!item?.id && wizardFormHasDraftContent(form)) {
+      saveProjectWizardDraft({ form, step });
+    }
+    onClose();
+  };
 
   const applyAutoSuggest = () => {
     const nextStarter = inferProjectStarter(form);
@@ -1355,6 +1492,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
       ...options,
       applyPlaybook: !item?.id ? draft.playbookId : options.applyPlaybook,
     });
+    if (!item?.id) clearProjectWizardDraft();
   };
 
   const geocode = async () => {
@@ -1518,6 +1656,11 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
 
   return (
     <div className="project-wizard-overlay" role="dialog" aria-modal="true" aria-labelledby="project-wizard-title">
+      <ConfettiCelebration
+        active={celebrateReady}
+        label="Project ready to go live"
+        onDone={() => setCelebrateReady(false)}
+      />
       <div className={`project-wizard-panel${step >= 3 ? " project-wizard-panel--wide" : ""}`} style={ss.card}>
         <div className="project-wizard-header">
           <div>
@@ -1568,6 +1711,17 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
           <h3 className="project-wizard-step-intro__title">{stepMeta.title}</h3>
           <p className="project-wizard-step-intro__lead">{stepMeta.lead}</p>
         </div>
+
+        {!item?.id && draftRestored ? (
+          <div className="project-wizard-draft-banner" role="status">
+            <span>
+              Restored unsaved draft ({formatWizardDraftAge(initialDraft?.savedAt)})
+            </span>
+            <button type="button" className="project-wizard-link-btn" onClick={discardDraft}>
+              Discard draft
+            </button>
+          </div>
+        ) : null}
 
         {stepBlockers.length > 0 ? (
           <div className="project-wizard-alert" role="status">
@@ -1670,7 +1824,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                   <div className="project-wizard-section">
                     <div className="project-wizard-section__head">
                       <h4 className="project-wizard-section__title">Address and postcode</h4>
-                      {siteCoordsReady ? (
+                      {siteLocationReady ? (
                         <span className="project-wizard-status project-wizard-status--ok">Site located</span>
                       ) : (
                         <span className="project-wizard-status">Awaiting location</span>
@@ -1698,10 +1852,10 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                       placeholder={`e.g. ${sitePostcodeExample(orgMarketId)}`}
                       autoComplete="postal-code"
                     />
-                    {siteCoordsReady ? (
+                    {siteLocationReady ? (
                       <p className="project-wizard-location-resolved">
                         <span className="project-wizard-location-resolved__pin" aria-hidden>📍</span>
-                        {[form.postcode, form.address?.split(",")[0]?.trim()].filter(Boolean).join(" · ") || "Site coordinates set"}
+                        {siteLocationLabel || "Site location set"}
                       </p>
                     ) : null}
                     <p className="project-wizard-hint">
@@ -1852,7 +2006,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                     <dl className="project-wizard-summary__grid">
                       <div><dt>Project</dt><dd>{form.name || "—"}</dd></div>
                       <div><dt>Site / client</dt><dd>{form.site || "—"}</dd></div>
-                      <div><dt>Location</dt><dd>{[form.address, form.postcode].filter(Boolean).join(", ") || "—"}</dd></div>
+                      <div><dt>Location</dt><dd>{siteLocationLabel || "—"}</dd></div>
                       <div><dt>Industry</dt><dd>{starterMeta.label}</dd></div>
                       <div><dt>Timeline</dt><dd>{form.timelineStart && form.timelineEnd ? `${form.timelineStart} → ${form.timelineEnd}` : "—"}</dd></div>
                       <div><dt>Team</dt><dd>{soloMode ? (form.soloLeadName || "Solo mode") : [form.owner, form.hseLead].filter(Boolean).join(" · ") || "—"}</dd></div>
@@ -1919,6 +2073,11 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                         <span className="project-wizard-readiness--warn">{missing.join(", ")}</span>
                       )}
                     </div>
+                    {missing.length === 0 ? (
+                      <div className="project-wizard-ready-banner" role="status">
+                        All required fields complete — save to create RAMS, survey and permit drafts.
+                      </div>
+                    ) : null}
                     {soloMode ? (
                       <p className="project-wizard-hint">Coordinates are recommended for weather and nearest A&E, but not required to save in solo mode.</p>
                     ) : null}
@@ -1959,7 +2118,12 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
             </button>
           </div>
           <div className="project-wizard-footer__save">
-            <button type="button" style={ss.btn} onClick={onClose}>Cancel</button>
+            <button type="button" style={ss.btn} onClick={handleClose}>
+              {item?.id ? "Cancel" : "Close"}
+            </button>
+            {!item?.id ? (
+              <span className="project-wizard-footer__draft-hint">Draft auto-saves</span>
+            ) : null}
             <button type="button" style={ss.btnO} onClick={() => persist({ openDrawingEditor: true })}>Save + drawing editor</button>
             <button type="button" style={ss.btnP} onClick={persist}>Save</button>
           </div>
