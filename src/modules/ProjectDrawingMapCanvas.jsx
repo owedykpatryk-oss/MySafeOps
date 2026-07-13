@@ -70,7 +70,17 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
     flyTo(lat, lng, zoom = 17) {
       const m = mapRef.current;
       if (!m || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
-      m.flyTo([lat, lng], zoom, { duration: 0.55 });
+      try {
+        m.invalidateSize({ animate: false });
+        const size = m.getSize?.();
+        if (!size || size.x <= 0 || size.y <= 0) {
+          m.setView([lat, lng], zoom, { animate: false });
+          return;
+        }
+        m.flyTo([lat, lng], zoom, { duration: 0.55 });
+      } catch {
+        m.setView([lat, lng], zoom, { animate: false });
+      }
     },
     fitObjects() {
       const m = mapRef.current;

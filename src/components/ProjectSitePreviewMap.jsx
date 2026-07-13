@@ -46,6 +46,41 @@ function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+function mapHasLayout(map) {
+  if (!map) return false;
+  const size = map.getSize?.();
+  return Boolean(size && size.x > 0 && size.y > 0);
+}
+
+function applyMapBounds(map, bounds, { animate = false } = {}) {
+  if (!map || !Array.isArray(bounds) || bounds.length === 0) return false;
+  map.invalidateSize({ animate: false });
+  if (!mapHasLayout(map)) return false;
+
+  try {
+    if (bounds.length === 1) {
+      const zoom = 15;
+      if (animate) map.flyTo(bounds[0], zoom, { duration: 0.55 });
+      else map.setView(bounds[0], zoom, { animate: false });
+    } else {
+      const opts = { padding: [24, 24], maxZoom: 17 };
+      if (animate && typeof map.flyToBounds === "function") {
+        map.flyToBounds(bounds, { ...opts, duration: 0.6 });
+      } else {
+        map.fitBounds(bounds, { ...opts, animate: false });
+      }
+    }
+    return true;
+  } catch {
+    if (bounds.length === 1) {
+      map.setView(bounds[0], 15, { animate: false });
+    } else {
+      map.fitBounds(bounds, { padding: [24, 24], maxZoom: 17, animate: false });
+    }
+    return true;
+  }
+}
+
 /**
  * Lightweight site preview — pin, KML boundary polygon, optional escape-route polylines.
  */
@@ -71,6 +106,9 @@ function ProjectSitePreviewMap({
   const tileRef = useRef(null);
   const lastBoundsKeyRef = useRef("");
   const fitMapRef = useRef(() => {});
+  const fitRetryRef = useRef(0);
+  const hasFittedOnceRef = useRef(false);
+  const pendingBoundsRef = useRef([]);
   const labelRef = useRef(label);
   const [kmlDragOver, setKmlDragOver] = useState(false);
   labelRef.current = label;
@@ -95,6 +133,7 @@ function ProjectSitePreviewMap({
     tileRef.current = tile;
     mapRef.current = map;
     layerRef.current = L.layerGroup().addTo(map);
+    map.setView([54.5, -2.5], 6, { animate: false });
 
     const ro = typeof ResizeObserver !== "undefined"
       ? new ResizeObserver(() => {
@@ -111,6 +150,9 @@ function ProjectSitePreviewMap({
       layerRef.current = null;
       tileRef.current = null;
       lastBoundsKeyRef.current = "";
+      fitRetryRef.current = 0;
+      hasFittedOnceRef.current = false;
+      pendingBoundsRef.current = [];
     };
   }, []);
 
@@ -146,7 +188,6 @@ function ProjectSitePreviewMap({
     layer.clearLayers();
     const bounds = [];
     const accent = getComputedStyle(document.documentElement).getPropertyValue("--color-accent").trim() || "#0d9488";
-    const animate = animateZoom && !prefersReducedMotion();
 
     if (Array.isArray(boundaryRing) && boundaryRing.length >= 3) {
       L.polygon(boundaryRing, {
@@ -216,19 +257,26 @@ function ProjectSitePreviewMap({
     }
 
     const fitMap = () => {
-      if (bounds.length === 1) {
-        if (animate) map.flyTo(bounds[0], 15, { duration: 0.55 });
-        else map.setView(bounds[0], 15, { animate: false });
-      } else if (bounds.length > 1) {
-        const opts = { padding: [24, 24], maxZoom: 17 };
-        if (animate && typeof map.flyToBounds === "function") {
-          map.flyToBounds(bounds, { ...opts, duration: 0.6 });
-        } else {
-          map.fitBounds(bounds, { ...opts, animate: false });
-        }
-      } else {
-        map.setView([54.5, -2.5], 6, { animate: false });
+      pendingBoundsRef.current = bounds;
+      const animate = animateZoom && !prefersReducedMotion() && hasFittedOnceRef.current;
+      const applied = applyMapBounds(map, bounds, { animate });
+      if (applied) {
+        hasFittedOnceRef.current = true;
+        fitRetryRef.current = 0;
+        return;
       }
+      if (fitRetryRef.current >= 12) {
+        if (bounds.length === 1) map.setView(bounds[0], 15, { animate: false });
+        else if (bounds.length > 1) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 17, animate: false });
+        else map.setView([54.5, -2.5], 6, { animate: false });
+        hasFittedOnceRef.current = true;
+        fitRetryRef.current = 0;
+        return;
+      }
+      fitRetryRef.current += 1;
+      requestAnimationFrame(() => {
+        if (pendingBoundsRef.current === bounds) fitMapRef.current();
+      });
     };
 
     fitMapRef.current = fitMap;
