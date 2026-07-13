@@ -18,6 +18,7 @@ import {
   createCloudAgent,
   findActiveAgentDuplicate,
   getCursorApiKey,
+  isCursorBillingBlock,
   loadCursorEnv,
   loadPrompt,
 } from "./cursor-agent-api.mjs";
@@ -138,6 +139,10 @@ try {
     appendFileSync(summaryFile, `### Cursor ${type}\n\n- **Agent:** ${agent.url}\n`);
   }
 } catch (err) {
+  if (isCursorBillingBlock(err)) {
+    console.log(`Skipped — Cursor agent billing limit (${err.message})`);
+    process.exit(0);
+  }
   console.error(err.message);
   process.exit(1);
 }

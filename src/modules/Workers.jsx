@@ -304,7 +304,7 @@ export function WorkersModule({ mode = "all" }) {
         permits: load("permits_v2", []),
         methodStatements: load("method_statements", []),
       }),
-    [projects]
+    []
   );
 
   const openProjectHub = (project) => {
@@ -334,6 +334,7 @@ export function WorkersModule({ mode = "all" }) {
       const p = list.find((x) => x.id === t.projectId);
       if (p) openProjectHub(p);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot nav target on mount
   }, [mode, showProjects, useInlineHub]);
 
   const billingOpts = { trialStatus, billing, isPlatformOwner };
@@ -937,6 +938,7 @@ function WorkerForm({ item, onSave, onClose }) {
   const [certFilter, setCertFilter] = useState("");
   useEffect(() => {
     setForm(workerFormShape(item));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync when editing a different worker
   }, [item?.id]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -1395,6 +1397,8 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     setForm(projectFormShape(null, { workers, user, orgSettings }));
     setStep(1);
     setDraftRestored(false);
+    // Reset only when switching project or user — not on every workers/orgSettings tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional narrow deps
   }, [item?.id, user?.id]);
 
   useEffect(() => {

@@ -26,6 +26,11 @@ export const AGENT_TYPES = {
   billing: "billing-auto-fix.prompt.md",
 };
 
+export function isCursorBillingBlock(err) {
+  const msg = String(err?.message || "");
+  return /hard limit|increase your hard limit|billing|payment required/i.test(msg);
+}
+
 export function loadCursorEnv() {
   config({ path: resolve(ROOT, ".env.local") });
   config({ path: resolve(ROOT, ".env") });
