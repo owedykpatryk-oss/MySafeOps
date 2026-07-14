@@ -181,7 +181,7 @@ export default function VehicleFleetRegister() {
   const d1Hydrating = d1ItemsH || d1ProjH || d1WorkersH;
   const d1OutboxPending = d1ItemsO || d1ProjO || d1WorkersO;
 
-  const dueAlerts = useMemo(() => getVehicleDueAlerts(), [items.length]);
+  const dueAlerts = getVehicleDueAlerts();
   const activeCount = useMemo(() => items.filter((i) => String(i.status || "active") !== "disposed").length, [items]);
 
   const exportCsv = () => {

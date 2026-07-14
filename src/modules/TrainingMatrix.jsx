@@ -141,8 +141,8 @@ export default function TrainingMatrix() {
     () => workers.flatMap((w) => getWorkerCertAlerts(w).map((a) => ({ ...a, worker: w }))),
     [workers]
   );
-  const equipmentAlerts = useMemo(() => getEquipmentDueAlerts(), [workers.length, items.length]);
-  const vehicleAlerts = useMemo(() => getVehicleDueAlerts(), [workers.length, items.length]);
+  const equipmentAlerts = getEquipmentDueAlerts();
+  const vehicleAlerts = getVehicleDueAlerts();
   const [stepsHidden, setStepsHidden] = useState(() => {
     try {
       return sessionStorage.getItem(`training_next_steps_hide_${getOrgId()}`) === "1";

@@ -347,14 +347,14 @@ export function WorkersModule({ mode = "all" }) {
 
   const billingOpts = { trialStatus, billing, isPlatformOwner };
 
-  const tryAddWorker = () => {
-    const gate = checkBillingLimit("workers", billingOpts);
+  const tryAddWorker = useCallback(() => {
+    const gate = checkBillingLimit("workers", { trialStatus, billing, isPlatformOwner });
     if (!gate.ok) {
       pushToast(billingLimitMessage(gate), "warn");
       return;
     }
     setModal({ type: "worker", data: null });
-  };
+  }, [trialStatus, billing, isPlatformOwner, pushToast]);
 
   const tryAddProject = () => {
     const gate = checkBillingLimit("projects", billingOpts);
@@ -529,9 +529,9 @@ export function WorkersModule({ mode = "all" }) {
     .flatMap((w) => getWorkerCertAlerts(w).map((a) => ({ ...a, worker: w })))
     .sort((a, b) => a.days - b.days);
   const criticalAlerts = certAlerts.filter((a) => a.severity === "expired" || a.severity === "critical");
-  const equipmentAlerts = useMemo(() => getEquipmentDueAlerts(), [workers.length, projects.length]);
-  const vehicleAlerts = useMemo(() => getVehicleDueAlerts(), [workers.length, projects.length]);
-  const trainingRecords = useMemo(() => load("training_matrix"), [workers.length, modal]);
+  const equipmentAlerts = getEquipmentDueAlerts();
+  const vehicleAlerts = getVehicleDueAlerts();
+  const trainingRecords = load("training_matrix");
   const complianceDueItems = useMemo(
     () => collectComplianceDueItems({ workers, trainingRecords }),
     [workers, trainingRecords]

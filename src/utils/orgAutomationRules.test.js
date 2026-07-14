@@ -61,7 +61,7 @@ describe("orgAutomationRules", () => {
       certExpiryReminder: false,
     });
     expect(summary.gatesOn).toBe(4);
-    expect(summary.remindersOn).toBe(8);
+    expect(summary.remindersOn).toBe(10);
   });
 
   it("presets are defined for all profiles", () => {
