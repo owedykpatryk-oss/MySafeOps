@@ -208,6 +208,8 @@ export default function NotificationSettings() {
     { key: "weekly_digest",  label: "Weekly workspace digest",         sub: "Monday summary · org toggle in Automation rules" },
     { key: "rams_review",    label: "RAMS review due reminders",       sub: "14 days before review date · Automation rules" },
     { key: "equip_inspect",  label: "Equipment inspection reminders",  sub: "14 and 7 days before due · Automation rules" },
+    { key: "training_expiry", label: "Training matrix expiry reminders", sub: "30, 14, 7 and 1 day before expiry · Automation rules" },
+    { key: "vehicle_compliance", label: "Fleet MOT / insurance reminders", sub: "14 and 7 days before due · Automation rules" },
     { key: "timesheet",      label: "Timesheet approval reminders",    sub: "When timesheets are awaiting approval" },
     { key: "snag_overdue",   label: "Overdue snag alerts",             sub: "When snag items pass their due date" },
   ];

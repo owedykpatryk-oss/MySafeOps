@@ -20,11 +20,13 @@ describe("computePermitActivationReadiness", () => {
   it("returns partial score when blocked", () => {
     const r = computePermitActivationReadiness({
       derivedStatus: "approved",
-      activateGate: { allowed: false },
+      activateGate: { allowed: false, code: "signatures" },
       checkedCount: 2,
       totalChecks: 4,
     });
     expect(r.score).toBeLessThan(100);
     expect(r.show).toBe(true);
+    expect(Array.isArray(r.gaps)).toBe(true);
+    expect(r.gaps.length).toBeGreaterThan(0);
   });
 });

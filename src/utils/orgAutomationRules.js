@@ -103,6 +103,20 @@ export const REMINDER_RULE_DEFS = [
     default: true,
   },
   {
+    id: "trainingExpiryReminder",
+    label: "Training matrix expiry reminders",
+    hint: "Alert when competence records on the training matrix approach expiry (30, 14, 7 and 1 day).",
+    impact: "notify",
+    default: true,
+  },
+  {
+    id: "vehicleComplianceReminder",
+    label: "Fleet compliance reminders",
+    hint: "MOT, insurance, service and road tax due dates (14 and 7 day window).",
+    impact: "notify",
+    default: true,
+  },
+  {
     id: "weeklyDigest",
     label: "Weekly workspace digest",
     hint: "Monday summary — active projects, PTW count and survey pipeline.",
@@ -125,6 +139,8 @@ export const DEFAULT_ORG_AUTOMATION_RULES = {
   permitRamsLinkReminder: true,
   ramsReviewReminder: true,
   equipInspectReminder: true,
+  trainingExpiryReminder: true,
+  vehicleComplianceReminder: true,
   weeklyDigest: true,
   /** 0 = off; otherwise remind when draft surveys are idle this many days */
   staleSurveyReminderDays: 14,
@@ -250,6 +266,8 @@ export const REMINDER_TO_NOTIF_PREF = {
   permitRamsLinkReminder: "permit_rams_link",
   ramsReviewReminder: "rams_review",
   equipInspectReminder: "equip_inspect",
+  trainingExpiryReminder: "training_expiry",
+  vehicleComplianceReminder: "vehicle_compliance",
   weeklyDigest: "weekly_digest",
   dailyBriefingReminder: "daily_briefing",
   monthlyReportReminder: "monthly_report",

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useApp } from "../context/AppContext";
@@ -33,7 +33,14 @@ import {
   addMonthsIso,
   normalizeWorkerCertifications,
   getWorkerCertAlerts,
+  evaluateWorkerPermitEligibility,
 } from "../utils/certifications";
+import { getEquipmentDueAlerts } from "../utils/equipmentInspectionDue";
+import { getVehicleDueAlerts } from "../utils/vehicleComplianceDue";
+import { collectComplianceDueItems } from "../utils/complianceDueCalendar";
+import { buildPeopleNextSteps } from "../utils/peopleNextSteps";
+import PeopleNextSteps from "../components/PeopleNextSteps";
+import ComplianceDuePanel from "../components/ComplianceDuePanel";
 import { pushRecycleBinItem } from "../utils/recycleBin";
 import { openWorkspaceView, setWorkspaceNavTarget, consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { getNearestHospital } from "../utils/nearestHospital";
@@ -522,6 +529,99 @@ export function WorkersModule({ mode = "all" }) {
     .flatMap((w) => getWorkerCertAlerts(w).map((a) => ({ ...a, worker: w })))
     .sort((a, b) => a.days - b.days);
   const criticalAlerts = certAlerts.filter((a) => a.severity === "expired" || a.severity === "critical");
+  const equipmentAlerts = useMemo(() => getEquipmentDueAlerts(), [workers.length, projects.length]);
+  const vehicleAlerts = useMemo(() => getVehicleDueAlerts(), [workers.length, projects.length]);
+  const trainingRecords = useMemo(() => load("training_matrix"), [workers.length, modal]);
+  const complianceDueItems = useMemo(
+    () => collectComplianceDueItems({ workers, trainingRecords }),
+    [workers, trainingRecords]
+  );
+  const handleComplianceDueSelect = useCallback(
+    (item) => {
+      if (!item) return;
+      if (item.kind === "cert" && item.workerId) {
+        const worker = workers.find((w) => w.id === item.workerId);
+        if (worker) setModal({ type: "worker", data: worker });
+        return;
+      }
+      if (item.kind === "training") {
+        openWorkspaceView({ viewId: "training" });
+        return;
+      }
+      if (item.kind === "vehicle") {
+        openWorkspaceView({ viewId: "vehicles" });
+        return;
+      }
+      openWorkspaceView(item.moduleId || "inspections");
+    },
+    [workers]
+  );
+  const [peopleStepsHidden, setPeopleStepsHidden] = useState(() => {
+    try {
+      return sessionStorage.getItem(`people_next_steps_hide_${getOrgId()}`) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const peopleNextSteps = useMemo(
+    () =>
+      buildPeopleNextSteps({
+        workers,
+        certAlerts,
+        equipmentAlerts,
+        vehicleAlerts,
+        trainingRecords,
+        projects,
+      }),
+    [workers, certAlerts, equipmentAlerts, vehicleAlerts, trainingRecords, projects]
+  );
+  const runPeopleNextStepAction = useCallback(
+    (action) => {
+      try {
+        sessionStorage.removeItem(`people_next_steps_hide_${getOrgId()}`);
+      } catch {
+        /* ignore */
+      }
+      setPeopleStepsHidden(false);
+      switch (action) {
+        case "add_worker":
+          tryAddWorker();
+          break;
+        case "scroll_certs":
+          document.getElementById("people-cert-alerts")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          break;
+        case "scroll_people":
+          document.getElementById("people-register")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          break;
+        case "open_inspections":
+          openWorkspaceView("inspections");
+          break;
+        case "open_plant":
+          openWorkspaceView("plant");
+          break;
+        case "open_training":
+          openWorkspaceView({ viewId: "training" });
+          break;
+        case "open_vehicles":
+          openWorkspaceView({ viewId: "vehicles" });
+          break;
+        case "scroll_compliance":
+          document.getElementById("people-compliance-calendar")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          break;
+        default:
+          break;
+      }
+    },
+    [tryAddWorker]
+  );
+  const hidePeopleNextSteps = useCallback(() => {
+    setPeopleStepsHidden(true);
+    try {
+      sessionStorage.setItem(`people_next_steps_hide_${getOrgId()}`, "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const handleApplyPlaybook = (p, playbookId) => {
     try {
@@ -592,6 +692,7 @@ export function WorkersModule({ mode = "all" }) {
       {modal?.type === "worker" && (
         <WorkerForm
           item={modal.data}
+          projects={projects}
           onSave={saveWorker}
           onClose={() => setModal(null)}
         />
@@ -658,7 +759,21 @@ export function WorkersModule({ mode = "all" }) {
 
       {!(useInlineHub && hubProject) && showPeople ? (
       <>
-      <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
+      {!peopleStepsHidden ? (
+        <PeopleNextSteps
+          steps={peopleNextSteps}
+          onAction={runPeopleNextStepAction}
+          onDismiss={hidePeopleNextSteps}
+        />
+      ) : null}
+
+      {complianceDueItems.length > 0 ? (
+        <div style={{ marginBottom: 16 }}>
+          <ComplianceDuePanel items={complianceDueItems} onSelect={handleComplianceDueSelect} />
+        </div>
+      ) : null}
+
+      <div id="people-cert-alerts" className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
           <div style={{ fontWeight: 600 }}>Certification alerts</div>
           <span style={ss.chip}>{certAlerts.length} alert(s)</span>
@@ -668,10 +783,26 @@ export function WorkersModule({ mode = "all" }) {
         ) : (
           <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
             {certAlerts.slice(0, 8).map((a) => (
-              <div key={`${a.worker.id}_${a.cert.certCode}_${a.cert.expiryDate}`} style={{ fontSize: 12, padding: "6px 8px", borderRadius: 8, background: a.severity === "expired" ? "#FCEBEB" : a.severity === "critical" ? "#FCEBEB" : "#FAEEDA", color: a.severity === "warning" ? "#633806" : "#791F1F" }}>
+              <button
+                key={`${a.worker.id}_${a.cert.certCode}_${a.cert.expiryDate}`}
+                type="button"
+                onClick={() => setModal({ type: "worker", data: a.worker })}
+                style={{
+                  fontSize: 12,
+                  padding: "6px 8px",
+                  borderRadius: 8,
+                  border: "none",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  background: a.severity === "expired" ? "#FCEBEB" : a.severity === "critical" ? "#FCEBEB" : "#FAEEDA",
+                  color: a.severity === "warning" ? "#633806" : "#791F1F",
+                }}
+              >
                 <strong>{a.worker.name || "Unnamed worker"}</strong> · {a.cert.certType} ·{" "}
                 {a.days < 0 ? `expired ${Math.abs(a.days)} day(s) ago` : `expires in ${a.days} day(s)`}
-              </div>
+                <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.85 }}>— Edit</span>
+              </button>
             ))}
             {criticalAlerts.length > 0 ? (
               <div style={{ fontSize: 11, color: "#791F1F" }}>
@@ -682,7 +813,39 @@ export function WorkersModule({ mode = "all" }) {
         )}
       </div>
 
-      <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
+      {equipmentAlerts.length > 0 ? (
+        <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontWeight: 600 }}>Equipment inspection alerts</div>
+            <span style={ss.chip}>{equipmentAlerts.length} due</span>
+          </div>
+          <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+            {equipmentAlerts.slice(0, 6).map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => openWorkspaceView(a.moduleId || "inspections")}
+                style={{
+                  fontSize: 12,
+                  padding: "6px 8px",
+                  borderRadius: 8,
+                  border: "none",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  background: a.severity === "expired" ? "#FCEBEB" : a.severity === "critical" ? "#FCEBEB" : "#FAEEDA",
+                  color: a.severity === "warning" ? "#633806" : "#791F1F",
+                }}
+              >
+                <strong>{a.name}</strong> ·{" "}
+                {a.days < 0 ? `overdue ${Math.abs(a.days)} day(s)` : `due in ${a.days} day(s)`}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div id="people-register" className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
           People ({workers.length})
         </div>
@@ -692,7 +855,12 @@ export function WorkersModule({ mode = "all" }) {
             Showing {Math.min(workersPg.cap, workers.length)} of {workers.length}
           </div>
         ) : null}
-        {workersPg.visible(workers).map((w) => (
+        {workersPg.visible(workers).map((w) => {
+          const assignedProjects = (Array.isArray(w.projectIds) ? w.projectIds : [])
+            .map((pid) => projects.find((p) => p.id === pid)?.name)
+            .filter(Boolean);
+          const ptwOk = evaluateWorkerPermitEligibility(w, "hot_work").eligible;
+          return (
           <div
             key={w.id}
             style={{
@@ -707,6 +875,13 @@ export function WorkersModule({ mode = "all" }) {
             <div style={{ flex: "1 1 200px", minWidth: 0 }}>
               <strong>{w.name || "Unnamed"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{w.role || "—"} · {w.phone || w.email || ""}</div>
+              {assignedProjects.length > 0 ? (
+                <div style={{ fontSize: 11, color: "#0f766e", marginTop: 4 }}>
+                  Projects: {assignedProjects.join(", ")}
+                </div>
+              ) : projects.length > 0 ? (
+                <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>No project assigned</div>
+              ) : null}
               {normalizeWorkerCertifications(w).length > 0 ? (
                 <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4 }}>
                   {normalizeWorkerCertifications(w)
@@ -715,6 +890,9 @@ export function WorkersModule({ mode = "all" }) {
                     .join(" · ")}
                 </div>
               ) : null}
+              <div style={{ fontSize: 11, marginTop: 4, color: ptwOk ? "#047857" : "#92400e" }}>
+                PTW hot work: {ptwOk ? "eligible" : "blocked — check certs"}
+              </div>
             </div>
             <button type="button" style={ss.btn} onClick={() => setModal({ type: "worker", data: w })}>
               Edit
@@ -723,7 +901,7 @@ export function WorkersModule({ mode = "all" }) {
               Remove
             </button>
           </div>
-        ))}
+        );})}
         {workersPg.hasMore(workers) ? (
           <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
             <button type="button" style={ss.btn} onClick={workersPg.showMore}>
@@ -936,10 +1114,11 @@ function workerFormShape(w) {
     certType: c0?.certType || "",
     certExpiry: c0?.expiryDate || "",
     certMatrix: baseMatrix,
+    projectIds: Array.isArray(w.projectIds) ? w.projectIds : [],
   };
 }
 
-function WorkerForm({ item, onSave, onClose }) {
+function WorkerForm({ item, projects = [], onSave, onClose }) {
   const orgMarketId = getOrgMarketId();
   const certLibrary = getCertLibraryForMarket(orgMarketId);
   const [form, setForm] = useState(() => workerFormShape(item));
@@ -982,8 +1161,8 @@ function WorkerForm({ item, onSave, onClose }) {
     if (form.certType?.trim() && form.certExpiry) {
       certs.push({ certType: form.certType.trim(), expiryDate: form.certExpiry });
     }
-    const rest = (form.certifications || []).filter((c) => c?.certType && c?.expiryDate);
-    const merged = [...rest, ...certs];
+    const existingCerts = (form.certifications || []).filter((c) => c?.certType && c?.expiryDate);
+    const merged = [...existingCerts, ...certs];
     const matrixRows = Object.entries(form.certMatrix || {})
       .filter(([, v]) => v?.enabled)
       .map(([code, v]) => ({
@@ -1002,7 +1181,22 @@ function WorkerForm({ item, onSave, onClose }) {
             String(x.expiryDate || "") === String(c.expiryDate || "")
         ) === i
     );
-    onSave({ ...form, certifications: uniqueAll });
+    const { certMatrix: _cm, certType: _ct, certExpiry: _ce, ...rest } = form;
+    onSave({
+      ...rest,
+      certifications: uniqueAll,
+      projectIds: Array.isArray(form.projectIds) ? form.projectIds : [],
+    });
+  };
+
+  const toggleProject = (projectId) => {
+    const id = String(projectId || "").trim();
+    if (!id) return;
+    setForm((f) => {
+      const current = Array.isArray(f.projectIds) ? f.projectIds : [];
+      const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+      return { ...f, projectIds: next };
+    });
   };
 
   const visibleCatalog = certLibrary.filter((c) => c.label.toLowerCase().includes(certFilter.trim().toLowerCase()));
@@ -1019,6 +1213,25 @@ function WorkerForm({ item, onSave, onClose }) {
         <input style={ss.inp} value={form.phone} onChange={(e) => set("phone", e.target.value)} />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Email</label>
         <input style={ss.inp} value={form.email} onChange={(e) => set("email", e.target.value)} />
+        {projects.length > 0 ? (
+          <div style={{ marginTop: 12 }}>
+            <label style={ss.lbl}>Assigned projects</label>
+            <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 6 }}>
+              Link this person to sites for RAMS, PTW, client portal and briefings.
+            </div>
+            <div style={{ display: "grid", gap: 6, maxHeight: 140, overflow: "auto" }}>
+              {projects.map((p) => {
+                const on = (form.projectIds || []).includes(p.id);
+                return (
+                  <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                    <input type="checkbox" checked={on} onChange={() => toggleProject(p.id)} />
+                    {p.name || p.id}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         <label style={{ ...ss.lbl, marginTop: 10 }}>Primary certificate (for dashboard expiry)</label>
         <input style={ss.inp} value={form.certType || ""} onChange={(e) => set("certType", e.target.value)} placeholder={getCompetencyCardHint(getOrgMarketId())} />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Certificate expiry</label>

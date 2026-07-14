@@ -50,6 +50,21 @@ export function buildRegisterModuleStats(moduleId, items = []) {
         stat("Out of service", list.filter((i) => /out|repair|quarantine/i.test(String(i.status || ""))).length, "warn"),
         stat("Due inspection", countAttention(list), countAttention(list) ? "warn" : "good"),
       ];
+    case "vehicles": {
+      const active = list.filter((i) => String(i.status || "active") !== "disposed");
+      const dueSoon = active.filter((i) => {
+        const dates = [i.motDue, i.insuranceExpiry, i.nextServiceDue, i.taxDue].filter(Boolean);
+        return dates.some((d) => {
+          const days = Math.ceil((new Date(d) - new Date()) / 86400000);
+          return days <= 30;
+        });
+      }).length;
+      return [
+        stat("Vehicles", active.length),
+        stat("Due ≤30 days", dueSoon, dueSoon ? "warn" : "good"),
+        stat("Off road", list.filter((i) => i.status === "off_road").length, "warn"),
+      ];
+    }
     case "training":
       return [
         stat("Records", n),

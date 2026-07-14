@@ -73,6 +73,8 @@ export function getRegisterSmartTips(moduleId, ctx = {}) {
       return ppeTips(enriched);
     case "plant":
       return plantTips(enriched);
+    case "vehicles":
+      return vehicleTips(enriched);
     case "training":
       return trainingTips(enriched);
     case "first-aid":
@@ -418,6 +420,18 @@ function plantTips({ items = [] }) {
     }];
   }
   return [{ id: "ok", tone: "good", text: "Plant register active — keep asset tags aligned with inspection records." }];
+}
+
+function vehicleTips({ items = [] }) {
+  if (!items.length) {
+    return [{
+      id: "start",
+      tone: "info",
+      text: "Add vans and HGVs with MOT, insurance and service dates — due items appear on the People compliance calendar.",
+      viewId: "vehicles",
+    }];
+  }
+  return [{ id: "ok", tone: "good", text: "Fleet register active — renew MOT and insurance before deploying vehicles to site." }];
 }
 
 function trainingTips({ items = [] }) {

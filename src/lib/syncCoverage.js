@@ -30,6 +30,7 @@ export const D1_LIVE_SYNC_NAMESPACES = [
   "scaffold_register",
   "electrical_pat_log",
   "plant_register",
+  "vehicle_register",
   "safety_observations",
   "confined_space_log",
   "noise_vibration_log",

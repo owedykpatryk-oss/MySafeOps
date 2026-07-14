@@ -7,6 +7,8 @@ import {
 } from "../modules/permits/permitOrgPrefs";
 import { getAppliedIndustryPackId, getWorkspacePackLabel } from "../utils/orgIndustryPacks";
 import { ms } from "../utils/moduleStyles";
+import { PTW_REPLAY_GUIDE_EVENT, resetPermitGuide } from "../utils/permitGuideStorage";
+import { PTW_RESET_TIPS_EVENT } from "../utils/permitContextTips";
 
 const ss = ms;
 
@@ -149,6 +151,41 @@ export default function OrgPermitSettings({ form, set }) {
           placeholder="Site manager name&#10;Subcontractor lead"
           style={{ ...ss.ta, minHeight: 64 }}
         />
+      </div>
+
+      <div style={{ borderTop: "1px solid var(--color-border, #e5e7eb)", paddingTop: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-secondary)", marginBottom: 8 }}>
+          Team guidance
+        </div>
+        <div style={{ fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>
+          Replay the PTW tour for new supervisors or reset in-app tips after training.
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            style={{ ...ss.btn, fontSize: 12 }}
+            onClick={() => window.dispatchEvent(new CustomEvent(PTW_REPLAY_GUIDE_EVENT))}
+          >
+            Replay PTW guide
+          </button>
+          <button
+            type="button"
+            style={{ ...ss.btn, fontSize: 12 }}
+            onClick={() => window.dispatchEvent(new CustomEvent(PTW_RESET_TIPS_EVENT))}
+          >
+            Reset PTW tips
+          </button>
+          <button
+            type="button"
+            style={{ ...ss.btn, fontSize: 12 }}
+            onClick={() => {
+              resetPermitGuide();
+              window.dispatchEvent(new CustomEvent(PTW_REPLAY_GUIDE_EVENT));
+            }}
+          >
+            Reset guide (this browser)
+          </button>
+        </div>
       </div>
     </div>
   );

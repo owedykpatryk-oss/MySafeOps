@@ -131,6 +131,16 @@ export const MODULE_PDF_REGISTRY = {
       { k: "result", l: "Result" },
     ],
   },
+  vehicles: {
+    key: "vehicle_register",
+    columns: [
+      { k: "registration", l: "Registration" },
+      { k: "makeModel", l: "Make/model" },
+      { k: "motDue", l: "MOT due" },
+      { k: "insuranceExpiry", l: "Insurance" },
+      { k: "status", l: "Status" },
+    ],
+  },
   fire: {
     key: "fire_safety_log",
     columns: [

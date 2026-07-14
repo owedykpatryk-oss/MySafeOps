@@ -27,6 +27,7 @@ export const D1_BACKUP_PUSH_NAMESPACES = new Set([
   "scaffold_register",
   "electrical_pat_log",
   "plant_register",
+  "vehicle_register",
   "safety_observations",
   "confined_space_log",
   "noise_vibration_log",

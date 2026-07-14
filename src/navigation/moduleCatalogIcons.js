@@ -81,6 +81,7 @@ export const MODULE_ICONS = {
   emergency: HeartPulse,
   ppe: Shield,
   plant: Wrench,
+  vehicles: Truck,
   fire: Flame,
   "hot-work": Flame,
   training: GraduationCap,
