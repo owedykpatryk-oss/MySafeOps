@@ -59,18 +59,14 @@ export function buildDrawingObjectsKml({
     "Plan points exported with illustrative WGS84 from editor anchor. Adjust anchor lat/lng/spans before relying on positions in Google Earth."
   );
 
-  const placemarks = objects.map((row) => {
-    const { lat, lng } = getObjectLatLng(row, anchor, affine);
+  const placemarks = objects.flatMap((row) => {
     const name = escapeXml(drawingObjectLabel(row));
     const src =
       row.placement === "map"
         ? `Map: lat=${Number(row.geoLat).toFixed(6)} lng=${Number(row.geoLng).toFixed(6)}`
         : `Plan: x=${Number(row.x).toFixed(2)}% y=${Number(row.y).toFixed(2)}%`;
     const desc = escapeXml(`${src} | type=${row.type} | planId=${row.planId || ""} | id=${row.id}`);
-    return `    <Placemark>
-      <name>${name}</name>
-      <description>${desc}</description>
-      <ExtendedData>
+    const ext = `      <ExtendedData>
         <Data name="id"><value>${escapeXml(row.id)}</value></Data>
         <Data name="projectId"><value>${escapeXml(String(row.projectId || ""))}</value></Data>
         <Data name="planId"><value>${escapeXml(String(row.planId || ""))}</value></Data>
@@ -81,9 +77,38 @@ export function buildDrawingObjectsKml({
         <Data name="geoLat"><value>${row.geoLat != null ? Number(row.geoLat) : ""}</value></Data>
         <Data name="geoLng"><value>${row.geoLng != null ? Number(row.geoLng) : ""}</value></Data>
         <Data name="permitRef"><value>${escapeXml(String(permitRef || ""))}</value></Data>
-      </ExtendedData>
+      </ExtendedData>`;
+
+    if (row.geometry === "polygon" && Array.isArray(row.ring) && row.ring.length >= 3) {
+      const coords = row.ring
+        .map((p) => {
+          if (row.placement === "map") {
+            const lat = Number(p.geoLat ?? p.lat);
+            const lng = Number(p.geoLng ?? p.lng);
+            return Number.isFinite(lat) && Number.isFinite(lng) ? `${lng},${lat},0` : null;
+          }
+          const ll = getObjectLatLng({ ...row, x: p.x, y: p.y, placement: "plan" }, anchor, affine);
+          return `${ll.lng},${ll.lat},0`;
+        })
+        .filter(Boolean)
+        .join(" ");
+      if (coords.split(" ").length >= 3) {
+        return [`    <Placemark>
+      <name>${name}</name>
+      <description>${desc}</description>
+${ext}
+      <Polygon><outerBoundaryIs><LinearRing><coordinates>${coords}</coordinates></LinearRing></outerBoundaryIs></Polygon>
+    </Placemark>`];
+      }
+    }
+
+    const { lat, lng } = getObjectLatLng(row, anchor, affine);
+    return [`    <Placemark>
+      <name>${name}</name>
+      <description>${desc}</description>
+${ext}
       <Point><coordinates>${lng},${lat},0</coordinates></Point>
-    </Placemark>`;
+    </Placemark>`];
   });
 
   return `<?xml version="1.0" encoding="UTF-8"?>

@@ -10,6 +10,7 @@ import {
   buildProjectDrawingObject,
   drawingObjectLabel,
   drawingObjectTypeMeta,
+  drawingObjectCategories,
   objectsForProject,
   saveProjectDrawingObjects,
   listProjectDrawingObjects,
@@ -21,7 +22,8 @@ import {
   buildDrawingObjectsKml,
   getObjectLatLng,
 } from "./permits/projectDrawingGeo";
-import { geoAnchorFromProject } from "../utils/projectBoundary";
+import { isDefaultGeoAnchor, parseProjectBoundaryRing, projectSiteLocationSignature } from "../utils/projectBoundary";
+import { resolveProjectGeoAnchor } from "../utils/resolveProjectGeoAnchor";
 import { loadDrawingEditorPrefs, saveDrawingEditorPrefs } from "./permits/projectDrawingEditorPrefs";
 import {
   validateDrawingImportJson,
@@ -30,6 +32,8 @@ import {
   parseGeoJsonPoints,
 } from "./permits/projectDrawingImport";
 import { solvePlanAffineFromControlPoints } from "./permits/projectDrawingAffine";
+import { PDE_AREA_KINDS, pdeAreaKindMeta, isPolygonDrawingObject } from "./permits/projectDrawingAreas";
+import { projectBoundaryFromDraftRing } from "./permits/projectDrawingBoundary";
 import { isR2StorageConfigured, uploadFileToR2Storage } from "../lib/r2Storage";
 import { pushAudit } from "../utils/auditLog";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
@@ -37,6 +41,18 @@ import { isSupabaseConfigured } from "../lib/supabase";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import ProjectDrawingGeoMap from "./ProjectDrawingGeoMap";
 import ProjectDrawingMapCanvas from "./ProjectDrawingMapCanvas";
+import ProjectDrawingEmergencyIntel, {
+  captureHospitalRoutePng,
+  downloadHospitalRoutePng,
+} from "./ProjectDrawingEmergencyIntel";
+import ProjectDrawingSmartBar, { ProjectDrawingQuickChips } from "./ProjectDrawingSmartBar";
+import ProjectDrawingEscapeRoutesPanel from "./ProjectDrawingEscapeRoutesPanel";
+import ProjectDrawingMapLayers, { DEFAULT_PDE_MAP_LAYERS } from "./ProjectDrawingMapLayers";
+import ProjectDrawingMapLegend, { buildMapLegendItems } from "./ProjectDrawingMapLegend";
+import { computeProjectDrawingReadiness } from "./permits/projectDrawingReadiness";
+import { buildSitePackKml, buildSitePackManifest, triggerBlobDownload } from "./permits/projectDrawingSitePack";
+import { resolveHospitalRoute } from "../utils/hospitalRoute";
+import { captureElementPngBlob } from "../utils/captureElementPng";
 import ProjectSitePlanPanel from "./ProjectSitePlanPanel";
 
 const pdeUi = {
@@ -120,6 +136,28 @@ const pdeUi = {
     textAlign: "center",
     pointerEvents: "none",
   },
+  siteChip: (tone = "ready") => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12,
+    fontWeight: 600,
+    padding: "6px 12px",
+    borderRadius: 999,
+    border:
+      tone === "warn"
+        ? "1px solid #fcd34d"
+        : tone === "loading"
+          ? "1px solid #bae6fd"
+          : "1px solid #99f6e4",
+    background:
+      tone === "warn"
+        ? "#fffbeb"
+        : tone === "loading"
+          ? "#f0f9ff"
+          : "var(--color-accent-muted,#f0fdfa)",
+    color: tone === "warn" ? "#92400e" : "var(--color-text-primary)",
+  }),
 };
 
 const ss = {
@@ -195,6 +233,15 @@ function markerStyle(type, selected) {
   if (meta.shape === "circle") return { ...base, borderRadius: "50%" };
   if (meta.shape === "square") return { ...base, borderRadius: 3 };
   if (meta.shape === "diamond") return { ...base, borderRadius: 2, transform: "translate(-50%,-50%) rotate(45deg)" };
+  if (meta.shape === "star") {
+    return {
+      ...base,
+      width: 18,
+      height: 18,
+      borderRadius: 0,
+      clipPath: "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)",
+    };
+  }
   return { ...base, borderRadius: "50%" };
 }
 
@@ -239,6 +286,21 @@ export default function ProjectDrawingEditor() {
     [projects, projectId]
   );
 
+  const projectSiteLocationSig = useMemo(
+    () => projectSiteLocationSignature(currentProject),
+    [currentProject]
+  );
+
+  const projectBoundaryRing = useMemo(
+    () => (currentProject ? parseProjectBoundaryRing(currentProject) : null),
+    [currentProject]
+  );
+
+  const projectSiteLabel = useMemo(() => {
+    if (!currentProject) return "";
+    return [currentProject.postcode, currentProject.address, currentProject.site].filter(Boolean).join(" · ");
+  }, [currentProject]);
+
   const updateProjectRecord = useCallback(
     (updated) => {
       if (!updated?.id) return;
@@ -254,8 +316,20 @@ export default function ProjectDrawingEditor() {
   const [visibleType, setVisibleType] = useState("all");
   const [tool, setTool] = useState(() => {
     const t = loadPdeSession().tool;
-    return t === "select" || t === "pan" || t === "place" ? t : "place";
+    return t === "select" || t === "pan" || t === "place" || t === "boundary" || t === "area" || t === "route" ? t : "place";
   });
+  const [areaKind, setAreaKind] = useState("exclusion");
+  const [draftRing, setDraftRing] = useState([]);
+  const [hospitalIntel, setHospitalIntel] = useState(null);
+  const [showHospitalRoute, setShowHospitalRoute] = useState(true);
+  const [hospitalBusy, setHospitalBusy] = useState(false);
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const [sitePackBusy, setSitePackBusy] = useState(false);
+  const [showMapLegend, setShowMapLegend] = useState(() => loadPdeSession().showMapLegend !== false);
+  const [mapLayers, setMapLayers] = useState(() => ({ ...DEFAULT_PDE_MAP_LAYERS }));
+  const [highlightEscapeRouteId, setHighlightEscapeRouteId] = useState("");
+  const [escapeRouteAppendMode, setEscapeRouteAppendMode] = useState(false);
+  const [escapeRoutePointIndex, setEscapeRoutePointIndex] = useState(-1);
   const [selectedIds, setSelectedIds] = useState([]);
   const [snapGrid, setSnapGrid] = useState(() => Boolean(loadPdeSession().snapGrid));
   const [listFilter, setListFilter] = useState("");
@@ -266,6 +340,7 @@ export default function ProjectDrawingEditor() {
   const [showMapLabels, setShowMapLabels] = useState(() => Boolean(loadPdeSession().showMapLabels ?? true));
   const [showGeoPreview, setShowGeoPreview] = useState(() => Boolean(loadPdeSession().showGeoPreview));
   const [geoAnchor, setGeoAnchor] = useState(() => ({ ...DEFAULT_GEO_ANCHOR }));
+  const [siteGeoStatus, setSiteGeoStatus] = useState({ source: "default", busy: false, postcode: "" });
   const [planGeoMode, setPlanGeoMode] = useState("anchor");
   const [planAffine, setPlanAffine] = useState(null);
   const [controlPoints, setControlPoints] = useState(() => [emptyControlPoint(), emptyControlPoint(), emptyControlPoint()]);
@@ -290,7 +365,12 @@ export default function ProjectDrawingEditor() {
     return b === "satellite" ? "satellite" : "streets";
   });
   const mapCanvasRef = useRef(null);
-  const geoAnchorSeedRef = useRef("");
+  const mapClickOverrideRef = useRef(null);
+  const highlightEscapeRouteIdRef = useRef("");
+  const escapeRoutePointIndexRef = useRef(-1);
+  const siteLocationSigRef = useRef("");
+  const hospitalAutoFetchedRef = useRef(new Set());
+  const workSurfaceRef = useRef(workSurface);
   const mapContentRef = useRef(null);
   const viewportRef = useRef(null);
   const listItemRefs = useRef({});
@@ -466,42 +546,101 @@ export default function ProjectDrawingEditor() {
   }, [plansForCurrentProject, projectId]);
 
   useEffect(() => {
-    if (!projectId) {
-      geoAnchorSeedRef.current = "";
-      return;
-    }
-    if (geoAnchorSeedRef.current === projectId) return;
-    geoAnchorSeedRef.current = projectId;
+    setHospitalIntel(null);
+    setShowHospitalRoute(true);
+    setHighlightEscapeRouteId("");
+  }, [projectId]);
 
+  const flyMapToAnchor = useCallback((anchor, zoom = 17) => {
+    if (!anchor || workSurfaceRef.current !== "map") return;
+    window.setTimeout(() => {
+      mapCanvasRef.current?.flyTo(anchor.lat, anchor.lng, zoom);
+    }, 120);
+  }, []);
+
+  const applyGeoAnchor = useCallback((anchor, meta = {}, { fly = false } = {}) => {
+    if (!anchor || typeof anchor.lat !== "number" || typeof anchor.lng !== "number") return;
+    setGeoAnchor({
+      lat: anchor.lat,
+      lng: anchor.lng,
+      spanLat: typeof anchor.spanLat === "number" ? clamp(anchor.spanLat, 0.0005, 5) : DEFAULT_GEO_ANCHOR.spanLat,
+      spanLng: typeof anchor.spanLng === "number" ? clamp(anchor.spanLng, 0.0005, 5) : DEFAULT_GEO_ANCHOR.spanLng,
+    });
+    setSiteGeoStatus((prev) => ({
+      ...prev,
+      source: meta.source || prev.source,
+      postcode: meta.postcode || prev.postcode,
+      busy: false,
+    }));
+    if (fly) flyMapToAnchor(anchor);
+  }, [flyMapToAnchor]);
+
+  const reapplyProjectSiteAnchor = useCallback(async () => {
+    if (!projectId || !currentProject) return;
+    setSiteGeoStatus((prev) => ({ ...prev, busy: true }));
+    try {
+      const resolved = await resolveProjectGeoAnchor(currentProject);
+      applyGeoAnchor(resolved.anchor, { source: resolved.source, postcode: resolved.postcode || "" }, { fly: true });
+      if (resolved.source === "default") {
+        setToast("No site coordinates found — add postcode on the project or set anchor manually.");
+      } else if (resolved.source === "postcode") {
+        setToast(`Map centred on ${resolved.postcode || "project postcode"}`);
+      } else {
+        setToast("Map centred on project site");
+      }
+    } catch {
+      setSiteGeoStatus((prev) => ({ ...prev, busy: false }));
+      setToast("Could not resolve site location");
+    }
+  }, [projectId, currentProject, applyGeoAnchor]);
+
+  useEffect(() => {
+    if (!projectId) {
+      siteLocationSigRef.current = "";
+      setSiteGeoStatus({ source: "default", busy: false, postcode: "" });
+      setGeoAnchor({ ...DEFAULT_GEO_ANCHOR });
+      return undefined;
+    }
+    if (siteLocationSigRef.current === projectSiteLocationSig) return undefined;
+    siteLocationSigRef.current = projectSiteLocationSig;
+
+    let cancelled = false;
     const orgSaved = loadDrawingEditorPrefs().geoAnchorByProject?.[projectId];
     const sessSaved = loadPdeSession().geoAnchorByProject?.[projectId];
     const saved = orgSaved || sessSaved;
-    if (saved && typeof saved.lat === "number" && typeof saved.lng === "number") {
-      setGeoAnchor({
-        lat: saved.lat,
-        lng: saved.lng,
-        spanLat: typeof saved.spanLat === "number" ? clamp(saved.spanLat, 0.0005, 5) : DEFAULT_GEO_ANCHOR.spanLat,
-        spanLng: typeof saved.spanLng === "number" ? clamp(saved.spanLng, 0.0005, 5) : DEFAULT_GEO_ANCHOR.spanLng,
-      });
-      return;
+    const hasCustomSaved = saved && typeof saved.lat === "number" && typeof saved.lng === "number" && !isDefaultGeoAnchor(saved);
+
+    if (hasCustomSaved) {
+      applyGeoAnchor(saved, { source: "saved" });
+      return undefined;
     }
-    const fromProject = geoAnchorFromProject(currentProject);
-    if (fromProject) {
-      setGeoAnchor(fromProject);
-      return;
-    }
-    setGeoAnchor({ ...DEFAULT_GEO_ANCHOR });
-  }, [projectId, currentProject]);
+
+    setSiteGeoStatus((prev) => ({ ...prev, busy: true }));
+    (async () => {
+      try {
+        const resolved = await resolveProjectGeoAnchor(currentProject);
+        if (cancelled) return;
+        applyGeoAnchor(resolved.anchor, { source: resolved.source, postcode: resolved.postcode || "" }, { fly: true });
+      } catch {
+        if (!cancelled) {
+          setSiteGeoStatus((prev) => ({ ...prev, busy: false }));
+          setGeoAnchor({ ...DEFAULT_GEO_ANCHOR });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, projectSiteLocationSig, currentProject, applyGeoAnchor]);
 
   useEffect(() => {
-    if (!projectId || workSurface !== "map") return undefined;
-    const fromProject = geoAnchorFromProject(currentProject);
-    if (!fromProject) return undefined;
-    const t = window.setTimeout(() => {
-      mapCanvasRef.current?.flyTo(fromProject.lat, fromProject.lng, 17);
-    }, 180);
-    return () => window.clearTimeout(t);
-  }, [projectId, workSurface, currentProject?.lat, currentProject?.lng, currentProject?.boundaryPoints]);
+    const wasMap = workSurfaceRef.current === "map";
+    workSurfaceRef.current = workSurface;
+    if (!projectId || workSurface !== "map" || wasMap) return undefined;
+    flyMapToAnchor(geoAnchor);
+    return undefined;
+  }, [workSurface, projectId, geoAnchor.lat, geoAnchor.lng, flyMapToAnchor]);
 
   useEffect(() => {
     if (!projectId || !planId) {
@@ -542,6 +681,7 @@ export default function ProjectDrawingEditor() {
       tool,
       snapGrid,
       showMapLabels,
+      showMapLegend,
       showGeoPreview,
       workSurface,
       mapBasemap,
@@ -555,7 +695,7 @@ export default function ProjectDrawingEditor() {
         geoAnchorByProject: { ...(p.geoAnchorByProject || {}), [projectId]: geoAnchor },
       });
     }
-  }, [mapZoom, tool, snapGrid, showMapLabels, showGeoPreview, workSurface, mapBasemap, geoAnchor, projectId, planId, exportPermitRef]);
+  }, [mapZoom, tool, snapGrid, showMapLabels, showMapLegend, showGeoPreview, workSurface, mapBasemap, geoAnchor, projectId, planId, exportPermitRef]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -970,7 +1110,7 @@ export default function ProjectDrawingEditor() {
 
   const uploadBlobToOrgR2 = useCallback(
     async (blob, filename) => {
-      if (!blob || !r2Enabled) return;
+      if (!blob || !r2Enabled) return null;
       setR2Busy(true);
       let orgIdForPath = getOrgId();
       if (isSupabaseConfigured() && supabase) {
@@ -996,8 +1136,10 @@ export default function ProjectDrawingEditor() {
         saveR2UploadsList(next);
         pushAudit({ action: "r2_upload", entity: "document", detail: result.key });
         setToast(`Uploaded ${filename} to cloud library`);
+        return result.publicUrl || null;
       } catch (e) {
         setToast(e?.message || "Upload failed");
+        return null;
       } finally {
         setR2Busy(false);
       }
@@ -1015,30 +1157,103 @@ export default function ProjectDrawingEditor() {
   };
 
   const uploadMapPngToR2 = async () => {
-    const el = document.getElementById("pde-map-capture-root");
-    if (!el) {
-      setToast("Map not ready");
+    await captureMapPng();
+  };
+
+  const siteCoordsForHospital = useMemo(() => {
+    const plat = parseFloat(String(currentProject?.lat ?? "").trim());
+    const plng = parseFloat(String(currentProject?.lng ?? "").trim());
+    if (Number.isFinite(plat) && Number.isFinite(plng)) return { lat: plat, lng: plng };
+    if (Number.isFinite(geoAnchor.lat) && Number.isFinite(geoAnchor.lng) && !isDefaultGeoAnchor(geoAnchor)) {
+      return { lat: geoAnchor.lat, lng: geoAnchor.lng };
+    }
+    return { lat: geoAnchor.lat, lng: geoAnchor.lng };
+  }, [currentProject?.lat, currentProject?.lng, geoAnchor]);
+
+  const fetchHospitalRoute = useCallback(async () => {
+    if (!projectId) return;
+    const { lat, lng } = siteCoordsForHospital;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      setToast("Set project site coordinates or postcode first");
       return;
     }
+    setHospitalBusy(true);
     try {
-      const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(el, {
-        useCORS: true,
-        allowTaint: false,
-        scale: 2,
-        logging: false,
-        backgroundColor: "#f1f5f9",
-      });
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!blob) {
-        setToast("PNG blob failed");
+      const resolved = await resolveHospitalRoute(lat, lng);
+      if (!resolved) {
+        setToast("No hospital found within 25 km — check site coordinates");
+        setHospitalIntel(null);
         return;
       }
-      await uploadBlobToOrgR2(blob, `project-map-${projectId || "export"}.png`);
+      setHospitalIntel(resolved);
+      setShowHospitalRoute(true);
+      window.setTimeout(() => mapCanvasRef.current?.fitHospitalRoute(resolved.ring), 200);
+      updateProjectRecord({
+        ...currentProject,
+        nearestHospital: resolved.hospital.summary,
+        hospitalDirectionsUrl: resolved.hospital.directions_url,
+      });
+      setToast(`A&E route ready — ${resolved.hospital.name}`);
     } catch {
-      setToast("PNG capture failed (tile CORS) — try KML export");
+      setToast("Hospital lookup failed");
+    } finally {
+      setHospitalBusy(false);
     }
-  };
+  }, [projectId, siteCoordsForHospital, currentProject, updateProjectRecord]);
+
+  useEffect(() => {
+    if (!projectId || workSurface !== "map") return undefined;
+    const key = String(projectId);
+    if (hospitalAutoFetchedRef.current.has(key)) return undefined;
+    if (hospitalIntel || hospitalBusy || currentProject?.nearestHospital) return undefined;
+    if (!Number.isFinite(siteCoordsForHospital.lat) || !Number.isFinite(siteCoordsForHospital.lng)) return undefined;
+    if (siteGeoStatus.source === "default" || siteGeoStatus.busy) return undefined;
+    hospitalAutoFetchedRef.current.add(key);
+    fetchHospitalRoute();
+    return undefined;
+  }, [
+    projectId,
+    workSurface,
+    hospitalIntel,
+    hospitalBusy,
+    currentProject?.nearestHospital,
+    siteCoordsForHospital.lat,
+    siteCoordsForHospital.lng,
+    siteGeoStatus.source,
+    siteGeoStatus.busy,
+    fetchHospitalRoute,
+  ]);
+
+  const captureHospitalScreenshot = useCallback(async () => {
+    if (!projectId || !hospitalIntel?.ring?.length) return;
+    setCaptureBusy(true);
+    try {
+      if (!showHospitalRoute) setShowHospitalRoute(true);
+      await new Promise((r) => window.setTimeout(r, 350));
+      const blob = await captureHospitalRoutePng();
+      if (!blob) {
+        setToast("Screenshot failed — try again");
+        return;
+      }
+      downloadHospitalRoutePng(blob, projectId);
+      const filename = `hospital-route-${projectId}.png`;
+      const publicUrl = await uploadBlobToOrgR2(blob, filename);
+      const patch = {
+        ...currentProject,
+        nearestHospital: hospitalIntel.hospital.summary || currentProject?.nearestHospital,
+        hospitalDirectionsUrl: hospitalIntel.hospital.directions_url || currentProject?.hospitalDirectionsUrl,
+        hospitalRouteScreenshotUrl: publicUrl || currentProject?.hospitalRouteScreenshotUrl || "",
+        hospitalRouteCapturedAt: new Date().toISOString(),
+        ...(publicUrl && !currentProject?.siteMapUrl ? { siteMapUrl: publicUrl } : {}),
+      };
+      updateProjectRecord(patch);
+      setToast(publicUrl ? "Screenshot saved — link stored on project" : "PNG downloaded — enable cloud for shareable link");
+    } catch {
+      setToast("Screenshot capture failed");
+    } finally {
+      setCaptureBusy(false);
+    }
+  }, [projectId, hospitalIntel, showHospitalRoute, currentProject, uploadBlobToOrgR2, updateProjectRecord]);
 
   const persistPlanGeoEntry = useCallback((entry) => {
     if (!projectId || !planId) return;
@@ -1085,17 +1300,41 @@ export default function ProjectDrawingEditor() {
     if (!selectedPlan) return [];
     return visibleObjects.filter(
       (row) =>
-        row.placement !== "map" && (!row.planId || row.planId === selectedPlan.id)
+        row.placement !== "map" &&
+        row.geometry !== "polygon" &&
+        (!row.planId || row.planId === selectedPlan.id)
     );
   }, [visibleObjects, selectedPlan]);
 
   const mapObjectsForCanvas = useMemo(
     () =>
       visibleObjects.filter(
-        (row) => row.placement === "map" && Number.isFinite(row.geoLat) && Number.isFinite(row.geoLng)
+        (row) =>
+          row.placement === "map" &&
+          row.geometry !== "polygon" &&
+          Number.isFinite(row.geoLat) &&
+          Number.isFinite(row.geoLng)
       ),
     [visibleObjects]
   );
+
+  const mapAreaObjects = useMemo(
+    () =>
+      visibleObjects.filter(
+        (row) => row.placement === "map" && isPolygonDrawingObject(row)
+      ),
+    [visibleObjects]
+  );
+
+  const planAreaObjects = useMemo(() => {
+    if (!selectedPlan) return [];
+    return visibleObjects.filter(
+      (row) =>
+        isPolygonDrawingObject(row) &&
+        row.placement !== "map" &&
+        (!row.planId || row.planId === selectedPlan.id)
+    );
+  }, [visibleObjects, selectedPlan]);
 
   const planTypeStats = useMemo(() => {
     const counts = Object.fromEntries(PROJECT_DRAWING_OBJECT_TYPES.map((t) => [t.id, 0]));
@@ -1105,6 +1344,70 @@ export default function ProjectDrawingEditor() {
     }
     return counts;
   }, [workSurface, mapObjectsForCanvas, planObjectsForMap]);
+
+  const activeTypeStats = useMemo(
+    () => PROJECT_DRAWING_OBJECT_TYPES.filter((meta) => (planTypeStats[meta.id] ?? 0) > 0),
+    [planTypeStats]
+  );
+
+  const escapeRoutesForMap = useMemo(
+    () => (Array.isArray(currentProject?.mapEscapeRoutes) ? currentProject.mapEscapeRoutes : []),
+    [currentProject?.mapEscapeRoutes]
+  );
+
+  const draftMode = tool === "route" ? "route" : "polygon";
+
+  const mapLegendItems = useMemo(
+    () =>
+      buildMapLegendItems({
+        markerTypes: activeTypeStats,
+        typeCounts: planTypeStats,
+        hasBoundary: Boolean(projectBoundaryRing?.length >= 3),
+        showBoundary: mapLayers.boundary,
+        escapeRouteCount: escapeRoutesForMap.length,
+        showEscapeRoutes: mapLayers.escapeRoutes,
+        showHospitalRoute: Boolean(showHospitalRoute && hospitalIntel?.ring?.length),
+        showHospitalLayer: mapLayers.hospitalRoute,
+      }),
+    [
+      activeTypeStats,
+      planTypeStats,
+      projectBoundaryRing,
+      mapLayers.boundary,
+      mapLayers.escapeRoutes,
+      mapLayers.hospitalRoute,
+      escapeRoutesForMap.length,
+      showHospitalRoute,
+      hospitalIntel?.ring?.length,
+    ]
+  );
+
+  const siteReadiness = useMemo(
+    () =>
+      computeProjectDrawingReadiness({
+        siteOk: siteGeoStatus.source && siteGeoStatus.source !== "default",
+        hasBoundary: Boolean(projectBoundaryRing?.length >= 3),
+        objects,
+        escapeRouteCount: escapeRoutesForMap.length,
+        hospitalReady: Boolean(hospitalIntel?.hospital || currentProject?.nearestHospital),
+        screenshotSaved: Boolean(
+          currentProject?.hospitalRouteScreenshotUrl ||
+            currentProject?.siteMapUrl ||
+            currentProject?.siteMapPngDataUrl
+        ),
+      }),
+    [
+      siteGeoStatus.source,
+      projectBoundaryRing,
+      objects,
+      escapeRoutesForMap.length,
+      hospitalIntel?.hospital,
+      currentProject?.nearestHospital,
+      currentProject?.hospitalRouteScreenshotUrl,
+      currentProject?.siteMapUrl,
+      currentProject?.siteMapPngDataUrl,
+    ]
+  );
 
   const geoPreviewPoints = useMemo(() => {
     const out = [];
@@ -1154,7 +1457,8 @@ export default function ProjectDrawingEditor() {
 
   const addMapObject = useCallback(
     (lat, lng) => {
-      if (!projectId) return;
+      if (mapClickOverrideRef.current?.(lat, lng)) return;
+      if (!projectId || tool !== "place") return;
       pushHistory();
       const next = buildProjectDrawingObject({
         projectId,
@@ -1170,8 +1474,344 @@ export default function ProjectDrawingEditor() {
       setRows((prev) => [next, ...prev].slice(0, 1500));
       setSelectedIds([next.id]);
     },
-    [projectId, objectType, pushHistory]
+    [projectId, objectType, pushHistory, tool]
   );
+
+  const addDraftPointPlan = useCallback(
+    (x, y) => {
+      if (tool !== "boundary" && tool !== "area" && tool !== "route") return;
+      setDraftRing((prev) => [...prev, { x, y }]);
+    },
+    [tool]
+  );
+
+  const addDraftPointMap = useCallback(
+    (lat, lng) => {
+      if (tool !== "boundary" && tool !== "area" && tool !== "route") return;
+      setDraftRing((prev) => [...prev, { geoLat: lat, geoLng: lng }]);
+    },
+    [tool]
+  );
+
+  const undoDraftPoint = useCallback(() => {
+    setDraftRing((prev) => prev.slice(0, -1));
+  }, []);
+
+  const cancelDraftRing = useCallback(() => {
+    setDraftRing([]);
+  }, []);
+
+  const finishSiteBoundary = useCallback(() => {
+    if (!projectId || !currentProject || draftRing.length < 3) {
+      window.alert("Add at least 3 points to close the site boundary.");
+      return;
+    }
+    const placement = workSurface === "map" ? "map" : "plan";
+    const patch = projectBoundaryFromDraftRing(draftRing, placement, geoAnchor, effectiveAffine, {
+      name: currentProject.boundaryName || "Drawn site boundary",
+    });
+    if (!patch) {
+      window.alert("Could not build boundary — check anchor / calibration.");
+      return;
+    }
+    const centroid = patch.boundaryPoints.reduce(
+      (acc, p) => ({ lat: acc.lat + p.lat / patch.boundaryPoints.length, lng: acc.lng + p.lng / patch.boundaryPoints.length }),
+      { lat: 0, lng: 0 }
+    );
+    updateProjectRecord({
+      ...currentProject,
+      ...patch,
+      lat: String(centroid.lat),
+      lng: String(centroid.lng),
+    });
+    setDraftRing([]);
+    setTool("select");
+    setToast(`Site boundary saved (${patch.boundaryPoints.length} points)`);
+  }, [projectId, currentProject, draftRing, workSurface, geoAnchor, effectiveAffine, updateProjectRecord]);
+
+  const finishAreaPolygon = useCallback(() => {
+    if (!projectId || draftRing.length < 3) {
+      window.alert("Add at least 3 points to close the area.");
+      return;
+    }
+    pushHistory();
+    const placement = workSurface === "map" ? "map" : "plan";
+    const kindMeta = pdeAreaKindMeta(areaKind);
+    const ring =
+      placement === "map"
+        ? draftRing.map((p) => ({ geoLat: p.geoLat, geoLng: p.geoLng }))
+        : draftRing.map((p) => ({ x: p.x, y: p.y }));
+    let cx = 50;
+    let cy = 50;
+    let geoLat = null;
+    let geoLng = null;
+    if (placement === "map") {
+      const sLat = ring.reduce((s, p) => s + p.geoLat, 0);
+      const sLng = ring.reduce((s, p) => s + p.geoLng, 0);
+      geoLat = sLat / ring.length;
+      geoLng = sLng / ring.length;
+    } else {
+      cx = ring.reduce((s, p) => s + p.x, 0) / ring.length;
+      cy = ring.reduce((s, p) => s + p.y, 0) / ring.length;
+    }
+    const next = buildProjectDrawingObject({
+      projectId,
+      planId: placement === "plan" ? planId : "",
+      type: "site_area",
+      label: kindMeta.label,
+      x: cx,
+      y: cy,
+      placement,
+      geometry: "polygon",
+      ring,
+      geoLat,
+      geoLng,
+      meta: { areaKind, notes: "" },
+    });
+    setRows((prev) => [next, ...prev].slice(0, 1500));
+    setSelectedIds([next.id]);
+    setDraftRing([]);
+    setTool("select");
+    setToast(`${kindMeta.label} saved`);
+  }, [projectId, draftRing, workSurface, areaKind, planId, pushHistory]);
+
+  const finishEscapeRoute = useCallback(() => {
+    if (!projectId || !currentProject || draftRing.length < 2) {
+      window.alert("Add at least 2 points to save an escape route.");
+      return;
+    }
+    const points =
+      workSurface === "map"
+        ? draftRing.map((p) => ({ lat: p.geoLat, lng: p.geoLng }))
+        : draftRing.map((p) => {
+            const { lat, lng } = getObjectLatLng({ x: p.x, y: p.y }, geoAnchor, effectiveAffine);
+            return { lat, lng };
+          });
+    const routes = Array.isArray(currentProject.mapEscapeRoutes) ? currentProject.mapEscapeRoutes : [];
+    const next = {
+      id: `er_${Date.now()}`,
+      name: `Escape route ${routes.length + 1}`,
+      points,
+    };
+    updateProjectRecord({
+      ...currentProject,
+      mapEscapeRoutes: [...routes, next].slice(0, 24),
+    });
+    setDraftRing([]);
+    setTool("select");
+    setHighlightEscapeRouteId(next.id);
+    setEscapeRouteAppendMode(false);
+    setEscapeRoutePointIndex(-1);
+    setToast(`Escape route saved (${points.length} points) — drag handles to adjust`);
+  }, [projectId, currentProject, draftRing, workSurface, geoAnchor, effectiveAffine, updateProjectRecord]);
+
+  const renameEscapeRoute = useCallback(
+    (routeId, name) => {
+      if (!currentProject) return;
+      const routes = Array.isArray(currentProject.mapEscapeRoutes) ? currentProject.mapEscapeRoutes : [];
+      updateProjectRecord({
+        ...currentProject,
+        mapEscapeRoutes: routes.map((r) => (r.id === routeId ? { ...r, name: String(name || "").slice(0, 80) } : r)),
+      });
+    },
+    [currentProject, updateProjectRecord]
+  );
+
+  const deleteEscapeRoute = useCallback(
+    (routeId) => {
+      if (!currentProject) return;
+      const routes = Array.isArray(currentProject.mapEscapeRoutes) ? currentProject.mapEscapeRoutes : [];
+      if (!routes.some((r) => r.id === routeId)) return;
+      if (!window.confirm("Delete this escape route from the project?")) return;
+      updateProjectRecord({
+        ...currentProject,
+        mapEscapeRoutes: routes.filter((r) => r.id !== routeId),
+      });
+      setHighlightEscapeRouteId((cur) => (cur === routeId ? "" : cur));
+      setToast("Escape route removed");
+    },
+    [currentProject, updateProjectRecord]
+  );
+
+  const zoomEscapeRoute = useCallback((route) => {
+    if (!route?.points?.length) return;
+    setWorkSurface("map");
+    setTool("select");
+    setHighlightEscapeRouteId(route.id || "");
+    window.setTimeout(() => mapCanvasRef.current?.fitEscapeRoute(route.points), 180);
+  }, []);
+
+  const updateEscapeRoutePoints = useCallback(
+    (routeId, points) => {
+      if (!currentProject || !routeId || !Array.isArray(points)) return;
+      const routes = Array.isArray(currentProject.mapEscapeRoutes) ? currentProject.mapEscapeRoutes : [];
+      updateProjectRecord({
+        ...currentProject,
+        mapEscapeRoutes: routes.map((r) =>
+          r.id === routeId
+            ? {
+                ...r,
+                points: points
+                  .map((p) => ({
+                    lat: Number(p.lat),
+                    lng: Number(p.lng),
+                  }))
+                  .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)),
+              }
+            : r
+        ),
+      });
+    },
+    [currentProject, updateProjectRecord]
+  );
+
+  const insertEscapeRoutePoint = useCallback(
+    (routeId, insertIndex, lat, lng) => {
+      if (!currentProject || !routeId || insertIndex < 1) return;
+      const routes = Array.isArray(currentProject.mapEscapeRoutes) ? currentProject.mapEscapeRoutes : [];
+      const route = routes.find((r) => r.id === routeId);
+      if (!route) return;
+      const points = [...(route.points || [])];
+      const idx = Math.min(Math.max(insertIndex, 1), points.length);
+      points.splice(idx, 0, { lat, lng });
+      updateEscapeRoutePoints(routeId, points);
+      setEscapeRoutePointIndex(idx);
+      setToast("Point inserted on route");
+    },
+    [currentProject, updateEscapeRoutePoints]
+  );
+
+  const appendEscapeRoutePoint = useCallback(
+    (lat, lng) => {
+      if (!currentProject || !highlightEscapeRouteId) return;
+      const routes = Array.isArray(currentProject.mapEscapeRoutes) ? currentProject.mapEscapeRoutes : [];
+      const route = routes.find((r) => r.id === highlightEscapeRouteId);
+      if (!route) return;
+      const points = [...(route.points || []), { lat, lng }];
+      updateEscapeRoutePoints(highlightEscapeRouteId, points);
+      setEscapeRoutePointIndex(points.length - 1);
+      setToast("Point added to escape route");
+    },
+    [currentProject, highlightEscapeRouteId, updateEscapeRoutePoints]
+  );
+
+  const removeEscapeRoutePointAt = useCallback(
+    (routeId, pointIndex) => {
+      if (!currentProject || !routeId || pointIndex < 0) return;
+      const routes = Array.isArray(currentProject.mapEscapeRoutes) ? currentProject.mapEscapeRoutes : [];
+      const route = routes.find((r) => r.id === routeId);
+      if (!route || (route.points || []).length <= 2) {
+        setToast("Route needs at least 2 points");
+        return;
+      }
+      const points = (route.points || []).filter((_, i) => i !== pointIndex);
+      updateEscapeRoutePoints(routeId, points);
+      setEscapeRoutePointIndex(Math.min(pointIndex, points.length - 1));
+      setToast("Route point removed");
+    },
+    [currentProject, updateEscapeRoutePoints]
+  );
+
+  const duplicateEscapeRoute = useCallback(
+    (routeId) => {
+      if (!currentProject) return;
+      const routes = Array.isArray(currentProject.mapEscapeRoutes) ? currentProject.mapEscapeRoutes : [];
+      const source = routes.find((r) => r.id === routeId);
+      if (!source?.points?.length) return;
+      const copy = {
+        id: `er_${Date.now()}`,
+        name: `${source.name || "Escape route"} (copy)`,
+        points: source.points.map((p) => ({ lat: Number(p.lat), lng: Number(p.lng) })),
+      };
+      updateProjectRecord({
+        ...currentProject,
+        mapEscapeRoutes: [...routes, copy].slice(0, 24),
+      });
+      setHighlightEscapeRouteId(copy.id);
+      setToast("Escape route duplicated");
+    },
+    [currentProject, updateProjectRecord]
+  );
+
+  useEffect(() => {
+    highlightEscapeRouteIdRef.current = highlightEscapeRouteId;
+    escapeRoutePointIndexRef.current = escapeRoutePointIndex;
+  }, [highlightEscapeRouteId, escapeRoutePointIndex]);
+
+  useEffect(() => {
+    if (escapeRouteAppendMode && highlightEscapeRouteId) {
+      mapClickOverrideRef.current = (lat, lng) => {
+        appendEscapeRoutePoint(lat, lng);
+        return true;
+      };
+      return;
+    }
+    mapClickOverrideRef.current = null;
+  }, [escapeRouteAppendMode, highlightEscapeRouteId, appendEscapeRoutePoint]);
+
+  const handleMapLayerChange = useCallback((layerId, enabled) => {
+    setMapLayers((prev) => ({ ...prev, [layerId]: enabled }));
+  }, []);
+
+  const exportSitePack = useCallback(async () => {
+    if (!projectId || !currentProject) return;
+    setSitePackBusy(true);
+    try {
+      const permitRef = String(exportPermitRef || "").trim();
+      const manifest = buildSitePackManifest({
+        project: currentProject,
+        readiness: siteReadiness,
+        objects,
+        escapeRoutes: escapeRoutesForMap,
+        permitRef,
+      });
+      triggerBlobDownload(
+        new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }),
+        `site-pack-${projectId}.json`
+      );
+
+      const kml = buildSitePackKml({
+        projectId,
+        planName: selectedPlan?.name || "",
+        objects,
+        anchor: geoAnchor,
+        affine: effectiveAffine,
+        permitRef,
+        boundaryPoints: currentProject.boundaryPoints || [],
+        boundaryName: currentProject.boundaryName || "",
+        escapeRoutes: escapeRoutesForMap,
+      });
+      triggerBlobDownload(new Blob([kml], { type: "application/vnd.google-earth.kml+xml" }), `site-pack-${projectId}.kml`);
+
+      if (workSurface === "map") {
+        const el = document.getElementById("pde-map-capture-root");
+        if (el) {
+          await new Promise((r) => window.setTimeout(r, 250));
+          const blob = await captureElementPngBlob(el);
+          if (blob) {
+            triggerBlobDownload(blob, `site-pack-map-${projectId}.png`);
+          }
+        }
+      }
+
+      setToast("Site pack downloaded — JSON, KML" + (workSurface === "map" ? " and map PNG" : ""));
+    } catch {
+      setToast("Site pack export failed");
+    } finally {
+      setSitePackBusy(false);
+    }
+  }, [
+    projectId,
+    currentProject,
+    exportPermitRef,
+    siteReadiness,
+    objects,
+    escapeRoutesForMap,
+    selectedPlan?.name,
+    geoAnchor,
+    effectiveAffine,
+    workSurface,
+  ]);
 
   const onMapSelectIds = useCallback((id, additive) => {
     if (additive) {
@@ -1210,23 +1850,75 @@ export default function ProjectDrawingEditor() {
       return;
     }
     try {
-      const { default: html2canvas } = await import("html2canvas");
-      const canvas = await html2canvas(el, {
-        useCORS: true,
-        allowTaint: false,
-        scale: 2,
-        logging: false,
-        backgroundColor: "#f1f5f9",
-      });
+      const blob = await captureElementPngBlob(el);
+      if (!blob) {
+        setToast("PNG blob failed");
+        return;
+      }
       const a = document.createElement("a");
-      a.href = canvas.toDataURL("image/png");
+      a.href = URL.createObjectURL(blob);
       a.download = `project-map-${projectId || "export"}.png`;
       a.click();
-      setToast("PNG saved — attach to RAMS / permits or documents");
+      URL.revokeObjectURL(a.href);
+      let cloudNote = "";
+      if (r2Enabled && projectId && currentProject) {
+        const filename = `project-map-${projectId}.png`;
+        const publicUrl = await uploadBlobToOrgR2(blob, filename);
+        if (publicUrl) {
+          updateProjectRecord({
+            ...currentProject,
+            siteMapUrl: publicUrl,
+            siteMapCapturedAt: new Date().toISOString(),
+          });
+          cloudNote = " — link saved on project for RAMS";
+        }
+      }
+      setToast(`PNG saved${cloudNote}`);
     } catch {
       setToast("PNG failed (tile CORS) — use Win+Shift+S or export KML");
     }
-  }, [projectId]);
+  }, [projectId, currentProject, r2Enabled, uploadBlobToOrgR2, updateProjectRecord]);
+
+  const runReadinessFix = useCallback(
+    (checkId) => {
+      switch (checkId) {
+        case "site":
+          reapplyProjectSiteAnchor();
+          break;
+        case "boundary":
+          setWorkSurface("map");
+          setTool("boundary");
+          setToast("Click map corners to draw site boundary");
+          break;
+        case "muster":
+          setWorkSurface("map");
+          setObjectType("master_point");
+          setTool("place");
+          setToast("Click map to place muster point");
+          break;
+        case "firstAid":
+          setWorkSurface("map");
+          setObjectType("first_aid");
+          setTool("place");
+          setToast("Click map to place first aid");
+          break;
+        case "escapeRoute":
+          setWorkSurface("map");
+          setTool("route");
+          setToast("Click waypoints, then Finish route");
+          break;
+        case "hospital":
+          fetchHospitalRoute();
+          break;
+        case "screenshot":
+          captureMapPng();
+          break;
+        default:
+          break;
+      }
+    },
+    [reapplyProjectSiteAnchor, fetchHospitalRoute, captureMapPng]
+  );
 
   const dismissPdeOnboarding = useCallback(() => {
     try {
@@ -1272,9 +1964,13 @@ export default function ProjectDrawingEditor() {
   const onPlanBackgroundPointerDown = (e) => {
     if (tool === "pan") return;
     if (e.target !== e.currentTarget && e.target.tagName !== "IMG") return;
-    if (tool !== "place") return;
     if (!selectedPlan || String(selectedPlan.mimeType || "").toLowerCase().includes("pdf")) return;
     const { x, y } = clientToPercent(e.clientX, e.clientY);
+    if (tool === "boundary" || tool === "area" || tool === "route") {
+      addDraftPointPlan(x, y);
+      return;
+    }
+    if (tool !== "place") return;
     addObject({ x, y, planId: selectedPlan.id });
   };
 
@@ -1384,6 +2080,17 @@ export default function ProjectDrawingEditor() {
       const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
       if (e.key === "Delete" || e.key === "Backspace") {
         if (typing) return;
+        if (
+          highlightEscapeRouteIdRef.current &&
+          escapeRoutePointIndexRef.current >= 0
+        ) {
+          e.preventDefault();
+          removeEscapeRoutePointAt(
+            highlightEscapeRouteIdRef.current,
+            escapeRoutePointIndexRef.current
+          );
+          return;
+        }
         const ids = selectedIdsRef.current;
         if (ids.length === 0) return;
         e.preventDefault();
@@ -1428,7 +2135,7 @@ export default function ProjectDrawingEditor() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [removeObject, removeSelectedBulk, pushHistory, gridStep, upsertObject]);
+  }, [removeObject, removeSelectedBulk, pushHistory, gridStep, upsertObject, removeEscapeRoutePointAt]);
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -1482,10 +2189,48 @@ export default function ProjectDrawingEditor() {
           e.preventDefault();
           return;
         }
+        if (!typing && draftRing.length > 0) {
+          setDraftRing([]);
+          e.preventDefault();
+          return;
+        }
+        if (!typing && escapeRouteAppendMode) {
+          setEscapeRouteAppendMode(false);
+          e.preventDefault();
+          return;
+        }
+        if (!typing && highlightEscapeRouteIdRef.current) {
+          setHighlightEscapeRouteId("");
+          setEscapeRoutePointIndex(-1);
+          e.preventDefault();
+          return;
+        }
         if (!typing && selectedIdsRef.current.length > 0) {
           setSelectedIds([]);
           e.preventDefault();
         }
+        return;
+      }
+      if (
+        (e.key === "Enter" || e.key === " ") &&
+        !typing &&
+        draftRing.length >= (tool === "route" ? 2 : 3) &&
+        (tool === "boundary" || tool === "area" || tool === "route")
+      ) {
+        e.preventDefault();
+        if (tool === "boundary") finishSiteBoundary();
+        else if (tool === "area") finishAreaPolygon();
+        else finishEscapeRoute();
+        return;
+      }
+      if (
+        (e.key === "Backspace" || e.key === "Delete") &&
+        !typing &&
+        draftRing.length > 0 &&
+        (tool === "boundary" || tool === "area" || tool === "route")
+      ) {
+        e.preventDefault();
+        undoDraftPoint();
         return;
       }
       if ((e.key === "?" || (e.code === "Slash" && e.shiftKey)) && !typing) {
@@ -1509,11 +2254,20 @@ export default function ProjectDrawingEditor() {
         redo();
         return;
       }
-      if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === "1" || e.key === "2" || e.key === "3")) {
+      if (
+        !typing &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        (e.key === "1" || e.key === "2" || e.key === "3" || e.key === "4" || e.key === "5" || e.key === "6")
+      ) {
         e.preventDefault();
         if (e.key === "1") setTool("place");
         if (e.key === "2") setTool("select");
         if (e.key === "3") setTool("pan");
+        if (e.key === "4") setTool("boundary");
+        if (e.key === "5") setTool("area");
+        if (e.key === "6") setTool("route");
       }
       if (e.key === "Home" && !typing && selectedIdsRef.current.length > 0) {
         e.preventDefault();
@@ -1522,7 +2276,21 @@ export default function ProjectDrawingEditor() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [copySelectedCoords, showShortcuts, undo, redo, centerPlanOnSelection]);
+  }, [
+    copySelectedCoords,
+    showShortcuts,
+    undo,
+    redo,
+    centerPlanOnSelection,
+    draftRing.length,
+    tool,
+    finishSiteBoundary,
+    finishAreaPolygon,
+    finishEscapeRoute,
+    undoDraftPoint,
+    escapeRouteAppendMode,
+    removeEscapeRoutePointAt,
+  ]);
 
   return (
     <div style={{ fontFamily: "DM Sans, system-ui, sans-serif", padding: "1.25rem 0", fontSize: 14, color: "var(--color-text-primary)" }}>
@@ -1555,7 +2323,10 @@ export default function ProjectDrawingEditor() {
               Choose a <strong>project</strong>, then <strong>Plan (PDF / image)</strong> to draw on an uploaded plan, or <strong>Map (GPS)</strong> when you have no drawing.
             </li>
             <li>
-              Use tool <strong>Place</strong> and click the plan or map to add zones, fire exits, master points, etc.
+              Use <strong>Place</strong> for points (fire exit, extinguisher, muster, parking, first aid…) or <strong>Boundary</strong> / <strong>Area zone</strong> to draw closed polygons on plan or map.
+            </li>
+            <li>
+              Use tool <strong>Place</strong> and click the plan or map to add markers. Draw <strong>site boundary</strong> with the Boundary tool — it saves to the project like KML import.
             </li>
             <li>
               Export <strong>KML / GPX / GeoJSON</strong>, import GPX/KML waypoints, or <strong>Save map PNG</strong> for RAMS and permits.
@@ -1567,7 +2338,36 @@ export default function ProjectDrawingEditor() {
         </div>
       ) : null}
 
-      <div className="app-surface-card" style={{ ...ss.card, marginBottom: 12, ...pdeUi.cardAccent }}>
+      <div className="app-surface-card pde-workspace-card" style={{ ...ss.card, marginBottom: 12, ...pdeUi.cardAccent }}>
+        {projectId ? (
+          <ProjectDrawingSmartBar
+            project={currentProject}
+            workSurface={workSurface}
+            siteGeoStatus={siteGeoStatus}
+            hasBoundary={Boolean(projectBoundaryRing?.length >= 3)}
+            mapPointCount={mapObjectsForCanvas.length}
+            planPointCount={planObjectsForMap.length}
+            areaCount={(workSurface === "map" ? mapAreaObjects : planAreaObjects).length}
+            escapeRouteCount={escapeRoutesForMap.length}
+            hospitalReady={Boolean(hospitalIntel?.hospital || currentProject?.nearestHospital)}
+            screenshotSaved={Boolean(
+              currentProject?.hospitalRouteScreenshotUrl ||
+                currentProject?.siteMapUrl ||
+                currentProject?.siteMapPngDataUrl
+            )}
+            readiness={siteReadiness}
+            onCentreSite={reapplyProjectSiteAnchor}
+            onFetchHospital={fetchHospitalRoute}
+            onSwitchMap={() => setWorkSurface("map")}
+            onExportSitePack={exportSitePack}
+            onReadinessFix={runReadinessFix}
+            sitePackBusy={sitePackBusy}
+            hospitalBusy={hospitalBusy}
+          />
+        ) : null}
+
+        <div className="pde-section pde-section--project">
+          <div className="pde-section__label">Project &amp; objects</div>
         <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))" }}>
           <div>
             <label style={ss.lbl}>Project</label>
@@ -1601,10 +2401,14 @@ export default function ProjectDrawingEditor() {
           <div>
             <label style={ss.lbl}>Object type (new)</label>
             <select value={objectType} onChange={(e) => setObjectType(e.target.value)} style={ss.inp}>
-              {PROJECT_DRAWING_OBJECT_TYPES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
+              {drawingObjectCategories().map((cat) => (
+                <optgroup key={cat.id} label={cat.label}>
+                  {PROJECT_DRAWING_OBJECT_TYPES.filter((t) => t.category === cat.id && !t.isArea).map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
@@ -1655,9 +2459,22 @@ export default function ProjectDrawingEditor() {
             />
           </div>
         ) : null}
+        </div>
 
-        <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", letterSpacing: "0.04em" }}>SURFACE</span>
+        {projectId ? (
+          <ProjectDrawingQuickChips
+            disabled={!projectId}
+            activeType={objectType}
+            onPick={(type) => {
+              setObjectType(type);
+              setTool("place");
+            }}
+          />
+        ) : null}
+
+        <div className="pde-section pde-section--tools" style={{ marginTop: 12 }}>
+          <div className="pde-section__label">Surface &amp; tools</div>
+        <div style={{ display: "flex", gap: 12, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
           <div style={pdeUi.toolWrap} role="tablist" aria-label="Work surface">
             <button
               type="button"
@@ -1691,6 +2508,10 @@ export default function ProjectDrawingEditor() {
                 <input type="radio" name="pde-basemap" checked={mapBasemap === "satellite"} onChange={() => setMapBasemap("satellite")} />
                 Satellite
               </label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                <input type="checkbox" checked={showMapLegend} onChange={(e) => setShowMapLegend(e.target.checked)} />
+                Legend on PNG
+              </label>
               <button type="button" style={{ ...ss.btn, ...pdeUi.btnCompact }} onClick={captureMapPng} disabled={!projectId}>
                 Save map PNG
               </button>
@@ -1708,10 +2529,11 @@ export default function ProjectDrawingEditor() {
             </>
           ) : null}
         </div>
+        </div>
 
-        <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", letterSpacing: "0.04em" }}>TOOL</span>
+        <div className="pde-section pde-section--actions" style={{ marginTop: 12 }}>
+          <div className="pde-section__label">Tools &amp; actions</div>
+        <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap", alignItems: "center", rowGap: 10 }}>
             <div style={pdeUi.toolWrap} role="tablist" aria-label="Drawing tool">
               <button
                 type="button"
@@ -1721,6 +2543,36 @@ export default function ProjectDrawingEditor() {
                 onClick={() => setTool("place")}
               >
                 Place
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tool === "boundary"}
+                style={pdeUi.toolBtn(tool === "boundary")}
+                onClick={() => setTool("boundary")}
+                title="Draw closed site boundary polygon (saved to project)"
+              >
+                Boundary
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tool === "area"}
+                style={pdeUi.toolBtn(tool === "area")}
+                onClick={() => setTool("area")}
+                title="Draw zone / parking / exclusion area polygon"
+              >
+                Area zone
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tool === "route"}
+                style={pdeUi.toolBtn(tool === "route")}
+                onClick={() => setTool("route")}
+                title="Draw escape / evacuation route (saved to project)"
+              >
+                Escape route
               </button>
               <button
                 type="button"
@@ -1741,7 +2593,18 @@ export default function ProjectDrawingEditor() {
                 Pan
               </button>
             </div>
-          </div>
+          {tool === "area" ? (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+              Area type
+              <select value={areaKind} onChange={(e) => setAreaKind(e.target.value)} style={{ ...ss.inp, width: 200, margin: 0 }}>
+                {PDE_AREA_KINDS.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
             <input type="checkbox" checked={snapGrid} onChange={(e) => setSnapGrid(e.target.checked)} />
             Snap 5% grid
@@ -1753,11 +2616,14 @@ export default function ProjectDrawingEditor() {
           <span style={pdeUi.toolHint}>
             Keys <kbd style={{ fontFamily: "inherit", padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>1</kbd>{" "}
             <kbd style={{ fontFamily: "inherit", padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>2</kbd>{" "}
-            <kbd style={{ fontFamily: "inherit", padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>3</kbd> · Ctrl+wheel zoom
+            <kbd style={{ fontFamily: "inherit", padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>3</kbd>{" "}
+            <kbd style={{ fontFamily: "inherit", padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>4</kbd>{" "}
+            <kbd style={{ fontFamily: "inherit", padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>5</kbd>{" "}
+            <kbd style={{ fontFamily: "inherit", padding: "1px 5px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>6</kbd> · Enter finish shape
           </span>
         </div>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center", rowGap: 10 }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap", alignItems: "center", rowGap: 10 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             <button
               type="button"
@@ -1827,8 +2693,12 @@ export default function ProjectDrawingEditor() {
               Delete ({selectedIds.length})
             </button>
           </div>
-          <div style={pdeUi.toolbarDivider} aria-hidden />
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        </div>
+
+        <details className="pde-advanced-panel">
+          <summary className="pde-advanced-panel__summary">Import &amp; export</summary>
+          <div className="pde-advanced-panel__body">
+        <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap", alignItems: "center", rowGap: 10 }}>
             <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
               Permit / ref
               <input
@@ -1994,20 +2864,71 @@ export default function ProjectDrawingEditor() {
               Shortcuts (?)
             </button>
           </div>
+          </div>
+        </details>
         </div>
+
+        {(tool === "boundary" || tool === "area" || tool === "route") && draftRing.length > 0 ? (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+              marginTop: 10,
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: tool === "route" ? "#eff6ff" : "var(--color-background-secondary,#f0fdfa)",
+              border: tool === "route" ? "1px solid #93c5fd" : "1px solid #99f6e4",
+            }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 700, color: tool === "route" ? "#1d4ed8" : "#0f766e" }}>
+              {tool === "boundary" ? "Site boundary draft" : tool === "area" ? "Area draft" : "Escape route draft"} · {draftRing.length} point{draftRing.length === 1 ? "" : "s"}
+            </span>
+            <button
+              type="button"
+              style={{ ...ss.btn, ...pdeUi.btnCompact }}
+              disabled={draftRing.length < (tool === "route" ? 2 : 3)}
+              onClick={tool === "boundary" ? finishSiteBoundary : tool === "area" ? finishAreaPolygon : finishEscapeRoute}
+            >
+              {tool === "route"
+                ? `Finish route (${draftRing.length >= 2 ? "save" : "need 2+"})`
+                : `Close polygon (${draftRing.length >= 3 ? "save" : "need 3+"})`}
+            </button>
+            <button type="button" style={{ ...ss.btn, ...pdeUi.btnCompact }} disabled={draftRing.length === 0} onClick={undoDraftPoint}>
+              Undo point
+            </button>
+            <button type="button" style={{ ...ss.btn, ...pdeUi.btnCompact }} onClick={cancelDraftRing}>
+              Cancel
+            </button>
+            <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Enter to close · Backspace undo · Esc cancel</span>
+          </div>
+        ) : null}
 
         <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 8 }}>
           {workSurface === "map"
             ? tool === "place"
-              ? "Map: click to drop a marker at GPS position. Set anchor below for “add at center”. Export KML/GPX includes all points."
-              : tool === "pan"
-                ? "Pan: drag the map. Zoom with +/− or mouse wheel."
-                : "Select: click a marker; Ctrl+click for multi-select. Drag a marker to move. Arrows nudge in degrees."
+              ? "Map: click to drop a marker. Set anchor below for “add at center”. Export KML/GPX includes all points."
+              : tool === "boundary"
+                ? "Boundary: click map corners to outline the site. Close polygon saves to project (same as KML import)."
+                : tool === "area"
+                  ? `Area zone: click corners for ${pdeAreaKindMeta(areaKind).label.toLowerCase()}. Close polygon saves as a reusable area.`
+                  : tool === "route"
+                    ? "Escape route: click waypoints along the evacuation path. Finish with 2+ points — saved on the project for RAMS."
+                    : tool === "pan"
+                    ? "Pan: drag the map. Zoom with +/− or mouse wheel."
+                    : "Select: click a marker; Ctrl+click for multi-select. Drag a marker to move. Arrows nudge in degrees."
             : tool === "place"
               ? "Place: click the image to drop a marker. Ctrl+wheel zooms; scrollbars pan when zoomed."
-              : tool === "pan"
-                ? "Pan: drag the plan to scroll. Ctrl+wheel zooms."
-                : "Select / move: Ctrl+click markers to multi-select; drag moves the whole group. Arrow keys nudge all selected. Delete removes selected when not typing."}
+              : tool === "boundary"
+                ? "Boundary: click plan corners for site outline. Uses anchor / affine for GPS when saved."
+                : tool === "area"
+                  ? `Area zone: click plan corners for ${pdeAreaKindMeta(areaKind).label.toLowerCase()}.`
+                  : tool === "route"
+                    ? "Escape route: click waypoints on the plan. GPS coordinates use anchor / affine calibration."
+                    : tool === "pan"
+                    ? "Pan: drag the plan to scroll. Ctrl+wheel zooms."
+                    : "Select / move: Ctrl+click markers to multi-select; drag moves the whole group. Arrow keys nudge all selected. Delete removes selected when not typing."}
         </div>
 
         {workSurface === "plan" ? (
@@ -2031,32 +2952,36 @@ export default function ProjectDrawingEditor() {
         ) : null}
 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-          {PROJECT_DRAWING_OBJECT_TYPES.map((meta) => (
-            <span
-              key={meta.id}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                fontSize: 11,
-                padding: "2px 8px",
-                borderRadius: 999,
-                border: "1px solid var(--color-border-tertiary,#e5e5e5)",
-                background: "var(--color-background-secondary,#f7f7f5)",
-              }}
-            >
+          {activeTypeStats.length > 0 ? (
+            activeTypeStats.map((meta) => (
               <span
+                key={meta.id}
                 style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: meta.shape === "square" ? 2 : "50%",
-                  background: meta.color,
-                  display: "inline-block",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 11,
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                  border: "1px solid var(--color-border-tertiary,#e5e5e5)",
+                  background: "var(--color-background-secondary,#f7f7f5)",
                 }}
-              />
-              {meta.label}
-            </span>
-          ))}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: meta.shape === "square" ? 2 : "50%",
+                    background: meta.color,
+                    display: "inline-block",
+                  }}
+                />
+                {meta.label}: {planTypeStats[meta.id]}
+              </span>
+            ))
+          ) : (
+            <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>No markers on this surface yet</span>
+          )}
         </div>
       </div>
 
@@ -2110,7 +3035,7 @@ export default function ProjectDrawingEditor() {
           </div>
           {workSurface === "map" || selectedPlan ? (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8, alignItems: "center" }}>
-              {PROJECT_DRAWING_OBJECT_TYPES.map((meta) => (
+              {activeTypeStats.map((meta) => (
                 <span
                   key={meta.id}
                   style={{
@@ -2135,10 +3060,14 @@ export default function ProjectDrawingEditor() {
                   {meta.label}: {planTypeStats[meta.id] ?? 0}
                 </span>
               ))}
+              {activeTypeStats.length === 0 ? (
+                <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>No markers yet — use Quick place or Place tool</span>
+              ) : null}
               <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
                 {workSurface === "map"
-                  ? `${mapObjectsForCanvas.length} on map (visibility filter)`
-                  : `${planObjectsForMap.length} on plan (visibility filter)`}
+                  ? `${mapObjectsForCanvas.length} on map`
+                  : `${planObjectsForMap.length} on plan`}
+                {escapeRoutesForMap.length > 0 ? ` · ${escapeRoutesForMap.length} escape route(s)` : ""}
               </span>
             </div>
           ) : null}
@@ -2146,7 +3075,46 @@ export default function ProjectDrawingEditor() {
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Choose a project first.</div>
           ) : workSurface === "map" ? (
             <div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap", alignItems: "center" }}>
+              {projectId ? (
+                <ProjectDrawingEmergencyIntel
+                  project={currentProject}
+                  siteLat={siteCoordsForHospital.lat}
+                  siteLng={siteCoordsForHospital.lng}
+                  hospitalIntel={hospitalIntel}
+                  hospitalBusy={hospitalBusy}
+                  showHospitalRoute={showHospitalRoute}
+                  onToggleShowRoute={setShowHospitalRoute}
+                  onFetchHospital={fetchHospitalRoute}
+                  onSaveToProject={({ toast: t }) => t && setToast(t)}
+                  onCaptureScreenshot={captureHospitalScreenshot}
+                  captureBusy={captureBusy}
+                  r2Enabled={r2Enabled}
+                />
+              ) : null}
+              <ProjectDrawingMapLayers layers={mapLayers} onChange={handleMapLayerChange} disabled={!projectId} />
+              <ProjectDrawingEscapeRoutesPanel
+                routes={escapeRoutesForMap}
+                highlightId={highlightEscapeRouteId}
+                appendMode={escapeRouteAppendMode}
+                selectedPointIndex={escapeRoutePointIndex}
+                disabled={!projectId}
+                onRename={renameEscapeRoute}
+                onDelete={deleteEscapeRoute}
+                onZoom={zoomEscapeRoute}
+                onHighlight={(id) => {
+                  setHighlightEscapeRouteId(id);
+                  setEscapeRouteAppendMode(false);
+                }}
+                onToggleAppend={() => {
+                  if (!highlightEscapeRouteId) return;
+                  setEscapeRouteAppendMode((v) => !v);
+                  setTool("select");
+                  setWorkSurface("map");
+                }}
+                onRemovePoint={removeEscapeRoutePointAt}
+                onDuplicate={duplicateEscapeRoute}
+              />
+              <div style={{ display: "flex", gap: 8, marginBottom: 10, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
                 <button
                   type="button"
                   style={{ ...ss.btn, ...pdeUi.btnCompact }}
@@ -2158,20 +3126,49 @@ export default function ProjectDrawingEditor() {
                 </button>
                 <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
                   Multi-select markers (Ctrl+click), then drag one to move the whole group.
+                  {highlightEscapeRouteId ? " Drag orange handles to edit the escape route — click the line to insert a point." : ""}
                 </span>
               </div>
+              <div id="pde-map-capture-root" className="pde-map-capture-stack">
               <ProjectDrawingMapCanvas
                 ref={mapCanvasRef}
                 objects={mapObjectsForCanvas}
+                areaObjects={mapAreaObjects}
                 tool={tool}
                 selectedIds={selectedIds}
                 basemap={mapBasemap}
                 defaultCenter={{ lat: geoAnchor.lat, lng: geoAnchor.lng }}
+                boundaryRing={projectBoundaryRing}
+                draftRing={draftRing}
+                draftRingColor={tool === "boundary" ? "#0d9488" : tool === "route" ? "#0C447C" : pdeAreaKindMeta(areaKind).color}
+                draftMode={draftMode}
+                escapeRoutes={escapeRoutesForMap}
+                highlightEscapeRouteId={highlightEscapeRouteId}
+                highlightEscapeRoutePointIndex={escapeRoutePointIndex}
+                layers={mapLayers}
                 onAddAtLatLng={addMapObject}
+                onDraftPoint={addDraftPointMap}
                 onBatchGeoUpdate={onBatchGeoUpdate}
                 onSelectIds={onMapSelectIds}
                 onMarkerDragStart={onMapMarkerDragStart}
+                onEscapeRoutePointsUpdate={updateEscapeRoutePoints}
+                onEscapeRouteInsertPoint={insertEscapeRoutePoint}
+                onEscapeRoutePointSelect={(routeId, pointIndex) => {
+                  setHighlightEscapeRouteId(routeId);
+                  setEscapeRoutePointIndex(pointIndex);
+                  setEscapeRouteAppendMode(false);
+                  setTool("select");
+                }}
+                hospitalOverlay={
+                  showHospitalRoute && hospitalIntel?.ring?.length
+                    ? { ring: hospitalIntel.ring, hospital: hospitalIntel.hospital, show: true }
+                    : null
+                }
               />
+              {showMapLegend ? (
+                <ProjectDrawingMapLegend projectName={currentProject?.name} items={mapLegendItems} />
+              ) : null}
+              </div>
             </div>
           ) : !selectedPlan ? (
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
@@ -2196,7 +3193,12 @@ export default function ProjectDrawingEditor() {
                 overflow: "auto",
                 border: "1px solid var(--color-border-tertiary,#e5e5e5)",
                 borderRadius: 10,
-                cursor: tool === "place" ? "crosshair" : tool === "pan" ? "grab" : "default",
+                cursor:
+                  tool === "place" || tool === "boundary" || tool === "area" || tool === "route"
+                    ? "crosshair"
+                    : tool === "pan"
+                      ? "grab"
+                      : "default",
                 touchAction: tool === "pan" ? "none" : "auto",
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6)",
               }}
@@ -2274,6 +3276,61 @@ export default function ProjectDrawingEditor() {
                     ))}
                   </svg>
                 ) : null}
+                <svg
+                  width="100%"
+                  height="100%"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }}
+                >
+                  {planAreaObjects.map((row) => {
+                    const kind = pdeAreaKindMeta(row.meta?.areaKind);
+                    const pts = (row.ring || [])
+                      .map((p) => `${Number(p.x)},${Number(p.y)}`)
+                      .join(" ");
+                    if (!pts) return null;
+                    return (
+                      <polygon
+                        key={row.id}
+                        points={pts}
+                        fill={kind.fill}
+                        stroke={kind.color}
+                        strokeWidth={selectedIds.includes(row.id) ? 0.6 : 0.35}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    );
+                  })}
+                  {draftRing.length >= 2 ? (
+                    <polyline
+                      points={draftRing.map((p) => `${Number(p.x)},${Number(p.y)}`).join(" ")}
+                      fill="none"
+                      stroke={tool === "boundary" ? "#0d9488" : pdeAreaKindMeta(areaKind).color}
+                      strokeWidth={0.45}
+                      strokeDasharray="1.2 0.8"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ) : null}
+                  {draftRing.length >= 3 ? (
+                    <polygon
+                      points={draftRing.map((p) => `${Number(p.x)},${Number(p.y)}`).join(" ")}
+                      fill={tool === "boundary" ? "rgba(13,148,136,0.12)" : pdeAreaKindMeta(areaKind).fill}
+                      stroke={tool === "boundary" ? "#0d9488" : pdeAreaKindMeta(areaKind).color}
+                      strokeWidth={0.4}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ) : null}
+                  {draftRing.map((p, idx) => (
+                    <circle
+                      key={`draft-${idx}`}
+                      cx={Number(p.x)}
+                      cy={Number(p.y)}
+                      r={0.9}
+                      fill={tool === "boundary" ? "#0d9488" : pdeAreaKindMeta(areaKind).color}
+                      stroke="#fff"
+                      strokeWidth={0.25}
+                    />
+                  ))}
+                </svg>
                 {planObjectsForMap.map((row) => {
                   const labelFull = String(row.label || "").trim() || drawingObjectTypeMeta(row.type).label;
                   const label = shortMapLabel(labelFull);
@@ -2335,7 +3392,7 @@ export default function ProjectDrawingEditor() {
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Choose project first.</div>
           ) : objects.length === 0 ? (
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              No objects yet. Add zone, excavation, fire exit, master point, or ATEX / DSEAR zone marker.
+              No objects yet. Use Place for points (fire exit, extinguisher, muster, parking…) or Area zone / Boundary for polygons.
             </div>
           ) : filteredList.length === 0 ? (
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>No objects match filter or visibility.</div>
@@ -2612,8 +3669,21 @@ export default function ProjectDrawingEditor() {
               style={ss.inp}
             />
           </div>
-          <div style={{ display: "flex", alignItems: "flex-end" }}>
-            <button type="button" style={{ ...ss.btn, width: "100%" }} onClick={() => setGeoAnchor({ ...DEFAULT_GEO_ANCHOR })}>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              style={{ ...ss.btn, flex: "1 1 140px" }}
+              disabled={!projectId || siteGeoStatus.busy}
+              onClick={() => reapplyProjectSiteAnchor()}
+              title="Re-centre anchor from project postcode or coordinates"
+            >
+              Use project site
+            </button>
+            <button
+              type="button"
+              style={{ ...ss.btn, flex: "1 1 120px" }}
+              onClick={() => setGeoAnchor({ ...DEFAULT_GEO_ANCHOR })}
+            >
               Reset anchor
             </button>
           </div>
@@ -2728,7 +3798,12 @@ export default function ProjectDrawingEditor() {
         ) : null}
 
         {showGeoPreview && projectId ? (
-          <ProjectDrawingGeoMap points={geoPreviewPoints} selectedIds={selectedIds} onSelect={onGeoMapSelect} />
+          <ProjectDrawingGeoMap
+            points={geoPreviewPoints}
+            selectedIds={selectedIds}
+            onSelect={onGeoMapSelect}
+            defaultCenter={{ lat: geoAnchor.lat, lng: geoAnchor.lng }}
+          />
         ) : null}
       </div>
 
@@ -2757,9 +3832,14 @@ export default function ProjectDrawingEditor() {
             <div style={{ fontWeight: 700, marginBottom: 10 }}>Keyboard shortcuts</div>
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7, color: "var(--color-text-primary)" }}>
               <li>
-                <kbd style={{ fontFamily: "inherit", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>1</kbd> /{" "}
-                <kbd style={{ fontFamily: "inherit", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>2</kbd> /{" "}
-                <kbd style={{ fontFamily: "inherit", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>3</kbd> — Place / Select / Pan
+                <kbd style={{ fontFamily: "inherit", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>1</kbd>–
+                <kbd style={{ fontFamily: "inherit", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>5</kbd> — Place / Select / Pan / Boundary / Area zone
+              </li>
+              <li>
+                <kbd style={{ fontFamily: "inherit", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>Enter</kbd> — Close polygon (Boundary or Area, 3+ points)
+              </li>
+              <li>
+                <kbd style={{ fontFamily: "inherit", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>Backspace</kbd> — Undo last polygon point while drawing
               </li>
               <li>
                 <kbd style={{ fontFamily: "inherit", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--color-border-tertiary,#e5e5e5)" }}>Ctrl</kbd>+click marker — Add/remove from selection; drag moves whole selection

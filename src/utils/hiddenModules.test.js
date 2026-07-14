@@ -27,7 +27,7 @@ describe("hiddenModules", () => {
     localStorage.setItem("mysafeops_trial_ends_at", endsAt);
     hideModule("snags");
     expect(getHiddenModuleIds()).toEqual(["snags"]);
-    expect(isModuleVisible("snags")).toBe(true);
+    expect(isModuleVisible("snags")).toBe(false);
     unhideModule("snags");
     expect(getHiddenModuleIds()).toEqual([]);
   });
@@ -37,7 +37,7 @@ describe("hiddenModules", () => {
     localStorage.setItem("mysafeops_trial_ends_at", endsAt);
     hideFeature(RAMS_FEATURES.SURVEYING);
     expect(getHiddenFeatureIds()).toEqual([RAMS_FEATURES.SURVEYING]);
-    expect(isFeatureVisible(RAMS_FEATURES.SURVEYING)).toBe(true);
+    expect(isFeatureVisible(RAMS_FEATURES.SURVEYING)).toBe(false);
     expect(isFeatureVisible(RAMS_FEATURES.ALLERGEN)).toBe(true);
   });
 
@@ -56,13 +56,13 @@ describe("hiddenModules", () => {
     expect(getHiddenFeatureIds()).toEqual([]);
   });
 
-  it("active org trial shows hidden modules and RAMS features", () => {
+  it("active org trial respects hidden modules and RAMS features", () => {
     const endsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     localStorage.setItem("mysafeops_trial_ends_at", endsAt);
     hideModule("snags");
     hideFeature(RAMS_FEATURES.SURVEYING);
-    expect(isModuleVisible("snags")).toBe(true);
-    expect(isFeatureVisible(RAMS_FEATURES.SURVEYING)).toBe(true);
+    expect(isModuleVisible("snags")).toBe(false);
+    expect(isFeatureVisible(RAMS_FEATURES.SURVEYING)).toBe(false);
     expect(getHiddenModuleIds()).toEqual(["snags"]);
   });
 
@@ -79,18 +79,18 @@ describe("hiddenModules", () => {
     expect(isModuleVisible("ai-rams")).toBe(false);
   });
 
-  it("paid subscription shows modules hidden by slim bootstrap", () => {
+  it("paid subscription respects hidden modules", () => {
     hideModule("gmp-deviations");
     localStorage.setItem("mysafeops_trial_ends_at", new Date(Date.now() - 86400000).toISOString());
     localStorage.setItem("mysafeops_subscription_status", "active");
     localStorage.setItem("mysafeops_billing_plan", "starter");
     expect(hasFullModuleEntitlement()).toBe(true);
-    expect(isModuleVisible("gmp-deviations")).toBe(true);
+    expect(isModuleVisible("gmp-deviations")).toBe(false);
   });
 
-  it("local workspace without trial metadata shows all modules", () => {
+  it("local workspace respects hidden modules", () => {
     hideModule("survey-report");
     expect(hasFullModuleEntitlement()).toBe(true);
-    expect(isModuleVisible("survey-report")).toBe(true);
+    expect(isModuleVisible("survey-report")).toBe(false);
   });
 });

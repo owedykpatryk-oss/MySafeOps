@@ -121,6 +121,47 @@ export function centroidFromBoundaryRing(ring) {
   return { lat: sumLat / n, lng: sumLng / n };
 }
 
+/** London fallback used when no project site coordinates are available. */
+export const DEFAULT_DRAWING_GEO_ANCHOR = {
+  lat: 51.505,
+  lng: -0.09,
+  spanLat: DEFAULT_GEO_SPAN.spanLat,
+  spanLng: DEFAULT_GEO_SPAN.spanLng,
+};
+
+/**
+ * True when anchor is still the illustrative London default (not user-calibrated).
+ * @param {{ lat?: number, lng?: number } | null | undefined} anchor
+ */
+export function isDefaultGeoAnchor(anchor) {
+  if (!anchor || typeof anchor.lat !== "number" || typeof anchor.lng !== "number") return false;
+  return (
+    Math.abs(anchor.lat - DEFAULT_DRAWING_GEO_ANCHOR.lat) < 0.0005 &&
+    Math.abs(anchor.lng - DEFAULT_DRAWING_GEO_ANCHOR.lng) < 0.0005
+  );
+}
+
+/**
+ * Stable signature for project site fields that affect map centre.
+ * @param {object | null | undefined} project
+ */
+export function projectSiteLocationSignature(project) {
+  if (!project) return "";
+  const ring = parseProjectBoundaryRing(project);
+  const ringKey = ring
+    ? ring.map(([lat, lng]) => `${lat.toFixed(5)},${lng.toFixed(5)}`).join(";")
+    : "";
+  return [
+    String(project.id || ""),
+    String(project.lat ?? "").trim(),
+    String(project.lng ?? "").trim(),
+    String(project.postcode ?? "").trim(),
+    String(project.address ?? "").trim(),
+    String(project.site ?? "").trim(),
+    ringKey,
+  ].join("|");
+}
+
 /**
  * Drawing-editor geo anchor from saved project lat/lng or KML boundary bbox.
  * @param {object | null | undefined} project
