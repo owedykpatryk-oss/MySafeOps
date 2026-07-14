@@ -135,13 +135,11 @@ export function isModuleVisible(moduleId, { hiddenModules = getHiddenModuleIds()
   if (!isModuleAllowedForMarket(id, marketId)) return false;
   if (ORG_GATED_MODULE_VISIBILITY[id] && !ORG_GATED_MODULE_VISIBILITY[id]()) return false;
   if (id === "hygiene-setup" && isFessOrg()) return false;
-  if (hasFullModuleEntitlement()) return true;
   return !hiddenModules.includes(id);
 }
 
 export function isFeatureVisible(featureId, { hiddenFeatures = getHiddenFeatureIds(), marketId = getOrgMarketId() } = {}) {
   if (!isFeatureAllowedForMarket(featureId, marketId)) return false;
-  if (hasFullModuleEntitlement()) return true;
   return !hiddenFeatures.includes(featureId);
 }
 

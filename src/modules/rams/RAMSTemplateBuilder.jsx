@@ -2014,6 +2014,7 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
       siteLng: lngStr,
       nearestHospital: project.nearestHospital || f.nearestHospital,
       hospitalDirectionsUrl: project.hospitalDirectionsUrl || f.hospitalDirectionsUrl,
+      siteMapUrl: project.hospitalRouteScreenshotUrl || project.siteMapUrl || f.siteMapUrl,
       siteWeatherNote: project.weatherSnapshot || f.siteWeatherNote,
     }));
     if (String(project.weatherSnapshot || "").trim()) return;

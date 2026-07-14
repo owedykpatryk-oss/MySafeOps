@@ -89,6 +89,30 @@ import {
   requiredPermitTypesForProject,
 } from "./permitProjectDefaults";
 import PermitQuickIssueHub from "./components/PermitQuickIssueHub";
+import PermitStudioShell, { PermitStudioPanel, PERMIT_FIELD_SECTIONS } from "./components/PermitStudioShell";
+import PermitFirstRunGuide from "./components/PermitFirstRunGuide";
+import PermitConflictMatrixGrid from "./components/PermitConflictMatrixGrid";
+import PermitFormPreview from "./components/PermitFormPreview";
+import PermitWorkflowDesigner from "./components/PermitWorkflowDesigner";
+import PermitConditionalRulesBoard from "./components/PermitConditionalRulesBoard";
+import PermitDependencyFlowChart from "./components/PermitDependencyFlowChart";
+import PermitIntegrationsPanel from "./components/PermitIntegrationsPanel";
+import PermitWorkflowRoleMatrix from "./components/PermitWorkflowRoleMatrix";
+import { labelWorkflowState } from "./permitWorkflowLabels";
+import PermitAuditDashboard from "./components/PermitAuditDashboard";
+import PermitContextTips from "./components/PermitContextTips";
+import { isPermitGuideComplete, shouldPreferQuickIssueView } from "../../utils/permitGuideStorage";
+import {
+  buildPermitStudioConfigBundle,
+  downloadPermitStudioConfigBundle,
+  parsePermitStudioConfigBundle,
+} from "./permitStudioConfigBundle";
+import { computePermitActivationReadiness } from "./permitActivationReadiness";
+import {
+  dispatchPermitWebhook,
+  loadPermitWebhookConfig,
+  savePermitWebhookConfig,
+} from "../../utils/permitWebhook";
 import {
   filterPermitTypesForOrg,
   getDefaultPermitSavedViewId,
@@ -2024,10 +2048,11 @@ function PermitForm({
             <div style={{ marginTop:6 }}>
               <button
                 type="button"
+                className="ptw-smart-suggest"
                 style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}
                 onClick={() => set("description", suggestPermitDescriptionText({ ...form, type }))}
               >
-                Smart suggest description
+                ✨ Smart suggest description
               </button>
             </div>
           </div>
@@ -3320,6 +3345,12 @@ const PermitCard = memo(function PermitCard({
   const statusMeta = getPermitStatusMeta(derived);
   const workflowRail = permitWorkflowRail(derived);
   const permitRisk = computePermitRiskScore(permit, { simopsHits: simopsConflicts });
+  const activationReadiness = computePermitActivationReadiness({
+    derivedStatus: derived,
+    activateGate,
+    checkedCount,
+    totalChecks,
+  });
   const slaBadge = buildPermitSlaBadge(permit, derived);
   const issueDrift = diffPermitVsIssueSnapshot(permit);
   const latestHandover = latestCompletedHandover(permit?.handoverLog || []);
@@ -3433,6 +3464,22 @@ const PermitCard = memo(function PermitCard({
             <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background: permitRisk.level === "high" ? "#FCEBEB" : permitRisk.level === "medium" ? "#FAEEDA" : "#EAF3DE", color: permitRisk.level === "high" ? "#791F1F" : permitRisk.level === "medium" ? "#633806" : "#27500A" }}>
               Risk {permitRisk.score}
             </span>
+            {activationReadiness.show ? (
+              <span
+                title="Activation readiness"
+                style={{
+                  padding:"2px 8px",
+                  borderRadius:20,
+                  fontSize:11,
+                  fontWeight:600,
+                  background: activationReadiness.tone === "ok" ? "#ecfdf5" : "#fffbeb",
+                  color: activationReadiness.tone === "ok" ? "#047857" : "#92400e",
+                  border: `1px solid ${activationReadiness.tone === "ok" ? "#6ee7b7" : "#fcd34d"}`,
+                }}
+              >
+                Ready {activationReadiness.score}%
+              </span>
+            ) : null}
             {slaBadge && (
               <span style={{ padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:600, background:slaBadge.bg, color:slaBadge.color }}>
                 {slaBadge.label}
@@ -3956,6 +4003,15 @@ export default function PermitSystem() {
   );
   const [fieldEditorType, setFieldEditorType] = useState("_all");
   const [fieldEditorFilter, setFieldEditorFilter] = useState("");
+  const [fieldEditorSectionFilter, setFieldEditorSectionFilter] = useState("");
+  const [permitStudioOpen, setPermitStudioOpen] = useState(false);
+  const [permitStudioTab, setPermitStudioTab] = useState("form");
+  const [permitGuideOpen, setPermitGuideOpen] = useState(false);
+  const [permitGuideMode, setPermitGuideMode] = useState("wizard");
+  const [webhookConfig, setWebhookConfig] = useState(() => loadPermitWebhookConfig());
+  const [adminInsightsOpen, setAdminInsightsOpen] = useState(false);
+  const [bulkMobileOpen, setBulkMobileOpen] = useState(false);
+  const [configImportError, setConfigImportError] = useState("");
   const [workflowEditorOpen, setWorkflowEditorOpen] = useState(false);
   const [workflowEditorText, setWorkflowEditorText] = useState(() =>
     JSON.stringify(normalizeWorkflowPolicyOverrides(load(PERMIT_WORKFLOW_OVERRIDES_KEY, {})), null, 2)
@@ -4041,6 +4097,59 @@ export default function PermitSystem() {
     () => resolvePermitFieldConfig(fieldEditorType === "_all" ? "general" : fieldEditorType, permitFieldOverrides),
     [fieldEditorType, permitFieldOverrides]
   );
+  const permitStudioStats = useMemo(() => {
+    const fieldOverrides = Object.values(permitFieldOverrides || {}).reduce(
+      (sum, fields) => sum + Object.keys(fields || {}).length,
+      0
+    );
+    const policyOverrides =
+      Object.keys(conflictMatrixOverrides || {}).length +
+      Object.keys(workflowPolicyOverrides || {}).length +
+      Object.keys(workflowRolePolicyOverrides || {}).length +
+      Object.keys(dependencyRuleOverrides || {}).length +
+      Object.keys(permitTypeOverrides || {}).length;
+    return {
+      fieldOverrides,
+      conditionalRules: conditionalRuleOverrides.length,
+      policyOverrides,
+    };
+  }, [
+    permitFieldOverrides,
+    conflictMatrixOverrides,
+    workflowPolicyOverrides,
+    workflowRolePolicyOverrides,
+    dependencyRuleOverrides,
+    permitTypeOverrides,
+    conditionalRuleOverrides.length,
+  ]);
+  const filteredFieldCatalog = useMemo(() => {
+    const q = String(fieldEditorFilter || "").trim().toLowerCase();
+    const section = String(fieldEditorSectionFilter || "").trim();
+    return PERMIT_FIELD_CATALOG.filter((field) => {
+      if (section && field.section !== section) return false;
+      if (!q) return true;
+      return (
+        field.id.toLowerCase().includes(q) ||
+        field.section.toLowerCase().includes(q) ||
+        field.label.toLowerCase().includes(q)
+      );
+    });
+  }, [fieldEditorFilter, fieldEditorSectionFilter]);
+  const fieldOverrideCountForType = useMemo(
+    () => Object.keys(permitFieldOverrides[String(fieldEditorType || "_all").toLowerCase()] || {}).length,
+    [fieldEditorType, permitFieldOverrides]
+  );
+  const isPermitFieldOverridden = useCallback(
+    (fieldId) => {
+      const typeKey = String(fieldEditorType || "_all").toLowerCase();
+      const patch = {
+        ...(permitFieldOverrides._all?.[fieldId] || {}),
+        ...(permitFieldOverrides[typeKey]?.[fieldId] || {}),
+      };
+      return Object.keys(patch).length > 0;
+    },
+    [fieldEditorType, permitFieldOverrides]
+  );
   const permitThemeVars = useMemo(
     () => resolvePermitThemeVars(permitThemeMode, prefersDarkTheme),
     [permitThemeMode, prefersDarkTheme]
@@ -4071,6 +4180,14 @@ export default function PermitSystem() {
     const onChange = (event) => setPrefersDarkTheme(Boolean(event.matches));
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
+  }, []);
+  useEffect(() => {
+    if (isPermitGuideComplete()) return undefined;
+    const timer = window.setTimeout(() => {
+      setPermitGuideMode("wizard");
+      setPermitGuideOpen(true);
+    }, 750);
+    return () => window.clearTimeout(timer);
   }, []);
   useEffect(() => {
     const base = PERMIT_TYPES[permitTypeEditorType] || PERMIT_TYPES.general;
@@ -4334,28 +4451,6 @@ export default function PermitSystem() {
     return () => clearInterval(t);
   }, []);
 
-  const simopsMap = useMemo(() => buildSimopsConflictMap(permits), [permits]);
-  const simopsRadarRows = useMemo(() => {
-    return permits
-      .map((p) => {
-        const conflicts = simopsMap.get(p.id) || [];
-        if (conflicts.length === 0) return null;
-        const overlapTypes = Array.from(new Set(conflicts.map((c) => (effectivePermitTypes[c.type] || effectivePermitTypes.general).label)));
-        const severity = conflicts.length >= 3 ? "high" : conflicts.length === 2 ? "medium" : "low";
-        return {
-          id: p.id,
-          location: p.location || "Unknown location",
-          permitLabel: (effectivePermitTypes[p.type] || effectivePermitTypes.general).label,
-          overlapCount: conflicts.length,
-          overlapTypes: overlapTypes.slice(0, 3),
-          severity,
-          windowLabel: `${fmtDateTime(p.startDateTime)} -> ${fmtDateTime(permitEndIso(p))}`,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => b.overlapCount - a.overlapCount)
-      .slice(0, 10);
-  }, [permits, simopsMap]);
   const permitScorecard = useMemo(() => {
     const reviewTargetMs = 4 * 60 * 60 * 1000;
     const activationTargetMs = 2 * 60 * 60 * 1000;
@@ -4504,6 +4599,7 @@ export default function PermitSystem() {
         next = transitionPermitWorkflowWithPolicy(next, "closed", "manual_close");
         const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
         void logPermitAuditToSupabase(p, withLog, getOrgId());
+        void dispatchPermitWebhook("status_changed", withLog, { from_status: p.status, to_status: "closed" });
         return withLog;
       })
     );
@@ -4531,9 +4627,10 @@ export default function PermitSystem() {
   // referentially stable between renders while still refreshing status/expiry classification.
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30000);
+    const tickMs = viewMode === "wall" ? 1000 : 60000;
+    const t = setInterval(() => setNow(new Date()), tickMs);
     return () => clearInterval(t);
-  }, []);
+  }, [viewMode]);
   const complianceForPermitGate = useCallback((p) => {
     const items = normalizeChecklistItems(p.type || "general", p, checklistStringsForType(p.type || "general"));
     return evaluatePermitCompliance(p, items);
@@ -4591,17 +4688,6 @@ export default function PermitSystem() {
     }
     return false;
   }, [now, activationGateForPermit]);
-  const permitCardContextById = useMemo(() => {
-    const map = new Map();
-    for (const p of permits) {
-      map.set(p.id, {
-        handoverState: handoverStateForPermit(p, now),
-        activationHandoverRequirement: handoverRequirementForActivation(p, now),
-        activationDependencyResult: evaluatePermitDependencies(p, permits, effectiveDependencyRules, { now }),
-      });
-    }
-    return map;
-  }, [permits, now, effectiveDependencyRules, handoverStateForPermit, handoverRequirementForActivation]);
 
   const ensureWorkflowTransitionAllowed = useCallback((permit, targetState, actionLabel = "action") => {
     if (canPermitWorkflowTransition(permit, targetState, effectiveWorkflowPolicy)) return true;
@@ -4723,6 +4809,7 @@ export default function PermitSystem() {
         return withLog;
       })
     );
+    void dispatchPermitWebhook("issued", { ...p, status: "active" });
   };
   const suspendPermit = (id) => {
     const target = permits.find((x) => x.id === id);
@@ -4809,6 +4896,7 @@ export default function PermitSystem() {
           payload: victim,
         });
         void logPermitDeletedToSupabase(victim, getOrgId());
+        void dispatchPermitWebhook("deleted", victim);
       }
       return prev.filter((p) => p.id !== id);
     });
@@ -4881,6 +4969,17 @@ export default function PermitSystem() {
     handoverStateForPermit,
     blockedNowForPermit,
   ]);
+  const permitCardContextById = useMemo(() => {
+    const map = new Map();
+    for (const p of filtered) {
+      map.set(p.id, {
+        handoverState: handoverStateForPermit(p, now),
+        activationHandoverRequirement: handoverRequirementForActivation(p, now),
+        activationDependencyResult: evaluatePermitDependencies(p, permits, effectiveDependencyRules, { now }),
+      });
+    }
+    return map;
+  }, [filtered, permits, now, effectiveDependencyRules, handoverStateForPermit, handoverRequirementForActivation]);
   const permitsByColumn = useMemo(() => {
     const cols = { draft: [], pending_review: [], approved: [], active: [], expired: [], closed: [] };
     for (const p of filtered) {
@@ -4975,6 +5074,33 @@ export default function PermitSystem() {
         ...(safetyMapEnabled ? ["map"] : []),
       ];
   const showAdvancedPermitAdmin = !supervisorMode;
+  const simopsMap = useMemo(() => {
+    const needsSimops =
+      effectiveViewMode !== "quick" || permitStudioOpen || Boolean(modal?.data?.id);
+    if (!needsSimops) return new Map();
+    return buildSimopsConflictMap(permits);
+  }, [permits, effectiveViewMode, permitStudioOpen, modal?.data?.id]);
+  const simopsRadarRows = useMemo(() => {
+    return permits
+      .map((p) => {
+        const conflicts = simopsMap.get(p.id) || [];
+        if (conflicts.length === 0) return null;
+        const overlapTypes = Array.from(new Set(conflicts.map((c) => (effectivePermitTypes[c.type] || effectivePermitTypes.general).label)));
+        const severity = conflicts.length >= 3 ? "high" : conflicts.length === 2 ? "medium" : "low";
+        return {
+          id: p.id,
+          location: p.location || "Unknown location",
+          permitLabel: (effectivePermitTypes[p.type] || effectivePermitTypes.general).label,
+          overlapCount: conflicts.length,
+          overlapTypes: overlapTypes.slice(0, 3),
+          severity,
+          windowLabel: `${fmtDateTime(p.startDateTime)} -> ${fmtDateTime(permitEndIso(p))}`,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.overlapCount - a.overlapCount)
+      .slice(0, 10);
+  }, [permits, simopsMap, effectivePermitTypes]);
   const warRoomAlerts = useMemo(() => {
     const soonMs = 3600000;
     const result = [];
@@ -5119,7 +5245,7 @@ export default function PermitSystem() {
   }, [incidents]);
   const slaQueue = useMemo(() => buildPermitSlaQueue(permits, incidents, now), [permits, incidents, now]);
   const riskInsights = useMemo(() => buildPermitRiskInsights(permits, incidents, now), [permits, incidents, now]);
-  const integrationAdapters = useMemo(() => buildIntegrationAdaptersStatus(), []);
+  const integrationAdapters = useMemo(() => buildIntegrationAdaptersStatus(webhookConfig), [webhookConfig]);
   const openIncidents = useMemo(() => incidents.filter((i) => i.status !== "closed"), [incidents]);
   const deliverySummary = useMemo(() => {
     const rows = permits.flatMap((p) => p.notificationLog || []);
@@ -5261,6 +5387,52 @@ export default function PermitSystem() {
     setConflictMatrixOverrides({});
     setConflictMatrixEditorText("{}");
     setConflictMatrixEditorError("");
+  };
+  const exportStudioConfigBundle = () => {
+    downloadPermitStudioConfigBundle(
+      buildPermitStudioConfigBundle({
+        fieldOverrides: permitFieldOverrides,
+        formDefaults: permitFormDefaults,
+        conflictMatrixOverrides,
+        permitTypeOverrides,
+        workflowPolicyOverrides,
+        workflowRolePolicyOverrides,
+        dependencyRuleOverrides,
+        conditionalRuleOverrides,
+        shiftBoundaryHours,
+      })
+    );
+  };
+  const applyImportedStudioConfig = (parsed) => {
+    setPermitFieldOverrides(parsed.fieldOverrides || {});
+    setPermitFormDefaults({ ...DEFAULT_PERMIT_FORM_DEFAULTS, ...(parsed.formDefaults || {}) });
+    setConflictMatrixOverrides(parsed.conflictMatrixOverrides || {});
+    setPermitTypeOverrides(parsed.permitTypeOverrides || {});
+    setWorkflowPolicyOverrides(parsed.workflowPolicyOverrides || {});
+    setWorkflowRolePolicyOverrides(parsed.workflowRolePolicyOverrides || {});
+    setDependencyRuleOverrides(parsed.dependencyRuleOverrides || {});
+    setConditionalRuleOverrides(parsed.conditionalRuleOverrides || []);
+    if (Array.isArray(parsed.shiftBoundaryHours) && parsed.shiftBoundaryHours.length) {
+      setShiftBoundaryHours(parsed.shiftBoundaryHours);
+    }
+    setConfigImportError("");
+  };
+  const importStudioConfigFromFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        applyImportedStudioConfig(parsePermitStudioConfigBundle(String(reader.result || "")));
+      } catch (err) {
+        setConfigImportError(err?.message || "Invalid config bundle.");
+      }
+    };
+    reader.readAsText(file);
+  };
+  const persistWebhookConfig = (patch) => {
+    const next = { ...webhookConfig, ...patch };
+    setWebhookConfig(next);
+    savePermitWebhookConfig(next);
   };
   const savePermitTypeOverride = () => {
     const type = permitTypeEditorType;
@@ -6084,13 +6256,23 @@ export default function PermitSystem() {
 
   useEffect(() => {
     if (defaultViewAppliedRef.current) return;
-    if (String(load(PERMIT_LAST_VIEW_KEY, "") || "").trim()) return;
+    if (String(load(PERMIT_LAST_VIEW_KEY, "") || "").trim()) {
+      defaultViewAppliedRef.current = true;
+      return;
+    }
     const defaultId = getDefaultPermitSavedViewId(orgSettingsLive);
-    if (!defaultId) return;
-    const view = savedViews.find((v) => v.id === defaultId);
-    if (!view) return;
+    if (defaultId) {
+      const view = savedViews.find((v) => v.id === defaultId);
+      if (view) {
+        defaultViewAppliedRef.current = true;
+        applySavedView(view);
+        return;
+      }
+    }
+    if (shouldPreferQuickIssueView()) {
+      setViewMode("quick");
+    }
     defaultViewAppliedRef.current = true;
-    applySavedView(view);
   }, [savedViews, orgSettingsLive]);
 
   const toggleWallFullscreen = async () => {
@@ -7097,6 +7279,23 @@ export default function PermitSystem() {
         queueMessage="Permits: upload queued — will retry when you're online."
       />
 
+      <PermitFirstRunGuide
+        open={permitGuideOpen}
+        mode={permitGuideMode}
+        isAdmin={showAdvancedPermitAdmin}
+        supervisorMode={supervisorMode}
+        onClose={() => setPermitGuideOpen(false)}
+        onIssueFirst={() => {
+          setViewMode("quick");
+          openIssueWithType(permitQuickFavorites.types[0] || Object.keys(issuePermitTypes)[0] || "hot_work");
+        }}
+        onOpenStudio={() => {
+          setPermitStudioOpen(true);
+          setPermitStudioTab("form");
+        }}
+        onStartSpotlight={() => setPermitGuideMode("spotlight")}
+      />
+
       <PageHero
         badgeText="PTW"
         title="Permits to work"
@@ -7111,6 +7310,7 @@ export default function PermitSystem() {
           recentPermits={recentPermitsHub}
           recentLocations={recentLocationsHub}
           projects={projectList}
+          now={now}
           supervisorMode={supervisorMode}
           onIssueType={openIssueWithType}
           onRepeatPermit={duplicatePermit}
@@ -7528,6 +7728,17 @@ export default function PermitSystem() {
       <div style={{ display:"grid", gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr", gap:12, marginBottom:16 }}>
         {showAdvancedPermitAdmin ? (
         <>
+        <button
+          type="button"
+          className="ptw-admin-insights-toggle app-panel-surface"
+          style={{ gridColumn: isTablet ? "1" : "1 / -1", padding:"10px 12px", borderRadius:10, textAlign:"left", cursor:"pointer", border:"1px solid var(--permit-panel-border)" }}
+          onClick={() => setAdminInsightsOpen((v) => !v)}
+        >
+          <span style={{ fontSize:12, fontWeight:700 }}>{adminInsightsOpen ? "▼" : "▶"} Admin insights</span>
+          <span style={{ fontSize:11, color:"var(--color-text-secondary)", marginLeft:8 }}>SLA queue, risk analytics — collapsed by default</span>
+        </button>
+        {adminInsightsOpen ? (
+        <>
         <div className="app-panel-surface" style={{ padding:10, borderRadius:10 }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:8 }}>
             <div style={{ fontSize:12, fontWeight:700 }}>Automation & SLA</div>
@@ -7576,6 +7787,8 @@ export default function PermitSystem() {
         </div>
         </>
         ) : null}
+        </>
+        ) : null}
       </div>
 
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:12, background:"var(--permit-panel-bg)", border:"1px solid var(--permit-panel-border)" }}>
@@ -7595,7 +7808,8 @@ export default function PermitSystem() {
       </div>
 
       {/* filters */}
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+      <div className="ptw-layout">
+      <div className="ptw-order-filters" style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search location, worker, issuer, type…" style={{ ...ss.inp, flex:1, width: isNarrow ? "100%" : "auto", minWidth: isNarrow ? "100%" : 140 }} />
         <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto" }}>
           <option value="">All permit types</option>
@@ -7635,7 +7849,7 @@ export default function PermitSystem() {
         {(search||filterType||filterStatus||filterHandoverDue||filterBlockedNow||filterBriefingPending||filterRamsMissing)&&<button type="button" onClick={()=>{setSearch("");setFilterType("");setFilterStatus("");setFilterHandoverDue(false);setFilterBlockedNow(false);setFilterBriefingPending(false);setFilterRamsMissing(false);}} style={{ ...ss.btn, fontSize:12, width: isNarrow ? "100%" : "auto" }}>Clear</button>}
       </div>
 
-      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16, border:"1px solid var(--permit-panel-border)", background:"var(--permit-panel-bg)" }}>
+      <div className="ptw-order-command app-panel-surface" data-permit-guide="command" style={{ padding:10, borderRadius:10, marginBottom:16, border:"1px solid var(--permit-panel-border)", background:"var(--permit-panel-bg)" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:8, flexWrap:"wrap" }}>
           <div style={{ fontSize:12, fontWeight:700 }}>Command strip</div>
           <button
@@ -7695,7 +7909,7 @@ export default function PermitSystem() {
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16, alignItems:"center" }}>
+      <div className="ptw-order-saved" style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16, alignItems:"center" }}>
         <button type="button" onClick={saveCurrentView} style={{ ...ss.btn, fontSize:12 }}>
           Save current view
         </button>
@@ -7721,175 +7935,143 @@ export default function PermitSystem() {
         )}
       </div>
 
-      {showAdvancedPermitAdmin ? (
-      <>
-      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-          <div>
-            <div style={{ fontSize:12, fontWeight:700 }}>Conditional rules builder v2 (visual IF/AND/OR)</div>
-            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
-              Build conditions visually using multiple IF clauses with ALL/ANY logic, then apply required/optional/show/hide/block.
-            </div>
-          </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <button type="button" onClick={addConditionalRuleRow} style={{ ...ss.btnO, fontSize:12 }}>
-              + Add rule
+      <div className="ptw-order-toolbar ptw-view-toolbar" data-permit-guide="views">
+        <div className="ptw-view-toolbar__modes" role="tablist" aria-label="Permit views">
+          {availableViewModes.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={viewMode === mode}
+              onClick={() => {
+                setViewMode(mode);
+                trackEvent("permit_view_changed", { mode });
+              }}
+              className={`ptw-view-toolbar__mode${viewMode === mode ? " ptw-view-toolbar__mode--active" : ""}`}
+            >
+              {viewModeLabels[mode] || mode[0].toUpperCase() + mode.slice(1)}
             </button>
-            <button type="button" onClick={resetConditionalRules} style={{ ...ss.btn, fontSize:12 }}>
-              Reset all
-            </button>
-          </div>
+          ))}
         </div>
-        {conditionalRuleOverrides.length === 0 ? (
-          <div style={{ marginTop:10, fontSize:12, color:"var(--color-text-secondary)" }}>
-            No rules yet. Add first IF/THEN rule to automate permit form behavior.
-          </div>
-        ) : (
-          <div style={{ marginTop:10, display:"grid", gap:8 }}>
-            {conditionalRuleOverrides.map((rule) => (
-              <div key={rule.id} style={{ border:"1px solid var(--permit-panel-border)", borderRadius:8, padding:"8px 10px" }}>
-                <div style={{ display:"grid", gap:8 }}>
-                  <div style={{ display:"grid", gap:8 }}>
-                    <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-                      <label style={{ ...ss.lbl, marginBottom:0 }}>IF logic</label>
-                      <select
-                        value={rule.whenOperator || "and"}
-                        onChange={(e) => updateConditionalRuleRow(rule.id, { whenOperator: e.target.value })}
-                        style={{ ...ss.inp, width: 140 }}
-                      >
-                        <option value="and">ALL (AND)</option>
-                        <option value="or">ANY (OR)</option>
-                      </select>
-                      <button type="button" onClick={() => addConditionalClause(rule.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>
-                        + Add IF clause
-                      </button>
-                      <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, minHeight:38 }}>
-                        <input
-                          type="checkbox"
-                          checked={rule.enabled !== false}
-                          onChange={(e) => updateConditionalRuleRow(rule.id, { enabled: e.target.checked })}
-                        />
-                        Enabled
-                      </label>
-                    </div>
-                    {(Array.isArray(rule.whenClauses) ? rule.whenClauses : []).map((clause, idx) => (
-                      <div key={`${rule.id}_clause_${idx}`} style={{ display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,150px) minmax(0,1fr) auto", gap:8, alignItems:"center" }}>
-                        <select
-                          value={clause.field || "permitType"}
-                          onChange={(e) => updateConditionalClause(rule.id, idx, { field: e.target.value, value: "" })}
-                          style={ss.inp}
-                        >
-                          <option value="permitType">Permit type</option>
-                          <option value="status">Status</option>
-                          <option value="projectId">Project</option>
-                        </select>
-                        {clause.field === "permitType" ? (
-                          <select
-                            value={clause.value || ""}
-                            onChange={(e) => updateConditionalClause(rule.id, idx, { value: e.target.value })}
-                            style={ss.inp}
-                          >
-                            <option value="">Any permit type</option>
-                            {Object.entries(effectivePermitTypes).map(([k, v]) => (
-                              <option key={k} value={k}>{v.label}</option>
-                            ))}
-                          </select>
-                        ) : clause.field === "status" ? (
-                          <select
-                            value={clause.value || ""}
-                            onChange={(e) => updateConditionalClause(rule.id, idx, { value: e.target.value })}
-                            style={ss.inp}
-                          >
-                            <option value="">Any status</option>
-                            {WORKFLOW_STATES.map((state) => (
-                              <option key={state} value={state}>{state}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <select
-                            value={clause.value || ""}
-                            onChange={(e) => updateConditionalClause(rule.id, idx, { value: e.target.value })}
-                            style={ss.inp}
-                          >
-                            <option value="">Any project</option>
-                            {load("mysafeops_projects", []).slice(0, 300).map((p) => (
-                              <option key={p.id} value={p.id}>{p.name || p.id}</option>
-                            ))}
-                          </select>
-                        )}
-                        <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
-                          <button type="button" onClick={() => moveConditionalClause(rule.id, idx, "up")} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} disabled={idx === 0}>↑</button>
-                          <button type="button" onClick={() => moveConditionalClause(rule.id, idx, "down")} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} disabled={idx === (rule.whenClauses || []).length - 1}>↓</button>
-                          <button type="button" onClick={() => removeConditionalClause(rule.id, idx)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px", color:"#A32D2D", borderColor:"#F09595" }}>
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "repeat(3,minmax(0,1fr))", gap:8 }}>
-                    <div>
-                      <label style={{ ...ss.lbl, marginBottom:4 }}>THEN action</label>
-                      <select value={rule.action || "required"} onChange={(e) => updateConditionalRuleRow(rule.id, { action: e.target.value })} style={ss.inp}>
-                        <option value="required">Set required</option>
-                        <option value="optional">Set optional</option>
-                        <option value="show">Show field</option>
-                        <option value="hide">Hide field</option>
-                        <option value="block">Block issue</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ ...ss.lbl, marginBottom:4 }}>THEN field</label>
-                      <select value={rule.thenField || ""} onChange={(e) => updateConditionalRuleRow(rule.id, { thenField: e.target.value })} style={ss.inp}>
-                        {PERMIT_FIELD_CATALOG.map((field) => (
-                          <option key={field.id} value={field.id}>{field.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ ...ss.lbl, marginBottom:4 }}>Block message (optional)</label>
-                      <input
-                        value={rule.message || ""}
-                        onChange={(e) => updateConditionalRuleRow(rule.id, { message: e.target.value })}
-                        placeholder="Shown when action = block"
-                        style={ss.inp}
-                      />
-                    </div>
-                  </div>
-                  <div style={{ display:"flex", justifyContent:"space-between", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-                    <span style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
-                      Rule ID: {rule.id}
-                    </span>
-                    <button type="button" onClick={() => removeConditionalRuleRow(rule.id)} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>
-                      Remove rule
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {effectiveViewMode === "wall" ? (
+          <button type="button" onClick={() => void toggleWallFullscreen()} style={{ ...ss.btn, fontSize:12 }}>
+            {wallFullscreen ? "Exit fullscreen" : "Fullscreen"}
+          </button>
+        ) : null}
+        {showAdvancedPermitAdmin ? (
+          <button
+            type="button"
+            className="ptw-studio__toggle"
+            data-permit-guide="studio"
+            style={{ minHeight:38, padding:"8px 14px", fontSize:12 }}
+            onClick={() => {
+              setPermitStudioOpen((v) => !v);
+              if (!permitStudioOpen) setPermitStudioTab("form");
+            }}
+          >
+            {permitStudioOpen ? "Hide studio" : "Configure PTW"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="ptw-guide-reopen"
+          style={{ ...ss.btn, fontSize:12, minHeight:38 }}
+          onClick={() => {
+            setPermitGuideMode("wizard");
+            setPermitGuideOpen(true);
+          }}
+          title="PTW quick-start guide"
+        >
+          Guide
+        </button>
       </div>
 
-      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-          <div>
-            <div style={{ fontSize:12, fontWeight:700 }}>No-code form fields editor (MVP)</div>
-            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
-              Configure required/optional, helper text, placeholder, and max length for permit fields without JSON.
-            </div>
+      <div className={`ptw-order-toolbar ptw-bulk-bar${hasSelectedPermits ? " ptw-bulk-bar--active" : ""}${isNarrow ? " ptw-bulk-bar--mobile" : ""}`} data-permit-guide="bulk">
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", minWidth:0, width: isNarrow ? "100%" : "auto" }}>
+            <button type="button" onClick={toggleSelectAllFiltered} style={{ ...ss.btn, fontSize:12 }} className="ptw-bulk-bar__btn">
+              {allFilteredSelected ? "Unselect filtered" : "Select filtered"}
+            </button>
+            <button type="button" onClick={clearPermitSelection} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">
+              Clear selection
+            </button>
+            <span style={{ ...ss.chip, fontSize:11 }}>{selectedPermits.length} selected</span>
+            {hasSelectedPermits ? (
+              <span style={{ fontSize:11, color:"var(--color-text-secondary)", overflowWrap:"anywhere", width: isUltraNarrow ? "100%" : "auto" }}>
+                Activate ready: {selectedActivationSummary.activatable}
+                {selectedActivationSummary.warn > 0 ? ` · warn override: ${selectedActivationSummary.warn}` : ""}
+                {selectedActivationSummary.blocked > 0 ? ` · blocked: ${selectedActivationSummary.blocked}` : ""}
+              </span>
+            ) : null}
+            {isNarrow ? (
+              <button type="button" className="ptw-bulk-bar__more" style={{ ...ss.btn, fontSize:12 }} onClick={() => setBulkMobileOpen((v) => !v)}>
+                {bulkMobileOpen ? "Hide actions" : "More actions"}
+              </button>
+            ) : null}
           </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <div className={`ptw-bulk-bar__actions${isNarrow && !bulkMobileOpen ? " ptw-bulk-bar__actions--collapsed" : ""}`}>
+            <button type="button" onClick={bulkApproveSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Bulk approve</button>
+            <button type="button" onClick={() => void bulkActivateSelected()} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Bulk activate</button>
+            <button type="button" onClick={bulkCloseSelected} disabled={!hasSelectedPermits} style={{ ...ss.btnR, fontSize:12, minHeight:38, padding:"6px 10px", opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Bulk close</button>
+            <button type="button" onClick={bulkSetIssuerSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Bulk set issuer</button>
+            <button type="button" onClick={bulkTagSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Bulk add tag</button>
+            <button type="button" onClick={bulkExportSelectedCsv} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Export CSV</button>
+            <button type="button" onClick={bulkExportSitePackV2} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Site pack</button>
+            <button type="button" onClick={bulkDeleteSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595", opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <PermitContextTips isAdmin={showAdvancedPermitAdmin} />
+
+      {showAdvancedPermitAdmin ? (
+      <div className="ptw-order-studio">
+      <PermitStudioShell
+        open={permitStudioOpen}
+        onToggle={() => setPermitStudioOpen((v) => !v)}
+        tab={permitStudioTab}
+        onTabChange={setPermitStudioTab}
+        stats={permitStudioStats}
+      >
+      {permitStudioOpen ? (
+      <>
+      {permitStudioTab === "rules" ? (
+      <PermitConditionalRulesBoard
+        rules={conditionalRuleOverrides}
+        isNarrow={isNarrow}
+        ss={ss}
+        effectivePermitTypes={effectivePermitTypes}
+        workflowStates={WORKFLOW_STATES}
+        fieldCatalog={PERMIT_FIELD_CATALOG}
+        projects={projectList}
+        onAddRule={addConditionalRuleRow}
+        onReset={resetConditionalRules}
+        onUpdateRule={updateConditionalRuleRow}
+        onAddClause={addConditionalClause}
+        onUpdateClause={updateConditionalClause}
+        onMoveClause={moveConditionalClause}
+        onRemoveClause={removeConditionalClause}
+        onRemoveRule={removeConditionalRuleRow}
+      />
+      ) : null}
+
+      {permitStudioTab === "form" ? (
+      <PermitStudioPanel
+        title="No-code form fields editor"
+        lead="Configure required/optional, helper text, placeholder, and max length for permit fields without JSON."
+        actions={(
+          <>
             <button type="button" onClick={resetFieldSettingsForType} style={{ ...ss.btn, fontSize:12 }}>
               Reset selected
             </button>
             <button type="button" onClick={resetAllFieldSettings} style={{ ...ss.btn, fontSize:12 }}>
               Reset all
             </button>
-          </div>
-        </div>
-        <div style={{ marginTop:10, display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,220px) minmax(0,1fr)", gap:8 }}>
-          <div style={{ display:"grid", gap:8, alignContent:"start" }}>
+          </>
+        )}
+      >
+        <div className={`ptw-field-editor${isNarrow ? " ptw-field-editor--narrow" : ""}`}>
+          <div className="ptw-field-editor__sidebar">
             <div>
               <label style={ss.lbl}>Target permit type</label>
               <select value={fieldEditorType} onChange={(e) => setFieldEditorType(e.target.value)} style={ss.inp}>
@@ -7904,44 +8086,63 @@ export default function PermitSystem() {
               <input
                 value={fieldEditorFilter}
                 onChange={(e) => setFieldEditorFilter(e.target.value)}
-                placeholder="Search by label, id, section..."
+                placeholder="Search by label, id, section…"
                 style={ss.inp}
               />
             </div>
+            <div className="ptw-field-editor__sections" role="group" aria-label="Field sections">
+              <button
+                type="button"
+                className={`ptw-field-editor__section-btn${!fieldEditorSectionFilter ? " ptw-field-editor__section-btn--active" : ""}`}
+                onClick={() => setFieldEditorSectionFilter("")}
+              >
+                All
+              </button>
+              {PERMIT_FIELD_SECTIONS.map((section) => (
+                <button
+                  key={section}
+                  type="button"
+                  className={`ptw-field-editor__section-btn${fieldEditorSectionFilter === section ? " ptw-field-editor__section-btn--active" : ""}`}
+                  onClick={() => setFieldEditorSectionFilter(section)}
+                >
+                  {section}
+                </button>
+              ))}
+            </div>
             <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
-              Active overrides: {Object.keys(permitFieldOverrides[String(fieldEditorType || "_all").toLowerCase()] || {}).length}
+              Active overrides: <strong>{fieldOverrideCountForType}</strong>
+              {fieldEditorSectionFilter ? ` · section: ${fieldEditorSectionFilter}` : ""}
             </div>
           </div>
-          <div style={{ display:"grid", gap:8 }}>
-            {PERMIT_FIELD_CATALOG
-              .filter((field) => {
-                const q = String(fieldEditorFilter || "").trim().toLowerCase();
-                if (!q) return true;
-                return (
-                  field.id.toLowerCase().includes(q) ||
-                  field.section.toLowerCase().includes(q) ||
-                  field.label.toLowerCase().includes(q)
-                );
-              })
-              .map((field) => {
+          <div className="ptw-field-editor__list">
+            {filteredFieldCatalog.length === 0 ? (
+              <div style={{ fontSize:12, color:"var(--color-text-secondary)", padding:"12px 0" }}>
+                No fields match your search or section filter.
+              </div>
+            ) : (
+              filteredFieldCatalog.map((field) => {
                 const cfg = activeFieldConfig[field.id] || field;
+                const overridden = isPermitFieldOverridden(field.id);
                 return (
-                  <div key={field.id} style={{ border:"1px solid var(--permit-panel-border)", borderRadius:8, padding:"8px 10px" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", gap:8, alignItems:"center", marginBottom:6, flexWrap:"wrap" }}>
+                  <div key={field.id} className={`ptw-field-card${overridden ? " ptw-field-card--overridden" : ""}`}>
+                    <div className="ptw-field-card__head">
                       <div>
-                        <div style={{ fontSize:12, fontWeight:700 }}>{field.label}</div>
-                        <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>{field.section} · {field.id} · {field.type}</div>
+                        <div className="ptw-field-card__title">{field.label}</div>
+                        <div className="ptw-field-card__meta">{field.section} · {field.id} · {field.type}</div>
                       </div>
-                      <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12 }}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(cfg.required)}
-                          onChange={(e) => updatePermitFieldSetting(field.id, { required: e.target.checked })}
-                        />
-                        Required
-                      </label>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                        {overridden ? <span className="ptw-field-card__badge">Overridden</span> : null}
+                        <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12 }}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(cfg.required)}
+                            onChange={(e) => updatePermitFieldSetting(field.id, { required: e.target.checked })}
+                          />
+                          Required
+                        </label>
+                      </div>
                     </div>
-                    <div style={{ display:"grid", gridTemplateColumns:isUltraNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
+                    <div className="ptw-field-card__grid">
                       <div>
                         <label style={{ ...ss.lbl, marginBottom:4 }}>Placeholder</label>
                         <input
@@ -7961,7 +8162,7 @@ export default function PermitSystem() {
                           style={ss.inp}
                         />
                       </div>
-                      <div style={{ gridColumn:"1/-1" }}>
+                      <div className="ptw-field-card__grid-full">
                         <label style={{ ...ss.lbl, marginBottom:4 }}>Helper text</label>
                         <input
                           value={cfg.helpText || ""}
@@ -7972,11 +8173,25 @@ export default function PermitSystem() {
                     </div>
                   </div>
                 );
-              })}
+              })
+            )}
           </div>
+          {!isNarrow ? (
+            <div className="ptw-field-editor__preview">
+              <PermitFormPreview
+                permitTypes={effectivePermitTypes}
+                typeId={fieldEditorType}
+                fieldCatalog={filteredFieldCatalog.length ? filteredFieldCatalog : PERMIT_FIELD_CATALOG}
+                fieldConfigById={activeFieldConfig}
+                formDefaults={permitFormDefaults}
+              />
+            </div>
+          ) : null}
         </div>
-      </div>
+      </PermitStudioPanel>
+      ) : null}
 
+      {permitStudioTab === "form" ? (
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
           <div>
@@ -8075,7 +8290,9 @@ export default function PermitSystem() {
           </div>
         </div>
       </div>
+      ) : null}
 
+      {permitStudioTab === "rules" ? (
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
           <div>
@@ -8086,12 +8303,19 @@ export default function PermitSystem() {
           </div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <button type="button" onClick={openConflictMatrixEditor} style={{ ...ss.btn, fontSize:12 }}>
-              Edit overrides (JSON)
+              {conflictMatrixEditorOpen ? "Hide JSON" : "Advanced JSON"}
             </button>
             <button type="button" onClick={resetConflictMatrixOverrides} style={{ ...ss.btn, fontSize:12 }}>
               Reset overrides
             </button>
           </div>
+        </div>
+        <div style={{ marginTop:12 }}>
+          <PermitConflictMatrixGrid
+            permitTypes={effectivePermitTypes}
+            overrides={conflictMatrixOverrides}
+            onChangeOverrides={setConflictMatrixOverrides}
+          />
         </div>
         {conflictMatrixEditorOpen ? (
           <div style={{ marginTop:10 }}>
@@ -8119,7 +8343,9 @@ export default function PermitSystem() {
           </div>
         ) : null}
       </div>
+      ) : null}
 
+      {permitStudioTab === "form" ? (
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
           <div>
@@ -8177,6 +8403,28 @@ export default function PermitSystem() {
           </div>
         ) : null}
       </div>
+      ) : null}
+
+      {permitStudioTab === "system" ? (
+      <>
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>PTW configuration bundle</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Export or import org field overrides, workflow, conflict matrix, and defaults as JSON.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={exportStudioConfigBundle} style={{ ...ss.btnO, fontSize:12 }}>Export bundle</button>
+            <label style={{ ...ss.btn, fontSize:12, cursor:"pointer", display:"inline-flex", alignItems:"center" }}>
+              Import bundle
+              <input type="file" accept="application/json,.json" style={{ display:"none" }} onChange={(e) => { importStudioConfigFromFile(e.target.files?.[0]); e.target.value = ""; }} />
+            </label>
+          </div>
+        </div>
+        {configImportError ? <div style={{ marginTop:8, fontSize:12, color:"#A32D2D" }}>{configImportError}</div> : null}
+      </div>
 
       <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
@@ -8217,348 +8465,12 @@ export default function PermitSystem() {
         </div>
       </div>
 
-      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-          <div>
-            <div style={{ fontSize:12, fontWeight:700 }}>Workflow policy designer (org overrides)</div>
-            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
-              Control which status transitions are allowed. Overrides: {Object.keys(workflowPolicyOverrides || {}).length}.
-            </div>
-          </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <button type="button" onClick={openWorkflowPolicyEditor} style={{ ...ss.btn, fontSize:12 }}>
-              {workflowEditorOpen ? "Hide JSON editor" : "Advanced JSON"}
-            </button>
-            <button type="button" onClick={resetWorkflowPolicyOverrides} style={{ ...ss.btn, fontSize:12 }}>
-              Reset overrides
-            </button>
-          </div>
-        </div>
-        <div style={{ marginTop:10, display:"grid", gap:8 }}>
-          {WORKFLOW_STATES.map((from) => (
-            <div key={`wf-${from}`} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px" }}>
-              <div style={{ fontSize:11, fontWeight:700, marginBottom:6 }}>
-                {from} -&gt; allowed next states
-              </div>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                {WORKFLOW_STATES.map((to) => {
-                  const enabled = (effectiveWorkflowPolicy[from] || []).includes(to);
-                  return (
-                    <button
-                      key={`wf-${from}-${to}`}
-                      type="button"
-                      onClick={() => toggleWorkflowTransitionRule(from, to)}
-                      style={{
-                        ...ss.btn,
-                        fontSize:11,
-                        padding:"3px 8px",
-                        borderColor: enabled ? "var(--color-accent,#0d9488)" : undefined,
-                        background: enabled ? "var(--color-accent-muted,#ccfbf1)" : undefined,
-                        color: enabled ? "#0f766e" : undefined,
-                      }}
-                    >
-                      {to}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-        {workflowEditorOpen ? (
-          <div style={{ marginTop:10 }}>
-            <label style={{ ...ss.lbl, marginBottom:4 }}>Workflow overrides JSON (state -&gt; allowed next states[])</label>
-            <textarea
-              style={{ ...ss.ta, minHeight:160 }}
-              value={workflowEditorText}
-              onChange={(e) => {
-                setWorkflowEditorText(e.target.value);
-                setWorkflowEditorError("");
-              }}
-              spellCheck={false}
-            />
-            {workflowEditorError ? (
-              <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{workflowEditorError}</div>
-            ) : null}
-            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
-              Example: {`{"approved":["issued","closed"],"suspended":["issued","closed"]}`}
-            </div>
-            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
-              <button type="button" onClick={() => setWorkflowEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>
-                Cancel
-              </button>
-              <button type="button" onClick={applyWorkflowPolicyOverrides} style={{ ...ss.btnO, fontSize:12 }}>
-                Apply overrides
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-          <div>
-            <div style={{ fontSize:12, fontWeight:700 }}>Workflow role policy (org overrides)</div>
-            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
-              Control which roles can execute each target transition. Current role: <strong>{appRole}</strong>.
-            </div>
-          </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <button type="button" onClick={openWorkflowRolePolicyEditor} style={{ ...ss.btn, fontSize:12 }}>
-              {workflowRoleEditorOpen ? "Hide JSON editor" : "Advanced JSON"}
-            </button>
-            <button type="button" onClick={resetWorkflowRolePolicyOverrides} style={{ ...ss.btn, fontSize:12 }}>
-              Reset overrides
-            </button>
-          </div>
-        </div>
-        <div style={{ marginTop:10, display:"grid", gap:8 }}>
-          {WORKFLOW_STATES.map((target) => (
-            <div key={`role-${target}`} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px" }}>
-              <div style={{ fontSize:11, fontWeight:700, marginBottom:6 }}>{target} - allowed roles</div>
-              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                {WORKFLOW_ROLES.map((roleName) => {
-                  const enabled = (effectiveWorkflowRolePolicy[target] || []).includes(roleName);
-                  return (
-                    <label key={`role-${target}-${roleName}`} style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12 }}>
-                      <input
-                        type="checkbox"
-                        checked={enabled}
-                        onChange={() => toggleWorkflowRolePermission(target, roleName)}
-                      />
-                      {roleName}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-        {workflowRoleEditorOpen ? (
-          <div style={{ marginTop:10 }}>
-            <label style={{ ...ss.lbl, marginBottom:4 }}>Role policy JSON (target state -&gt; allowed roles[])</label>
-            <textarea
-              style={{ ...ss.ta, minHeight:130 }}
-              value={workflowRoleEditorText}
-              onChange={(e) => {
-                setWorkflowRoleEditorText(e.target.value);
-                setWorkflowRoleEditorError("");
-              }}
-              spellCheck={false}
-            />
-            {workflowRoleEditorError ? <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{workflowRoleEditorError}</div> : null}
-            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
-              Example: {`{"approved":["admin","supervisor"],"issued":["admin","supervisor"],"closed":["admin"]}`}
-            </div>
-            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
-              <button type="button" onClick={() => setWorkflowRoleEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>Cancel</button>
-              <button type="button" onClick={applyWorkflowRolePolicyOverrides} style={{ ...ss.btnO, fontSize:12 }}>Apply overrides</button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-          <div>
-            <div style={{ fontSize:12, fontWeight:700 }}>Permit dependency rules (org overrides)</div>
-            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
-              Require active dependency permits before activation for selected permit types.
-            </div>
-          </div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <button type="button" onClick={openDependencyRuleEditor} style={{ ...ss.btn, fontSize:12 }}>
-              {dependencyEditorOpen ? "Hide JSON editor" : "Advanced JSON"}
-            </button>
-            <button type="button" onClick={resetDependencyRuleOverrides} style={{ ...ss.btn, fontSize:12 }}>
-              Reset overrides
-            </button>
-          </div>
-        </div>
-        <div style={{ marginTop:10, display:"grid", gap:8 }}>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-            <label style={ss.lbl}>Permit type</label>
-            <select value={dependencyEditorType} onChange={(e) => setDependencyEditorType(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto", minWidth:180 }}>
-              {Object.entries(effectivePermitTypes).map(([k, v]) => (
-                <option key={`dep-type-${k}`} value={k}>{v.label}</option>
-              ))}
-            </select>
-            <button type="button" onClick={addDependencyRuleRow} style={{ ...ss.btn, fontSize:12 }}>
-              + Add dependency
-            </button>
-          </div>
-          {(dependencyRuleOverrides[dependencyEditorType] || []).length === 0 ? (
-            <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>No dependency rules for this permit type.</div>
-          ) : (
-            (dependencyRuleOverrides[dependencyEditorType] || []).map((row, idx) => (
-              <div key={`dep-row-${dependencyEditorType}-${idx}`} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px", display:"grid", gap:8 }}>
-                <div style={{ display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,220px) minmax(0,1fr) auto", gap:8, alignItems:"end" }}>
-                  <div>
-                    <label style={ss.lbl}>Requires active type</label>
-                    <select
-                      value={row.requiresActiveType || ""}
-                      onChange={(e) => updateDependencyRuleRow(dependencyEditorType, idx, { requiresActiveType: e.target.value })}
-                      style={ss.inp}
-                    >
-                      {Object.entries(effectivePermitTypes)
-                        .filter(([k]) => k !== dependencyEditorType)
-                        .map(([k, v]) => <option key={`dep-req-${dependencyEditorType}-${k}`} value={k}>{v.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={ss.lbl}>Reason (shown on gate block)</label>
-                    <input
-                      value={row.reason || ""}
-                      onChange={(e) => updateDependencyRuleRow(dependencyEditorType, idx, { reason: e.target.value })}
-                      style={ss.inp}
-                      placeholder="Explain why dependency is required"
-                    />
-                  </div>
-                  <button type="button" onClick={() => removeDependencyRuleRow(dependencyEditorType, idx)} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        {dependencyEditorOpen ? (
-          <div style={{ marginTop:10 }}>
-            <label style={{ ...ss.lbl, marginBottom:4 }}>Dependency rules JSON (permit type -&gt; dependencies[])</label>
-            <textarea
-              style={{ ...ss.ta, minHeight:140 }}
-              value={dependencyEditorText}
-              onChange={(e) => {
-                setDependencyEditorText(e.target.value);
-                setDependencyEditorError("");
-              }}
-              spellCheck={false}
-            />
-            {dependencyEditorError ? <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{dependencyEditorError}</div> : null}
-            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
-              Example: {`{"confined_space":[{"requiresActiveType":"loto","reason":"Confined space entry requires active LOTOTO isolation permit."}]}`}
-            </div>
-            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
-              <button type="button" onClick={() => setDependencyEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>Cancel</button>
-              <button type="button" onClick={applyDependencyRuleOverrides} style={{ ...ss.btnO, fontSize:12 }}>Apply overrides</button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-      </>
-      ) : null}
-
-      <div
-        className={`app-panel-surface${isNarrow ? "" : " app-permit-bulk-bar"}`}
-        style={{
-          padding:10,
-          borderRadius:10,
-          marginBottom:16,
-          boxShadow: hasSelectedPermits ? "0 8px 24px rgba(15,23,42,0.14)" : "none",
-          border: hasSelectedPermits ? "1px solid var(--permit-info-border)" : undefined,
-          background: hasSelectedPermits ? "var(--permit-panel-bg)" : undefined,
-        }}
-      >
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", justifyContent:"space-between" }}>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", minWidth:0, width: isNarrow ? "100%" : "auto" }}>
-            <button type="button" onClick={toggleSelectAllFiltered} style={{ ...ss.btn, fontSize:12 }}>
-              {allFilteredSelected ? "Unselect filtered" : "Select filtered"}
-            </button>
-            <button type="button" onClick={clearPermitSelection} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }}>
-              Clear selection
-            </button>
-            <span style={{ ...ss.chip, fontSize:11 }}>{selectedPermits.length} selected</span>
-            {hasSelectedPermits ? (
-              <span style={{ fontSize:11, color:"var(--color-text-secondary)", overflowWrap:"anywhere", width: isUltraNarrow ? "100%" : "auto" }}>
-                Activate ready: {selectedActivationSummary.activatable}
-                {selectedActivationSummary.warn > 0 ? ` · warn override: ${selectedActivationSummary.warn}` : ""}
-                {selectedActivationSummary.blocked > 0 ? ` · blocked: ${selectedActivationSummary.blocked}` : ""}
-              </span>
-            ) : null}
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: isUltraNarrow ? "1fr" : isNarrow ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,max-content))",
-              gap: 8,
-              width: isNarrow ? "100%" : "auto",
-            }}
-          >
-            <button type="button" onClick={bulkApproveSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
-              {isUltraNarrow ? "Approve selected" : "Bulk approve"}
-            </button>
-            <button type="button" onClick={() => void bulkActivateSelected()} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
-              {isUltraNarrow ? "Activate selected" : "Bulk activate"}
-            </button>
-            <button type="button" onClick={bulkCloseSelected} disabled={!hasSelectedPermits} style={{ ...ss.btnR, fontSize:12, minHeight:38, padding:"6px 10px", opacity: hasSelectedPermits ? 1 : 0.45, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
-              {isUltraNarrow ? "Close selected" : "Bulk close"}
-            </button>
-            <button type="button" onClick={bulkSetIssuerSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
-              {isUltraNarrow ? "Set issuer" : "Bulk set issuer"}
-            </button>
-            <button type="button" onClick={bulkTagSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
-              {isUltraNarrow ? "Add tag" : "Bulk add tag"}
-            </button>
-            <button type="button" onClick={bulkExportSelectedCsv} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
-              {isUltraNarrow ? "Export CSV" : "Export selected CSV"}
-            </button>
-            <button type="button" onClick={bulkExportSitePackV2} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
-              {isUltraNarrow ? "Site pack" : "Site pack v2"}
-            </button>
-            <button type="button" onClick={bulkDeleteSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595", opacity: hasSelectedPermits ? 1 : 0.45, minHeight: 38, width: isNarrow ? "100%" : "auto", whiteSpace:"normal", lineHeight:1.2 }}>
-              {isUltraNarrow ? "Delete" : "Delete selected"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        {availableViewModes.map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => {
-              setViewMode(mode);
-              trackEvent("permit_view_changed", { mode });
-            }}
-            style={{
-              ...ss.btn,
-              fontSize:12,
-              background: viewMode === mode ? "var(--color-background-secondary,#f7f7f5)" : "var(--color-background-primary,#fff)",
-              borderColor: viewMode === mode ? "var(--color-accent,#0d9488)" : "var(--color-border-secondary,#ccc)",
-            }}
-          >
-            {viewModeLabels[mode] || mode[0].toUpperCase() + mode.slice(1)}
-          </button>
-        ))}
-        {effectiveViewMode === "wall" ? (
-          <button
-            type="button"
-            onClick={() => void toggleWallFullscreen()}
-            style={{ ...ss.btn, fontSize:12 }}
-          >
-            {wallFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          </button>
-        ) : null}
-      </div>
-
-      {showAdvancedPermitAdmin ? (
-      <>
-      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:6, flexWrap:"wrap" }}>
-          <div style={{ fontSize:12, fontWeight:600 }}>Integration adapters (AI/Automation readiness)</div>
-          <span style={{ ...ss.chip, fontSize:11 }}>Hybrid mode</span>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:8 }}>
-          {integrationAdapters.map((row) => (
-            <div key={row.channel} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"6px 8px", fontSize:12 }}>
-              <strong>{row.channel}</strong>
-              <div style={{ color:"var(--color-text-secondary)", marginTop:2 }}>{row.enabled ? "enabled" : "placeholder"}</div>
-              <div style={{ color:"var(--color-text-secondary)", marginTop:2 }}>{row.note}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <PermitIntegrationsPanel
+        config={webhookConfig}
+        adapters={integrationAdapters}
+        ss={ss}
+        onChange={persistWebhookConfig}
+      />
 
       {supabase && (
         <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
@@ -8571,6 +8483,7 @@ export default function PermitSystem() {
 
           {auditOpen && (
             <>
+              <PermitAuditDashboard rows={auditRows} permits={permits} loading={auditLoading} />
               <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:10, marginBottom:10 }}>
                 <select
                   value={auditPermitId}
@@ -8729,7 +8642,7 @@ export default function PermitSystem() {
                         auditRows.map((row) => (
                           <tr key={row.id} style={{ borderTop:"1px solid var(--color-border-tertiary,#e5e5e5)" }}>
                             <td style={{ padding:"6px 8px", whiteSpace:"nowrap" }}>{fmtDateTime(row.occurred_at)}</td>
-                            <td style={{ padding:"6px 8px", fontFamily:"monospace", fontSize:11 }}>
+                            <td style={{ padding:"6px 8px" }}>
                               <button
                                 type="button"
                                 onClick={() => jumpToPermitFromAudit(row.permit_id)}
@@ -8748,12 +8661,12 @@ export default function PermitSystem() {
                 </div>
               )}
 
-              <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:10 }}>
+              <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap" }}>
                 <button
                   type="button"
                   onClick={() => setAuditPage((p) => Math.max(1, p - 1))}
                   disabled={auditPage <= 1}
-                  style={{ ...ss.btn, fontSize:12, opacity: auditPage <= 1 ? 0.45 : 1 }}
+                  style={{ ...ss.btn, fontSize:12, opacity: auditPage > 1 ? 1 : 0.45 }}
                 >
                   Previous
                 </button>
@@ -8773,6 +8686,212 @@ export default function PermitSystem() {
       )}
       </>
       ) : null}
+
+      {permitStudioTab === "rules" ? (
+      <>
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Workflow policy designer (org overrides)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Control which status transitions are allowed. Overrides: {Object.keys(workflowPolicyOverrides || {}).length}.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={openWorkflowPolicyEditor} style={{ ...ss.btn, fontSize:12 }}>
+              {workflowEditorOpen ? "Hide JSON editor" : "Advanced JSON"}
+            </button>
+            <button type="button" onClick={resetWorkflowPolicyOverrides} style={{ ...ss.btn, fontSize:12 }}>
+              Reset overrides
+            </button>
+          </div>
+        </div>
+        <PermitWorkflowDesigner
+          states={WORKFLOW_STATES}
+          policy={effectiveWorkflowPolicy}
+          onToggle={toggleWorkflowTransitionRule}
+          compact={isNarrow}
+        />
+        {workflowEditorOpen ? (
+          <div style={{ marginTop:10 }}>
+            <label style={{ ...ss.lbl, marginBottom:4 }}>Workflow overrides JSON (state -&gt; allowed next states[])</label>
+            <textarea
+              style={{ ...ss.ta, minHeight:160 }}
+              value={workflowEditorText}
+              onChange={(e) => {
+                setWorkflowEditorText(e.target.value);
+                setWorkflowEditorError("");
+              }}
+              spellCheck={false}
+            />
+            {workflowEditorError ? (
+              <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{workflowEditorError}</div>
+            ) : null}
+            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
+              Example: {`{"approved":["issued","closed"],"suspended":["issued","closed"]}`}
+            </div>
+            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+              <button type="button" onClick={() => setWorkflowEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>
+                Cancel
+              </button>
+              <button type="button" onClick={applyWorkflowPolicyOverrides} style={{ ...ss.btnO, fontSize:12 }}>
+                Apply overrides
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Workflow role policy (org overrides)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Control which roles can execute each target transition. Current role: <strong>{appRole}</strong>.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={openWorkflowRolePolicyEditor} style={{ ...ss.btn, fontSize:12 }}>
+              {workflowRoleEditorOpen ? "Hide JSON editor" : "Advanced JSON"}
+            </button>
+            <button type="button" onClick={resetWorkflowRolePolicyOverrides} style={{ ...ss.btn, fontSize:12 }}>
+              Reset overrides
+            </button>
+          </div>
+        </div>
+        <PermitWorkflowRoleMatrix
+          states={WORKFLOW_STATES}
+          roles={WORKFLOW_ROLES}
+          policy={effectiveWorkflowRolePolicy}
+          onToggle={toggleWorkflowRolePermission}
+          compact={isNarrow}
+        />
+        {workflowRoleEditorOpen ? (
+          <div style={{ marginTop:10 }}>
+            <label style={{ ...ss.lbl, marginBottom:4 }}>Role policy JSON (target state -&gt; allowed roles[])</label>
+            <textarea
+              style={{ ...ss.ta, minHeight:130 }}
+              value={workflowRoleEditorText}
+              onChange={(e) => {
+                setWorkflowRoleEditorText(e.target.value);
+                setWorkflowRoleEditorError("");
+              }}
+              spellCheck={false}
+            />
+            {workflowRoleEditorError ? <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{workflowRoleEditorError}</div> : null}
+            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
+              Example: {`{"approved":["admin","supervisor"],"issued":["admin","supervisor"],"closed":["admin"]}`}
+            </div>
+            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+              <button type="button" onClick={() => setWorkflowRoleEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>Cancel</button>
+              <button type="button" onClick={applyWorkflowRolePolicyOverrides} style={{ ...ss.btnO, fontSize:12 }}>Apply overrides</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="app-panel-surface" style={{ padding:10, borderRadius:10, marginBottom:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700 }}>Permit dependency rules (org overrides)</div>
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+              Require active dependency permits before activation for selected permit types.
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button type="button" onClick={openDependencyRuleEditor} style={{ ...ss.btn, fontSize:12 }}>
+              {dependencyEditorOpen ? "Hide JSON editor" : "Advanced JSON"}
+            </button>
+            <button type="button" onClick={resetDependencyRuleOverrides} style={{ ...ss.btn, fontSize:12 }}>
+              Reset overrides
+            </button>
+          </div>
+        </div>
+        <div style={{ marginTop:10, display:"grid", gap:8 }}>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+            <label style={ss.lbl}>Permit type</label>
+            <select value={dependencyEditorType} onChange={(e) => setDependencyEditorType(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto", minWidth:180 }}>
+              {Object.entries(effectivePermitTypes).map(([k, v]) => (
+                <option key={`dep-type-${k}`} value={k}>{v.label}</option>
+              ))}
+            </select>
+            <button type="button" onClick={addDependencyRuleRow} style={{ ...ss.btn, fontSize:12 }}>
+              + Add dependency
+            </button>
+          </div>
+          <PermitDependencyFlowChart
+            permitTypeKey={dependencyEditorType}
+            permitTypeLabel={effectivePermitTypes[dependencyEditorType]?.label}
+            rules={dependencyRuleOverrides[dependencyEditorType] || []}
+            permitTypes={effectivePermitTypes}
+          />
+          {(dependencyRuleOverrides[dependencyEditorType] || []).length > 0 ? (
+            (dependencyRuleOverrides[dependencyEditorType] || []).map((row, idx) => (
+              <div key={`dep-row-${dependencyEditorType}-${idx}`} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px", display:"grid", gap:8 }}>
+                <div style={{ display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,220px) minmax(0,1fr) auto", gap:8, alignItems:"end" }}>
+                  <div>
+                    <label style={ss.lbl}>Requires active type</label>
+                    <select
+                      value={row.requiresActiveType || ""}
+                      onChange={(e) => updateDependencyRuleRow(dependencyEditorType, idx, { requiresActiveType: e.target.value })}
+                      style={ss.inp}
+                    >
+                      {Object.entries(effectivePermitTypes)
+                        .filter(([k]) => k !== dependencyEditorType)
+                        .map(([k, v]) => <option key={`dep-req-${dependencyEditorType}-${k}`} value={k}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>Reason (shown on gate block)</label>
+                    <input
+                      value={row.reason || ""}
+                      onChange={(e) => updateDependencyRuleRow(dependencyEditorType, idx, { reason: e.target.value })}
+                      style={ss.inp}
+                      placeholder="Explain why dependency is required"
+                    />
+                  </div>
+                  <button type="button" onClick={() => removeDependencyRuleRow(dependencyEditorType, idx)} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : null}
+        </div>
+        {dependencyEditorOpen ? (
+          <div style={{ marginTop:10 }}>
+            <label style={{ ...ss.lbl, marginBottom:4 }}>Dependency rules JSON (permit type -&gt; dependencies[])</label>
+            <textarea
+              style={{ ...ss.ta, minHeight:140 }}
+              value={dependencyEditorText}
+              onChange={(e) => {
+                setDependencyEditorText(e.target.value);
+                setDependencyEditorError("");
+              }}
+              spellCheck={false}
+            />
+            {dependencyEditorError ? <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{dependencyEditorError}</div> : null}
+            <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
+              Example: {`{"confined_space":[{"requiresActiveType":"loto","reason":"Confined space entry requires active LOTOTO isolation permit."}]}`}
+            </div>
+            <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
+              <button type="button" onClick={() => setDependencyEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>Cancel</button>
+              <button type="button" onClick={applyDependencyRuleOverrides} style={{ ...ss.btnO, fontSize:12 }}>Apply overrides</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+      </>
+      ) : null}
+
+      </>
+      ) : null}
+
+      </PermitStudioShell>
+      </div>
+      ) : null}
+
+      <div className="ptw-order-main">
 
       {advancedViewsEnabled && showAdvancedPermitAdmin && permits.length > 0 && (
         <div style={{ display:"grid", gridTemplateColumns: isTablet ? "1fr" : "2fr 1fr", gap:12, marginBottom:16 }}>
@@ -8963,7 +9082,9 @@ export default function PermitSystem() {
               Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} permits
             </div>
           ) : null}
+          <div className="ptw-permit-list">
           {listPg.visible(filtered).map(renderListPermitCard)}
+          </div>
           {listPg.hasMore(filtered) ? (
             <div style={{ display: "flex", justifyContent: "center", marginTop: 8, marginBottom: 8 }}>
               <button type="button" style={ss.btn} onClick={listPg.showMore}>
@@ -8973,6 +9094,8 @@ export default function PermitSystem() {
           ) : null}
         </>
       ))}
+      </div>
+      </div>
     </div>
   );
 }

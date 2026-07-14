@@ -14,6 +14,7 @@ import {
   d1OutboxTryFlush,
 } from "../lib/d1SyncOutbox.js";
 import { D1_OUTBOX_MANUAL_RETRY_EVENT } from "../lib/d1OutboxRetryEvent.js";
+import { mergeOrgArrays } from "../utils/d1ArrayMerge.js";
 
 const transient = (e) => /^http_(502|503|504|429)$/.test(String(e || ""));
 
@@ -144,8 +145,10 @@ export function useD1OrgArraySync({
       }
       d1VersionRef.current = r.version || 0;
       if (Array.isArray(r.value)) {
-        setValue(r.value);
-        save(storageKey, r.value);
+        const local = load(storageKey, []);
+        const merged = mergeOrgArrays(local, r.value);
+        setValue(merged);
+        save(storageKey, merged);
         await d1OutboxTryFlush(flushCtxBase());
         await refreshPending();
         setD1Ready(true);
@@ -267,8 +270,9 @@ export function useD1OrgArraySync({
         }
         if (r.ok && Array.isArray(r.value)) {
           d1VersionRef.current = r.version || 0;
-          setValue(r.value);
-          save(storageKey, r.value);
+          const merged = mergeOrgArrays(value, r.value);
+          setValue(merged);
+          save(storageKey, merged);
         }
       } else if (isForbiddenD1Write(put.error)) {
         notifyD1WriteForbidden(namespace);

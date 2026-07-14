@@ -61,6 +61,7 @@ import {
   projectHealthScore,
   projectMissingItems,
 } from "../utils/soloWorkspace";
+import { isModuleVisible } from "../utils/hiddenModules";
 
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -456,15 +457,18 @@ export function WorkersModule({ mode = "all" }) {
     }
 
     saved = sanitizeProjectForOrg(saved, getOrgId());
+    const withTs = { ...saved, updatedAt: new Date().toISOString() };
 
     setProjects((prev) => {
-      const i = prev.findIndex((x) => x.id === saved.id);
-      if (i >= 0) {
-        const next = [...prev];
-        next[i] = saved;
-        return next;
+      const i = prev.findIndex((x) => x.id === withTs.id);
+      const next = i >= 0 ? prev.map((row, idx) => (idx === i ? withTs : row)) : [withTs, ...prev];
+      const wrote = save(PROJECTS_KEY, next);
+      if (!wrote) {
+        pushToast("Project could not be saved on this device — check billing or browser storage.", "warn");
+      } else {
+        pushToast(isNew ? "Project saved." : "Project updated.", "success");
       }
-      return [saved, ...prev];
+      return next;
     });
 
     if (saved.soloMode !== false && workers.length === 0) {
@@ -480,10 +484,10 @@ export function WorkersModule({ mode = "all" }) {
 
     setModal(null);
     if (useInlineHub && isNew) {
-      openProjectHub(saved);
+      openProjectHub(withTs);
     }
     if (options.openDrawingEditor) {
-      setWorkspaceNavTarget({ viewId: "project-drawings", projectId: saved.id });
+      setWorkspaceNavTarget({ viewId: "project-drawings", projectId: withTs.id });
       openWorkspaceView({ viewId: "project-drawings" });
     }
   };
@@ -841,6 +845,7 @@ export function WorkersModule({ mode = "all" }) {
             >
               Permit
             </button>
+            {isModuleVisible("survey-report") ? (
             <button
               type="button"
               style={ss.btn}
@@ -851,6 +856,8 @@ export function WorkersModule({ mode = "all" }) {
             >
               Survey
             </button>
+            ) : null}
+            {isModuleVisible("geo-photos") ? (
             <button
               type="button"
               style={ss.btn}
@@ -861,6 +868,7 @@ export function WorkersModule({ mode = "all" }) {
             >
               Geo
             </button>
+            ) : null}
             </>
             ) : null}
             <button type="button" style={ss.btn} onClick={() => removeProject(p.id)}>
@@ -2126,7 +2134,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
               {item?.id ? "Cancel" : "Close"}
             </button>
             {!item?.id ? (
-              <span className="project-wizard-footer__draft-hint">Draft auto-saves</span>
+              <span className="project-wizard-footer__draft-hint">Draft only — click Save to add the project</span>
             ) : null}
             <button type="button" style={ss.btnO} onClick={() => persist({ openDrawingEditor: true })}>Save + drawing editor</button>
             <button type="button" style={ss.btnP} onClick={persist}>Save</button>

@@ -79,3 +79,45 @@ export function isWarnConflictOverrideValid(override) {
   const approvedBy = String(override.approvedBy || "").trim();
   return reason.length >= 8 && approvedBy.length >= 2;
 }
+
+/** Merge baseline matrix with org overrides (overrides win). */
+export function mergeConflictMatrix(baseline = PERMIT_CONFLICT_MATRIX, overrides = {}) {
+  const base = baseline && typeof baseline === "object" ? baseline : PERMIT_CONFLICT_MATRIX;
+  const ov = overrides && typeof overrides === "object" && !Array.isArray(overrides) ? overrides : {};
+  return { ...base, ...ov };
+}
+
+const CONFLICT_OUTCOMES = ["allow", "warn", "block"];
+
+/** Cycle conflict outcome for visual matrix editor. */
+export function cycleConflictOutcome(current) {
+  const c = String(current || "allow").toLowerCase();
+  const idx = CONFLICT_OUTCOMES.indexOf(c);
+  const next = CONFLICT_OUTCOMES[(idx + 1) % CONFLICT_OUTCOMES.length];
+  return next;
+}
+
+/** Effective outcome for a pair (override or baseline). */
+export function effectiveConflictOutcome(typeA, typeB, overrides = {}, baseline = PERMIT_CONFLICT_MATRIX) {
+  const merged = mergeConflictMatrix(baseline, overrides);
+  return resolvePermitConflictRule(typeA, typeB, merged);
+}
+
+/** Build org override patch when user sets cell outcome; null clears override if matches baseline. */
+export function conflictOverridePatch(typeA, typeB, outcome, reason = "", baseline = PERMIT_CONFLICT_MATRIX) {
+  const key = normalizeConflictPair(typeA, typeB);
+  const base = resolvePermitConflictRule(typeA, typeB, baseline);
+  const next = String(outcome || "allow").toLowerCase();
+  if (!CONFLICT_OUTCOMES.includes(next)) return { key, clear: true };
+  if (next === base.outcome || (next === "allow" && base.outcome === "allow")) {
+    return { key, clear: true };
+  }
+  return {
+    key,
+    clear: false,
+    rule: {
+      outcome: next,
+      reason: String(reason || base.reason || "").slice(0, 240),
+    },
+  };
+}

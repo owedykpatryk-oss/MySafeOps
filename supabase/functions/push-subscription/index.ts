@@ -1,23 +1,26 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { assertOrgSlugAccess } from "../_shared/orgAccess.ts";
+import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, prefer, accept, accept-profile",
-  "Access-Control-Max-Age": "86400",
-};
+function pushCorsHeaders(req: Request) {
+  return {
+    ...corsHeadersForRequest(req),
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, prefer, accept, accept-profile, x-request-id",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 type PushSubPayload = {
   endpoint?: string;
   keys?: { p256dh?: string; auth?: string };
 };
 
-function json(status: number, payload: unknown) {
+function json(req: Request, status: number, payload: unknown) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...pushCorsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
@@ -28,17 +31,17 @@ function cleanOrgSlug(v: unknown) {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: pushCorsHeaders(req) });
   }
-  if (req.method !== "POST") return json(405, { error: "Method not allowed" });
+  if (req.method !== "POST") return json(req, 405, { error: "Method not allowed" });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json(401, { error: "Unauthorized" });
+    if (!authHeader?.startsWith("Bearer ")) return json(req,401, { error: "Unauthorized" });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    if (!supabaseUrl || !serviceKey) return json(500, { error: "Server misconfigured" });
+    if (!supabaseUrl || !serviceKey) return json(req,500, { error: "Server misconfigured" });
 
     const supabase = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -49,19 +52,19 @@ Deno.serve(async (req) => {
       data: { user },
       error: userErr,
     } = await supabase.auth.getUser(jwt);
-    if (userErr || !user) return json(401, { error: "Unauthorized" });
+    if (userErr || !user) return json(req,401, { error: "Unauthorized" });
 
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json(req,).catch(() => ({}));
     const action = String(body?.action || "upsert").trim().toLowerCase();
     const orgSlug = cleanOrgSlug(body?.orgSlug);
 
     const access = await assertOrgSlugAccess(supabase, user.id, orgSlug);
-    if (!access.ok) return json(access.status, { error: access.error });
+    if (!access.ok) return json(req,access.status, { error: access.error });
 
     const sub = (body?.subscription || {}) as PushSubPayload;
     const endpoint = String(sub?.endpoint || body?.endpoint || "").trim();
 
-    if (!endpoint) return json(400, { error: "Missing endpoint" });
+    if (!endpoint) return json(req,400, { error: "Missing endpoint" });
 
     if (action === "remove") {
       const { error } = await supabase
@@ -70,8 +73,8 @@ Deno.serve(async (req) => {
         .eq("user_id", user.id)
         .eq("org_slug", orgSlug)
         .eq("endpoint", endpoint);
-      if (error) return json(500, { error: error.message });
-      return json(200, { ok: true, removed: true });
+      if (error) return json(req,500, { error: error.message });
+      return json(req,200, { ok: true, removed: true });
     }
 
     const cleanedSub = {
@@ -93,10 +96,10 @@ Deno.serve(async (req) => {
       },
       { onConflict: "user_id,org_slug,endpoint" }
     );
-    if (error) return json(500, { error: error.message });
+    if (error) return json(req,500, { error: error.message });
 
-    return json(200, { ok: true, subscribed: true });
+    return json(req,200, { ok: true, subscribed: true });
   } catch (e) {
-    return json(500, { error: String(e) });
+    return json(req,500, { error: String(e) });
   }
 });

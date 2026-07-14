@@ -3,23 +3,19 @@
  * GET /api/health → { ok: true, ts }
  */
 
-const API_JSON_HEADERS = {
-  "Content-Type": "application/json; charset=utf-8",
-  "X-Content-Type-Options": "nosniff",
-  "Cross-Origin-Resource-Policy": "same-site",
-  "Cache-Control": "no-store",
-};
+import { API_JSON_HEADERS, rejectIfRateLimited, sendJson } from "./securityUtils.js";
 
 export default function handler(req, res) {
   if (req.method !== "GET" && req.method !== "HEAD") {
-    res.writeHead(405, API_JSON_HEADERS);
-    res.end(JSON.stringify({ error: "Method not allowed" }));
-    return;
+    return sendJson(res, 405, { error: "Method not allowed" });
   }
-  res.writeHead(200, API_JSON_HEADERS);
+
+  if (rejectIfRateLimited(req, res, "health", { max: 120, windowMs: 60_000 })) return;
+
   if (req.method === "HEAD") {
-    res.end();
-    return;
+    res.writeHead(200, API_JSON_HEADERS);
+    return res.end();
   }
-  res.end(JSON.stringify({ ok: true, ts: Date.now() }));
+
+  return sendJson(res, 200, { ok: true, ts: Date.now() });
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { centroidFromBoundaryRing, geoAnchorFromProject } from "./projectBoundary";
+import {
+  centroidFromBoundaryRing,
+  geoAnchorFromProject,
+  isDefaultGeoAnchor,
+  projectSiteLocationSignature,
+} from "./projectBoundary";
 
 describe("centroidFromBoundaryRing", () => {
   it("averages lat/lng tuples", () => {
@@ -20,6 +25,21 @@ describe("centroidFromBoundaryRing", () => {
     ]);
     expect(c.lat).toBeCloseTo(53.01, 2);
     expect(c.lng).toBeCloseTo(-1.0, 2);
+  });
+});
+
+describe("isDefaultGeoAnchor", () => {
+  it("detects London fallback", () => {
+    expect(isDefaultGeoAnchor({ lat: 51.505, lng: -0.09 })).toBe(true);
+    expect(isDefaultGeoAnchor({ lat: 53.48, lng: -2.24 })).toBe(false);
+  });
+});
+
+describe("projectSiteLocationSignature", () => {
+  it("changes when postcode updates", () => {
+    const a = projectSiteLocationSignature({ id: "p1", postcode: "KT22 7SH" });
+    const b = projectSiteLocationSignature({ id: "p1", postcode: "SW1A 1AA" });
+    expect(a).not.toBe(b);
   });
 });
 

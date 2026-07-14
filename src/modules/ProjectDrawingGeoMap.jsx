@@ -6,12 +6,19 @@ import "leaflet/dist/leaflet.css";
  * Interactive OSM preview: points use illustrative lat/lng from planPercentToLatLng.
  * Rebuilds layers when point positions change; updates styles only when selection changes.
  */
-export default function ProjectDrawingGeoMap({ points, selectedIds = [], onSelect }) {
+export default function ProjectDrawingGeoMap({
+  points,
+  selectedIds = [],
+  onSelect,
+  defaultCenter = { lat: 51.505, lng: -0.09 },
+  defaultZoom = 11,
+}) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const prevPointsSig = useRef(null);
   const prevPointCountRef = useRef(0);
+  const prevCenterRef = useRef(null);
   const onSelectRef = useRef(onSelect);
 
   useEffect(() => {
@@ -28,6 +35,12 @@ export default function ProjectDrawingGeoMap({ points, selectedIds = [], onSelec
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
     }).addTo(map);
+    const lat = Number(defaultCenter.lat);
+    const lng = Number(defaultCenter.lng);
+    map.setView(
+      Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : [51.505, -0.09],
+      defaultZoom
+    );
     mapRef.current = map;
     layerRef.current = L.layerGroup().addTo(map);
     prevPointsSig.current = null;
@@ -37,8 +50,23 @@ export default function ProjectDrawingGeoMap({ points, selectedIds = [], onSelec
       layerRef.current = null;
       prevPointsSig.current = null;
       prevPointCountRef.current = 0;
+      prevCenterRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const lat = Number(defaultCenter.lat);
+    const lng = Number(defaultCenter.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    if (prevCenterRef.current === key) return;
+    prevCenterRef.current = key;
+    if (prevPointCountRef.current === 0) {
+      map.setView([lat, lng], defaultZoom, { animate: false });
+    }
+  }, [defaultCenter.lat, defaultCenter.lng, defaultZoom]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -77,7 +105,12 @@ export default function ProjectDrawingGeoMap({ points, selectedIds = [], onSelec
         }
       } else {
         prevPointCountRef.current = 0;
-        map.setView([51.505, -0.09], 11);
+        const lat = Number(defaultCenter.lat);
+        const lng = Number(defaultCenter.lng);
+        map.setView(
+          Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : [51.505, -0.09],
+          defaultZoom
+        );
       }
     } else {
       layer.eachLayer((ly) => {
@@ -90,7 +123,7 @@ export default function ProjectDrawingGeoMap({ points, selectedIds = [], onSelec
         });
       });
     }
-  }, [points, pointsSig, selectedIds]);
+  }, [points, pointsSig, selectedIds, defaultCenter.lat, defaultCenter.lng, defaultZoom]);
 
   return (
     <div
