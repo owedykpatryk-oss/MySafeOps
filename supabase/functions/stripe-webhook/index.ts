@@ -11,11 +11,7 @@ import {
   type StripeMode,
 } from "../_shared/stripeConfig.ts";
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
-
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature",
-};
+import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 
 type Diagnostics = {
   function: string;
@@ -281,6 +277,10 @@ function constructStripeEvent(
 
 Deno.serve(async (req) => {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
+  const corsHeaders = {
+    ...corsHeadersForRequest(req),
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature, x-request-id",
+  };
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }

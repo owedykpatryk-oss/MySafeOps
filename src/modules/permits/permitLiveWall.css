@@ -54,6 +54,19 @@
   letter-spacing: 0.04em;
 }
 
+.permit-live-wall__date {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+
+.permit-live-wall--kiosk .permit-live-wall__date {
+  font-size: 14px;
+  color: #94a3b8;
+}
+
 .permit-live-wall__stats {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

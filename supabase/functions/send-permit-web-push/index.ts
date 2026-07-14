@@ -1,19 +1,21 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { assertOrgSlugAccess } from "../_shared/orgAccess.ts";
+import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 
-/** Full CORS for browser + supabase-js (preflight sends apikey, authorization, content-type, x-client-info). */
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, prefer, accept, accept-profile",
-  "Access-Control-Max-Age": "86400",
-};
+function pushCorsHeaders(req: Request) {
+  return {
+    ...corsHeadersForRequest(req),
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, prefer, accept, accept-profile, x-request-id",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
-function json(status: number, payload: unknown) {
+function json(req: Request, status: number, payload: unknown) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...pushCorsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
@@ -29,23 +31,23 @@ function permitLabel(permit: Record<string, unknown>) {
 Deno.serve(async (req) => {
   // Respond without loading web-push so OPTIONS / health never fail on npm import issues.
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: pushCorsHeaders(req) });
   }
-  if (req.method !== "POST") return json(405, { error: "Method not allowed" });
+  if (req.method !== "POST") return json(req, 405, { error: "Method not allowed" });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json(401, { error: "Unauthorized" });
+    if (!authHeader?.startsWith("Bearer ")) return json(req,401, { error: "Unauthorized" });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    if (!supabaseUrl || !serviceKey) return json(500, { error: "Server misconfigured" });
+    if (!supabaseUrl || !serviceKey) return json(req,500, { error: "Server misconfigured" });
 
     const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
     const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
     const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:safety@mysafeops.local";
     if (!vapidPublicKey || !vapidPrivateKey) {
-      return json(500, { error: "VAPID keys are not configured" });
+      return json(req,500, { error: "VAPID keys are not configured" });
     }
 
     const webpushMod = await import("npm:web-push@3.6.7");
@@ -61,13 +63,13 @@ Deno.serve(async (req) => {
       data: { user },
       error: userErr,
     } = await supabase.auth.getUser(jwt);
-    if (userErr || !user) return json(401, { error: "Unauthorized" });
+    if (userErr || !user) return json(req,401, { error: "Unauthorized" });
 
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json(req,).catch(() => ({}));
     const orgSlug = cleanOrgSlug(body?.orgSlug);
 
     const access = await assertOrgSlugAccess(supabase, user.id, orgSlug);
-    if (!access.ok) return json(access.status, { error: access.error });
+    if (!access.ok) return json(req,access.status, { error: access.error });
 
     const permit = (body?.permit || {}) as Record<string, unknown>;
     const title = String(body?.title || "Permit update");
@@ -99,18 +101,18 @@ Deno.serve(async (req) => {
       .select("id, endpoint, subscription")
       .eq("user_id", user.id)
       .eq("org_slug", orgSlug);
-    if (subErr) return json(500, { error: subErr.message });
+    if (subErr) return json(req,500, { error: subErr.message });
 
     const subscriptions = Array.isArray(rows) ? rows : [];
     if (dryRun) {
-      return json(200, {
+      return json(req,200, {
         ok: true,
         dryRun: true,
         subscriptions: subscriptions.length,
         configured: true,
       });
     }
-    if (subscriptions.length === 0) return json(200, { ok: true, sent: 0, skipped: true });
+    if (subscriptions.length === 0) return json(req,200, { ok: true, sent: 0, skipped: true });
 
     let sent = 0;
     let failed = 0;
@@ -136,8 +138,8 @@ Deno.serve(async (req) => {
         .in("id", removeIds);
     }
 
-    return json(200, { ok: true, sent, failed, pruned: removeIds.length });
+    return json(req,200, { ok: true, sent, failed, pruned: removeIds.length });
   } catch (e) {
-    return json(500, { error: String(e) });
+    return json(req,500, { error: String(e) });
   }
 });

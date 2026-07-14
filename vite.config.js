@@ -377,6 +377,80 @@ export default defineConfig(({ mode }) => {
         },
       },
       {
+        name: "dev-osrm-route-api",
+        configureServer(server) {
+          server.middlewares.use("/api/osrm-route", async (req, res, next) => {
+            if (req.method !== "POST" && req.method !== "HEAD") return next();
+            if (req.method === "HEAD") {
+              res.statusCode = 204;
+              res.end();
+              return;
+            }
+            const chunks = [];
+            for await (const chunk of req) chunks.push(chunk);
+            let body = {};
+            try {
+              body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+            } catch {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "invalid_json" }));
+              return;
+            }
+            const fromLat = Number(body.fromLat ?? body.lat);
+            const fromLng = Number(body.fromLng ?? body.lng);
+            const toLat = Number(body.toLat);
+            const toLng = Number(body.toLng);
+            if (![fromLat, fromLng, toLat, toLng].every(Number.isFinite)) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "invalid_coordinates" }));
+              return;
+            }
+            const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&steps=false`;
+            try {
+              const upstream = await fetch(url, {
+                headers: { Accept: "application/json", "User-Agent": "MySafeOps/1.0 (dev osrm; mysafeops.com)" },
+              });
+              const text = await upstream.text();
+              let json;
+              try {
+                json = JSON.parse(text);
+              } catch {
+                res.statusCode = 502;
+                res.setHeader("Content-Type", "application/json");
+                res.end(JSON.stringify({ error: "osrm_upstream_invalid" }));
+                return;
+              }
+              const route = json?.routes?.[0];
+              const coords = route?.geometry?.coordinates;
+              if (!Array.isArray(coords) || coords.length < 2) {
+                res.statusCode = 404;
+                res.setHeader("Content-Type", "application/json");
+                res.end(JSON.stringify({ error: "no_route" }));
+                return;
+              }
+              const ring = coords
+                .map((c) => (Array.isArray(c) && c.length >= 2 ? [Number(c[1]), Number(c[0])] : null))
+                .filter((p) => p && Number.isFinite(p[0]) && Number.isFinite(p[1]));
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json");
+              res.end(
+                JSON.stringify({
+                  ring,
+                  distance_m: route.distance ?? null,
+                  duration_s: route.duration ?? null,
+                })
+              );
+            } catch {
+              res.statusCode = 502;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "osrm_upstream_unreachable" }));
+            }
+          });
+        },
+      },
+      {
         name: "dev-overpass-api",
         configureServer(server) {
           server.middlewares.use("/api/overpass", async (req, res, next) => {
@@ -477,6 +551,17 @@ out body;`.trim();
               }
               if (norm.includes("/modules/rams/constructionQuickPacks")) return "rams-quick-packs";
               if (norm.includes("/modules/permits/PermitSystem")) return "permits";
+              if (
+                norm.includes("/modules/permits/components/PermitStudio") ||
+                norm.includes("/modules/permits/components/PermitWorkflow") ||
+                norm.includes("/modules/permits/components/PermitConditional") ||
+                norm.includes("/modules/permits/components/PermitIntegrations") ||
+                norm.includes("/modules/permits/components/PermitAudit") ||
+                norm.includes("/modules/permits/components/PermitFormPreview") ||
+                norm.includes("/modules/permits/components/PermitConflict")
+              ) {
+                return "permits-studio";
+              }
               if (norm.includes("moduleCatalogIcons")) return "module-icons";
               return;
             }

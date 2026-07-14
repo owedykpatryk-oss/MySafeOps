@@ -8,7 +8,7 @@ import {
 import { getAppliedIndustryPackId, getWorkspacePackLabel } from "../utils/orgIndustryPacks";
 import { ms } from "../utils/moduleStyles";
 
-const ss = ms();
+const ss = ms;
 
 export default function OrgPermitSettings({ form, set }) {
   const allIds = allPermitTypeIds();

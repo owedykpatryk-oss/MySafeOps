@@ -64,4 +64,18 @@ describe("buildSimopsConflictMap", () => {
     expect(map.get("b")).toHaveLength(1);
     expect(map.get("b")[0].id).toBe("a");
   });
+
+  it("skips cross-location comparisons (location buckets)", () => {
+    const permits = Array.from({ length: 40 }, (_, i) => ({
+      id: `p${i}`,
+      status: "active",
+      location: `Bay ${i % 5}`,
+      startDateTime: "2026-04-09T08:00:00.000Z",
+      endDateTime: "2026-04-09T12:00:00.000Z",
+    }));
+    const map = buildSimopsConflictMap(permits);
+    for (const [, conflicts] of map) {
+      expect(conflicts.length).toBeLessThan(40);
+    }
+  });
 });

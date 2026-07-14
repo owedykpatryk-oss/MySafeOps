@@ -1,7 +1,25 @@
 import { useMemo } from "react";
 import { PERMIT_TYPES } from "../permitTypes";
+import { derivePermitStatus } from "../permitRules";
 import { favoriteTypesForIssue } from "../permitOrgPrefs";
 import { formatRecentPermitAge } from "../permitRecentHistory";
+
+const STATUS_LABELS = {
+  active: "Active",
+  approved: "Approved",
+  pending_review: "In review",
+  draft: "Draft",
+  closed: "Closed",
+  expired: "Expired",
+};
+
+function statusTone(status) {
+  if (status === "active") return { bg: "#ecfdf5", color: "#047857", border: "#6ee7b7" };
+  if (status === "expired") return { bg: "#fef2f2", color: "#991b1b", border: "#fecaca" };
+  if (status === "pending_review") return { bg: "#fffbeb", color: "#92400e", border: "#fcd34d" };
+  if (status === "approved") return { bg: "#eff6ff", color: "#1d4ed8", border: "#93c5fd" };
+  return { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };
+}
 
 export default function PermitQuickIssueHub({
   issuePermitTypes = PERMIT_TYPES,
@@ -9,6 +27,7 @@ export default function PermitQuickIssueHub({
   recentPermits = [],
   recentLocations = [],
   projects = [],
+  now = new Date(),
   onIssueType,
   onRepeatPermit,
   onRepeatSameTypeNewLocation,
@@ -35,42 +54,33 @@ export default function PermitQuickIssueHub({
   const issuerChips = favorites.issuers || [];
 
   return (
-    <div
-      className="app-panel-surface"
-      style={{
-        padding: 16,
-        borderRadius: 14,
-        marginBottom: 16,
-        background: "linear-gradient(135deg,#f8fafc 0%,#ecfeff 55%,#f0fdf4 100%)",
-        border: "1px solid #cbd5e1",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+    <div className="ptw-quick-hub app-panel-surface">
+      <div className="ptw-quick-hub__head">
         <div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a" }}>Quick issue</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+          <div className="ptw-quick-hub__title">Quick issue</div>
+          <div className="ptw-quick-hub__lead">
             {supervisorMode ? "Site supervisor mode — issue, list and TV wall only." : "Favourites, recent permits and locations — one tap to issue."}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="ptw-quick-hub__head-actions">
           {onOpenList ? (
-            <button type="button" onClick={onOpenList} style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" }}>
+            <button type="button" className="ptw-quick-hub__link-btn" onClick={onOpenList}>
               All permits
             </button>
           ) : null}
           {onOpenWall ? (
-            <button type="button" onClick={onOpenWall} style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" }}>
+            <button type="button" className="ptw-quick-hub__link-btn" onClick={onOpenWall}>
               TV wall
             </button>
           ) : null}
         </div>
       </div>
 
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#64748b", marginBottom: 8 }}>
+      <div className="ptw-quick-hub__section">
+        <div className="ptw-quick-hub__section-label">
           Permit types {favorites.types?.length ? "· favourites first" : ""}
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="ptw-quick-hub__type-row">
           {favoriteTypes.map((typeId) => {
             const def = issuePermitTypes[typeId] || PERMIT_TYPES[typeId];
             if (!def) return null;
@@ -79,22 +89,10 @@ export default function PermitQuickIssueHub({
               <button
                 key={typeId}
                 type="button"
+                className="ptw-quick-hub__type-btn"
                 onClick={() => onIssueType?.(typeId)}
                 title={def.description}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  border: `1.5px solid ${def.color}`,
-                  background: def.bg,
-                  color: def.color,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "DM Sans,sans-serif",
-                }}
+                style={{ borderColor: def.color, background: def.bg, color: def.color }}
               >
                 {pinned ? "⭐ " : ""}
                 {def.label}
@@ -103,48 +101,42 @@ export default function PermitQuickIssueHub({
           })}
         </div>
         {onToggleFavoriteType ? (
-          <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 6 }}>Tip: configure favourites in Settings → Modules → Permits</div>
+          <div className="ptw-quick-hub__tip">Tip: configure favourites in Settings → Modules → Permits</div>
         ) : null}
       </div>
 
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#64748b", marginBottom: 8 }}>
-          Recent permits
-        </div>
+      <div className="ptw-quick-hub__section">
+        <div className="ptw-quick-hub__section-label">Recent permits</div>
         {recentPermits.length === 0 ? (
-          <div style={{ fontSize: 12, color: "#94a3b8" }}>No recent permits — issue your first one above.</div>
+          <div className="ptw-quick-hub__empty">No recent permits — issue your first one above.</div>
         ) : (
-          <div style={{ display: "grid", gap: 8 }}>
+          <div className="ptw-quick-hub__recent-list">
             {recentPermits.slice(0, 8).map((p) => {
               const def = issuePermitTypes[p.type] || PERMIT_TYPES[p.type] || PERMIT_TYPES.general;
               const age = formatRecentPermitAge(p.updatedAt || p.createdAt);
+              const derived = derivePermitStatus(p, now);
+              const tone = statusTone(derived);
               return (
-                <div
-                  key={p.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(0,1fr) auto",
-                    gap: 8,
-                    alignItems: "center",
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    border: "1px solid #e2e8f0",
-                    background: "#fff",
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: def.color }}>
+                <div key={p.id} className="ptw-quick-hub__recent-row">
+                  <div className="ptw-quick-hub__recent-main">
+                    <div className="ptw-quick-hub__recent-title" style={{ color: def.color }}>
                       {def.label} · {p.location || "No location"}
+                      <span
+                        className="ptw-quick-hub__status"
+                        style={{ background: tone.bg, color: tone.color, borderColor: tone.border }}
+                      >
+                        {STATUS_LABELS[derived] || derived}
+                      </span>
                     </div>
-                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                    <div className="ptw-quick-hub__recent-meta">
                       {p.issuedTo || "Unassigned"} · {age}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <button type="button" onClick={() => onRepeatPermit?.(p)} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" }}>
+                  <div className="ptw-quick-hub__recent-actions">
+                    <button type="button" className="ptw-quick-hub__mini-btn" onClick={() => onRepeatPermit?.(p)}>
                       Repeat
                     </button>
-                    <button type="button" onClick={() => onRepeatSameTypeNewLocation?.(p)} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" }}>
+                    <button type="button" className="ptw-quick-hub__mini-btn" onClick={() => onRepeatSameTypeNewLocation?.(p)}>
                       Same type
                     </button>
                   </div>
@@ -156,18 +148,11 @@ export default function PermitQuickIssueHub({
       </div>
 
       {locationChips.length > 0 ? (
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#64748b", marginBottom: 8 }}>
-            Locations
-          </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <div className="ptw-quick-hub__section">
+          <div className="ptw-quick-hub__section-label">Locations</div>
+          <div className="ptw-quick-hub__chip-row">
             {locationChips.map((loc) => (
-              <button
-                key={loc}
-                type="button"
-                onClick={() => onLocationChip?.(loc)}
-                style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" }}
-              >
+              <button key={loc} type="button" className="ptw-quick-hub__chip" onClick={() => onLocationChip?.(loc)}>
                 {loc}
               </button>
             ))}
@@ -176,13 +161,11 @@ export default function PermitQuickIssueHub({
       ) : null}
 
       {issuerChips.length > 0 ? (
-        <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#64748b", marginBottom: 8 }}>
-            Favourite issuers / holders
-          </div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <div className="ptw-quick-hub__section">
+          <div className="ptw-quick-hub__section-label">Favourite issuers / holders</div>
+          <div className="ptw-quick-hub__chip-row">
             {issuerChips.map((name) => (
-              <span key={name} style={{ fontSize: 11, padding: "4px 10px", borderRadius: 999, background: "#f1f5f9", color: "#475569" }}>
+              <span key={name} className="ptw-quick-hub__issuer-chip">
                 {name}
               </span>
             ))}

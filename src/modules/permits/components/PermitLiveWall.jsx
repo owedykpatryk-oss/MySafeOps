@@ -128,6 +128,11 @@ export default function PermitLiveWall({
           ) : null}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {kiosk ? (
+            <span className="permit-live-wall__date">
+              {now.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}
+            </span>
+          ) : null}
           <span className="permit-live-wall__clock">
             {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </span>

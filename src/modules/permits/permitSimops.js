@@ -18,14 +18,25 @@ function isSimopsRelevantStatus(status) {
 /** Map permit id → overlapping permits at same location/time (for board/list badges). */
 export function buildSimopsConflictMap(permits = []) {
   const map = new Map();
+  const byLocation = new Map();
+
   for (const p of permits) {
-    const conflicts = findSimopsConflicts(
-      { ...p, status: p.status },
-      permits,
-      { ignoreId: p.id }
-    );
-    if (conflicts.length) map.set(p.id, conflicts);
+    if (!isSimopsRelevantStatus(p.status)) continue;
+    const loc = normLoc(p.location);
+    if (!loc) continue;
+    const bucket = byLocation.get(loc);
+    if (bucket) bucket.push(p);
+    else byLocation.set(loc, [p]);
   }
+
+  for (const group of byLocation.values()) {
+    if (group.length < 2) continue;
+    for (const p of group) {
+      const conflicts = findSimopsConflicts(p, group, { ignoreId: p.id });
+      if (conflicts.length) map.set(p.id, conflicts);
+    }
+  }
+
   return map;
 }
 

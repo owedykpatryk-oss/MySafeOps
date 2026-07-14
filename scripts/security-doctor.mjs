@@ -193,6 +193,43 @@ async function main() {
     issues += 1;
   }
 
+  if (fileIncludes("src/utils/webhookUrlValidation.js", "validateOutboundWebhookUrl")) {
+    ok("PTW webhook URLs validated before save/dispatch");
+  } else {
+    fail("missing webhook URL validation helper");
+    issues += 1;
+  }
+
+  if (fileIncludes("supabase/functions/_shared/corsHeaders.ts", "corsHeadersForRequest")) {
+    ok("Edge Functions use site-restricted CORS helper");
+  } else {
+    fail("missing Edge Function CORS helper");
+    issues += 1;
+  }
+
+  const edgeFnDir = resolve(root, "supabase/functions");
+  let wildcardCors = 0;
+  for (const name of [
+    "stripe-checkout",
+    "stripe-portal",
+    "stripe-webhook",
+    "revoke-org-member-sessions",
+    "permit-audit-export",
+    "send-org-invite",
+    "send-permit-notification",
+    "send-permit-web-push",
+    "push-subscription",
+  ]) {
+    if (fileIncludes(`supabase/functions/${name}/index.ts`, 'Access-Control-Allow-Origin": "*"')) {
+      wildcardCors += 1;
+    }
+  }
+  if (wildcardCors === 0) ok("Edge Functions no longer use wildcard ACAO");
+  else {
+    fail(`${wildcardCors} Edge Function(s) still use Access-Control-Allow-Origin: *`);
+    issues += 1;
+  }
+
   const audit = spawnSync("npm", ["audit", "--audit-level=high", "--json"], {
     cwd: root,
     encoding: "utf8",

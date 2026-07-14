@@ -17,6 +17,8 @@ This document supports procurement and internal review. It is not a legal warran
 - **Platform owner (DB)**: superadmin RPCs use `public.platform_owner_email_allowlist` — add each owner email in Supabase SQL (in addition to **`VITE_PLATFORM_OWNER_EMAIL`** in the app).
 - **Insider hardening (D1)**: `DELETE /v1/kv` requires admin or supervisor (`user_can_delete_org_kv`); `PUT /v1/kv` checks `user_can_write_org_kv` (operative cannot overwrite workers/projects/training/CDM/timesheets namespaces); audit append validates `action`/`entity` and rate-limits per user; cloud UI role refreshes from `get_my_membership_role` every focus / 5 min; workspace banner on D1 403 (`D1WriteForbiddenBanner`).
 - **Session revoke**: Edge Function `revoke-org-member-sessions` — admins sign out a member globally after role change or removal (`OrgMembers`).
+- **Outbound webhooks**: PTW Slack/Teams/custom URLs are validated (`src/utils/webhookUrlValidation.js`) — HTTPS only, private IPs blocked before save or dispatch.
+- **Edge CORS**: Supabase functions use `supabase/functions/_shared/corsHeaders.ts` (reflects `SITE_URL` / localhost dev — not `*`).
 - **Client portal**: default cloud expiry 90 days; publish events go to audit log.
 - **Diagnostics**: `npm run security:doctor` — migrations present, npm audit, deploy checklist.
 
