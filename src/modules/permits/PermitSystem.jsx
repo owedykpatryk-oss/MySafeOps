@@ -101,7 +101,12 @@ import PermitWorkflowRoleMatrix from "./components/PermitWorkflowRoleMatrix";
 import { labelWorkflowState } from "./permitWorkflowLabels";
 import PermitAuditDashboard from "./components/PermitAuditDashboard";
 import PermitContextTips from "./components/PermitContextTips";
-import { isPermitGuideComplete, shouldPreferQuickIssueView } from "../../utils/permitGuideStorage";
+import PermitNextSteps from "./components/PermitNextSteps";
+import { isPermitGuideComplete, registerPermitGuideCloudSync, shouldPreferQuickIssueView, PTW_REPLAY_GUIDE_EVENT } from "../../utils/permitGuideStorage";
+import { hydratePermitGuideFromCloud, syncPermitGuideToCloud } from "../../utils/permitGuideCloud";
+import { PTW_RESET_TIPS_EVENT, resetContextTips } from "../../utils/permitContextTips";
+import { buildPermitNextSteps, isPermitStudioConfigured } from "./permitNextSteps";
+import { useSupabaseAuth } from "../../context/SupabaseAuthContext";
 import {
   buildPermitStudioConfigBundle,
   downloadPermitStudioConfigBundle,
@@ -3348,8 +3353,12 @@ const PermitCard = memo(function PermitCard({
   const activationReadiness = computePermitActivationReadiness({
     derivedStatus: derived,
     activateGate,
+    approveGate,
     checkedCount,
     totalChecks,
+    briefingPending,
+    ramsMissing,
+    handoverState,
   });
   const slaBadge = buildPermitSlaBadge(permit, derived);
   const issueDrift = diffPermitVsIssueSnapshot(permit);
@@ -3478,6 +3487,9 @@ const PermitCard = memo(function PermitCard({
                 }}
               >
                 Ready {activationReadiness.score}%
+                {activationReadiness.label && activationReadiness.label !== "Live" && activationReadiness.label !== "Ready"
+                  ? ` · ${activationReadiness.label}`
+                  : ""}
               </span>
             ) : null}
             {slaBadge && (
@@ -3504,6 +3516,16 @@ const PermitCard = memo(function PermitCard({
               </span>
             ) : null}
           </div>
+          {activationReadiness.gaps?.length > 0 ? (
+            <ul className="ptw-activation-gaps" aria-label="Items to fix before activation">
+              {activationReadiness.gaps.map((gap) => (
+                <li key={gap.id} className="ptw-activation-gaps__item">
+                  <span className="ptw-activation-gaps__mark" aria-hidden>○</span>
+                  {gap.label}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap", marginBottom:6, minHeight: showWorkflowRail ? undefined : 0 }}>
             {showWorkflowRail ? workflowRail.map((node, idx) => (
               <div key={`${permit.id}-${node.step}`} style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -3880,6 +3902,7 @@ function exportPermitPdf(permit) {
 export default function PermitSystem() {
   const { role: appRole = "admin" } = useApp();
   const { pushToast } = useToast();
+  const { supabase, session } = useSupabaseAuth() || {};
   const org = (() => {
     try {
       return loadOrgSettingsRaw();
@@ -4006,8 +4029,17 @@ export default function PermitSystem() {
   const [fieldEditorSectionFilter, setFieldEditorSectionFilter] = useState("");
   const [permitStudioOpen, setPermitStudioOpen] = useState(false);
   const [permitStudioTab, setPermitStudioTab] = useState("form");
+  const [guideCompleteTick, setGuideCompleteTick] = useState(0);
   const [permitGuideOpen, setPermitGuideOpen] = useState(false);
   const [permitGuideMode, setPermitGuideMode] = useState("wizard");
+  const [guideHydrated, setGuideHydrated] = useState(() => !supabase);
+  const [nextStepsHidden, setNextStepsHidden] = useState(() => {
+    try {
+      return sessionStorage.getItem(`ptw_next_steps_hide_${getOrgId()}`) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [webhookConfig, setWebhookConfig] = useState(() => loadPermitWebhookConfig());
   const [adminInsightsOpen, setAdminInsightsOpen] = useState(false);
   const [bulkMobileOpen, setBulkMobileOpen] = useState(false);
@@ -4182,13 +4214,52 @@ export default function PermitSystem() {
     return () => mql.removeEventListener("change", onChange);
   }, []);
   useEffect(() => {
+    if (!guideHydrated) return undefined;
     if (isPermitGuideComplete()) return undefined;
     const timer = window.setTimeout(() => {
       setPermitGuideMode("wizard");
       setPermitGuideOpen(true);
     }, 750);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [guideHydrated]);
+  useEffect(() => {
+    registerPermitGuideCloudSync((local) => {
+      const userId = session?.user?.id;
+      if (!supabase || !userId) return;
+      void syncPermitGuideToCloud(supabase, userId, { ...local, completed: Boolean(local?.completed) });
+    });
+    return () => registerPermitGuideCloudSync(null);
+  }, [supabase, session?.user?.id]);
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!supabase || !userId) {
+      setGuideHydrated(true);
+      return undefined;
+    }
+    let cancelled = false;
+    hydratePermitGuideFromCloud(supabase, userId).finally(() => {
+      if (!cancelled) setGuideHydrated(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, session?.user?.id]);
+  useEffect(() => {
+    const replay = () => {
+      setPermitGuideMode("wizard");
+      setPermitGuideOpen(true);
+    };
+    const resetTips = () => {
+      resetContextTips();
+      pushToast("PTW tips reset — they will show again.", "success");
+    };
+    window.addEventListener(PTW_REPLAY_GUIDE_EVENT, replay);
+    window.addEventListener(PTW_RESET_TIPS_EVENT, resetTips);
+    return () => {
+      window.removeEventListener(PTW_REPLAY_GUIDE_EVENT, replay);
+      window.removeEventListener(PTW_RESET_TIPS_EVENT, resetTips);
+    };
+  }, [pushToast]);
   useEffect(() => {
     const base = PERMIT_TYPES[permitTypeEditorType] || PERMIT_TYPES.general;
     const ov = permitTypeOverrides[permitTypeEditorType] || {};
@@ -5074,6 +5145,28 @@ export default function PermitSystem() {
         ...(safetyMapEnabled ? ["map"] : []),
       ];
   const showAdvancedPermitAdmin = !supervisorMode;
+  const studioConfigured = useMemo(
+    () =>
+      isPermitStudioConfigured({
+        fieldOverrides: permitFieldOverrides,
+        workflowOverrides: workflowPolicyOverrides,
+        conflictOverrides: conflictMatrixOverrides,
+        conditionalRules: conditionalRuleOverrides,
+      }),
+    [permitFieldOverrides, workflowPolicyOverrides, conflictMatrixOverrides, conditionalRuleOverrides]
+  );
+  const permitNextSteps = useMemo(
+    () =>
+      buildPermitNextSteps({
+        supervisorMode,
+        isAdmin: showAdvancedPermitAdmin,
+        guideComplete: isPermitGuideComplete(),
+        studioConfigured,
+        commandCounts,
+        totalPermits: permits.length,
+      }),
+    [supervisorMode, showAdvancedPermitAdmin, studioConfigured, commandCounts, permits.length, guideCompleteTick]
+  );
   const simopsMap = useMemo(() => {
     const needsSimops =
       effectiveViewMode !== "quick" || permitStudioOpen || Boolean(modal?.data?.id);
@@ -6214,6 +6307,73 @@ export default function PermitSystem() {
     trackEvent("permit_quick_issue_type", { type: tid });
   };
 
+  const runPermitNextStepAction = useCallback(
+    (action) => {
+      try {
+        sessionStorage.removeItem(`ptw_next_steps_hide_${getOrgId()}`);
+      } catch {
+        /* ignore */
+      }
+      setNextStepsHidden(false);
+      switch (action) {
+        case "guide":
+          setPermitGuideMode("wizard");
+          setPermitGuideOpen(true);
+          break;
+        case "issue":
+          setViewMode("quick");
+          openIssueWithType(permitQuickFavorites.types[0] || Object.keys(issuePermitTypes)[0] || "hot_work");
+          break;
+        case "studio":
+          setPermitStudioOpen(true);
+          setPermitStudioTab("form");
+          break;
+        case "filter_review":
+          setViewMode("list");
+          setFilterStatus("pending_review");
+          setFilterHandoverDue(false);
+          setFilterBlockedNow(false);
+          break;
+        case "filter_approved":
+          setViewMode("list");
+          setFilterStatus("approved");
+          setFilterHandoverDue(false);
+          setFilterBlockedNow(false);
+          break;
+        case "filter_handover":
+          setViewMode("list");
+          setFilterStatus("");
+          setFilterHandoverDue(true);
+          break;
+        case "filter_expired":
+          setViewMode("list");
+          setFilterStatus("expired");
+          break;
+        case "filter_blocked":
+          setViewMode("list");
+          setFilterStatus("");
+          setFilterBlockedNow(true);
+          break;
+        case "filter_active":
+          setViewMode("list");
+          setFilterStatus("active");
+          break;
+        default:
+          break;
+      }
+    },
+    [openIssueWithType, permitQuickFavorites.types, issuePermitTypes]
+  );
+
+  const hidePermitNextSteps = useCallback(() => {
+    setNextStepsHidden(true);
+    try {
+      sessionStorage.setItem(`ptw_next_steps_hide_${getOrgId()}`, "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const openIssueWithLocation = (loc) => {
     const location = String(loc || "").trim();
     if (!location) return;
@@ -7284,7 +7444,10 @@ export default function PermitSystem() {
         mode={permitGuideMode}
         isAdmin={showAdvancedPermitAdmin}
         supervisorMode={supervisorMode}
-        onClose={() => setPermitGuideOpen(false)}
+        onClose={() => {
+          setPermitGuideOpen(false);
+          setGuideCompleteTick((n) => n + 1);
+        }}
         onIssueFirst={() => {
           setViewMode("quick");
           openIssueWithType(permitQuickFavorites.types[0] || Object.keys(issuePermitTypes)[0] || "hot_work");
@@ -8021,6 +8184,14 @@ export default function PermitSystem() {
           </div>
         </div>
       </div>
+
+      {!nextStepsHidden ? (
+        <PermitNextSteps
+          steps={permitNextSteps}
+          onAction={runPermitNextStepAction}
+          onDismiss={hidePermitNextSteps}
+        />
+      ) : null}
 
       <PermitContextTips isAdmin={showAdvancedPermitAdmin} />
 

@@ -35,6 +35,7 @@ export const workspaceViewLoaders = {
   emergency: () => import("../modules/EmergencyContacts"),
   ppe: () => import("../modules/PPERegister"),
   plant: () => import("../modules/PlantEquipmentRegister"),
+  vehicles: () => import("../modules/VehicleFleetRegister"),
   fire: () => import("../modules/FireSafetyLog"),
   "hot-work": () => import("../modules/HotWorkRegister"),
   training: () => import("../modules/TrainingMatrix"),

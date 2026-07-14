@@ -46,3 +46,5 @@ export function dismissContextTip(tipId) {
 export function resetContextTips() {
   saveOrgScoped(PERMIT_CONTEXT_TIPS_KEY, []);
 }
+
+export const PTW_RESET_TIPS_EVENT = "mysafeops-reset-ptw-tips";

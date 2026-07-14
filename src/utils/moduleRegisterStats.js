@@ -71,6 +71,10 @@ const DATE_KEYS = [
   "testDate",
   "assessedDate",
   "inspectionDate",
+  "motDue",
+  "insuranceExpiry",
+  "nextServiceDue",
+  "taxDue",
   "signedOffAt",
 ];
 

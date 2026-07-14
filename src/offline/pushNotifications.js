@@ -6,6 +6,9 @@ import { supabase } from "../lib/supabase";
 import { workspaceDeepLink } from "../utils/appDeepLinks";
 import { staleSurveyReminderDays, isAutomationEnabled } from "../utils/orgAutomationRules";
 import { todayIsoDate } from "../utils/projectDashboard";
+import { normalizeWorkerCertifications } from "../utils/certifications";
+import { collectEquipmentInspectionDueItems } from "../utils/equipmentInspectionDue";
+import { collectVehicleDueItems } from "../utils/vehicleComplianceDue";
 
 const VAPID_PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "").trim();
 const NOTIF_PREFS_KEY = "mysafeops_notif_prefs";
@@ -348,24 +351,27 @@ export function checkExpiryNotifications(opts = {}) {
 
   const workers = loadJSON("mysafeops_workers", []);
   const permits = loadJSON("permits_v2", []);
-  const equipment = loadJSON("mysafeops_equipment", []);
   const ramsDocs = loadJSON("rams_builder_docs", []);
+  const trainingRecords = loadJSON("training_matrix", []);
+  const equipmentItems = collectEquipmentInspectionDueItems();
 
   // ── Worker certifications ──
   if (isAutomationEnabled("certExpiryReminder") && isNotificationTypeEnabled("cert_expiry")) workers.forEach(w => {
-    (w.certifications || []).forEach(cert => {
+    normalizeWorkerCertifications(w).forEach(cert => {
       const days = daysUntil(cert.expiryDate);
       if (days === null) return;
+      const certKey = cert.certCode || cert.certType || "cert";
+      const label = cert.certType || cert.certCode || "Certificate";
 
       THRESHOLDS_DAYS.forEach(threshold => {
         if (days <= threshold && days >= (threshold === 0 ? -7 : threshold - 1)) {
-          const id = `cert_${w.id}_${cert.type}_${threshold}`;
+          const id = `cert_${w.id}_${certKey}_${threshold}`;
           if (wasRecentlySeen(id)) return;
 
           const urgency = days <= 0 ? "EXPIRED" : days <= 7 ? "URGENT" : "REMINDER";
           const body = days <= 0
-            ? `${cert.type || "Certificate"} for ${w.name} expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""} ago.`
-            : `${cert.type || "Certificate"} for ${w.name} expires in ${days} day${days !== 1 ? "s" : ""}.`;
+            ? `${label} for ${w.name} expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""} ago.`
+            : `${label} for ${w.name} expires in ${days} day${days !== 1 ? "s" : ""}.`;
 
           showLocalNotification(`${urgency}: Certificate expiry`, {
             body,
@@ -461,8 +467,8 @@ export function checkExpiryNotifications(opts = {}) {
   });
 
   // ── Equipment inspections ──
-  if (isAutomationEnabled("equipInspectReminder") && isNotificationTypeEnabled("equip_inspect")) equipment.forEach(item => {
-    const days = daysUntil(item.nextInspection);
+  if (isAutomationEnabled("equipInspectReminder") && isNotificationTypeEnabled("equip_inspect")) equipmentItems.forEach(item => {
+    const days = daysUntil(item.nextDueIso);
     if (days === null) return;
 
     THRESHOLDS_DAYS.filter(t => t <= 14).forEach(threshold => {
@@ -473,12 +479,67 @@ export function checkExpiryNotifications(opts = {}) {
         showLocalNotification("Equipment inspection due", {
           body: `${item.name || "Equipment"} inspection ${days <= 0 ? "overdue" : `due in ${days} day(s)`}.`,
           tag: id,
-          data: { url: workspaceDeepLink("plant") },
+          data: { url: workspaceDeepLink(item.moduleId || "plant") },
         });
         markSeen(id);
       }
     });
   });
+
+  // ── Training matrix competence records ──
+  if (isAutomationEnabled("trainingExpiryReminder") && isNotificationTypeEnabled("training_expiry")) {
+    trainingRecords.forEach((record) => {
+      const days = daysUntil(record.expiryDate);
+      if (days === null) return;
+      const courseKey = String(record.courseName || "training").toLowerCase().replace(/\s+/g, "_").slice(0, 32);
+      const label = record.courseName || "Training record";
+      const who = record.workerName || "Worker";
+
+      THRESHOLDS_DAYS.forEach((threshold) => {
+        if (days <= threshold && days >= (threshold === 0 ? -7 : threshold - 1)) {
+          const id = `training_${record.id}_${courseKey}_${threshold}`;
+          if (wasRecentlySeen(id)) return;
+
+          const urgency = days <= 0 ? "EXPIRED" : days <= 7 ? "URGENT" : "REMINDER";
+          const body =
+            days <= 0
+              ? `${label} for ${who} expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""} ago.`
+              : `${label} for ${who} expires in ${days} day${days !== 1 ? "s" : ""}.`;
+
+          showLocalNotification(`${urgency}: Training expiry`, {
+            body,
+            tag: id,
+            requireInteraction: days <= 1,
+            data: { url: workspaceDeepLink("training") },
+            actions: [{ action: "view", title: "View training" }],
+          });
+          markSeen(id);
+        }
+      });
+    });
+  }
+
+  // ── Fleet / vehicle compliance ──
+  if (isAutomationEnabled("vehicleComplianceReminder") && isNotificationTypeEnabled("vehicle_compliance")) {
+    collectVehicleDueItems().forEach((item) => {
+      const days = daysUntil(item.nextDueIso);
+      if (days === null) return;
+
+      THRESHOLDS_DAYS.filter((t) => t <= 14).forEach((threshold) => {
+        if (days <= threshold && days >= (threshold === 0 ? -1 : threshold - 1)) {
+          const id = `vehicle_${item.id}_${threshold}`;
+          if (wasRecentlySeen(id)) return;
+
+          showLocalNotification("Fleet compliance due", {
+            body: `${item.name || "Vehicle"} ${days <= 0 ? "overdue" : `due in ${days} day(s)`}.`,
+            tag: id,
+            data: { url: workspaceDeepLink("vehicles") },
+          });
+          markSeen(id);
+        }
+      });
+    });
+  }
 
   // ── Stale survey drafts ──
   const staleDays = staleSurveyReminderDays();
