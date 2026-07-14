@@ -6,7 +6,7 @@ import { supabase } from "../lib/supabase";
 import { workspaceDeepLink } from "../utils/appDeepLinks";
 import { staleSurveyReminderDays, isAutomationEnabled } from "../utils/orgAutomationRules";
 import { todayIsoDate } from "../utils/projectDashboard";
-import { normalizeWorkerCertifications } from "../utils/certifications";
+import { normalizeWorkerCertifications, getWorkerCertAlerts } from "../utils/certifications";
 import { collectEquipmentInspectionDueItems } from "../utils/equipmentInspectionDue";
 import { collectVehicleDueItems } from "../utils/vehicleComplianceDue";
 
@@ -579,8 +579,27 @@ export function checkExpiryNotifications(opts = {}) {
         const draftSurveys = surveys.filter((s) => s.status !== "final").length;
         const finals = surveys.filter((s) => s.status === "final").length;
         const activePermits = permits.filter((p) => p.status === "active").length;
+        const certDue = workers.flatMap((w) => getWorkerCertAlerts(w)).filter((a) => a.days <= 30).length;
+        const equipDue = collectEquipmentInspectionDueItems().filter((item) => {
+          const d = daysUntil(item.nextDueIso);
+          return d !== null && d <= 30;
+        }).length;
+        const fleetDue = collectVehicleDueItems().filter((item) => {
+          const d = daysUntil(item.nextDueIso);
+          return d !== null && d <= 30;
+        }).length;
+        const trainingDue = loadJSON("training_matrix", []).filter((r) => {
+          const d = daysUntil(r.expiryDate);
+          return d !== null && d <= 30;
+        }).length;
+        const complianceParts = [];
+        if (certDue) complianceParts.push(`${certDue} cert`);
+        if (trainingDue) complianceParts.push(`${trainingDue} training`);
+        if (equipDue) complianceParts.push(`${equipDue} equipment`);
+        if (fleetDue) complianceParts.push(`${fleetDue} fleet`);
+        const complianceLine = complianceParts.length ? ` · Compliance due: ${complianceParts.join(", ")}` : "";
         showLocalNotification("Weekly site summary", {
-          body: `${projects.length} active project(s) · ${activePermits} active PTW · ${draftSurveys} survey draft(s) · ${finals} final survey(s).`,
+          body: `${projects.length} active project(s) · ${activePermits} active PTW · ${draftSurveys} survey draft(s) · ${finals} final survey(s)${complianceLine}.`,
           tag: id,
           data: { url: workspaceDeepLink("dashboard") },
         });
