@@ -25,4 +25,15 @@ describe("safeHttpUrl", () => {
   it("blocks javascript: URLs", () => {
     expect(safeHttpUrl("javascript:alert(1)")).toBeNull();
   });
+
+  it("blocks data: and empty values", () => {
+    expect(safeHttpUrl("data:text/html,hi")).toBeNull();
+    expect(safeHttpUrl("")).toBeNull();
+    expect(safeHttpUrl(null)).toBeNull();
+  });
+
+  it("allows http(s) URLs", () => {
+    expect(safeHttpUrl("https://maps.google.com/?q=1")).toContain("https://");
+    expect(safeHttpUrl("http://example.com/a")).toContain("http://");
+  });
 });

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
-import { escapeHtml, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { escapeHtml, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
@@ -36,7 +36,7 @@ function printMonthlyReport(monthLabel) {
   if (expiredPermits.length) score -= Math.min(20, expiredPermits.length * 5);
   score = Math.max(0, score);
 
-  const win = openPrintWindow();
+  const win = openPrintWindowOrWarn();
   if (!win) return;
   const bodyHtml = `
   <div class="print-section-title">Monthly snapshot</div>

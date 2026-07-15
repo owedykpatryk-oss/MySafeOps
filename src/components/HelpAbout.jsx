@@ -659,8 +659,9 @@ export default function HelpAbout() {
 
         <h3 style={ss.h3}>RAMS</h3>
         <p style={ss.p}>
-          Pick hazards from the library or add custom rows; link operatives and project; print branded PDFs; export JSON; import JSON with operative matching; optional evidence pack for audits.
-          Your workspace profile suggests a <strong>hazard starter</strong>. Tick <strong>competent review</strong> before issuing approved RAMS — the app records the review; you remain responsible for competence on site.
+          <strong>First RAMS in minutes:</strong> open RAMS → <strong>Start new</strong> → pick a <strong>Quick pack</strong> for the job → link the project and people → Preview PDF.
+          Tick <strong>competent review</strong> before issuing — the app records the review; you remain responsible for competence on site.
+          Advanced (when you need it): JSON export/import, share links, evidence packs.
         </p>
 
         <h3 style={ss.h3}>CDM &amp; H&amp;S file</h3>
@@ -681,8 +682,9 @@ export default function HelpAbout() {
 
         <h3 style={ss.h3}>Survey report</h3>
         <p style={ss.p}>
-          Structured survey / dilapidation reports: scope, weather, records review, findings, geo-photos, utility DXF import, plan snapshots, QA checklist, PDF export.
-          Visible for <strong>Surveying &amp; geodesy</strong>, <strong>Contractor + surveying</strong>, and <strong>Show all modules</strong> profiles — hidden for pure contractor profiles to keep the menu focused.
+          <strong>First survey in ~10 minutes:</strong> New report → pick project → <strong>Smart fill</strong> → Preview PDF → mark final when ready.
+          <strong> Simple mode</strong> (default for many orgs) walks you through guided steps; PAS 128 detail and CAD/export tools stay under More / advanced.
+          Visible for surveying profiles and <strong>Show all modules</strong> — hidden for pure contractor menus.
         </p>
 
         <h3 style={ss.h3}>Geo-photos</h3>

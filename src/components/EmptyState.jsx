@@ -25,12 +25,16 @@ export default function EmptyState({
       {(actionLabel || secondaryLabel) && (
         <div className="app-empty-state__actions">
           {actionLabel ? (
-            <button type="button" className="app-empty-state__btn app-empty-state__btn--primary" onClick={onAction}>
+            <button
+              type="button"
+              className="app-empty-state__btn app-empty-state__btn--primary"
+              onClick={() => onAction?.()}
+            >
               {actionLabel}
             </button>
           ) : null}
           {secondaryLabel ? (
-            <button type="button" className="app-empty-state__btn" onClick={onSecondary}>
+            <button type="button" className="app-empty-state__btn" onClick={() => onSecondary?.()}>
               {secondaryLabel}
             </button>
           ) : null}

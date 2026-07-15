@@ -6,6 +6,7 @@ import { exportGeoPhotosGeoJson, projectGeoPhotosForReport } from "../../utils/g
 import { filterGeoPhotosWithCoords } from "../../utils/geoPhotoExport";
 import { sanitizePdfFileSegment } from "../../utils/pdfFileName";
 import { sanitizePrintPreviewHtml } from "../../utils/htmlEscape.js";
+import { downloadBlob } from "../../utils/downloadBlob.js";
 import { buildSurveyReportHtml } from "./surveyReportPrintHtml";
 import { generateSurveyReportPdfBlob } from "./surveyReportPdf";
 import { normalizeSurveyReport, utilityTypeLabel, utilityConfidenceLabel } from "./surveyReportHelpers";
@@ -153,11 +154,9 @@ function buildDeliverablesManifest(report) {
 }
 
 function triggerDownload(blob, fileName) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = fileName;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  if (!downloadBlob(blob, fileName)) {
+    throw new Error("Browser blocked the download — allow downloads for this site and try again.");
+  }
 }
 
 function encodeText(text) {

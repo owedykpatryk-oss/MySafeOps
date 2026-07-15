@@ -58,6 +58,35 @@ describe("buildPermitStatusDeepLink", () => {
   });
 });
 
+describe("contractor acknowledgements on PDF", () => {
+  it("embeds read/sign acknowledgements with signature images", () => {
+    const html = renderPermitDocumentHtml({
+      id: "p-ack-1",
+      type: "general",
+      status: "active",
+      description: "Test",
+      location: "Yard",
+      issuedBy: "A",
+      issuedTo: "B",
+      startDateTime: "2026-04-14T08:00:00.000Z",
+      endDateTime: "2026-04-14T15:00:00.000Z",
+      checklist: {},
+      extraFields: {},
+      acknowledgements: [
+        {
+          at: "2026-04-14T09:00:00.000Z",
+          by: "Sam Contractor",
+          note: "Read/Sign link confirmation",
+          signatureImageDataUrl: "data:image/png;base64,aaa",
+        },
+      ],
+    });
+    expect(html).toContain("Contractor acknowledgements");
+    expect(html).toContain("Sam Contractor");
+    expect(html).toContain("data:image/png;base64,aaa");
+  });
+});
+
 describe("excavation dig guidance on PDF", () => {
   it("embeds PAS 128 safe dig section for excavation permits", () => {
     const html = renderPermitDocumentHtml({

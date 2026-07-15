@@ -110,6 +110,16 @@ export function buildRegisterModuleStats(moduleId, items = []) {
         stat("Check-ins", n),
         stat("Active", list.filter((i) => /active|checked_in/i.test(String(i.status || ""))).length, "warn"),
       ];
+    case "excavation":
+      return [
+        stat("Records", n),
+        stat("Open", list.filter((i) => i.status === "open").length, list.filter((i) => i.status === "open").length ? "warn" : "good"),
+        stat(
+          "Utilities unchecked",
+          list.filter((i) => !i.utilitiesConfirmed && i.status !== "backfilled").length,
+          list.filter((i) => !i.utilitiesConfirmed && i.status !== "backfilled").length ? "warn" : "good"
+        ),
+      ];
     case "asbestos":
       return [
         stat("Locations", n),

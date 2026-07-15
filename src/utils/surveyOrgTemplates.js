@@ -94,3 +94,25 @@ export function setSurveySimpleMode(enabled) {
   const settings = loadOrgSettingsRaw();
   saveOrgSettingsRaw({ ...settings, surveySimpleMode: enabled !== false });
 }
+
+const SURVEY_SIMPLE_PREF_KEY = "mysafeops_survey_simple_pref";
+
+/** Session override for Simple / Full editor (falls back to org default). */
+export function getSurveySimpleModePref() {
+  try {
+    const raw = sessionStorage.getItem(SURVEY_SIMPLE_PREF_KEY);
+    if (raw === "0") return false;
+    if (raw === "1") return true;
+  } catch {
+    /* ignore */
+  }
+  return isSurveySimpleMode(loadOrgSettingsRaw());
+}
+
+export function setSurveySimpleModePref(enabled) {
+  try {
+    sessionStorage.setItem(SURVEY_SIMPLE_PREF_KEY, enabled ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}

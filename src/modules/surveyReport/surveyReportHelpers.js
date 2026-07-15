@@ -20,6 +20,7 @@ import { getQaChecklistItemsForSurveyType, getQaChecklistProgress, SURVEY_PUBLIC
 import { mergeSpecialistTables } from "./surveySpecialistFindings";
 import { safeImageSrc } from "../../utils/htmlEscape.js";
 import { safeHttpUrl } from "../../utils/safeUrl.js";
+import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 
 const labelOf = (options, key) => options.find((o) => o.key === key)?.label || key;
 
@@ -234,10 +235,7 @@ export function surveyTypeChipTone(surveyType) {
 
 /** Small static map thumbnail for editor hero (OpenStreetMap.de). */
 export function surveyStaticMapThumbUrl(lat, lng) {
-  const la = Number(lat);
-  const lo = Number(lng);
-  if (!Number.isFinite(la) || !Number.isFinite(lo)) return "";
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${la},${lo}&zoom=14&size=96x96&markers=${la},${lo},red-pushpin`;
+  return buildStaticMapUrl(lat, lng, { width: 96, height: 96, zoom: 14, label: "Site" });
 }
 
 /** Completeness score 0–100 and list of missing items for quality nudges. */

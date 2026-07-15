@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { formatRouteDuration } from "../utils/hospitalRoute";
 import { captureElementPngBlob, downloadPngBlob } from "../utils/captureElementPng";
+import { safeHttpUrl } from "../utils/safeUrl";
+import { safeImageSrc } from "../utils/htmlEscape.js";
 
 /**
  * Smart emergency intel — nearest A&E route, screenshot preview, collapsible panel.
@@ -27,10 +29,11 @@ export default function ProjectDrawingEmergencyIntel({
     hospitalIntel?.hospital?.distance_km != null
       ? `${Number(hospitalIntel.hospital.distance_km).toFixed(1)} km`
       : "";
-
   const savedScreenshot = String(project?.hospitalRouteScreenshotUrl || "").trim();
   const savedDirections = String(project?.hospitalDirectionsUrl || "").trim();
   const savedSummary = String(project?.nearestHospital || "").trim();
+  const directionsHref = safeHttpUrl(savedDirections);
+  const screenshotHref = safeImageSrc(savedScreenshot) || safeHttpUrl(savedScreenshot);
 
   const statusTone = useMemo(() => {
     if (hospitalBusy) return "loading";
@@ -97,21 +100,21 @@ export default function ProjectDrawingEmergencyIntel({
               </label>
             </div>
 
-            {(savedDirections || savedScreenshot) ? (
+            {(directionsHref || screenshotHref) ? (
               <div className="pde-emergency-intel__saved">
-                {savedDirections ? (
+                {directionsHref ? (
                   <div className="pde-emergency-intel__link-row">
-                    <a href={savedDirections} target="_blank" rel="noreferrer" className="pde-emergency-intel__link">
+                    <a href={directionsHref} target="_blank" rel="noopener noreferrer" className="pde-emergency-intel__link">
                       Open directions in Google Maps
                     </a>
-                    <button type="button" className="pde-emergency-intel__link-btn" onClick={() => copyText(savedDirections, "directions link")}>
+                    <button type="button" className="pde-emergency-intel__link-btn" onClick={() => copyText(directionsHref, "directions link")}>
                       Copy link
                     </button>
                   </div>
                 ) : null}
-                {savedScreenshot ? (
+                {screenshotHref ? (
                   <div className="pde-emergency-intel__link-row">
-                    <a href={savedScreenshot} target="_blank" rel="noreferrer" className="pde-emergency-intel__link">
+                    <a href={screenshotHref} target="_blank" rel="noopener noreferrer" className="pde-emergency-intel__link">
                       Open saved screenshot
                     </a>
                   </div>
@@ -123,9 +126,9 @@ export default function ProjectDrawingEmergencyIntel({
             ) : null}
           </div>
 
-          {savedScreenshot ? (
-            <a href={savedScreenshot} target="_blank" rel="noreferrer" className="pde-emergency-intel__preview" aria-label="Open route screenshot">
-              <img src={savedScreenshot} alt="Saved hospital route map" loading="lazy" />
+          {screenshotHref ? (
+            <a href={screenshotHref} target="_blank" rel="noopener noreferrer" className="pde-emergency-intel__preview" aria-label="Open route screenshot">
+              <img src={screenshotHref} alt="Saved hospital route map" loading="lazy" />
               <span className="pde-emergency-intel__preview-label">Saved attachment</span>
             </a>
           ) : (

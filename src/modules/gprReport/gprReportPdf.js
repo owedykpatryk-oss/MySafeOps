@@ -4,6 +4,7 @@
 import { jsPDF } from "jspdf";
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
 import { sanitizePdfFileSegment } from "../../utils/pdfFileName";
+import { downloadBlob } from "../../utils/downloadBlob";
 import { buildGprReportHtml } from "./gprReportPrintHtml";
 import { sanitizePrintPreviewHtml } from "../../utils/htmlEscape.js";
 import { normalizeGprReport } from "./gprReportHelpers";
@@ -54,7 +55,7 @@ export async function downloadGprReportPdf(report, extras = {}, opts = {}) {
   const iframe = document.createElement("iframe");
   iframe.setAttribute("title", "GPR report PDF export");
   iframe.style.cssText =
-    "position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;visibility:hidden;";
+    "position:fixed;left:0;top:0;width:794px;height:1123px;border:0;opacity:0;pointer-events:none;z-index:-1;";
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -134,7 +135,13 @@ export async function downloadGprReportPdf(report, extras = {}, opts = {}) {
   }
 
   notify("save");
-  pdf.save(fileName);
+  try {
+    pdf.save(fileName);
+  } catch {
+    if (!downloadBlob(pdf.output("blob"), fileName)) {
+      throw new Error("Browser blocked the PDF download — allow downloads for this site and try again.");
+    }
+  }
   return { ok: true, fileName, pages: totalPages };
 }
 

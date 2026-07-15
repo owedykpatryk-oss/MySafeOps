@@ -23,6 +23,7 @@ import WorkplaceTodayCard from "./WorkplaceTodayCard";
 import ProjectHubCard from "./ProjectHubCard";
 import ProjectCommandCenter from "./ProjectCommandCenter";
 import { useOrgBranding } from "../hooks/useOrgBranding";
+import { safeImageSrc } from "../utils/htmlEscape.js";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { openWorkspaceSettings, openWorkspaceView, openWorkspaceMoreSection, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { getTrialExtensionCount } from "../utils/orgMembership";
@@ -1145,8 +1146,8 @@ export default function AnalyticsDashboard() {
           <div className="app-dashboard-hero-tools" aria-busy={pdfExporting !== null} aria-live="polite">
             <div className="app-dashboard-hero-org">
               <div className="app-dashboard-hero-org__logo">
-                {org.logo ? (
-                  <img src={org.logo} alt={`${orgName} logo`} />
+                {safeImageSrc(org.logo) ? (
+                  <img src={safeImageSrc(org.logo)} alt={`${orgName} logo`} />
                 ) : (
                   <span className="app-dashboard-hero-org__logo-fallback">LOGO</span>
                 )}

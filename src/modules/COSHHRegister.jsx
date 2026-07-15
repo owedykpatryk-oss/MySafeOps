@@ -6,6 +6,8 @@ import { safeHttpUrl } from "../utils/safeUrl";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
+import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -214,9 +216,10 @@ function SubstanceCard({ item, onEdit, onDelete }) {
               <div style={{ fontWeight:500, fontSize:14 }}>{item.name}</div>
               {item.manufacturer && <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>{item.manufacturer}{item.productCode?` · ${item.productCode}`:""}</div>}
             </div>
-            <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-              <button onClick={()=>onEdit(item)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Edit</button>
-              <button onClick={()=>onDelete(item.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
+            <div style={{ display:"flex", gap:6, flexShrink:0, flexWrap:"wrap" }}>
+              <RegisterFormPrintButton moduleId="coshh" record={item} />
+              <button type="button" onClick={()=>onEdit(item)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Edit</button>
+              <button type="button" onClick={()=>onDelete(item.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
             </div>
           </div>
 
@@ -341,11 +344,26 @@ export default function COSHHRegister() {
       <PageHero
         badgeText="COS"
         title="COSHH register"
-        lead="Control of Substances Hazardous to Health — COSHH Regs 2002. Data stays on this device."
+        lead="Control of Substances Hazardous to Health — COSHH Regs 2002. Print a branded A4 assessment per substance (Save as PDF)."
         exportModuleId="coshh"
         exportModuleLabel="COSHH register"
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {filtered.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const res = printRegisterFormPack("coshh", filtered);
+                  if (!res.ok && res.reason === "popup_blocked") {
+                    window.alert("Allow pop-ups to print the COSHH A4 pack (Print → Save as PDF).");
+                  }
+                }}
+                style={ss.btn}
+                title="Print branded A4 assessment sheets for visible substances"
+              >
+                Print forms pack
+              </button>
+            )}
             {items.length > 0 && (
               <button type="button" onClick={exportCSV} style={ss.btn}>
                 Export CSV

@@ -4,6 +4,7 @@ import {
   encryptBackupForCloud,
   hasCloudBackupDek,
   isEncryptedCloudPayload,
+  clearCloudBackupDek,
 } from "./backupCrypto.js";
 
 const sample = {
@@ -45,6 +46,14 @@ describe("backupCrypto", () => {
   it("fails decrypt without local DEK", async () => {
     const enc = await encryptBackupForCloud(sample);
     localStorage.removeItem("mysafeops_cloud_dek_v1");
+    await expect(decryptCloudBackupPayload(enc)).rejects.toThrow(/encrypted/i);
+  });
+
+  it("clearCloudBackupDek removes key so decrypt fails", async () => {
+    const enc = await encryptBackupForCloud(sample);
+    expect(hasCloudBackupDek()).toBe(true);
+    clearCloudBackupDek();
+    expect(hasCloudBackupDek()).toBe(false);
     await expect(decryptCloudBackupPayload(enc)).rejects.toThrow(/encrypted/i);
   });
 });

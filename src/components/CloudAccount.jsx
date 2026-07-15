@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
+import { clearCloudBackupDek } from "../lib/backupCrypto";
 import { signInWithGoogleOAuth } from "../lib/authRedirect";
 import { isR2StorageConfigured } from "../lib/r2Storage";
 import { ms } from "../utils/moduleStyles";
@@ -537,6 +538,7 @@ export default function CloudAccount() {
     setBusy(true);
     try {
       await client.auth.signOut();
+      clearCloudBackupDek();
       pushAudit({ action: "supabase_sign_out", entity: "auth", detail: "" });
       navigate("/login", { replace: true });
     } finally {

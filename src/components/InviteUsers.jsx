@@ -8,6 +8,7 @@ import { getSupportEmail } from "../config/supportContact";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
+import { genOpaqueToken } from "../utils/opaqueToken";
 const ss = ms;
 const NO_MEMBERSHIP_MSG = "No organisation membership";
 
@@ -26,10 +27,7 @@ function getEmailDeliveryInfo(row) {
 }
 
 function makeToken() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID().replace(/-/g, "");
-  }
-  return `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+  return genOpaqueToken("inv").replace(/^inv_/, "");
 }
 
 export default function InviteUsers() {

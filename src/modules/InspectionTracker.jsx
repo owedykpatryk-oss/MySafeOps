@@ -6,6 +6,8 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
+import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `insp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -232,13 +234,30 @@ export default function InspectionTracker() {
       <PageHero
         badgeText="IN"
         title="Inspection register"
-        lead="LOLER, PAT, PUWER, PSSR, EICR, scaffold, ladder, harness and more — due dates and outcomes in one place."
+        lead="LOLER, PAT, PUWER, PSSR, EICR, scaffold, ladder, harness and more — print a branded A4 inspection form per record."
         exportModuleId="inspections"
         exportModuleLabel="Inspection register"
         right={
-          <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>
-            + Add inspection record
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {filtered.length > 0 ? (
+              <button
+                type="button"
+                style={ss.btn}
+                onClick={() => {
+                  const res = printRegisterFormPack("inspections", filtered);
+                  if (!res.ok && res.reason === "popup_blocked") {
+                    window.alert("Allow pop-ups to print the inspection A4 pack (Print → Save as PDF).");
+                  }
+                }}
+                title="Print branded A4 forms for visible inspection records"
+              >
+                Print forms pack
+              </button>
+            ) : null}
+            <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>
+              + Add inspection record
+            </button>
+          </div>
         }
       />
 
@@ -313,6 +332,7 @@ export default function InspectionTracker() {
                     </div>
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flexShrink: 0 }}>
+                    <RegisterFormPrintButton moduleId="inspections" record={item} />
                     <button type="button" onClick={() => setModal({ type: "form", data: item })} style={{ ...ss.btn, fontSize: 12, padding: "4px 10px" }}>Edit</button>
                     <button type="button" onClick={() => {
                       if (softDeleteToRecycleBin({

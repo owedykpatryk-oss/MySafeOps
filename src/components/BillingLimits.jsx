@@ -42,6 +42,8 @@ import PageHero from "./PageHero";
 const ss = ms;
 const SUPPORT_EMAIL = getSupportEmail();
 const NO_MEMBERSHIP_MSG = "No organisation membership";
+/** Browser health probe — never hit stripe-webhook from the app (Stripe servers POST that). */
+const STRIPE_PROBE_KEYS = ["stripe-checkout", "stripe-portal"];
 const STRIPE_FN_KEYS = ["stripe-checkout", "stripe-portal", "stripe-webhook"];
 const EDGE_FN_TIMEOUT_MS = 10000;
 
@@ -161,7 +163,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
     let cancelled = false;
     const run = async () => {
       setStripeFnStatus("checking");
-      setStripeFnHealth(Object.fromEntries(STRIPE_FN_KEYS.map((k) => [k, "checking"])));
+      setStripeFnHealth(
+        Object.fromEntries(STRIPE_FN_KEYS.map((k) => [k, k === "stripe-webhook" ? "server" : "checking"]))
+      );
       try {
         const base = String(getSupabaseUrl() || "").replace(/\/$/, "");
         if (!base) throw new Error("Missing Supabase URL");
@@ -171,7 +175,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
           probeHeaders.Authorization = `Bearer ${session.access_token}`;
         }
         const results = await Promise.all(
-          STRIPE_FN_KEYS.map(async (fn) => {
+          STRIPE_PROBE_KEYS.map(async (fn) => {
             try {
               // Use a simple GET existence check to avoid browser/CORS false negatives from custom-header OPTIONS probes.
               const controller = new AbortController();
@@ -216,7 +220,10 @@ export default function BillingLimits({ checkoutReturn = null }) {
           })
         );
         if (cancelled) return;
-        const health = Object.fromEntries(results.map(([fn, status]) => [fn, status]));
+        const health = {
+          ...Object.fromEntries(results.map(([fn, status]) => [fn, status])),
+          "stripe-webhook": "server",
+        };
         const diagnostics = Object.fromEntries(results.map(([fn, _status, diag]) => [fn, diag || null]));
         setStripeFnHealth(health);
         setStripeFnDiagnostics(diagnostics);
@@ -439,6 +446,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
     if (status === "missing") return { label: "missing", color: "#991b1b", bg: "#fee2e2", border: "#fecaca" };
     if (status === "misconfigured") return { label: "not configured", color: "#9a3412", bg: "#ffedd5", border: "#fed7aa" };
     if (status === "checking") return { label: "checking", color: "#334155", bg: "#e2e8f0", border: "#cbd5e1" };
+    if (status === "server") return { label: "Stripe → server only", color: "#334155", bg: "#f1f5f9", border: "#cbd5e1" };
     return { label: "unknown", color: "#92400e", bg: "#fef3c7", border: "#fde68a" };
   };
 
@@ -516,19 +524,6 @@ export default function BillingLimits({ checkoutReturn = null }) {
       )}
       {cloudOk &&
         isAdmin &&
-        Number(stripeFnDiagnostics["stripe-webhook"]?.pendingFailures || 0) > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <InlineAlert
-              type="warn"
-              text={
-                isPlatformOwner
-                  ? `Stripe webhook has ${stripeFnDiagnostics["stripe-webhook"]?.pendingFailures} pending failure(s). Run npm run stripe:retry-webhooks and review function logs.`
-                  : `Stripe webhook has ${stripeFnDiagnostics["stripe-webhook"]?.pendingFailures} pending failure(s). Contact platform support if billing updates look wrong.`
-              }
-            />
-          </div>
-        )}
-
       {cloudOk && isAdmin && showDevHints && (
         <div style={{ ...ss.card, marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Billing health</div>
@@ -553,12 +548,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
           <div style={{ marginTop: 8, fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
             <div>Last health check: {formatDateTime(lastHealthCheckAt)}</div>
             <div>Last billing request id: {lastActionRequestId || "n/a"}</div>
-            <div>
-              Webhook last processed: {formatDateTime(stripeFnDiagnostics["stripe-webhook"]?.lastProcessedAt)}
-            </div>
-            <div>
-              Webhook pending failures: {stripeFnDiagnostics["stripe-webhook"]?.pendingFailures ?? "n/a"}
-            </div>
+            <div>Webhook: received by Stripe → Supabase (not probed from this browser).</div>
           </div>
         </div>
       )}

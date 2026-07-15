@@ -11,6 +11,7 @@ import {
   interpretGeologyForGpr,
 } from "../../utils/gprGroundConditions";
 import { gprEvidenceStats } from "./gprReportPulse";
+import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 
 export function normalizeGprReport(raw) {
   const base = blankGprReport();
@@ -79,10 +80,7 @@ export function buildQaNarrative(qa = {}) {
 }
 
 export function gprStaticMapUrl(lat, lng) {
-  const la = Number(lat);
-  const lo = Number(lng);
-  if (!Number.isFinite(la) || !Number.isFinite(lo)) return "";
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${la},${lo}&zoom=15&size=120x80&markers=${la},${lo},red-pushpin`;
+  return buildStaticMapUrl(lat, lng, { width: 120, height: 80, zoom: 15, label: "Site" });
 }
 
 const QUALITY_LABELS = [

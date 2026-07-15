@@ -49,12 +49,15 @@ async function authHeaders(supabase) {
 export async function d1GetKv(supabase, orgSlug, namespace, key) {
   const base = baseUrl();
   if (!base) return { ok: false, error: "d1_not_configured" };
+  const ns = NS(namespace);
+  const dataKey = NS(key);
+  if (!ns || !dataKey) return { ok: false, error: "missing_namespace" };
   const h = await authHeaders(supabase);
   if (h.error) return { ok: false, error: h.error };
   const org = NS(orgSlug);
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
-  const q = new URLSearchParams({ namespace: NS(namespace), key: NS(key) });
+  const q = new URLSearchParams({ namespace: ns, key: dataKey });
   let res;
   try {
     res = await fetch(`${base}/v1/kv?${q}`, {
@@ -88,12 +91,15 @@ export async function d1GetKv(supabase, orgSlug, namespace, key) {
 export async function d1PutKv(supabase, orgSlug, namespace, key, value, ifVersion) {
   const base = baseUrl();
   if (!base) return { ok: false, error: "d1_not_configured" };
+  const ns = NS(namespace);
+  const dataKey = NS(key);
+  if (!ns || !dataKey) return { ok: false, error: "missing_namespace" };
   const h = await authHeaders(supabase);
   if (h.error) return { ok: false, error: h.error };
   const org = NS(orgSlug);
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
-  const payload = { namespace: NS(namespace), key: NS(key), value };
+  const payload = { namespace: ns, key: dataKey, value };
   if (ifVersion != null && Number.isFinite(ifVersion)) {
     payload.ifVersion = ifVersion;
   }
@@ -129,12 +135,14 @@ export async function d1PutKv(supabase, orgSlug, namespace, key, value, ifVersio
 export async function d1ListKvKeys(supabase, orgSlug, namespace) {
   const base = baseUrl();
   if (!base) return { ok: false, error: "d1_not_configured" };
+  const ns = NS(namespace);
+  if (!ns) return { ok: false, error: "missing_namespace" };
   const h = await authHeaders(supabase);
   if (h.error) return { ok: false, error: h.error };
   const org = NS(orgSlug);
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
-  const q = new URLSearchParams({ namespace: NS(namespace), list: "1" });
+  const q = new URLSearchParams({ namespace: ns, list: "1" });
   const res = await fetch(`${base}/v1/kv?${q}`, {
     method: "GET",
     headers: {
@@ -158,12 +166,15 @@ export function isD1Configured() {
 export async function d1DeleteKv(supabase, orgSlug, namespace, key) {
   const base = baseUrl();
   if (!base) return { ok: false, error: "d1_not_configured" };
+  const ns = NS(namespace);
+  const dataKey = NS(key);
+  if (!ns || !dataKey) return { ok: false, error: "missing_namespace" };
   const h = await authHeaders(supabase);
   if (h.error) return { ok: false, error: h.error };
   const org = NS(orgSlug);
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
-  const q = new URLSearchParams({ namespace: NS(namespace), key: NS(key) });
+  const q = new URLSearchParams({ namespace: ns, key: dataKey });
   const res = await fetch(`${base}/v1/kv?${q}`, {
     method: "DELETE",
     headers: {

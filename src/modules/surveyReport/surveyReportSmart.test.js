@@ -200,7 +200,7 @@ describe("surveyReportPrintHtml", () => {
     expect(html).toContain("Findings &amp; results");
     expect(html).toContain("HV cable");
     expect(html).toContain("Sign-off");
-    expect(html).toContain("staticmap.openstreetmap.de");
+    expect(html).toMatch(/data:image\/svg\+xml|Site location/);
     expect(html).toContain('class="sr-watermark"');
     expect(html).toContain("DRAFT");
   });

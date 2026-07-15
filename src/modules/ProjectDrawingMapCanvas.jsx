@@ -24,6 +24,17 @@ function clampLng(n) {
   return Math.max(-180, Math.min(180, n));
 }
 
+/** Avoid Leaflet `_leaflet_pos` crashes after unmount / mid navigation. */
+function safeInvalidate(map) {
+  try {
+    if (!map || !map._loaded || !map.getContainer?.()?.parentNode) return false;
+    map.invalidateSize({ animate: false });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Squared distance from lat/lng point to line segment (flat approx, fine for site scale). */
 function pointToSegmentDist2(p, a, b) {
   const px = p.lat;
@@ -200,7 +211,7 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
       const m = mapRef.current;
       if (!m || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
       try {
-        m.invalidateSize({ animate: false });
+        safeInvalidate(m);
         const size = m.getSize?.();
         if (!size || size.x <= 0 || size.y <= 0) {
           m.setView([lat, lng], zoom, { animate: false });
@@ -208,7 +219,11 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
         }
         m.flyTo([lat, lng], zoom, { duration: 0.55 });
       } catch {
-        m.setView([lat, lng], zoom, { animate: false });
+        try {
+          m.setView([lat, lng], zoom, { animate: false });
+        } catch {
+          /* map torn down */
+        }
       }
     },
     fitObjects() {
@@ -216,7 +231,7 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
       const group = layerRef.current;
       if (!m || !group) return;
       try {
-        m.invalidateSize({ animate: false });
+        if (!safeInvalidate(m)) return;
         const bounds = [];
         group.eachLayer((ly) => {
           const ll = ly.getLatLng?.();
@@ -234,12 +249,36 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
         /* map not ready */
       }
     },
-    fitHospitalRoute(ring) {
+    getView() {
+      const m = mapRef.current;
+      if (!m) return null;
+      try {
+        const c = m.getCenter();
+        return { lat: c.lat, lng: c.lng, zoom: m.getZoom() };
+      } catch {
+        return null;
+      }
+    },
+    setView(lat, lng, zoom) {
+      const m = mapRef.current;
+      if (!m || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      try {
+        if (!safeInvalidate(m)) return;
+        m.setView([lat, lng], Number.isFinite(zoom) ? zoom : m.getZoom(), { animate: false });
+      } catch {
+        /* map not ready */
+      }
+    },
+    fitHospitalRoute(ring, opts = {}) {
       const m = mapRef.current;
       if (!m || !Array.isArray(ring) || ring.length < 2) return;
       try {
-        m.invalidateSize({ animate: false });
-        m.fitBounds(ring, { padding: [48, 48], maxZoom: 15 });
+        if (!safeInvalidate(m)) return;
+        m.fitBounds(ring, {
+          padding: opts.padding || [48, 48],
+          maxZoom: opts.maxZoom ?? 15,
+          animate: false,
+        });
       } catch {
         /* map not ready */
       }
@@ -256,7 +295,7 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
         .filter(Boolean);
       if (ring.length < 2) return;
       try {
-        m.invalidateSize({ animate: false });
+        if (!safeInvalidate(m)) return;
         m.fitBounds(ring, { padding: [48, 48], maxZoom: 17 });
       } catch {
         /* map not ready */
@@ -305,11 +344,15 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
     prevCenterRef.current = key;
     const hasObjects = prevObjectCountRef.current > 0;
     try {
-      map.invalidateSize({ animate: false });
+      if (!safeInvalidate(map)) return;
       if (hasObjects) map.setView([lat, lng], defaultZoom, { animate: false });
       else map.flyTo([lat, lng], defaultZoom, { duration: 0.55 });
     } catch {
-      map.setView([lat, lng], defaultZoom, { animate: false });
+      try {
+        map.setView([lat, lng], defaultZoom, { animate: false });
+      } catch {
+        /* map torn down */
+      }
     }
   }, [defaultCenter.lat, defaultCenter.lng, defaultZoom]);
 
@@ -558,12 +601,16 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
 
   useEffect(() => {
     const m = mapRef.current;
-    if (!m) return;
+    if (!m) return undefined;
+    let t2 = null;
     const t = window.setTimeout(() => {
-      m.invalidateSize();
-      window.setTimeout(() => m.invalidateSize(), 280);
+      safeInvalidate(m);
+      t2 = window.setTimeout(() => safeInvalidate(m), 280);
     }, 80);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+      if (t2 != null) window.clearTimeout(t2);
+    };
   }, []);
 
   useEffect(() => {
@@ -673,7 +720,7 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
       prevObjectCountRef.current = n;
       if (bounds.length > 0 && wasEmpty) {
         try {
-          map.invalidateSize({ animate: false });
+          if (!safeInvalidate(map)) return;
           map.fitBounds(bounds, { padding: [36, 36], maxZoom: 19 });
         } catch {
           /* map not ready */

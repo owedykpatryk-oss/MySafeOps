@@ -42,6 +42,7 @@ function SurveyEditorHero({
     <header
       className={`app-survey-editor-hero${readyToFinal ? " app-survey-editor-hero--ready" : ""}${qaProgress.complete ? " app-survey-editor-hero--qa-done" : ""}${isFinal ? " app-survey-editor-hero--final" : ""}`}
     >
+      <span className="app-survey-editor-hero__topbar" aria-hidden />
       <div className="app-survey-editor-hero__main">
         {mapUrl ? (
           <div className="app-survey-editor-hero__map app-survey-editor-hero__map--live">

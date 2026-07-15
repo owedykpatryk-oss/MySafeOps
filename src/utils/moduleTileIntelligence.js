@@ -28,7 +28,7 @@ export const MODULE_PREBUILDS = {
   timesheets: { shortLabel: "This week", label: "Pre-built weekly timesheet grid", action: "create" },
   "geo-photos": { shortLabel: "Site photo", label: "Pre-built geo-tagged site photo", action: "capture" },
   induction: { shortLabel: "QR site", label: "Pre-built QR induction site + register", action: "create" },
-  signatures: { shortLabel: "Sign-off", label: "Pre-built digital signature request", action: "create" },
+  signatures: { shortLabel: "Sign-off", label: "In-app digital signature pad", action: "create" },
   coshh: { shortLabel: "Add substance", label: "Pre-built COSHH row with SDS checklist", action: "create" },
   inspections: { shortLabel: "LOLER check", label: "Pre-built thorough examination record", action: "create" },
   incidents: { shortLabel: "Near miss", label: "Pre-built incident / near-miss form", action: "create" },

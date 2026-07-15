@@ -8,6 +8,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -180,6 +181,7 @@ export default function EnvironmentalLog() {
                   {!r.closedOut && <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>Open</div>}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <RegisterFormPrintButton moduleId="environmental" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                     Edit
                   </button>

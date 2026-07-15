@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
-const KML_ACCEPT = ".kml,.kmz,application/vnd.google-earth.kml+xml,text/xml";
+const KML_ACCEPT =
+  ".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/zip,text/xml";
 
 function isKmlFile(file) {
   if (!file) return false;

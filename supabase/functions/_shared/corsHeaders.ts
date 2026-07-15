@@ -8,11 +8,28 @@ function parseOrigin(url: string): string | null {
   }
 }
 
+/** Allow both apex and www for a configured site origin (browsers hit either). */
+function addOriginAndWwwTwin(allowed: Set<string>, origin: string) {
+  allowed.add(origin);
+  try {
+    const u = new URL(origin);
+    if (u.hostname.startsWith("www.")) {
+      u.hostname = u.hostname.slice(4);
+      allowed.add(u.origin);
+    } else if (u.hostname.includes(".")) {
+      u.hostname = `www.${u.hostname}`;
+      allowed.add(u.origin);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function buildAllowedOrigins(): Set<string> {
   const allowed = new Set<string>();
   for (const key of ["SITE_URL", "VITE_PUBLIC_SITE_URL"]) {
     const origin = parseOrigin(Deno.env.get(key)?.trim() ?? "");
-    if (origin) allowed.add(origin);
+    if (origin) addOriginAndWwwTwin(allowed, origin);
   }
   const supabaseOrigin = parseOrigin(Deno.env.get("SUPABASE_URL")?.trim() ?? "");
   if (supabaseOrigin) allowed.add(supabaseOrigin);
@@ -21,7 +38,7 @@ function buildAllowedOrigins(): Set<string> {
   extra.split(/[\s,]+/).forEach((raw) => {
     if (!raw) return;
     const origin = parseOrigin(raw);
-    if (origin) allowed.add(origin);
+    if (origin) addOriginAndWwwTwin(allowed, origin);
   });
 
   return allowed;

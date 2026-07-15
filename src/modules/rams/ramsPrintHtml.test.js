@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, expect, it, beforeEach } from "vitest";
-import { wrapRamsPrintDocument } from "./ramsPrintHtml.js";
+import { wrapRamsPrintDocument, generatePrintHTML } from "./ramsPrintHtml.js";
 import { saveOrgSettingsRaw } from "../../utils/orgSettingsStorage.js";
 
 describe("ramsPrintHtml", () => {
@@ -31,5 +31,28 @@ describe("ramsPrintHtml", () => {
     expect(html).toContain("Controlled copy");
     expect(html).toContain("Segoe UI");
     expect(html).toContain("page-footer");
+  });
+
+  it("embeds operative ink signatures in the sign-off table", () => {
+    const html = generatePrintHTML(
+      {
+        title: "RAMS ink",
+        location: "Yard",
+        operativeIds: ["w1"],
+        operativeSignatures: {
+          w1: { name: "Alex", imageDataUrl: "data:image/png;base64,aaa", signedAt: "2026-04-14T10:00:00.000Z" },
+        },
+        printSections: { signatures: true },
+      },
+      [],
+      ["Alex"],
+      {},
+      { signatures: true },
+      "fp",
+      [{ id: "w1", name: "Alex" }]
+    );
+    expect(html).toContain("Sign-off list");
+    expect(html).toContain("data:image/png;base64,aaa");
+    expect(html).toContain("Alex");
   });
 });

@@ -480,28 +480,86 @@ export default defineConfig(({ mode }) => {
               res.end(JSON.stringify({ error: "invalid_coordinates" }));
               return;
             }
-            const query = `
-[out:json][timeout:15];
-(
-  node(around:${radiusM},${lat},${lng})["amenity"="hospital"];
-  node(around:${radiusM},${lat},${lng})["healthcare"="hospital"];
-);
-out body;`.trim();
-            try {
-              const upstream = await fetch("https://overpass-api.de/api/interpreter", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/x-www-form-urlencoded",
-                  Accept: "application/json",
-                  "User-Agent": "MySafeOps/1.0 (dev nearest hospital; mysafeops.com)",
-                },
-                body: `data=${encodeURIComponent(query)}`,
-              });
-              const text = await upstream.text();
-              res.statusCode = upstream.status;
-              res.setHeader("Content-Type", "application/json");
-              res.end(text);
-            } catch {
+            const { buildHospitalQuery } = await import("./src/utils/hospitalOverpassQuery.js");
+            const query = buildHospitalQuery(lat, lng, radiusM);
+            const upstreams = [
+              "https://overpass-api.de/api/interpreter",
+              "https://lz4.overpass-api.de/api/interpreter",
+              "https://overpass.kumi.systems/api/interpreter",
+              "https://overpass.openstreetmap.ru/api/interpreter",
+            ];
+            let done = false;
+            for (const url of upstreams) {
+              try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 22_000);
+                const upstream = await fetch(url, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    Accept: "application/json",
+                    "User-Agent": "MySafeOps/1.0 (dev nearest hospital; mysafeops.com)",
+                  },
+                  body: `data=${encodeURIComponent(query)}`,
+                  signal: controller.signal,
+                }).finally(() => clearTimeout(timer));
+                if (!upstream.ok) continue;
+                const text = await upstream.text();
+                res.statusCode = 200;
+                res.setHeader("Content-Type", "application/json");
+                res.setHeader("X-Hospital-Source", "overpass");
+                res.end(text);
+                done = true;
+                break;
+              } catch {
+                /* try next mirror */
+              }
+            }
+            if (!done) {
+              try {
+                const delta = 0.35;
+                const u = new URL("https://nominatim.openstreetmap.org/search");
+                u.searchParams.set("amenity", "hospital");
+                u.searchParams.set("format", "jsonv2");
+                u.searchParams.set("limit", "12");
+                u.searchParams.set("viewbox", `${lng - delta},${lat + delta},${lng + delta},${lat - delta}`);
+                u.searchParams.set("bounded", "1");
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 12_000);
+                const fallback = await fetch(u.toString(), {
+                  headers: {
+                    Accept: "application/json",
+                    "User-Agent": "MySafeOps/1.0 (dev nearest hospital; mysafeops.com)",
+                  },
+                  signal: controller.signal,
+                }).finally(() => clearTimeout(timer));
+                if (fallback.ok) {
+                  const rows = await fallback.json();
+                  if (Array.isArray(rows) && rows.length) {
+                    const elements = rows
+                      .map((row) => {
+                        const la = Number(row.lat);
+                        const lo = Number(row.lon);
+                        if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
+                        const name =
+                          String(row.name || row.display_name || "Hospital").split(",")[0].trim() || "Hospital";
+                        return { type: "node", lat: la, lon: lo, tags: { amenity: "hospital", name } };
+                      })
+                      .filter(Boolean);
+                    if (elements.length) {
+                      res.statusCode = 200;
+                      res.setHeader("Content-Type", "application/json");
+                      res.setHeader("X-Hospital-Source", "nominatim");
+                      res.end(JSON.stringify({ elements }));
+                      done = true;
+                    }
+                  }
+                }
+              } catch {
+                /* fall through to 502 */
+              }
+            }
+            if (!done) {
               res.statusCode = 502;
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ error: "overpass_upstream_unreachable" }));
@@ -550,6 +608,12 @@ out body;`.trim();
                 return "rams-hazards";
               }
               if (norm.includes("/modules/rams/constructionQuickPacks")) return "rams-quick-packs";
+              if (norm.includes("/modules/rams/ramsPrintHtml") || norm.includes("/modules/rams/RAMSTemplateBuilder")) {
+                return norm.includes("ramsPrintHtml") || norm.includes("fessRamsPrintHtml") ? "rams-print" : "rams-builder";
+              }
+              if (norm.includes("/modules/surveyReport/")) return "survey-report";
+              if (norm.includes("/modules/gprReport/")) return "gpr-report";
+              if (norm.includes("/modules/ProjectDrawing")) return "project-drawing";
               if (norm.includes("/modules/permits/PermitSystem")) return "permits";
               if (
                 norm.includes("/modules/permits/components/PermitStudio") ||
@@ -558,7 +622,12 @@ out body;`.trim();
                 norm.includes("/modules/permits/components/PermitIntegrations") ||
                 norm.includes("/modules/permits/components/PermitAudit") ||
                 norm.includes("/modules/permits/components/PermitFormPreview") ||
-                norm.includes("/modules/permits/components/PermitConflict")
+                norm.includes("/modules/permits/components/PermitConflict") ||
+                norm.includes("/modules/permits/components/PermitBoard") ||
+                norm.includes("/modules/permits/components/PermitTimeline") ||
+                norm.includes("/modules/permits/components/PermitLiveWall") ||
+                norm.includes("/modules/permits/components/PermitSafetyMap") ||
+                norm.includes("/modules/permits/components/PermitDependency")
               ) {
                 return "permits-studio";
               }
@@ -571,8 +640,6 @@ out body;`.trim();
             if (id.includes("leaflet")) return "leaflet";
             if (id.includes("pdfjs-dist") || id.includes("pdf.worker")) return "pdfjs";
             if (id.includes("dompurify")) return "dompurify";
-            if (norm.includes("/modules/surveyReport/")) return "survey-report";
-            if (norm.includes("/modules/gprReport/")) return "gpr-report";
             if (id.includes("html2canvas") || id.includes("jspdf")) return "print-export";
             if (
               id.includes("/react/") ||
@@ -583,7 +650,6 @@ out body;`.trim();
               return "react-core";
             }
             // Let Rollup split the remaining deps by async boundaries.
-            // This keeps initial bundles leaner for landing-first visits.
             return undefined;
           },
         },

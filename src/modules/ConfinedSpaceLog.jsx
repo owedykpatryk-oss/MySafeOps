@@ -8,6 +8,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -151,7 +152,7 @@ export default function ConfinedSpaceLog() {
             <PageHero exportModuleId="confined-space"
         badgeText="CS"
         title="Confined space log"
-        lead="Entries, gas checks, and standby (local only)."
+        lead="Entries, gas checks, and standby — export the register to PDF from the header."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {items.length > 0 && (
             <button type="button" style={ss.btn} onClick={exportCsv}>
@@ -188,6 +189,7 @@ export default function ConfinedSpaceLog() {
                   {!r.gasTestOk && <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>Gas test not ticked OK</div>}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <RegisterFormPrintButton moduleId="confined-space" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                     Edit
                   </button>

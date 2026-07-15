@@ -5,6 +5,7 @@ import "../styles/login.css";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { pushAudit } from "../utils/auditLog";
+import { clearCloudBackupDek } from "../lib/backupCrypto";
 import { signInWithGoogleOAuth } from "../lib/authRedirect";
 import {
   clearAuthFailures,
@@ -566,6 +567,7 @@ export default function LoginPage() {
                   mfaGateActiveRef.current = false;
                   setAalState("idle");
                   await client.auth.signOut();
+                  clearCloudBackupDek();
                 }}
               >
                 Start over

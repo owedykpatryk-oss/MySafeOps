@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   escapeHtml,
   safeCssColor,
@@ -7,6 +7,7 @@ import {
   sanitizePrintPreviewHtml,
   buildPrintPreviewSrcDoc,
   writePrintWindowDocument,
+  openPrintWindowOrWarn,
 } from "./htmlEscape.js";
 
 describe("escapeHtml", () => {
@@ -71,6 +72,15 @@ describe("sanitizePrintPreviewHtml", () => {
     expect(clean).toContain("Ok");
   });
 
+  it("keeps document style blocks for print/PDF layout", () => {
+    const dirty = `<!DOCTYPE html><html><head><style>.sr-body{color:teal}</style></head><body><div class="sr-body">Survey</div></body></html>`;
+    const clean = sanitizePrintPreviewHtml(dirty);
+    expect(clean).toMatch(/<style[\s>]/i);
+    expect(clean).toContain(".sr-body");
+    expect(clean).toContain("Survey");
+    expect(clean).not.toMatch(/<script/i);
+  });
+
   it("writePrintWindowDocument strips scripts before write", async () => {
     const writes = [];
     const win = {
@@ -92,5 +102,18 @@ describe("sanitizePrintPreviewHtml", () => {
     expect(doc).toMatch(/script-src 'none'/i);
     expect(doc).not.toMatch(/<script/i);
     expect(doc).toContain("RAMS");
+  });
+});
+
+describe("openPrintWindowOrWarn", () => {
+  it("alerts when the print window cannot open", () => {
+    const alert = vi.fn();
+    const open = vi.fn(() => null);
+    vi.stubGlobal("alert", alert);
+    vi.stubGlobal("open", open);
+    const win = openPrintWindowOrWarn();
+    expect(win).toBeNull();
+    expect(alert).toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

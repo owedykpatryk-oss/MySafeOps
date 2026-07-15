@@ -28,6 +28,22 @@ function permitLabel(permit: Record<string, unknown>) {
   return String(permit?.type || "permit").replace(/_/g, " ");
 }
 
+/** Only same-app relative paths — blocks open redirects in push payload. */
+function safePushUrl(raw: unknown, fallback: string): string {
+  const s = String(raw ?? "").trim();
+  if (!s.startsWith("/") || s.startsWith("//") || s.includes("\\") || s.includes("\0")) {
+    return fallback;
+  }
+  try {
+    const u = new URL(s, "https://static-base.invalid");
+    if (u.origin !== "https://static-base.invalid") return fallback;
+    if (!u.pathname.startsWith("/app")) return fallback;
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
 Deno.serve(async (req) => {
   // Respond without loading web-push so OPTIONS / health never fail on npm import issues.
   if (req.method === "OPTIONS") {
@@ -79,7 +95,7 @@ Deno.serve(async (req) => {
       if (id) return `/app?view=permits&permitId=${encodeURIComponent(String(id))}`;
       return "/app?view=permits";
     };
-    const url = String(body?.url || defaultPermitUrl());
+    const url = safePushUrl(body?.url, defaultPermitUrl());
     const tag = String(body?.tag || `permit-${String(permit?.id || "notice")}`);
     const dryRun = Boolean(body?.dryRun);
 

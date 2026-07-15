@@ -1,5 +1,7 @@
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
 import { openPrintWindow, safeImageSrc, escapeAttr, sanitizePrintPreviewHtml, writePrintWindowDocument } from "../../utils/htmlEscape.js";
+import { downloadBlob } from "../../utils/downloadBlob.js";
+import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import {
   buildAccessLimitationsText,
   buildControlAccuracyNarrative,
@@ -130,10 +132,7 @@ function metaGrid(pairs) {
 }
 
 function staticSiteMapUrl(lat, lng) {
-  const la = Number(lat);
-  const lo = Number(lng);
-  if (!Number.isFinite(la) || !Number.isFinite(lo)) return "";
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${la},${lo}&zoom=15&size=520x220&markers=${la},${lo},red-pushpin`;
+  return buildStaticMapUrl(lat, lng, { width: 520, height: 220, zoom: 15, label: "Site location" });
 }
 
 function pas128SummaryBlock(report, primary = "#0d9488") {
@@ -1168,9 +1167,9 @@ export function buildSurveyReportHtml(report, extras = {}) {
     margin-right: 6px;
   }
   .sr-ql-badge--method {
-    background: #eff6ff;
-    color: #1d4ed8;
-    border-color: #93c5fd;
+    background: #f0fdfa;
+    color: #0f766e;
+    border-color: #99f6e4;
   }
   .sr-limit-list {
     margin: 0 0 8px;
@@ -1293,8 +1292,8 @@ export function buildSurveyReportHtml(report, extras = {}) {
   }
   .sr-callout-title { font-weight: 700; font-size: 9.5pt; color: #92400e; margin-bottom: 4px; }
   .sr-callout p { margin: 0; font-size: 10pt; }
-  .sr-callout--records { background: #eff6ff; border-color: #93c5fd; border-left-color: #3b82f6; }
-  .sr-callout--records .sr-callout-title { color: #1e40af; }
+  .sr-callout--records { background: #f0fdfa; border-color: #99f6e4; border-left-color: #0d9488; }
+  .sr-callout--records .sr-callout-title { color: #0f766e; }
   .sr-cad-total { font-size: 10pt; margin: 8px 0 0; }
   .sr-cad-note { font-size: 9pt; color: #6b7280; margin: 0 0 10px; }
   .sr-cad-stats {
@@ -1309,7 +1308,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     padding: 10px 12px;
     background: #fafafa;
   }
-  .sr-cad-stat--accent { background: #eff6ff; border-color: #93c5fd; }
+  .sr-cad-stat--accent { background: #f0fdfa; border-color: #99f6e4; }
   .sr-cad-stat-label {
     font-size: 7.5pt;
     font-weight: 600;
@@ -1517,12 +1516,21 @@ export function buildSurveyReportHtml(report, extras = {}) {
 
 export function openSurveyReportPrint(report, extras) {
   void (async () => {
-  const html = buildSurveyReportHtml(report, extras);
-  const win = openPrintWindow();
-  if (!win) return;
-  await writePrintWindowDocument(win, html);
-  win.focus();
-  setTimeout(() => win.print(), 400);
+    const html = buildSurveyReportHtml(report, extras);
+    const win = openPrintWindow();
+    if (!win) {
+      window.alert("Pop-up blocked — allow pop-ups for MySafeOps to print / save PDF.");
+      return;
+    }
+    await writePrintWindowDocument(win, html);
+    win.focus();
+    setTimeout(() => {
+      try {
+        win.print();
+      } catch {
+        window.alert("Could not open the print dialog. Try Download PDF instead.");
+      }
+    }, 400);
   })();
   return true;
 }
@@ -1530,9 +1538,8 @@ export function openSurveyReportPrint(report, extras) {
 export function downloadSurveyReportHtml(report, extras) {
   const html = sanitizePrintPreviewHtml(buildSurveyReportHtml(report, extras));
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${(report.ref || report.id || "survey_report").replace(/\s+/g, "_")}.html`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const name = `${(report.ref || report.id || "survey_report").replace(/\s+/g, "_")}.html`;
+  if (!downloadBlob(blob, name)) {
+    window.alert("Download blocked — allow downloads for this site and try again.");
+  }
 }

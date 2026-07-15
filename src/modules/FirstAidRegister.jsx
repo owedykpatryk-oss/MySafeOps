@@ -8,6 +8,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -146,6 +147,7 @@ export default function FirstAidRegister() {
                   {r.kitLocation && <div style={{ fontSize: 12, marginTop: 4 }}>Kit: {r.kitLocation}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <RegisterFormPrintButton moduleId="first-aid" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                     Edit
                   </button>

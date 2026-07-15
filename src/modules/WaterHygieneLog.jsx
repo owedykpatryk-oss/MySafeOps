@@ -8,6 +8,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -183,6 +184,7 @@ export default function WaterHygieneLog() {
                   <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.outletType} · {r.temperatureC ? `${r.temperatureC}°C` : "—"}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <RegisterFormPrintButton moduleId="water-hygiene" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                     Edit
                   </button>

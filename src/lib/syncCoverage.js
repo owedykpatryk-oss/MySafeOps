@@ -48,6 +48,7 @@ export const D1_LIVE_SYNC_NAMESPACES = [
   "ppe_register",
   "loto_register",
   "survey_reports",
+  "gpr_reports",
   "geo_photos",
   "fire_safety_log",
   "first_aid_register",

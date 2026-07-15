@@ -29,15 +29,22 @@ async function buildUploadHeaders() {
       const jwt = data?.session?.access_token;
       if (jwt) {
         headers.Authorization = `Bearer ${jwt}`;
-        return headers;
+        return { headers, ok: true };
       }
     } catch {
       /* session optional */
     }
   }
+  // Production builds must use JWT — the Vite upload token ships in the bundle.
+  if (import.meta.env.PROD) {
+    return { headers: {}, ok: false, error: "no_upload_auth" };
+  }
   const token = getStorageUploadToken();
-  if (token) headers["X-Upload-Token"] = token;
-  return headers;
+  if (token) {
+    headers["X-Upload-Token"] = token;
+    return { headers, ok: true };
+  }
+  return { headers: {}, ok: false, error: "no_upload_auth" };
 }
 
 /**
@@ -61,16 +68,22 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   fd.append("file", file);
   fd.append("key", key);
 
-  const headers = await buildUploadHeaders();
+  const auth = await buildUploadHeaders();
+  if (!auth.ok) {
+    throw new Error("Sign in to upload to cloud storage.");
+  }
 
   const res = await fetch(`${base}/upload`, {
     method: "POST",
-    headers,
+    headers: auth.headers,
     body: fd,
   });
 
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("Cloud upload not authorised — sign in again, then retry.");
+    }
     const msg = json?.error || json?.message || res.statusText || "Upload failed";
     throw new Error(msg);
   }

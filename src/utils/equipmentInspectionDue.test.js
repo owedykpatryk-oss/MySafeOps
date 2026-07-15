@@ -29,4 +29,21 @@ describe("equipmentInspectionDue", () => {
     saveOrgScoped("plant_register", [{ id: "p1", assetRef: "EXC-1", nextDue: due.toISOString().slice(0, 10) }]);
     expect(getEquipmentDueAlerts(new Date())).toHaveLength(0);
   });
+
+  it("surfaces plant calibration due separately from inspection nextDue", () => {
+    const due = new Date();
+    due.setDate(due.getDate() + 5);
+    const later = new Date();
+    later.setDate(later.getDate() + 40);
+    saveOrgScoped("plant_register", [
+      {
+        id: "p2",
+        assetRef: "GPR-1",
+        nextDue: later.toISOString().slice(0, 10),
+        calibrationDue: due.toISOString().slice(0, 10),
+      },
+    ]);
+    const alerts = getEquipmentDueAlerts(new Date());
+    expect(alerts.some((a) => String(a.name).includes("calibration"))).toBe(true);
+  });
 });

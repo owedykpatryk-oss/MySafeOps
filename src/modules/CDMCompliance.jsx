@@ -8,7 +8,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
-import { escapeHtml, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { escapeHtml, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { assessComplianceNotification, getCompliancePackContent } from "../config/compliancePackContent";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { buildHealthSafetyFileInventory } from "../utils/hsFileAccumulator";
@@ -370,7 +370,7 @@ function printCDM(form, pack, marketId = getOrgMarketId()) {
   void (async () => {
   const CPP_SECTIONS = pack.planSections;
   const isUkCdm = pack.moduleId === "cdm";
-  const win = openPrintWindow();
+  const win = openPrintWindowOrWarn();
   if (!win) return;
   const he = escapeHtml;
   const nl2br = (s) => he(String(s || "")).replace(/\n/g, "<br/>");

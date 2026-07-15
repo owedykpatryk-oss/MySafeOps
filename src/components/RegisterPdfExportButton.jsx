@@ -24,9 +24,17 @@ export default function RegisterPdfExportButton({ moduleId, label, compact = fal
         rowsOverride: override?.rows,
         filterNote: override?.filterNote,
       });
-      if (!result.ok) window.alert("Could not export this register to PDF.");
+      if (!result?.ok) {
+        window.alert(
+          result?.error === "no_pdf_config"
+            ? "This module cannot export a register PDF."
+            : result?.error === "download_blocked"
+              ? "Browser blocked the PDF download — allow downloads for this site and try again."
+              : "Could not export this register to PDF."
+        );
+      }
     } catch (e) {
-      window.alert(e?.message || "PDF export failed.");
+      window.alert(e?.message || "PDF export failed. Check that downloads are allowed for this site.");
     } finally {
       setBusy(false);
     }

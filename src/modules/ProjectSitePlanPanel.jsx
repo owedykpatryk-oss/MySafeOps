@@ -9,7 +9,7 @@ import {
   saveProjectPlans,
   updateProjectPlan,
 } from "./permits/permitPlanOverlayRegistry";
-import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDrawingImport";
+import { boundaryFromKmlGeometry, describeKmlBoundaryMiss, parseKmlGeometry } from "./permits/projectDrawingImport";
 import { rasterizePdfDataUrl } from "../utils/planPdfRaster";
 import { parseProjectBoundaryRing, centroidFromBoundaryRing } from "../utils/projectBoundary";
 import ProjectKmlDropZone from "../components/ProjectKmlDropZone";
@@ -96,11 +96,12 @@ export default function ProjectSitePlanPanel({
     setBusy(true);
     setMsg("");
     try {
-      const text = await file.text();
+      const { readKmlTextFromFile } = await import("../utils/kmzExtract");
+      const text = await readKmlTextFromFile(file);
       const geom = parseKmlGeometry(text);
       const boundary = boundaryFromKmlGeometry(geom, { sourceName: file.name });
       if (!boundary) {
-        setMsg("No polygon boundary found in KML. Use a closed site boundary polygon.");
+        setMsg(describeKmlBoundaryMiss(geom));
         return;
       }
       const centroid = centroidFromBoundaryRing(boundary.boundaryPoints);

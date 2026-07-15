@@ -24,7 +24,7 @@ async function importDek(raw) {
 }
 
 /** @returns {Promise<CryptoKey>} */
-export async function getOrCreateCloudBackupDek() {
+async function getOrCreateCloudBackupDek() {
   const existing = localStorage.getItem(DEK_STORAGE_KEY);
   if (existing) {
     return importDek(b64ToBytes(existing));
@@ -40,6 +40,15 @@ export function isEncryptedCloudPayload(payload) {
 
 export function hasCloudBackupDek() {
   return Boolean(localStorage.getItem(DEK_STORAGE_KEY));
+}
+
+/** Wipe the local DEK (call on sign-out so XSS leftovers / shared devices cannot keep decrypting). */
+export function clearCloudBackupDek() {
+  try {
+    localStorage.removeItem(DEK_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 /**

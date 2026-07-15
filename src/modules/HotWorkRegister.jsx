@@ -8,6 +8,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { orgHasFoodIndustrialPack } from "../utils/industrialSectors";
 import { getAuthorisedLiveLotoList } from "./LOTORegister";
@@ -438,6 +439,7 @@ export default function HotWorkRegister() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <RegisterFormPrintButton moduleId="hot-work" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                     Edit
                   </button>

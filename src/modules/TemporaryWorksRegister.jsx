@@ -8,6 +8,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -163,7 +164,7 @@ export default function TemporaryWorksRegister() {
             <PageHero exportModuleId="temp-works"
         badgeText="TW"
         title="Temporary works"
-        lead="TW design checks and inspections (local only)."
+        lead="TW design checks and inspections — register exports to PDF from the header."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {items.length > 0 && (
             <button type="button" style={ss.btn} onClick={exportCsv}>
@@ -199,6 +200,7 @@ export default function TemporaryWorksRegister() {
                   <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.inspectionDate} · {r.status}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <RegisterFormPrintButton moduleId="temp-works" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                     Edit
                   </button>

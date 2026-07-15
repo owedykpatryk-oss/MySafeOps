@@ -9,6 +9,8 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
+import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const genId = () => `tt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -183,15 +185,30 @@ export default function ToolboxTalkRegister() {
       <PageHero
         badgeText="TT"
         title="Toolbox talks (register)"
-        lead="Manual log of toolbox talks delivered on site."
+        lead="Log toolbox talks on site — print a branded A4 talk sheet with attendance signature lines."
         exportModuleId="toolbox-reg"
         exportModuleLabel="Toolbox talk register"
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {items.length > 0 && (
-              <button type="button" style={ss.btn} onClick={exportCsv}>
-                Export CSV
-              </button>
+              <>
+                <button
+                  type="button"
+                  style={ss.btn}
+                  onClick={() => {
+                    const res = printRegisterFormPack("toolbox-reg", items);
+                    if (!res.ok && res.reason === "popup_blocked") {
+                      window.alert("Allow pop-ups to print the toolbox A4 pack (Print → Save as PDF).");
+                    }
+                  }}
+                  title="Print branded A4 talk sheets with attendance lines"
+                >
+                  Print forms pack
+                </button>
+                <button type="button" style={ss.btn} onClick={exportCsv}>
+                  Export CSV
+                </button>
+              </>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
               + Add talk
@@ -232,6 +249,7 @@ export default function ToolboxTalkRegister() {
                     <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.presenter} · {r.attendeeCount ? `${r.attendeeCount} attendees` : ""}</div>
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <RegisterFormPrintButton moduleId="toolbox-reg" record={r} />
                     <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                       Edit
                     </button>

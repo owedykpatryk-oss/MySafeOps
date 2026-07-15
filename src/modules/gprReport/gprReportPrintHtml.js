@@ -1,5 +1,6 @@
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
 import { renderMySafeOpsMarkSvg } from "../../utils/pdfBranding.js";
+import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import {
   anomalyConfidenceLabel,
   anomalyTypeLabel,
@@ -84,10 +85,7 @@ function coverStatsRow(r) {
 }
 
 function staticSiteMapUrl(lat, lng) {
-  const la = Number(lat);
-  const lo = Number(lng);
-  if (!Number.isFinite(la) || !Number.isFinite(lo)) return "";
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${la},${lo}&zoom=15&size=520x220&markers=${la},${lo},red-pushpin`;
+  return buildStaticMapUrl(lat, lng, { width: 520, height: 220, zoom: 15, label: "Site location" });
 }
 
 function styles(primary, accent) {

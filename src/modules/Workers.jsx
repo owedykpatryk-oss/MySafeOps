@@ -1,3 +1,4 @@
+import { safeHttpUrl } from "../utils/safeUrl";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
@@ -45,7 +46,13 @@ import { pushRecycleBinItem } from "../utils/recycleBin";
 import { openWorkspaceView, setWorkspaceNavTarget, consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { getNearestHospital } from "../utils/nearestHospital";
 import { fetchWeatherSummary, fetchWeatherForDate } from "../utils/weatherSummary";
-import { boundaryFromKmlGeometry, parseKmlGeometry } from "./permits/projectDrawingImport";
+import {
+  clearSiteEnrichmentFields,
+  formatSiteEnrichmentCaption,
+  siteEnrichmentMatchesCoords,
+  withSiteEnrichment,
+} from "../utils/siteEnrichment";
+import { boundaryFromKmlGeometry, describeKmlBoundaryMiss, parseKmlGeometry } from "./permits/projectDrawingImport";
 import { parseProjectBoundaryRing, centroidFromBoundaryRing } from "../utils/projectBoundary";
 import ProjectSitePreviewMap from "../components/ProjectSitePreviewMap";
 import ProjectKmlDropZone from "../components/ProjectKmlDropZone";
@@ -552,7 +559,7 @@ export function WorkersModule({ mode = "all" }) {
         openWorkspaceView({ viewId: "vehicles" });
         return;
       }
-      openWorkspaceView(item.moduleId || "inspections");
+      openWorkspaceView({ viewId: item.moduleId || "inspections" });
     },
     [workers]
   );
@@ -594,10 +601,10 @@ export function WorkersModule({ mode = "all" }) {
           document.getElementById("people-register")?.scrollIntoView({ behavior: "smooth", block: "start" });
           break;
         case "open_inspections":
-          openWorkspaceView("inspections");
+          openWorkspaceView({ viewId: "inspections" });
           break;
         case "open_plant":
-          openWorkspaceView("plant");
+          openWorkspaceView({ viewId: "plant" });
           break;
         case "open_training":
           openWorkspaceView({ viewId: "training" });
@@ -824,7 +831,7 @@ export function WorkersModule({ mode = "all" }) {
               <button
                 key={a.id}
                 type="button"
-                onClick={() => openWorkspaceView(a.moduleId || "inspections")}
+                onClick={() => openWorkspaceView({ viewId: a.moduleId || "inspections" })}
                 style={{
                   fontSize: 12,
                   padding: "6px 8px",
@@ -863,6 +870,7 @@ export function WorkersModule({ mode = "all" }) {
           return (
           <div
             key={w.id}
+            className="app-people-list-row"
             style={{
               display: "flex",
               flexWrap: "wrap",
@@ -1332,6 +1340,8 @@ function projectFormShape(p, { workers = [], user, orgSettings } = {}) {
       weatherFetchedAt: "",
       weatherAtStartSnapshot: "",
       weatherAtStartDate: "",
+      siteEnrichmentFor: "",
+      siteEnrichmentAt: "",
       mapEscapeRoutes: [],
       boundaryGeoJson: null,
       boundaryPoints: [],
@@ -1345,6 +1355,12 @@ function projectFormShape(p, { workers = [], user, orgSettings } = {}) {
     lat: p.lat != null && p.lat !== "" ? String(p.lat) : "",
     lng: p.lng != null && p.lng !== "" ? String(p.lng) : "",
     postcode: p.postcode || "",
+    nearestHospital: p.nearestHospital || "",
+    hospitalDirectionsUrl: p.hospitalDirectionsUrl || "",
+    weatherSnapshot: p.weatherSnapshot || "",
+    weatherFetchedAt: p.weatherFetchedAt || "",
+    siteEnrichmentFor: p.siteEnrichmentFor || "",
+    siteEnrichmentAt: p.siteEnrichmentAt || "",
     industryStarter: p.industryStarter || inferProjectStarter(p),
     soloMode: inferSoloMode(p, workers),
     soloLeadName: p.soloLeadName || p.owner || leadDefault,
@@ -1396,23 +1412,49 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
 
   const applyResolvedCoords = (resolved) => {
     if (!resolved?.changed) return;
-    setForm((f) => ({
-      ...f,
-      lat: String(resolved.lat),
-      lng: String(resolved.lng),
-      postcode: resolved.postcode ?? f.postcode,
-      address: resolved.address ?? f.address,
-    }));
+    setForm((f) => {
+      const nextLat = String(resolved.lat);
+      const nextLng = String(resolved.lng);
+      const same =
+        String(f.lat || "") === nextLat &&
+        String(f.lng || "") === nextLng &&
+        String(f.postcode || "") === String(resolved.postcode ?? f.postcode || "");
+      const base = same ? f : clearSiteEnrichmentFields(f);
+      return {
+        ...base,
+        lat: nextLat,
+        lng: nextLng,
+        postcode: resolved.postcode ?? f.postcode,
+        address: resolved.address ?? f.address,
+      };
+    });
   };
 
-  const ensureSiteCoordinates = async (draft = form) => {
+  const ensureSiteCoordinates = async (draft = form, { preferPostcode = false } = {}) => {
     const lat = parseFloat(String(draft.lat ?? "").trim());
     const lng = parseFloat(String(draft.lng ?? "").trim());
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    const postcodeQuery = resolveSitePostcodeInput(draft.postcode, draft.address, draft.site);
+
+    // New / changed postcode must win over leftover draft coordinates.
+    if (preferPostcode && postcodeQuery) {
+      const pc = await lookupSitePostcode(postcodeQuery, orgMarketId);
+      if (pc) {
+        return {
+          lat: pc.lat,
+          lng: pc.lng,
+          postcode: pc.postcode,
+          address: draft.address?.trim()
+            ? draft.address
+            : [pc.adminDistrict, pc.region].filter(Boolean).join(", "),
+          changed: true,
+        };
+      }
+    }
+
+    if (Number.isFinite(lat) && Number.isFinite(lng) && !preferPostcode) {
       return { lat, lng, postcode: draft.postcode, address: draft.address, changed: false };
     }
 
-    const postcodeQuery = resolveSitePostcodeInput(draft.postcode, draft.address, draft.site);
     if (postcodeQuery) {
       const pc = await lookupSitePostcode(postcodeQuery, orgMarketId);
       if (pc) {
@@ -1443,22 +1485,46 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     return { lat: null, lng: null, postcode: draft.postcode, address: draft.address, changed: false };
   };
 
-  const lookupPostcodeOnBlur = async (rawPostcode) => {
-    const lat = parseFloat(String(form.lat ?? "").trim());
-    const lng = parseFloat(String(form.lng ?? "").trim());
-    if (Number.isFinite(lat) && Number.isFinite(lng)) return;
+  const applyWeatherAndHospital = async (lat, lng) => {
+    setEnrichBusy(true);
+    try {
+      const [weather, hospital] = await Promise.all([
+        fetchWeatherSummary(lat, lng).catch(() => null),
+        getNearestHospital(lat, lng).catch(() => null),
+      ]);
+      setForm((f) => withSiteEnrichment(clearSiteEnrichmentFields(f), { lat, lng, weather, hospital }));
+      const bits = [];
+      if (weather) bits.push("weather");
+      if (hospital) bits.push("nearest A&E");
+      return bits;
+    } finally {
+      setEnrichBusy(false);
+    }
+  };
 
+  const lookupPostcodeOnBlur = async (rawPostcode) => {
     const postcodeQuery = resolveSitePostcodeInput(rawPostcode, form.address, form.site);
     if (!postcodeQuery) return;
 
     setGeoBusy(true);
     setGeoMsg("");
     try {
-      const resolved = await ensureSiteCoordinates({ ...form, postcode: postcodeQuery });
-      if (resolved.changed) {
-        applyResolvedCoords(resolved);
-        setGeoMsg(geoLookupSuccessMsg(orgMarketId));
+      const resolved = await ensureSiteCoordinates(
+        { ...form, postcode: postcodeQuery },
+        { preferPostcode: true }
+      );
+      if (Number.isFinite(resolved.lat) && Number.isFinite(resolved.lng)) {
+        applyResolvedCoords({ ...resolved, changed: true });
+        setGeoBusy(false);
+        const bits = await applyWeatherAndHospital(resolved.lat, resolved.lng);
+        setGeoMsg(
+          bits.length
+            ? `${geoLookupSuccessMsg(orgMarketId)} Updated for this postcode: ${bits.join(" + ")}.`
+            : `${geoLookupSuccessMsg(orgMarketId)} Pin set — weather/A&E unavailable; tap Fetch site data to retry.`
+        );
+        return;
       }
+      setGeoMsg(`Postcode "${postcodeQuery}" not found — check spelling.`);
     } catch (e) {
       setGeoMsg(e?.message || "Postcode lookup failed.");
     } finally {
@@ -1472,8 +1538,9 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
       setGeoBusy(true);
       setGeoMsg("");
       try {
-        const resolved = await ensureSiteCoordinates(form);
-        if (resolved.changed) {
+        const hasPostcode = Boolean(resolveSitePostcodeInput(form.postcode, form.address, form.site));
+        const resolved = await ensureSiteCoordinates(form, { preferPostcode: hasPostcode });
+        if (resolved.changed || (hasPostcode && Number.isFinite(resolved.lat))) {
           nextForm = {
             ...form,
             lat: String(resolved.lat),
@@ -1481,7 +1548,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
             postcode: resolved.postcode ?? form.postcode,
             address: resolved.address ?? form.address,
           };
-          applyResolvedCoords(resolved);
+          applyResolvedCoords({ ...resolved, changed: true });
           setGeoMsg(geoLookupSuccessMsg(orgMarketId));
         }
       } catch (e) {
@@ -1505,11 +1572,12 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     setKmlBusy(true);
     setGeoMsg("");
     try {
-      const text = await file.text();
+      const { readKmlTextFromFile } = await import("../utils/kmzExtract");
+      const text = await readKmlTextFromFile(file);
       const geom = parseKmlGeometry(text);
       const boundary = boundaryFromKmlGeometry(geom, { sourceName: file.name });
       if (!boundary) {
-        setGeoMsg("No polygon found in KML — use a closed site boundary.");
+        setGeoMsg(describeKmlBoundaryMiss(geom));
         return;
       }
       const centroid = centroidFromBoundaryRing(boundary.boundaryPoints);
@@ -1609,7 +1677,18 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     }
     const draft = loadProjectWizardDraft();
     if (draft?.form) {
-      setForm(projectFormShape(draft.form, { workers, user, orgSettings }));
+      let shaped = projectFormShape(draft.form, { workers, user, orgSettings });
+      // Legacy drafts may keep A&E/weather without a coord fingerprint — do not trust them.
+      const lat = parseFloat(String(shaped.lat ?? "").trim());
+      const lng = parseFloat(String(shaped.lng ?? "").trim());
+      const enrichmentOk =
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        siteEnrichmentMatchesCoords(shaped, lat, lng);
+      if ((shaped.nearestHospital || shaped.weatherSnapshot) && !enrichmentOk) {
+        shaped = clearSiteEnrichmentFields(shaped);
+      }
+      setForm(shaped);
       const draftStep = Number(draft.step);
       setStep(draftStep >= 1 && draftStep <= 5 ? draftStep : 1);
       setDraftRestored(true);
@@ -1794,23 +1873,12 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         );
         return;
       }
-      const [weather, hospital] = await Promise.all([
-        fetchWeatherSummary(lat, lng).catch(() => null),
-        getNearestHospital(lat, lng).catch(() => null),
-      ]);
-      setForm((f) => ({
-        ...f,
-        lat: String(lat),
-        lng: String(lng),
-        weatherSnapshot: weather?.text || f.weatherSnapshot || "",
-        weatherFetchedAt: weather?.fetchedAt || f.weatherFetchedAt || "",
-        nearestHospital: hospital?.summary || f.nearestHospital || "",
-        hospitalDirectionsUrl: hospital?.directions_url || f.hospitalDirectionsUrl || "",
-      }));
-      const bits = [];
-      if (weather) bits.push("weather");
-      if (hospital) bits.push("nearest A&E");
-      setGeoMsg(bits.length ? `Updated: ${bits.join(" + ")}.` : "Could not fetch weather or hospital — try again.");
+      const bits = await applyWeatherAndHospital(lat, lng);
+      setGeoMsg(
+        bits.length
+          ? `Updated for this site: ${bits.join(" + ")}.`
+          : "Could not fetch weather or hospital for these coordinates — check postcode and try again."
+      );
     } catch (e) {
       setGeoMsg(e?.message || "Site enrichment failed.");
     } finally {
@@ -1823,7 +1891,8 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     setGeoBusy(true);
     setGeoMsg("");
     try {
-      const resolved = await ensureSiteCoordinates(form);
+      const postcodeQuery = resolveSitePostcodeInput(form.postcode, form.address, form.site);
+      const resolved = await ensureSiteCoordinates(form, { preferPostcode: Boolean(postcodeQuery) });
       let lat = resolved.lat;
       let lng = resolved.lng;
       if (resolved.changed) {
@@ -1840,19 +1909,22 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         fetchWeatherSummary(lat, lng).catch(() => null),
         getNearestHospital(lat, lng).catch(() => null),
       ]);
-      setForm((f) => ({
-        ...f,
-        lat: String(lat),
-        lng: String(lng),
-        weatherSnapshot: weather?.text || f.weatherSnapshot || "",
-        weatherFetchedAt: weather?.fetchedAt || f.weatherFetchedAt || "",
-        nearestHospital: hospital?.summary || f.nearestHospital || "",
-        hospitalDirectionsUrl: hospital?.directions_url || f.hospitalDirectionsUrl || "",
-      }));
+      setForm((f) =>
+        withSiteEnrichment(clearSiteEnrichmentFields(f), {
+          lat,
+          lng,
+          weather,
+          hospital,
+        })
+      );
       const bits = ["coordinates"];
       if (weather) bits.push("weather");
       if (hospital) bits.push(`nearest ${getEmergencyServicesLabel(orgMarketId)}`);
-      setGeoMsg(`Updated: ${bits.join(", ")}.`);
+      setGeoMsg(
+        bits.length > 1
+          ? `Updated for this site: ${bits.join(", ")}.`
+          : "Coordinates set — weather/A&E unavailable right now. Tap Fetch again in a moment."
+      );
     } catch (e) {
       setGeoMsg(e?.message || "Site data fetch failed.");
     } finally {
@@ -1940,10 +2012,10 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         {!item?.id && draftRestored ? (
           <div className="project-wizard-draft-banner" role="status">
             <span>
-              Restored unsaved draft ({formatWizardDraftAge(initialDraft?.savedAt)})
+              Restored unsaved draft ({formatWizardDraftAge(initialDraft?.savedAt)}). Check the postcode — weather and nearest A&E follow the current site, not the last job.
             </span>
             <button type="button" className="project-wizard-link-btn" onClick={discardDraft}>
-              Discard draft
+              Start blank
             </button>
           </div>
         ) : null}
@@ -2061,18 +2133,44 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                     <input
                       style={ss.inp}
                       value={form.postcode || ""}
-                      onChange={(e) => set("postcode", e.target.value)}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setForm((f) => {
+                          const prevPc = String(f.postcode || "")
+                            .trim()
+                            .toUpperCase()
+                            .replace(/\s+/g, "");
+                          const nextPc = String(next || "")
+                            .trim()
+                            .toUpperCase()
+                            .replace(/\s+/g, "");
+                          // Changing postcode must drop the previous site's pin + A&E/weather.
+                          if (prevPc && nextPc && prevPc !== nextPc) {
+                            return {
+                              ...clearSiteEnrichmentFields(f),
+                              postcode: next,
+                              lat: "",
+                              lng: "",
+                            };
+                          }
+                          return { ...f, postcode: next };
+                        });
+                      }}
                       onBlur={(e) => {
                         const normalised = resolveSitePostcodeInput(e.target.value);
-                        if (normalised && normalised !== form.postcode) set("postcode", normalised);
-                        lookupPostcodeOnBlur(normalised || e.target.value);
+                        if (normalised && normalised !== form.postcode) {
+                          setForm((f) => ({ ...f, postcode: normalised }));
+                        }
+                        void lookupPostcodeOnBlur(normalised || e.target.value);
                       }}
                       onKeyDown={(e) => {
                         if (e.key !== "Enter") return;
                         e.preventDefault();
                         const normalised = resolveSitePostcodeInput(form.postcode);
-                        if (normalised && normalised !== form.postcode) set("postcode", normalised);
-                        lookupPostcodeOnBlur(normalised || form.postcode);
+                        if (normalised && normalised !== form.postcode) {
+                          setForm((f) => ({ ...f, postcode: normalised }));
+                        }
+                        void lookupPostcodeOnBlur(normalised || form.postcode);
                       }}
                       placeholder={`e.g. ${sitePostcodeExample(orgMarketId)}`}
                       autoComplete="postal-code"
@@ -2084,7 +2182,8 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                       </p>
                     ) : null}
                     <p className="project-wizard-hint">
-                      {getPostcodeHint(orgMarketId)} Map, weather and nearest {getEmergencyServicesLabel(orgMarketId)} use these details.
+                      {getPostcodeHint(orgMarketId)} Tap <strong>Fetch site data</strong> after the pin updates — weather and nearest{" "}
+                      {getEmergencyServicesLabel(orgMarketId)} always follow the current postcode, not a previous draft.
                     </p>
                     <div className="project-wizard-actions">
                       <button type="button" style={ss.btnP} disabled={enrichBusy || geoBusy} onClick={fetchSiteData}>
@@ -2123,19 +2222,34 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                       </div>
                     ) : null}
                     {(form.weatherSnapshot || form.nearestHospital) && (
-                      <div className="project-wizard-enrich-card">
-                        {form.weatherSnapshot ? <div><strong>Weather:</strong> {form.weatherSnapshot}</div> : null}
-                        {form.nearestHospital ? (
+                      <div className="project-wizard-enrich-card" role="status">
+                        <div className="project-wizard-enrich-card__caption">{formatSiteEnrichmentCaption(form)}</div>
+                        {form.weatherSnapshot ? (
                           <div>
-                            <strong>Nearest A&E:</strong> {form.nearestHospital}
-                            {form.hospitalDirectionsUrl ? (
-                              <>
-                                {" "}
-                                <a href={form.hospitalDirectionsUrl} target="_blank" rel="noreferrer">Directions</a>
-                              </>
-                            ) : null}
+                            <strong>Weather at site</strong>
+                            <div>{form.weatherSnapshot}</div>
                           </div>
                         ) : null}
+                        {form.nearestHospital ? (
+                          <div style={{ marginTop: form.weatherSnapshot ? 8 : 0 }}>
+                            <strong>Nearest A&E</strong>
+                            <div>
+                              {form.nearestHospital}
+                              {safeHttpUrl(form.hospitalDirectionsUrl) ? (
+                                <>
+                                  {" "}
+                                  <a href={safeHttpUrl(form.hospitalDirectionsUrl)} target="_blank" rel="noopener noreferrer">
+                                    Directions
+                                  </a>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ marginTop: 8, color: "#92400e" }}>
+                            A&E not loaded for this pin — tap Fetch site data again.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

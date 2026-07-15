@@ -24,14 +24,14 @@ function StatCard({ label, value, hint, accent }) {
         minWidth: 110,
         padding: "10px 12px",
         borderRadius: 8,
-        border: accent ? "1px solid #93c5fd" : "1px solid #e5e7eb",
-        background: accent ? "linear-gradient(180deg,#eff6ff,#fff)" : "#fafafa",
+        border: accent ? "1px solid #5eead4" : "1px solid #e5e7eb",
+        background: accent ? "linear-gradient(180deg,#f0fdfa,#fff)" : "#fafafa",
       }}
     >
       <div style={{ fontSize: 10, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         {label}
       </div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: accent ? "#1d4ed8" : "#0f766e", lineHeight: 1.2, marginTop: 2 }}>
+      <div style={{ fontSize: 20, fontWeight: 700, color: accent ? "#0f766e" : "#0f766e", lineHeight: 1.2, marginTop: 2 }}>
         {value}
       </div>
       {hint && <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>{hint}</div>}

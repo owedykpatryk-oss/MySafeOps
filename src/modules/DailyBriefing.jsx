@@ -9,7 +9,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
-import { escapeHtml, safeImageSrc, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { escapeHtml, safeImageSrc, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 
@@ -693,7 +693,7 @@ function BriefingCard({ brief, onDelete, onPrint }) {
   const isToday = brief.date === todayStr;
 
   return (
-    <div style={{ ...ss.card, marginBottom: 8 }}>
+    <div className="app-daily-briefing-card" style={{ ...ss.card, marginBottom: 8 }}>
       <div
         style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-start", cursor: "pointer" }}
         onClick={() => setExpanded((v) => !v)}
@@ -841,7 +841,7 @@ function BriefingCard({ brief, onDelete, onPrint }) {
 // ─── Print briefing ───────────────────────────────────────────────────────────
 function printBriefing(brief) {
   void (async () => {
-  const win = openPrintWindow();
+  const win = openPrintWindowOrWarn();
   if (!win) return;
   const he = escapeHtml;
   const topicsHTML = (brief.topics || []).map((t) => `<li>${he(t)}</li>`).join("");

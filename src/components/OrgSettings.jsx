@@ -17,6 +17,7 @@ import { setOrgMarketId } from "../utils/orgMarket";
 import { MARKET_PACK_HINTS } from "../config/marketModules";
 import { MARKET_IDS, getMarket, isValidMarketId, resolveMarketId } from "../config/markets";
 import { syncOrgBrandingFromCloud } from "../utils/orgBrandingCloudSync";
+import { safeImageSrc } from "../utils/htmlEscape.js";
 import OrgModuleVisibility from "./OrgModuleVisibility";
 import OrgWorkspaceProfile from "./OrgWorkspaceProfile";
 import OrgPermitSettings from "./OrgPermitSettings";
@@ -190,8 +191,8 @@ export default function OrgSettings() {
                 background:"var(--color-background-secondary,#f7f7f5)",
                 display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden",
               }}>
-                {form.logo
-                  ? <img src={form.logo} alt="logo" style={{ maxWidth:132, maxHeight:72, objectFit:"contain" }} />
+                {safeImageSrc(form.logo)
+                  ? <img src={safeImageSrc(form.logo)} alt="logo" style={{ maxWidth:132, maxHeight:72, objectFit:"contain" }} />
                   : <span style={{ fontSize:11, color:"var(--color-text-secondary)" }}>No logo</span>
                 }
               </div>
@@ -522,8 +523,8 @@ export default function OrgSettings() {
             <div style={{ background:"#f5f5f5", padding:"6px 12px", fontSize:11, color:"var(--color-text-secondary)" }}>PDF preview</div>
             <div style={{ padding:"16px", background:"#fff" }}>
               <div style={{ display:"flex", alignItems:"center", gap:16, paddingBottom:12, borderBottom:"2px solid "+(form.primaryColor||"#0d9488"), marginBottom:10 }}>
-                {form.logo
-                  ? <img src={form.logo} alt="logo" style={{ height:44, maxWidth:120, objectFit:"contain" }} />
+                {safeImageSrc(form.logo)
+                  ? <img src={safeImageSrc(form.logo)} alt="logo" style={{ height:44, maxWidth:120, objectFit:"contain" }} />
                   : <div style={{ width:80, height:44, background:"#f0f0f0", borderRadius:4, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"#999" }}>LOGO</div>
                 }
                 <div>
@@ -637,8 +638,8 @@ export default function OrgSettings() {
       {tab==="preview" && (
         <div style={{ ...ss.card }}>
           <div style={{ display:"flex", alignItems:"center", gap:16, paddingBottom:14, borderBottom:"2.5px solid "+(form.primaryColor||"#0d9488"), marginBottom:14 }}>
-            {form.logo
-              ? <img src={form.logo} alt="logo" style={{ height:56, maxWidth:160, objectFit:"contain" }} />
+            {safeImageSrc(form.logo)
+              ? <img src={safeImageSrc(form.logo)} alt="logo" style={{ height:56, maxWidth:160, objectFit:"contain" }} />
               : <div style={{ width:100, height:56, background:"var(--color-background-secondary,#f7f7f5)", borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, color:"var(--color-text-secondary)" }}>No logo</div>
             }
             <div>

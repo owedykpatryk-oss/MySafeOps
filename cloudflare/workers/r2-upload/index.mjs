@@ -6,6 +6,27 @@
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const KEY_RE = /^[\w./-]+$/;
 const ORG_KEY_RE = /\/org_[\w-]+\//;
+const ALLOWED_UPLOAD_EXT = /\.(pdf|png|jpe?g|gif|webp|docx?|xlsx?|csv|txt|zip|kml|kmz)$/i;
+const BLOCKED_CONTENT_TYPES = new Set([
+  "text/html",
+  "application/xhtml+xml",
+  "image/svg+xml",
+  "text/javascript",
+  "application/javascript",
+  "application/x-javascript",
+]);
+
+function contentTypeAllowed(fileName, contentType) {
+  const name = String(fileName || "");
+  if (!ALLOWED_UPLOAD_EXT.test(name)) return false;
+  const ct = String(contentType || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+  if (!ct || ct === "application/octet-stream") return true;
+  if (BLOCKED_CONTENT_TYPES.has(ct)) return false;
+  return true;
+}
 
 function timingSafeEqual(expected, received) {
   const a = String(expected ?? "");
@@ -214,6 +235,10 @@ export default {
       return json({ error: "File too large" }, 413, c);
     }
 
+    if (!contentTypeAllowed(file.name || "", file.type || "")) {
+      return json({ error: "File type not allowed" }, 415, c);
+    }
+
     let key = form.get("key");
     if (!key || typeof key !== "string") {
       key = `uploads/${crypto.randomUUID()}-${file.name || "blob"}`;
@@ -221,6 +246,10 @@ export default {
     key = key.replace(/^\/+/, "").slice(0, 900);
     if (!KEY_RE.test(key) || key.includes("..") || !ORG_KEY_RE.test(key)) {
       return json({ error: "Invalid key" }, 400, c);
+    }
+    // Key may override the client file name — still require a safe extension on the object path.
+    if (!ALLOWED_UPLOAD_EXT.test(key)) {
+      return json({ error: "File type not allowed" }, 415, c);
     }
 
     const orgSlug = orgSlugFromStorageKey(key);

@@ -25,6 +25,9 @@ const saveMeta = (m) => saveOrgScoped(DOC_META_KEY, m);
 const ss = ms;
 const FILE_LIST_PAGE = 120;
 const R2_LIST_PAGE = 60;
+const R2_ACCEPT =
+  ".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.kml,.kmz";
+const R2_ALLOWED_EXT = /\.(pdf|png|jpe?g|gif|webp|docx?|xlsx?|csv|txt|zip|kml|kmz)$/i;
 
 async function readDirRecursive(dirHandle, basePath = "") {
   const out = [];
@@ -114,6 +117,10 @@ export default function DocumentLibrary() {
     try {
       for (let i = 0; i < fl.length; i++) {
         const file = fl[i];
+        if (!R2_ALLOWED_EXT.test(file.name || "")) {
+          setR2Msg(`Skipped ${file.name || "file"} — type not allowed.`);
+          continue;
+        }
         const result = await uploadFileToR2Storage(file, { orgId: orgIdForPath, subPath: "documents" });
         const row = {
           id: `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}`,
@@ -184,7 +191,7 @@ export default function DocumentLibrary() {
           <div style={{ ...ss.card, marginTop: 16 }}>
             <div style={{ fontWeight: 600, marginBottom: 8 }}>Cloud upload</div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>You can still upload files to cloud storage from this browser.</p>
-            <input ref={r2InputRef} type="file" multiple style={{ display: "none" }} onChange={onR2Files} />
+            <input ref={r2InputRef} type="file" multiple accept={R2_ACCEPT} style={{ display: "none" }} onChange={onR2Files} />
             <button type="button" style={ss.btnP} disabled={r2Busy} onClick={() => r2InputRef.current?.click()}>
               {r2Busy ? "Uploading…" : "Upload to cloud"}
             </button>
@@ -252,7 +259,7 @@ export default function DocumentLibrary() {
           <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.5 }}>
             Upload file copies to your organisation&apos;s cloud storage. Files stay linked here after upload.
           </p>
-          <input ref={r2InputRef} type="file" multiple style={{ display: "none" }} onChange={onR2Files} />
+          <input ref={r2InputRef} type="file" multiple accept={R2_ACCEPT} style={{ display: "none" }} onChange={onR2Files} />
           <button type="button" style={ss.btnP} disabled={r2Busy} onClick={() => r2InputRef.current?.click()}>
             {r2Busy ? "Uploading…" : "Upload to cloud"}
           </button>

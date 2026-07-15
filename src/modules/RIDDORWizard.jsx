@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
-import { escapeHtml, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { escapeHtml, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
@@ -68,7 +68,7 @@ export function printNotifiableWorksheet(form, content) {
   void (async () => {
   const org = getOrgSettings();
   const def = getIncidentTypeDef(content, form.riddorType);
-  const win = openPrintWindow();
+  const win = openPrintWindowOrWarn();
   if (!win) return;
   const he = escapeHtml;
   const row = (a, b) => `<tr><td style="border:1px solid #e2e8f0;padding:8px;width:32%;font-weight:600;background:#f8fafc">${he(a)}</td><td style="border:1px solid #e2e8f0;padding:8px">${he(b ?? "—")}</td></tr>`;

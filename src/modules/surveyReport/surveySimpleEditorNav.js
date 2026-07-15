@@ -1,11 +1,24 @@
-/** Simple 4-step survey editor navigation (site supervisor style). */
+/** Simple 4-step survey editor navigation (plain English for site users). */
 
 export const SURVEY_SIMPLE_STEPS = [
-  { id: "mobilise", label: "Mobilise", hint: "Details, scope, sign-off", tabs: ["details", "scope", "professional"] },
-  { id: "site", label: "Site", hint: "Weather, records, limits", tabs: ["weather", "records", "limitations"] },
+  { id: "mobilise", label: "Start", hint: "Job details & scope", tabs: ["details", "scope", "professional"] },
+  { id: "site", label: "On site", hint: "Weather, records, limits", tabs: ["weather", "records", "limitations"] },
   { id: "findings", label: "Findings", hint: "Results & photos", tabs: ["findings", "photos"] },
-  { id: "issue", label: "Issue", hint: "Print preview", tabs: ["preview"] },
+  { id: "issue", label: "Print", hint: "Preview & finalise", tabs: ["preview"] },
 ];
+
+/** Friendly sub-labels inside a step (one panel at a time). */
+export const SURVEY_TAB_PLAIN_LABELS = {
+  details: "Job details",
+  scope: "Scope of work",
+  professional: "Checks & sign-off",
+  weather: "Weather",
+  records: "Utility records",
+  limitations: "Limitations",
+  findings: "What we found",
+  photos: "Photos",
+  preview: "Print preview",
+};
 
 export function simpleStepForTab(tabId) {
   const id = String(tabId || "").trim();

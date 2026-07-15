@@ -11,6 +11,7 @@ import { generateFessPrintHTML, buildFessRamsPrintBodyHTML } from "../../utils/f
 import { getRamsPrintLabels } from "../../utils/ramsUiLabels.js";
 import { getOrgMarketId } from "../../utils/orgMarket.js";
 import { formatOrgDate, formatOrgDateTime } from "../../utils/orgLocale.js";
+import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 
 const RL = {
   high: { bg: "#FCEBEB", color: "#791F1F" },
@@ -461,10 +462,7 @@ export function computeRamsFingerprint(form, rows) {
 }
 
 function staticSiteMapUrl(lat, lng) {
-  const la = Number(lat);
-  const lo = Number(lng);
-  if (!Number.isFinite(la) || !Number.isFinite(lo)) return "";
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${la},${lo}&zoom=15&size=520x220&markers=${la},${lo},red-pushpin`;
+  return buildStaticMapUrl(lat, lng, { width: 520, height: 220, zoom: 15, label: "Site location" });
 }
 
 function ramsPrintTheme(themeOrPrimary) {
@@ -766,15 +764,27 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
     )
     .join("");
 
-  const sigRows = opList
-    .map(
-      (n) => `
-    <tr style="height:40px">
-      <td style="padding:8px;border:1px solid #e5e5e5;font-size:12px">${escHtml(n)}</td>
-      <td style="border:1px solid #e5e5e5"></td>
-      <td style="border:1px solid #e5e5e5"></td>
-    </tr>`
-    )
+  const sigRows = (Array.isArray(form.operativeIds) && form.operativeIds.length > 0
+    ? form.operativeIds
+    : opList.map((n, i) => `__name_${i}`)
+  )
+    .map((id, i) => {
+      const fromWorkers = (workersAll || []).find((w) => w.id === id);
+      const name = fromWorkers?.name || opList[i] || String(id);
+      const ink = form.operativeSignatures?.[id];
+      const imgSrc = ink?.imageDataUrl ? safeImageSrc(ink.imageDataUrl) : "";
+      const signedAt = ink?.signedAt ? fmtDateTime(ink.signedAt) : "";
+      return `
+    <tr style="height:48px">
+      <td style="padding:8px;border:1px solid #e5e5e5;font-size:12px">${escHtml(name)}</td>
+      <td style="padding:4px;border:1px solid #e5e5e5;text-align:center">${
+        imgSrc
+          ? `<img src="${escapeAttr(imgSrc)}" alt="Signature" style="max-height:40px;max-width:100%;object-fit:contain"/>`
+          : ""
+      }</td>
+      <td style="padding:8px;border:1px solid #e5e5e5;font-size:11px">${escHtml(signedAt || "")}</td>
+    </tr>`;
+    })
     .join("");
 
   const weatherBlock =

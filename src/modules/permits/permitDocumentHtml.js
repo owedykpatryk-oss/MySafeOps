@@ -326,6 +326,29 @@ export function renderPermitDocumentHtml(permit, options = {}) {
     ${signatureRowsHtml}
   </table>
   ${
+    Array.isArray(permit.acknowledgements) && permit.acknowledgements.length > 0
+      ? `<h2>Contractor acknowledgements (read &amp; sign)</h2>
+  <table>
+    <tr><th>Name</th><th>Note</th><th>Signature</th><th>Date/Time</th></tr>
+    ${[...permit.acknowledgements]
+      .slice(-20)
+      .map((row) => {
+        const sigSrc = row?.signatureImageDataUrl ? safeImageSrc(row.signatureImageDataUrl) : "";
+        const sigImg = sigSrc
+          ? `<img src="${escapeAttr(sigSrc)}" alt="Acknowledgement signature" style="max-width:100%;max-height:42px;object-fit:contain;display:block;margin:0 auto"/>`
+          : "";
+        return `<tr style="height:48px">
+      <td style="padding:6px;border:1px solid #ddd">${escapeHtml(row?.by || "—")}</td>
+      <td style="padding:6px;border:1px solid #ddd">${escapeHtml(row?.note || "—")}</td>
+      <td style="padding:4px;border:1px solid #ddd">${sigImg}</td>
+      <td style="padding:6px;border:1px solid #ddd">${escapeHtml(row?.at ? fmtDateTime(row.at) : "—")}</td>
+    </tr>`;
+      })
+      .join("")}
+  </table>`
+      : ""
+  }
+  ${
     statusLc === "closed" && permit.closedAt
       ? `<h2>Permit closure</h2><p style="font-size:12px;line-height:1.6;padding:8px 10px;background:#f8fafc;border:0.5px solid #e2e8f0;margin:0 0 10px">Closed: ${escapeHtml(fmtDateTime(permit.closedAt))}</p>`
       : ""

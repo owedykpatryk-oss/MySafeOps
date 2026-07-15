@@ -2,6 +2,7 @@ import { useState } from "react";
 import { verifyTotpMfaLogin } from "../lib/mfaAal";
 import { getSupportEmail } from "../config/supportContact";
 import { ms } from "../utils/moduleStyles";
+import { clearCloudBackupDek } from "../lib/backupCrypto";
 
 const ss = ms;
 
@@ -40,6 +41,7 @@ export default function MfaLoginChallenge({ client, onSuccess, supportEmail = ge
     setBusyState(true);
     try {
       await client.auth.signOut();
+      clearCloudBackupDek();
     } finally {
       setBusyState(false);
     }

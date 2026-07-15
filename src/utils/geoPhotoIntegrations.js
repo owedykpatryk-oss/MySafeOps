@@ -9,6 +9,7 @@ import {
   resolvedGiLocationId,
   permitHasSiteEvidence,
 } from "./geoPhotoFields";
+import { buildStaticMapUrl } from "./staticMapUrl.js";
 
 export const GEO_PHOTOS_FINDINGS_MARKER = "=== Geo-photos (field capture) ===";
 
@@ -450,17 +451,21 @@ export function geoPhotosToGiLocationsTable(allGeoPhotos, projectId, { existingR
   return upsertGeoPhotoDerivedRows(existingRows, incoming);
 }
 
-/** Static map URL with multiple geo-photo markers (OpenStreetMap.de). */
+/** Static map URL for geo-photo GPS cluster (offline SVG — no third-party staticmap host). */
 export function geoPhotosStaticMapUrl(photos, { width = 520, height = 220, maxMarkers = 25 } = {}) {
   const pts = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)));
   const capped = pts.slice(0, maxMarkers);
   if (!capped.length) return "";
-  const markers = capped.map((p) => `${Number(p.latitude)},${Number(p.longitude)},red-pushpin`).join("|");
   const lat = capped.reduce((s, p) => s + Number(p.latitude), 0) / capped.length;
   const lng = capped.reduce((s, p) => s + Number(p.longitude), 0) / capped.length;
   const zoom = capped.length === 1 ? 16 : pts.length > 8 ? 14 : 15;
-  return `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lng}&zoom=${zoom}&size=${width}x${height}&markers=${markers}`;
+  return buildStaticMapUrl(lat, lng, {
+    width,
+    height,
+    zoom,
+    label: capped.length === 1 ? "Geo-photo" : `${capped.length} geo-photos`,
+  });
 }
 
 export function geoPhotosStaticMapCaption(photos, maxMarkers = 25) {

@@ -1,9 +1,9 @@
 import { memo, useMemo } from "react";
-import { SURVEY_SIMPLE_STEPS, simpleStepForTab } from "./surveySimpleEditorNav";
+import { SURVEY_SIMPLE_STEPS, SURVEY_TAB_PLAIN_LABELS, simpleStepForTab } from "./surveySimpleEditorNav";
 import { surveyTabIsComplete } from "./surveyReportListUtils";
 
 function SurveySimpleStepNav({ tab, report, onTabChange }) {
-  const activeStep = simpleStepForTab(tab).id;
+  const activeStep = simpleStepForTab(tab);
 
   const stepProgress = useMemo(() => {
     const out = {};
@@ -26,8 +26,8 @@ function SurveySimpleStepNav({ tab, report, onTabChange }) {
               key={step.id}
               type="button"
               role="tab"
-              aria-selected={activeStep === step.id}
-              className={`app-survey-editor-nav__group${activeStep === step.id ? " app-survey-editor-nav__group--active" : ""}${prog.complete ? " app-survey-editor-nav__group--done" : ""}`}
+              aria-selected={activeStep.id === step.id}
+              className={`app-survey-editor-nav__group${activeStep.id === step.id ? " app-survey-editor-nav__group--active" : ""}${prog.complete ? " app-survey-editor-nav__group--done" : ""}`}
               onClick={() => onTabChange(step.tabs[0])}
             >
               <span className="app-survey-editor-nav__group-top">
@@ -49,6 +49,37 @@ function SurveySimpleStepNav({ tab, report, onTabChange }) {
           );
         })}
       </div>
+      {activeStep.tabs.length > 1 ? (
+        <div
+          style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--color-border-tertiary, #e2e8f0)" }}
+          role="tablist"
+          aria-label="Panels in this step"
+        >
+          {activeStep.tabs.map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => onTabChange(t)}
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                padding: "5px 10px",
+                borderRadius: 999,
+                border: `1px solid ${tab === t ? "#0d9488" : "var(--color-border-tertiary, #e2e8f0)"}`,
+                background: tab === t ? "#ccfbf1" : "#fff",
+                color: tab === t ? "#115e59" : "var(--color-text-secondary)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {SURVEY_TAB_PLAIN_LABELS[t] || t}
+              {surveyTabIsComplete(report, t) ? " ✓" : ""}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

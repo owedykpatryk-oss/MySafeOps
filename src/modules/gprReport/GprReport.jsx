@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import "../../styles/gpr-report.css";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useApp } from "../../context/AppContext";
+import { useToast } from "../../context/ToastContext";
 import { pushAudit } from "../../utils/auditLog";
 import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { downloadBlob } from "../../utils/downloadBlob";
 import PageHero from "../../components/PageHero";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import EmptyState from "../../components/EmptyState";
@@ -26,7 +28,6 @@ import { filterGprReports, groupGprReportsByProject, suggestDeliverableFlags, GP
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { countGprGeoPhotos, importGeoPhotosIntoGprReport } from "../../utils/gprGeoIntegrations";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
-import { sanitizePrintPreviewHtml } from "../../utils/htmlEscape";
 import {
   ANOMALY_CONFIDENCE,
   ANOMALY_TYPES,
@@ -53,6 +54,7 @@ import {
   SURFACE_TYPE_OPTIONS,
 } from "./gprReportConstants";
 import { buildGprReportHtml } from "./gprReportPrintHtml";
+import { useGprPreviewHtml } from "./useGprPreviewHtml";
 import GprLineLengthSummaryCard from "./GprLineLengthSummaryCard.jsx";
 import { downloadGprReportPdf } from "./gprReportPdf";
 import {
@@ -133,8 +135,8 @@ const ss = {
     fontSize: 12,
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
-    background: active ? "#E6F1FB" : "transparent",
-    color: active ? "#0C447C" : "var(--color-text-secondary)",
+    background: active ? "#ccfbf1" : "transparent",
+    color: active ? "#0f766e" : "var(--color-text-secondary)",
     fontFamily: "DM Sans,sans-serif",
   }),
   btn: {
@@ -166,8 +168,10 @@ function Field({ label, children }) {
 
 export default function GprReport() {
   const { dataRefreshTick } = useApp();
-  const sync = useD1OrgArraySync(STORAGE_KEY, []);
+  const { pushToast } = useToast();
   const [reports, setReports] = useState(() => load(STORAGE_KEY, []));
+  const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
+  const [geoPhotos, setGeoPhotos] = useState(() => load("geo_photos", []));
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState("setup");
   const [busy, setBusy] = useState("");
@@ -181,23 +185,45 @@ export default function GprReport() {
   const [groupByProject, setGroupByProject] = useState(true);
   const [confirmFinal, setConfirmFinal] = useState(false);
 
-  const projects = useMemo(() => load("mysafeops_projects", []), [dataRefreshTick]);
+  const { d1Hydrating: d1RepH, d1OutboxPending: d1RepO } = useD1OrgArraySync({
+    storageKey: STORAGE_KEY,
+    namespace: STORAGE_KEY,
+    value: reports,
+    setValue: setReports,
+    load,
+    save,
+  });
+  const { d1Hydrating: d1ProjH, d1OutboxPending: d1ProjO } = useD1OrgArraySync({
+    storageKey: "mysafeops_projects",
+    namespace: "mysafeops_projects",
+    value: projects,
+    setValue: setProjects,
+    load,
+    save,
+  });
+  const { d1Hydrating: d1GeoH, d1OutboxPending: d1GeoO } = useD1OrgArraySync({
+    storageKey: "geo_photos",
+    namespace: "geo_photos",
+    value: geoPhotos,
+    setValue: setGeoPhotos,
+    load,
+    save,
+  });
+  const d1Hydrating = d1RepH || d1ProjH || d1GeoH;
+  const d1OutboxPending = d1RepO || d1ProjO || d1GeoO;
+
   const surveyReports = useMemo(() => load("survey_reports", []), [dataRefreshTick]);
-  const geoPhotos = useMemo(() => load("geo_photos", []), [dataRefreshTick]);
   const listSummary = useMemo(() => summarizeGprReportList(reports), [reports]);
 
   useEffect(() => {
     setReports(load(STORAGE_KEY, []));
-  }, [dataRefreshTick, sync.lastSyncAt]);
+    setProjects(load("mysafeops_projects", []));
+    setGeoPhotos(load("geo_photos", []));
+  }, [dataRefreshTick]);
 
-  const persist = useCallback(
-    (next) => {
-      setReports(next);
-      save(STORAGE_KEY, next);
-      sync.queueSave(next);
-    },
-    [sync]
-  );
+  const persist = useCallback((next) => {
+    setReports(next);
+  }, []);
 
   useEffect(() => {
     const t = consumeWorkspaceNavTarget();
@@ -252,10 +278,10 @@ export default function GprReport() {
     [project?.lat, project?.lng, linkedSurveyReport]
   );
 
-  const previewHtml = useMemo(() => {
-    if (!form) return "";
-    return sanitizePrintPreviewHtml(buildGprReportHtml(form, gprPrintExtras));
-  }, [form, gprPrintExtras]);
+  const { html: previewHtml, pending: previewPending } = useGprPreviewHtml(form, gprPrintExtras, {
+    active: Boolean(form) && livePreviewOpen,
+    debounceMs: 500,
+  });
 
   const quality = form ? gprReportQuality(form) : { score: 0, missing: [] };
   const smartTips = useMemo(
@@ -396,12 +422,12 @@ export default function GprReport() {
     if (!form) return;
     const html = buildGprReportHtml(form, gprPrintExtras);
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${form.ref || "gpr-report"}.html`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    if (!downloadBlob(blob, `${form.ref || "gpr-report"}.html`)) {
+      pushToast({ type: "error", title: "Download blocked", message: "Allow downloads for this site and try again." });
+      return;
+    }
     pushAudit({ action: "gpr_report_html", entity: "gpr_report", detail: form.ref });
+    pushToast({ type: "success", title: "HTML downloaded", message: `${form.ref || "gpr-report"}.html` });
   };
 
   const syncDeliverablesFromEvidence = () => {
@@ -461,8 +487,16 @@ export default function GprReport() {
   const exportPdf = async () => {
     if (!form) return;
     setBusy("pdf");
+    pushToast({ type: "info", title: "Generating PDF…", message: "Building A4 GPR report pages.", durationMs: 4000 });
     try {
-      await downloadGprReportPdf(form, gprPrintExtras);
+      const result = await downloadGprReportPdf(form, gprPrintExtras);
+      pushToast({
+        type: "success",
+        title: "PDF downloaded",
+        message: result?.fileName ? `${result.fileName}${result.pages ? ` · ${result.pages} page(s)` : ""}` : "GPR report PDF saved.",
+      });
+    } catch (e) {
+      pushToast({ type: "error", title: "PDF export failed", message: e?.message || "Could not generate PDF." });
     } finally {
       setBusy("");
     }
@@ -478,11 +512,9 @@ export default function GprReport() {
   const exportAnomaliesGeoJson = () => {
     if (!form) return;
     const blob = new Blob([JSON.stringify(buildAnomaliesGeoJson(form), null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${form.ref || "gpr-anomalies"}.geojson`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    if (!downloadBlob(blob, `${form.ref || "gpr-anomalies"}.geojson`)) {
+      pushToast({ type: "error", title: "Download blocked", message: "Allow downloads for this site and try again." });
+    }
   };
 
   const importGeoPhotos = () => {
@@ -591,13 +623,13 @@ export default function GprReport() {
         </select>
       </Field>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-        <button type="button" style={{ ...ss.btn, background: "#0C447C", color: "#fff" }} disabled={!!busy} onClick={runPrebuiltPack}>
+        <button type="button" style={{ ...ss.btn, ...ss.btnP }} disabled={!!busy} onClick={runPrebuiltPack}>
           {busy === "prebuilt" ? "Applying…" : "Apply prebuilt pack"}
         </button>
-        <button type="button" style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C" }} disabled={!!busy} onClick={applyGenericTemplate}>
+        <button type="button" style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }} disabled={!!busy} onClick={applyGenericTemplate}>
           Template only
         </button>
-        <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0C447C" }} disabled={!!busy} onClick={runSmartFill}>
+        <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0f766e" }} disabled={!!busy} onClick={runSmartFill}>
           {busy === "smart" ? "Filling…" : "BGS + weather + narratives"}
         </button>
       </div>
@@ -618,7 +650,7 @@ export default function GprReport() {
             </label>
           ))}
         </div>
-        <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0C447C", marginTop: 8 }} onClick={syncDeliverablesFromEvidence}>
+        <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0f766e", marginTop: 8 }} onClick={syncDeliverablesFromEvidence}>
           Sync deliverables from evidence
         </button>
       </div>
@@ -894,10 +926,10 @@ export default function GprReport() {
         }}
       />
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "16px 0" }}>
-        <button type="button" style={{ ...ss.btn, background: "#0C447C", color: "#fff" }} disabled={!!busy} onClick={fetchGeology}>
+        <button type="button" style={{ ...ss.btn, ...ss.btnP }} disabled={!!busy} onClick={fetchGeology}>
           {busy === "geology" ? "Fetching BGS…" : "Fetch BGS geology"}
         </button>
-        <button type="button" style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C" }} disabled={!!busy} onClick={fetchWeather}>
+        <button type="button" style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }} disabled={!!busy} onClick={fetchWeather}>
           {busy === "weather" ? "Fetching weather…" : "Fetch weather for survey date"}
         </button>
       </div>
@@ -1001,7 +1033,7 @@ export default function GprReport() {
       <div className="app-gpr-radargram-panel">
         <div style={ss.sectionHead}>Radargrams & scan images</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <label style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C", cursor: "pointer" }}>
+          <label style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e", cursor: "pointer" }}>
             + Upload image
             <input
               type="file"
@@ -1015,19 +1047,19 @@ export default function GprReport() {
             />
           </label>
           {form.projectId && geoPhotoCount > 0 ? (
-            <button type="button" style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C" }} onClick={importGeoPhotos}>
+            <button type="button" style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }} onClick={importGeoPhotos}>
               Import {geoPhotoCount} geo-photo(s)
             </button>
           ) : null}
           <button
             type="button"
-            style={{ ...ss.btn, background: "#f1f5f9", color: "#0C447C" }}
+            style={{ ...ss.btn, background: "#f1f5f9", color: "#0f766e" }}
             onClick={() => patchReport((r) => autoNumberAnomalies(r))}
           >
             Auto-number anomalies
           </button>
           {(form.anomalies || []).length ? (
-            <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0C447C" }} onClick={exportAnomaliesGeoJson}>
+            <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0f766e" }} onClick={exportAnomaliesGeoJson}>
               Export anomalies JSON
             </button>
           ) : null}
@@ -1076,7 +1108,7 @@ export default function GprReport() {
       <div className="app-gpr-radargram-panel" style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div style={ss.sectionHead}>Plan layouts & CAD figures</div>
-          <label style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C", cursor: "pointer" }}>
+          <label style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e", cursor: "pointer" }}>
             + Upload plan / CAD
             <input
               type="file"
@@ -1126,7 +1158,7 @@ export default function GprReport() {
           <div style={ss.sectionHead}>Scan panels (grid / slab)</div>
           <button
             type="button"
-            style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C" }}
+            style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }}
             onClick={() => patch({ scanPanels: [...(form.scanPanels || []), blankGprScanPanel()] })}
           >
             + Panel
@@ -1309,7 +1341,7 @@ export default function GprReport() {
             ) : null}
             <button
               type="button"
-              style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C" }}
+              style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }}
               onClick={() => patch({ chainageSegments: [...(form.chainageSegments || []), blankGprChainageSegment()] })}
             >
               + Segment
@@ -1438,7 +1470,7 @@ export default function GprReport() {
         <div style={ss.sectionHead}>Anomalies</div>
         <button
           type="button"
-          style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C" }}
+          style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }}
           onClick={() => patch({ anomalies: [...(form.anomalies || []), blankGprAnomaly()] })}
         >
           + Add anomaly
@@ -1568,12 +1600,12 @@ export default function GprReport() {
           />
         </Field>
       ))}
-      <button type="button" style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C" }} onClick={suggestLimitations}>
+      <button type="button" style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }} onClick={suggestLimitations}>
         Suggest limitation keys from data
       </button>
       <button
         type="button"
-        style={{ ...ss.btn, background: "#f1f5f9", color: "#0C447C", marginLeft: 8 }}
+        style={{ ...ss.btn, background: "#f1f5f9", color: "#0f766e", marginLeft: 8 }}
         onClick={() => patchReport((r) => applyGprSmartNarratives(r))}
       >
         Regenerate prebuilt narratives
@@ -1722,16 +1754,16 @@ export default function GprReport() {
       </Field>
       <button
         type="button"
-        style={{ ...ss.btn, background: "#E6F1FB", color: "#0C447C", marginBottom: 16 }}
+        style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e", marginBottom: 16 }}
         onClick={() => patchReport((r) => syncProcessingNarrative(r))}
       >
         Sync data processing narrative from steps
       </button>
       <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
-        <button type="button" style={{ ...ss.btn, background: "#0C447C", color: "#fff" }} disabled={!!busy} onClick={exportPdf}>
+        <button type="button" style={ss.btnP} disabled={!!busy} onClick={exportPdf}>
           {busy === "pdf" ? "Generating PDF…" : "Download PDF"}
         </button>
-        <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0C447C" }} onClick={exportHtml}>
+        <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0f766e" }} onClick={exportHtml}>
           Export HTML
         </button>
         <span style={{ fontSize: 12, color: "var(--color-text-secondary)", alignSelf: "center" }}>
@@ -1794,6 +1826,7 @@ export default function GprReport() {
               html={previewHtml}
               onPrint={exportPdf}
               height={520}
+              pending={previewPending}
             />
           </div>
           <div className="app-gpr-editor-footer app-gpr-editor-footer--shortcuts" title="Ctrl+S save · Alt+←/→ tabs · Ctrl+Shift+P preview">
@@ -1806,7 +1839,7 @@ export default function GprReport() {
             <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={() => setModal(null)}>
               Cancel
             </button>
-            <button type="button" style={{ ...ss.btn, background: "#0C447C", color: "#fff" }} onClick={saveReport}>
+            <button type="button" style={{ ...ss.btn, ...ss.btnP }} onClick={saveReport}>
               Save report
             </button>
           </div>
@@ -1816,13 +1849,15 @@ export default function GprReport() {
   };
 
   return (
-    <div className="app-gpr-page-shell">
+    <div className="app-document-module app-document-module--premium app-gpr-page-shell">
       <GprWaveBackdrop />
       <PageHero
+        badgeText="GPR"
         title="GPR report"
-        subtitle="Prebuilt GPR reports — equipment presets, BGS geology, weather impact, rule-based narratives (offline-ready)."
+        lead="Prebuilt GPR reports — equipment presets, BGS geology, weather impact, rule-based narratives (offline-ready)."
+        suppressRegisterPdf
       />
-      <D1ModuleSyncBanner {...sync} />
+      <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="GPR reports" />
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <input
           style={{ ...ss.input, maxWidth: 280 }}
@@ -1851,7 +1886,7 @@ export default function GprReport() {
         </label>
         <button
           type="button"
-          style={{ ...ss.btn, background: "#0C447C", color: "#fff" }}
+          style={{ ...ss.btn, ...ss.btnP }}
           onClick={() => {
             setTab("setup");
             setModal({ isNew: true, data: blankGprReport({ ref: nextGprRef(reports) }) });

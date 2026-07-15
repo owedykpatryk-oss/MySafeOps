@@ -40,6 +40,17 @@ export function collectEquipmentInspectionDueItems() {
       nextDueIso: row.nextDue,
       moduleId: "plant",
     });
+    // Calibration / service due — separate alert row when date differs from inspection nextDue
+    const calDue = String(row.calibrationDue || row.serviceDue || "").slice(0, 10);
+    const inspDue = String(row.nextDue || "").slice(0, 10);
+    if (calDue && calDue !== inspDue) {
+      push({
+        id: `plant_cal_${row.id}`,
+        name: `${row.assetRef || row.description || "Plant item"} (calibration)`,
+        nextDueIso: calDue,
+        moduleId: "plant",
+      });
+    }
   });
 
   (loadOrgScoped("electrical_pat_log", []) || []).forEach((row) => {

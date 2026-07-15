@@ -8,6 +8,8 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
+import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { getWorkerCertAlerts } from "../utils/certifications";
@@ -289,9 +291,24 @@ export default function TrainingMatrix() {
               </button>
             )}
             {items.length > 0 && (
-              <button type="button" style={ss.btn} onClick={exportCsv}>
-                Export CSV
-              </button>
+              <>
+                <button
+                  type="button"
+                  style={ss.btn}
+                  onClick={() => {
+                    const res = printRegisterFormPack("training", items);
+                    if (!res.ok && res.reason === "popup_blocked") {
+                      window.alert("Allow pop-ups to print the training A4 pack (Print → Save as PDF).");
+                    }
+                  }}
+                  title="Print branded A4 competence forms"
+                >
+                  Print forms pack
+                </button>
+                <button type="button" style={ss.btn} onClick={exportCsv}>
+                  Export CSV
+                </button>
+              </>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
               + Add record
@@ -345,6 +362,7 @@ export default function TrainingMatrix() {
                         Sync to People
                       </button>
                     ) : null}
+                    <RegisterFormPrintButton moduleId="training" record={r} />
                     <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                       Edit
                     </button>

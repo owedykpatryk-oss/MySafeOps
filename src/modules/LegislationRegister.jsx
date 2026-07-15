@@ -11,6 +11,7 @@ import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { safeHttpUrl } from "../utils/safeUrl";
 
 const KEY = "legislation_register";
 const genId = () => `leg_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
@@ -144,9 +145,12 @@ export default function LegislationRegister() {
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{item.shortName || item.fullName}</div>
                     <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>{item.summary || item.fullName}</div>
-                    {item.url ? (
-                      <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, marginTop: 4, display: "inline-block" }}>View on legislation.gov.uk</a>
-                    ) : null}
+                    {(() => {
+                      const legislationHref = safeHttpUrl(item.url);
+                      return legislationHref ? (
+                      <a href={legislationHref} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, marginTop: 4, display: "inline-block" }}>View on legislation.gov.uk</a>
+                      ) : null;
+                    })()}
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
                     {item.applicable ? <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: "#EAF3DE", color: "#27500A" }}>Applicable</span> : null}

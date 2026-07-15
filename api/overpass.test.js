@@ -1,20 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { buildHospitalQuery } from "../src/utils/hospitalOverpassQuery.js";
 
 function clampRadiusM(raw) {
   const n = Number(raw);
   if (!Number.isFinite(n)) return 25_000;
   return Math.max(500, Math.min(50_000, Math.round(n)));
-}
-
-function buildHospitalQuery(lat, lng, radiusM) {
-  return `
-[out:json][timeout:15];
-(
-  node(around:${radiusM},${lat},${lng})["amenity"="hospital"];
-  node(around:${radiusM},${lat},${lng})["healthcare"="hospital"];
-);
-out body;
-`.trim();
 }
 
 describe("overpass proxy helpers", () => {
@@ -24,9 +14,11 @@ describe("overpass proxy helpers", () => {
     expect(clampRadiusM(12_000)).toBe(12_000);
   });
 
-  it("builds hospital-only Overpass query", () => {
+  it("builds hospital query with ways/relations and center output", () => {
     const q = buildHospitalQuery(51.5, -0.12, 25_000);
     expect(q).toContain('["amenity"="hospital"]');
-    expect(q).toContain("around:25000,51.5,-0.12");
+    expect(q).toContain("nwr(around:25000,51.5,-0.12)");
+    expect(q).toContain("out center tags");
+    expect(q).toContain('["emergency"="yes"]');
   });
 });

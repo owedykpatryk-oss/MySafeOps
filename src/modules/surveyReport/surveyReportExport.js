@@ -10,6 +10,7 @@ import {
   filterGeoPhotosWithCoords,
 } from "../../utils/geoPhotoExport";
 import { sanitizePdfFileSegment } from "../../utils/pdfFileName";
+import { downloadBlob } from "../../utils/downloadBlob.js";
 import { downloadSurveyReportHtml } from "./surveyReportPrintHtml";
 import { downloadSurveyReportPdf } from "./surveyReportPdf";
 
@@ -32,11 +33,9 @@ export function downloadSurveyReportGeoJson(report, allGeoPhotos = []) {
   const { photos } = reportGeoPhotos(report, allGeoPhotos);
   const geo = exportGeoPhotosGeoJson(photos, report.ref || report.title || "survey-report");
   const blob = new Blob([JSON.stringify(geo, null, 2)], { type: "application/geo+json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${reportFileBase(report)}-geo-photos.geojson`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  if (!downloadBlob(blob, `${reportFileBase(report)}-geo-photos.geojson`)) {
+    throw new Error("Browser blocked the download — allow downloads for this site and try again.");
+  }
   return { count: photos.length };
 }
 

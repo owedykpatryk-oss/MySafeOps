@@ -7,6 +7,7 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
@@ -484,7 +485,8 @@ function SnagCard({ snag, workers, onEdit, onDelete, onStatusChange, bulkMode, s
               </option>
             ))}
           </select>
-          <button onClick={() => onEdit(snag)} style={{ ...ss.btn, padding: "4px 10px", fontSize: 12 }}>
+          <RegisterFormPrintButton moduleId="snags" record={snag} />
+          <button type="button" onClick={() => onEdit(snag)} style={{ ...ss.btn, padding: "4px 10px", fontSize: 12 }}>
             Edit
           </button>
           {canDelete !== false && (

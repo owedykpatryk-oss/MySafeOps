@@ -5,9 +5,10 @@ import { copyTextToClipboard } from "../utils/copyToClipboard";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
+import { genOpaqueToken } from "../utils/opaqueToken";
 import PageHero from "../components/PageHero";
 
-const genId = () => `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const genId = () => genOpaqueToken("sub");
 
 const ss = ms;
 

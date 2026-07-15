@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, memo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, memo, lazy, Suspense } from "react";
 import { useToast } from "../../context/ToastContext";
 import { copyTextToClipboard } from "../../utils/copyToClipboard";
 import { ms } from "../../utils/moduleStyles";
@@ -24,11 +24,7 @@ import { projectRamsCheckForPermit } from "../../utils/orgAutomationRules";
 import { gateCompetentReview, stampCompetentReview } from "../../utils/competentReviewGate";
 import { trackEvent } from "../../utils/telemetry";
 import PermitBuilder from "./components/PermitBuilder";
-import PermitBoardView from "./components/PermitBoard";
-import PermitTimelineView from "./components/PermitTimeline";
-import PermitLiveWall from "./components/PermitLiveWall";
 import PermitCommandCentre from "./components/PermitCommandCentre";
-import PermitSafetyMap from "./components/PermitSafetyMap";
 import PermitGuidancePanel from "./permitGuidance/components/PermitGuidancePanel";
 import { getPermitGuidance, hasPermitGuidance } from "./permitGuidance/registry";
 import { createDefaultChecklistItems, normalizeChecklistItems, normalizeChecklistState } from "./permitChecklistUtils";
@@ -60,7 +56,7 @@ import { PERMIT_TYPES, checklistStringsForType } from "./permitTypes";
 import { getPermitTypesForMarket } from "./permitTypesMarket";
 import { getOrgMarketId } from "../../utils/orgMarket";
 import { renderPermitDocumentHtml } from "./permitDocumentHtml";
-import { safeOpaqueToken, openPrintWindow, writePrintWindowDocument } from "../../utils/htmlEscape.js";
+import { safeOpaqueToken, openPrintWindowOrWarn, writePrintWindowDocument } from "../../utils/htmlEscape.js";
 import { buildPermitEmailRecipients, parseManualEmails, sendPermitNotificationEmail, sendPermitNotificationWebPush } from "../../utils/permitNotifications";
 import {
   listPermitIncidents,
@@ -76,13 +72,13 @@ import {
   readPlanUploadFile,
   planIsMarkable,
 } from "./permitPlanOverlayRegistry";
-import PlanMarkupCanvas from "../../components/plans/PlanMarkupCanvas";
 import PermitIncidentReportDialog from "./components/PermitIncidentReportDialog";
 import PermitSimpleFormDialog from "./components/PermitSimpleFormDialog";
 import { rasterizePdfDataUrl } from "../../utils/planPdfRaster";
 import { getPermitStatusMeta } from "../../utils/statusChipMeta";
 import StatusChip from "../../components/StatusChip";
 import EmptyState from "../../components/EmptyState";
+import TouchSignaturePad from "../../components/TouchSignaturePad";
 import {
   buildPermitDraftFromProject,
   missingRequiredPermits,
@@ -91,18 +87,32 @@ import {
 import PermitQuickIssueHub from "./components/PermitQuickIssueHub";
 import PermitStudioShell, { PermitStudioPanel, PERMIT_FIELD_SECTIONS } from "./components/PermitStudioShell";
 import PermitFirstRunGuide from "./components/PermitFirstRunGuide";
-import PermitConflictMatrixGrid from "./components/PermitConflictMatrixGrid";
-import PermitFormPreview from "./components/PermitFormPreview";
-import PermitWorkflowDesigner from "./components/PermitWorkflowDesigner";
-import PermitConditionalRulesBoard from "./components/PermitConditionalRulesBoard";
-import PermitDependencyFlowChart from "./components/PermitDependencyFlowChart";
-import PermitIntegrationsPanel from "./components/PermitIntegrationsPanel";
-import PermitWorkflowRoleMatrix from "./components/PermitWorkflowRoleMatrix";
 import { labelWorkflowState } from "./permitWorkflowLabels";
-import PermitAuditDashboard from "./components/PermitAuditDashboard";
 import PermitContextTips from "./components/PermitContextTips";
 import PermitNextSteps from "./components/PermitNextSteps";
-import { isPermitGuideComplete, registerPermitGuideCloudSync, shouldPreferQuickIssueView, PTW_REPLAY_GUIDE_EVENT } from "../../utils/permitGuideStorage";
+
+const PermitBoardView = lazy(() => import("./components/PermitBoard"));
+const PermitTimelineView = lazy(() => import("./components/PermitTimeline"));
+const PermitLiveWall = lazy(() => import("./components/PermitLiveWall"));
+const PermitSafetyMap = lazy(() => import("./components/PermitSafetyMap"));
+const PermitConflictMatrixGrid = lazy(() => import("./components/PermitConflictMatrixGrid"));
+const PermitFormPreview = lazy(() => import("./components/PermitFormPreview"));
+const PermitWorkflowDesigner = lazy(() => import("./components/PermitWorkflowDesigner"));
+const PermitConditionalRulesBoard = lazy(() => import("./components/PermitConditionalRulesBoard"));
+const PermitDependencyFlowChart = lazy(() => import("./components/PermitDependencyFlowChart"));
+const PermitIntegrationsPanel = lazy(() => import("./components/PermitIntegrationsPanel"));
+const PermitWorkflowRoleMatrix = lazy(() => import("./components/PermitWorkflowRoleMatrix"));
+const PermitAuditDashboard = lazy(() => import("./components/PermitAuditDashboard"));
+const PlanMarkupCanvas = lazy(() => import("../../components/plans/PlanMarkupCanvas"));
+
+function PermitLazyFallback({ label = "Loading…" }) {
+  return (
+    <div style={{ padding: 16, fontSize: 13, color: "var(--color-text-secondary,#64748b)" }} role="status">
+      {label}
+    </div>
+  );
+}
+import { isPermitGuideComplete, registerPermitGuideCloudSync, shouldPreferQuickIssueView, setPreferQuickIssueView, PTW_REPLAY_GUIDE_EVENT } from "../../utils/permitGuideStorage";
 import { hydratePermitGuideFromCloud, syncPermitGuideToCloud } from "../../utils/permitGuideCloud";
 import { PTW_RESET_TIPS_EVENT, resetContextTips } from "../../utils/permitContextTips";
 import { buildPermitNextSteps, isPermitStudioConfigured } from "./permitNextSteps";
@@ -160,15 +170,15 @@ import { evaluatePermitConditionalRules, normalizePermitConditionalRules } from 
 import { useApp } from "../../context/AppContext";
 import {
   suggestPermitDescriptionText,
-  queueIntegrationEvent,
   buildIntegrationAdaptersStatus,
 } from "./permitIntegrationAdapters";
 import { evaluateWorkerPermitEligibility } from "../../utils/certifications";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
+import { genOpaqueToken } from "../../utils/opaqueToken";
 
 const genId = () => `ptw_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-const genAckToken = () => `ack_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+const genAckToken = () => genOpaqueToken("ack");
 
 // Cheap in-memory cache — avoids a localStorage read + JSON.parse per date cell rendered
 // (permit board/list renders many date fields per permit, every render).
@@ -291,8 +301,8 @@ function collectSlaSignalsForPermit(permit, nowTs) {
     if (minsLeft <= threshold && minsLeft >= threshold - 1) {
       signals.push({
         key: `reminder_${queueType}_${threshold}`,
-        note: `Auto reminder: ${kindLabel} SLA due in ~${threshold} min.`,
-        status: "queued",
+        note: `SLA clock: ${kindLabel} due in ~${threshold} min (local note — not emailed).`,
+        status: "local",
       });
     }
   });
@@ -302,9 +312,9 @@ function collectSlaSignalsForPermit(permit, nowTs) {
         key: `escalation_${queueType}_${threshold}`,
         note:
           threshold === 0
-            ? `Auto escalation: ${kindLabel} SLA overdue.`
-            : `Auto escalation: ${kindLabel} SLA overdue by ${threshold}+ min.`,
-        status: "escalated",
+            ? `SLA clock: ${kindLabel} overdue (local note — not emailed).`
+            : `SLA clock: ${kindLabel} overdue by ${threshold}+ min (local note — not emailed).`,
+        status: "local_escalated",
       });
     }
   });
@@ -3209,13 +3219,7 @@ function PermitForm({
               type="button"
               onClick={() => {
                 if (!canIssue) return;
-                const pr = {
-                  ...buildPermitPayload("ready_for_review"),
-                  integrationQueue: [
-                    queueIntegrationEvent(form, "webhook", { event: "permit_ready_for_review" }),
-                    ...(form.integrationQueue || []),
-                  ],
-                };
+                const pr = buildPermitPayload("ready_for_review");
                 saveFormPrefs(pr);
                 trackEvent("permit_submitted_review", { permitType: type });
                 onSave(pr);
@@ -3246,14 +3250,7 @@ function PermitForm({
                 saveFormPrefs(withOverride);
                 trackEvent("permit_issued", { permitType: type, legalReady });
                 const issuedPayload = attachRamsSnapshotOnIssue(withOverride);
-                onSave({
-                  ...issuedPayload,
-                  integrationQueue: [
-                    queueIntegrationEvent(form, "calendar", { event: "permit_expiry_reminder" }),
-                    queueIntegrationEvent(form, "webhook", { event: "permit_issued" }),
-                    ...(form.integrationQueue || []),
-                  ],
-                });
+                onSave(issuedPayload);
               }}
               style={{ ...ss.btnO, opacity: canIssue ? 1 : 0.6, cursor: canIssue ? "pointer" : "not-allowed" }}
               disabled={!canIssue}
@@ -3791,8 +3788,15 @@ const PermitCard = memo(function PermitCard({
               <div style={{ fontWeight: 600, marginBottom: 6, color: "var(--color-text-primary)" }}>Acknowledgements</div>
               <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.5 }}>
                 {[...permit.acknowledgements].slice(-10).reverse().map((e, i) => (
-                  <li key={`${e.at || "ack"}-${i}`}>
+                  <li key={`${e.at || "ack"}-${i}`} style={{ marginBottom: 6 }}>
                     {fmtDateTime(e.at)} — {e.by || "Unknown"}{e.note ? ` · ${e.note}` : ""}
+                    {e.signatureImageDataUrl && String(e.signatureImageDataUrl).startsWith("data:image") ? (
+                      <img
+                        src={e.signatureImageDataUrl}
+                        alt={`Signature ${e.by || ""}`}
+                        style={{ display: "block", maxHeight: 36, marginTop: 4, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 4 }}
+                      />
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -3868,7 +3872,7 @@ PermitCard.displayName = "PermitCard";
 
 function openPermitDocument(permit, { autoPrint = false } = {}) {
   void (async () => {
-    const win = openPrintWindow();
+    const win = openPrintWindowOrWarn();
     if (!win) return;
     await writePrintWindowDocument(
       win,
@@ -3943,14 +3947,22 @@ export default function PermitSystem() {
   const [orgSettingsTick, setOrgSettingsTick] = useState(0);
   const defaultViewAppliedRef = useRef(false);
   const [viewMode, setViewMode] = useState(() => {
+    const narrow = typeof window !== "undefined" && window.innerWidth < 820;
     const saved = String(load(PERMIT_LAST_VIEW_KEY, "") || "").trim().toLowerCase();
-    if (saved) return saved;
+    if (saved) {
+      if (narrow && ["command", "board", "timeline", "map"].includes(saved)) return "quick";
+      return saved;
+    }
     const orgRaw = loadOrgSettingsRaw();
     const defaultViewId = getDefaultPermitSavedViewId(orgRaw);
     if (defaultViewId) {
       const views = load(PERMIT_SAVED_VIEWS_KEY, []);
       const dv = views.find((v) => v.id === defaultViewId);
-      if (dv?.viewMode) return String(dv.viewMode).toLowerCase();
+      if (dv?.viewMode) {
+        const mode = String(dv.viewMode).toLowerCase();
+        if (narrow && ["command", "board", "timeline", "map"].includes(mode)) return "quick";
+        return mode;
+      }
     }
     return "quick";
   });
@@ -3991,6 +4003,7 @@ export default function PermitSystem() {
   });
   const [ackActorName, setAckActorName] = useState("");
   const [ackActorNote, setAckActorNote] = useState("");
+  const ackPadRef = useRef(null);
   const [closePermitDialog, setClosePermitDialog] = useState(null);
   const [conflictOverrideDialog, setConflictOverrideDialog] = useState(null);
   const [handoverDialog, setHandoverDialog] = useState(null);
@@ -4570,33 +4583,48 @@ export default function PermitSystem() {
   }, [permits]);
 
   const finishSavePermit = (p, versionReason = "") => {
-    setPermits((prev) => {
-      const existing = prev.find((x) => x.id === p.id);
-      const normalized = normalizeAdvancedPermit(p, p.type || existing?.type || "hot_work");
-      const auditLog = appendPermitAuditEntry(existing, normalized);
-      let next = { ...normalized, auditLog };
-      if (existing) {
-        const history = Array.isArray(existing.versionHistory) ? existing.versionHistory : [];
-        if (hasMaterialPermitChanges(existing, next)) {
-          const versionEntry = createPermitVersionEntry(existing, next, permitActorLabel, versionReason || "");
-          if (versionEntry) {
-            next = {
-              ...next,
-              versionHistory: [versionEntry, ...history].slice(0, 60),
-              lastVersionNote: versionEntry.reason || "",
-              updatedBy: permitActorLabel,
-            };
-          }
-        } else {
-          next = { ...next, versionHistory: history, updatedBy: permitActorLabel };
+    const existing = permits.find((x) => x.id === p.id);
+    const prevStatus = String(existing?.status || "");
+    const normalized = normalizeAdvancedPermit(p, p.type || existing?.type || "hot_work");
+    const auditLog = appendPermitAuditEntry(existing, normalized);
+    let next = { ...normalized, auditLog, integrationQueue: [] };
+    if (existing) {
+      const history = Array.isArray(existing.versionHistory) ? existing.versionHistory : [];
+      if (hasMaterialPermitChanges(existing, next)) {
+        const versionEntry = createPermitVersionEntry(existing, next, permitActorLabel, versionReason || "");
+        if (versionEntry) {
+          next = {
+            ...next,
+            versionHistory: [versionEntry, ...history].slice(0, 60),
+            lastVersionNote: versionEntry.reason || "",
+            updatedBy: permitActorLabel,
+          };
         }
       } else {
-        next = { ...next, versionHistory: [], updatedBy: permitActorLabel };
+        next = { ...next, versionHistory: history, updatedBy: permitActorLabel };
       }
-      void logPermitAuditToSupabase(existing, next, getOrgId());
-      pushPermitRecentHistory(next);
-      return existing ? prev.map((x) => (x.id === p.id ? next : x)) : [next, ...prev];
+    } else {
+      next = { ...next, versionHistory: [], updatedBy: permitActorLabel };
+    }
+    setPermits((prev) => {
+      const stillThere = prev.find((x) => x.id === next.id);
+      return stillThere ? prev.map((x) => (x.id === next.id ? next : x)) : [next, ...prev];
     });
+    void logPermitAuditToSupabase(existing, next, getOrgId());
+    pushPermitRecentHistory(next);
+    const nextStatus = String(next.status || "");
+    if (nextStatus === "active" && prevStatus !== "active") {
+      void dispatchPermitWebhook("issued", { ...next, status: "active" });
+    } else if (
+      (nextStatus === "ready_for_review" || nextStatus === "pending_review") &&
+      prevStatus !== "ready_for_review" &&
+      prevStatus !== "pending_review"
+    ) {
+      void dispatchPermitWebhook("status_changed", next, {
+        from_status: prevStatus || "draft",
+        to_status: nextStatus,
+      });
+    }
     setModal(null);
   };
 
@@ -5000,8 +5028,14 @@ export default function PermitSystem() {
     const derived = meta?.derived ?? derivePermitStatus(p, tick);
     const endDate = meta?.endDate ?? (permitEndIso(p) ? new Date(permitEndIso(p)) : null);
     if (filterType && p.type!==filterType) return false;
-    if (filterStatus==="active" && (derived!=="active" || !endDate || endDate < tick)) return false;
-    if (filterStatus==="expired" && !(derived==="active" && endDate && endDate < tick)) return false;
+    if (filterStatus==="active" && derived!=="active") return false;
+    if (filterStatus==="expiring_soon") {
+      const soonMs = 2 * 60 * 60 * 1000;
+      if (derived !== "active" || !endDate) return false;
+      const msLeft = endDate.getTime() - tick.getTime();
+      if (!(msLeft >= 0 && msLeft < soonMs)) return false;
+    }
+    if (filterStatus==="expired" && derived!=="expired") return false;
     if (filterStatus==="closed" && derived!=="closed") return false;
     if (filterStatus==="draft" && derived!=="draft") return false;
     if (filterStatus==="pending_review" && derived!=="pending_review") return false;
@@ -6429,11 +6463,11 @@ export default function PermitSystem() {
         return;
       }
     }
-    if (shouldPreferQuickIssueView()) {
+    if (shouldPreferQuickIssueView({ narrow: viewportWidth < 820 })) {
       setViewMode("quick");
     }
     defaultViewAppliedRef.current = true;
-  }, [savedViews, orgSettingsLive]);
+  }, [savedViews, orgSettingsLive, viewportWidth]);
 
   const toggleWallFullscreen = async () => {
     try {
@@ -6504,22 +6538,10 @@ export default function PermitSystem() {
     const autoRecipients = buildPermitEmailRecipients(permit, workers);
     setSimpleFormDialog({
       title: "Notify permit team",
-      description: `${(effectivePermitTypes[permit.type] || effectivePermitTypes.general).label}${permit.location ? ` · ${permit.location}` : ""}`,
-      submitLabel: "Send notification",
+      description: `${(effectivePermitTypes[permit.type] || effectivePermitTypes.general).label}${permit.location ? ` · ${permit.location}` : ""} · Sends email now. Slack/Teams (Integrations) fire when the permit is issued or activated.`,
+      submitLabel: "Send email",
       maxWidth: 520,
       fields: [
-        {
-          name: "channel",
-          label: "Channel",
-          type: "select",
-          defaultValue: "email",
-          options: [
-            { value: "email", label: "Email" },
-            { value: "slack", label: "Slack (queued)" },
-            { value: "teams", label: "Teams (queued)" },
-            { value: "whatsapp", label: "WhatsApp (queued)" },
-          ],
-        },
         {
           name: "recipients",
           label: "Recipients (comma-separated emails)",
@@ -6531,20 +6553,7 @@ export default function PermitSystem() {
       ],
       submit: async (values) => {
         setSimpleFormDialog(null);
-        const channel = String(values.channel || "email").trim().toLowerCase();
-        if (channel !== "email") {
-          const queued = {
-            at: new Date().toISOString(),
-            channel: ["slack", "teams", "whatsapp"].includes(channel) ? channel : "email",
-            status: "queued",
-            recipientCount: 0,
-            note: "Channel integration queued (observability + retry center).",
-          };
-          setPermits((prev) => prev.map((p) => (p.id === permit.id ? { ...p, notificationLog: [...(p.notificationLog || []), queued] } : p)));
-          trackEvent("permit_notification_queued_channel", { permitId: permit.id, channel: queued.channel });
-          window.alert(`Saved ${queued.channel} notification request to delivery log (integration queue).`);
-          return;
-        }
+        const channel = "email";
         if (!supabase) {
           window.alert("Cloud notifications require a signed-in cloud account.");
           return;
@@ -6642,7 +6651,10 @@ export default function PermitSystem() {
     const url = `${window.location.origin}${window.location.pathname}?view=permits&permitAck=${encodeURIComponent(targetToken)}`;
     const ok = await copyTextToClipboard(url);
     if (ok) {
-      pushToast({ type: "success", message: "Read/sign link copied to clipboard." });
+      pushToast({
+        type: "success",
+        message: "Read/sign link copied. Recipient needs this org’s data (same device or cloud sync).",
+      });
     } else {
       pushToast({ type: "info", message: url, title: "Copy this link manually" });
     }
@@ -6708,6 +6720,15 @@ export default function PermitSystem() {
       window.alert("Enter your name/email before signing.");
       return;
     }
+    if (!ackPadRef.current?.hasInk?.()) {
+      window.alert("Draw your signature on the pad before confirming.");
+      return;
+    }
+    const signatureImageDataUrl = ackPadRef.current.toDataURL("image/png") || "";
+    if (!signatureImageDataUrl.startsWith("data:image")) {
+      window.alert("Could not capture signature — try clearing and signing again.");
+      return;
+    }
     const at = new Date().toISOString();
     setPermits((prev) =>
       prev.map((p) => {
@@ -6716,7 +6737,13 @@ export default function PermitSystem() {
           ...p,
           acknowledgements: [
             ...(p.acknowledgements || []),
-            { at, by, note: String(ackActorNote || "").trim() || "Read/Sign link confirmation" },
+            {
+              at,
+              by,
+              note: String(ackActorNote || "").trim() || "Read/Sign link confirmation",
+              signatureImageDataUrl,
+              source: "portal",
+            },
           ],
           notificationLog: [
             ...(p.notificationLog || []),
@@ -6728,9 +6755,11 @@ export default function PermitSystem() {
         return withLog;
       })
     );
-    window.alert("Acknowledgement saved.");
+    trackEvent("permit_acknowledged_portal", { permitId: ackPortalPermit.id });
+    window.alert("Acknowledgement and signature saved.");
     setAckActorName("");
     setAckActorNote("");
+    ackPadRef.current?.clear?.();
   };
 
   const confirmPermitBriefing = (permitId) => {
@@ -7405,29 +7434,38 @@ export default function PermitSystem() {
             </button>
           </div>
           <div style={{ display:"grid", gridTemplateColumns: isUltraNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
-            <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:38 }} onClick={() => previewPermit(mobileQuickPermit)}>
+            <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:44 }} onClick={() => previewPermit(mobileQuickPermit)}>
               Preview
             </button>
-            <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:38 }} onClick={() => setModal({ type: "form", data: mobileQuickPermit })}>
+            <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:44 }} onClick={() => setModal({ type: "form", data: mobileQuickPermit })}>
               Edit
             </button>
-            <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:38 }} onClick={() => openHandoverDialog(mobileQuickPermit)}>
+            <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:44 }} onClick={() => openHandoverDialog(mobileQuickPermit)}>
               Shift handover
             </button>
             {derivePermitStatus(mobileQuickPermit, now) === "active" && !mobileQuickPermit.briefingConfirmedAt && mobileQuickPermit.startDateTime && (now.getTime() - new Date(mobileQuickPermit.startDateTime).getTime() > 20 * 60 * 1000) ? (
-              <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:38 }} onClick={() => confirmPermitBriefing(mobileQuickPermit.id)}>
+              <button type="button" style={{ ...ss.btn, fontSize:12, minHeight:44 }} onClick={() => confirmPermitBriefing(mobileQuickPermit.id)}>
                 Confirm briefing
               </button>
             ) : null}
-            {(mobileQuickPermit.status === "approved" || mobileQuickPermit.status === "closed" || mobileQuickPermit.status === "pending_review" || mobileQuickPermit.status === "ready_for_review") ? (
-              <button type="button" style={{ ...ss.btnO, fontSize:12, minHeight:38 }} onClick={() => void activatePermit(mobileQuickPermit.id)}>
+            {mobileQuickPermit.status === "approved" ||
+            mobileQuickPermit.status === "closed" ||
+            mobileQuickPermit.status === "pending_review" ||
+            mobileQuickPermit.status === "ready_for_review" ? (
+              <button type="button" style={{ ...ss.btnO, fontSize:12, minHeight:44 }} onClick={() => void activatePermit(mobileQuickPermit.id)}>
                 Activate
               </button>
-            ) : (
-              <button type="button" style={{ ...ss.btnR, fontSize:12, minHeight:38 }} onClick={() => requestClosePermit(mobileQuickPermit.id)}>
+            ) : null}
+            {mobileQuickPermit.status === "active" || derivePermitStatus(mobileQuickPermit, now) === "active" ? (
+              <button type="button" style={{ ...ss.btnR, fontSize:12, minHeight:44 }} onClick={() => requestClosePermit(mobileQuickPermit.id)}>
                 Close permit
               </button>
-            )}
+            ) : null}
+            {mobileQuickPermit.status === "suspended" ? (
+              <button type="button" style={{ ...ss.btnO, fontSize:12, minHeight:44 }} onClick={() => resumePermit(mobileQuickPermit.id)}>
+                Resume
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -7512,12 +7550,14 @@ export default function PermitSystem() {
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#0C447C" }}>Contractor Read/Sign portal</div>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                {ackPortalPermit ? "Confirm you have read this permit before work starts." : "Permit not found for this link."}
+                {ackPortalPermit
+                  ? "Read the permit, enter your name, draw your signature, then confirm."
+                  : "Permit not found for this link."}
               </div>
             </div>
             <button
               type="button"
-              style={{ ...ss.btn, fontSize: 11, padding: "3px 8px" }}
+              style={{ ...ss.btn, fontSize: 12, padding: "8px 12px", minHeight: 44 }}
               onClick={() => {
                 const next = new URLSearchParams(window.location.search);
                 next.delete("permitAck");
@@ -7529,30 +7569,33 @@ export default function PermitSystem() {
             </button>
           </div>
           {ackPortalPermit ? (
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontSize: 12 }}>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ fontSize: 13 }}>
                 <strong>{(effectivePermitTypes[ackPortalPermit.type] || effectivePermitTypes.general).label}</strong> · {ackPortalPermit.location || "No location"} ·{" "}
                 {fmtDateTime(ackPortalPermit.startDateTime)} → {fmtDateTime(permitEndIso(ackPortalPermit))}
               </div>
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
                 {ackPortalPermit.description || "No description"}
               </div>
               <label style={{ ...ss.lbl, marginBottom: 0 }}>Name / email</label>
               <input
-                style={ss.inp}
+                style={{ ...ss.inp, minHeight: 44, fontSize: 16 }}
                 value={ackActorName}
                 onChange={(e) => setAckActorName(e.target.value)}
                 placeholder="e.g. subcontractor@company.com"
+                autoComplete="name"
               />
               <label style={{ ...ss.lbl, marginBottom: 0 }}>Note (optional)</label>
               <input
-                style={ss.inp}
+                style={{ ...ss.inp, minHeight: 44, fontSize: 16 }}
                 value={ackActorNote}
                 onChange={(e) => setAckActorNote(e.target.value)}
                 placeholder="Optional note"
               />
+              <label style={{ ...ss.lbl, marginBottom: 0 }}>Signature</label>
+              <TouchSignaturePad ref={ackPadRef} height={160} placeholder="Draw signature here" />
               <div>
-                <button type="button" style={ss.btnO} onClick={acknowledgeFromPortalLink}>
+                <button type="button" style={{ ...ss.btnO, minHeight: 48, padding: "12px 16px", fontSize: 14 }} onClick={acknowledgeFromPortalLink}>
                   Confirm read & sign
                 </button>
               </div>
@@ -7569,7 +7612,7 @@ export default function PermitSystem() {
             { label:"Approved", value:stats.approved, bg:"#E6F1FB", color:"#0C447C", filter:"approved" },
             { label:"Suspended", value:permits.filter((p) => p.status === "suspended").length, bg:"#FCEBEB", color:"#791F1F", filter:"suspended" },
             { label:"Active", value:stats.active, bg:"#EAF3DE", color:"#27500A", filter:"active" },
-            { label:"Expiring soon", value:stats.expiringSoon, bg:"#FAEEDA", color:"#633806", filter:"active" },
+            { label:"Expiring soon", value:stats.expiringSoon, bg:"#FAEEDA", color:"#633806", filter:"expiring_soon" },
             { label:"Expired", value:stats.expired, bg:"#FCEBEB", color:"#791F1F", filter:"expired" },
             { label:"Closed", value:stats.closed, bg:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary)", filter:"closed" },
           ].map(c=>(
@@ -7875,15 +7918,17 @@ export default function PermitSystem() {
           });
           const combinedOverlay = [...permitOverlay, ...incidentOverlay];
           return (
-            <PlanMarkupCanvas
-              plan={plan}
-              compact
-              extraOverlay={combinedOverlay.length ? combinedOverlay : null}
-              onPlanChange={(next) => {
-                setProjectPlans((prev) => prev.map((p) => (p.id === plan.id ? next : p)));
-                trackEvent("permit_plan_markup_updated", { planId: plan.id });
-              }}
-            />
+            <Suspense fallback={<PermitLazyFallback label="Loading plan…" />}>
+              <PlanMarkupCanvas
+                plan={plan}
+                compact
+                extraOverlay={combinedOverlay.length ? combinedOverlay : null}
+                onPlanChange={(next) => {
+                  setProjectPlans((prev) => prev.map((p) => (p.id === plan.id ? next : p)));
+                  trackEvent("permit_plan_markup_updated", { planId: plan.id });
+                }}
+              />
+            </Suspense>
           );
         })()}
       </div>
@@ -7981,6 +8026,7 @@ export default function PermitSystem() {
         <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto" }}>
           <option value="">All statuses</option>
           <option value="active">Active</option>
+          <option value="expiring_soon">Expiring soon (2h)</option>
           <option value="expired">Expired</option>
           <option value="closed">Closed</option>
           <option value="draft">Draft</option>
@@ -8108,6 +8154,8 @@ export default function PermitSystem() {
               aria-selected={viewMode === mode}
               onClick={() => {
                 setViewMode(mode);
+                if (mode === "quick") setPreferQuickIssueView(true);
+                else if (mode === "list" && isNarrow) setPreferQuickIssueView(false);
                 trackEvent("permit_view_changed", { mode });
               }}
               className={`ptw-view-toolbar__mode${viewMode === mode ? " ptw-view-toolbar__mode--active" : ""}`}
@@ -8205,6 +8253,7 @@ export default function PermitSystem() {
         stats={permitStudioStats}
       >
       {permitStudioOpen ? (
+      <Suspense fallback={<PermitLazyFallback label="Loading Permit Studio…" />}>
       <>
       {permitStudioTab === "rules" ? (
       <PermitConditionalRulesBoard
@@ -9056,6 +9105,7 @@ export default function PermitSystem() {
       ) : null}
 
       </>
+      </Suspense>
       ) : null}
 
       </PermitStudioShell>
@@ -9146,17 +9196,19 @@ export default function PermitSystem() {
           compact
         />
       ) : effectiveViewMode === "map" ? (
-        <PermitSafetyMap
-          projects={projectList}
-          plans={projectPlans}
-          permits={permits}
-          drawingObjects={allDrawingObjects}
-          simopsMap={simopsMap}
-          now={now}
-          permitTypes={effectivePermitTypes}
-          onOpenPermit={(permit) => setModal({ type: "form", data: permit })}
-          onPreviewPermit={previewPermit}
-        />
+        <Suspense fallback={<PermitLazyFallback label="Loading map…" />}>
+          <PermitSafetyMap
+            projects={projectList}
+            plans={projectPlans}
+            permits={permits}
+            drawingObjects={allDrawingObjects}
+            simopsMap={simopsMap}
+            now={now}
+            permitTypes={effectivePermitTypes}
+            onOpenPermit={(permit) => setModal({ type: "form", data: permit })}
+            onPreviewPermit={previewPermit}
+          />
+        </Suspense>
       ) : effectiveViewMode === "command" ? (
         <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
           {opsActionItems.length === 0 ? (
@@ -9177,36 +9229,41 @@ export default function PermitSystem() {
           )}
         </div>
       ) : effectiveViewMode === "wall" ? (
-        <PermitLiveWall
-          permits={filtered}
-          now={wallNow}
-          isNarrow={isNarrow}
-          stats={stats}
-          simopsMap={simopsMap}
-          commandCounts={commandCounts}
-          isFullscreen={wallFullscreen}
-          soundEnabled={wallSoundEnabled}
-          onToggleSound={() => setWallSoundEnabled((v) => !v)}
-          onToggleFullscreen={() => void toggleWallFullscreen()}
-          onOpen={(permit) => setModal({ type:"form", data: permit })}
-          onPreview={previewPermit}
-          onPrint={exportPermitPdf}
-        />
+        <Suspense fallback={<PermitLazyFallback label="Loading wall…" />}>
+          <PermitLiveWall
+            permits={filtered}
+            now={wallNow}
+            isNarrow={isNarrow}
+            stats={stats}
+            simopsMap={simopsMap}
+            commandCounts={commandCounts}
+            isFullscreen={wallFullscreen}
+            soundEnabled={wallSoundEnabled}
+            onToggleSound={() => setWallSoundEnabled((v) => !v)}
+            onToggleFullscreen={() => void toggleWallFullscreen()}
+            onOpen={(permit) => setModal({ type:"form", data: permit })}
+            onPreview={previewPermit}
+            onPrint={exportPermitPdf}
+          />
+        </Suspense>
       ) : effectiveViewMode === "board" ? (
-        <PermitBoardView
-          compact={isNarrow}
-          columns={[
-            { id: "draft", label: "Draft" },
-            { id: "pending_review", label: "In review" },
-            { id: "approved", label: "Approved" },
-            { id: "active", label: "Active" },
-            { id: "expired", label: "Expired" },
-            { id: "closed", label: "Closed" },
-          ]}
-          permitsByColumn={permitsByColumn}
-          renderPermit={renderBoardPermitCard}
-        />
+        <Suspense fallback={<PermitLazyFallback label="Loading board…" />}>
+          <PermitBoardView
+            compact={isNarrow}
+            columns={[
+              { id: "draft", label: "Draft" },
+              { id: "pending_review", label: "In review" },
+              { id: "approved", label: "Approved" },
+              { id: "active", label: "Active" },
+              { id: "expired", label: "Expired" },
+              { id: "closed", label: "Closed" },
+            ]}
+            permitsByColumn={permitsByColumn}
+            renderPermit={renderBoardPermitCard}
+          />
+        </Suspense>
       ) : effectiveViewMode === "timeline" ? (
+        <Suspense fallback={<PermitLazyFallback label="Loading timeline…" />}>
         <PermitTimelineView
           permits={timelineSortedPermits}
           renderRow={(permit) => {
@@ -9246,6 +9303,7 @@ export default function PermitSystem() {
             );
           }}
         />
+        </Suspense>
       ) : (
         <>
           {listPg.hasMore(filtered) ? (

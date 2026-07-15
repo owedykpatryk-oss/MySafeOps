@@ -68,7 +68,7 @@ function SurveyListRow({
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <strong style={{ fontSize: 15 }}>{r.title || r.ref || "Untitled"}</strong>
+                <strong style={{ fontSize: 15, letterSpacing: "-0.015em", fontWeight: 700 }}>{r.title || r.ref || "Untitled"}</strong>
                 {r.surveyType ? (
                   <span className={`app-survey-type-chip app-survey-type-chip--${surveyTypeChipTone(r.surveyType)}`}>
                     {surveyTypeLabel(r.surveyType)}

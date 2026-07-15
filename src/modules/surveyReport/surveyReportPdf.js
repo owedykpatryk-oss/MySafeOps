@@ -4,6 +4,7 @@
 import { jsPDF } from "jspdf";
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
 import { sanitizePdfFileSegment } from "../../utils/pdfFileName";
+import { downloadBlob } from "../../utils/downloadBlob";
 import { buildSurveyReportHtml } from "./surveyReportPrintHtml";
 import { sanitizePrintPreviewHtml } from "../../utils/htmlEscape.js";
 import { normalizeSurveyReport } from "./surveyReportHelpers";
@@ -11,9 +12,18 @@ import { normalizeSurveyReport } from "./surveyReportHelpers";
 const A4_W_MM = 210;
 const A4_H_MM = 297;
 const MARGIN_MM = 8;
+const CAPTURE_TIMEOUT_MS = 45_000;
 
 function wait(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function waitForImages(root) {
@@ -30,7 +40,7 @@ function waitForImages(root) {
           const done = () => resolve();
           img.addEventListener("load", done, { once: true });
           img.addEventListener("error", done, { once: true });
-          setTimeout(done, 8000);
+          setTimeout(done, 4000);
         })
     )
   );
@@ -46,13 +56,15 @@ function buildFileName(report) {
 }
 
 async function renderSurveyReportCanvas(report, extras, notify) {
+  // Regex sanitize keeps <style>; DOMPurify whole-document config applied when available.
   const html = sanitizePrintPreviewHtml(buildSurveyReportHtml(report, extras));
 
   notify("prepare");
   const iframe = document.createElement("iframe");
   iframe.setAttribute("title", "Survey report PDF export");
+  // Keep visible to the compositor (opacity:0) — visibility:hidden often yields a blank html2canvas capture.
   iframe.style.cssText =
-    "position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;visibility:hidden;";
+    "position:fixed;left:0;top:0;width:794px;height:1123px;border:0;opacity:0;pointer-events:none;z-index:-1;";
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -67,26 +79,48 @@ async function renderSurveyReportCanvas(report, extras, notify) {
 
   notify("images");
   await waitForImages(doc.body);
-  await wait(350);
+  await wait(400);
+
+  const captureRoot = doc.body;
+  if (!captureRoot || !captureRoot.innerText?.trim()) {
+    document.body.removeChild(iframe);
+    throw new Error("Survey report preview was empty — try Print preview first, then Download PDF again.");
+  }
 
   notify("capture");
   const { default: html2canvas } = await import("html2canvas");
   let canvas;
   try {
-    canvas = await html2canvas(doc.body, {
-      scale: 2,
-      logging: false,
-      useCORS: true,
-      allowTaint: false,
-      backgroundColor: "#ffffff",
-      windowWidth: 794,
-      width: 794,
-      scrollX: 0,
-      scrollY: 0,
-      imageTimeout: 15000,
-    });
+    canvas = await withTimeout(
+      html2canvas(captureRoot, {
+        scale: 1.5,
+        logging: false,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: "#ffffff",
+        windowWidth: 794,
+        width: 794,
+        scrollX: 0,
+        scrollY: 0,
+        imageTimeout: 10000,
+        onclone: (clonedDoc) => {
+          const b = clonedDoc.body;
+          if (b) {
+            b.style.background = "#fff";
+            b.style.opacity = "1";
+            b.style.visibility = "visible";
+          }
+        },
+      }),
+      CAPTURE_TIMEOUT_MS,
+      "PDF capture"
+    );
   } finally {
-    document.body.removeChild(iframe);
+    if (iframe.parentNode) document.body.removeChild(iframe);
+  }
+
+  if (!canvas || canvas.width < 8 || canvas.height < 8) {
+    throw new Error("PDF capture produced a blank page — check the report has content, then try again.");
   }
 
   return canvas;
@@ -106,7 +140,7 @@ function assembleSurveyReportPdf(report, canvas) {
   const side = MARGIN_MM;
   const usableW = pageW - side * 2;
   const usableH = pageH - side * 2;
-  const imgData = canvas.toDataURL("image/jpeg", 0.92);
+  const imgData = canvas.toDataURL("image/jpeg", 0.9);
   const imgProps = pdf.getImageProperties(imgData);
   const imgHeightMm = (imgProps.height * usableW) / imgProps.width;
 
@@ -162,12 +196,21 @@ export async function generateSurveyReportPdfBlob(report, extras = {}, opts = {}
  * @param {{ onProgress?: (phase: string) => void }} [opts]
  */
 export async function downloadSurveyReportPdf(report, extras = {}, opts = {}) {
-  const { blob, fileName, pages } = await generateSurveyReportPdfBlob(report, extras, opts);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  URL.revokeObjectURL(url);
-  return { ok: true, fileName, pages };
+  const notify = (phase) => opts.onProgress?.(phase);
+  const fileName = buildFileName(report);
+  const canvas = await renderSurveyReportCanvas(report, extras, notify);
+  notify("assemble");
+  const { pdf, totalPages } = assembleSurveyReportPdf(report, canvas);
+  notify("save");
+
+  // jsPDF.save is the most reliable path in Chromium; fall back to blob download.
+  try {
+    pdf.save(fileName);
+  } catch {
+    const blob = pdf.output("blob");
+    const ok = downloadBlob(blob, fileName);
+    if (!ok) throw new Error("Browser blocked the PDF download — allow downloads for this site and try again.");
+  }
+
+  return { ok: true, fileName, pages: totalPages };
 }

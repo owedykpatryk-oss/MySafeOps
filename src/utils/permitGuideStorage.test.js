@@ -4,6 +4,7 @@ import {
   isPermitGuideComplete,
   markPermitGuideComplete,
   resetPermitGuide,
+  shouldPreferQuickIssueView,
 } from "./permitGuideStorage";
 
 vi.mock("./orgStorage", () => ({
@@ -29,6 +30,12 @@ describe("permitGuideStorage", () => {
       PERMIT_GUIDE_STORAGE_KEY,
       expect.objectContaining({ completed: true, role: "admin" })
     );
+  });
+
+  it("prefers quick issue on narrow viewports by default", () => {
+    expect(shouldPreferQuickIssueView({ narrow: true })).toBe(true);
+    vi.mocked(loadOrgScoped).mockReturnValue({ preferListView: true });
+    expect(shouldPreferQuickIssueView({ narrow: true })).toBe(false);
   });
 
   it("reports complete when saved flag is set", () => {

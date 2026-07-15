@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../../lib/supabase";
+import { safeHttpUrl } from "../../../utils/safeUrl";
+import { safeImageSrc } from "../../../utils/htmlEscape.js";
 
 const BUCKET = "permit-evidence";
 
@@ -7,13 +9,13 @@ const BUCKET = "permit-evidence";
  * Renders site evidence: refreshes signed URL when `storagePath` is set (private bucket).
  */
 export default function PermitEvidenceImage({ storagePath, srcUrl, alt = "Site evidence" }) {
-  const [url, setUrl] = useState(srcUrl || "");
+  const [url, setUrl] = useState(() => safeImageSrc(srcUrl) || safeHttpUrl(srcUrl) || "");
   const [err, setErr] = useState(null);
 
   useEffect(() => {
     setErr(null);
     if (!storagePath || !supabase) {
-      setUrl(srcUrl || "");
+      setUrl(safeImageSrc(srcUrl) || safeHttpUrl(srcUrl) || "");
       return undefined;
     }
     let cancelled = false;
@@ -22,23 +24,28 @@ export default function PermitEvidenceImage({ storagePath, srcUrl, alt = "Site e
       if (cancelled) return;
       if (error) {
         setErr(error.message);
-        setUrl(srcUrl || "");
+        setUrl(safeImageSrc(srcUrl) || safeHttpUrl(srcUrl) || "");
         return;
       }
-      if (data?.signedUrl) setUrl(data.signedUrl);
+      if (data?.signedUrl) {
+        const safe = safeHttpUrl(data.signedUrl);
+        setUrl(safe || "");
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, [storagePath, srcUrl]);
 
+  const fallbackHref = safeHttpUrl(srcUrl);
+
   if (err && !url) {
     return (
       <div style={{ marginTop: 10, fontSize: 11, color: "#A32D2D" }}>
         Could not load photo{err ? `: ${err}` : ""}
-        {srcUrl ? (
+        {fallbackHref ? (
           <div style={{ marginTop: 6 }}>
-            <a href={srcUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#0C447C" }}>
+            <a href={fallbackHref} target="_blank" rel="noopener noreferrer" style={{ color: "#0C447C" }}>
               Open last link
             </a>
           </div>

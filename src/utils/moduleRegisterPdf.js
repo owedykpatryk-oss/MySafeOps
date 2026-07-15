@@ -370,7 +370,14 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
     finalizePdf(pdf, org, theme, rgb, accentRgb);
     const slug = sanitizePdfFileSegment(label, 36) || sanitizePdfFileSegment(moduleId, 36) || "module";
     const fileName = buildFileName(org, slug);
-    pdf.save(fileName);
+    try {
+      pdf.save(fileName);
+    } catch {
+      const { downloadBlob } = await import("./downloadBlob.js");
+      if (!downloadBlob(pdf.output("blob"), fileName)) {
+        return { ok: false, error: "download_blocked" };
+      }
+    }
     return { ok: true, fileName, rows: 0, overview: true };
   }
 
@@ -453,7 +460,15 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
 
   const slug = sanitizePdfFileSegment(label, 36) || sanitizePdfFileSegment(moduleId, 36) || "register";
   const fileName = buildFileName(org, slug);
-  pdf.save(fileName);
+  try {
+    pdf.save(fileName);
+  } catch (e) {
+    const { downloadBlob } = await import("./downloadBlob.js");
+    const blob = pdf.output("blob");
+    if (!downloadBlob(blob, fileName)) {
+      throw e instanceof Error ? e : new Error("PDF download was blocked by the browser.");
+    }
+  }
   return { ok: true, fileName, rows: rows.length };
 }
 

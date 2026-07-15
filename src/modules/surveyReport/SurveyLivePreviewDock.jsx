@@ -9,6 +9,7 @@ export default function SurveyLivePreviewDock({
   height = 480,
   qualityScore,
   exportReady,
+  pending = false,
 }) {
   if (!open) {
     return (
@@ -24,7 +25,7 @@ export default function SurveyLivePreviewDock({
   return (
     <aside className="app-survey-live-preview-dock" aria-label="Live print preview">
       <div className="app-survey-live-preview-dock__head">
-        <span>Live A4 preview</span>
+        <span>Live A4 preview{pending ? " (updating…)" : ""}</span>
         <div className="app-survey-live-preview-dock__meta">
           {typeof qualityScore === "number" ? (
             <span className={`app-survey-live-preview-dock__score${qualityScore >= 80 ? " app-survey-live-preview-dock__score--ready" : ""}`}>

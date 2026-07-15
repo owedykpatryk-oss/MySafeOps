@@ -5,6 +5,8 @@ import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { getWorkspaceTitle } from "../navigation/appModules";
 import { useOrgBranding } from "../hooks/useOrgBranding";
+import { clearCloudBackupDek } from "../lib/backupCrypto";
+import { safeImageSrc } from "../utils/htmlEscape.js";
 
 /**
  * Sticky top bar: org branding, current module title, quick actions (compact menu on mobile).
@@ -17,6 +19,7 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
   const menuRef = useRef(null);
   const cloud = isSupabaseConfigured();
   const title = getWorkspaceTitle(view, navTab);
+  const logoSrc = safeImageSrc(branding.logo);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -39,6 +42,7 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
     setSigningOut(true);
     try {
       await supabase.auth.signOut();
+      clearCloudBackupDek();
     } finally {
       setSigningOut(false);
       setMenuOpen(false);
@@ -96,7 +100,7 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
           <span
             className="app-brand-mark app-workspace-brand__mark"
             style={
-              branding.logo
+              logoSrc
                 ? {
                     background: "#fff",
                     border: "1px solid var(--color-border-tertiary,#e2e8f0)",
@@ -109,8 +113,8 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
             }
             aria-hidden
           >
-            {branding.logo ? (
-              <img src={branding.logo} alt="" className="app-workspace-brand__logo" />
+            {logoSrc ? (
+              <img src={logoSrc} alt="" className="app-workspace-brand__logo" />
             ) : (
               <ShieldCheck size={20} strokeWidth={2} color="#fff" />
             )}

@@ -25,6 +25,14 @@ function readMembershipRoleForCurrentOrg() {
 }
 
 /** Least privilege for signed-in cloud users; admin for offline / local-only workspaces. */
+function isCloudAuthSession() {
+  try {
+    return Boolean(isSupabaseConfigured() && !isLocalWorkspaceOnly() && hasPersistedSupabaseSession());
+  } catch {
+    return false;
+  }
+}
+
 function defaultMembershipRole() {
   try {
     if (!isSupabaseConfigured() || isLocalWorkspaceOnly()) return "admin";
@@ -35,7 +43,12 @@ function defaultMembershipRole() {
   return "operative";
 }
 
+/**
+ * Cloud sessions fail closed to operative — localStorage role is never trusted until
+ * refreshMembershipRoleFromSupabase / persistOrgRow writes it and fires mysafeops-org-updated.
+ */
 function resolveMembershipRole() {
+  if (isCloudAuthSession()) return "operative";
   return readMembershipRoleForCurrentOrg() || defaultMembershipRole();
 }
 
@@ -109,9 +122,14 @@ export function AppProvider({ children }) {
     let cancelled = false;
     const syncRole = () => {
       if (cancelled || !hasPersistedSupabaseSession()) return;
-      refreshMembershipRoleFromSupabase(supabase).catch(() => {
-        /* non-fatal — keep last known role */
-      });
+      refreshMembershipRoleFromSupabase(supabase)
+        .then((role) => {
+          if (cancelled) return;
+          if (role && ROLES.includes(role)) setRoleState(role);
+        })
+        .catch(() => {
+          if (!cancelled) setRoleState("operative");
+        });
     };
 
     syncRole();

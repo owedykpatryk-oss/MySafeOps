@@ -93,10 +93,9 @@ import ModuleOverlay from "../../components/ModuleOverlay";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import SurveyEditorStepNav from "./SurveyEditorStepNav";
 import SurveySimpleStepNav from "./SurveySimpleStepNav";
-import { adjacentSimpleStep, simpleStepForTab, tabsForSimpleStep } from "./surveySimpleEditorNav";
-import { isSurveySimpleMode } from "../../utils/surveyOrgTemplates";
+import { adjacentSimpleStep, simpleStepForTab } from "./surveySimpleEditorNav";
+import { getSurveySimpleModePref, setSurveySimpleModePref } from "../../utils/surveyOrgTemplates";
 import { catalogDefaultDeliverables } from "../../utils/surveyContentCatalog";
-import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import SurveyEditorHero from "./SurveyEditorHero";
 import SurveyListStatsBar from "./SurveyListStatsBar";
 import SurveyRevisionTimeline from "./SurveyRevisionTimeline";
@@ -179,8 +178,8 @@ const ss = {
     fontSize: 12,
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
-    background: active ? "#E6F1FB" : "transparent",
-    color: active ? "#0C447C" : "var(--color-text-secondary)",
+    background: active ? "#ccfbf1" : "transparent",
+    color: active ? "#115e59" : "var(--color-text-secondary)",
     fontFamily: "DM Sans,sans-serif",
   }),
 };
@@ -428,7 +427,7 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
         fontSize: 11,
         padding: "6px 10px",
         opacity: disabled ? 0.55 : 1,
-        borderColor: busy === label ? "#0C447C" : undefined,
+        borderColor: busy === label ? "#0d9488" : undefined,
       }}
       disabled={Boolean(busy) || disabled}
       onClick={() => run(label, onClick)}
@@ -443,15 +442,17 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
         marginBottom: 16,
         padding: "12px 14px",
         borderRadius: 8,
-        border: "0.5px solid #c7d9ec",
-        background: "linear-gradient(180deg, #f0f7ff 0%, #fafcff 100%)",
+        border: "0.5px solid #99f6e4",
+        background: "linear-gradient(180deg, #f0fdfa 0%, #fafcff 100%)",
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: open ? 10 : 0 }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#0C447C" }}>Smart assist</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#0f766e" }}>Smart assist</div>
           <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2 }}>
-            {simpleMode ? "One-click Smart fill all — expand for individual tools." : "One-click fill, site plan import, weather, templates and optional AI polish."}
+            {simpleMode
+              ? "Fill what we can from the project — weather, templates and findings. Advanced tools stay collapsed."
+              : "One-click fill, site plan import, weather, templates and optional AI polish."}
           </div>
         </div>
         <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 8px" }} onClick={() => setOpen((o) => !o)}>
@@ -462,22 +463,7 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 10 }}>
             {assistBtn(
-              "PAS128 complete pack",
-              !pas128MethodAppliesToSurveyType(form.surveyType),
-              async () =>
-                applyPas128CompletePack(form, {
-                  project,
-                  ramsDocs,
-                  projectPlans: plansWithMarkup,
-                  linkedRams,
-                  useAi: useAiOnFill,
-                  geoPhotos,
-                  permits,
-                }),
-              true
-            )}
-            {assistBtn(
-              "Smart fill all",
+              "Fill what I can",
               !project && !form.surveyType,
               async () =>
                 runSmartFillAll(form, {
@@ -489,8 +475,24 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
                   geoPhotos,
                   permits,
                 }),
-              false
+              true
             )}
+            {!simpleMode &&
+              assistBtn(
+                "PAS128 complete pack",
+                !pas128MethodAppliesToSurveyType(form.surveyType),
+                async () =>
+                  applyPas128CompletePack(form, {
+                    project,
+                    ramsDocs,
+                    projectPlans: plansWithMarkup,
+                    linkedRams,
+                    useAi: useAiOnFill,
+                    geoPhotos,
+                    permits,
+                  }),
+                false
+              )}
             {hasAi && (
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, cursor: "pointer" }}>
                 <input type="checkbox" checked={useAiOnFill} onChange={(e) => setUseAiOnFill(e.target.checked)} />
@@ -508,8 +510,45 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
               </button>
             ) : null}
           </div>
+          {nextSteps.length > 0 && (
+            <div style={{ marginTop: 4, marginBottom: 8, fontSize: 11 }}>
+              <span style={{ color: "var(--color-text-secondary)", marginRight: 6 }}>Next:</span>
+              {nextSteps.slice(0, 4).map((step) => (
+                <button
+                  key={step.id}
+                  type="button"
+                  style={{
+                    ...ss.btn,
+                    fontSize: 10,
+                    padding: "3px 8px",
+                    marginRight: 4,
+                    marginBottom: 4,
+                  }}
+                  onClick={() => onGoToTab?.(step.tab)}
+                >
+                  {step.label}
+                </button>
+              ))}
+            </div>
+          )}
           {(simpleMode ? advancedOpen : true) ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {simpleMode &&
+              assistBtn(
+                "PAS128 complete pack",
+                !pas128MethodAppliesToSurveyType(form.surveyType),
+                async () =>
+                  applyPas128CompletePack(form, {
+                    project,
+                    ramsDocs,
+                    projectPlans: plansWithMarkup,
+                    linkedRams,
+                    useAi: useAiOnFill,
+                    geoPhotos,
+                    permits,
+                  }),
+                false
+              )}
             {assistBtn("Prefill project + RAMS", !project, async () => {
               const rams = pickRamsForProject(ramsDocs, form.projectId) || linkedRams;
               return prefillReportFromProject(form, project, rams);
@@ -608,27 +647,6 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
             })}
           </div>
           ) : null}
-          {(simpleMode ? advancedOpen : true) && nextSteps.length > 0 && (
-            <div style={{ marginTop: 10, fontSize: 11 }}>
-              <span style={{ color: "var(--color-text-secondary)", marginRight: 6 }}>Next:</span>
-              {nextSteps.slice(0, 4).map((step) => (
-                <button
-                  key={step.id}
-                  type="button"
-                  style={{
-                    ...ss.btn,
-                    fontSize: 10,
-                    padding: "3px 8px",
-                    marginRight: 4,
-                    marginBottom: 4,
-                  }}
-                  onClick={() => onGoToTab?.(step.tab)}
-                >
-                  {step.label}
-                </button>
-              ))}
-            </div>
-          )}
           <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 8 }}>
             {!project && "Select a project to enable prefill and weather fetch. "}
             {project && !hasCoords && "Project has no map coordinates — set location on the project for weather. "}
@@ -666,15 +684,10 @@ function ReportEditor({
   const { pushToast } = useToast();
   const [form, setForm] = useState(() => normalizeSurveyReport({ ...report }));
   const [tab, setTab] = useState("details");
-  const simpleMode = useMemo(() => isSurveySimpleMode(loadOrgSettingsRaw()), []);
+  const [simpleMode, setSimpleMode] = useState(() => getSurveySimpleModePref());
   const activeSimpleStep = useMemo(() => simpleStepForTab(tab), [tab]);
-  const showTab = useCallback(
-    (tabId) => {
-      if (!simpleMode) return tab === tabId;
-      return tabsForSimpleStep(activeSimpleStep.id).includes(tabId);
-    },
-    [simpleMode, tab, activeSimpleStep]
-  );
+  // One panel at a time — even in Simple mode (sub-pills switch within the step)
+  const showTab = useCallback((tabId) => tab === tabId, [tab]);
   const [saving, setSaving] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [cadBusy, setCadBusy] = useState(false);
@@ -1097,8 +1110,13 @@ function ReportEditor({
     setPdfBusy(true);
     try {
       const { downloadSurveyReportPdf } = await import("./surveyReportPdf");
-      await downloadSurveyReportPdf(form, printExtras);
+      const result = await downloadSurveyReportPdf(form, printExtras);
       pushAudit({ action: "survey_report_pdf", entity: "survey_report", detail: form.ref || form.id });
+      pushToast({
+        type: "success",
+        title: "PDF downloaded",
+        message: result?.fileName ? `${result.fileName}${result.pages ? ` · ${result.pages} page(s)` : ""}` : "Survey report PDF saved.",
+      });
     } catch (e) {
       pushToast({ type: "error", title: "PDF export failed", message: e?.message || "Could not generate PDF." });
     } finally {
@@ -1334,6 +1352,26 @@ function ReportEditor({
           />
         </div>
 
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button
+            type="button"
+            style={{
+              ...ss.btn,
+              fontSize: 11,
+              fontWeight: 600,
+              borderColor: simpleMode ? "#0d9488" : undefined,
+              background: simpleMode ? "#ccfbf1" : undefined,
+              color: simpleMode ? "#115e59" : undefined,
+            }}
+            onClick={() => {
+              const next = !simpleMode;
+              setSurveySimpleModePref(next);
+              setSimpleMode(next);
+            }}
+          >
+            {simpleMode ? "Simple mode" : "Full editor"}
+          </button>
+        </div>
         {simpleMode ? (
           <SurveySimpleStepNav tab={tab} report={form} onTabChange={setTab} />
         ) : (
@@ -1539,7 +1577,7 @@ function ReportEditor({
                     {form.surveyType ? (
                       <button
                         type="button"
-                        style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, borderColor: "#0C447C", color: "#0C447C" }}
+                        style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, borderColor: "#0d9488", color: "#0f766e" }}
                         onClick={pushSurveyPackToRams}
                       >
                         Push pack to RAMS
@@ -2627,6 +2665,7 @@ function ReportEditor({
             height={520}
             qualityScore={editorQuality.score}
             exportReady={form.status === "final" ? exportGate.allowed : null}
+            pending={previewPending}
           />
         </div>
         <ConfirmDialog
@@ -2644,6 +2683,7 @@ function ReportEditor({
 }
 
 export default function SurveyReport() {
+  const [simpleMode, setSimpleMode] = useState(() => getSurveySimpleModePref());
   const { caps } = useApp();
   const { pushToast } = useToast();
   const [reports, setReports] = useState(() => load(STORAGE_KEY, []));
@@ -2769,14 +2809,20 @@ export default function SurveyReport() {
     const rams = ramsById[report.linkedRamsId];
     const project = projectById[report.projectId];
     setPdfBusyId(report.id);
+    pushToast({ type: "info", title: "Generating PDF…", message: "Building A4 pages — this can take a few seconds.", durationMs: 4000 });
     try {
       const { downloadSurveyReportPdf } = await import("./surveyReportPdf");
-      await downloadSurveyReportPdf(report, {
+      const result = await downloadSurveyReportPdf(report, {
         ramsTitle: rams?.title || rams?.documentTitle,
         projectLat: project?.lat,
         projectLng: project?.lng,
       });
       pushAudit({ action: "survey_report_pdf", entity: "survey_report", detail: report.ref || report.id });
+      pushToast({
+        type: "success",
+        title: "PDF downloaded",
+        message: result?.fileName ? `${result.fileName}${result.pages ? ` · ${result.pages} page(s)` : ""}` : "Survey report PDF saved.",
+      });
     } catch (e) {
       pushToast({ type: "error", title: "PDF export failed", message: e?.message || "Could not generate PDF." });
     } finally {
@@ -3016,13 +3062,6 @@ export default function SurveyReport() {
   const createNew = () => {
     const ref = nextSurveyRef(reports);
     const pid = defaultProjectIdForCreate(projects);
-    if (!projects.length) {
-      if (window.confirm("Survey reports must be linked to a project. Create a project first?")) {
-        setWorkspaceNavTarget({ viewId: "projects", action: "createProject" });
-        openWorkspaceView({ viewId: "projects" });
-      }
-      return;
-    }
     const p = projects.find((x) => x.id === pid);
     const base = blankSurveyReport({
       ref,
@@ -3036,8 +3075,14 @@ export default function SurveyReport() {
     });
   };
 
+  const toggleSimpleMode = () => {
+    const next = !simpleMode;
+    setSurveySimpleModePref(next);
+    setSimpleMode(next);
+  };
+
   return (
-    <div className="app-document-module" style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
+    <div className="app-document-module app-document-module--premium" style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="survey reports" />
 
       {modal?.type === "edit" && (
@@ -3060,15 +3105,61 @@ export default function SurveyReport() {
         />
       )}
 
+      <div className="app-survey-list-shell">
       <PageHero
         badgeText="SR"
         title="Survey report"
-        lead="PAS128 survey reports — cover page, utility schedule, PDF download, revision control, geo-photo import and branded A4 print."
+        lead={
+          <span>
+            Site survey reports you can issue as a branded A4 PDF — pick a project, use Smart fill, then preview.
+            {simpleMode ? (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 8, flexWrap: "wrap" }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    background: "#ccfbf1",
+                    color: "#115e59",
+                    border: "1px solid #99f6e4",
+                  }}
+                >
+                  Simple mode on
+                </span>
+                <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  Guided steps first — PAS 128 / advanced tools stay under More.
+                </span>
+              </span>
+            ) : (
+              <span style={{ fontSize: 12, color: "var(--color-text-secondary)", marginLeft: 6 }}>
+                Full editor — you can turn on Simple mode in Survey templates / org settings.
+              </span>
+            )}
+          </span>
+        }
         suppressRegisterPdf
         right={
-          <button type="button" style={ss.btnP} onClick={createNew}>
-            + New report
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              type="button"
+              style={{
+                ...ss.btn,
+                fontSize: 12,
+                fontWeight: 600,
+                borderColor: simpleMode ? "#0d9488" : undefined,
+                background: simpleMode ? "#ccfbf1" : undefined,
+                color: simpleMode ? "#115e59" : undefined,
+              }}
+              onClick={toggleSimpleMode}
+              title="Simple mode shows guided steps; Full editor shows every tab"
+            >
+              {simpleMode ? "Simple mode" : "Full editor"}
+            </button>
+            <button type="button" style={ss.btnP} onClick={createNew}>
+              + New report
+            </button>
+          </div>
         }
       />
 
@@ -3152,7 +3243,7 @@ export default function SurveyReport() {
         ) : null}
         <button
           type="button"
-          style={{ ...ss.btn, fontSize: 12, ...(listBulkMode ? { background: "#E6F1FB", color: "#0C447C" } : {}) }}
+          style={{ ...ss.btn, fontSize: 12, ...(listBulkMode ? { background: "#ccfbf1", color: "#115e59" } : {}) }}
           onClick={() => {
             setListBulkMode((v) => !v);
             setSelectedReportIds(new Set());
@@ -3178,10 +3269,10 @@ export default function SurveyReport() {
           title={reports.length === 0 ? "No survey reports yet" : "No reports match this filter"}
           description={
             reports.length === 0
-              ? "Create a report with structured checklists for weather, utility records and limitations — then preview A4 or mark final."
+              ? "Three steps: 1) New report + pick a project  2) Smart fill (weather, records, findings)  3) Preview PDF — then mark final when ready."
               : "Try another filter or create a new report."
           }
-          actionLabel={reports.length === 0 ? "Create first report" : "Create report"}
+          actionLabel={reports.length === 0 ? "Start first report" : "Create report"}
           onAction={createNew}
         />
       ) : (
@@ -3251,6 +3342,7 @@ export default function SurveyReport() {
         onConfirm={listConfirm?.onConfirm}
         onCancel={() => setListConfirm(null)}
       />
+      </div>
     </div>
   );
 }

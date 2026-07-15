@@ -1,12 +1,21 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.3.3";
+const SW_VERSION = "mysafeops-v1.3.4";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
 function isCacheableResponse(res) {
   return res && res.ok && res.status >= 200 && res.status < 300;
+}
+
+/** Never resolve fetch handlers with Response.error() — Chromium logs a FetchEvent network error. */
+function offlineFallbackResponse(status = 503) {
+  return new Response("Offline", {
+    status,
+    statusText: "Offline",
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
 
 /** Clone synchronously — Response bodies can only be read once. */
@@ -107,15 +116,7 @@ self.addEventListener("fetch", (event) => {
         .catch(() =>
           caches.match("/index.html")
             .then((cached) => cached || caches.match(OFFLINE_URL))
-            .then(
-              (fallback) =>
-                fallback ||
-                new Response("Offline", {
-                  status: 503,
-                  statusText: "Offline",
-                  headers: { "Content-Type": "text/plain" },
-                })
-            )
+            .then((fallback) => fallback || offlineFallbackResponse())
         )
     );
     return;
@@ -135,7 +136,7 @@ self.addEventListener("fetch", (event) => {
           scheduleCachePut(request, res);
           return res;
         }
-        return Response.error();
+        return offlineFallbackResponse();
       })
     );
     return;
@@ -150,7 +151,7 @@ self.addEventListener("fetch", (event) => {
       })
       .catch(async () => {
         const cached = await caches.match(request);
-        return cached || Response.error();
+        return cached || offlineFallbackResponse();
       })
   );
 });

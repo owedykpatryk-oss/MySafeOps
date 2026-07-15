@@ -9,6 +9,34 @@ function clampLng(n) {
   return Math.max(-180, Math.min(180, n));
 }
 
+/** Namespace-safe lookup — Google Earth KML uses the default OGC namespace. */
+function elementsByLocalName(root, localName) {
+  if (!root) return [];
+  try {
+    if (typeof root.getElementsByTagNameNS === "function") {
+      const ns = root.getElementsByTagNameNS("*", localName);
+      if (ns?.length) return Array.from(ns);
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const plain = root.getElementsByTagName?.(localName);
+    if (plain?.length) return Array.from(plain);
+  } catch {
+    /* ignore */
+  }
+  return [];
+}
+
+function firstByLocalName(root, localName) {
+  return elementsByLocalName(root, localName)[0] || null;
+}
+
+function placemarkName(pm) {
+  return firstByLocalName(pm, "name")?.textContent?.trim() || "";
+}
+
 /**
  * @returns {{ name: string, lat: number, lng: number }[]}
  */
@@ -16,12 +44,11 @@ export function parseKmlPoints(xmlText) {
   const doc = new DOMParser().parseFromString(String(xmlText || ""), "text/xml");
   const err = doc.querySelector("parsererror");
   if (err) return [];
-  const placemarks = doc.getElementsByTagName("Placemark");
+  const placemarks = elementsByLocalName(doc, "Placemark");
   const out = [];
-  for (let i = 0; i < placemarks.length; i++) {
-    const pm = placemarks[i];
-    const name = pm.getElementsByTagName("name")[0]?.textContent?.trim() || "";
-    const coordEl = pm.getElementsByTagName("coordinates")[0];
+  for (const pm of placemarks) {
+    const name = placemarkName(pm);
+    const coordEl = firstByLocalName(pm, "coordinates");
     if (!coordEl) continue;
     const parts = String(coordEl.textContent || "")
       .trim()
@@ -93,43 +120,101 @@ function parseCoordTriples(text) {
     .filter(Boolean);
 }
 
+function ringsClose(a, b, eps = 1e-7) {
+  if (!a || !b) return false;
+  return Math.abs(a.lat - b.lat) <= eps && Math.abs(a.lng - b.lng) <= eps;
+}
+
+function ensureClosedRing(ring) {
+  if (!ring?.length) return ring || [];
+  if (ring.length >= 3 && !ringsClose(ring[0], ring[ring.length - 1])) {
+    return [...ring, { lat: ring[0].lat, lng: ring[0].lng }];
+  }
+  return ring;
+}
+
+/** Regex fallback when DOMParser drops namespaced geometry (rare, but seen with Earth exports). */
+function parsePolygonsFromKmlTextFallback(xmlText) {
+  const text = String(xmlText || "");
+  if (!/<Polygon[\s>]/i.test(text)) return [];
+  const out = [];
+  const polyRe = /<Polygon\b[\s\S]*?<\/Polygon>/gi;
+  let m;
+  while ((m = polyRe.exec(text))) {
+    const block = m[0];
+    const coordMatch =
+      block.match(/<outerBoundaryIs[\s\S]*?<coordinates[^>]*>([\s\S]*?)<\/coordinates>/i) ||
+      block.match(/<coordinates[^>]*>([\s\S]*?)<\/coordinates>/i);
+    if (!coordMatch?.[1]) continue;
+    const ring = ensureClosedRing(parseCoordTriples(coordMatch[1]));
+    if (ring.length >= 3) out.push({ name: "", ring });
+  }
+  return out;
+}
+
+function parentPlacemarkName(el) {
+  let n = el?.parentElement || el?.parentNode;
+  while (n) {
+    const ln = String(n.localName || n.nodeName || "").replace(/^.*:/, "");
+    if (ln === "Placemark") return placemarkName(n);
+    n = n.parentElement || n.parentNode;
+  }
+  return "";
+}
+
 /**
  * Parse KML polygons, line strings and points from Placemarks.
  * @returns {{ polygons: { name: string, ring: { lat: number, lng: number }[] }[], lineStrings: { name: string, points: { lat: number, lng: number }[] }[], points: { name: string, lat: number, lng: number }[] }}
  */
 export function parseKmlGeometry(xmlText) {
-  const doc = new DOMParser().parseFromString(String(xmlText || ""), "text/xml");
+  const raw = String(xmlText || "").replace(/^\uFEFF/, "");
+  const doc = new DOMParser().parseFromString(raw, "text/xml");
   if (doc.querySelector("parsererror")) {
     return { polygons: [], lineStrings: [], points: [] };
   }
   const polygons = [];
   const lineStrings = [];
   const points = [];
-  const placemarks = doc.getElementsByTagName("Placemark");
-  for (let i = 0; i < placemarks.length; i++) {
-    const pm = placemarks[i];
-    const name = pm.getElementsByTagName("name")[0]?.textContent?.trim() || "";
-    const polygonEl = pm.getElementsByTagName("Polygon")[0];
-    if (polygonEl) {
-      const coordEl = polygonEl.getElementsByTagName("coordinates")[0];
-      const ring = parseCoordTriples(coordEl?.textContent);
-      if (ring.length >= 3) polygons.push({ name, ring });
-      continue;
-    }
-    const lineEl = pm.getElementsByTagName("LineString")[0];
-    if (lineEl) {
-      const coordEl = lineEl.getElementsByTagName("coordinates")[0];
-      const pts = parseCoordTriples(coordEl?.textContent);
-      if (pts.length >= 2) lineStrings.push({ name, points: pts });
-      continue;
-    }
-    const pointEl = pm.getElementsByTagName("Point")[0];
-    if (pointEl) {
-      const coordEl = pointEl.getElementsByTagName("coordinates")[0];
-      const pts = parseCoordTriples(coordEl?.textContent);
-      if (pts[0]) points.push({ name, lat: pts[0].lat, lng: pts[0].lng });
+
+  // Walk every geometry node (handles Folder / Document / MultiGeometry nesting).
+  for (const polygonEl of elementsByLocalName(doc, "Polygon")) {
+    const coordEl = firstByLocalName(polygonEl, "coordinates");
+    const ring = ensureClosedRing(parseCoordTriples(coordEl?.textContent));
+    if (ring.length >= 3) {
+      polygons.push({ name: parentPlacemarkName(polygonEl), ring });
     }
   }
+
+  for (const lineEl of elementsByLocalName(doc, "LineString")) {
+    const coordEl = firstByLocalName(lineEl, "coordinates");
+    const pts = parseCoordTriples(coordEl?.textContent);
+    if (pts.length >= 2) {
+      lineStrings.push({ name: parentPlacemarkName(lineEl), points: pts });
+    }
+  }
+
+  for (const pointEl of elementsByLocalName(doc, "Point")) {
+    const coordEl = firstByLocalName(pointEl, "coordinates");
+    const pts = parseCoordTriples(coordEl?.textContent);
+    if (pts[0]) {
+      points.push({ name: parentPlacemarkName(pointEl), lat: pts[0].lat, lng: pts[0].lng });
+    }
+  }
+
+  // Closed paths exported as LineString (common from some GIS tools) → site boundary.
+  for (const line of lineStrings) {
+    const pts = line.points || [];
+    if (pts.length >= 3 && ringsClose(pts[0], pts[pts.length - 1])) {
+      polygons.push({ name: line.name || "Closed path", ring: ensureClosedRing(pts) });
+    }
+  }
+
+  if (!polygons.length) {
+    for (const p of parsePolygonsFromKmlTextFallback(raw)) {
+      polygons.push(p);
+    }
+  }
+
   return { polygons, lineStrings, points };
 }
 
@@ -157,16 +242,30 @@ export function boundaryFromKmlGeometry(geom, { sourceName = "KML import" } = {}
   };
 }
 
+/** Human hint when import finds geometry but no usable polygon. */
+export function describeKmlBoundaryMiss(geom) {
+  const polys = geom?.polygons?.length || 0;
+  const lines = geom?.lineStrings?.length || 0;
+  const pts = geom?.points?.length || 0;
+  if (polys > 0) return "";
+  if (lines > 0) {
+    return `Found ${lines} path(s) but no closed polygon. In Google Earth use Add → Polygon (not Path), or close the path so the first and last points match.`;
+  }
+  if (pts > 0) {
+    return `Found ${pts} point(s) but no polygon boundary. Export a closed site polygon from your survey/GIS.`;
+  }
+  return "No polygon found in KML — use a closed site boundary.";
+}
+
 export function parseGpxPoints(xmlText) {
   const doc = new DOMParser().parseFromString(String(xmlText || ""), "text/xml");
   if (doc.querySelector("parsererror")) return [];
-  const wpts = doc.getElementsByTagName("wpt");
+  const wpts = elementsByLocalName(doc, "wpt");
   const out = [];
-  for (let i = 0; i < wpts.length; i++) {
-    const w = wpts[i];
+  for (const w of wpts) {
     const lat = parseFloat(w.getAttribute("lat"));
     const lng = parseFloat(w.getAttribute("lon"));
-    const name = w.getElementsByTagName("name")[0]?.textContent?.trim() || "";
+    const name = firstByLocalName(w, "name")?.textContent?.trim() || "";
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
     out.push({ name, lat: clampLat(lat), lng: clampLng(lng) });
   }

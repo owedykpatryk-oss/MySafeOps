@@ -19,6 +19,7 @@ import { loadEmergencySiteExtras, googleMapsSearchUrl } from "../../utils/emerge
 import { ms } from "../../utils/moduleStyles";
 import { safeHttpUrl } from "../../utils/safeUrl";
 import { fetchWeatherSummary } from "../../utils/weatherSummary";
+import { buildWeatherHazardTemplate, upsertWeatherHazardIntoRows } from "../../utils/ramsWeatherRisk";
 import {
   lookupSitePostcode,
   resolveSitePostcodeInput,
@@ -48,6 +49,7 @@ import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import PageHero from "../../components/PageHero";
 import ConfettiCelebration from "../../components/ConfettiCelebration";
+import TouchSignaturePad from "../../components/TouchSignaturePad";
 import EmptyState from "../../components/EmptyState";
 import SimpleFormDialog from "../../components/SimpleFormDialog";
 import { geocodeAddressNominatim } from "../../utils/geocode";
@@ -71,7 +73,6 @@ import {
   CONSTRUCTION_ACTIVITY_CATALOG,
   CORE_RAMS_ACTIVITY_MODULES,
 } from "./constructionActivityCatalog";
-import { ensureBuiltInConstructionPacks } from "./constructionQuickPacks";
 import {
   ensureOrgExclusiveQuickPacks,
   filterQuickPacksForOrg,
@@ -88,6 +89,7 @@ import { sanitizeRamsDocForOrg } from "../../utils/fessExclusive";
 import { computeFessRamsCompleteness } from "../../utils/fessRamsCompleteness";
 import { syncFessMsFromRams } from "../../utils/fessMsSync";
 import FessRamsCompletenessBadge from "../../components/FessRamsCompletenessBadge";
+import { genOpaqueToken } from "../../utils/opaqueToken";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
@@ -806,6 +808,7 @@ const ss = {
 };
 
 const RAMS_FORM_DEFAULTS = {
+  outdoorWork: true,
   siteWeatherNote: "",
   siteMapUrl: "",
   siteLat: "",
@@ -837,6 +840,7 @@ const RAMS_FORM_DEFAULTS = {
   strictMinControls: 3,
   strictRequireHoldPoints: true,
   signatureEvents: [],
+  operativeSignatures: {},
   printSections: {},
   allergenControlsNote: "",
   allergenChangeoverRef: "",
@@ -1741,7 +1745,7 @@ function RiskBadge({ rf }) {
 }
 
 // ─── Step 1 — Document info ──────────────────────────────────────────────────
-function StepInfo({ form, setForm, projects, workers, onNext }) {
+function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const smartFields = isFeatureEnabled("rams_header_smart_fields");
   const [draftSavedAtLabel, setDraftSavedAtLabel] = useState("");
@@ -1960,6 +1964,7 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
         }
       }
       set("siteWeatherNote", [form.siteWeatherNote, snap.text].filter(Boolean).join("\n\n"));
+      onWeatherApplied?.(snap, { outdoor: form.outdoorWork !== false });
     } catch (e) {
       console.warn(e);
       alert("Could not load weather. Check postcode, latitude / longitude, and try again.");
@@ -2020,8 +2025,9 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
     if (String(project.weatherSnapshot || "").trim()) return;
     setWeatherLoading(true);
     try {
-      const line = (await fetchWeatherSummary(latStr, lngStr)).text;
-      setForm((f) => ({ ...f, siteLat: latStr, siteLng: lngStr, siteWeatherNote: line }));
+      const snap = await fetchWeatherSummary(latStr, lngStr);
+      setForm((f) => ({ ...f, siteLat: latStr, siteLng: lngStr, siteWeatherNote: snap.text }));
+      onWeatherApplied?.(snap, { outdoor: form.outdoorWork !== false });
     } catch (e) {
       console.warn(e);
     } finally {
@@ -2616,8 +2622,16 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
         Site weather, map &amp; emergency (optional)
       </div>
       <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"0 0 12px", maxWidth:640 }}>
-        Fills printed RAMS sections. Save nearest A&amp;E under <strong>Emergency contacts</strong> and use &quot;Import from Emergency&quot; to copy here.
+        Fetch weather to fill the printed note. With <strong>Outdoor work</strong> on, a weather risk row is added automatically (stronger if raining / high wind).
       </p>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 12, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={form.outdoorWork !== false}
+          onChange={(e) => set("outdoorWork", e.target.checked)}
+        />
+        Outdoor work — auto-add weather risk when weather is fetched
+      </label>
       <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:10 }}>
         <button type="button" onClick={importFromEmergency} style={{ ...ss.btn, fontSize:12 }}>
           Import from Emergency module
@@ -2692,7 +2706,7 @@ function StepInfo({ form, setForm, projects, workers, onNext }) {
           }}
           style={{ ...ss.btnP, opacity:valid?1:0.4 }}
         >
-          Next — select hazards →
+          Continue to Quick pack →
         </button>
       </div>
     </div>
@@ -3127,6 +3141,44 @@ function HazardPicker({
 
   return (
     <div>
+      <div
+        style={{
+          ...ss.card,
+          marginBottom: 12,
+          padding: 14,
+          border: "1px solid #99f6e4",
+          background: "linear-gradient(135deg, #f0fdfa 0%, #fff 70%)",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#0f766e", marginBottom: 4 }}>
+          Start here — Quick packs
+        </div>
+        <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+          Pick a saved activity bundle (or build one below), then edit hazards in the next step. Full catalogue stays underneath.
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select value={selectedPackId} onChange={(e) => setSelectedPackId(e.target.value)} style={{ ...ss.inp, minWidth: 220, maxWidth: 360, margin: 0 }}>
+            <option value="">— Select saved quick pack —</option>
+            {quickPacks.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.isPinned ? "★ " : ""}{p.name} · {(p.templates || []).length} activities
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!selectedPackId}
+            onClick={() => {
+              const pack = quickPacks.find((p) => p.id === selectedPackId);
+              if (pack) onApplyHazardPack?.(pack);
+            }}
+            style={{ ...ss.btnP, opacity: selectedPackId ? 1 : 0.45 }}
+          >
+            Apply pack
+          </button>
+        </div>
+      </div>
+
       <IndustryStarterSection
         orgRamsStarterKey={orgRamsStarterKey}
         industryPackLabel={industryPackLabel}
@@ -4077,6 +4129,8 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
 function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSave, onBack, onPrintFessSitePack }) {
   const [fpCopied, setFpCopied] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
+  const [signingWorkerId, setSigningWorkerId] = useState("");
+  const inkPadRef = useRef(null);
   const deferredForm = useDeferredValue(form);
   const deferredRows = useDeferredValue(rows);
   const previewHtml = useMemo(
@@ -4496,11 +4550,14 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
           Quick actions (site use)
         </div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-          {(form.hospitalDirectionsUrl || "").trim() && (
-            <a href={safeHttpUrl(form.hospitalDirectionsUrl) || "#"} target="_blank" rel="noopener noreferrer" style={{ ...ss.btn, fontSize:12, textDecoration:"none" }}>
+          {(() => {
+            const emergencyHref = safeHttpUrl(form.hospitalDirectionsUrl);
+            return emergencyHref ? (
+            <a href={emergencyHref} target="_blank" rel="noopener noreferrer" style={{ ...ss.btn, fontSize:12, textDecoration:"none" }}>
               Emergency route
             </a>
-          )}
+            ) : null;
+          })()}
           {form.location?.trim() && (
             <a href={googleMapsSearchUrl(form.location)} target="_blank" rel="noopener noreferrer" style={{ ...ss.btn, fontSize:12, textDecoration:"none" }}>
               Site location
@@ -4545,10 +4602,10 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             )}
             <div style={{ marginBottom:8 }}>Tip: place this page on top of printed pack for fast mobile access.</div>
             <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-              <button type="button" onClick={() => applyAutoSign("approved")} style={{ ...ss.btn, fontSize:12 }}>
-                Auto-sign approval
+              <button type="button" onClick={() => applyAutoSign("approved")} style={{ ...ss.btn, fontSize:12 }} title="Fills approved-by name and date — not a drawn ink signature">
+                Fill approval name/date
               </button>
-              <button type="button" onClick={() => applyAutoSign("issue")} style={{ ...ss.btn, fontSize:12 }}>
+              <button type="button" onClick={() => applyAutoSign("issue")} style={{ ...ss.btn, fontSize:12 }} title="Stamps today’s issue date on the document">
                 Stamp issue date
               </button>
             </div>
@@ -5125,16 +5182,88 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
         )}
 
         {/* operatives */}
-        {operatives.length>0 && (
+        {selectedWorkers.length > 0 && (
           <div id={previewAnchorId(RAMS_SECTION_IDS.SIGNATURES)} style={{ marginTop:14, paddingTop:14, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)", scrollMarginTop:72 }}>
             <div style={{ fontSize:11, fontWeight:700, color:"#0f172a", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>
               8. Sign-off list
             </div>
-            <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:6 }}>Operatives to sign:</div>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-              {operatives.map(n=>(
-                <span key={n} style={{ padding:"2px 10px", borderRadius:20, fontSize:11, background:"#EAF3DE", color:"#27500A" }}>{n}</span>
-              ))}
+            <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:8 }}>
+              Capture finger / mouse signatures for the print pack (same pad as permits).
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {selectedWorkers.map((w) => {
+                const ink = (form.operativeSignatures || {})[w.id];
+                return (
+                  <div key={w.id} style={{ border:"1px solid var(--color-border-tertiary,#e2e8f0)", borderRadius:8, padding:10, background:"#fff" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                      <strong style={{ fontSize:13 }}>{w.name}</strong>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {ink?.imageDataUrl ? (
+                          <button
+                            type="button"
+                            style={{ ...ss.btn, fontSize:12 }}
+                            onClick={() =>
+                              setForm((f) => {
+                                const next = { ...(f.operativeSignatures || {}) };
+                                delete next[w.id];
+                                return { ...f, operativeSignatures: next };
+                              })
+                            }
+                          >
+                            Clear ink
+                          </button>
+                        ) : null}
+                        <button type="button" style={{ ...ss.btnP, fontSize:12 }} onClick={() => setSigningWorkerId(signingWorkerId === w.id ? "" : w.id)}>
+                          {signingWorkerId === w.id ? "Close pad" : ink?.imageDataUrl ? "Re-sign" : "Sign"}
+                        </button>
+                      </div>
+                    </div>
+                    {ink?.imageDataUrl ? (
+                      <img src={ink.imageDataUrl} alt={`${w.name} signature`} style={{ maxHeight:48, marginTop:8, background:"#fff", border:"1px solid #e2e8f0", borderRadius:4 }} />
+                    ) : (
+                      <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginTop:6 }}>Not signed yet</div>
+                    )}
+                    {signingWorkerId === w.id ? (
+                      <div style={{ marginTop:10 }}>
+                        <TouchSignaturePad ref={inkPadRef} height={140} placeholder={`Sign for ${w.name}`} />
+                        <button
+                          type="button"
+                          style={{ ...ss.btnO, fontSize:12, marginTop:8 }}
+                          onClick={() => {
+                            if (!inkPadRef.current?.hasInk?.()) {
+                              window.alert("Draw a signature on the pad first.");
+                              return;
+                            }
+                            const imageDataUrl = inkPadRef.current.toDataURL("image/png");
+                            setForm((f) => ({
+                              ...f,
+                              operativeSignatures: {
+                                ...(f.operativeSignatures || {}),
+                                [w.id]: {
+                                  name: w.name,
+                                  imageDataUrl,
+                                  signedAt: new Date().toISOString(),
+                                },
+                              },
+                              signatureEvents: appendSignatureEvent(f.signatureEvents, {
+                                action: "operative_ink_sign",
+                                actor: w.name,
+                                role: "operative",
+                                revision: f.revision || "1A",
+                                status: f.documentStatus || "draft",
+                              }),
+                            }));
+                            setSigningWorkerId("");
+                            inkPadRef.current?.clear?.();
+                          }}
+                        >
+                          Save signature
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -5306,11 +5435,23 @@ function SavedList({
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
   const projectMap = Object.fromEntries(projects.map(p=>[p.id,p.name]));
   const [q, setQ] = useState("");
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [listFilter, setListFilter] = useState("all"); // all | draft | issued | favorites
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState({});
   const listPg = useRegisterListPaging(50);
   const favoriteCount = useMemo(() => ramsDocs.filter((d) => !!d.isFavorite).length, [ramsDocs]);
+  const statusCounts = useMemo(() => {
+    let draft = 0;
+    let issued = 0;
+    let approved = 0;
+    for (const d of ramsDocs) {
+      const s = String(d.documentStatus || d.status || "draft").toLowerCase();
+      if (s === "approved") approved += 1;
+      else if (s === "issued") issued += 1;
+      else draft += 1;
+    }
+    return { all: ramsDocs.length, draft, issued, approved, favorites: favoriteCount };
+  }, [ramsDocs, favoriteCount]);
   const importRef = useRef(null);
 
   const onImportFile = (e) => {
@@ -5342,7 +5483,19 @@ function SavedList({
   }, [ramsDocs]);
 
   const filtered = useMemo(() => {
-    const base = favoritesOnly ? sortedByDate.filter((d) => !!d.isFavorite) : sortedByDate;
+    let base = sortedByDate;
+    if (listFilter === "favorites") base = base.filter((d) => !!d.isFavorite);
+    else if (listFilter === "issued") {
+      base = base.filter((d) => {
+        const s = String(d.documentStatus || d.status || "").toLowerCase();
+        return s === "issued" || s === "approved";
+      });
+    } else if (listFilter === "draft") {
+      base = base.filter((d) => {
+        const s = String(d.documentStatus || d.status || "draft").toLowerCase();
+        return s !== "issued" && s !== "approved";
+      });
+    }
     const s = q.trim().toLowerCase();
     if (!s) return base;
     return base.filter((d) => {
@@ -5354,11 +5507,11 @@ function SavedList({
         pn.toLowerCase().includes(s)
       );
     });
-  }, [sortedByDate, q, projectMap, favoritesOnly]);
+  }, [sortedByDate, q, projectMap, listFilter]);
 
   useEffect(() => {
     listPg.reset();
-  }, [q, favoritesOnly]);
+  }, [q, listFilter]);
 
   const selectedDocs = useMemo(
     () => filtered.filter((d) => selectedIds[d.id]),
@@ -5384,44 +5537,99 @@ function SavedList({
 
   return (
     <div>
-      <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"space-between", alignItems:"center", gap:12, marginBottom:16 }}>
-        <div style={{ fontSize:12, color:"var(--color-text-secondary)" }}>
-          {ramsDocs.length} RAMS document{ramsDocs.length!==1?"s":""}
-          {favoriteCount > 0 ? ` · ${favoriteCount} favorite${favoriteCount !== 1 ? "s" : ""}` : ""}
-          {q.trim() ? ` · showing ${filtered.length}` : ""}
-        </div>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
-          {ramsDocs.length > 0 && (
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search title, location, ref, project…"
-              style={{ ...ss.inp, minWidth: 200, maxWidth: 360 }}
-              aria-label="Search RAMS list"
-            />
-          )}
-          <button type="button" onClick={() => setFavoritesOnly((v) => !v)} style={{ ...ss.btn, fontSize:12 }}>
-            {favoritesOnly ? "★ Favorites only" : "☆ Favorites"}
-          </button>
-          <input ref={importRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={onImportFile} aria-hidden />
-          <button type="button" onClick={() => importRef.current?.click()} style={ss.btn} title="Restore from a previously exported .json file">
-            Import JSON
-          </button>
-          {ramsDocs.length > 0 && onBulkDuplicateToProject ? (
-            <button
-              type="button"
-              onClick={() => {
-                setBulkMode((v) => !v);
-                setSelectedIds({});
-              }}
-              style={{ ...ss.btn, fontSize: 12, ...(bulkMode ? { borderColor: "#0d9488", color: "#0f766e" } : {}) }}
-            >
-              {bulkMode ? "Cancel bulk" : "Bulk select"}
+      <section className="app-rams-hub" aria-label="RAMS quick start">
+        <div className="app-rams-hub__top">
+          <div>
+            <p className="app-rams-hub__eyebrow">Site pack</p>
+            <h3 className="app-rams-hub__title">Build RAMS that look client-ready</h3>
+            <p className="app-rams-hub__lead">
+              Start from a Quick pack for the fastest path, or open a blank document. Favourites and issued docs stay pinned for the next job.
+            </p>
+          </div>
+          <div className="app-rams-hub__cta">
+            <button type="button" onClick={() => onNew({ jumpToHazards: true })} style={ss.btnO}>
+              Start from Quick pack
             </button>
-          ) : null}
-          <button type="button" onClick={onNew} style={ss.btnO}>+ Build new RAMS</button>
+            <button type="button" onClick={() => onNew()} style={ss.btnP}>
+              + Blank RAMS
+            </button>
+          </div>
         </div>
+        {ramsDocs.length > 0 ? (
+          <div className="app-rams-hub__stats">
+            <div className="app-rams-hub__stat">
+              <strong>{statusCounts.all}</strong>
+              <span>Documents</span>
+            </div>
+            <div className="app-rams-hub__stat">
+              <strong>{statusCounts.draft}</strong>
+              <span>Drafts</span>
+            </div>
+            <div className="app-rams-hub__stat">
+              <strong>{statusCounts.issued + statusCounts.approved}</strong>
+              <span>Issued</span>
+            </div>
+            <div className="app-rams-hub__stat">
+              <strong>{statusCounts.favorites}</strong>
+              <span>Favourites</span>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <div className="app-rams-list-toolbar">
+        {ramsDocs.length > 0 ? (
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search title, location, ref, project…"
+            style={{ ...ss.inp, flex: "1 1 220px", minWidth: 180, maxWidth: 400 }}
+            aria-label="Search RAMS list"
+          />
+        ) : null}
+        <input ref={importRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={onImportFile} aria-hidden />
+        <button type="button" onClick={() => importRef.current?.click()} style={ss.btn} title="Restore from a previously exported .json file">
+          Import JSON
+        </button>
+        {ramsDocs.length > 0 && onBulkDuplicateToProject ? (
+          <button
+            type="button"
+            onClick={() => {
+              setBulkMode((v) => !v);
+              setSelectedIds({});
+            }}
+            style={{ ...ss.btn, fontSize: 12, ...(bulkMode ? { borderColor: "#0d9488", color: "#0f766e", background: "#f0fdfa" } : {}) }}
+          >
+            {bulkMode ? "Cancel bulk" : "Bulk select"}
+          </button>
+        ) : null}
       </div>
+
+      {ramsDocs.length > 0 ? (
+        <div className="app-rams-list-filters" role="toolbar" aria-label="Filter RAMS">
+          {[
+            ["all", "All", statusCounts.all],
+            ["draft", "Drafts", statusCounts.draft],
+            ["issued", "Issued", statusCounts.issued + statusCounts.approved],
+            ["favorites", "Favourites", statusCounts.favorites],
+          ].map(([k, label, count]) => (
+            <button
+              key={k}
+              type="button"
+              className={`app-survey-list-filter-pill${listFilter === k ? " app-survey-list-filter-pill--active" : ""}`}
+              onClick={() => setListFilter(k)}
+            >
+              {label}
+              <span className="app-survey-list-filter-pill__count">{count}</span>
+            </button>
+          ))}
+          {q.trim() ? (
+            <span style={{ fontSize: 12, color: "var(--color-text-secondary)", marginLeft: 4 }}>
+              Showing {filtered.length}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       {bulkMode && selectedCount > 0 ? (
         <div
@@ -5453,11 +5661,11 @@ function SavedList({
         <EmptyState
           icon="⚠️"
           title="No RAMS yet"
-          description="Build a risk assessment and method statement for your site, or import JSON from another device or backup."
-          actionLabel="+ Build new RAMS"
-          onAction={onNew}
-          secondaryLabel="Import JSON"
-          onSecondary={() => importRef.current?.click()}
+          description="Fastest path: Start from a Quick pack → pick activities → Preview PDF. You can add project, title and site next."
+          actionLabel="Start from Quick pack"
+          onAction={() => onNew({ jumpToHazards: true })}
+          secondaryLabel="Blank RAMS"
+          onSecondary={() => onNew()}
           variant="dashed"
         />
       ) : filtered.length===0 ? (
@@ -5471,23 +5679,22 @@ function SavedList({
               Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} documents
             </div>
           ) : null}
-          {listPg.visible(filtered).map((doc) => (
+          {listPg.visible(filtered).map((doc) => {
+            const statusKey = String(doc.documentStatus || doc.status || "draft").toLowerCase();
+            const rowMod =
+              (doc.isFavorite ? " app-rams-doc-row--favorite" : "") +
+              (statusKey === "issued" ? " app-rams-doc-row--issued" : "") +
+              (statusKey === "approved" ? " app-rams-doc-row--approved" : "");
+            const statusMod =
+              statusKey === "approved"
+                ? " app-rams-doc-row__status--approved"
+                : statusKey === "issued"
+                  ? " app-rams-doc-row__status--issued"
+                  : " app-rams-doc-row__status--draft";
+            return (
             <div
               key={doc.id}
-              className="app-rams-doc-row"
-              style={{
-                ...ss.card,
-                display: "flex",
-                gap: 12,
-                alignItems: "flex-start",
-                border: doc.isFavorite ? "1px solid #f59e0b" : "0.5px solid var(--color-border-tertiary,#e5e5e5)",
-                background: doc.isFavorite
-                  ? "linear-gradient(180deg,#fffdf5 0%, #ffffff 68%)"
-                  : "linear-gradient(180deg,var(--color-background-primary,#fff) 0%, #fbfdff 100%)",
-                boxShadow: doc.isFavorite ? "0 4px 16px rgba(245,158,11,0.14)" : "0 2px 10px rgba(15,23,42,0.06)",
-                contentVisibility: "auto",
-                containIntrinsicSize: "0 100px",
-              }}
+              className={`app-rams-doc-row${rowMod}`}
             >
               {bulkMode ? (
                 <label style={{ display: "flex", alignItems: "flex-start", paddingTop: 2, flexShrink: 0, cursor: "pointer" }}>
@@ -5501,33 +5708,45 @@ function SavedList({
                 </label>
               ) : null}
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>
+                <div className="app-rams-doc-row__title">
                   {doc.isFavorite ? "★ " : ""}{doc.title}
                 </div>
-                <div style={{ display:"flex", gap:12, flexWrap:"wrap", fontSize:12, color:"var(--color-text-secondary)" }}>
-                  <span>{doc.location}</span>
-                  {doc.projectId && projectMap[doc.projectId] && <span>Project: {projectMap[doc.projectId]}</span>}
-                  {doc.documentNo && <span style={{ fontFamily:"ui-monospace, monospace" }}>{doc.documentNo}</span>}
-                  {doc.jobRef && <span>Ref: {doc.jobRef}</span>}
-                  <span>{doc.rows?.length||0} hazard rows</span>
-                  {Array.isArray(doc.signatureEvents) && doc.signatureEvents.length > 0 && <span>Signatures: {doc.signatureEvents.length}</span>}
-                  <span>Created: {fmtDate(doc.createdAt)}</span>
-                  {doc.issueDate && <span>Issued: {fmtDate(doc.issueDate)}</span>}
-                  {doc.reviewDate && <span style={{ color: new Date(doc.reviewDate)<new Date() ? "#A32D2D" : "inherit" }}>Review: {fmtDate(doc.reviewDate)}</span>}
-                  {doc.contentHash && <span style={{ fontFamily:"ui-monospace, monospace", fontSize:10 }} title="Fingerprint">#{String(doc.contentHash).slice(0,8)}…</span>}
+                <div className="app-rams-doc-row__meta">
+                  {doc.location ? <span className="app-rams-doc-row__meta-chip">{doc.location}</span> : null}
+                  {doc.projectId && projectMap[doc.projectId] ? (
+                    <span className="app-rams-doc-row__meta-chip">{projectMap[doc.projectId]}</span>
+                  ) : null}
+                  {doc.documentNo ? (
+                    <span className="app-rams-doc-row__meta-chip" style={{ fontFamily: "ui-monospace, monospace" }}>
+                      {doc.documentNo}
+                    </span>
+                  ) : null}
+                  {doc.jobRef ? <span className="app-rams-doc-row__meta-chip">Ref {doc.jobRef}</span> : null}
+                  <span className="app-rams-doc-row__meta-chip">{doc.rows?.length || 0} hazards</span>
+                  {Array.isArray(doc.signatureEvents) && doc.signatureEvents.length > 0 ? (
+                    <span className="app-rams-doc-row__meta-chip">{doc.signatureEvents.length} signatures</span>
+                  ) : null}
+                  <span className="app-rams-doc-row__meta-chip">Created {fmtDate(doc.createdAt)}</span>
+                  {doc.issueDate ? <span className="app-rams-doc-row__meta-chip">Issued {fmtDate(doc.issueDate)}</span> : null}
+                  {doc.reviewDate ? (
+                    <span
+                      className="app-rams-doc-row__meta-chip"
+                      style={{ color: new Date(doc.reviewDate) < new Date() ? "#A32D2D" : undefined }}
+                    >
+                      Review {fmtDate(doc.reviewDate)}
+                    </span>
+                  ) : null}
                 </div>
                 {(doc.operativeIds||[]).length>0 && (
-                  <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:4 }}>
+                  <div style={{ marginTop:8, display:"flex", flexWrap:"wrap", gap:4 }}>
                     {(doc.operativeIds||[]).map(id=>(
-                      <span key={id} style={{ padding:"1px 8px", borderRadius:20, fontSize:10, background:"#EAF3DE", color:"#27500A" }}>{workerMap[id]||id}</span>
+                      <span key={id} style={{ padding:"2px 8px", borderRadius:20, fontSize:10, fontWeight:600, background:"#ccfbf1", color:"#115e59" }}>{workerMap[id]||id}</span>
                     ))}
                   </div>
                 )}
               </div>
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0, justifyContent:"flex-end", maxWidth: 420 }}>
-                <span style={{ padding:"2px 10px", borderRadius:20, fontSize:11, fontWeight:600,
-                  background:(doc.documentStatus || doc.status)==="approved"?"#EAF3DE":(doc.documentStatus || doc.status)==="issued"?"#E6F1FB":(doc.documentStatus || doc.status)==="draft"?"var(--color-background-secondary,#f7f7f5)":"#FAEEDA",
-                  color:(doc.documentStatus || doc.status)==="approved"?"#27500A":(doc.documentStatus || doc.status)==="issued"?"#0C447C":(doc.documentStatus || doc.status)==="draft"?"var(--color-text-secondary)":"#633806" }}>
+                <span className={`app-rams-doc-row__status${statusMod}`}>
                   {(doc.documentStatus || doc.status || "draft").replace(/_/g, " ")}
                 </span>
                 {doc.clientApproval?.at ? (
@@ -5580,7 +5799,8 @@ function SavedList({
                 <button type="button" onClick={()=>onDelete(doc.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
               </div>
             </div>
-          ))}
+            );
+          })}
           {listPg.hasMore(filtered) ? (
             <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
               <button type="button" style={ss.btn} onClick={listPg.showMore}>
@@ -5726,7 +5946,10 @@ export default function RAMSTemplateBuilder() {
   useEffect(() => {
     if (builtInPacksSeededRef.current) return;
     builtInPacksSeededRef.current = true;
-    loadRamsHazardLibrary().then(({ library }) => {
+    Promise.all([
+      loadRamsHazardLibrary(),
+      import("./constructionQuickPacks"),
+    ]).then(([{ library }, { ensureBuiltInConstructionPacks }]) => {
       setHazardPacks((prev) => {
         const withBuiltIn = ensureBuiltInConstructionPacks(prev, library);
         const next = ensureOrgExclusiveQuickPacks(withBuiltIn, library, getOrgId());
@@ -5797,9 +6020,18 @@ export default function RAMSTemplateBuilder() {
     return () => clearTimeout(t);
   }, [view, step, form, editedRows, selectedHazards]);
 
-  useEffect(()=>{ save(RAMS_ORG_ACTIVITIES_KEY, orgActivities); },[orgActivities]);
-  useEffect(()=>{ save(RAMS_HAZARD_PREFS_KEY, hazardPrefs); },[hazardPrefs]);
-  useEffect(()=>{ save(RAMS_HAZARD_PACKS_KEY, hazardPacks); },[hazardPacks]);
+  useEffect(() => {
+    const t = setTimeout(() => save(RAMS_ORG_ACTIVITIES_KEY, orgActivities), 600);
+    return () => clearTimeout(t);
+  }, [orgActivities]);
+  useEffect(() => {
+    const t = setTimeout(() => save(RAMS_HAZARD_PREFS_KEY, hazardPrefs), 600);
+    return () => clearTimeout(t);
+  }, [hazardPrefs]);
+  useEffect(() => {
+    const t = setTimeout(() => save(RAMS_HAZARD_PACKS_KEY, hazardPacks), 600);
+    return () => clearTimeout(t);
+  }, [hazardPacks]);
 
   const startNew = (opts = {}) => {
     let formInit = {
@@ -5918,6 +6150,8 @@ export default function RAMSTemplateBuilder() {
 
     fessAutoSeedRef.current = false;
 
+    if (opts?.jumpToHazards && startStep < 2) startStep = 2;
+
     setForm(formInit);
     setSelectedHazards(selInit);
     setEditedRows(rowsInit);
@@ -6004,6 +6238,12 @@ export default function RAMSTemplateBuilder() {
           type: "success",
           title: "Job starter loaded",
           message: `${form.fessJobStarterLabel || form.fessJobStarterKey} — ${hazards.length} hazard rows.`,
+        });
+      } else {
+        pushToast({
+          type: "warn",
+          title: "Job starter ready",
+          message: `${form.fessJobStarterLabel || form.fessJobStarterKey} applied — no matching hazards in the library yet. Add hazards manually on this step.`,
         });
       }
       return;
@@ -6491,9 +6731,11 @@ export default function RAMSTemplateBuilder() {
     }
 
     pushToast({
-      type: "success",
-      title: "Job starter applied",
-      message: `${patch.fessJobStarterLabel || starterKey} — scope, method and ${toAdd.length || recommended.length} hazard row(s) loaded.`,
+      type: toAdd.length ? "success" : "warn",
+      title: toAdd.length ? "Job starter applied" : "Job starter — no new hazards",
+      message: toAdd.length
+        ? `${patch.fessJobStarterLabel || starterKey} — scope, method and ${toAdd.length} hazard row(s) loaded.`
+        : `${patch.fessJobStarterLabel || starterKey} applied — scope updated, but no new hazard rows matched. Check the hazard library or add rows manually.`,
     });
     trackEvent("rams_fess_job_starter_applied", { starter: starterKey, hazardsAdded: toAdd.length });
   };
@@ -6902,7 +7144,7 @@ export default function RAMSTemplateBuilder() {
     if (!targetId?.trim()) return;
     try {
       const copy = duplicateRamsToProject(doc, targetId.trim(), projects);
-      pushToast({ type: "success", title: "Copied to project", message: copy.title });
+      pushToast({ type: "success", title: "Copied to project", message: copy.title?.trim() || "Draft RAMS created on the selected project." });
     } catch (e) {
       pushToast({ type: "warn", title: "Copy failed", message: e?.message || "Could not copy." });
     }
@@ -7072,7 +7314,7 @@ export default function RAMSTemplateBuilder() {
     alert(`Imported: ${doc.title}`);
   };
 
-  const genShareToken = () => `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`;
+  const genShareToken = () => genOpaqueToken("r");
 
   const copyShareLink = (doc) => {
     let token = doc.shareToken;
@@ -7095,7 +7337,7 @@ export default function RAMSTemplateBuilder() {
 
   if (view==="list") {
     return (
-      <div className="app-document-module" style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+      <div className="app-document-module app-document-module--premium" style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
         <ConfettiCelebration
           active={celebrateRamsIssue}
           label={`${ramsLabel} issued`}
@@ -7105,7 +7347,8 @@ export default function RAMSTemplateBuilder() {
         <PageHero
           badgeText={ramsLabel}
           title={ramsBuilderTitle}
-          lead={`Build ${ramsLabel} from the hazard library — export/import JSON, share read-only links, optional operative certificates from Workers, site weather and map links. Unsaved work is kept as a draft in this browser for up to a week — choose "Resume" when you start a new ${ramsLabel}.`}
+          lead="Risk assessments and method statements for your site — tap Start from Quick pack, adjust people and site, then Preview PDF. Advanced tools (JSON, share links) stay in the list actions."
+          suppressRegisterPdf
         />
         <SavedList
           ramsDocs={ramsDocs}
@@ -7133,31 +7376,34 @@ export default function RAMSTemplateBuilder() {
   }
 
   return (
-    <div className="app-document-module" style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+    <div className="app-document-module app-document-module--premium" style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       <ConfettiCelebration
         active={celebrateRamsIssue}
         label={`${ramsLabel} issued`}
         onDone={() => setCelebrateRamsIssue(false)}
       />
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="RAMS" />
-      {/* header */}
       <div
-        className="app-panel-surface app-rams-builder-header"
+        className="app-rams-builder-header"
         style={{
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           flexWrap: "wrap",
-          gap: 12,
-          marginBottom: 20,
-          padding: "15px 14px 14px",
+          gap: 14,
         }}
       >
         <button type="button" onClick={goToList} style={{ ...ss.btn, fontSize: 12 }}>
           ← Back to list
         </button>
-        <h2 style={{ fontWeight: 600, fontSize: 17, margin: 0, flex: "1 1 200px", letterSpacing: "-0.02em" }}>
-          {editingDoc ? `Edit: ${form.title || "Untitled"}` : "New RAMS"}
-        </h2>
+        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+          <p className="app-rams-builder-header__eyebrow">{editingDoc ? "Editing document" : "New document"}</p>
+          <h2 className="app-rams-builder-header__title">
+            {editingDoc ? form.title || "Untitled RAMS" : "New RAMS"}
+          </h2>
+          <p className="app-rams-builder-header__hint">
+            Step {step} of {STEPS.length} — complete hazards, review controls, then preview the A4 pack.
+          </p>
+        </div>
       </div>
 
       {/* step progress — click a completed step to go back */}
@@ -7192,15 +7438,23 @@ export default function RAMSTemplateBuilder() {
                       width: 32,
                       height: 32,
                       borderRadius: "var(--radius-full, 9999px)",
-                      background: done ? "var(--color-accent,#0d9488)" : current ? "#f97316" : "var(--color-background-primary,#fff)",
+                      background: done
+                        ? "var(--color-accent,#0d9488)"
+                        : current
+                          ? "linear-gradient(145deg,#14b8a6,#0f766e)"
+                          : "var(--color-background-primary,#fff)",
                       color: done || current ? "#fff" : "var(--color-text-muted,#94a3b8)",
                       fontSize: 13,
                       fontWeight: 700,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      border: current ? "2px solid #fdba74" : done ? "none" : "1px solid var(--color-border-tertiary)",
-                      boxShadow: current ? "0 0 0 4px rgba(249, 115, 22, 0.2)" : done ? "0 2px 8px rgba(13, 148, 136, 0.25)" : "var(--shadow-sm)",
+                      border: current ? "2px solid #5eead4" : done ? "none" : "1px solid var(--color-border-tertiary)",
+                      boxShadow: current
+                        ? "0 0 0 4px rgba(13, 148, 136, 0.22)"
+                        : done
+                          ? "0 2px 8px rgba(13, 148, 136, 0.25)"
+                          : "var(--shadow-sm)",
                       pointerEvents: "none",
                     }}
                   >
@@ -7212,7 +7466,11 @@ export default function RAMSTemplateBuilder() {
                   style={{
                     height: 4,
                     borderRadius: 4,
-                    background: done ? "var(--color-accent,#0d9488)" : current ? "#fed7aa" : "var(--color-border-tertiary)",
+                    background: done
+                      ? "var(--color-accent,#0d9488)"
+                      : current
+                        ? "linear-gradient(90deg,#5eead4,#0d9488)"
+                        : "var(--color-border-tertiary)",
                     marginBottom: 8,
                     maxWidth: 100,
                     marginLeft: "auto",
@@ -7247,6 +7505,30 @@ export default function RAMSTemplateBuilder() {
             projects={projects}
             workers={workers}
             onNext={() => setStep(2)}
+            onWeatherApplied={(snap, opts) => {
+              const tpl = buildWeatherHazardTemplate({ outdoor: opts?.outdoor !== false, snap });
+              if (!tpl) return;
+              setEditedRows((rows) => {
+                const next = upsertWeatherHazardIntoRows(rows, selectedHazards, tpl);
+                queueMicrotask(() => {
+                  setSelectedHazards(next.selected);
+                  if (next.added) {
+                    pushToast({
+                      type: "success",
+                      title: "Weather risk added",
+                      message: "Outdoor / weather hazard row added to Step 2 — review controls before issue.",
+                    });
+                  } else if (next.updated) {
+                    pushToast({
+                      type: "info",
+                      title: "Weather risk updated",
+                      message: "Existing weather hazard row refreshed from the latest snapshot.",
+                    });
+                  }
+                });
+                return next.rows;
+              });
+            }}
           />
         )}
         {step===2 && (

@@ -10,8 +10,12 @@ async function loadDomPurify() {
   return domPurifyPromise;
 }
 
+/** Keep full document + <style> — otherwise survey/RAMS print CSS is dropped and PDF/print looks empty. */
 const PRINT_PURIFY_CONFIG = {
   USE_PROFILES: { html: true },
+  WHOLE_DOCUMENT: true,
+  ADD_TAGS: ["style"],
+  ADD_ATTR: ["target", "class", "id", "style", "width", "height", "viewBox", "xmlns", "fill", "stroke", "d", "cx", "cy", "r", "x", "y", "transform", "preserveAspectRatio"],
   FORBID_TAGS: ["script", "iframe", "object", "embed", "form", "base", "link", "meta", "foreignObject"],
   FORBID_ATTR: ["onerror", "onclick", "onload", "onmouseover", "onfocus", "onblur", "srcdoc"],
 };
@@ -143,7 +147,26 @@ export function buildPrintPreviewSrcDoc(html) {
 
 /** Open a blank print window without giving it `window.opener` access. */
 export function openPrintWindow() {
-  return window.open("", "_blank", "noopener,noreferrer");
+  const openFn = globalThis.window?.open?.bind(globalThis.window) || globalThis.open?.bind(globalThis);
+  if (typeof openFn !== "function") return null;
+  return openFn("", "_blank", "noopener,noreferrer");
+}
+
+const PRINT_POPUP_BLOCKED_MSG =
+  "Pop-up blocked — allow pop-ups for MySafeOps to print / save PDF.";
+
+/**
+ * Open a print window or alert when the browser blocks it.
+ * @param {{ message?: string; silent?: boolean }} [opts]
+ * @returns {Window | null}
+ */
+export function openPrintWindowOrWarn(opts = {}) {
+  const win = openPrintWindow();
+  if (!win && !opts.silent) {
+    const alertFn = globalThis.window?.alert || globalThis.alert;
+    if (typeof alertFn === "function") alertFn(opts.message || PRINT_POPUP_BLOCKED_MSG);
+  }
+  return win;
 }
 
 /** Write sanitized HTML into a print window (CSP + DOMPurify when loaded). */

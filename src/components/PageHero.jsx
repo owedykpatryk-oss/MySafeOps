@@ -3,6 +3,7 @@ import { ms } from "../utils/moduleStyles";
 import { useRegisterPdfViewId } from "../context/RegisterPdfExportContext";
 import { canExportModulePdf } from "../navigation/moduleCatalogMeta";
 import { useOrgBranding } from "../hooks/useOrgBranding";
+import { safeImageSrc } from "../utils/htmlEscape.js";
 
 const LazyRegisterPdfExportButton = lazy(() => import("./RegisterPdfExportButton"));
 
@@ -21,6 +22,7 @@ export default function PageHero({
   suppressRegisterPdf = false,
 }) {
   const branding = useOrgBranding();
+  const logoSrc = safeImageSrc(branding.logo);
   const len = badgeText ? String(badgeText).length : 0;
   const badgeFontSize = len > 4 ? 9 : len > 3 ? 10 : 12;
   const activeViewId = useRegisterPdfViewId();
@@ -47,7 +49,7 @@ export default function PageHero({
         <div
           className="app-page-hero__badge"
           style={
-            branding.logo
+            logoSrc
               ? undefined
               : {
                   background: branding.badgeGradient,
@@ -56,8 +58,8 @@ export default function PageHero({
           }
           aria-hidden
         >
-          {branding.logo ? (
-            <img src={branding.logo} alt="" className="app-page-hero__badge-logo" />
+          {logoSrc ? (
+            <img src={logoSrc} alt="" className="app-page-hero__badge-logo" />
           ) : (
             <span style={{ fontSize: badgeFontSize, fontWeight: 700, letterSpacing: "0.03em", lineHeight: 1.1 }}>{badgeText}</span>
           )}

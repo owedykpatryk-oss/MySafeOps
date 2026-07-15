@@ -16,4 +16,9 @@ describe("buildIntegrationAdaptersStatus", () => {
     const rows = buildIntegrationAdaptersStatus({ teamsEnabled: true, teamsUrl: "" });
     expect(rows.find((r) => r.channel === "teams")?.enabled).toBe(false);
   });
+
+  it("does not surface calendar coming-soon as a live adapter", () => {
+    const rows = buildIntegrationAdaptersStatus({});
+    expect(rows.some((r) => r.channel === "calendar")).toBe(false);
+  });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, ChevronRight, Sparkles, X } from "lucide-react";
-import ConfettiCelebration from "./ConfettiCelebration";import { useApp } from "../context/AppContext";
+import ConfettiCelebration from "./ConfettiCelebration";
+import { useApp } from "../context/AppContext";
 import { useOrgBranding } from "../hooks/useOrgBranding";
 import { getModuleLabel } from "../utils/hiddenModules";
 import {
@@ -18,6 +19,7 @@ import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { getOnboardingCopy } from "../data/appUiCopy";
 import { getRamsShortLabel, localizeIndustryTerminology } from "../utils/marketLabels";
+import { escapeHtml } from "../utils/htmlEscape.js";
 
 const STEPS = ["welcome", "profile", "shortcut", "done"];
 
@@ -110,7 +112,14 @@ export default function WorkspaceOnboarding({ onComplete }) {
             <h2 id="app-onboarding-title" className="app-onboarding-title">
               {t("welcomeTitle") || "Welcome to MySafeOps"}
             </h2>
-            <p className="app-onboarding-lead" dangerouslySetInnerHTML={{ __html: t("welcomeLead", branding.displayName) || `Set up <strong>${branding.displayName}</strong> in under a minute. Your workspace profile controls which modules appear, how Project Hub scores readiness, and which RAMS hazard starter is suggested — you can change it anytime in Settings.` }} />
+            <p
+              className="app-onboarding-lead"
+              dangerouslySetInnerHTML={{
+                __html:
+                  t("welcomeLead", escapeHtml(branding.displayName)) ||
+                  `Set up <strong>${escapeHtml(branding.displayName)}</strong> in under a minute. Your workspace profile controls which modules appear, how Project Hub scores readiness, and which RAMS hazard starter is suggested — you can change it anytime in Settings.`,
+              }}
+            />
             <button type="button" className="app-onboarding-primary" onClick={() => setStepIndex(1)}>
               {t("getStarted") || "Get started"}
               <ChevronRight size={18} aria-hidden />

@@ -8,6 +8,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -26,6 +27,7 @@ function Form({ item, projects, onSave, onClose }) {
         projectId: "",
         inspectedDate: today(),
         nextDue: "",
+        calibrationDue: "",
         result: "pass",
         inspector: "",
         notes: "",
@@ -58,8 +60,12 @@ function Form({ item, projects, onSave, onClose }) {
             <input type="date" style={ss.inp} value={form.inspectedDate} onChange={(e) => set("inspectedDate", e.target.value)} />
           </div>
           <div>
-            <label style={ss.lbl}>Next due</label>
+            <label style={ss.lbl}>Next inspection due</label>
             <input type="date" style={ss.inp} value={form.nextDue || ""} onChange={(e) => set("nextDue", e.target.value)} />
+          </div>
+          <div>
+            <label style={ss.lbl}>Calibration / service due</label>
+            <input type="date" style={ss.inp} value={form.calibrationDue || ""} onChange={(e) => set("calibrationDue", e.target.value)} />
           </div>
         </div>
         <label style={{ ...ss.lbl, marginTop: 10 }}>Result</label>
@@ -112,8 +118,17 @@ export default function PlantEquipmentRegister() {
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
   const exportCsv = () => {
-    const h = ["Asset", "Description", "Project", "Inspected", "Next due", "Result", "Inspector"];
-    const rows = items.map((r) => [r.assetRef, r.description, r.projectName || "", r.inspectedDate, r.nextDue, r.result, r.inspector]);
+    const h = ["Asset", "Description", "Project", "Inspected", "Next due", "Calibration due", "Result", "Inspector"];
+    const rows = items.map((r) => [
+      r.assetRef,
+      r.description,
+      r.projectName || "",
+      r.inspectedDate,
+      r.nextDue,
+      r.calibrationDue || "",
+      r.result,
+      r.inspector,
+    ]);
     const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -143,7 +158,7 @@ export default function PlantEquipmentRegister() {
             <PageHero exportModuleId="plant"
         badgeText="PL"
         title="Plant & equipment"
-        lead="Plant register, inspections, and handover notes (local only)."
+        lead="Inspections, next due and calibration dates — reminders show on People (same as MOT on fleet)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {items.length > 0 && (
             <button type="button" style={ss.btn} onClick={exportCsv}>
@@ -177,9 +192,11 @@ export default function PlantEquipmentRegister() {
                 <div style={{ minWidth: 0 }}>
                   <strong>{r.assetRef || "No ref"}</strong> · {r.inspectedDate}
                   <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.description} · {r.result}</div>
-                  {r.nextDue && <div style={{ fontSize: 11, marginTop: 4 }}>Next due: {r.nextDue}</div>}
+                  {r.nextDue && <div style={{ fontSize: 11, marginTop: 4 }}>Inspection due: {r.nextDue}</div>}
+                  {r.calibrationDue && <div style={{ fontSize: 11, marginTop: 2 }}>Calibration due: {r.calibrationDue}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <RegisterFormPrintButton moduleId="plant" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
                     Edit
                   </button>

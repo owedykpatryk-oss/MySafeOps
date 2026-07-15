@@ -40,7 +40,7 @@ export default function PermitIntegrationsPanel({
             Notify Slack, Teams, or your own webhook when permits are issued or closed.
           </div>
         </div>
-        <span style={{ ...ss.chip, fontSize: 11 }}>Hybrid mode</span>
+        <span style={{ ...ss.chip, fontSize: 11 }}>Webhooks</span>
       </div>
 
       <div className="ptw-integrations__status-grid">

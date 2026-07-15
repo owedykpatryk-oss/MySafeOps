@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -7,10 +7,11 @@ import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import TouchSignaturePad from "../components/TouchSignaturePad";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
-import { escapeHtml, openPrintWindow, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { escapeHtml, escapeAttr, safeImageSrc, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { MS_TEMPLATE_DEFS } from "./msStepTemplates";
@@ -185,7 +186,7 @@ function MSForm({ ms, onSave, onClose }) {
     briefingNotes:"",
     scope:"", restrictions:"",
     steps:[], plant:[], materials:[],
-    ppeRequired:[], operativeIds:[],
+    ppeRequired:[], operativeIds:[], operativeSignatures:{},
     emergencyProcedure:"", wasteDisposal:"",
     relatedRamsId:"", notes:"",
     status:"draft", createdAt:new Date().toISOString(),
@@ -195,6 +196,8 @@ function MSForm({ ms, onSave, onClose }) {
   const [newPlant, setNewPlant] = useState("");
   const [newMat, setNewMat] = useState("");
   const [activeTab, setActiveTab] = useState("info");
+  const [signingWorkerId, setSigningWorkerId] = useState("");
+  const inkPadRef = useRef(null);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
   const addPlant = () => { if (!newPlant.trim()) return; set("plant",[...form.plant,newPlant.trim()]); setNewPlant(""); };
@@ -358,6 +361,58 @@ function MSForm({ ms, onSave, onClose }) {
                     );
                   })}
                 </div>
+                {(form.operativeIds || []).length > 0 ? (
+                  <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                      Finger / mouse signatures for the printed A4 pack
+                    </div>
+                    {(form.operativeIds || []).map((id) => {
+                      const w = workers.find((x) => x.id === id);
+                      if (!w) return null;
+                      const ink = (form.operativeSignatures || {})[id];
+                      return (
+                        <div key={id} style={{ border: "1px solid var(--color-border-secondary,#e2e8f0)", borderRadius: 8, padding: 10 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <strong style={{ fontSize: 13 }}>{w.name}</strong>
+                            <button type="button" style={{ ...ss.btn, fontSize: 12 }} onClick={() => setSigningWorkerId(signingWorkerId === id ? "" : id)}>
+                              {signingWorkerId === id ? "Close pad" : ink?.imageDataUrl ? "Re-sign" : "Sign"}
+                            </button>
+                          </div>
+                          {ink?.imageDataUrl ? (
+                            <img src={ink.imageDataUrl} alt="" style={{ maxHeight: 44, marginTop: 6, border: "1px solid #e2e8f0", borderRadius: 4 }} />
+                          ) : null}
+                          {signingWorkerId === id ? (
+                            <div style={{ marginTop: 8 }}>
+                              <TouchSignaturePad ref={inkPadRef} height={130} placeholder={`Sign for ${w.name}`} />
+                              <button
+                                type="button"
+                                style={{ ...ss.btnO, fontSize: 12, marginTop: 8 }}
+                                onClick={() => {
+                                  if (!inkPadRef.current?.hasInk?.()) {
+                                    window.alert("Draw a signature first.");
+                                    return;
+                                  }
+                                  const imageDataUrl = inkPadRef.current.toDataURL("image/png");
+                                  setForm((f) => ({
+                                    ...f,
+                                    operativeSignatures: {
+                                      ...(f.operativeSignatures || {}),
+                                      [id]: { name: w.name, imageDataUrl, signedAt: new Date().toISOString() },
+                                    },
+                                  }));
+                                  setSigningWorkerId("");
+                                  inkPadRef.current?.clear?.();
+                                }}
+                              >
+                                Save signature
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -501,7 +556,7 @@ function printMS(form, workers, projects) {
 
   if (isFessOrg()) {
     const coshhItems = load("coshh_register", []);
-    const win = openPrintWindow();
+    const win = openPrintWindowOrWarn();
     if (!win) return;
     const org = getOrgSettings();
     const bodyHtml = buildFessMethodStatementPackHtml(form, operatives, coshhItems, linkedRams);
@@ -532,14 +587,36 @@ function printMS(form, workers, projects) {
       <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap">${he(s.duration||"")}</td>
     </tr>`).join("");
 
-  const sigRows = operatives.map(n=>`
+  const sigRows = isFessOrg()
+    ? operatives
+        .map((n) => {
+          const name = typeof n === "string" ? n : n?.name || "—";
+          return `
     <tr style="height:44px">
-      <td style="padding:6px;border:1px solid #ddd;font-size:12px">${he(n)}</td>
+      <td style="padding:6px;border:1px solid #ddd;font-size:12px">${he(name)}</td>
       <td style="border:1px solid #ddd"></td>
       <td style="border:1px solid #ddd"></td>
-    </tr>`).join("");
+    </tr>`;
+        })
+        .join("")
+    : (form.operativeIds || [])
+        .map((id) => {
+          const name = workerMap[id] || id;
+          const ink = (form.operativeSignatures || {})[id];
+          const src = ink?.imageDataUrl ? safeImageSrc(ink.imageDataUrl) : "";
+          const when = ink?.signedAt ? fmtDate(ink.signedAt) : "";
+          return `
+    <tr style="height:48px">
+      <td style="padding:6px;border:1px solid #ddd;font-size:12px">${he(name)}</td>
+      <td style="padding:4px;border:1px solid #ddd;text-align:center">${
+        src ? `<img src="${escapeAttr(src)}" alt="Signature" style="max-height:40px;max-width:100%;object-fit:contain"/>` : ""
+      }</td>
+      <td style="padding:6px;border:1px solid #ddd;font-size:11px">${he(when)}</td>
+    </tr>`;
+        })
+        .join("");
 
-  const win = openPrintWindow();
+  const win = openPrintWindowOrWarn();
   if (!win) return;
   const org = getOrgSettings();
   const bodyHtml = `
@@ -671,7 +748,7 @@ export default function MethodStatement() {
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
 
   return (
-    <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
+    <div className="app-document-module app-document-module--premium" style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {modal?.type==="form" && <MSForm ms={modal.data} onSave={saveDoc} onClose={()=>setModal(null)} />}
 
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="method statements and shared lists" />

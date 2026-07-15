@@ -3,6 +3,7 @@
  */
 import { loadOrgScoped as load, asStorageArray } from "./orgStorage";
 import { pushAudit } from "./auditLog";
+import { genOpaqueToken } from "./opaqueToken";
 
 export const PORTAL_DEFAULT_TTL_DAYS = 90;
 
@@ -138,5 +139,5 @@ export function genPortalToken() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
-  return `pt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 10)}`;
+  return genOpaqueToken("pt");
 }

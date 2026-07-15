@@ -71,12 +71,21 @@ function corsHeaders(request, env) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const allow = allowed.length === 0 ? "*" : allowed.includes(origin) ? origin : allowed[0] || "*";
-  return {
-    "Access-Control-Allow-Origin": allow,
+  const base = {
     "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Org-Slug",
     "Access-Control-Max-Age": "86400",
+  };
+  // Fail closed for browsers when ALLOWED_ORIGINS is unset — never echo '*'.
+  if (!origin) return base;
+  if (allowed.length === 0) {
+    return { ...base, "Access-Control-Allow-Origin": "null" };
+  }
+  if (!allowed.includes(origin)) return base;
+  return {
+    ...base,
+    "Access-Control-Allow-Origin": origin,
+    Vary: "Origin",
   };
 }
 

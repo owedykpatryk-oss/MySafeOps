@@ -8,9 +8,10 @@ import {
 } from "./surveySimpleEditorNav";
 
 describe("surveySimpleEditorNav", () => {
-  it("groups tabs into four steps", () => {
+  it("groups tabs into four steps with plain English labels", () => {
     expect(SURVEY_SIMPLE_STEPS).toHaveLength(4);
     expect(SURVEY_SIMPLE_STEPS.map((s) => s.id)).toEqual(["mobilise", "site", "findings", "issue"]);
+    expect(SURVEY_SIMPLE_STEPS.map((s) => s.label)).toEqual(["Start", "On site", "Findings", "Print"]);
   });
 
   it("resolves step from tab id", () => {

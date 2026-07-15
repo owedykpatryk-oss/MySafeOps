@@ -34,9 +34,29 @@ export function getPermitGuidePrefs() {
   return loadOrgScoped(PERMIT_GUIDE_STORAGE_KEY, null) || {};
 }
 
-export function shouldPreferQuickIssueView() {
+export function shouldPreferQuickIssueView(opts = {}) {
   const prefs = getPermitGuidePrefs();
-  return Boolean(prefs.preferQuickView);
+  if (prefs.preferListView === true) return false;
+  if (prefs.preferQuickView === true) return true;
+  // Phone / narrow: keep first visit on Quick issue (less overwhelming than board/command/map)
+  if (opts.narrow === true) return true;
+  return false;
+}
+
+/** Persist explicit view preference from the PTW view switcher. */
+export function setPreferQuickIssueView(preferQuick) {
+  const prev = getPermitGuidePrefs();
+  const payload = {
+    ...prev,
+    preferQuickView: Boolean(preferQuick),
+    preferListView: !preferQuick,
+  };
+  saveOrgScoped(PERMIT_GUIDE_STORAGE_KEY, payload);
+  try {
+    guideCloudSync?.(payload);
+  } catch {
+    /* non-fatal */
+  }
 }
 
 export function resetPermitGuide() {

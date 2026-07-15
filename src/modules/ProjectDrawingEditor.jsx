@@ -30,7 +30,10 @@ import {
   parseKmlPoints,
   parseGpxPoints,
   parseGeoJsonPoints,
+  parseKmlGeometry,
+  boundaryFromKmlGeometry,
 } from "./permits/projectDrawingImport";
+import { readKmlTextFromFile } from "../utils/kmzExtract";
 import { solvePlanAffineFromControlPoints } from "./permits/projectDrawingAffine";
 import { PDE_AREA_KINDS, pdeAreaKindMeta, isPolygonDrawingObject } from "./permits/projectDrawingAreas";
 import { projectBoundaryFromDraftRing } from "./permits/projectDrawingBoundary";
@@ -52,6 +55,10 @@ import ProjectDrawingMapLegend, { buildMapLegendItems } from "./ProjectDrawingMa
 import { computeProjectDrawingReadiness } from "./permits/projectDrawingReadiness";
 import { buildSitePackKml, buildSitePackManifest, triggerBlobDownload } from "./permits/projectDrawingSitePack";
 import { resolveHospitalRoute } from "../utils/hospitalRoute";
+import {
+  siteCoordFingerprint,
+  siteEnrichmentMatchesCoords,
+} from "../utils/siteEnrichment";
 import { captureElementPngBlob } from "../utils/captureElementPng";
 import ProjectSitePlanPanel from "./ProjectSitePlanPanel";
 
@@ -1003,22 +1010,77 @@ export default function ProjectDrawingEditor() {
     reader.readAsText(file);
   };
 
-  const importKmlOrGpxFile = (file, kind) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result || "");
-      const pts = kind === "kml" ? parseKmlPoints(text) : parseGpxPoints(text);
-      if (pts.length === 0) {
-        setToast(`No waypoints found in ${kind.toUpperCase()}`);
+  const importKmlOrGpxFile = async (file, kind) => {
+    if (!projectId) {
+      window.alert("Select a project first.");
+      return;
+    }
+    try {
+      let text = "";
+      if (kind === "kml") {
+        text = await readKmlTextFromFile(file);
+      } else {
+        text = await file.text();
+      }
+
+      if (kind === "gpx") {
+        const pts = parseGpxPoints(text);
+        if (pts.length === 0) {
+          setToast("No waypoints found in GPX");
+          return;
+        }
+        if (!window.confirm(`Import ${pts.length} waypoint(s) as map (GPS) objects?`)) return;
+        pushHistory();
+        const merged = pts.map((p) =>
+          buildProjectDrawingObject({
+            projectId,
+            planId: "",
+            type: objectType,
+            label: p.name ? p.name.slice(0, 120) : "",
+            x: 50,
+            y: 50,
+            placement: "map",
+            geoLat: p.lat,
+            geoLng: p.lng,
+          })
+        );
+        setRows((prev) => [...merged, ...prev].slice(0, 1500));
+        setSelectedIds(merged[0]?.id ? [merged[0].id] : []);
+        setWorkSurface("map");
+        setToast(`Imported ${merged.length} point(s) from GPX`);
         return;
       }
-      if (!projectId) {
-        window.alert("Select a project first.");
+
+      // KML / KMZ — polygons (site areas) + Point placemarks
+      const geom = parseKmlGeometry(text);
+      const polys = geom.polygons || [];
+      const pts = geom.points?.length ? geom.points : polys.length ? [] : parseKmlPoints(text);
+      if (!pts.length && !polys.length) {
+        setToast("No points or polygons found in KML/KMZ");
         return;
       }
-      if (!window.confirm(`Import ${pts.length} waypoint(s) as map (GPS) objects?`)) return;
+      const bits = [];
+      if (polys.length) bits.push(`${polys.length} area(s)`);
+      if (pts.length) bits.push(`${pts.length} point(s)`);
+      if (!window.confirm(`Import ${bits.join(" + ")} from ${file.name || "KML"}?`)) return;
+
       pushHistory();
-      const merged = pts.map((p) =>
+      const areaRows = polys.map((poly) => {
+        const ring = poly.ring.map((p) => ({ geoLat: p.lat, geoLng: p.lng }));
+        return buildProjectDrawingObject({
+          projectId,
+          planId: "",
+          type: "site_area",
+          label: poly.name ? poly.name.slice(0, 120) : "Imported area",
+          x: 50,
+          y: 50,
+          placement: "map",
+          geometry: "polygon",
+          ring,
+          meta: { areaKind: areaKind || "exclusion", importedFrom: file.name || "kml" },
+        });
+      });
+      const pointRows = pts.map((p) =>
         buildProjectDrawingObject({
           projectId,
           planId: "",
@@ -1031,12 +1093,30 @@ export default function ProjectDrawingEditor() {
           geoLng: p.lng,
         })
       );
+      const merged = [...areaRows, ...pointRows];
       setRows((prev) => [...merged, ...prev].slice(0, 1500));
       setSelectedIds(merged[0]?.id ? [merged[0].id] : []);
       setWorkSurface("map");
-      setToast(`Imported ${merged.length} point(s) from ${kind.toUpperCase()}`);
-    };
-    reader.readAsText(file);
+
+      if (polys.length && currentProject) {
+        const boundary = boundaryFromKmlGeometry(geom, { sourceName: file.name || "KML/KMZ import" });
+        if (boundary) {
+          const hasBoundary = Array.isArray(currentProject.boundaryPoints) && currentProject.boundaryPoints.length >= 3;
+          if (!hasBoundary || window.confirm("Also set this polygon as the project site boundary?")) {
+            updateProjectRecord({
+              ...currentProject,
+              ...boundary,
+              boundaryImportedAt: new Date().toISOString(),
+            });
+          }
+        }
+      }
+
+      setToast(`Imported ${bits.join(" + ")} from ${file.name || "KML"}`);
+      window.setTimeout(() => mapCanvasRef.current?.fitObjects?.(), 220);
+    } catch (e) {
+      setToast(e?.message || "Import failed");
+    }
   };
 
   const importGeoJsonFile = (file) => {
@@ -1185,15 +1265,18 @@ export default function ProjectDrawingEditor() {
         setHospitalIntel(null);
         return;
       }
-      setHospitalIntel(resolved);
+      const fp = siteCoordFingerprint(lat, lng);
+      setHospitalIntel({ ...resolved, siteFp: fp });
       setShowHospitalRoute(true);
       window.setTimeout(() => mapCanvasRef.current?.fitHospitalRoute(resolved.ring), 200);
       updateProjectRecord({
         ...currentProject,
         nearestHospital: resolved.hospital.summary,
         hospitalDirectionsUrl: resolved.hospital.directions_url,
+        siteEnrichmentFor: fp,
+        siteEnrichmentAt: new Date().toISOString(),
       });
-      setToast(`A&E route ready — ${resolved.hospital.name}`);
+      setToast(`A&E for this site pin — ${resolved.hospital.name}`);
     } catch {
       setToast("Hospital lookup failed");
     } finally {
@@ -1203,11 +1286,36 @@ export default function ProjectDrawingEditor() {
 
   useEffect(() => {
     if (!projectId || workSurface !== "map") return undefined;
-    const key = String(projectId);
-    if (hospitalAutoFetchedRef.current.has(key)) return undefined;
-    if (hospitalIntel || hospitalBusy || currentProject?.nearestHospital) return undefined;
-    if (!Number.isFinite(siteCoordsForHospital.lat) || !Number.isFinite(siteCoordsForHospital.lng)) return undefined;
+    const { lat, lng } = siteCoordsForHospital;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
     if (siteGeoStatus.source === "default" || siteGeoStatus.busy) return undefined;
+    if (hospitalBusy) return undefined;
+
+    const fp = siteCoordFingerprint(lat, lng);
+    const key = `${projectId}:${fp}`;
+    if (hospitalAutoFetchedRef.current.has(key)) return undefined;
+
+    const projectHospitalFits =
+      siteEnrichmentMatchesCoords(currentProject, lat, lng) && Boolean(currentProject?.nearestHospital);
+    const intelFits = Boolean(hospitalIntel?.hospital) && hospitalIntel.siteFp === fp;
+
+    if (projectHospitalFits || intelFits) {
+      hospitalAutoFetchedRef.current.add(key);
+      return undefined;
+    }
+
+    // Stale A&E from another postcode — drop it and fetch for the current pin.
+    if (currentProject?.nearestHospital && !siteEnrichmentMatchesCoords(currentProject, lat, lng)) {
+      updateProjectRecord({
+        ...currentProject,
+        nearestHospital: "",
+        hospitalDirectionsUrl: "",
+        siteEnrichmentFor: "",
+        siteEnrichmentAt: "",
+      });
+    }
+    if (hospitalIntel && hospitalIntel.siteFp !== fp) setHospitalIntel(null);
+
     hospitalAutoFetchedRef.current.add(key);
     fetchHospitalRoute();
     return undefined;
@@ -1216,20 +1324,25 @@ export default function ProjectDrawingEditor() {
     workSurface,
     hospitalIntel,
     hospitalBusy,
-    currentProject?.nearestHospital,
+    currentProject,
     siteCoordsForHospital.lat,
     siteCoordsForHospital.lng,
     siteGeoStatus.source,
     siteGeoStatus.busy,
     fetchHospitalRoute,
+    updateProjectRecord,
   ]);
 
   const captureHospitalScreenshot = useCallback(async () => {
     if (!projectId || !hospitalIntel?.ring?.length) return;
     setCaptureBusy(true);
+    const prevView = mapCanvasRef.current?.getView?.() || null;
     try {
       if (!showHospitalRoute) setShowHospitalRoute(true);
-      await new Promise((r) => window.setTimeout(r, 350));
+      // Fit route for the capture frame, then restore site view so the map doesn't stay zoomed out
+      await new Promise((r) => window.setTimeout(r, 80));
+      mapCanvasRef.current?.fitHospitalRoute?.(hospitalIntel.ring, { maxZoom: 14 });
+      await new Promise((r) => window.setTimeout(r, 450));
       const blob = await captureHospitalRoutePng();
       if (!blob) {
         setToast("Screenshot failed — try again");
@@ -1251,6 +1364,9 @@ export default function ProjectDrawingEditor() {
     } catch {
       setToast("Screenshot capture failed");
     } finally {
+      if (prevView) {
+        mapCanvasRef.current?.setView?.(prevView.lat, prevView.lng, prevView.zoom);
+      }
       setCaptureBusy(false);
     }
   }, [projectId, hospitalIntel, showHospitalRoute, currentProject, uploadBlobToOrgR2, updateProjectRecord]);
@@ -2782,16 +2898,16 @@ export default function ProjectDrawingEditor() {
                 display: "inline-block",
               }}
             >
-              Import KML
+              Import KML / KMZ
               <input
                 type="file"
-                accept=".kml,application/vnd.google-earth.kml+xml,application/xml,text/xml"
+                accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz,application/zip,application/xml,text/xml"
                 style={{ display: "none" }}
                 disabled={!projectId}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   e.target.value = "";
-                  if (f) importKmlOrGpxFile(f, "kml");
+                  if (f) void importKmlOrGpxFile(f, "kml");
                 }}
               />
             </label>
