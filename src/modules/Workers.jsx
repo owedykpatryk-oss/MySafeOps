@@ -1418,7 +1418,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
       const same =
         String(f.lat || "") === nextLat &&
         String(f.lng || "") === nextLng &&
-        String(f.postcode || "") === String(resolved.postcode ?? f.postcode || "");
+          String(f.postcode || "") === String(resolved.postcode ?? f.postcode ?? "");
       const base = same ? f : clearSiteEnrichmentFields(f);
       return {
         ...base,
