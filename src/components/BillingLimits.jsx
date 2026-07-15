@@ -522,8 +522,6 @@ export default function BillingLimits({ checkoutReturn = null }) {
           />
         </div>
       )}
-      {cloudOk &&
-        isAdmin &&
       {cloudOk && isAdmin && showDevHints && (
         <div style={{ ...ss.card, marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Billing health</div>
