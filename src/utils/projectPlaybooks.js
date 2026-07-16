@@ -6,6 +6,7 @@
 import { PROJECT_DOC_KEYS } from "./projectDashboard";
 import { isSurveyWorkflowEnabled } from "./surveyWorkflowGate";
 import { loadOrgScoped as load, saveOrgScoped as save, asStorageArray } from "./orgStorage";
+import { projectHasRams, docsForProject } from "./projectRamsPresence";
 import { blankSurveyReport } from "../modules/surveyReport/surveyReportConstants";
 import {
   prefillReportFromProject,
@@ -32,6 +33,8 @@ import { getFessPlaybook } from "./fessProjectPlaybooks";
 import { isFessOrg } from "./fessOrg";
 import { FESS_CLIENT_SITE_TEMPLATES } from "./fessClientSites";
 import ALL from "../modules/rams/ramsAllHazards.js";
+
+export { projectHasRams, docsForProject };
 
 const genId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
@@ -302,16 +305,6 @@ function buildRamsRowsFromHazards(hazards) {
     regs: h.regs || [],
     rowSource: "hazard_pack",
   }));
-}
-
-export function projectHasRams(projectId, ramsDocs = []) {
-  if (!projectId) return true;
-  return asStorageArray(ramsDocs).some((d) => String(d.projectId || "") === String(projectId));
-}
-
-export function docsForProject(projectId, rows = []) {
-  if (!projectId) return [];
-  return asStorageArray(rows).filter((r) => String(r.projectId || "") === String(projectId));
 }
 
 export function createRamsDraftFromPlaybook(project, playbook) {

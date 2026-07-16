@@ -137,7 +137,7 @@ import {
 } from "./permitOrgPrefs";
 import { pushPermitRecentHistory, recentPermitsFromHistory } from "./permitRecentHistory";
 import { ORG_SETTINGS_UPDATED_EVENT, saveOrgSettingsRaw } from "../../utils/orgSettingsStorage";
-import { projectHasRams } from "../../utils/projectPlaybooks";
+import { projectHasRams } from "../../utils/projectRamsPresence";
 import {
   PROJECT_DRAWING_OBJECT_TYPES,
   drawingObjectLabel,

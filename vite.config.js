@@ -599,6 +599,9 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             const norm = id.replace(/\\/g, "/");
             if (!norm.includes("node_modules")) {
+              // Tiny loader only — AppContext clears cache; must not sit in rams-hazards
+              // (shared-ui ↔ rams-hazards TDZ). Heavy library stays in rams-hazards via dynamic import.
+              if (norm.includes("/modules/rams/ramsHazardLibraryLoader")) return "shared-ui";
               if (
                 norm.includes("/modules/rams/ramsHazardLibrary") ||
                 norm.includes("/modules/rams/ramsAllHazards") ||
@@ -607,7 +610,9 @@ export default defineConfig(({ mode }) => {
               ) {
                 return "rams-hazards";
               }
-              if (norm.includes("/modules/rams/constructionQuickPacks")) return "rams-quick-packs";
+              if (norm.includes("/modules/rams/constructionQuickPacks")) {
+                return "rams-quick-packs";
+              }
               if (norm.includes("/modules/rams/ramsPrintHtml") || norm.includes("/modules/rams/RAMSTemplateBuilder")) {
                 return norm.includes("ramsPrintHtml") || norm.includes("fessRamsPrintHtml") ? "rams-print" : "rams-builder";
               }
@@ -622,9 +627,11 @@ export default defineConfig(({ mode }) => {
                 return "survey-report";
               }
               if (norm.includes("/utils/orgAutomationRules")) return "shared-ui";
-              if (norm.includes("/utils/permitWebhook")) return "permits-lib";
-              if (norm.includes("/modules/surveyReport/")) return "survey-report";
-              if (norm.includes("/modules/gprReport/")) return "gpr-report";
+              if (norm.includes("/utils/permitWebhook") || norm.includes("/utils/permitIntegrationNotify") || norm.includes("/utils/webhookUrlValidation")) {
+                return "permits-lib";
+              }
+              if (norm.includes("/utils/surveyPermitLink")) return "permits-lib";
+              if (norm.includes("/utils/projectRamsPresence")) return "shared-ui";
               // Shared leaf utils — never absorb into feature chunks (avoids cross-chunk TDZ).
               if (
                 norm.includes("/utils/moduleStyles") ||
@@ -638,15 +645,67 @@ export default defineConfig(({ mode }) => {
                 norm.includes("/utils/orgStorage") ||
                 norm.includes("/utils/orgId") ||
                 norm.includes("/utils/billingState") ||
+                norm.includes("/utils/pdfBranding") ||
+                norm.includes("/utils/orgLocale") ||
+                norm.includes("/utils/orgMarket") ||
+                norm.includes("/utils/orgSettingsStorage") ||
+                norm.includes("/utils/orgBrandingTheme") ||
+                norm.includes("/utils/orgCustomFields") ||
+                norm.includes("/utils/staticMapUrl") ||
+                norm.includes("/utils/geoPhotoFields") ||
+                norm.includes("/utils/geoPhotoIntegrations") ||
+                norm.includes("/utils/geoPhotoPresets") ||
+                norm.includes("/utils/geoPhotoMedia") ||
+                norm.includes("/utils/geoPhotoUtils") ||
+                norm.includes("/utils/cadImportVisuals") ||
+                norm.includes("/utils/surveyDxfAnalyzer") ||
+                norm.includes("/utils/weatherSummary") ||
+                norm.includes("/utils/weatherFieldMap") ||
+                // weatherSummary imports these — keep in shared-ui (not project-drawing-lib)
+                // or shared-ui ↔ project-drawing-lib cycles.
+                norm.includes("/utils/siteAddressLookup") ||
+                norm.includes("/utils/postcodeLookup") ||
+                norm.includes("/utils/auPostcodeLookup") ||
+                norm.includes("/utils/plPostcodeLookup") ||
+                norm.includes("/utils/marketLabels") ||
+                norm.includes("/utils/statusChipMeta") ||
+                norm.includes("/utils/recycleBin") ||
+                norm.includes("/utils/useRegisterListPaging") ||
+                norm.includes("/utils/permitGuideStorage") ||
+                norm.includes("/utils/permitContextTips") ||
+                norm.includes("/utils/fessExclusive") ||
+                norm.includes("/utils/fessOrg") ||
+                norm.includes("/utils/fessWorkspaceProfile") ||
+                norm.includes("/utils/ramsHazardPacksStorage") ||
+                norm.includes("/modules/rams/orgExclusiveQuickPacks") ||
                 norm.includes("/navigation/workspaceViewIds") ||
                 norm.includes("/hooks/useD1OrgArraySync") ||
+                norm.includes("/hooks/useCountUp") ||
                 norm.includes("/context/SupabaseAuthContext") ||
+                norm.includes("/context/AppContext") ||
+                norm.includes("/context/ToastContext") ||
                 norm.includes("/components/PageHero") ||
+                norm.includes("/components/EmptyState") ||
+                norm.includes("/components/StatusChip") ||
+                norm.includes("/components/D1ModuleSyncBanner") ||
+                norm.includes("/components/ModuleOverlay") ||
+                norm.includes("/components/PrintPreviewFrame") ||
+                norm.includes("/components/ConfirmDialog") ||
+                norm.includes("/components/ConfettiCelebration") ||
+                norm.includes("/components/SimpleFormDialog") ||
+                norm.includes("/components/TouchSignaturePad") ||
+                // GPR reuses these survey UI leaves — pin here so gpr-report ↛ survey-report.
+                norm.includes("/modules/surveyReport/SurveyLivePreviewDock") ||
+                norm.includes("/modules/surveyReport/SurveyProgressRing") ||
+                norm.includes("/modules/surveyReport/surveyPas128Visual") ||
                 norm.includes("/lib/r2Storage") ||
-                norm.includes("/lib/supabase")
+                norm.includes("/lib/supabase") ||
+                norm.includes("/config/markets")
               ) {
                 return "shared-ui";
               }
+              if (norm.includes("/modules/surveyReport/")) return "survey-report";
+              if (norm.includes("/modules/gprReport/")) return "gpr-report";
               // Drawing / plan helpers — survey also uses overlay registry; keep out of UI chunk
               // so survey-report never sync-imports project-drawing (and vice versa).
               if (
@@ -660,7 +719,7 @@ export default defineConfig(({ mode }) => {
                 norm.includes("/utils/hospitalRoute") ||
                 norm.includes("/utils/nearestHospital") ||
                 norm.includes("/utils/siteEnrichment") ||
-                norm.includes("/utils/siteAddressLookup") ||
+                norm.includes("/utils/geoPhotoExport") ||
                 norm.includes("/utils/captureElementPng") ||
                 norm.includes("/components/plans/") ||
                 norm.includes("/components/ProjectKmlDropZone")
@@ -709,6 +768,9 @@ export default defineConfig(({ mode }) => {
                 norm.includes("/modules/permits/components/PermitStepper")
               ) {
                 return "permits-studio";
+              }
+              if (norm.includes("/utils/fessRamsPrintHtml") || norm.includes("/modules/rams/ramsPrintDocument")) {
+                return "rams-print";
               }
               if (norm.includes("moduleCatalogIcons")) return "module-icons";
               return;

@@ -2,7 +2,7 @@
  * Smart automation for GPR reports — geology API, weather, limitation suggestions, prebuilt narratives.
  */
 import { fetchWeatherForDate, resolveSiteCoordinates } from "../../utils/weatherSummary";
-import { mapWeatherSnapshotToFields } from "../surveyReport/surveyReportSmart";
+import { mapWeatherSnapshotToFields } from "../../utils/weatherFieldMap";
 import {
   buildGprWeatherImpactNarrative,
   interpretGeologyForGpr,
