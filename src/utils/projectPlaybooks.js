@@ -5,7 +5,7 @@
 
 import { PROJECT_DOC_KEYS } from "./projectDashboard";
 import { isSurveyWorkflowEnabled } from "./surveyWorkflowGate";
-import { loadOrgScoped as load, saveOrgScoped as save, asStorageArray } from "./orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save } from "./orgStorage";
 import { projectHasRams, docsForProject } from "./projectRamsPresence";
 import { blankSurveyReport } from "../modules/surveyReport/surveyReportConstants";
 import {
