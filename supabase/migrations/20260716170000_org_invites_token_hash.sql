@@ -3,13 +3,13 @@
 -- invites keep working. Plaintext remains until email-resend / copy-from-list
 -- can move to return-once tokens.
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 alter table public.org_invites
   add column if not exists invite_token_hash text;
 
 update public.org_invites
-set invite_token_hash = encode(digest(invite_token, 'sha256'), 'hex')
+set invite_token_hash = encode(extensions.digest(convert_to(invite_token, 'UTF8'), 'sha256'), 'hex')
 where invite_token is not null
   and (invite_token_hash is null or invite_token_hash = '');
 
@@ -20,10 +20,11 @@ create index if not exists org_invites_token_hash_idx
 create or replace function public.org_invites_set_token_hash()
 returns trigger
 language plpgsql
+set search_path = public, extensions
 as $$
 begin
   if new.invite_token is not null and nullif(trim(new.invite_token), '') is not null then
-    new.invite_token_hash := encode(digest(new.invite_token, 'sha256'), 'hex');
+    new.invite_token_hash := encode(extensions.digest(convert_to(new.invite_token, 'UTF8'), 'sha256'), 'hex');
   end if;
   return new;
 end;
@@ -43,7 +44,7 @@ returns table (
 language sql
 stable
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
   select o.name::text, i.email::text, i.expires_at
   from public.org_invites i
@@ -52,7 +53,7 @@ as $$
     and i.expires_at > now()
     and (
       i.invite_token = p_token
-      or i.invite_token_hash = encode(digest(p_token, 'sha256'), 'hex')
+      or i.invite_token_hash = encode(extensions.digest(convert_to(p_token, 'UTF8'), 'sha256'), 'hex')
     )
   limit 1;
 $$;
@@ -76,7 +77,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_uid uuid := auth.uid();
@@ -98,7 +99,7 @@ begin
   where u.id = v_uid;
 
   if nullif(trim(coalesce(p_invite_token, '')), '') is not null then
-    v_token_hash := encode(digest(p_invite_token, 'sha256'), 'hex');
+    v_token_hash := encode(extensions.digest(convert_to(p_invite_token, 'UTF8'), 'sha256'), 'hex');
     select i.id, i.org_id, i.role
       into v_invite_id, v_org_id, v_invite_role
     from public.org_invites i
