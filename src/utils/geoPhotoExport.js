@@ -4,7 +4,7 @@
 import { geoPhotoPreset } from "./geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
 import { bearingToEnd, normalizeBearing } from "./geoPhotoUtils";
-import { escapeXml } from "../modules/permits/projectDrawingGeo";
+import { escapeXml } from "./xmlEscape";
 import { CAPTURE_PHASE_OPTIONS, resolvedGiDepth, resolvedGiLocationId } from "./geoPhotoFields";
 import { loadDrawingEditorPrefs } from "../modules/permits/projectDrawingEditorPrefs";
 import { latLngToPlanPercentAffine } from "../modules/permits/projectDrawingAffine";

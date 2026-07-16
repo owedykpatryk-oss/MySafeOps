@@ -1,4 +1,4 @@
-import { DEFAULT_GEO_ANCHOR } from "../modules/permits/projectDrawingGeo";
+import { DEFAULT_GEO_ANCHOR } from "../modules/permits/projectDrawingGeoDefaults";
 import { geoAnchorFromProject } from "./projectBoundary";
 import { lookupSitePostcode, resolveSitePostcodeInput } from "./siteAddressLookup";
 

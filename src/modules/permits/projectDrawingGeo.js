@@ -1,13 +1,10 @@
 import { drawingObjectLabel } from "./projectDrawingRegistry";
 import { planPercentToLatLngAffine } from "./projectDrawingAffine";
+import { escapeXml } from "../../utils/xmlEscape";
+import { DEFAULT_GEO_ANCHOR } from "./projectDrawingGeoDefaults";
 
-/** Default bbox center (illustrative — calibrate in UI for your site). */
-export const DEFAULT_GEO_ANCHOR = {
-  lat: 51.505,
-  lng: -0.09,
-  spanLat: 0.012,
-  spanLng: 0.016,
-};
+export { DEFAULT_GEO_ANCHOR };
+export { escapeXml };
 
 /**
  * Map plan percentages (0–100, origin top-left) to WGS84 degrees inside the anchor rectangle.
@@ -33,14 +30,6 @@ export function getObjectLatLng(row, anchor = DEFAULT_GEO_ANCHOR, affine = null)
     return planPercentToLatLngAffine(row.x, row.y, affine);
   }
   return planPercentToLatLng(row.x, row.y, anchor);
-}
-
-export function escapeXml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 /**

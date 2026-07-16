@@ -613,7 +613,54 @@ export default defineConfig(({ mode }) => {
               }
               if (norm.includes("/modules/surveyReport/")) return "survey-report";
               if (norm.includes("/modules/gprReport/")) return "gpr-report";
-              if (norm.includes("/modules/ProjectDrawing")) return "project-drawing";
+              // Shared leaf utils — never absorb into feature chunks (avoids cross-chunk TDZ).
+              if (
+                norm.includes("/utils/moduleStyles") ||
+                norm.includes("/utils/htmlEscape") ||
+                norm.includes("/utils/safeUrl") ||
+                norm.includes("/utils/xmlEscape") ||
+                norm.includes("/utils/dataUrlBlob") ||
+                norm.includes("/utils/auditLog") ||
+                norm.includes("/utils/workspaceNavContext") ||
+                norm.includes("/utils/orgMembership") ||
+                norm.includes("/utils/orgStorage") ||
+                norm.includes("/utils/orgId") ||
+                norm.includes("/utils/billingState") ||
+                norm.includes("/navigation/workspaceViewIds") ||
+                norm.includes("/hooks/useD1OrgArraySync") ||
+                norm.includes("/context/SupabaseAuthContext") ||
+                norm.includes("/components/PageHero") ||
+                norm.includes("/lib/r2Storage") ||
+                norm.includes("/lib/supabase")
+              ) {
+                return "shared-ui";
+              }
+              // Drawing / plan helpers — survey also uses overlay registry; keep out of UI chunk
+              // so survey-report never sync-imports project-drawing (and vice versa).
+              if (
+                norm.includes("/modules/permits/projectDrawing") ||
+                norm.includes("/modules/permits/permitPlanOverlayRegistry") ||
+                norm.includes("/utils/planMarkupMeta") ||
+                norm.includes("/utils/planPdfRaster") ||
+                norm.includes("/utils/kmzExtract") ||
+                norm.includes("/utils/projectBoundary") ||
+                norm.includes("/utils/resolveProjectGeoAnchor") ||
+                norm.includes("/utils/hospitalRoute") ||
+                norm.includes("/utils/nearestHospital") ||
+                norm.includes("/utils/siteEnrichment") ||
+                norm.includes("/utils/siteAddressLookup") ||
+                norm.includes("/utils/captureElementPng") ||
+                norm.includes("/components/plans/") ||
+                norm.includes("/components/ProjectKmlDropZone")
+              ) {
+                return "project-drawing-lib";
+              }
+              if (
+                norm.includes("/modules/ProjectDrawing") ||
+                norm.includes("/modules/ProjectSitePlanPanel")
+              ) {
+                return "project-drawing";
+              }
               if (norm.includes("/modules/permits/PermitSystem")) return "permits";
               if (
                 norm.includes("/modules/permits/components/PermitStudio") ||

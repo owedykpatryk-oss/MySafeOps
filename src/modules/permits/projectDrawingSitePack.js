@@ -1,4 +1,5 @@
-import { buildDrawingObjectsKml, escapeXml } from "./projectDrawingGeo";
+import { buildDrawingObjectsKml } from "./projectDrawingGeo";
+import { escapeXml } from "../../utils/xmlEscape";
 import { computeProjectDrawingReadiness } from "./projectDrawingReadiness";
 import { drawingObjectLabel } from "./projectDrawingRegistry";
 

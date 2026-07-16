@@ -167,21 +167,28 @@ const pdeUi = {
   }),
 };
 
-const ss = {
-  ...ms,
-  btnO: {
-    padding: "10px 14px",
-    borderRadius: 6,
-    border: "0.5px solid #c2410c",
-    background: "#f97316",
-    color: "#fff",
-    fontSize: 13,
-    cursor: "pointer",
-    fontFamily: "DM Sans,sans-serif",
-    minHeight: 44,
-    lineHeight: 1.3,
-  },
+/** Orange override only — lazy `ms` access avoids cross-chunk TDZ at module init. */
+const ssBtnO = {
+  padding: "10px 14px",
+  borderRadius: 6,
+  border: "0.5px solid #c2410c",
+  background: "#f97316",
+  color: "#fff",
+  fontSize: 13,
+  cursor: "pointer",
+  fontFamily: "DM Sans,sans-serif",
+  minHeight: 44,
+  lineHeight: 1.3,
 };
+const ss = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (prop === "btnO") return ssBtnO;
+      return ms[prop];
+    },
+  }
+);
 
 const HISTORY_CAP = 50;
 const PDE_SESSION_KEY = "mysafeops_pde_session_v1";
