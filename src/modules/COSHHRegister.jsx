@@ -8,6 +8,7 @@ import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
@@ -432,21 +433,18 @@ export default function COSHHRegister() {
           />
         ) : (
           <>
-            {listPg.hasMore(filtered) ? (
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
-                Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} substances
-              </div>
-            ) : null}
             {listPg.visible(filtered).map((i) => (
               <SubstanceCard key={i.id} item={i} onEdit={(x) => setModal({ type: "form", data: x })} onDelete={deleteItem} />
             ))}
-            {listPg.hasMore(filtered) ? (
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-                <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                  Show more ({listPg.remaining(filtered)} remaining)
-                </button>
-              </div>
-            ) : null}
+            <RegisterListPagingFooter
+              hasMore={listPg.hasMore(filtered)}
+              remaining={listPg.remaining(filtered)}
+              showing={Math.min(listPg.cap, filtered.length)}
+              total={filtered.length}
+              onShowMore={listPg.showMore}
+              itemLabel="substances"
+              buttonStyle={ss.btn}
+            />
           </>
         )}
       </RegisterModuleShell>

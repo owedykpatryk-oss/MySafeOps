@@ -5,6 +5,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import {
   loadEmergencySiteExtras,
@@ -175,11 +176,6 @@ export default function EmergencyContacts() {
           Contact list
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {listPg.hasMore(rows) ? (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Showing {Math.min(listPg.cap, rows.length)} of {rows.length} contacts
-            </div>
-          ) : null}
           {listPg.visible(rows).map((row) => (
             <div
               key={row.id}
@@ -217,13 +213,15 @@ export default function EmergencyContacts() {
               </div>
             </div>
           ))}
-          {listPg.hasMore(rows) ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(rows)} remaining)
-              </button>
-            </div>
-          ) : null}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(rows)}
+            remaining={listPg.remaining(rows)}
+            showing={Math.min(listPg.cap, rows.length)}
+            total={rows.length}
+            onShowMore={listPg.showMore}
+            itemLabel="contacts"
+            buttonStyle={ss.btn}
+          />
         </div>
         <button type="button" style={{ ...ss.btnP, marginTop: 8 }} onClick={addRow}>
           + Add contact

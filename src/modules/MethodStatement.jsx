@@ -6,6 +6,7 @@ import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import TouchSignaturePad from "../components/TouchSignaturePad";
@@ -804,11 +805,6 @@ export default function MethodStatement() {
         />
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {listPg.hasMore(filtered) ? (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} method statements
-            </div>
-          ) : null}
           {listPg.visible(filtered).map((doc) => {
             const operatives = (doc.operativeIds||[]).map(id=>workerMap[id]).filter(Boolean);
             return (
@@ -845,13 +841,15 @@ export default function MethodStatement() {
               </div>
             );
           })}
-          {listPg.hasMore(filtered) ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(filtered)} remaining)
-              </button>
-            </div>
-          ) : null}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(filtered)}
+            remaining={listPg.remaining(filtered)}
+            showing={Math.min(listPg.cap, filtered.length)}
+            total={filtered.length}
+            onShowMore={listPg.showMore}
+            itemLabel="method statements"
+            buttonStyle={ss.btn}
+          />
         </div>
       )}
 

@@ -5,8 +5,10 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -299,17 +301,16 @@ export default function InspectionTracker() {
         }
       >
         {items.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "3rem 1rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12 }}>
-            <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>No inspection records yet.</p>
-            <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>+ Add first record</button>
-          </div>
+          <EmptyState
+            icon="🔍"
+            title="No inspection records yet"
+            description="Track LOLER, PAT, PUWER and other plant and equipment inspections."
+            actionLabel="+ Add first record"
+            onAction={() => setModal({ type: "form" })}
+            variant="dashed"
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {listPg.hasMore(filtered) ? (
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} records
-              </div>
-            ) : null}
             {listPg.visible(filtered).map((item) => {
               const def = INSPECTION_TYPES[item.type] || INSPECTION_TYPES.other;
               const pill = getStatusPill(item);
@@ -348,13 +349,14 @@ export default function InspectionTracker() {
                 </div>
               );
             })}
-            {listPg.hasMore(filtered) ? (
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-                <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                  Show more ({listPg.remaining(filtered)} remaining)
-                </button>
-              </div>
-            ) : null}
+            <RegisterListPagingFooter
+              hasMore={listPg.hasMore(filtered)}
+              remaining={listPg.remaining(filtered)}
+              showing={Math.min(listPg.cap, filtered.length)}
+              total={filtered.length}
+              onShowMore={listPg.showMore}
+              buttonStyle={ss.btn}
+            />
           </div>
         )}
       </RegisterModuleShell>

@@ -7,8 +7,10 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -172,14 +174,16 @@ export default function LadderInspection() {
       >
 
 {items.length === 0 ? (
-        <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No ladder inspections recorded.</div>
+        <EmptyState
+          icon="🪜"
+          title="No ladder inspections yet"
+          description="Record pre-use and formal ladder checks so defective kit is taken out of service."
+          actionLabel="+ Add inspection"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.hasMore(items) ? (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Showing {Math.min(listPg.cap, items.length)} of {items.length} records
-            </div>
-          ) : null}
           {listPg.visible(items).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -219,13 +223,14 @@ export default function LadderInspection() {
               </div>
             </div>
           ))}
-          {listPg.hasMore(items) ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(items)} remaining)
-              </button>
-            </div>
-          ) : null}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(items)}
+            remaining={listPg.remaining(items)}
+            showing={Math.min(listPg.cap, items.length)}
+            total={items.length}
+            onShowMore={listPg.showMore}
+            buttonStyle={ss.btn}
+          />
         </div>
       )}
 
