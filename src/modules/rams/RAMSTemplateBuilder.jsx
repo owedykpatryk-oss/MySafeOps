@@ -773,39 +773,45 @@ function remapOperativeIds(oldIds, operativeNames, workersList) {
   });
 }
 
-const ss = {
-  ...ms,
-  btnO: {
-    ...ms.btn,
-    padding: "10px 16px",
-    borderRadius: "var(--radius-sm, 8px)",
-    border: "1px solid #c2410c",
-    background: "linear-gradient(180deg, #fb923c 0%, #ea580c 100%)",
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    fontFamily: "DM Sans,sans-serif",
-    minHeight: 44,
-    lineHeight: 1.3,
-    boxShadow: "0 2px 8px rgba(234, 88, 12, 0.35)",
-  },
-  ta: {
-    width: "100%",
-    padding: "10px 12px",
-    border: "1px solid var(--color-border-secondary,#cbd5e1)",
-    borderRadius: "var(--radius-sm, 8px)",
-    fontSize: 13,
-    background: "var(--color-background-primary,#fff)",
-    color: "var(--color-text-primary)",
-    fontFamily: "DM Sans,sans-serif",
-    boxSizing: "border-box",
-    resize: "vertical",
-    minHeight: 60,
-    lineHeight: 1.5,
-    transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-  },
+const ssBtnO = {
+  padding: "10px 16px",
+  borderRadius: "var(--radius-sm, 8px)",
+  border: "1px solid #c2410c",
+  background: "linear-gradient(180deg, #fb923c 0%, #ea580c 100%)",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontFamily: "DM Sans,sans-serif",
+  minHeight: 44,
+  lineHeight: 1.3,
+  boxShadow: "0 2px 8px rgba(234, 88, 12, 0.35)",
 };
+const ssTa = {
+  width: "100%",
+  padding: "10px 12px",
+  border: "1px solid var(--color-border-secondary,#cbd5e1)",
+  borderRadius: "var(--radius-sm, 8px)",
+  fontSize: 13,
+  background: "var(--color-background-primary,#fff)",
+  color: "var(--color-text-primary)",
+  fontFamily: "DM Sans,sans-serif",
+  boxSizing: "border-box",
+  resize: "vertical",
+  minHeight: 60,
+  lineHeight: 1.5,
+  transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+};
+/** Lazy `ms` access — avoid cross-chunk TDZ at module init. */
+const ss = new Proxy(
+  { btnO: ssBtnO, ta: ssTa },
+  {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      return ms[prop];
+    },
+  }
+);
 
 const RAMS_FORM_DEFAULTS = {
   outdoorWork: true,
@@ -1233,7 +1239,12 @@ const SURVEYING_PACKS_RAW = [
   },
 ];
 
-const SURVEYING_PACKS = SURVEYING_PACKS_RAW.map(mergeRamsPackFromCatalog);
+let _surveyingPacks;
+/** Lazy — avoid calling survey catalog at module init (cross-chunk TDZ). */
+function surveyingPacks() {
+  if (!_surveyingPacks) _surveyingPacks = SURVEYING_PACKS_RAW.map(mergeRamsPackFromCatalog);
+  return _surveyingPacks;
+}
 
 const SURVEY_PACK_METADATA = {
   utility_mapping_survey: {
@@ -1441,7 +1452,7 @@ function surveyPackMetaFor(packKey) {
 
 function findSurveyPackByKey(packKey) {
   const key = resolveSurveyPackKey(packKey);
-  return SURVEYING_PACKS.find((p) => p.key === key) || null;
+  return surveyingPacks().find((p) => p.key === key) || null;
 }
 
 function findHazardsForSurveyPack(pack, hazardLibrary) {
@@ -1610,7 +1621,7 @@ function SurveyingPackSection({ form, onApplySurveyPack, suggestedPackKey = "" }
           style={{ ...ss.inp, minWidth: 260 }}
         >
           <option value="">— Select surveying pack —</option>
-          {SURVEYING_PACKS.map((p) => (
+          {surveyingPacks().map((p) => (
             <option key={p.key} value={p.key}>
               {p.label}
             </option>
@@ -1626,7 +1637,7 @@ function SurveyingPackSection({ form, onApplySurveyPack, suggestedPackKey = "" }
         </button>
         {!!form.surveyWorkType && (
           <span style={{ fontSize: 11, color: "#0C447C", background: "#E6F1FB", padding: "2px 8px", borderRadius: 20 }}>
-            Active: {form.surveyWorkTypeLabel || SURVEYING_PACKS.find((p) => p.key === form.surveyWorkType)?.label || form.surveyWorkType}
+            Active: {form.surveyWorkTypeLabel || surveyingPacks().find((p) => p.key === form.surveyWorkType)?.label || form.surveyWorkType}
           </span>
         )}
         <button
@@ -4831,7 +4842,7 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             </div>
             {(form.surveyWorkType || "").trim() && (
               <div style={{ marginBottom:6, fontSize:11, color:"#0C447C" }}>
-                Work type: {form.surveyWorkTypeLabel || SURVEYING_PACKS.find((p) => p.key === form.surveyWorkType)?.label || form.surveyWorkType}
+                Work type: {form.surveyWorkTypeLabel || surveyingPacks().find((p) => p.key === form.surveyWorkType)?.label || form.surveyWorkType}
               </div>
             )}
             <div style={{ fontSize:12, whiteSpace:"pre-wrap", lineHeight:1.55, color:"var(--color-text-secondary)" }}>

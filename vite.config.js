@@ -611,6 +611,17 @@ export default defineConfig(({ mode }) => {
               if (norm.includes("/modules/rams/ramsPrintHtml") || norm.includes("/modules/rams/RAMSTemplateBuilder")) {
                 return norm.includes("ramsPrintHtml") || norm.includes("fessRamsPrintHtml") ? "rams-print" : "rams-builder";
               }
+              // Survey catalog is a zero-dep leaf used by RAMS at module init — must not live in
+              // survey-report or rams-builder (cross-chunk TDZ on SURVEY_CATALOG / Js).
+              if (norm.includes("/utils/surveyContentCatalog")) return "survey-catalog";
+              // Keep survey↔RAMS bridge helpers in the survey chunk (not rams-builder).
+              if (
+                norm.includes("/utils/documentPropagation") ||
+                norm.includes("/utils/surveyCompletenessGates")
+              ) {
+                return "survey-report";
+              }
+              if (norm.includes("/utils/orgAutomationRules")) return "shared-ui";
               if (norm.includes("/modules/surveyReport/")) return "survey-report";
               if (norm.includes("/modules/gprReport/")) return "gpr-report";
               // Shared leaf utils — never absorb into feature chunks (avoids cross-chunk TDZ).
