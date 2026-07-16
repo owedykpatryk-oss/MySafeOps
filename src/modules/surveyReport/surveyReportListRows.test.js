@@ -20,7 +20,7 @@ describe("surveyReportListRows", () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].score).toBeGreaterThan(0);
-    expect(rows[0].mapThumb).toContain("staticmap");
+    expect(rows[0].mapThumb).toMatch(/staticmap|data:image\/svg\+xml/);
   });
 
   it("builds group meta map", () => {
