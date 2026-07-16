@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { buildRosterLinkedEmailSet } from "../_shared/permitNotificationRecipients.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
+import { checkEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
 
 function escHtml(s: string) {
   return String(s || "")
@@ -57,6 +58,13 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!checkEdgeRateLimit(`permit-notify:${user.id}`, 20, 60_000)) {
+      return new Response(JSON.stringify({ error: "Too many requests" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
       });
     }
 

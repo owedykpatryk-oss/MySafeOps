@@ -61,6 +61,9 @@ async function main() {
     "supabase/migrations/20260711200000_supabase_linter_hardening.sql",
     "supabase/migrations/20260712230000_permit_notification_rate_limit.sql",
     "supabase/migrations/20260713020000_org_permits_rls_membership.sql",
+    "supabase/migrations/20260716150000_org_invites_select_admin_only.sql",
+    "supabase/migrations/20260716160000_user_module_guides_org_gate.sql",
+    "supabase/migrations/20260716170000_org_invites_token_hash.sql",
   ];
   for (const m of migrations) {
     if (existsSync(resolve(root, m))) ok(`migration present — ${m}`);
@@ -186,10 +189,54 @@ async function main() {
     issues += 1;
   }
 
-  if (fileIncludes("src/lib/supabase.js", "allowDevFallback")) {
-    ok("Supabase bundled fallbacks disabled in production builds");
+  if (fileIncludes("src/lib/supabase.js", "FALLBACK_SUPABASE") || fileIncludes("src/lib/supabase.js", "allowDevFallback")) {
+    fail("Supabase client still embeds a hardcoded URL/anon fallback — remove it");
+    issues += 1;
   } else {
-    warn("Supabase fallbacks may still ship in production bundle");
+    ok("Supabase client has no hardcoded URL/anon fallback");
+  }
+
+  if (fileIncludes("supabase/functions/send-permit-notification/index.ts", "checkEdgeRateLimit")) {
+    ok("Permit notification Edge Function has isolate rate limit");
+  } else {
+    fail("Permit notification missing checkEdgeRateLimit");
+    issues += 1;
+  }
+
+  if (fileIncludes("supabase/functions/send-org-invite/index.ts", "&email=")) {
+    fail("send-org-invite accept URL still embeds email= in the query string");
+    issues += 1;
+  } else {
+    ok("send-org-invite accept URL omits email from query string");
+  }
+
+  if (fileIncludes("vite.config.js", "block-bundled-proxy-secrets-in-production")) {
+    ok("Vite blocks VITE_AI_PROXY_SECRET / VITE_STORAGE_UPLOAD_TOKEN in production builds");
+  } else {
+    fail("Vite missing production ban for bundled proxy/upload secrets");
+    issues += 1;
+  }
+
+  const cspPolicyBody = CONTENT_SECURITY_POLICY;
+
+  if (/\bimg-src\b[^;]*\bhttps:(?!\/\/)/.test(cspPolicyBody)) {
+    fail("CSP still allows any HTTPS image (bare img-src https:)");
+    issues += 1;
+  } else {
+    ok("CSP img-src is host-pinned (no bare https:)");
+  }
+
+  if (cspPolicyBody.includes("https://*.workers.dev")) {
+    fail("CSP still allows any workers.dev host — pin mysafeops Worker URLs");
+    issues += 1;
+  } else {
+    ok("CSP connect-src pins Worker hosts (no *.workers.dev)");
+  }
+
+  if (fileIncludes("cloudflare/workers/d1-api/index.mjs", "kv_get:")) {
+    ok("D1 Worker rate-limits KV GET");
+  } else {
+    warn("D1 Worker may not rate-limit KV GET");
     issues += 1;
   }
 

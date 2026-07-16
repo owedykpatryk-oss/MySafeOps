@@ -18,12 +18,13 @@ This document supports procurement and internal review. It is not a legal warran
 - **Insider hardening (D1)**: `DELETE /v1/kv` requires admin or supervisor (`user_can_delete_org_kv`); `PUT /v1/kv` checks `user_can_write_org_kv` (operative cannot overwrite workers/projects/training/CDM/timesheets namespaces); audit append validates `action`/`entity` and rate-limits per user; cloud UI role refreshes from `get_my_membership_role` every focus / 5 min; workspace banner on D1 403 (`D1WriteForbiddenBanner`).
 - **MFA gate**: accounts with TOTP enrolled must reach AAL2 before `/app` loads (`ProtectedAppRoute` + `mfaAal.js`) — not login-page only. MFA status probe **fails closed** (retry UI) on API errors.
 - **Platform owner UI**: `VITE_PLATFORM_OWNER_EMAIL` allowlist only (fail closed if unset). DB RPCs still use `platform_owner_email_allowlist`.
-- **Invites**: `org_invites` SELECT is admin-only (migration `20260716150000_org_invites_select_admin_only`); accept/preview via security-definer RPCs. Invite links omit email from the query string; pending token prefers `sessionStorage`.
+- **Invites**: `org_invites` SELECT is admin-only (migration `20260716150000_org_invites_select_admin_only`); accept/preview via security-definer RPCs. Invite links omit email from the query string; pending token prefers `sessionStorage`. Tokens also store SHA-256 hash (dual-read with plaintext until return-once cutover).
 - **Session revoke**: Edge Function `revoke-org-member-sessions` — admins sign out a member globally after role change or removal (`OrgMembers`).
 - **Outbound webhooks**: PTW Slack/Teams/custom URLs are validated (`src/utils/webhookUrlValidation.js`) — HTTPS only, private IPs blocked before save or dispatch.
-- **Edge CORS**: Supabase functions use `supabase/functions/_shared/corsHeaders.ts` (reflects `SITE_URL` / localhost dev — not `*`). R2 upload Worker fails closed when `ALLOWED_ORIGINS` is empty.
+- **Edge CORS**: Supabase functions use `supabase/functions/_shared/corsHeaders.ts` (reflects `SITE_URL` / localhost dev — not `*`). R2 upload Worker fails closed when `ALLOWED_ORIGINS` is empty. Permit notification has isolate rate limit + DB log ceiling.
 - **Client portal**: default cloud expiry **14 days** (FESS presets 30); publish snapshots redact worker contact/NI fields; local-only copy warns until Publish cloud.
 - **Permit evidence**: store private storage path only; short-lived signed URLs at display time (not 7-day URLs persisted on the permit).
+- **CSP**: host-pinned `img-src` and Worker `connect-src` (no bare `https:` / `*.workers.dev`); sync with `npm run csp:sync`.
 - **Diagnostics**: `npm run security:doctor` — migrations present, npm audit, deploy checklist.
 
 ## What you must configure outside the repo

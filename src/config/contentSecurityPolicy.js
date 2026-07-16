@@ -5,6 +5,9 @@
  * Browser calls third-party hosts only when no same-origin proxy exists
  * (e.g. Nominatim geocode, Open-Meteo weather fallback). Overpass and
  * postcodes.io are proxied at /api/overpass and /api/postcode in production.
+ *
+ * Worker hosts are pinned to named mysafeops Workers (not a wildcard workers.dev allowlist).
+ * If you deploy Workers under a different Cloudflare account subdomain, update connect-src and re-run csp:sync.
  */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -14,7 +17,24 @@ export const CONTENT_SECURITY_POLICY = [
   "manifest-src 'self'",
   "script-src 'self' https://js.stripe.com https://*.hcaptcha.com https://challenges.cloudflare.com https://vercel.live",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
+  [
+    "img-src 'self' data: blob:",
+    "https://*.supabase.co",
+    "https://*.r2.dev",
+    "https://*.cloudflarestorage.com",
+    "https://*.tile.openstreetmap.org",
+    "https://*.openstreetmap.org",
+    "https://server.arcgisonline.com",
+    "https://*.arcgisonline.com",
+    "https://maps.google.com",
+    "https://maps.gstatic.com",
+    "https://*.googleapis.com",
+    "https://api.qrserver.com",
+    "https://quickchart.io",
+    "https://*.stripe.com",
+    "https://*.hcaptcha.com",
+    "https://challenges.cloudflare.com",
+  ].join(" "),
   "font-src 'self' data:",
   "media-src 'self' data: blob:",
   "worker-src 'self' blob:",
@@ -34,7 +54,8 @@ export const CONTENT_SECURITY_POLICY = [
     "https://*.openstreetmap.org",
     "https://server.arcgisonline.com",
     "https://*.arcgisonline.com",
-    "https://*.workers.dev",
+    "https://mysafeops-d1-api.owedykpatryk.workers.dev",
+    "https://mysafeops-r2-upload.owedykpatryk.workers.dev",
     "https://www.google.com",
     "https://maps.googleapis.com",
     "https://*.hcaptcha.com",
@@ -53,6 +74,6 @@ export const CONTENT_SECURITY_POLICY_DEV = [
   "object-src 'none'",
   "script-src 'self' 'unsafe-inline' https://js.stripe.com https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.ingest.sentry.io",
+  "img-src 'self' data: blob: https://*.supabase.co https://*.tile.openstreetmap.org https://*.openstreetmap.org",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.ingest.sentry.io http://127.0.0.1:* http://localhost:*",
 ].join("; ");

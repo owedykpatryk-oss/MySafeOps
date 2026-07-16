@@ -54,6 +54,7 @@ import EmptyState from "../../components/EmptyState";
 import SimpleFormDialog from "../../components/SimpleFormDialog";
 import { geocodeAddressNominatim } from "../../utils/geocode";
 import { useToast } from "../../context/ToastContext";
+import { copyCapabilityLink } from "../../utils/copyCapabilityLink";
 import { orgHasFoodIndustrialPack, orgHasPharmaPack } from "../../utils/industrialSectors";
 import {
   COMPETENT_REVIEW_LABEL,
@@ -7334,7 +7335,7 @@ export default function RAMSTemplateBuilder() {
 
   const genShareToken = () => genOpaqueToken("r");
 
-  const copyShareLink = (doc) => {
+  const copyShareLink = async (doc) => {
     let token = doc.shareToken;
     if (!token) {
       token = genShareToken();
@@ -7346,9 +7347,7 @@ export default function RAMSTemplateBuilder() {
     }
     const base = `${window.location.origin}${window.location.pathname}`;
     const url = `${base}?ramsShare=${encodeURIComponent(token)}`;
-    navigator.clipboard?.writeText(url).then(() =>
-      alert("Link copied. Opens read-only RAMS in this browser only (same saved data as here).")
-    );
+    await copyCapabilityLink(url, { pushToast, localOnly: true });
   };
 
   const STEPS = ["Document info","Select hazards","Review & edit","Preview & save"];

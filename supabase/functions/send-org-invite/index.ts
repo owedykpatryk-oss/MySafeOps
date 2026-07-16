@@ -137,11 +137,12 @@ Deno.serve(async (req) => {
     }
 
     const orgName = org?.name ?? "MySafeOps";
-    const acceptUrl = `${siteUrl}/accept-invite?invite=${encodeURIComponent(inv.invite_token)}&email=${encodeURIComponent(inv.email)}`;
+    const acceptUrl = `${siteUrl}/accept-invite?invite=${encodeURIComponent(inv.invite_token)}`;
     const supportLine = Deno.env.get("SUPPORT_CONTACT_EMAIL")?.trim() || "support@mysafeops.com";
 
     const html = `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#0f172a">
 <p>You've been invited to join <strong>${escapeHtml(orgName)}</strong> on MySafeOps.</p>
+<p>Sign in with <strong>${escapeHtml(inv.email)}</strong> to accept.</p>
 <p><a href="${acceptUrl}" style="color:#0d9488;font-weight:600">Accept invite</a></p>
 <p style="font-size:13px;color:#64748b">If the button does not work, copy this link:<br/>${escapeHtml(acceptUrl)}</p>
 <p style="font-size:13px;color:#64748b">Support: ${escapeHtml(supportLine)}</p>

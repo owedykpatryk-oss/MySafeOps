@@ -21,6 +21,7 @@ const AUDIT_FIELD_RE = /^[a-z][a-z0-9_]{0,63}$/i;
 
 const AUDIT_APPEND_MAX_PER_MINUTE = 90;
 const KV_PUT_MAX_PER_MINUTE = 120;
+const KV_GET_MAX_PER_MINUTE = 180;
 
 function currentRateWindowStart() {
   const d = new Date();
@@ -301,13 +302,21 @@ function handleHealth(c, requestId) {
   return json({ ok: true, service: "mysafeops-d1-api", request_id: requestId }, 200, c);
 }
 
-async function handleKvGet(request, env, orgSlug, c) {
+async function handleKvGet(request, env, orgSlug, c, authHeader) {
   const url = new URL(request.url);
   const namespace = (url.searchParams.get("namespace") || "").trim();
   const key = (url.searchParams.get("key") || "").trim();
   const list = url.searchParams.get("list") === "1";
   if (!namespace) {
     return json({ error: "missing_namespace" }, 400, c);
+  }
+  if (!isValidD1Namespace(namespace)) {
+    return json({ error: "invalid_namespace" }, 400, c);
+  }
+  const actorSub = parseJwtSub(authHeader);
+  if (actorSub) {
+    const allowed = await consumeRateLimit(env, `kv_get:${orgSlug}:${actorSub}`, KV_GET_MAX_PER_MINUTE);
+    if (!allowed) return json({ error: "rate_limited" }, 429, c);
   }
 
   if (list) {
@@ -629,7 +638,7 @@ export default {
     }
 
     if (request.method === "GET") {
-      return handleKvGet(request, env, orgSlug, c);
+      return handleKvGet(request, env, orgSlug, c, auth);
     }
     if (request.method === "PUT") {
       return handleKvPut(request, env, orgSlug, auth, c);

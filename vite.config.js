@@ -242,6 +242,22 @@ export default defineConfig(({ mode }) => {
         },
       },
       {
+        name: "block-bundled-proxy-secrets-in-production",
+        config(_config, { mode }) {
+          if (mode !== "production") return;
+          if (String(env.VITE_AI_PROXY_SECRET || "").trim()) {
+            throw new Error(
+              "VITE_AI_PROXY_SECRET must not be set for production builds — Anthropic proxy auth uses Supabase JWT only."
+            );
+          }
+          if (String(env.VITE_STORAGE_UPLOAD_TOKEN || "").trim()) {
+            throw new Error(
+              "VITE_STORAGE_UPLOAD_TOKEN must not be set for production builds — R2 uploads require a signed-in Supabase session."
+            );
+          }
+        },
+      },
+      {
         name: "dev-weather-api",
         configureServer(server) {
           server.middlewares.use("/api/weather", async (req, res, next) => {

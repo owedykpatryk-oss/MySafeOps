@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, getOrgId } from "../utils/orgStorage";
+import { useToast } from "../context/ToastContext";
+import { copyCapabilityLink } from "../utils/copyCapabilityLink";
 import PageHero from "../components/PageHero";
 
 // ─── storage ─────────────────────────────────────────────────────────────────
@@ -305,6 +307,7 @@ function SiteManager({ sites, onSave, onClose }) {
 
 // ─── QR display modal ────────────────────────────────────────────────────────
 function QRModal({ site, baseUrl, onClose }) {
+  const { pushToast } = useToast();
   const url = `${baseUrl}?site=${site.id}&org=${getOrgId()}`;
   return (
     <div style={{ minHeight:480, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", padding:"1.5rem 1rem" }}>
@@ -319,11 +322,11 @@ function QRModal({ site, baseUrl, onClose }) {
         </div>
         <p style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:16, wordBreak:"break-all" }}>{url}</p>
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center" }}>
-          <button onClick={()=>navigator.clipboard?.writeText(url)} style={ss.btn}>Copy link</button>
-          <button onClick={()=>window.print()} style={ss.btnP}>Print QR</button>
+          <button type="button" onClick={() => void copyCapabilityLink(url, { pushToast, localOnly: true })} style={ss.btn}>Copy link</button>
+          <button type="button" onClick={()=>window.print()} style={ss.btnP}>Print QR</button>
         </div>
         <p style={{ fontSize:11, color:"var(--color-text-tertiary,#aaa)", marginTop:16 }}>
-          Workers scan this with their phone camera to begin site induction
+          Workers scan this with their phone camera to begin site induction. Link works with this org&apos;s data in the same browser / synced workspace.
         </p>
       </div>
     </div>

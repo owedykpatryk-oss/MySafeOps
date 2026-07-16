@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { useToast } from "../context/ToastContext";
-import { copyTextToClipboard } from "../utils/copyToClipboard";
+import { copyCapabilityLink } from "../utils/copyCapabilityLink";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
@@ -149,11 +149,7 @@ export default function SubcontractorPortal() {
   };
 
   const copyLink = async (url) => {
-    const ok = await copyTextToClipboard(url);
-    pushToast({
-      type: ok ? "success" : "error",
-      message: ok ? "Link copied to clipboard." : "Could not copy — select the link and copy manually.",
-    });
+    await copyCapabilityLink(url, { pushToast, localOnly: true });
   };
 
   return (
@@ -161,7 +157,7 @@ export default function SubcontractorPortal() {
       <PageHero
         badgeText="SUB"
         title="Subcontractor portal"
-        lead="Share a link for subs to submit details — stored only on this browser."
+        lead="Share a link for subs to submit details — stored only on this browser. Treat the link like a password."
         right={
           caps.subcontractorManage ? (
             <button type="button" style={ss.btnP} onClick={() => setShow(true)}>

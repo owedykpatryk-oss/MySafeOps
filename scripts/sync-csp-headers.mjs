@@ -31,11 +31,13 @@ function syncVercelJson() {
 function syncPublicHeaders() {
   const path = resolve(root, "public/_headers");
   const raw = readFileSync(path, "utf8");
-  const next = raw.replace(
-    /^(\s*Content-Security-Policy:\s*).+$/m,
-    `$1${CONTENT_SECURITY_POLICY}`
-  );
-  if (next === raw) throw new Error("public/_headers: Content-Security-Policy line not found");
+  const re = /^(\s*Content-Security-Policy:\s*).+$/m;
+  if (!re.test(raw)) throw new Error("public/_headers: Content-Security-Policy line not found");
+  const next = raw.replace(re, `$1${CONTENT_SECURITY_POLICY}`);
+  if (next === raw) {
+    console.log("✓ public/_headers — CSP already up to date");
+    return;
+  }
   writeFileSync(path, next, "utf8");
   console.log("✓ public/_headers — CSP updated");
 }
