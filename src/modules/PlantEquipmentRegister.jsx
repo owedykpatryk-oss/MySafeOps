@@ -7,6 +7,7 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -178,7 +179,14 @@ export default function PlantEquipmentRegister() {
       >
 
 {items.length === 0 ? (
-        <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No plant inspections recorded.</div>
+        <EmptyState
+          icon="🚜"
+          title="No plant inspections recorded"
+          description="Log plant and equipment checks so due dates stay visible on site."
+          actionLabel="+ Add inspection"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {listPg.hasMore(items) ? (

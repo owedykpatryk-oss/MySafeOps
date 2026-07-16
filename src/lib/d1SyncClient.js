@@ -8,6 +8,9 @@
 
 const NS = (s) => String(s || "").trim();
 
+/** Deduplicate concurrent GETs for the same org/namespace/key (module hops). */
+const d1GetInflight = new Map();
+
 /**
  * Correlation id from Worker (`X-Request-Id` header or JSON `request_id` on some bodies).
  * @param {Response} res
@@ -57,27 +60,38 @@ export async function d1GetKv(supabase, orgSlug, namespace, key) {
   const org = NS(orgSlug);
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
+  const inflightKey = `${org}|${ns}|${dataKey}`;
+  const existing = d1GetInflight.get(inflightKey);
+  if (existing) return existing;
+
   const q = new URLSearchParams({ namespace: ns, key: dataKey });
-  let res;
-  try {
-    res = await fetch(`${base}/v1/kv?${q}`, {
-      method: "GET",
-      headers: {
-        ...h,
-        "X-Org-Slug": org,
-      },
-    });
-  } catch {
-    return { ok: false, error: "fetch_failed" };
-  }
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
-  return {
-    ok: true,
-    value: body.value,
-    version: body.version,
-    updated_at: body.updated_at,
-  };
+  const pending = (async () => {
+    let res;
+    try {
+      res = await fetch(`${base}/v1/kv?${q}`, {
+        method: "GET",
+        headers: {
+          ...h,
+          "X-Org-Slug": org,
+        },
+      });
+    } catch {
+      return { ok: false, error: "fetch_failed" };
+    }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
+    return {
+      ok: true,
+      value: body.value,
+      version: body.version,
+      updated_at: body.updated_at,
+    };
+  })().finally(() => {
+    d1GetInflight.delete(inflightKey);
+  });
+
+  d1GetInflight.set(inflightKey, pending);
+  return pending;
 }
 
 /**

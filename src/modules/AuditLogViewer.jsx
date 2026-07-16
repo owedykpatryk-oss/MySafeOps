@@ -4,9 +4,11 @@ import { readOpsLog, clearOpsLog, exportOpsLogJson } from "../utils/clientOpsMon
 import { useApp } from "../context/AppContext";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import { getOrgId } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
 import { d1ListServerAudit, isD1Configured } from "../lib/d1SyncClient";
+import { useListWindow } from "../utils/useListWindow.js";
 
 const ss = ms;
 const AUDIT_PAGE = 120;
@@ -84,9 +86,12 @@ export default function AuditLogViewer() {
   const [visible, setVisible] = useState(AUDIT_PAGE);
   const [opsBump, setOpsBump] = useState(0);
   const opsRows = useMemo(() => readOpsLog(), [bump, opsBump]);
+  const pageRows = useMemo(() => rows.slice(0, visible), [rows, visible]);
+  const listWin = useListWindow(pageRows, { rowHeight: 56, maxHeight: 480, overscan: 4 });
 
   const refresh = () => {
     setVisible(AUDIT_PAGE);
+    listWin.onScrollReset();
     setBump((x) => x + 1);
   };
 
@@ -137,57 +142,31 @@ export default function AuditLogViewer() {
 
       <div style={ss.card}>
         {rows.length === 0 ? (
-          <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>No entries yet.</div>
+          <EmptyState
+            icon="📋"
+            title="No audit entries yet"
+            description="Local and cloud activity will show here as your team works in MySafeOps."
+            variant="dashed"
+            compact
+          />
         ) : (
-          <div style={{ maxHeight: 480, overflow: "auto" }}>
-            {rows.slice(0, visible).map((r) => (
-              <div
-                key={r.id}
-                style={{
-                  padding: "10px 0",
-                  borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
-                  fontSize: 13,
-                  contentVisibility: "auto",
-                  containIntrinsicSize: "0 52px",
-                }}
-              >
-                <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{new Date(r.at).toLocaleString("en-GB")}</div>
-                <div>
-                  {r.source === "server" ? (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        marginRight: 8,
-                        padding: "1px 6px",
-                        borderRadius: 4,
-                        background: "var(--color-background-tertiary, #e8f4f2)",
-                        color: "var(--color-accent, #0d9488)",
-                      }}
-                    >
-                      D1
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        marginRight: 8,
-                        padding: "1px 6px",
-                        borderRadius: 4,
-                        background: "var(--color-background-tertiary, #f1f5f9)",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      local
-                    </span>
-                  )}
-                  <strong>{r.action}</strong>
-                  {r.entity && ` · ${r.entity}`}
-                  {r.detail && <span style={{ color: "var(--color-text-secondary)" }}> — {r.detail}</span>}
+          <div>
+            <div
+              ref={listWin.parentRef}
+              style={{ maxHeight: listWin.maxHeight, overflow: "auto" }}
+            >
+              {listWin.enabled ? (
+                <div style={{ height: listWin.totalHeight, position: "relative" }}>
+                  <div style={{ position: "absolute", top: listWin.offsetY, left: 0, right: 0 }}>
+                    {listWin.visibleItems.map((r) => (
+                      <AuditRow key={r.id} r={r} rowHeight={listWin.rowHeight} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ) : (
+                listWin.visibleItems.map((r) => <AuditRow key={r.id} r={r} />)
+              )}
+            </div>
             {visible < rows.length ? (
               <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
                 <button type="button" style={ss.btn} onClick={() => setVisible((v) => v + AUDIT_PAGE)}>
@@ -261,6 +240,57 @@ export default function AuditLogViewer() {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function AuditRow({ r, rowHeight }) {
+  return (
+    <div
+      style={{
+        padding: "10px 0",
+        borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
+        fontSize: 13,
+        minHeight: rowHeight || undefined,
+        contentVisibility: "auto",
+        containIntrinsicSize: "0 52px",
+      }}
+    >
+      <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{new Date(r.at).toLocaleString("en-GB")}</div>
+      <div>
+        {r.source === "server" ? (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              marginRight: 8,
+              padding: "1px 6px",
+              borderRadius: 4,
+              background: "var(--color-background-tertiary, #e8f4f2)",
+              color: "var(--color-accent, #0d9488)",
+            }}
+          >
+            D1
+          </span>
+        ) : (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              marginRight: 8,
+              padding: "1px 6px",
+              borderRadius: 4,
+              background: "var(--color-background-tertiary, #f1f5f9)",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            local
+          </span>
+        )}
+        <strong>{r.action}</strong>
+        {r.entity && ` · ${r.entity}`}
+        {r.detail && <span style={{ color: "var(--color-text-secondary)" }}> — {r.detail}</span>}
       </div>
     </div>
   );

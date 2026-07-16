@@ -1972,6 +1972,12 @@ export default function ProjectDrawingEditor() {
       setToast("Map not ready");
       return;
     }
+    const previousBasemap = mapBasemap;
+    // Satellite tiles often taint the canvas even with crossOrigin — force OSM for export.
+    if (mapBasemap === "satellite") {
+      setMapBasemap("streets");
+      await new Promise((r) => window.setTimeout(r, 450));
+    }
     try {
       const blob = await captureElementPngBlob(el);
       if (!blob) {
@@ -1996,11 +2002,13 @@ export default function ProjectDrawingEditor() {
           cloudNote = " — link saved on project for RAMS";
         }
       }
-      setToast(`PNG saved${cloudNote}`);
+      setToast(`PNG saved${previousBasemap === "satellite" ? " (streets basemap)" : ""}${cloudNote}`);
     } catch {
-      setToast("PNG failed (tile CORS) — use Win+Shift+S or export KML");
+      setToast("PNG failed (tile CORS) — switch to Streets basemap, or use Win+Shift+S / export KML");
+    } finally {
+      if (previousBasemap === "satellite") setMapBasemap("satellite");
     }
-  }, [projectId, currentProject, r2Enabled, uploadBlobToOrgR2, updateProjectRecord]);
+  }, [projectId, currentProject, r2Enabled, uploadBlobToOrgR2, updateProjectRecord, mapBasemap]);
 
   const runReadinessFix = useCallback(
     (checkId) => {

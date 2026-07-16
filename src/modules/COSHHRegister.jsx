@@ -5,6 +5,7 @@ import { ms } from "../utils/moduleStyles";
 import { safeHttpUrl } from "../utils/safeUrl";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { printRegisterFormPack } from "../utils/registerFormPrint";
@@ -411,12 +412,24 @@ export default function COSHHRegister() {
         }
       >
         {items.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "3rem 1rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12 }}>
-            <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>No substances recorded yet.</p>
-            <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>+ Add first substance</button>
-          </div>
+          <EmptyState
+            icon="🧪"
+            title="No substances recorded yet"
+            description="Add COSHH assessments so site teams can check hazards before work."
+            actionLabel="+ Add first substance"
+            onAction={() => setModal({ type: "form" })}
+            variant="dashed"
+          />
         ) : filtered.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "2rem", border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius: 12, color: "var(--color-text-secondary)", fontSize: 13 }}>No items match your filters.</div>
+          <EmptyState
+            icon="🔍"
+            title="No items match your filters"
+            description="Clear risk, project or search filters to see the full register."
+            actionLabel="Clear filters"
+            onAction={() => { setFilterRisk(""); setFilterProject(""); setFilterHazard(""); setSearch(""); listPg.reset(); }}
+            variant="dashed"
+            compact
+          />
         ) : (
           <>
             {listPg.hasMore(filtered) ? (

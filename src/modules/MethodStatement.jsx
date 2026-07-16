@@ -4,6 +4,7 @@ import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
@@ -783,12 +784,24 @@ export default function MethodStatement() {
         }
       >
       {docs.length===0 ? (
-        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No method statements yet.</p>
-          <button onClick={()=>setModal({type:"form"})} style={ss.btnO}>+ Create first method statement</button>
-        </div>
+        <EmptyState
+          icon="📝"
+          title="No method statements yet"
+          description="Create a method statement linked to your RAMS and site team."
+          actionLabel="+ Create first method statement"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : filtered.length===0 ? (
-        <div style={{ textAlign:"center", padding:"2rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12, color:"var(--color-text-secondary)", fontSize:13 }}>No results match your filters.</div>
+        <EmptyState
+          icon="🔍"
+          title="No results match your filters"
+          description="Clear search or status filters to see all method statements."
+          actionLabel="Clear filters"
+          onAction={() => { setSearch(""); setFilterStatus(""); listPg.reset(); }}
+          variant="dashed"
+          compact
+        />
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {listPg.hasMore(filtered) ? (

@@ -32,7 +32,7 @@ const transient = (e) => /^http_(502|503|504|429)$/.test(String(e || ""));
  * @param {function} p.setValue – React setState for the array
  * @param {function} p.load – loadOrgScoped(base, fallback)
  * @param {function} p.save – saveOrgScoped(base, value)
- * @param {number} [p.debounceMs=800]
+ * @param {number} [p.debounceMs=1500]
  * @returns {{ d1Ready: boolean, d1Hydrating: boolean, d1OutboxPending: boolean, d1Syncing: boolean }}
  */
 export function useD1OrgArraySync({
@@ -43,7 +43,7 @@ export function useD1OrgArraySync({
   setValue,
   load,
   save,
-  debounceMs = 800,
+  debounceMs = 1500,
 }) {
   const [d1Ready, setD1Ready] = useState(() => !isD1Configured());
   const [d1OrgEpoch, setD1OrgEpoch] = useState(0);

@@ -34,6 +34,7 @@ export default function ProjectDrawingGeoMap({
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
+      crossOrigin: "anonymous",
     }).addTo(map);
     const lat = Number(defaultCenter.lat);
     const lng = Number(defaultCenter.lng);

@@ -7,6 +7,7 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -172,7 +173,14 @@ export default function AsbestosRegister() {
       >
 
 {items.length === 0 ? (
-        <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No asbestos register items yet.</div>
+        <EmptyState
+          icon="⚠️"
+          title="No asbestos register items yet"
+          description="Record ACM locations and review dates before intrusive works."
+          actionLabel="+ Add asbestos item"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {listPg.hasMore(items) ? (

@@ -856,7 +856,17 @@ export function WorkersModule({ mode = "all" }) {
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
           People ({workers.length})
         </div>
-        {workers.length === 0 && <div style={{ color: "var(--color-text-secondary)" }}>No people on the register yet.</div>}
+        {workers.length === 0 && (
+          <EmptyState
+            icon="👷"
+            title="No people on the register yet"
+            description="Add operatives so you can assign them to projects, RAMS and permits."
+            actionLabel="+ Add person"
+            onAction={tryAddWorker}
+            variant="dashed"
+            compact
+          />
+        )}
         {workersPg.hasMore(workers) ? (
           <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
             Showing {Math.min(workersPg.cap, workers.length)} of {workers.length}
@@ -878,6 +888,8 @@ export function WorkersModule({ mode = "all" }) {
               alignItems: "center",
               padding: "10px 0",
               borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
+              contentVisibility: "auto",
+              containIntrinsicSize: "0 76px",
             }}
           >
             <div style={{ flex: "1 1 200px", minWidth: 0 }}>

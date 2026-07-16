@@ -593,7 +593,7 @@ const ProjectDrawingMapCanvas = forwardRef(function ProjectDrawingMapCanvas(
     const t = L.tileLayer(next.url, {
       attribution: next.attribution,
       maxZoom: 19,
-      crossOrigin: true,
+      crossOrigin: "anonymous",
     });
     t.addTo(map);
     tileRef.current = t;

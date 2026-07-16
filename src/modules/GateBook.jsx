@@ -7,6 +7,7 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
@@ -172,7 +173,14 @@ export default function GateBook() {
       >
 
 {items.length === 0 ? (
-        <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No gate entries yet.</div>
+        <EmptyState
+          icon="🚪"
+          title="No gate entries yet"
+          description="Log vehicles and visitors as they arrive on site."
+          actionLabel="+ Add gate entry"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {listPg.hasMore(items) ? (
