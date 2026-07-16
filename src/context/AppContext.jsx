@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { isLocalWorkspaceOnly, hasPersistedSupabaseSession } from "../lib/authPrefs";
+import { hasPersistedSupabaseSession, clearLocalWorkspaceOnlyFlag } from "../lib/authPrefs";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { ORG_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
 import { scrubFessExclusiveOrgStorage } from "../utils/fessExclusive";
@@ -24,10 +24,10 @@ function readMembershipRoleForCurrentOrg() {
   }
 }
 
-/** Least privilege for signed-in cloud users; admin for offline / local-only workspaces. */
+/** Signed-in cloud user — privileges come from membership RPC, never from localStorage flags. */
 function isCloudAuthSession() {
   try {
-    return Boolean(isSupabaseConfigured() && !isLocalWorkspaceOnly() && hasPersistedSupabaseSession());
+    return Boolean(isSupabaseConfigured() && hasPersistedSupabaseSession());
   } catch {
     return false;
   }
@@ -35,8 +35,10 @@ function isCloudAuthSession() {
 
 function defaultMembershipRole() {
   try {
-    if (!isSupabaseConfigured() || isLocalWorkspaceOnly()) return "admin";
-    if (!hasPersistedSupabaseSession()) return "admin";
+    // True device-only product (no Supabase env): full local admin.
+    if (!isSupabaseConfigured()) return "admin";
+    // Cloud configured but no session yet: fail closed (ProtectedAppRoute sends to login).
+    if (hasPersistedSupabaseSession()) return "operative";
   } catch {
     /* ignore */
   }
@@ -49,7 +51,8 @@ function defaultMembershipRole() {
  */
 function resolveMembershipRole() {
   if (isCloudAuthSession()) return "operative";
-  return readMembershipRoleForCurrentOrg() || defaultMembershipRole();
+  if (!isSupabaseConfigured()) return readMembershipRoleForCurrentOrg() || "admin";
+  return "operative";
 }
 
 export function AppProvider({ children }) {
@@ -67,6 +70,7 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     scrubFessExclusiveOrgStorage(getOrgId());
+    if (isCloudAuthSession()) clearLocalWorkspaceOnlyFlag();
   }, []);
 
   useEffect(() => {
@@ -116,8 +120,9 @@ export function AppProvider({ children }) {
 
   /** Cloud: re-fetch role from Supabase so DevTools localStorage edits cannot persist. */
   useEffect(() => {
-    if (!isSupabaseConfigured() || isLocalWorkspaceOnly() || !supabase) return undefined;
+    if (!isSupabaseConfigured() || !supabase) return undefined;
     if (!hasPersistedSupabaseSession()) return undefined;
+    clearLocalWorkspaceOnlyFlag();
 
     let cancelled = false;
     const syncRole = () => {
@@ -150,8 +155,8 @@ export function AppProvider({ children }) {
 
   const setRole = useCallback((r) => {
     if (!ROLES.includes(r)) return;
-    // Role changes must come from cloud membership sync (persistOrgRow), not client self-elevation.
-    if (isSupabaseConfigured() && !isLocalWorkspaceOnly()) return;
+    // Role changes must come from cloud membership sync when Supabase is configured.
+    if (isSupabaseConfigured()) return;
     setRoleState(r);
     try {
       localStorage.setItem(`mysafeops_role_${getOrgId()}`, r);
@@ -169,7 +174,7 @@ export function AppProvider({ children }) {
       bulkSnag: role !== "operative",
       subcontractorManage: role !== "operative",
       clientPortalManage: role !== "operative",
-      roleManage: role === "admin" && (!isSupabaseConfigured() || isLocalWorkspaceOnly()),
+      roleManage: role === "admin" && !isSupabaseConfigured(),
     }),
     [role]
   );

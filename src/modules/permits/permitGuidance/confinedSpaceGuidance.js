@@ -2,6 +2,8 @@
  * UK confined spaces — Confined Spaces Regulations 1997 / HSE L101 (illustrative thresholds).
  */
 
+import { escapeHtml } from "../../../utils/htmlEscape.js";
+
 export const CONFINED_PERMIT_TYPES = new Set(["confined_space"]);
 
 export const CONFINED_EXTRA_FIELD_KEYS = [
@@ -111,10 +113,11 @@ export function renderConfinedRolesSvg(extra = {}, { width = 420, height = 88 } 
     .map((r) => {
       const filled = String(r.name || "").trim();
       const fill = filled ? "#dbeafe" : "#f8fafc";
+      const safeName = escapeHtml(filled ? filled.slice(0, 12) : "Assign");
       return `<g>
         <rect x="${r.x - 40}" y="28" width="80" height="44" rx="6" fill="${fill}" stroke="#64748b"/>
-        <text x="${r.x}" y="44" text-anchor="middle" font-size="8" font-weight="700" fill="#0f172a">${r.label}</text>
-        <text x="${r.x}" y="58" text-anchor="middle" font-size="7" fill="#475569">${filled ? String(filled).slice(0, 12) : "Assign"}</text>
+        <text x="${r.x}" y="44" text-anchor="middle" font-size="8" font-weight="700" fill="#0f172a">${escapeHtml(r.label)}</text>
+        <text x="${r.x}" y="58" text-anchor="middle" font-size="7" fill="#475569">${safeName}</text>
       </g>`;
     })
     .join("");

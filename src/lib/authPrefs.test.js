@@ -2,6 +2,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
   LOCAL_WORKSPACE_FLAG,
+  clearLocalWorkspaceOnlyFlag,
   hasPersistedSupabaseSession,
   isLocalWorkspaceOnly,
   setLocalWorkspaceOnly,
@@ -19,6 +20,12 @@ describe("authPrefs", () => {
     setLocalWorkspaceOnly(false);
     expect(isLocalWorkspaceOnly()).toBe(false);
     expect(localStorage.getItem(LOCAL_WORKSPACE_FLAG)).toBeNull();
+  });
+
+  it("clears the legacy local-only flag", () => {
+    setLocalWorkspaceOnly(true);
+    clearLocalWorkspaceOnlyFlag();
+    expect(isLocalWorkspaceOnly()).toBe(false);
   });
 
   it("detects persisted Supabase session token", () => {

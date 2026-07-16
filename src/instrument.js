@@ -17,17 +17,59 @@ function tracePropagationTargets() {
   return targets;
 }
 
+function scrubSensitiveString(value) {
+  return String(value ?? "")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [Filtered]")
+    .replace(/(access_token|refresh_token|invite_token|api[_-]?key)=([^&\s#]+)/gi, "$1=[Filtered]");
+}
+
 function scrubEventRequest(event) {
-  const url = event?.request?.url;
-  if (!url) return event;
+  if (!event) return event;
   try {
-    const u = new URL(url);
-    for (const key of ["portal", "subcontractor", "ramsShare", "permitAck", "access_token", "refresh_token"]) {
-      if (u.searchParams.has(key)) u.searchParams.set(key, "[Filtered]");
+    if (event.request?.url) {
+      const u = new URL(event.request.url);
+      for (const key of ["portal", "subcontractor", "ramsShare", "permitAck", "access_token", "refresh_token", "token", "code"]) {
+        if (u.searchParams.has(key)) u.searchParams.set(key, "[Filtered]");
+      }
+      event.request.url = u.toString();
     }
-    event.request.url = u.toString();
+    if (event.request?.headers) {
+      const headers = { ...event.request.headers };
+      for (const key of Object.keys(headers)) {
+        if (/authorization|cookie|x-api-key|apikey/i.test(key)) headers[key] = "[Filtered]";
+      }
+      event.request.headers = headers;
+    }
+    if (event.user) {
+      event.user = {
+        ...event.user,
+        email: event.user.email ? "[Filtered]" : undefined,
+        ip_address: undefined,
+        username: event.user.username ? scrubSensitiveString(event.user.username) : undefined,
+      };
+    }
+    if (Array.isArray(event.breadcrumbs)) {
+      event.breadcrumbs = event.breadcrumbs.map((b) => ({
+        ...b,
+        message: b?.message ? scrubSensitiveString(b.message) : b?.message,
+        data: b?.data
+          ? Object.fromEntries(
+              Object.entries(b.data).map(([k, v]) => [
+                k,
+                typeof v === "string" ? scrubSensitiveString(v) : v,
+              ])
+            )
+          : b?.data,
+      }));
+    }
+    if (event.extra && typeof event.extra === "object") {
+      event.extra = Object.fromEntries(
+        Object.entries(event.extra).map(([k, v]) => [k, typeof v === "string" ? scrubSensitiveString(v) : v])
+      );
+    }
   } catch {
-    /* ignore malformed URLs */
+    /* ignore scrub failures */
   }
   return event;
 }
@@ -71,6 +113,7 @@ export async function bootSentryIfConfigured() {
       dsn: getSentryDsnFromEnv(),
       environment: import.meta.env.MODE,
       release: `mysafeops@${getDisplayAppVersion()}`,
+      sendDefaultPii: false,
       integrations,
       tracesSampleRate: import.meta.env.PROD ? 0.12 : 1.0,
       replaysSessionSampleRate: import.meta.env.PROD ? 0.05 : 0,

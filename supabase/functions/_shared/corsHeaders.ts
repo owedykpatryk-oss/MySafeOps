@@ -68,10 +68,6 @@ export function corsHeadersForRequest(req: Request): Record<string, string> {
     return { ...base, "Access-Control-Allow-Origin": origin };
   }
 
-  if (!origin && allowed.size > 0) {
-    const first = [...allowed][0];
-    return { ...base, "Access-Control-Allow-Origin": first };
-  }
-
+  // No Origin (non-browser) — do not echo an allowlisted site; omit ACAO.
   return base;
 }

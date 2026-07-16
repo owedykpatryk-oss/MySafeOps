@@ -123,10 +123,17 @@ To jest sekcja „**co audytor rozumie jako backend**”, spójna z kodem w tym 
 Wiele pozycji jest już w `DOCS/FESS/CURSOR_BRIEF_FESS_READINESS.md` (Phase 2). Skrót:
 
 1. **Już w repo:** nagłówki (`vercel.json`, `public/_headers`), `security.txt`, `SECURITY.md`, strona `/security` (trust + subprocessory + CI), E2E: `tests/e2e/security.spec.js` (Playwright w `.github/workflows/ci.yml`).
-2. **Supabase:** MFA dla wszystkich kont operacyjnych; polityka haseł; ewent. rate limit na logowanie (jeśli CAB pyta o brute-force).
+2. **Supabase:** MFA dla wszystkich kont operacyjnych; polityka haseł; ewent. rate limit na logowanie (jeśli CAB pyta o brute-force). **Aplikacja:** `ProtectedAppRoute` wymaga AAL2 gdy MFA jest enrolled.
 3. **CI:** na każdym push/PR: `npm audit --audit-level=high`, lint, testy Vitest, Playwright (blog, landing, **security**), `npm run build` — plik `.github/workflows/ci.yml`. Utrzymuj zieloność; na critical reaguj w SLA z kwestionariusza (zwykle 14 dni).
-4. **Monitoring:** Sentry (`VITE_SENTRY_DSN`), uptime (np. Better Stack / UptimeRobot) — zrzut konfiguracji jako dowód.
-5. **Backup:** potwierdzenie w R2 + **jeden** udokumentowany test restore (nawet na staging).
+4. **Monitoring:** Sentry (`VITE_SENTRY_DSN`), uptime (np. Better Stack / UptimeRobot) — zrzut konfiguracji jako dowód. Sentry: `sendDefaultPii: false` + scrub e-mail / Bearer.
+5. **Backup:** potwierdzenie w R2 + **jeden** udokumentowany test restore (nawet na staging). Checklist poniżej.
+
+### 4.1 Dowód restore D1 (wpisz datę po wykonaniu)
+
+1. W Cloudflare: potwierdź obiekt w R2 pod `d1-snapshots/` (Worker `d1-backup`).
+2. Pobierz jeden snapshot JSON na staging / lokalnie.
+3. Opisz w PDF: data, kto wykonał, czy odczyt KV/audytu się udał (nawet częściowy).
+4. Zrzut ekranu + plik w folderze `CE-2026-evidence/backup/`.
 
 ---
 

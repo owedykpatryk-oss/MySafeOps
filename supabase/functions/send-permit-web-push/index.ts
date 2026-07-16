@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { assertOrgSlugAccess } from "../_shared/orgAccess.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
+import { checkEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
 
 function pushCorsHeaders(req: Request) {
   return {
@@ -81,7 +82,11 @@ Deno.serve(async (req) => {
     } = await supabase.auth.getUser(jwt);
     if (userErr || !user) return json(req,401, { error: "Unauthorized" });
 
-    const body = await req.json(req,).catch(() => ({}));
+    if (!checkEdgeRateLimit(`permit-web-push:${user.id}`, 30, 60_000)) {
+      return json(req, 429, { error: "Rate limit exceeded. Please try again later." });
+    }
+
+    const body = await req.json().catch(() => ({}));
     const orgSlug = cleanOrgSlug(body?.orgSlug);
 
     const access = await assertOrgSlugAccess(supabase, user.id, orgSlug);
