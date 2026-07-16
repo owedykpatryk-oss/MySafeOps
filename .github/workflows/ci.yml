@@ -81,4 +81,6 @@ jobs:
       - name: Install
         run: npm ci
       - name: Production build
-        run: npm run build
+        run: |
+          npm run build 2>&1 | tee build-output.txt
+          node scripts/check-vite-circular-chunks.mjs build-output.txt

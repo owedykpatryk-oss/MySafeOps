@@ -7,6 +7,7 @@
     "dev": "vite",
     "prebuild": "npm run verify:blog && node scripts/generate-sitemap.mjs && node scripts/generate-image-sitemap.mjs && node scripts/generate-blog-rss.mjs",
     "build": "vite build",
+    "build:check-chunks": "vite build 2>&1 | tee build-output.txt && node scripts/check-vite-circular-chunks.mjs build-output.txt",
     "preview": "vite preview",
     "stripe:seed-prices": "node scripts/stripe-seed-prices.mjs",
     "stripe:sync-secrets": "node scripts/sync-stripe-prices-to-supabase.mjs",

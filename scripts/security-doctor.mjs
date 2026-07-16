@@ -240,6 +240,27 @@ async function main() {
     issues += 1;
   }
 
+  if (fileIncludes("supabase/functions/dispatch-permit-webhook/index.ts", "validateOutboundWebhookUrl")) {
+    ok("PTW webhook Edge Function validates outbound URLs");
+  } else {
+    fail("missing dispatch-permit-webhook Edge Function with SSRF validation");
+    issues += 1;
+  }
+
+  if (fileIncludes("src/utils/permitWebhook.js", "dispatch-permit-webhook")) {
+    ok("Client PTW webhooks prefer Edge dispatch");
+  } else {
+    warn("Client may still fan-out PTW webhooks only from the browser");
+    issues += 1;
+  }
+
+  if (existsSync(resolve(root, "scripts/check-vite-circular-chunks.mjs"))) {
+    ok("Circular-chunk CI guard script present");
+  } else {
+    fail("missing scripts/check-vite-circular-chunks.mjs");
+    issues += 1;
+  }
+
   if (fileIncludes("src/utils/webhookUrlValidation.js", "validateOutboundWebhookUrl")) {
     ok("PTW webhook URLs validated before save/dispatch");
   } else {

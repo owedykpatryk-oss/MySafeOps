@@ -115,13 +115,13 @@ export default function InviteUsers() {
     const nextQuery = () =>
       supabase
         .from("org_invites")
-        .select("id,email,role,status,expires_at,created_at,invite_token,email_delivery_status,email_delivery_error,email_delivery_attempted_at,email_delivery_sent_at")
+        .select("id,email,role,status,expires_at,created_at,email_delivery_status,email_delivery_error,email_delivery_attempted_at,email_delivery_sent_at")
         .eq("org_id", org.id)
         .order("created_at", { ascending: false });
     const fallbackQuery = () =>
       supabase
         .from("org_invites")
-        .select("id,email,role,status,expires_at,created_at,invite_token")
+        .select("id,email,role,status,expires_at,created_at")
         .eq("org_id", org.id)
         .order("created_at", { ascending: false });
 
@@ -367,15 +367,18 @@ export default function InviteUsers() {
     setBusy(false);
   };
 
-  const copyInviteLink = async (token) => {
-    const url = `${window.location.origin}/accept-invite?invite=${encodeURIComponent(token)}`;
+  const copyInviteLink = async (linkOrToken) => {
+    const raw = String(linkOrToken || "").trim();
+    const url = raw.startsWith("http")
+      ? raw
+      : `${window.location.origin}/accept-invite?invite=${encodeURIComponent(raw)}`;
     try {
       await navigator.clipboard.writeText(url);
       setStatus({ type: "success", text: "Invite link copied." });
       pushToast({ type: "success", title: "Copied", message: "Invite link copied to clipboard." });
     } catch {
-      setStatus({ type: "warn", text: "Could not copy automatically. Use the generated link block above." });
-      pushToast({ type: "warn", title: "Copy failed", message: "Copy link manually from invite details." });
+      setStatus({ type: "warn", text: "Could not copy automatically. Select the link above." });
+      pushToast({ type: "warn", title: "Copy failed", message: "Copy the invite link manually." });
     }
   };
 
@@ -422,12 +425,15 @@ export default function InviteUsers() {
             </div>
             {lastInviteLink && (
               <div style={{ marginTop: 12, padding: 10, borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", fontSize: 12 }}>
-                <div style={{ marginBottom: 6, fontWeight: 600 }}>Invite link</div>
+                <div style={{ marginBottom: 6, fontWeight: 600 }}>Invite link (shown once — copy now)</div>
                 <div style={{ wordBreak: "break-all", color: "#0d9488" }}>{lastInviteLink}</div>
-                <div style={{ marginTop: 8 }}>
+                <div style={{ marginTop: 8, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <button type="button" style={{ ...ss.btn, padding: "4px 10px", fontSize: 12 }} onClick={() => void copyInviteLink(lastInviteLink)}>
+                    Copy link
+                  </button>
                   <a
                     href={`mailto:${encodeURIComponent(lastInviteEmail)}?subject=${encodeURIComponent("Invitation to MySafeOps")}&body=${encodeURIComponent(`You have been invited to MySafeOps.\n\nAccept your invite:\n${lastInviteLink}\n\nSupport: ${getSupportEmail()}`)}`}
-                    style={{ color: "#0d9488", fontWeight: 600, textDecoration: "none" }}
+                    style={{ color: "#0d9488", fontWeight: 600, textDecoration: "none", alignSelf: "center" }}
                   >
                     Open email draft
                   </a>
@@ -538,16 +544,16 @@ export default function InviteUsers() {
                   </div>
                 )}
                 {canManage && row.status === "pending" && (
-                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button type="button" style={ss.btn} disabled={busy} onClick={() => copyInviteLink(row.invite_token)}>
-                      Copy link
-                    </button>
+                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     <button type="button" style={ss.btn} disabled={busy} onClick={() => resendInviteEmail(row.id)}>
                       Resend email
                     </button>
                     <button type="button" style={ss.btn} disabled={busy} onClick={() => revoke(row.id)}>
                       Revoke
                     </button>
+                    <span style={{ fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)" }}>
+                      Invite link is shown once when created (not stored for later copy).
+                    </span>
                   </div>
                 )}
               </div>

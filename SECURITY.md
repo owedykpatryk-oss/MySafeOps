@@ -20,11 +20,12 @@ This document supports procurement and internal review. It is not a legal warran
 - **Platform owner UI**: `VITE_PLATFORM_OWNER_EMAIL` allowlist only (fail closed if unset). DB RPCs still use `platform_owner_email_allowlist`.
 - **Invites**: `org_invites` SELECT is admin-only (migration `20260716150000_org_invites_select_admin_only`); accept/preview via security-definer RPCs. Invite links omit email from the query string; pending token prefers `sessionStorage`. Tokens also store SHA-256 hash (dual-read with plaintext until return-once cutover).
 - **Session revoke**: Edge Function `revoke-org-member-sessions` — admins sign out a member globally after role change or removal (`OrgMembers`).
-- **Outbound webhooks**: PTW Slack/Teams/custom URLs are validated (`src/utils/webhookUrlValidation.js`) — HTTPS only, private IPs blocked before save or dispatch.
+- **Outbound webhooks**: PTW Slack/Teams/custom URLs are validated (`src/utils/webhookUrlValidation.js`) — HTTPS only, private IPs blocked. Fan-out goes through Edge Function `dispatch-permit-webhook` when signed in (browser fallback only in local DEV).
 - **Edge CORS**: Supabase functions use `supabase/functions/_shared/corsHeaders.ts` (reflects `SITE_URL` / localhost dev — not `*`). R2 upload Worker fails closed when `ALLOWED_ORIGINS` is empty. Permit notification has isolate rate limit + DB log ceiling.
 - **Client portal**: default cloud expiry **14 days** (FESS presets 30); publish snapshots redact worker contact/NI fields; local-only copy warns until Publish cloud.
 - **Permit evidence**: store private storage path only; short-lived signed URLs at display time (not 7-day URLs persisted on the permit).
 - **CSP**: host-pinned `img-src` and Worker `connect-src` (no bare `https:` / `*.workers.dev`); sync with `npm run csp:sync`.
+- **CI**: production build fails on Vite `Circular chunk:` warnings (`scripts/check-vite-circular-chunks.mjs`).
 - **Diagnostics**: `npm run security:doctor` — migrations present, npm audit, deploy checklist.
 
 ## What you must configure outside the repo

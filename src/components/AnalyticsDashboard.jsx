@@ -106,9 +106,9 @@ const ss = {
   },
 };
 
-// mini bar chart using SVG
-function BarChart({ data, height = 80, color = "var(--color-accent, #0d9488)" }) {
-  if (!data?.length)
+// mini bar chart — SVG with value labels and hover titles
+function BarChart({ data, height = 100, color = "#0d9488" }) {
+  if (!data?.length) {
     return (
       <div
         style={{
@@ -118,51 +118,136 @@ function BarChart({ data, height = 80, color = "var(--color-accent, #0d9488)" })
           justifyContent: "center",
           fontSize: 12,
           color: "var(--color-text-secondary)",
+          borderRadius: 10,
+          background: "linear-gradient(180deg, #f8fafc 0%, #fff 100%)",
+          border: "1px dashed var(--color-border-tertiary,#e2e8f0)",
         }}
       >
-        No data yet
+        No data yet — activity will appear here
       </div>
     );
-  const max = Math.max(...data.map((d) => d.value), 1);
+  }
+  const max = Math.max(...data.map((d) => Number(d.value) || 0), 1);
+  const chartH = Math.max(48, height - 28);
   return (
-    <div className="app-dashboard-bar-chart" style={{ display:"flex", alignItems:"flex-end", gap:2, height, padding:"4px 0" }}>
-      {data.map((d,i)=>(
-        <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2, height:"100%", justifyContent:"flex-end" }}>
-          <div title={`${d.label}: ${d.value}`} style={{ width:"100%", height:`${Math.max(4,(d.value/max)*100)}%`, background:color, borderRadius:"6px 6px 2px 2px", minHeight:d.value>0?4:0, transition:"height .3s", opacity:0.92 }} />
-          <span className="app-dashboard-bar-label">{d.label}</span>
-        </div>
-      ))}
+    <div className="app-dashboard-bar-chart" style={{ padding: "4px 0 0" }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: chartH }}>
+        {data.map((d, i) => {
+          const v = Number(d.value) || 0;
+          const pct = Math.max(v > 0 ? 8 : 0, (v / max) * 100);
+          return (
+            <div
+              key={d.label || i}
+              title={`${d.label}: ${v}`}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                height: "100%",
+                gap: 4,
+              }}
+            >
+              <span style={{ fontSize: 10, fontWeight: 600, color: "var(--color-text-secondary)", lineHeight: 1 }}>
+                {v > 0 ? v : ""}
+              </span>
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: 36,
+                  height: `${pct}%`,
+                  minHeight: v > 0 ? 6 : 2,
+                  borderRadius: "8px 8px 3px 3px",
+                  background: `linear-gradient(180deg, ${color} 0%, ${color}cc 100%)`,
+                  boxShadow: v > 0 ? "0 2px 6px rgba(13,148,136,0.18)" : "none",
+                  transition: "height 0.35s ease",
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        {data.map((d, i) => (
+          <div
+            key={`l-${d.label || i}`}
+            className="app-dashboard-bar-label"
+            style={{ flex: 1, textAlign: "center", fontSize: 10, color: "var(--color-text-tertiary,#94a3b8)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            title={d.label}
+          >
+            {d.label}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-// donut chart SVG
-function DonutChart({ segments, size=100 }) {
-  const total = segments.reduce((s,x)=>s+x.value,0) || 1;
+// donut chart SVG with centre total + accessible legend
+function DonutChart({ segments, size = 112 }) {
+  const safe = Array.isArray(segments) ? segments.filter((s) => s && Number(s.value) >= 0) : [];
+  const total = safe.reduce((s, x) => s + (Number(x.value) || 0), 0);
+  if (!safe.length || total === 0) {
+    return (
+      <div style={{ width: size, height: size, display: "grid", placeItems: "center", fontSize: 11, color: "var(--color-text-secondary)" }}>
+        No segments
+      </div>
+    );
+  }
   let offset = 0;
-  const r = 38, cx = 50, cy = 50, circumference = 2*Math.PI*r;
-  const arcs = segments.map(seg => {
-    const pct = seg.value/total;
-    const dash = pct*circumference;
-    const gap = circumference-dash;
-    const rotation = offset*360;
+  const r = 36;
+  const cx = 50;
+  const cy = 50;
+  const circumference = 2 * Math.PI * r;
+  const arcs = safe.map((seg) => {
+    const pct = (Number(seg.value) || 0) / total;
+    const dash = pct * circumference;
+    const gap = circumference - dash;
+    const rotation = offset * 360;
     offset += pct;
-    return { ...seg, dash, gap, rotation };
+    return { ...seg, dash, gap, rotation, pct };
   });
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100">
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--color-border-tertiary,#e5e5e5)" strokeWidth={10} />
-      {arcs.map((a,i)=>(
-        <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={a.color} strokeWidth={10}
-          strokeDasharray={`${a.dash} ${a.gap}`}
-          strokeDashoffset={circumference/4}
-          transform={`rotate(${a.rotation} ${cx} ${cy})`}
-          style={{ transition:"stroke-dasharray .5s" }}
-        />
-      ))}
-      <text x={50} y={46} textAnchor="middle" fontSize={11} fontWeight={500} fill="var(--color-text-primary)">{segments.find(s=>s.value===Math.max(...segments.map(x=>x.value)))?.value||0}</text>
-      <text x={50} y={58} textAnchor="middle" fontSize={8} fill="var(--color-text-secondary)">total</text>
-    </svg>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+      <svg width={size} height={size} viewBox="0 0 100 100" role="img" aria-label={`Total ${total}`}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--color-border-tertiary,#e5e5e5)" strokeWidth={11} />
+        {arcs.map((a, i) => (
+          <circle
+            key={i}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={a.color || "#0d9488"}
+            strokeWidth={11}
+            strokeLinecap="butt"
+            strokeDasharray={`${a.dash} ${a.gap}`}
+            strokeDashoffset={circumference / 4}
+            transform={`rotate(${a.rotation} ${cx} ${cy})`}
+            style={{ transition: "stroke-dasharray 0.45s ease" }}
+          >
+            <title>{`${a.label || "Segment"}: ${a.value}`}</title>
+          </circle>
+        ))}
+        <text x={50} y={48} textAnchor="middle" fontSize={14} fontWeight={700} fill="var(--color-text-primary)">
+          {total}
+        </text>
+        <text x={50} y={60} textAnchor="middle" fontSize={7.5} fill="var(--color-text-secondary)">
+          total
+        </text>
+      </svg>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 100 }}>
+        {arcs.map((a, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: a.color || "#0d9488", flexShrink: 0 }} />
+            <span style={{ color: "var(--color-text-secondary)", flex: 1 }}>{a.label || "—"}</span>
+            <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{a.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -5,6 +5,7 @@ import {
   postIncomingWebhook,
 } from "./permitIntegrationNotify";
 import { sanitizeWebhookConfigUrls, validateOutboundWebhookUrl } from "./webhookUrlValidation";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 export const PERMIT_WEBHOOK_CONFIG_KEY = "permit_webhook_config_v1";
 
@@ -76,7 +77,51 @@ function integrationTargets(config) {
   return targets;
 }
 
-/** POST permit event to all configured webhooks (best-effort, non-blocking). */
+function slimPermit(permit) {
+  if (!permit || typeof permit !== "object") return {};
+  return {
+    id: permit.id || "",
+    type: permit.type || "",
+    status: permit.status || "",
+    location: permit.location || "",
+    issuedTo: permit.issuedTo || "",
+  };
+}
+
+async function dispatchViaEdge(event, permit, detail, targets) {
+  if (!isSupabaseConfigured() || !supabase) return null;
+  try {
+    const { data: sess } = await supabase.auth.getSession();
+    if (!sess?.session?.access_token) return null;
+    const { data, error } = await supabase.functions.invoke("dispatch-permit-webhook", {
+      body: {
+        event,
+        permit: slimPermit(permit),
+        detail: detail && typeof detail === "object" ? detail : {},
+        targets,
+      },
+    });
+    if (error) return { ok: false, error: error.message || "Edge dispatch failed", via: "edge" };
+    return { ...(data || {}), via: "edge" };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e), via: "edge" };
+  }
+}
+
+async function dispatchViaBrowser(event, permit, detail, targets) {
+  const results = await Promise.all(
+    targets.map(({ channel, url, kind }) =>
+      postIncomingWebhook(url, pickWebhookPayload(event, permit, detail, kind), `ptw-${channel}`).then((res) => ({
+        channel,
+        ...res,
+      }))
+    )
+  );
+  const ok = results.some((r) => r.ok);
+  return { ok, results, via: "browser" };
+}
+
+/** POST permit event to configured webhooks via Edge (prod) or browser fallback (dev only). */
 export function dispatchPermitWebhook(event, permit, detail = {}) {
   const config = loadPermitWebhookConfig();
   const action = String(event || "").toLowerCase();
@@ -87,17 +132,23 @@ export function dispatchPermitWebhook(event, permit, detail = {}) {
   const targets = integrationTargets(config);
   if (!targets.length) return Promise.resolve({ skipped: true });
 
-  return Promise.all(
-    targets.map(({ channel, url, kind }) =>
-      postIncomingWebhook(url, pickWebhookPayload(action, permit, detail, kind), `ptw-${channel}`).then((res) => ({
-        channel,
-        ...res,
-      }))
-    )
-  ).then((results) => {
-    const ok = results.some((r) => r.ok);
-    return { ok, results };
-  });
+  return (async () => {
+    const edge = await dispatchViaEdge(action, permit, detail, targets);
+    if (edge && edge.via === "edge" && !edge.error) return edge;
+    if (edge?.ok) return edge;
+
+    // Production: do not fan-out from the browser (SSRF / CORS / secret leakage surface).
+    if (import.meta.env.PROD) {
+      return {
+        ok: false,
+        error: edge?.error || "Sign in to dispatch PTW webhooks from the server.",
+        via: "edge",
+        results: edge?.results,
+      };
+    }
+
+    return dispatchViaBrowser(action, permit, detail, targets);
+  })();
 }
 
 export async function testPermitWebhook(url, kind = "generic") {
@@ -105,11 +156,20 @@ export async function testPermitWebhook(url, kind = "generic") {
   if (!check.ok) return { ok: false, error: check.error };
   const target = check.url;
   const resolvedKind = kind === "auto" ? detectIncomingWebhookKind(target) : kind;
+  const permit = { id: "TEST", type: "general", location: "Test area", status: "draft" };
+  const targets = [{ channel: "test", url: target, kind: resolvedKind }];
+
+  const edge = await dispatchViaEdge("test", permit, {}, targets);
+  if (edge && !edge.error && edge.ok !== false) return { ...edge, ok: Boolean(edge.ok ?? true) };
+  if (import.meta.env.PROD) {
+    return { ok: false, error: edge?.error || "Sign in to test webhooks from the server." };
+  }
+
   const payload =
     resolvedKind === "slack"
-      ? pickWebhookPayload("test", { id: "TEST", type: "general", location: "Test area", status: "draft" }, {}, "slack")
+      ? pickWebhookPayload("test", permit, {}, "slack")
       : resolvedKind === "teams"
-        ? pickWebhookPayload("test", { id: "TEST", type: "general", location: "Test area", status: "draft" }, {}, "teams")
+        ? pickWebhookPayload("test", permit, {}, "teams")
         : { event: "test", at: new Date().toISOString(), message: "MySafeOps PTW webhook test" };
 
   return postIncomingWebhook(target, payload, "ptw-webhook-test");
