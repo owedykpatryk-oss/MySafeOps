@@ -622,6 +622,7 @@ export default defineConfig(({ mode }) => {
                 return "survey-report";
               }
               if (norm.includes("/utils/orgAutomationRules")) return "shared-ui";
+              if (norm.includes("/utils/permitWebhook")) return "permits-lib";
               if (norm.includes("/modules/surveyReport/")) return "survey-report";
               if (norm.includes("/modules/gprReport/")) return "gpr-report";
               // Shared leaf utils — never absorb into feature chunks (avoids cross-chunk TDZ).
@@ -672,6 +673,15 @@ export default defineConfig(({ mode }) => {
               ) {
                 return "project-drawing";
               }
+              // Shared permit helpers — studio UI must not sync-import the PermitSystem chunk
+              // (permits ↔ permits-studio TDZ on bindings like PERMIT_INTEGRATION_EVENTS / K).
+              if (
+                norm.includes("/modules/permits/") &&
+                !norm.includes("/modules/permits/PermitSystem") &&
+                !norm.includes("/modules/permits/components/")
+              ) {
+                return "permits-lib";
+              }
               if (norm.includes("/modules/permits/PermitSystem")) return "permits";
               if (
                 norm.includes("/modules/permits/components/PermitStudio") ||
@@ -685,7 +695,18 @@ export default defineConfig(({ mode }) => {
                 norm.includes("/modules/permits/components/PermitTimeline") ||
                 norm.includes("/modules/permits/components/PermitLiveWall") ||
                 norm.includes("/modules/permits/components/PermitSafetyMap") ||
-                norm.includes("/modules/permits/components/PermitDependency")
+                norm.includes("/modules/permits/components/PermitDependency") ||
+                norm.includes("/modules/permits/components/PermitBuilder") ||
+                norm.includes("/modules/permits/components/PermitCommandCentre") ||
+                norm.includes("/modules/permits/components/PermitQuickIssue") ||
+                norm.includes("/modules/permits/components/PermitFirstRun") ||
+                norm.includes("/modules/permits/components/PermitContextTips") ||
+                norm.includes("/modules/permits/components/PermitNextSteps") ||
+                norm.includes("/modules/permits/components/PermitDialog") ||
+                norm.includes("/modules/permits/components/PermitSimpleForm") ||
+                norm.includes("/modules/permits/components/PermitIncident") ||
+                norm.includes("/modules/permits/components/PermitEvidence") ||
+                norm.includes("/modules/permits/components/PermitStepper")
               ) {
                 return "permits-studio";
               }
