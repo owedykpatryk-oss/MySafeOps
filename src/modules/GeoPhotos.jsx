@@ -14,7 +14,8 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import GeoPhotosMap from "../components/geoPhotos/GeoPhotosMap";
 import GeoPhotoCaptureModal from "../components/geoPhotos/GeoPhotoCaptureModal";
 import GeoPhotoDirectionMap from "../components/geoPhotos/GeoPhotoDirectionMap";
-import { geoPhotoPreset, geoPhotoPresetLabel, GEO_PHOTO_PRESETS } from "../utils/geoPhotoPresets";
+import { geoPhotoPreset, geoPhotoPresetLabel, listGeoPhotoPresetsForOrg } from "../utils/geoPhotoPresets";
+import { isUtilityMappingOrg } from "../utils/utilityMappingOrg";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
 import { isSurveyWorkflowEnabled } from "../utils/projectHubIndustry";
@@ -358,6 +359,7 @@ export default function GeoPhotos() {
   const [exportBusy, setExportBusy] = useState("");
   const [detail, setDetail] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const photoPresets = useMemo(() => listGeoPhotoPresetsForOrg(isUtilityMappingOrg()), [orgName]);
 
   const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
     storageKey: STORAGE_KEY,
@@ -669,7 +671,7 @@ export default function GeoPhotos() {
           Type
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={ms.inp}>
             <option value="">All types</option>
-            {GEO_PHOTO_PRESETS.map((p) => (
+            {photoPresets.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.icon} {p.label}
               </option>

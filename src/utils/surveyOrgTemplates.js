@@ -9,6 +9,7 @@ import {
   isSurveySimpleMode,
 } from "./surveyContentCatalog";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
+import { listSurveyTypesForOrg } from "./utilityMappingFocus";
 
 export { isSurveySimpleMode };
 
@@ -59,7 +60,8 @@ export function getSurveyTypeTemplate(surveyType) {
 
 export function listSurveyTemplatesForEditor() {
   const overrides = getOrgSurveyTypeOverrides();
-  return SURVEY_TYPES.map(({ key, label }) => {
+  const types = listSurveyTypesForOrg(SURVEY_TYPES);
+  return types.map(({ key, label }) => {
     const builtIn = getSurveyCatalogEntry(key) || {};
     const org = normalizeTemplateFields(overrides[key]);
     const merged = getSurveyTypeTemplate(key) || {};

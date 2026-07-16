@@ -599,6 +599,13 @@ export default function LoginPage() {
                 Sign in to manage your site safety. Use your work email and password (or Google, if your organisation enabled it). Cloud backup is available from
                 Backup after you sign in.
               </p>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void signIn();
+                }}
+                noValidate
+              >
               <label htmlFor="login-email" style={ss.lbl}>
                 Email
               </label>
@@ -790,7 +797,7 @@ export default function LoginPage() {
                 />
               )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 14 }}>
-                <button type="button" className="login-btn-primary" style={{ ...ss.btnP, width: "100%" }} disabled={busy || lockout.isLocked} onClick={signIn}>
+                <button type="submit" className="login-btn-primary" style={{ ...ss.btnP, width: "100%" }} disabled={busy || lockout.isLocked}>
                   Sign in
                 </button>
                 <button
@@ -802,6 +809,7 @@ export default function LoginPage() {
                   Create account
                 </button>
               </div>
+              </form>
               {pendingConfirmationEmail && (
                 <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, border: "1px solid #bfdbfe", background: "#eff6ff" }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "#1e3a8a", marginBottom: 6 }}>Check your email</div>

@@ -1,10 +1,17 @@
 import { mergeCustomProfilesFromCloudSettings, isCustomWorkspacePackId } from "./customWorkspaceProfilesCloud";
 import { FESS_GROUP_PACK_ID } from "./fessWorkspaceProfile";
+import { UTILITY_MAPPING_PACK_ID } from "./utilityMappingWorkspaceProfile";
 import { isBuiltInIndustryPackId, normalizeIndustryPackId } from "./industryPackCatalog";
 
 function isCloudSafeIndustryPackId(packId) {
   const id = normalizeIndustryPackId(packId);
-  return Boolean(id && (isBuiltInIndustryPackId(id) || isCustomWorkspacePackId(id) || id === FESS_GROUP_PACK_ID));
+  return Boolean(
+    id &&
+      (isBuiltInIndustryPackId(id) ||
+        isCustomWorkspacePackId(id) ||
+        id === FESS_GROUP_PACK_ID ||
+        id === UTILITY_MAPPING_PACK_ID)
+  );
 }
 
 /** @param {Record<string, unknown>} settings */

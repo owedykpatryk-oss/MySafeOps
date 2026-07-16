@@ -161,7 +161,7 @@ export function runGeospatialSetupAction(stepId) {
   }
 }
 
-export const GEOSPATIAL_PACK_IDS = new Set(["surveyingGeodesy", "contractorPlusSurveying"]);
+export const GEOSPATIAL_PACK_IDS = new Set(["surveyingGeodesy", "contractorPlusSurveying", "utilityMapping"]);
 
 export function isGeospatialPackActive() {
   const id = loadOrgSettingsRaw().industryPackId;

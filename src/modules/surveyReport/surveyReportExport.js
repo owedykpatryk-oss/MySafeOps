@@ -10,11 +10,15 @@ import {
   filterGeoPhotosWithCoords,
 } from "../../utils/geoPhotoExport";
 import { sanitizePdfFileSegment } from "../../utils/pdfFileName";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
+import { utilityMappingExportBaseName } from "../../utils/utilityMappingDocRefs";
 import { downloadBlob } from "../../utils/downloadBlob.js";
 import { downloadSurveyReportHtml } from "./surveyReportPrintHtml";
 import { downloadSurveyReportPdf } from "./surveyReportPdf";
 
 function reportFileBase(report) {
+  const um = isUtilityMappingOrg() ? utilityMappingExportBaseName(report, "PAS128") : "";
+  if (um) return sanitizePdfFileSegment(um, 48);
   return sanitizePdfFileSegment(report?.ref || report?.id || "survey_report", 40);
 }
 

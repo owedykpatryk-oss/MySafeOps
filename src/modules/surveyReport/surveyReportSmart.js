@@ -38,6 +38,7 @@ import {
   mergeStandardsCited,
 } from "./surveyQaPack";
 import { syncSurveyReportFromRams } from "./surveyRamsSync";
+import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
 
 export { mapWeatherSnapshotToFields } from "../../utils/weatherFieldMap";
 
@@ -549,11 +550,11 @@ export function prefillReportFromProject(report, project, ramsDoc = null) {
   const defaults = report.surveyType ? buildSurveyTypeDefaults(report.surveyType, report.pas128Ql) : null;
   const extent = buildSurveyExtentFromProject(project);
 
-  const next = {
+  let next = {
     ...report,
     projectId: project.id,
     projectName: project.name || report.projectName,
-    client: project.client || report.client,
+    client: project.client || project.site || report.client,
     siteAddress: project.address || report.siteAddress,
     sections: { ...report.sections },
   };
@@ -579,7 +580,8 @@ export function prefillReportFromProject(report, project, ramsDoc = null) {
     if (synced.hseRefs) next.hseRefs = synced.hseRefs;
   }
 
-  return prefillProfessionalFields(next, { project, ramsDoc });
+  next = prefillProfessionalFields(next, { project, ramsDoc });
+  return applyUtilityMappingProjectJobToDoc(next, project, "SR");
 }
 
 /** Apply catalog template when user changes survey type (fills empty fields only). */

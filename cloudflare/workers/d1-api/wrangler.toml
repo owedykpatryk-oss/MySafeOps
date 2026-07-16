@@ -18,9 +18,7 @@ binding = "DB"
 database_name = "mysafeops-d1"
 database_id = "1eaba498-ae25-49a8-b701-e70c3b5c2b07"
 
-# Krok 3 w DOCS/D1_SETUP.md: ODKOMENTUJ [vars] i wklej z .env.local (VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY).
-# Hash chain audytu (serwer): npx wrangler@3 secret put AUDIT_CHAIN_SECRET  # długi losowy string, min. 16 znaków
-# [vars]
-# SUPABASE_URL = "https://xxxxx.supabase.co"
-# SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...."
-# ALLOWED_ORIGINS = "https://mysafeops.com,http://localhost:5173"
+# SUPABASE_URL / SUPABASE_ANON_KEY / AUDIT_CHAIN_SECRET → wrangler secret put (not vars).
+# Browser CORS allow-list (comma-separated). vercel_preview:mysafeops allows https://mysafeops*.vercel.app.
+[vars]
+ALLOWED_ORIGINS = "https://mysafeops.com,https://www.mysafeops.com,http://localhost:5173,http://127.0.0.1:5173,vercel_preview:mysafeops"

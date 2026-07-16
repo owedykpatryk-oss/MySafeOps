@@ -15,6 +15,7 @@ export const PACK_DEFAULT_PERMIT_TYPES = {
   contractorPlusSurveying: ["hot_work", "excavation", "electrical", "work_at_height", "aerial_survey_coordination", "general"],
   foodPharma: ["hot_work", "line_clearance", "cold_work", "confined_space", "visitor_access", "general"],
   fessGroup: ["hot_work", "line_clearance", "cold_work", "confined_space", "visitor_access", "loto", "general"],
+  utilityMapping: ["excavation", "ground_disturbance", "visitor_access", "general"],
   showEverything: [],
 };
 

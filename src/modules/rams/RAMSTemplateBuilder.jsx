@@ -31,6 +31,9 @@ import { getLeaveRamsBuilderConfirm, getRamsBuilderTitle } from "../../utils/ram
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
+import { nextUtilityMappingRamsDocNo } from "../../utils/utilityMappingDocRefs";
+import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
 import {
   mergeRamsPackFromCatalog,
   getSurveyPackMeta,
@@ -117,7 +120,21 @@ function currentYearToken() {
   return new Date().getFullYear();
 }
 
-function generateRamsDocNo() {
+function generateRamsDocNo(seed = {}) {
+  if (isUtilityMappingOrg()) {
+    try {
+      const existing = load("rams_builder_docs", []) || [];
+      const um = nextUtilityMappingRamsDocNo(existing, {
+        ...seed,
+        jobRef: seed.jobRef || seed.documentNo,
+        umClientCode: seed.umClientCode,
+        client: seed.client,
+      });
+      if (um) return um;
+    } catch {
+      /* fall through */
+    }
+  }
   const yr = currentYearToken();
   const tail = Date.now().toString().slice(-5);
   return `RAMS-${yr}-${tail}`;
@@ -2129,14 +2146,20 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
                   jobRef: form.jobRef,
                 });
               }
-              setForm((f) => ({
-                ...f,
-                projectId: nextId,
-                location: f.location || project?.location || project?.site || f.location,
-                leadEngineer: f.leadEngineer || project?.leadEngineer || project?.owner || f.leadEngineer,
-                jobRef: f.jobRef || project?.code || project?.projectCode || f.jobRef,
-                title: f.title || (project ? `${project.name} - RAMS` : f.title),
-              }));
+              setForm((f) => {
+                let next = {
+                  ...f,
+                  projectId: nextId,
+                  location: f.location || project?.location || project?.site || f.location,
+                  leadEngineer: f.leadEngineer || project?.leadEngineer || project?.owner || f.leadEngineer,
+                  jobRef: f.jobRef || project?.code || project?.projectCode || f.jobRef,
+                  title: f.title || (project ? `${project.name} - RAMS` : f.title),
+                };
+                if (project && isUtilityMappingOrg()) {
+                  next = applyUtilityMappingProjectJobToDoc(next, project, "RA");
+                }
+                return next;
+              });
               if (project) applyProjectGeocodeAndWeather(project);
             }} style={ss.inp}>
               <option value="">— Select project —</option>
@@ -2212,7 +2235,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
               <input
                 value={form.documentNo||""}
                 onChange={e=>set("documentNo",e.target.value)}
-                placeholder={`e.g. ${generateRamsDocNo()}`}
+                placeholder={isUtilityMappingOrg() ? "UM26-1234-WSP-RA" : `e.g. ${generateRamsDocNo()}`}
                 style={{ ...ss.inp, flex: 1 }}
               />
               <button type="button" onClick={() => set("documentNo", generateRamsDocNo())} style={{ ...ss.btn, minHeight: 40, fontSize: 12 }}>

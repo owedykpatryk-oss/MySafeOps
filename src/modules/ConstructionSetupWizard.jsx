@@ -16,6 +16,12 @@ import {
   runGeospatialSetupAction,
   isGeospatialPackActive,
 } from "../utils/geospatialOnboarding";
+import {
+  getUtilityMappingSetupStatus,
+  markUtilityMappingStepDone,
+  runUtilityMappingSetupAction,
+  isUtilityMappingSetupActive,
+} from "../utils/utilityMappingOnboarding";
 
 const ss = ms;
 
@@ -23,38 +29,58 @@ export default function ConstructionSetupWizard() {
   const marketId = getOrgMarketId();
   const ramsLabel = getRamsShortLabel(marketId);
   const wizardCopy = getConstructionWizardCopy(marketId);
-  const geospatial = isGeospatialPackActive();
+  const utilityMapping = isUtilityMappingSetupActive();
+  const geospatial = !utilityMapping && isGeospatialPackActive();
   const geospatialLead =
     marketId === "au"
       ? `Onboarding for surveying & geodesy teams — AS5488, aerial LiDAR, laser scan, hydrographic and rail corridor ${ramsLabel} packs.`
       : marketId === "pl"
       ? `Onboarding dla geodezji — PAS128/AS5488, LiDAR, skan laserowy i pakiety IOR geodezyjnych.`
       : `Onboarding for surveying & geodesy teams — PAS128/AS5488, aerial LiDAR, laser scan, hydrographic and rail corridor ${ramsLabel} packs.`;
-  const [status, setStatus] = useState(() => (geospatial ? getGeospatialSetupStatus() : getConstructionSetupStatus()));
+  const umLead =
+    "Onboarding for Utility Mapping — PAS128 M-series reports, GPR, geo-photos, exclusive RAMS packs and permit to dig.";
+  const [status, setStatus] = useState(() =>
+    utilityMapping
+      ? getUtilityMappingSetupStatus()
+      : geospatial
+        ? getGeospatialSetupStatus()
+        : getConstructionSetupStatus()
+  );
   const [message, setMessage] = useState("");
 
-  const refresh = () => setStatus(geospatial ? getGeospatialSetupStatus() : getConstructionSetupStatus());
+  const refresh = () =>
+    setStatus(
+      utilityMapping
+        ? getUtilityMappingSetupStatus()
+        : geospatial
+          ? getGeospatialSetupStatus()
+          : getConstructionSetupStatus()
+    );
 
   const runAction = (stepId) => {
-    const result = geospatial ? runGeospatialSetupAction(stepId) : runConstructionSetupAction(stepId);
+    const result = utilityMapping
+      ? runUtilityMappingSetupAction(stepId)
+      : geospatial
+        ? runGeospatialSetupAction(stepId)
+        : runConstructionSetupAction(stepId);
     setMessage(result.message || "");
     refresh();
   };
 
-  const autoSteps = geospatial
-    ? ["workspace_profile", "geospatial_packs", "legislation"]
-    : ["workspace_profile", "hazard_packs", "legislation"];
+  const autoSteps = utilityMapping
+    ? ["workspace_profile", "um_rams_packs", "pas128_ms", "survey_templates", "legislation"]
+    : geospatial
+      ? ["workspace_profile", "geospatial_packs", "legislation"]
+      : ["workspace_profile", "hazard_packs", "legislation"];
 
   return (
     <div>
       <PageHero
-        badgeText={geospatial ? "GEO" : wizardCopy.badge}
-        title={geospatial ? "Geospatial setup" : wizardCopy.title}
-        lead={
-          geospatial
-            ? geospatialLead
-            : wizardCopy.lead
+        badgeText={utilityMapping ? "UM" : geospatial ? "GEO" : wizardCopy.badge}
+        title={
+          utilityMapping ? "Utility Mapping setup" : geospatial ? "Geospatial setup" : wizardCopy.title
         }
+        lead={utilityMapping ? umLead : geospatial ? geospatialLead : wizardCopy.lead}
       />
 
       <div style={{ ...ss.card, marginBottom: 16, padding: 16 }}>
@@ -124,7 +150,8 @@ export default function ConstructionSetupWizard() {
                     type="button"
                     style={{ ...ss.btn, fontSize: 12, padding: "4px 10px" }}
                     onClick={() => {
-                      if (geospatial) markGeospatialStepDone(step.id);
+                      if (utilityMapping) markUtilityMappingStepDone(step.id);
+                      else if (geospatial) markGeospatialStepDone(step.id);
                       else markConstructionStepDone(step.id);
                       refresh();
                     }}

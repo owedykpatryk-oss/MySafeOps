@@ -12,6 +12,8 @@ import { generateSurveyReportPdfBlob } from "./surveyReportPdf";
 import { normalizeSurveyReport, utilityTypeLabel, utilityConfidenceLabel } from "./surveyReportHelpers";
 import { pas128MethodLabel } from "./pas128MethodPresets";
 import { UNDERTAKER_RESPONSE_STATUS } from "./surveyReportConstants";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
+import { utilityMappingExportBaseName } from "../../utils/utilityMappingDocRefs";
 
 function csvCell(value) {
   const s = String(value ?? "").replace(/"/g, '""');
@@ -23,6 +25,8 @@ function csvRow(cells) {
 }
 
 export function handoverPackBaseName(report) {
+  const um = isUtilityMappingOrg() ? utilityMappingExportBaseName(report, "Handover") : "";
+  if (um) return sanitizePdfFileSegment(um, 48);
   return sanitizePdfFileSegment(report?.ref || report?.id || "survey_report", 40);
 }
 
@@ -95,13 +99,28 @@ export function buildHandoverReadme(report, opts = {}) {
     `PAS 128 QL:    ${ql}`,
     `PAS 128 method:${method}`,
     `Status:        ${r.status || "draft"}`,
+  ];
+
+  if (isUtilityMappingOrg()) {
+    const emailSubject = utilityMappingExportBaseName(r, "PAS128") || r.ref || "PAS128 Survey Report";
+    lines.push(
+      "",
+      "EMAIL (suggested)",
+      "-----------------",
+      `Subject: ${emailSubject} — ${r.client || "Client"}`,
+      `Body:    Please find attached the PAS 128 utility survey package for ${r.siteAddress || r.projectName || "the site"}.`,
+      `         Ref ${r.ref || "—"}. Controlled document — ensure latest revision is in use.`
+    );
+  }
+
+  lines.push(
     "",
     "CONTENTS",
     "--------",
     "  report/report.pdf       — printable survey report (A4)",
     "  report/report.html      — offline HTML copy",
     "  data/utilities-schedule.csv",
-  ];
+  );
 
   if (undertakerCount) lines.push("  data/undertaker-responses.csv");
   if (geoIncluded) lines.push("  data/geo-photos.geojson   — geo-tagged field photos");

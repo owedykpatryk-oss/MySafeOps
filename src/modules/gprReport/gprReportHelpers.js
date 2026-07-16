@@ -11,6 +11,9 @@ import {
   interpretGeologyForGpr,
 } from "../../utils/gprGroundConditions";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
+import { formatUtilityMappingTypedRef, nextUtilityMappingJobNumber, utilityMappingJobYearYY } from "../../utils/utilityMappingDocRefs";
+import { matchUtilityMappingClientCode } from "../../utils/utilityMappingClients";
 
 export function normalizeGprReport(raw) {
   const base = blankGprReport();
@@ -45,7 +48,23 @@ export function normalizeGprReport(raw) {
   };
 }
 
-export function nextGprRef(reports = []) {
+export function nextGprRef(reports = [], seed = {}) {
+  if (isUtilityMappingOrg()) {
+    const yy = utilityMappingJobYearYY(seed.surveyDate);
+    const existing = (reports || []).map((r) => ({
+      ref: String(r.ref || "").replace(/-(RA|MS|PTW|GPR|SR)$/i, ""),
+    }));
+    const code =
+      String(seed.umClientCode || seed.clientCode || "").trim().toUpperCase() ||
+      matchUtilityMappingClientCode(seed.client) ||
+      "XXX";
+    const job = String(seed.umJobNumber || "").replace(/\D/g, "") || nextUtilityMappingJobNumber(existing, yy);
+    return formatUtilityMappingTypedRef("GPR", {
+      umJobNumber: job,
+      umClientCode: code,
+      surveyDate: seed.surveyDate,
+    });
+  }
   const year = new Date().getFullYear();
   const prefix = `GPR-${year}-`;
   const nums = reports

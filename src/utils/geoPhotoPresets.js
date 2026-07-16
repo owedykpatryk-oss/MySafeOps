@@ -49,6 +49,33 @@ export function geoPhotoPresetLabel(id) {
   return geoPhotoPreset(id).label;
 }
 
+/** Utility Mapping preferred capture order — shown first for that org only. */
+export const UM_PREFERRED_GEO_PHOTO_IDS = [
+  "site_entrance",
+  "access_route",
+  "buried_services_warning",
+  "utility_locator",
+  "gpr_setup",
+  "manhole_chamber",
+  "trial_pit",
+  "benchmark_control",
+  "traffic_management",
+  "hazard",
+  "orientation_wide_shot",
+];
+
+/**
+ * Presets for the capture UI — Utility Mapping sees preferred survey types first.
+ * @param {boolean} [utilityMappingOrg]
+ */
+export function listGeoPhotoPresetsForOrg(utilityMappingOrg = false) {
+  if (!utilityMappingOrg) return GEO_PHOTO_PRESETS;
+  const preferred = new Set(UM_PREFERRED_GEO_PHOTO_IDS);
+  const head = UM_PREFERRED_GEO_PHOTO_IDS.map((id) => BY_ID[id]).filter(Boolean);
+  const rest = GEO_PHOTO_PRESETS.filter((p) => !preferred.has(p.id));
+  return [...head, ...rest];
+}
+
 export function presetsByGroup() {
   const map = new Map();
   GEO_PHOTO_GROUP_ORDER.forEach((g) => map.set(g, []));

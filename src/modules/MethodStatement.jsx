@@ -19,6 +19,18 @@ import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { MS_TEMPLATE_DEFS } from "./msStepTemplates";
 import { getMsStepTemplate } from "../utils/msOrgTemplates";
 import { isFessOrg } from "../utils/fessOrg";
+import { isUtilityMappingOrg } from "../utils/utilityMappingOrg";
+import {
+  renderUtilityMappingHeroCover,
+  renderUtilityMappingDocControlPage,
+  utilityMappingCoverSystemCss,
+  renderUtilityMappingPageFooter,
+  renderUtilityMappingComplianceRibbon,
+  resolveUtilityMappingLogoSrc,
+} from "../utils/utilityMappingCovers";
+import { utilityMappingBodyPrintCss } from "../utils/utilityMappingPrintTheme";
+import { nextUtilityMappingMsJobRef } from "../utils/utilityMappingDocRefs";
+import { applyUtilityMappingProjectJobToDoc } from "../utils/utilityMappingProjectJob";
 import { buildFessMethodStatementPackHtml } from "../utils/fessMsPrintHtml";
 import { buildFessBriefingOperativeRows } from "../utils/fessBriefingRecord";
 import { buildMsStepsFromRams } from "../utils/fessMsWorkflow";
@@ -182,7 +194,8 @@ function MSForm({ ms, onSave, onClose }) {
 
   const blank = {
     id: genId(), title:"", location:"", projectId:"",
-    jobRef:"", client:"", date:today(), revision:"1A",
+    jobRef: isUtilityMappingOrg() ? nextUtilityMappingMsJobRef(load("method_statements", [])) : "",
+    client:"", date:today(), revision:"1A",
     leadEngineer:"", preparedBy:"", approvedBy:"",
     permitControllerName:"", permitControllerSignDate:"",
     briefingNotes:"",
@@ -275,7 +288,24 @@ function MSForm({ ms, onSave, onClose }) {
               </div>
               <div>
                 <label style={ss.lbl}>Project</label>
-                <select value={form.projectId} onChange={e=>set("projectId",e.target.value)} style={ss.inp}>
+                <select
+                  value={form.projectId}
+                  onChange={(e) => {
+                    const projectId = e.target.value;
+                    const project = projects.find((p) => p.id === projectId);
+                    setForm((f) => {
+                      let next = {
+                        ...f,
+                        projectId,
+                        location: f.location || project?.address || project?.site || f.location,
+                        client: f.client || project?.client || project?.site || f.client,
+                      };
+                      if (project) next = applyUtilityMappingProjectJobToDoc(next, project, "MS");
+                      return next;
+                    });
+                  }}
+                  style={ss.inp}
+                >
                   <option value="">— Select —</option>
                   {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
@@ -286,7 +316,7 @@ function MSForm({ ms, onSave, onClose }) {
               </div>
               <div>
                 <label style={ss.lbl}>Job reference</label>
-                <input value={form.jobRef||""} onChange={e=>set("jobRef",e.target.value)} placeholder="e.g. FP1-KETTLE-001" style={ss.inp} />
+                <input value={form.jobRef||""} onChange={e=>set("jobRef",e.target.value)} placeholder={isUtilityMappingOrg() ? "UM26-1234-WSP-MS" : "e.g. FP1-KETTLE-001"} style={ss.inp} />
               </div>
               <div>
                 <label style={ss.lbl}>Date</label>
@@ -647,6 +677,64 @@ function printMS(form, workers, projects) {
   <table style="width:100%;border-collapse:collapse;margin-bottom:12px"><thead><tr><th style="width:35%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Name</th><th style="width:40%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Signature</th><th style="width:25%;background:#0f172a;color:#fff;padding:6px 8px;font-size:11px;text-align:left;border:1px solid #0f172a">Date</th></tr></thead>
   <tbody>${sigRows}</tbody></table>`:""}`;
 
+  if (isUtilityMappingOrg()) {
+    const logoSrc = resolveUtilityMappingLogoSrc(org);
+    const umFront = `${renderUtilityMappingHeroCover({
+      title: form.title || "Method statement",
+      subtitle: form.location || form.client || "PAS128 field method statement",
+      badge: "METHOD STATEMENT",
+      methodBadge: "MS",
+      kitChips: ["PAS 128", "Safe dig", "EML", "HSG47"],
+      orgName: org.name || "Utility Mapping",
+      logoSrc,
+      meta: [
+        ["Job reference", form.jobRef || "—"],
+        ["Client", form.client || "—"],
+        ["Location", form.location || "—"],
+        ["Date", fmtDate(form.date)],
+        ["Revision", form.revision || "1A"],
+        ["Lead engineer", form.leadEngineer || "—"],
+      ],
+      footerNote: org.pdfFooter || "Utility Mapping · u-map.co.uk · Part of IS GROUP",
+    })}${renderUtilityMappingDocControlPage({
+      client: form.client || "",
+      title: form.title || "Method statement",
+      reportRef: form.jobRef || "",
+      logoSrc,
+      authors: [
+        {
+          name: form.preparedBy || form.leadEngineer || "—",
+          title: "Author",
+          date: fmtDate(form.date),
+        },
+      ],
+      checkedBy: {
+        name: form.approvedBy || "—",
+        title: "Approved by",
+        date: fmtDate(form.date),
+      },
+    })}`;
+    await writePrintWindowDocument(
+      win,
+      `<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"/>
+      <title>MS — ${he(form.title || "Method statement")}</title>
+      <style>
+        @page { size: A4; margin: 14mm 12mm 22mm; }
+        body { font-family: "Segoe UI", Arial, sans-serif; font-size: 11px; color: #0f172a; margin: 0; padding: 0 0 20mm; }
+        .print-section-title { font-size: 12px; font-weight: 700; color: #0B1D3A; margin: 14px 0 6px; border-bottom: 2px solid #00B4E4; padding-bottom: 3px; }
+        table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        ${utilityMappingCoverSystemCss()}
+        ${utilityMappingBodyPrintCss()}
+      </style></head><body>
+      ${umFront}
+      <div class="um-ms-body">${renderUtilityMappingComplianceRibbon()}${bodyHtml}</div>
+      ${renderUtilityMappingPageFooter(logoSrc)}
+      </body></html>`
+    );
+    win.print();
+    return;
+  }
+
   await writePrintWindowDocument(
     win,
     wrapPrintHtmlDocument(org, {
@@ -703,7 +791,16 @@ export default function MethodStatement() {
     if (t.action === "create") {
       setModal({
         type: "form",
-        data: { id: genId(), title: "", location: "", projectId: t.projectId || "", status: "draft", date: today(), revision: "1A" },
+        data: {
+          id: genId(),
+          title: "",
+          location: "",
+          projectId: t.projectId || "",
+          jobRef: isUtilityMappingOrg() ? nextUtilityMappingMsJobRef(load("method_statements", [])) : "",
+          status: "draft",
+          date: today(),
+          revision: "1A",
+        },
       });
     }
   }, []);

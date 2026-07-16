@@ -48,10 +48,21 @@ export const MS_STEP_TEMPLATES = {
     "Carry out works within the controlled or high-care zone under supervisor control",
     "Complete close-out checks, sign off permit, and hand back to site management",
   ],
+  pas128Mobilisation: [
+    "Arrive on site, sign in and complete induction; brief team on RAMS and PAS128 method",
+    "Confirm statutory undertaker records received and reviewed (QL-D desktop)",
+    "Set up traffic management / exclusion zone and Chapter 8 controls as required",
+    "EML survey — mark utilities with UV paint; record depth, material and diameter where known (QL-B4 / B3 / B2)",
+    "GPR survey — real-time (or post-process) interpretation; upgrade to QL-B1 where EML and GPR agree",
+    "Topographical capture of mark-ups and metadata with total station / GNSS (OSGB36)",
+    "Capture geo-photos of access, buried-services warnings, mark-ups and chambers",
+    "Demobilise — clear paint notes where required, confirm permit/dig interface, hand over findings",
+  ],
 };
 
 export const MS_TEMPLATE_DEFS = [
   { key: "mobilisation", label: "Mobilisation sequence" },
+  { key: "pas128Mobilisation", label: "PAS128 utility survey mobilisation" },
   { key: "foodFactoryMobilisation", label: "Food factory mobilisation" },
   { key: "electrical", label: "Electrical isolation sequence" },
   { key: "mechanical", label: "Mechanical LOTO sequence" },

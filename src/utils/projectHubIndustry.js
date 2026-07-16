@@ -8,6 +8,11 @@ import { PROJECT_PLAYBOOKS } from "./projectPlaybooks";
 import { isFessOrg } from "./fessOrg";
 import { FESS_PROJECT_PLAYBOOKS } from "./fessProjectPlaybooks";
 import { filterFessExclusivePlaybooks } from "./fessExclusive";
+import { isUtilityMappingOrg } from "./utilityMappingOrg";
+import { UM_PROJECT_PLAYBOOKS } from "./utilityMappingProjectPlaybooks";
+import { filterUtilityMappingExclusivePlaybooks } from "./utilityMappingExclusive";
+import { filterPlaybooksForUtilityMappingFocus } from "./utilityMappingFocus";
+import { UTILITY_MAPPING_PACK_ID } from "./utilityMappingWorkspaceProfile";
 import {
   getOrgIndustryPackId,
   isSurveyWorkflowEnabled,
@@ -33,7 +38,12 @@ export function getPlaybooksForOrg() {
   if (isFessOrg()) {
     list = [...list, ...FESS_PROJECT_PLAYBOOKS];
   }
-  return filterFessExclusivePlaybooks(list);
+  if (isUtilityMappingOrg()) {
+    list = [...UM_PROJECT_PLAYBOOKS, ...list];
+    list = filterPlaybooksForUtilityMappingFocus(list);
+  }
+  list = filterFessExclusivePlaybooks(list);
+  return filterUtilityMappingExclusivePlaybooks(list);
 }
 
 const FEATURED_BY_PACK = {
@@ -46,6 +56,7 @@ const FEATURED_BY_PACK = {
   demolitionStripout: ["demolition", "groundworks", "general", "confined_space"],
   foodPharma: ["general", "confined_space"],
   fessGroup: ["fess_dolav_meyn", "fess_machine_install", "fess_pipe_changeover", "general"],
+  utilityMapping: ["um_pas128_m2", "um_pas128_m2p", "um_topo_plus_utility", "um_gpr_corridor"],
   showEverything: ["general", "electrical", "utility_mapping", "site_investigation", "groundworks"],
 };
 
@@ -53,7 +64,12 @@ const FEATURED_BY_PACK = {
 export function getFeaturedPlaybooksForOrg(limit = 3) {
   const allPlaybooks = getPlaybooksForOrg();
   const allowed = new Set(allPlaybooks.map((p) => p.id));
-  const order = FEATURED_BY_PACK[resolveProfileBehaviorPackId(getOrgIndustryPackId())] || FEATURED_BY_PACK.generalContractor;
+  const packId = getOrgIndustryPackId();
+  const order =
+    (packId === UTILITY_MAPPING_PACK_ID ? FEATURED_BY_PACK.utilityMapping : null) ||
+    FEATURED_BY_PACK[packId] ||
+    FEATURED_BY_PACK[resolveProfileBehaviorPackId(packId)] ||
+    FEATURED_BY_PACK.generalContractor;
   const picked = [];
   for (const id of order) {
     if (!allowed.has(id)) continue;

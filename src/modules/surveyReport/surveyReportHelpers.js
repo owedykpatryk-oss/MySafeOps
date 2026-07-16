@@ -21,6 +21,8 @@ import { mergeSpecialistTables } from "./surveySpecialistFindings";
 import { safeImageSrc } from "../../utils/htmlEscape.js";
 import { safeHttpUrl } from "../../utils/safeUrl.js";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
+import { nextUtilityMappingRef } from "../../utils/utilityMappingDocRefs";
 
 const labelOf = (options, key) => options.find((o) => o.key === key)?.label || key;
 
@@ -286,7 +288,10 @@ export function surveyReportQuality(report) {
   };
 }
 
-export function nextSurveyRef(existing) {
+export function nextSurveyRef(existing, seed = {}) {
+  if (isUtilityMappingOrg()) {
+    return nextUtilityMappingRef(existing, seed) || "";
+  }
   const year = new Date().getFullYear();
   const prefix = `SR-${year}-`;
   const nums = (existing || [])

@@ -3,6 +3,8 @@
  */
 import { buildPackFromDef } from "./constructionQuickPacks.js";
 import { isFessOrg } from "../../utils/fessOrg.js";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg.js";
+import { UM_ORG_EXCLUSIVE_PACK_DEFS } from "../../utils/utilityMappingQuickPacks.js";
 
 /** Verbatim fess_001…fess_021 rows from FESS Excel master (org-exclusive). */
 export const FESS_EXCEL_BASELINE_PACK_DEF = {
@@ -127,8 +129,9 @@ export function getFessSiteHazardPackDef(siteTemplateId) {
  * @param {string} [orgId]
  */
 export function orgExclusivePackDefsForOrg(orgId) {
-  if (!isFessOrg(orgId)) return [];
-  return ORG_EXCLUSIVE_PACK_DEFS;
+  if (isFessOrg(orgId)) return ORG_EXCLUSIVE_PACK_DEFS;
+  if (isUtilityMappingOrg(orgId)) return UM_ORG_EXCLUSIVE_PACK_DEFS;
+  return [];
 }
 
 /**
@@ -164,9 +167,9 @@ export function ensureOrgExclusiveQuickPacks(existingPacks, allHazards, orgId) {
   return [...built, ...list];
 }
 
-/** Hide org-exclusive packs in UI/storage cleanup for non-FESS orgs. */
+/** Hide org-exclusive packs that do not belong to the current tenant. */
 export function filterQuickPacksForOrg(packs, orgId) {
   const list = Array.isArray(packs) ? packs : [];
-  if (isFessOrg(orgId)) return list;
-  return list.filter((p) => !p?.orgExclusive);
+  const allowed = new Set(orgExclusivePackDefsForOrg(orgId).map((d) => d.id));
+  return list.filter((p) => !p?.orgExclusive || allowed.has(p.id));
 }

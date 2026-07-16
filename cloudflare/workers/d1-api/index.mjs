@@ -66,6 +66,22 @@ function json(body, status = 200, extra = {}) {
   });
 }
 
+function isOriginAllowed(origin, allowed) {
+  if (!origin || allowed.length === 0) return false;
+  if (allowed.includes(origin)) return true;
+  if (allowed.includes("vercel_preview:mysafeops")) {
+    try {
+      const u = new URL(origin);
+      if (u.protocol === "https:" && u.hostname.endsWith(".vercel.app") && u.hostname.startsWith("mysafeops")) {
+        return true;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return false;
+}
+
 function corsHeaders(request, env) {
   const origin = request.headers.get("Origin") || "";
   const allowed = (env.ALLOWED_ORIGINS || "")
@@ -77,12 +93,8 @@ function corsHeaders(request, env) {
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Org-Slug",
     "Access-Control-Max-Age": "86400",
   };
-  // Fail closed for browsers when ALLOWED_ORIGINS is unset — never echo '*'.
-  if (!origin) return base;
-  if (allowed.length === 0) {
-    return { ...base, "Access-Control-Allow-Origin": "null" };
-  }
-  if (!allowed.includes(origin)) return base;
+  // Fail closed: omit ACAO when unset / disallowed — never echo '*' or the string "null".
+  if (!origin || !isOriginAllowed(origin, allowed)) return base;
   return {
     ...base,
     "Access-Control-Allow-Origin": origin,

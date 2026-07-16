@@ -2,6 +2,20 @@ import { getOrgSettings } from "../../utils/orgSettingsStorage";
 import { renderMySafeOpsMarkSvg } from "../../utils/pdfBranding.js";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import {
+  isUtilityMappingPrintTheme,
+  utilityMappingGprCoverCss,
+  utilityMappingCoverKitChips,
+} from "../../utils/utilityMappingPrintTheme.js";
+import {
+  renderUtilityMappingHeroCover,
+  renderUtilityMappingDocControlPage,
+  utilityMappingCoverSystemCss,
+  renderUtilityMappingPageHeader,
+  renderUtilityMappingPageFooter,
+  renderUtilityMappingComplianceRibbon,
+  resolveUtilityMappingLogoSrc,
+} from "../../utils/utilityMappingCovers.js";
+import {
   anomalyConfidenceLabel,
   anomalyTypeLabel,
   buildAcquisitionNarrative,
@@ -89,6 +103,9 @@ function staticSiteMapUrl(lat, lng) {
 }
 
 function styles(primary, accent) {
+  const umCss = isUtilityMappingPrintTheme()
+    ? `${utilityMappingCoverSystemCss()}${utilityMappingGprCoverCss(primary, accent)}`
+    : "";
   return `<style>
     /* Bottom @page margin reserves room for the fixed .gpr-print-footer on
        every printed page — a plain body/element bottom padding would only
@@ -146,6 +163,7 @@ function styles(primary, accent) {
       }
       .gpr-doc-body { padding-bottom: 6mm; }
     }
+    ${umCss}
   </style>`;
 }
 
@@ -425,8 +443,15 @@ function environmentalBlock(env) {
 export function buildGprReportHtml(report, extras = {}) {
   const r = normalizeGprReport(report);
   const org = getOrgSettings();
-  const primary = org.primaryColor || "#0C447C";
-  const accent = org.accentColor || "#E6F1FB";
+  const umTheme = isUtilityMappingPrintTheme();
+  const primary =
+    umTheme && (!org.primaryColor || org.primaryColor === "#0d9488" || org.primaryColor === "#0C447C")
+      ? "#0B1D3A"
+      : org.primaryColor || "#0C447C";
+  const accent =
+    umTheme && (!org.accentColor || org.accentColor === "#f97316" || org.accentColor === "#E6F1FB")
+      ? "#00B4E4"
+      : org.accentColor || "#E6F1FB";
   const quality = gprReportQuality(r);
   const scanLabel = SCAN_MODES.find((s) => s.key === r.acquisition?.scanMode)?.label || r.acquisition?.scanMode;
   const mapUrl = staticSiteMapUrl(extras.projectLat, extras.projectLng);
@@ -447,10 +472,34 @@ export function buildGprReportHtml(report, extras = {}) {
     sections.push(section(title, contentHtml, id, num));
   };
 
-  const coverHtml = `<div class="gpr-cover">
+  const umLogo = resolveUtilityMappingLogoSrc(org);
+  const coverHtml = umTheme
+    ? renderUtilityMappingHeroCover({
+        title: r.title || "Ground Penetrating Radar Report",
+        subtitle: scanLabel ? `GPR · ${scanLabel}` : "GPR survey report",
+        badge: r.status === "final" ? "Final GPR report" : "Draft GPR report",
+        methodBadge: "GPR",
+        kitChips: utilityMappingCoverKitChips({ surveyType: "gpr_survey", pas128Method: "GPR" }),
+        orgName: org.name || "Utility Mapping",
+        logoSrc: umLogo,
+        meta: [
+          ["Report ref", r.ref || "—"],
+          ["Survey date", r.surveyDate ? formatOrgDate(r.surveyDate) : "—"],
+          ["Site", r.siteAddress || r.projectName || "—"],
+          ["Surveyor", r.surveyor || "—"],
+          ["Scan mode", scanLabel || "—"],
+          [
+            "Primary antenna",
+            r.equipment?.[0]?.antennaFrequencyMhz ? `${r.equipment[0].antennaFrequencyMhz} MHz` : "—",
+          ],
+          ["Completeness", `${quality.score}%`],
+        ],
+        footerNote: org.pdfFooter || "Utility Mapping · u-map.co.uk · Part of IS GROUP",
+      })
+    : `<div class="gpr-cover">
       <div class="gpr-cover-top">
         <div>
-          ${org.logo ? `<img src="${esc(org.logo)}" alt="" style="max-height:48px;margin-bottom:8px"/>` : ""}
+          ${umLogo || org.logo ? `<img src="${esc(umLogo || org.logo)}" alt="" style="max-height:48px;margin-bottom:8px"/>` : ""}
           <div style="font-weight:600">${esc(org.name)}</div>
         </div>
         <div>${renderMySafeOpsMarkSvg(24)}</div>
@@ -523,18 +572,46 @@ export function buildGprReportHtml(report, extras = {}) {
   pushSection("Report sign-off", signOffBlock(r.signOff, r.surveyor, r.surveyDate), "signoff");
 
   const tocHtml = gprTableOfContents(toc);
-  const runningHeader = `<div class="gpr-running-header"><span>${esc(r.ref || "")}</span><span>${esc(r.title || "GPR Report")}</span></div>`;
+  const umDocControl = umTheme
+    ? renderUtilityMappingDocControlPage({
+        client: r.client || r.projectName || "",
+        title: r.title || "GPR report",
+        reportRef: r.ref || "",
+        logoSrc: umLogo,
+        authors: [
+          {
+            name: r.surveyor || r.signOff?.preparedBy || "—",
+            title: "GPR Surveyor",
+            date: r.surveyDate ? formatOrgDate(r.surveyDate) : "",
+          },
+        ],
+        checkedBy: {
+          name: r.signOff?.checkedBy || "—",
+          title: "Technical Manager",
+          date: r.surveyDate ? formatOrgDate(r.surveyDate) : "",
+        },
+      })
+    : "";
+  const runningHeader = umTheme
+    ? renderUtilityMappingPageHeader(umLogo, r.ref || "")
+    : `<div class="gpr-running-header"><span>${esc(r.ref || "")}</span><span>${esc(r.title || "GPR Report")}</span></div>`;
+  const umFooter = umTheme ? renderUtilityMappingPageFooter(umLogo) : "";
 
   const body = [
     coverHtml,
-    tocHtml,
+    umDocControl,
+    umTheme && tocHtml
+      ? `<div class="um-toc-page">${renderUtilityMappingPageHeader(umLogo, r.ref || "")}${renderUtilityMappingComplianceRibbon()}${tocHtml}</div>`
+      : tocHtml,
     runningHeader,
+    umTheme ? renderUtilityMappingComplianceRibbon() : "",
     ...sections,
     `<div class="gpr-footer-note">
       GPR interpretations are geophysical indications only. BGS geology via Open Government Licence (1:625k generalised).
       ${r.smartFillAt ? `Smart fill: ${formatOrgDateTime(r.smartFillAt)}.` : ""}
       Generated by MySafeOps.
     </div>`,
+    umFooter,
   ].join("");
 
   // Draft/final watermark and running footer — same visual signalling as permits/RAMS,

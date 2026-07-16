@@ -9,6 +9,7 @@ import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
 import { MIN_PASSWORD_LENGTH_RESET } from "../config/authPolicy";
 import { getSupportEmail } from "../config/supportContact";
+import { clearPasswordRecoveryPending } from "../lib/passwordRecovery";
 
 const ss = ms;
 const teal = "#0d9488";
@@ -47,6 +48,7 @@ export default function ResetPasswordPage() {
       trackAuthEvent("password_reset_success", { hasUser: Boolean(user) });
       setPassword("");
       setConfirmPassword("");
+      clearPasswordRecoveryPending();
       // End this recovery session so the new password must be used at sign-in.
       try {
         await client.auth.signOut({ scope: "local" });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { isPasswordRecoveryPending } from "../lib/passwordRecovery";
 import { getSupportEmail } from "../config/supportContact";
 import { scheduleIdleLoginPrefetch } from "../utils/routePrefetch";
 import "../styles/landing.css";
@@ -231,6 +232,11 @@ export default function LandingPage({ marketId = "uk" }) {
     const q = params.toString();
     window.location.assign(`/login${q ? `?${q}` : ""}`);
   };
+
+  // Recovery links often fall back to Site URL (`/`). Do not send those sessions into /app.
+  if (cloud && ready && user && isPasswordRecoveryPending()) {
+    return <Navigate to="/reset-password" replace />;
+  }
 
   if (cloud && ready && user) {
     return <Navigate to="/app?view=dashboard" replace />;

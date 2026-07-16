@@ -23,6 +23,7 @@ export const SEED_MODULES_BY_PACK = {
     "loto",
     "high-care-access",
   ],
+  utilityMapping: ["inspections", "daily-briefing", "geo-photos"],
   facilitiesMaintenance: ["inspections", "electrical-pat", "plant", "daily-briefing"],
   demolitionStripout: ["excavation", "temp-works", "gate", "asbestos", "daily-briefing"],
   civilEarthworks: ["excavation", "temp-works", "daily-briefing", "coshh", "toolbox-reg"],
@@ -32,13 +33,15 @@ export const SEED_MODULES_BY_PACK = {
 
 /** @param {string} packId */
 export function seedRegistersForIndustryPack(packId) {
-  const seedKey = resolveProfileBehaviorPackId(packId);
+  const seedKey =
+    SEED_MODULES_BY_PACK[packId] ? packId : resolveProfileBehaviorPackId(packId);
   const moduleIds = SEED_MODULES_BY_PACK[seedKey] || SEED_MODULES_BY_PACK.generalContractor;
   return seedEmptyRegisters(moduleIds);
 }
 
 /** @param {string} packId */
 export function getSeedModulesPreviewForPack(packId) {
-  const seedKey = resolveProfileBehaviorPackId(packId);
+  const seedKey =
+    SEED_MODULES_BY_PACK[packId] ? packId : resolveProfileBehaviorPackId(packId);
   return SEED_MODULES_BY_PACK[seedKey] || SEED_MODULES_BY_PACK.generalContractor;
 }

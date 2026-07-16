@@ -9,6 +9,11 @@ import {
   getFessGroupWorkspacePack,
   isFessOrgForWorkspaceList,
 } from "./fessWorkspaceProfile";
+import {
+  UTILITY_MAPPING_PACK_ID,
+  getUtilityMappingWorkspacePack,
+  isUtilityMappingOrgForWorkspaceList,
+} from "./utilityMappingWorkspaceProfile";
 import { getOrgId } from "./orgId";
 import { MORE_TABS } from "../navigation/appModules";
 import { isCustomWorkspacePackId } from "./customWorkspaceProfilesCloud";
@@ -99,17 +104,31 @@ export function resolveWorkspacePack(packKey) {
 /** Built-in + this org's custom profiles only (never cross-org). */
 export function listWorkspaceProfilesForOrg() {
   const builtIn = Object.entries(INDUSTRY_PACKS).map(([id, pack]) => ({ id, ...pack, custom: false }));
+  const settings = loadOrgSettingsRaw();
+  const orgId = getOrgId();
   const fess =
-    isFessOrgForWorkspaceList(getOrgId(), loadOrgSettingsRaw()?.name) ?
+    isFessOrgForWorkspaceList(orgId, settings?.name) ?
       [{ id: FESS_GROUP_PACK_ID, ...getFessGroupWorkspacePack(), custom: false, orgExclusive: true }]
     : [];
+  const utilityMapping =
+    isUtilityMappingOrgForWorkspaceList(orgId, settings) ?
+      [
+        {
+          id: UTILITY_MAPPING_PACK_ID,
+          ...getUtilityMappingWorkspacePack(),
+          custom: false,
+          orgExclusive: true,
+        },
+      ]
+    : [];
   const custom = loadCustomWorkspaceProfiles().map((p) => ({ id: p.id, ...p }));
-  return [...builtIn, ...fess, ...custom];
+  return [...builtIn, ...fess, ...utilityMapping, ...custom];
 }
 
 /** Effective pack id for seeds, playbooks and readiness (custom → basedOn or survey). */
 export function resolveProfileBehaviorPackId(packId) {
   if (packId === FESS_GROUP_PACK_ID) return FESS_GROUP_PACK_ID;
+  if (packId === UTILITY_MAPPING_PACK_ID) return "surveyingGeodesy";
   if (!isCustomWorkspacePackId(packId)) return packId;
   const custom = getCustomWorkspaceProfile(packId);
   if (!custom) return "generalContractor";

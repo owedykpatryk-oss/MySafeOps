@@ -24,6 +24,7 @@ import {
   buildGprSurveyLineComparison,
   importChainageFromSurveyCad,
 } from "./gprLineLengthSummary.js";
+import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
 
 const GEOLOGY_PROXY = "/api/geology";
 
@@ -265,13 +266,15 @@ export async function runGprSmartFill(report, project) {
 
 export function prefillGprFromProject(report, project) {
   if (!project) return report;
-  return {
+  const next = {
     ...report,
     projectId: project.id || report.projectId,
     projectName: project.name || report.projectName,
     siteAddress: project.address || project.postcode || report.siteAddress,
+    client: project.client || project.site || report.client,
     title: report.title || `GPR report — ${project.name || report.ref || "site"}`,
   };
+  return applyUtilityMappingProjectJobToDoc(next, project, "GPR");
 }
 
 function normalizeGprReportLocal(raw) {

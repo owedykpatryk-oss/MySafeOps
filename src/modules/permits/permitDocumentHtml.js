@@ -10,6 +10,14 @@ import {
   renderPrintDocFooter,
   buildDocReference,
 } from "../../utils/pdfBranding.js";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg.js";
+import {
+  renderUtilityMappingHeroCover,
+  renderUtilityMappingDocControlPage,
+  utilityMappingCoverSystemCss,
+  resolveUtilityMappingLogoSrc,
+} from "../../utils/utilityMappingCovers.js";
+import { utilityMappingBodyPrintCss } from "../../utils/utilityMappingPrintTheme.js";
 import { buildPermitStatusDeepLink, renderDigGuidancePrintHtml } from "./permitDigGuidance";
 import { renderGuidancePrintHtml } from "./permitGuidance/registry";
 import { formatOrgDateTime } from "../../utils/orgLocale.js";
@@ -59,10 +67,50 @@ function renderPermitCoverPage({
 }) {
   const st = permitStatusVisual(permit.status);
   const pct = checklistTotal ? Math.round((checkedCount / checklistTotal) * 100) : 0;
+  const logoSrc = resolveUtilityMappingLogoSrc(org) || safeImageSrc(org.logo) || "";
+
+  if (isUtilityMappingOrg()) {
+    return `${renderUtilityMappingHeroCover({
+      title: def.label || "Permit to work",
+      subtitle: permit.description || "Permit to dig / work",
+      badge: st.label,
+      methodBadge: "PTW",
+      kitChips: ["Permit to dig", "HSG47", "Safe dig"],
+      orgName: org.name || "Utility Mapping",
+      logoSrc,
+      meta: [
+        ["Location", permit.location || "—"],
+        ["Issued to", permit.issuedTo || "—"],
+        ["Valid from", fmtDateTime(permit.startDateTime)],
+        ["Expires", fmtDateTime(endIso)],
+        ["Permit id", permit.id || "—"],
+        ["Checklist", `${checkedCount}/${checklistTotal} · ${pct}%`],
+      ],
+      footerNote: org.pdfFooter || "Utility Mapping · u-map.co.uk · Part of IS GROUP",
+    })}${renderUtilityMappingDocControlPage({
+      client: permit.client || permit.issuedTo || "",
+      title: def.label || "Permit to work",
+      reportRef: permit.id || "",
+      logoSrc,
+      authors: [
+        {
+          name: permit.issuedBy || permit.issuerName || "—",
+          title: "Issuer",
+          date: fmtDateTime(permit.startDateTime),
+        },
+      ],
+      checkedBy: {
+        name: permit.approvedBy || "—",
+        title: "Authoriser",
+        date: "",
+      },
+    })}${qrHtml || ""}`;
+  }
+
   return `<div class="ptw-cover" style="page-break-after:always;min-height:240mm;display:flex;flex-direction:column;padding:4px 0 16px;margin-bottom:8px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:3px solid ${primaryColor};padding-bottom:14px;margin-bottom:18px">
       <div style="min-width:0">
-        ${org.logo ? `<img src="${escapeAttr(safeImageSrc(org.logo) || "")}" alt="" style="max-height:52px;margin-bottom:10px"/>` : ""}
+        ${logoSrc ? `<img src="${escapeAttr(logoSrc)}" alt="" style="max-height:52px;margin-bottom:10px"/>` : ""}
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Permit to work</div>
         <div style="font-size:20pt;font-weight:800;color:${primaryColor};line-height:1.15;margin-top:6px">${escapeHtml(def.label)}</div>
         <div style="font-size:11px;color:#64748b;margin-top:8px">${escapeHtml(org.name || "MySafeOps")}</div>
@@ -253,6 +301,7 @@ export function renderPermitDocumentHtml(permit, options = {}) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>PTW — ${escapeHtml(def.label)}</title>
   <style>
     ${printDocBaseCss(org)}
+    ${isUtilityMappingOrg() ? `${utilityMappingCoverSystemCss()}${utilityMappingBodyPrintCss()}` : ""}
     body{font-size:12px;line-height:1.45;padding:16px 16px 32px;position:relative}
     .watermark{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;font-size:84px;font-weight:800;letter-spacing:0.14em;color:rgba(100,116,139,0.09);transform:rotate(-28deg);z-index:0;text-transform:uppercase}
     .doc-content{position:relative;z-index:1;padding-bottom:12px}

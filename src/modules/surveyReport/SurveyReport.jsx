@@ -36,6 +36,29 @@ import {
   EQUIPMENT_CALIBRATION_STATUS,
   SURVEY_PHOTO_CATEGORIES,
 } from "./surveyReportConstants";
+import { listSurveyTypesForOrg } from "../../utils/utilityMappingFocus";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
+import { listUtilityMappingClients, getUtilityMappingClient, utilityMappingClientLogoUrl } from "../../utils/utilityMappingClients";
+import { formatUtilityMappingRef, utilityMappingJobYearYY, parseUtilityMappingRef } from "../../utils/utilityMappingDocRefs";
+import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
+import {
+  computeUtilityMappingDigRisk,
+  buildUtilityMappingDrawingSheets,
+} from "../../utils/utilityMappingPremiumPages";
+import {
+  downloadUtilityMappingClientPack,
+  buildUtilityMappingClientMailto,
+} from "../../utils/utilityMappingClientPack";
+import { getOrgSettings } from "../../utils/orgSettingsStorage";
+
+function umFieldsFromRef(ref) {
+  const p = parseUtilityMappingRef(ref);
+  if (!p) return {};
+  return {
+    umJobNumber: p.jobNumber,
+    umClientCode: p.clientCode === "XXX" ? "" : p.clientCode,
+  };
+}
 import { getQaChecklistGroupsForSurveyType, getQaChecklistProgress, getQaGroupProgress, patchQaGroup, mergeStandardsCited, applyMobilisationQaPrefill, suggestStandardsCitedForSurveyType, SURVEY_PUBLIC_STANDARDS } from "./surveyQaPack";
 import {
   buildLimitationsFromKeys,
@@ -194,6 +217,7 @@ function openSurveyReportFromNav(t, { projs, existing, geo, rams, setModal }) {
     }
   }
   const ref = nextSurveyRef(existing);
+  const umFields = umFieldsFromRef(ref);
   if (t?.projectId && t?.action === "editWithGeoPhotos") {
     const p = projs.find((x) => x.id === t.projectId);
     const report = existing.find((r) => r.projectId === t.projectId);
@@ -209,6 +233,7 @@ function openSurveyReportFromNav(t, { projs, existing, geo, rams, setModal }) {
       const ramsDoc = pickRamsForProject(rams, p.id);
       const base = blankSurveyReport({
         ref,
+        ...umFields,
         title: `Survey report — ${p.name || ref}`,
         projectId: p.id,
       });
@@ -233,6 +258,7 @@ function openSurveyReportFromNav(t, { projs, existing, geo, rams, setModal }) {
       const ramsDoc = pickRamsForProject(rams, p.id);
       const base = blankSurveyReport({
         ref,
+        ...umFields,
         title: `Survey report — ${p.name || ref}`,
         projectId: p.id,
       });
@@ -253,6 +279,7 @@ function openSurveyReportFromNav(t, { projs, existing, geo, rams, setModal }) {
     }
     const base = blankSurveyReport({
       ref,
+      ...umFields,
       title: pid ? `Survey report — ${projs.find((x) => x.id === pid)?.name || ref}` : `Survey report ${ref}`,
       projectId: pid || "",
     });
@@ -905,14 +932,18 @@ function ReportEditor({
 
   const onProjectChange = (projectId) => {
     const p = projects.find((x) => x.id === projectId);
-    setForm((f) => ({
-      ...f,
-      projectId,
-      projectName: p?.name || "",
-      client: p?.client || f.client,
-      siteAddress: p?.address || f.siteAddress,
-      updatedAt: new Date().toISOString(),
-    }));
+    setForm((f) => {
+      let next = {
+        ...f,
+        projectId,
+        projectName: p?.name || "",
+        client: p?.client || p?.site || f.client,
+        siteAddress: p?.address || f.siteAddress,
+        updatedAt: new Date().toISOString(),
+      };
+      if (p) next = applyUtilityMappingProjectJobToDoc(next, p, "SR");
+      return next;
+    });
   };
 
   const syncScopeFromRams = () => {
@@ -1396,8 +1427,121 @@ function ReportEditor({
               </div>
               <div>
                 <label style={ss.lbl}>Report ref</label>
-                <input style={ss.inp} value={form.ref} onChange={(e) => set("ref", e.target.value)} />
+                <input style={ss.inp} value={form.ref} onChange={(e) => set("ref", e.target.value)} placeholder={isUtilityMappingOrg() ? "UM26-1234-WSP" : ""} />
               </div>
+              {isUtilityMappingOrg() ? (
+                <>
+                  <div>
+                    <label style={ss.lbl}>Job number</label>
+                    <input
+                      style={ss.inp}
+                      value={form.umJobNumber || ""}
+                      onChange={(e) => {
+                        const umJobNumber = e.target.value.replace(/\D/g, "");
+                        setForm((f) => {
+                          const code = f.umClientCode || "";
+                          const next = { ...f, umJobNumber, updatedAt: new Date().toISOString() };
+                          if (umJobNumber && code) {
+                            next.ref = formatUtilityMappingRef({
+                              yearYY: utilityMappingJobYearYY(f.surveyDate),
+                              jobNumber: umJobNumber,
+                              clientCode: code,
+                            });
+                          }
+                          return next;
+                        });
+                      }}
+                      placeholder="1234"
+                    />
+                  </div>
+                  <div>
+                    <label style={ss.lbl}>Client code</label>
+                    <select
+                      style={ss.inp}
+                      value={form.umClientCode || ""}
+                      onChange={(e) => {
+                        const umClientCode = e.target.value;
+                        const client = getUtilityMappingClient(umClientCode);
+                        setForm((f) => {
+                          const job = f.umJobNumber || "";
+                          const next = {
+                            ...f,
+                            umClientCode,
+                            client: client?.name || f.client,
+                            updatedAt: new Date().toISOString(),
+                          };
+                          if (job && umClientCode) {
+                            next.ref = formatUtilityMappingRef({
+                              yearYY: utilityMappingJobYearYY(f.surveyDate),
+                              jobNumber: job,
+                              clientCode: umClientCode,
+                            });
+                          }
+                          return next;
+                        });
+                      }}
+                    >
+                      <option value="">— Select client —</option>
+                      {listUtilityMappingClients().map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} — {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {form.umClientCode && utilityMappingClientLogoUrl(form.umClientCode) ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <img
+                        src={utilityMappingClientLogoUrl(form.umClientCode)}
+                        alt={getUtilityMappingClient(form.umClientCode)?.name || form.umClientCode}
+                        style={{
+                          maxHeight: 44,
+                          maxWidth: 120,
+                          objectFit: "contain",
+                          background: "#fff",
+                          border: "1px solid var(--color-border-secondary,#e2e8f0)",
+                          borderRadius: 6,
+                          padding: "4px 8px",
+                        }}
+                      />
+                      <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                        Client logo · {form.umClientCode}
+                      </span>
+                    </div>
+                  ) : null}
+                  {(() => {
+                    const dig = computeUtilityMappingDigRisk(form);
+                    if (!dig.label) return null;
+                    const bandColor =
+                      dig.band === "high" ? "#b91c1c" : dig.band === "medium" ? "#b45309" : "#0f766e";
+                    return (
+                      <div
+                        style={{
+                          gridColumn: "1 / -1",
+                          border: `1px solid ${bandColor}33`,
+                          background: `${bandColor}0d`,
+                          borderRadius: 8,
+                          padding: "10px 12px",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                          <strong style={{ color: bandColor, fontSize: 13 }}>
+                            Dig readiness · {dig.score}/100 · {dig.label}
+                          </strong>
+                          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Live from utilities / QL / trial holes</span>
+                        </div>
+                        {dig.reasons?.length ? (
+                          <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--color-text-secondary)" }}>
+                            {dig.reasons.slice(0, 4).map((r) => (
+                              <li key={r}>{r}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+                </>
+              ) : null}
               <div>
                 <label style={ss.lbl}>Survey date *</label>
                 <input type="date" style={ss.inp} value={form.surveyDate} onChange={(e) => set("surveyDate", e.target.value)} />
@@ -1484,7 +1628,7 @@ function ReportEditor({
                 <label style={ss.lbl}>Survey type *</label>
                 <select style={ss.inp} value={form.surveyType} onChange={(e) => onSurveyTypeChange(e.target.value)}>
                   <option value="">— Select —</option>
-                  {SURVEY_TYPES.map((t) => (
+                  {listSurveyTypesForOrg(SURVEY_TYPES).map((t) => (
                     <option key={t.key} value={t.key}>
                       {t.label}
                     </option>
@@ -1755,6 +1899,39 @@ function ReportEditor({
                 { key: "status", label: "Status", placeholder: "Issued with report" },
               ]}
             />
+            {isUtilityMappingOrg() ? (
+              <>
+                <div style={{ ...ss.sectionHead, marginTop: 16 }}>Drawing register</div>
+                <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 8px" }}>
+                  CAD sheets for the issued pack. Leave empty to auto-build from the report ref on print.
+                </p>
+                <RowTableEditor
+                  rows={form.drawingSheets || []}
+                  onChange={(drawingSheets) => setForm((f) => ({ ...f, drawingSheets, updatedAt: new Date().toISOString() }))}
+                  emptyLabel="No custom sheets — print will use the default UM register."
+                  addLabel="+ Add sheet"
+                  columns={[
+                    { key: "sheet", label: "Sheet", placeholder: "UM26-1234-WSP-01" },
+                    { key: "title", label: "Title", placeholder: "Utility survey — overall plan" },
+                    { key: "scale", label: "Scale", placeholder: "As noted" },
+                    { key: "status", label: "Status", placeholder: "Rev A" },
+                  ]}
+                />
+                <button
+                  type="button"
+                  style={{ ...ss.btn, marginTop: 8 }}
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      drawingSheets: buildUtilityMappingDrawingSheets({ ...f, drawingSheets: [] }),
+                      updatedAt: new Date().toISOString(),
+                    }))
+                  }
+                >
+                  Seed default sheets
+                </button>
+              </>
+            ) : null}
           </>
         )}
 
@@ -2618,6 +2795,38 @@ function ReportEditor({
           <button type="button" style={ss.btn} disabled={pdfBusy} onClick={handleDownloadPdf}>
             {pdfBusy ? "PDF…" : "Download PDF"}
           </button>
+          {isUtilityMappingOrg() ? (
+            <>
+              <button
+                type="button"
+                style={ss.btn}
+                onClick={() => {
+                  const org = getOrgSettings();
+                  const shareUrl = form.ref
+                    ? `${String(org.website || "https://u-map.co.uk/").replace(/\/$/, "")}?ref=${encodeURIComponent(form.ref)}`
+                    : "";
+                  if (downloadUtilityMappingClientPack(form, { org, shareUrl })) {
+                    pushToast({ type: "success", title: "Client pack", message: "Executive HTML pack downloaded." });
+                  } else {
+                    pushToast({ type: "warn", title: "Client pack", message: "Could not build client pack." });
+                  }
+                }}
+              >
+                Client pack
+              </button>
+              <button
+                type="button"
+                style={ss.btn}
+                onClick={() => {
+                  const href = buildUtilityMappingClientMailto(form);
+                  if (href) window.location.href = href;
+                  else pushToast({ type: "warn", title: "Email", message: "Client email draft unavailable." });
+                }}
+              >
+                Email client
+              </button>
+            </>
+          ) : null}
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
@@ -2883,6 +3092,23 @@ export default function SurveyReport() {
     pushAudit({ action: "survey_report_html", entity: "survey_report", detail: report.ref || report.id });
   }, [projectById, ramsById]);
 
+  const exportClientPackForReport = useCallback(
+    (report) => {
+      if (!isUtilityMappingOrg()) return;
+      const org = getOrgSettings();
+      const shareUrl = report.ref
+        ? `${String(org.website || "https://u-map.co.uk/").replace(/\/$/, "")}?ref=${encodeURIComponent(report.ref)}`
+        : "";
+      if (downloadUtilityMappingClientPack(report, { org, shareUrl })) {
+        pushToast({ type: "success", title: "Client pack", message: "Executive HTML pack downloaded." });
+        pushAudit({ action: "survey_client_pack", entity: "survey_report", detail: report.ref || report.id });
+      } else {
+        pushToast({ type: "warn", title: "Client pack", message: "Could not build client pack." });
+      }
+    },
+    [pushToast]
+  );
+
   const missingProjectCount = useMemo(
     () => projectsMissingReports(projects, reports).length,
     [projects, reports]
@@ -3062,10 +3288,12 @@ export default function SurveyReport() {
 
   const createNew = () => {
     const ref = nextSurveyRef(reports);
+    const umFields = umFieldsFromRef(ref);
     const pid = defaultProjectIdForCreate(projects);
     const p = projects.find((x) => x.id === pid);
     const base = blankSurveyReport({
       ref,
+      ...umFields,
       title: p ? `Survey report — ${p.name || ref}` : `Survey report ${ref}`,
       projectId: pid || "",
     });
@@ -3308,6 +3536,7 @@ export default function SurveyReport() {
                   onPack={exportPackForReport}
                   onDuplicate={duplicateReport}
                   onHtmlExport={exportHtmlForReport}
+                  onClientPack={isUtilityMappingOrg() ? exportClientPackForReport : null}
                   onGeoJsonExport={hasGeo ? handleGeoJsonExport : null}
                   onKmlExport={hasGeo ? handleKmlExport : null}
                   onKmzExport={hasGeo ? handleKmzExport : null}

@@ -3,6 +3,34 @@ import { openPrintWindow, safeImageSrc, escapeAttr, sanitizePrintPreviewHtml, wr
 import { downloadBlob } from "../../utils/downloadBlob.js";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import {
+  isUtilityMappingPrintTheme,
+  utilityMappingSurveyCoverCss,
+  utilityMappingCoverKitChips,
+} from "../../utils/utilityMappingPrintTheme.js";
+import {
+  renderUtilityMappingHeroCover,
+  renderUtilityMappingDocControlPage,
+  utilityMappingCoverSystemCss,
+  utilityMappingPas128CoverBadges,
+  renderUtilityMappingPageHeader,
+  renderUtilityMappingPageFooter,
+  renderUtilityMappingComplianceRibbon,
+  resolveUtilityMappingLogoSrc,
+} from "../../utils/utilityMappingCovers.js";
+import {
+  renderUtilityMappingExecutivePage,
+  renderUtilityMappingDigReadinessPage,
+  renderUtilityMappingDeliverablesPage,
+  renderUtilityMappingDrawingsPage,
+  renderUtilityMappingApprovalBlock,
+  renderUtilityMappingAppendixDivider,
+  utilityMappingPremiumPagesCss,
+} from "../../utils/utilityMappingPremiumPages.js";
+import { utilityMappingClientLogoUrl, getUtilityMappingClient } from "../../utils/utilityMappingClients.js";
+import { parseUtilityMappingRef } from "../../utils/utilityMappingDocRefs.js";
+import { buildUtilityMappingQrSrc } from "../../utils/utilityMappingClientPack.js";
+import { UTILITY_MAPPING_BRAND } from "../../utils/utilityMappingBranding.js";
+import {
   buildAccessLimitationsText,
   buildControlAccuracyNarrative,
   buildEquipmentCalibrationNarrative,
@@ -195,18 +223,64 @@ function changesSinceBlock(changes) {
 
 function coverPage(report, org, primary, accent, extras) {
   const dc = report.documentControl || {};
+  const logoSrc = resolveUtilityMappingLogoSrc(org) || imgSrcAttr(org.logo);
+  const issueDate = dc.issueDate || report.surveyDate;
+  const quality = surveyReportQuality(report);
+
+  if (isUtilityMappingPrintTheme()) {
+    const methodLabel = report.pas128Method
+      ? `PAS128 ${report.pas128Method}`
+      : report.pas128Ql
+        ? `PAS 128 ${pas128Short(report.pas128Ql)}`
+        : "Utility Survey Report";
+    const { methodBadge, qlBadge } = utilityMappingPas128CoverBadges(
+      report.pas128Method,
+      report.pas128Ql ? pas128Short(report.pas128Ql) : ""
+    );
+    const clientCode =
+      report.umClientCode || parseUtilityMappingRef(report.ref)?.clientCode || "";
+    const clientLogoSrc = utilityMappingClientLogoUrl(clientCode);
+    const shareUrl = report.ref
+      ? `${String(org.website || UTILITY_MAPPING_BRAND.website || "https://u-map.co.uk/").replace(/\/$/, "")}?ref=${encodeURIComponent(report.ref)}`
+      : "";
+    return renderUtilityMappingHeroCover({
+      title: report.title || "PAS128 Utility Survey Report",
+      subtitle: methodLabel,
+      badge: report.status === "final" ? "Final report" : "Draft",
+      methodBadge,
+      qlBadge,
+      kitChips: utilityMappingCoverKitChips(report),
+      clientCode,
+      clientName: report.client || getUtilityMappingClient(clientCode)?.name || "",
+      clientLogoSrc,
+      orgName: org.name || "Utility Mapping",
+      logoSrc,
+      qrSrc: shareUrl ? buildUtilityMappingQrSrc(shareUrl, 140) : "",
+      qrLabel: report.ref || "",
+      meta: [
+        ["Report ref", report.ref || "—"],
+        ["Client", report.client || getUtilityMappingClient(clientCode)?.name || "—"],
+        ["Project", report.projectName || "—"],
+        ["Site", report.siteAddress || "—"],
+        ["Survey date", report.surveyDate ? new Date(report.surveyDate).toLocaleDateString("en-GB") : "—"],
+        ["Issue date", issueDate ? new Date(issueDate).toLocaleDateString("en-GB") : "—"],
+        ["Surveyor", report.surveyor || "—"],
+        ["Completeness", `${quality.score}%`],
+      ],
+      footerNote: org.pdfFooter || "Utility Mapping · u-map.co.uk · Part of IS GROUP",
+    });
+  }
+
   const coverPhoto = imgSrcAttr(
     extras.coverPhotoUrl || report.photos?.[0]?.dataUrl || report.photos?.[0]?.url || ""
   );
   const mapUrl = staticSiteMapUrl(extras.projectLat, extras.projectLng);
-  const issueDate = dc.issueDate || report.surveyDate;
   const qlBadge = report.pas128Ql
     ? `<span class="sr-ql-badge">PAS 128 ${esc(pas128Short(report.pas128Ql))}</span>`
     : "";
   const methodBadge = report.pas128Method
     ? `<span class="sr-ql-badge sr-ql-badge--method">${esc(report.pas128Method)}</span>`
     : "";
-  const quality = surveyReportQuality(report);
   const qualityColour = quality.score >= 80 ? primary : quality.score >= 50 ? "#f59e0b" : "#ea580c";
   const pas128Summary = pas128SummaryBlock(report, primary);
   const undertakerStrip = undertakerCoverStrip(report);
@@ -214,7 +288,7 @@ function coverPage(report, org, primary, accent, extras) {
   return `<div class="sr-cover">
     <div class="sr-cover-top">
       <div class="sr-cover-top-left">
-        ${org.logo ? `<img src="${imgSrcAttr(org.logo)}" alt="" class="sr-cover-logo"/>` : ""}
+        ${logoSrc ? `<img src="${imgSrcAttr(logoSrc)}" alt="" class="sr-cover-logo"/>` : ""}
         <div class="sr-cover-org">
           <div class="sr-cover-org-name">${esc(org.name)}</div>
           ${org.pdfHeader ? `<div class="sr-cover-org-sub">${esc(org.pdfHeader)}</div>` : org.address ? `<div class="sr-cover-org-sub">${esc(org.address)}</div>` : ""}
@@ -665,6 +739,9 @@ function qaChecklistBlock(qa, surveyType = "") {
 }
 
 function signaturesBlock(report) {
+  if (isUtilityMappingPrintTheme()) {
+    return renderUtilityMappingApprovalBlock(report);
+  }
   const sig = report.signatures || {};
   const surveyor = sig.surveyorName || report.surveyor || report.documentControl?.preparedBy || "";
   return `<div class="sr-signatures">
@@ -749,8 +826,15 @@ function keyFindingsCallout(text) {
  */
 export function buildSurveyReportHtml(report, extras = {}) {
   const org = getOrgSettings();
-  const primary = org.primaryColor || "#0d9488";
-  const accent = org.accentColor || "#0f766e";
+  const umTheme = isUtilityMappingPrintTheme();
+  const primary =
+    umTheme && (!org.primaryColor || org.primaryColor === "#0d9488")
+      ? "#0B1D3A"
+      : org.primaryColor || "#0d9488";
+  const accent =
+    umTheme && (!org.accentColor || org.accentColor === "#f97316" || org.accentColor === "#0f766e")
+      ? "#00B4E4"
+      : org.accentColor || "#0f766e";
   const now = new Date();
   const r = normalizeSurveyReport(report);
 
@@ -797,7 +881,10 @@ export function buildSurveyReportHtml(report, extras = {}) {
     if (includeInToc) toc.push({ num, title, id });
   };
 
-  pushSection("Document control", "doc-control", documentControlBlock(r));
+  // UM uses branded page-2 document control after the hero cover — skip duplicate body section.
+  if (!umTheme) {
+    pushSection("Document control", "doc-control", documentControlBlock(r));
+  }
 
   if ((r.changesSincePrevious || []).length) {
     pushSection("Changes since previous issue", "changes", changesSinceBlock(r.changesSincePrevious));
@@ -990,6 +1077,16 @@ export function buildSurveyReportHtml(report, extras = {}) {
   }
 
   if (photoBundle.html) {
+    if (umTheme) {
+      sections.push(
+        renderUtilityMappingAppendixDivider({
+          letter: "A",
+          title: "Photo appendix",
+          subtitle: "Geo-photos and site evidence",
+          reportRef: r.ref || "",
+        })
+      );
+    }
     pushSection("Photo appendix", "photos", photoBundle.html);
   }
 
@@ -998,6 +1095,44 @@ export function buildSurveyReportHtml(report, extras = {}) {
 
   const cover = coverPage(r, org, primary, accent, extras);
   const tocHtml = toc.length ? tableOfContents(toc) : "";
+  const umLogo = resolveUtilityMappingLogoSrc(org);
+  const umDocControl =
+    umTheme
+      ? renderUtilityMappingDocControlPage({
+          client: r.client || "",
+          title: r.title || r.projectName || "",
+          reportRef: r.ref || "",
+          logoSrc: umLogo,
+          clientCode: r.umClientCode || parseUtilityMappingRef(r.ref)?.clientCode || "",
+          clientLogoSrc: utilityMappingClientLogoUrl(
+            r.umClientCode || parseUtilityMappingRef(r.ref)?.clientCode || ""
+          ),
+          authors: [
+            {
+              name: r.documentControl?.preparedBy || r.surveyor || "—",
+              title: "Utility Surveyor",
+              date: (r.documentControl?.issueDate || r.surveyDate)
+                ? new Date(r.documentControl?.issueDate || r.surveyDate).toLocaleDateString("en-GB")
+                : "",
+            },
+          ],
+          checkedBy: {
+            name: r.documentControl?.checkedBy || "—",
+            title: "Technical Manager",
+            date: r.documentControl?.issueDate
+              ? new Date(r.documentControl.issueDate).toLocaleDateString("en-GB")
+              : "",
+          },
+        })
+      : "";
+  const umExec = umTheme ? renderUtilityMappingExecutivePage(r, { logoSrc: umLogo }) : "";
+  const umDig = umTheme ? renderUtilityMappingDigReadinessPage(r, { logoSrc: umLogo }) : "";
+  const umDel = umTheme ? renderUtilityMappingDeliverablesPage(r, { logoSrc: umLogo }) : "";
+  const umDwg = umTheme ? renderUtilityMappingDrawingsPage(r, { logoSrc: umLogo }) : "";
+  const umTocBlock =
+    umTheme && tocHtml
+      ? `<div class="um-toc-page">${renderUtilityMappingPageHeader(umLogo, r.ref || "")}${renderUtilityMappingComplianceRibbon()}${tocHtml}</div>`
+      : tocHtml;
 
   const dc = r.documentControl || {};
   const footerRef = [r.ref, dc.revision ? `Rev ${dc.revision}` : ""].filter(Boolean).join(" · ");
@@ -1006,7 +1141,17 @@ export function buildSurveyReportHtml(report, extras = {}) {
   const draftNote = r.status !== "final" ? " <strong>Draft — not for construction use until marked final.</strong>" : "";
   // Same diagonal watermark convention as permits/RAMS/GPR so a printed survey
   // report can't be mistaken for final while still in draft.
-  const watermarkText = String(org.pdfWatermarkText || "").trim() || (r.status === "final" ? "FINAL" : "DRAFT");
+  const watermarkText = umTheme
+    ? r.status === "final"
+      ? `CONTROLLED · ${r.ref || "UM"}`
+      : `DRAFT · ${r.ref || "UM"}`
+    : String(org.pdfWatermarkText || "").trim() || (r.status === "final" ? "FINAL" : "DRAFT");
+  const umThemeCss = umTheme
+    ? `${utilityMappingCoverSystemCss()}${utilityMappingSurveyCoverCss(primary, accent)}${utilityMappingPremiumPagesCss(primary, accent)}`
+    : "";
+  const umHeader = umTheme ? renderUtilityMappingPageHeader(umLogo, r.ref || "") : "";
+  const umFooter = umTheme ? renderUtilityMappingPageFooter(umLogo) : "";
+  const umRibbon = umTheme ? renderUtilityMappingComplianceRibbon() : "";
 
   return `<!DOCTYPE html>
 <html lang="en-GB">
@@ -1489,27 +1634,39 @@ export function buildSurveyReportHtml(report, extras = {}) {
     }
     a { color: inherit; text-decoration: none; }
   }
+  ${umThemeCss}
 </style>
 </head>
 <body>
   <div class="sr-watermark">${esc(watermarkText)}</div>
   ${cover}
-  ${tocHtml}
-  <div class="sr-running-header"><span>${esc(r.ref || "")}${dc.revision ? ` · Rev ${esc(dc.revision)}` : ""}</span><span>${esc(r.title || "Survey Report")}</span></div>
+  ${umDocControl}
+  ${umExec}
+  ${umDig}
+  ${umDel}
+  ${umDwg}
+  ${umTocBlock}
+  ${umTheme ? "" : `<div class="sr-running-header"><span>${esc(r.ref || "")}${dc.revision ? ` · Rev ${esc(dc.revision)}` : ""}</span><span>${esc(r.title || "Survey Report")}</span></div>`}
   <div class="sr-body">
-    <div class="sr-header-mini">
+    ${umHeader}
+    ${umRibbon}
+    ${umTheme ? "" : `<div class="sr-header-mini">
       <span><strong>${esc(r.title || "Survey Report")}</strong></span>
       <span>${esc(footerRef)} · Generated ${now.toLocaleDateString("en-GB")}</span>
-    </div>
+    </div>`}
     ${sections.join("")}
     <div class="sr-disclaimer">
       ${esc(disclaimer)}${draftNote}
     </div>
   </div>
-  <div class="sr-print-footer">
+  ${
+    umTheme
+      ? umFooter
+      : `<div class="sr-print-footer">
     <span>${esc(org.pdfFooter || "Generated by MySafeOps")} · mysafeops.com${org.pdfComplianceLine ? ` · ${esc(org.pdfComplianceLine)}` : ""}</span>
     <span>${esc(footerRef)}</span>
-  </div>
+  </div>`
+  }
 </body>
 </html>`;
 }

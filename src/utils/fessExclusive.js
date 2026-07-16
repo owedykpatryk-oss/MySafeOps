@@ -48,7 +48,7 @@ export function isFessExclusivePlaybookId(playbookId) {
 export function filterFessExclusivePlaybooks(playbooks, orgId) {
   if (isFessOrg(orgId)) return Array.isArray(playbooks) ? playbooks : [];
   return (Array.isArray(playbooks) ? playbooks : []).filter(
-    (p) => !p?.orgExclusive && !isFessExclusivePlaybookId(p?.id)
+    (p) => !isFessExclusivePlaybookId(p?.id)
   );
 }
 

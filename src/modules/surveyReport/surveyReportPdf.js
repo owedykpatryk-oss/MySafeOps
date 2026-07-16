@@ -8,6 +8,8 @@ import { downloadBlob } from "../../utils/downloadBlob";
 import { buildSurveyReportHtml } from "./surveyReportPrintHtml";
 import { sanitizePrintPreviewHtml } from "../../utils/htmlEscape.js";
 import { normalizeSurveyReport } from "./surveyReportHelpers";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
+import { utilityMappingExportBaseName } from "../../utils/utilityMappingDocRefs";
 
 const A4_W_MM = 210;
 const A4_H_MM = 297;
@@ -48,6 +50,11 @@ function waitForImages(root) {
 
 function buildFileName(report) {
   const r = normalizeSurveyReport(report);
+  const umBase = isUtilityMappingOrg() ? utilityMappingExportBaseName(r, "PAS128") : "";
+  if (umBase) {
+    const rev = r.documentControl?.revision ? `-Rev${sanitizePdfFileSegment(r.documentControl.revision, 4)}` : "";
+    return `${sanitizePdfFileSegment(umBase, 48)}${rev}.pdf`.replace(/--+/g, "-");
+  }
   const org = getOrgSettings();
   const ref = sanitizePdfFileSegment(r.ref || r.id || "survey-report", 32);
   const rev = r.documentControl?.revision ? `-Rev${sanitizePdfFileSegment(r.documentControl.revision, 4)}` : "";

@@ -8,6 +8,16 @@ import { openPrintWindow, safeCssColor, safeImageSrc, escapeAttr, writePrintWind
 import { renderMySafeOpsMarkSvg } from "../../utils/pdfBranding.js";
 import { isFessOrg } from "../../utils/fessOrg.js";
 import { generateFessPrintHTML, buildFessRamsPrintBodyHTML } from "../../utils/fessRamsPrintHtml.js";
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg.js";
+import {
+  renderUtilityMappingHeroCover,
+  renderUtilityMappingDocControlPage,
+  utilityMappingCoverSystemCss,
+  renderUtilityMappingPageHeader,
+  renderUtilityMappingPageFooter,
+  resolveUtilityMappingLogoSrc,
+} from "../../utils/utilityMappingCovers.js";
+import { utilityMappingBodyPrintCss } from "../../utils/utilityMappingPrintTheme.js";
 import { getRamsPrintLabels } from "../../utils/ramsUiLabels.js";
 import { getOrgMarketId } from "../../utils/orgMarket.js";
 import { formatOrgDate, formatOrgDateTime } from "../../utils/orgLocale.js";
@@ -1195,7 +1205,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   const statusLabel = docStatus.replace(/_/g, " ").toUpperCase();
   const orgTheme = loadOrgPrintSettings();
   const orgName = orgTheme.orgName;
-  const logoSrc = safeImageSrc(orgTheme.org?.logo);
+  const logoSrc = resolveUtilityMappingLogoSrc(orgTheme.org) || safeImageSrc(orgTheme.org?.logo);
   const badgeColor = orgTheme.primaryColor;
   const badgeBg = `${orgTheme.primaryColor}1A`;
   const watermark =
@@ -1225,7 +1235,43 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   const coverMapUrl = staticSiteMapUrl(form.siteLat, form.siteLng);
   const accentColor = orgTheme.accentColor;
 
-  const coverPage = `<div class="cover-page">
+  const coverPage = isUtilityMappingOrg()
+    ? `${renderUtilityMappingHeroCover({
+        title: form.title || printLabels.defaultTitle,
+        subtitle: form.scope || printLabels.defaultScope,
+        badge: statusLabel,
+        methodBadge: "RAMS",
+        kitChips: ["PAS 128", "HSG47", "Safe dig", "EML"],
+        orgName,
+        logoSrc,
+        meta: [
+          ["Document no.", form.documentNo || "—"],
+          ["Issue date", fmtDate(form.issueDate)],
+          ["Location", form.location || "—"],
+          ["Project", projName || "—"],
+          ["Lead engineer", form.leadEngineer || "—"],
+          ["Revision", form.revision || "1A"],
+        ],
+        footerNote: orgTheme.org?.pdfFooter || "Utility Mapping · u-map.co.uk · Part of IS GROUP",
+      })}${renderUtilityMappingDocControlPage({
+        client: form.client || projName || "",
+        title: form.title || printLabels.defaultTitle,
+        reportRef: form.documentNo || "",
+        logoSrc,
+        authors: [
+          {
+            name: form.preparedBy || form.leadEngineer || "—",
+            title: "Author",
+            date: fmtDate(form.issueDate || form.date),
+          },
+        ],
+        checkedBy: {
+          name: form.approvedBy || "—",
+          title: "Checked / approved",
+          date: fmtDate(form.issueDate || form.date),
+        },
+      })}`
+    : `<div class="cover-page">
     <div style="height:4px;border-radius:999px;background:linear-gradient(90deg, ${escHtml(badgeColor)}, ${escHtml(accentColor)});margin-bottom:16px"></div>
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
       <div style="flex:1;min-width:240px">
@@ -1334,7 +1380,10 @@ export function generatePrintHTML(form, rows, operatives, projectMap, printFlags
   const inner = buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll);
   const orgTheme = loadOrgPrintSettings();
   const footer = `${form.documentNo || printLabels.docShort} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
-  return wrapRamsPrintDocument(form.title || printLabels.docShort, inner, "", footer, orgTheme);
+  const umExtraCss = isUtilityMappingOrg()
+    ? `${utilityMappingCoverSystemCss()}${utilityMappingBodyPrintCss()}`
+    : "";
+  return wrapRamsPrintDocument(form.title || printLabels.docShort, inner, umExtraCss, footer, orgTheme);
 }
 
 /** Single HTML document: RAMS plus permit pages (same project). Uses permit module styling. */

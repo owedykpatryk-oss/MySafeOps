@@ -19,10 +19,19 @@ describe("orgSettingsStorage", () => {
     expect(getOrgSettings().primaryColor).toBe("#111111");
   });
 
-  it("migrates legacy global key into org scope", () => {
+  it("migrates legacy global key into org scope once, then clears it", () => {
     localStorage.setItem("mysafeops_org_settings", JSON.stringify({ name: "Legacy Co" }));
     expect(loadOrgSettingsRaw().name).toBe("Legacy Co");
     expect(localStorage.getItem("mysafeops_org_settings_test-org")).toBeTruthy();
+    expect(localStorage.getItem("mysafeops_org_settings")).toBeNull();
+  });
+
+  it("does not re-apply legacy branding to a second empty org", () => {
+    localStorage.setItem("mysafeops_org_settings", JSON.stringify({ name: "Landorahub" }));
+    expect(loadOrgSettingsRaw().name).toBe("Landorahub");
+    localStorage.setItem("mysafeops_orgId", "other-org");
+    expect(loadOrgSettingsRaw().name).toBeUndefined();
+    expect(localStorage.getItem("mysafeops_org_settings_other-org")).toBeNull();
   });
 
   it("pickCloudBrandingPayload omits empty customFields", () => {

@@ -4,8 +4,25 @@ import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
 import { syncSentryUser } from "../utils/sentryClient.js";
 import { ensureUserOrgContext } from "../utils/orgMembership";
 import { initPortalCloudAutoSync } from "../utils/clientPortalAutoSync";
+import {
+  isPasswordRecoveryPending,
+  markPasswordRecoveryPending,
+  redirectToResetPasswordIfNeeded,
+} from "../lib/passwordRecovery";
 
 const Ctx = createContext(null);
+
+/** Detect recovery from URL before / during PKCE exchange (hash or query). */
+function urlLooksLikePasswordRecovery() {
+  if (typeof window === "undefined") return false;
+  try {
+    const hash = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+    const query = new URLSearchParams(window.location.search || "");
+    return hash.get("type") === "recovery" || query.get("type") === "recovery";
+  } catch {
+    return false;
+  }
+}
 
 export function SupabaseAuthProvider({ children }) {
   const [session, setSession] = useState(null);
@@ -20,6 +37,10 @@ export function SupabaseAuthProvider({ children }) {
 
     let cancelled = false;
 
+    if (urlLooksLikePasswordRecovery() || isPasswordRecoveryPending()) {
+      markPasswordRecoveryPending();
+    }
+
     supabase.auth
       .getSession()
       .then(({ data: { session: s } }) => {
@@ -27,6 +48,10 @@ export function SupabaseAuthProvider({ children }) {
           setSession(s);
           setLoading(false);
           trackAuthEvent("session_bootstrap_success", { hasSession: Boolean(s) });
+        }
+        if (s?.user && isPasswordRecoveryPending()) {
+          redirectToResetPasswordIfNeeded();
+          return;
         }
         if (s?.user) {
           ensureUserOrgContext(supabase).catch((error) => {
@@ -47,6 +72,15 @@ export function SupabaseAuthProvider({ children }) {
     } = supabase.auth.onAuthStateChange((event, s) => {
       trackAuthEvent("auth_state_change", { event, hasSession: Boolean(s) });
       setSession(s);
+      if (event === "PASSWORD_RECOVERY") {
+        markPasswordRecoveryPending();
+        redirectToResetPasswordIfNeeded();
+        return;
+      }
+      if (s?.user && isPasswordRecoveryPending()) {
+        redirectToResetPasswordIfNeeded();
+        return;
+      }
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
         ensureUserOrgContext(supabase).catch((error) => {
           trackAuthError("org_context_sync_failed", error, { source: "onAuthStateChange", event });

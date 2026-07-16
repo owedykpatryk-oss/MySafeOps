@@ -66,6 +66,13 @@ import {
 import { isAutomationEnabled } from "../utils/orgAutomationRules";
 import { cloneProjectDocuments } from "../utils/documentPropagation";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
+import { isUtilityMappingOrg } from "../utils/utilityMappingOrg";
+import {
+  listUtilityMappingClients,
+  getUtilityMappingClient,
+  utilityMappingClientLogoUrl,
+} from "../utils/utilityMappingClients";
+import { syncUtilityMappingProjectJob } from "../utils/utilityMappingProjectJob";
 import {
   applySoloProjectRoles,
   buildSoloWorkerSeed,
@@ -1328,6 +1335,11 @@ function projectFormShape(p, { workers = [], user, orgSettings } = {}) {
       id: genId(),
       name: "",
       site: "",
+      client: "",
+      code: "",
+      umJobNumber: "",
+      umClientCode: "",
+      umJobRef: "",
       address: "",
       postcode: "",
       lat: "",
@@ -1367,6 +1379,11 @@ function projectFormShape(p, { workers = [], user, orgSettings } = {}) {
     lat: p.lat != null && p.lat !== "" ? String(p.lat) : "",
     lng: p.lng != null && p.lng !== "" ? String(p.lng) : "",
     postcode: p.postcode || "",
+    client: p.client || "",
+    code: p.code || p.umJobRef || "",
+    umJobNumber: p.umJobNumber || "",
+    umClientCode: p.umClientCode || "",
+    umJobRef: p.umJobRef || p.code || "",
     nearestHospital: p.nearestHospital || "",
     hospitalDirectionsUrl: p.hospitalDirectionsUrl || "",
     weatherSnapshot: p.weatherSnapshot || "",
@@ -1794,19 +1811,20 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     };
     const nextMissing = projectMissingItems(draft, { soloMode: draft.soloMode !== false });
     const nextHealth = projectHealthScore(draft, { soloMode: draft.soloMode !== false });
+    const umSynced = isUtilityMappingOrg() ? syncUtilityMappingProjectJob(draft) : draft;
     onSave({
-      ...draft,
+      ...umSynced,
       lat: lat !== undefined && !Number.isNaN(lat) ? lat : undefined,
       lng: lng !== undefined && !Number.isNaN(lng) ? lng : undefined,
       healthScore: nextHealth,
       healthMissing: nextMissing,
       startupChecklist:
-        Array.isArray(draft.startupChecklist) && draft.startupChecklist.length > 0
-          ? draft.startupChecklist.slice(0, 30)
-          : buildStartupChecklist(draft, { soloMode: draft.soloMode !== false, preset: starter }),
+        Array.isArray(umSynced.startupChecklist) && umSynced.startupChecklist.length > 0
+          ? umSynced.startupChecklist.slice(0, 30)
+          : buildStartupChecklist(umSynced, { soloMode: umSynced.soloMode !== false, preset: starter }),
     }, {
       ...options,
-      applyPlaybook: !item?.id ? draft.playbookId : options.applyPlaybook,
+      applyPlaybook: !item?.id ? umSynced.playbookId : options.applyPlaybook,
     });
     if (!item?.id) clearProjectWizardDraft();
   };
@@ -2046,6 +2064,63 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                 <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus />
                 <label style={{ ...ss.lbl, marginTop: 10 }}>Site / client</label>
                 <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)} />
+                {isUtilityMappingOrg() ? (
+                  <>
+                    <label style={{ ...ss.lbl, marginTop: 14 }}>UM job number</label>
+                    <input
+                      style={ss.inp}
+                      value={form.umJobNumber || ""}
+                      onChange={(e) => set("umJobNumber", e.target.value.replace(/\D/g, ""))}
+                      placeholder="1234"
+                    />
+                    <label style={{ ...ss.lbl, marginTop: 10 }}>Client code</label>
+                    <select
+                      style={ss.inp}
+                      value={form.umClientCode || ""}
+                      onChange={(e) => {
+                        const umClientCode = e.target.value;
+                        const client = getUtilityMappingClient(umClientCode);
+                        setForm((f) => ({
+                          ...f,
+                          umClientCode,
+                          client: client?.name || f.client || f.site || "",
+                          site: f.site || client?.name || "",
+                        }));
+                      }}
+                    >
+                      <option value="">— Select client —</option>
+                      {listUtilityMappingClients().map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} — {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    {form.umClientCode && utilityMappingClientLogoUrl(form.umClientCode) ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+                        <img
+                          src={utilityMappingClientLogoUrl(form.umClientCode)}
+                          alt={getUtilityMappingClient(form.umClientCode)?.name || form.umClientCode}
+                          style={{
+                            maxHeight: 40,
+                            maxWidth: 110,
+                            objectFit: "contain",
+                            background: "#fff",
+                            border: "1px solid var(--color-border-secondary,#e2e8f0)",
+                            borderRadius: 6,
+                            padding: "4px 8px",
+                          }}
+                        />
+                        <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                          Job refs inherit this code (survey, GPR, RAMS, MS)
+                        </span>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "8px 0 0" }}>
+                        Set once here — new survey / GPR / RAMS / MS docs pick up UM26-job-CLIENT.
+                      </p>
+                    )}
+                  </>
+                ) : null}
               </div>
             ) : null}
 

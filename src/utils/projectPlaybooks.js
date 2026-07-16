@@ -31,14 +31,22 @@ import { resolveFessStarterHazards } from "./fessJobStarters";
 import { buildMsStepsFromRams } from "./fessMsWorkflow";
 import { getFessPlaybook } from "./fessProjectPlaybooks";
 import { isFessOrg } from "./fessOrg";
+import { getUtilityMappingPlaybook } from "./utilityMappingProjectPlaybooks";
+import { isUtilityMappingOrg } from "./utilityMappingOrg";
 import { FESS_CLIENT_SITE_TEMPLATES } from "./fessClientSites";
 import ALL from "../modules/rams/ramsAllHazards.js";
 
 export { projectHasRams, docsForProject };
 
+import { nextUtilityMappingRamsDocNo } from "./utilityMappingDocRefs";
+
 const genId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-function generateRamsDocNo() {
+function generateRamsDocNo(seed = {}) {
+  if (isUtilityMappingOrg()) {
+    const um = nextUtilityMappingRamsDocNo([], seed);
+    if (um) return um;
+  }
   const year = new Date().getFullYear();
   const tail = String(Math.floor(Math.random() * 9000) + 1000);
   return `RAMS-${year}-${tail}`;
@@ -288,6 +296,8 @@ export const PROJECT_PLAYBOOKS = [
 export function getPlaybook(playbookId) {
   const fess = isFessOrg() ? getFessPlaybook(playbookId) : null;
   if (fess) return fess;
+  const um = isUtilityMappingOrg() ? getUtilityMappingPlaybook(playbookId) : null;
+  if (um) return um;
   return PROJECT_PLAYBOOKS.find((p) => p.id === playbookId) || PROJECT_PLAYBOOKS.find((p) => p.id === "general");
 }
 
@@ -374,9 +384,10 @@ export function createSurveyDraftFromPlaybook(project, playbook, existingReports
   let draft = prefillReportFromProject(base, project, ramsDoc);
   if (playbook.surveyType) {
     draft = applyDefaultRecordsPreset(draft);
-    const meta = getSurveyPackMeta(playbook.surveyType);
-    if (meta.defaultPas128Method && !draft.pas128Method) {
-      draft = applyPas128MethodToReport(draft, meta.defaultPas128Method, { overwrite: false });
+    const method =
+      playbook.pas128Method || getSurveyPackMeta(playbook.surveyType).defaultPas128Method || "";
+    if (method && !draft.pas128Method) {
+      draft = applyPas128MethodToReport(draft, method, { overwrite: false });
     }
   }
   draft.playbookId = playbook.id;

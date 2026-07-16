@@ -23,6 +23,7 @@ function SurveyListRow({
   onPack,
   onDuplicate,
   onHtmlExport,
+  onClientPack,
   onGeoJsonExport,
   onKmlExport,
   onKmzExport,
@@ -62,6 +63,31 @@ function SurveyListRow({
         {enriched.mapThumb ? (
           <div className="app-survey-list-row__map">
             <img src={enriched.mapThumb} alt="" loading="lazy" decoding="async" />
+          </div>
+        ) : null}
+        {enriched.clientLogoUrl ? (
+          <div
+            className="app-survey-list-row__client-logo"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 72,
+              height: 48,
+              flexShrink: 0,
+              background: "#fff",
+              border: "1px solid var(--color-border-secondary,#e2e8f0)",
+              borderRadius: 6,
+              padding: 4,
+            }}
+          >
+            <img
+              src={enriched.clientLogoUrl}
+              alt={enriched.clientLogoAlt || ""}
+              loading="lazy"
+              decoding="async"
+              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+            />
           </div>
         ) : null}
         <div className="app-survey-list-row__body">
@@ -119,6 +145,11 @@ function SurveyListRow({
                   <button type="button" onClick={() => onHtmlExport(r)}>
                     HTML export
                   </button>
+                  {onClientPack ? (
+                    <button type="button" onClick={() => onClientPack(r)}>
+                      Client pack
+                    </button>
+                  ) : null}
                   {onGeoJsonExport ? (
                     <button type="button" onClick={() => onGeoJsonExport(r)}>
                       GeoJSON

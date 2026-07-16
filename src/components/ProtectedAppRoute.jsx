@@ -5,6 +5,7 @@ import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { getRequiresMfaStep } from "../lib/mfaAal";
 import MfaLoginChallenge from "./MfaLoginChallenge";
 import { getSupportEmail } from "../config/supportContact";
+import { isPasswordRecoveryPending } from "../lib/passwordRecovery";
 
 /**
  * When Supabase env is set, /app requires a signed-in user.
@@ -81,6 +82,10 @@ export default function ProtectedAppRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login?next=%2Fapp" replace />;
+  }
+
+  if (isPasswordRecoveryPending()) {
+    return <Navigate to="/reset-password" replace />;
   }
 
   if (mfa.probeFailed) {

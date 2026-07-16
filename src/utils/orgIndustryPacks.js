@@ -18,6 +18,13 @@ import {
   getFessGroupWorkspacePack,
   isFessExclusivePackId,
 } from "./fessWorkspaceProfile";
+import { isUtilityMappingOrg } from "./utilityMappingOrg";
+import {
+  getUtilityMappingWorkspacePack,
+  isUtilityMappingExclusivePackId,
+} from "./utilityMappingWorkspaceProfile";
+import { mergeUtilityMappingBrandingDefaults } from "./utilityMappingBranding";
+import { seedUtilityMappingExclusiveContent } from "./utilityMappingExclusiveSeeds";
 
 export { INDUSTRY_PACKS, normalizeIndustryPackId } from "./industryPackCatalog";
 
@@ -26,6 +33,7 @@ export function isValidIndustryPackId(packKey) {
   const id = normalizeIndustryPackId(packKey);
   if (!id) return false;
   if (isFessExclusivePackId(id)) return isFessOrg();
+  if (isUtilityMappingExclusivePackId(id)) return isUtilityMappingOrg();
   return Object.prototype.hasOwnProperty.call(INDUSTRY_PACKS, id) || isCustomWorkspacePackId(id);
 }
 
@@ -35,6 +43,9 @@ export function getWorkspacePack(packKey) {
   if (!id) return null;
   if (isFessExclusivePackId(id)) {
     return isFessOrg() ? getFessGroupWorkspacePack() : null;
+  }
+  if (isUtilityMappingExclusivePackId(id)) {
+    return isUtilityMappingOrg() ? getUtilityMappingWorkspacePack() : null;
   }
   return resolveWorkspacePack(id);
 }
@@ -68,7 +79,7 @@ export function applyIndustryPack(packKey, options = {}) {
 
   const raw = loadOrgSettingsRaw();
   const packPermitDefaults = PACK_DEFAULT_PERMIT_TYPES[id];
-  const next = {
+  let next = {
     ...raw,
     industryPackId: id,
     hiddenModulesBootstrapped: true,
@@ -83,6 +94,9 @@ export function applyIndustryPack(packKey, options = {}) {
   if (Array.isArray(pack.industrySectors) && pack.industrySectors.length) {
     next.industrySectors = pack.industrySectors;
   }
+  if (isUtilityMappingExclusivePackId(id)) {
+    next = mergeUtilityMappingBrandingDefaults(next);
+  }
   saveOrgSettingsRaw(next);
   clearIndustryPackPreview();
 
@@ -91,6 +105,10 @@ export function applyIndustryPack(packKey, options = {}) {
     const seedKey =
       id === FESS_GROUP_PACK_ID ? FESS_GROUP_PACK_ID : pack.custom && pack.basedOn ? pack.basedOn : id;
     seeded = seedRegistersForIndustryPack(seedKey).seeded;
+  }
+
+  if (isUtilityMappingExclusivePackId(id)) {
+    seedUtilityMappingExclusiveContent();
   }
 
   if (typeof window !== "undefined") {

@@ -6,6 +6,12 @@ import { getIndustryPackPreviewId } from "./industryPackPreview";
 import { INDUSTRY_PACKS, normalizeIndustryPackId } from "./industryPackCatalog";
 import { isFessOrg } from "./fessOrg";
 import { FESS_GROUP_PACK_ID, getFessGroupWorkspacePack, isFessExclusivePackId } from "./fessWorkspaceProfile";
+import { isUtilityMappingOrg } from "./utilityMappingOrg";
+import {
+  UTILITY_MAPPING_PACK_ID,
+  getUtilityMappingWorkspacePack,
+  isUtilityMappingExclusivePackId,
+} from "./utilityMappingWorkspaceProfile";
 
 function readAppliedIndustryPackId() {
   try {
@@ -26,6 +32,9 @@ export function getIndustryPackLabel(packId) {
   const id = resolvePackId(packId);
   if (isFessExclusivePackId(id) || id === FESS_GROUP_PACK_ID) {
     if (isFessOrg()) return getFessGroupWorkspacePack()?.label || "FESS Group";
+  }
+  if (isUtilityMappingExclusivePackId(id) || id === UTILITY_MAPPING_PACK_ID) {
+    if (isUtilityMappingOrg()) return getUtilityMappingWorkspacePack()?.label || "Utility Mapping";
   }
   return INDUSTRY_PACKS[id]?.label || INDUSTRY_PACKS.generalContractor.label;
 }

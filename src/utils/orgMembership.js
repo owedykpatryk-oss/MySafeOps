@@ -80,6 +80,17 @@ export async function refreshOrgFromSupabase(supabase) {
   setOrgId(row.org_slug);
   persistOrgRow(row);
   try {
+    const { loadOrgSettingsRaw, saveOrgSettingsRaw } = await import("./orgSettingsStorage");
+    const local = loadOrgSettingsRaw(row.org_slug);
+    const localName = String(local?.name || "").trim();
+    const cloudOrgName = String(row.org_name || "").trim();
+    if (cloudOrgName && (!localName || localName === "My Organisation")) {
+      saveOrgSettingsRaw({ ...local, name: cloudOrgName }, row.org_slug);
+    }
+  } catch {
+    /* non-fatal */
+  }
+  try {
     const { syncOrgBrandingFromCloud } = await import("./orgBrandingCloudSync");
     await syncOrgBrandingFromCloud(supabase, row.org_slug);
   } catch {
@@ -125,6 +136,19 @@ export async function ensureUserOrgContext(supabase) {
   setOrgId(row.org_slug);
   clearPendingInvite();
   persistOrgRow(row);
+  try {
+    const { loadOrgSettingsRaw, saveOrgSettingsRaw } = await import("./orgSettingsStorage");
+    const local = loadOrgSettingsRaw(row.org_slug);
+    const localName = String(local?.name || "").trim();
+    const cloudOrgName = String(row.org_name || "").trim();
+    // Fresh org with empty / default local branding: seed display name from ensure_my_org,
+    // never leave the door open for stale cross-org localStorage branding.
+    if (cloudOrgName && (!localName || localName === "My Organisation")) {
+      saveOrgSettingsRaw({ ...local, name: cloudOrgName }, row.org_slug);
+    }
+  } catch {
+    /* non-fatal */
+  }
   try {
     const { syncOrgBrandingFromCloud } = await import("./orgBrandingCloudSync");
     await syncOrgBrandingFromCloud(supabase, row.org_slug);

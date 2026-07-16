@@ -13,9 +13,17 @@ export function loadOrgSettingsRaw(orgId = getOrgId()) {
     return scoped;
   }
   try {
-    const legacy = JSON.parse(localStorage.getItem(ORG_SETTINGS_BASE_KEY) || "{}");
+    const legacyRaw = localStorage.getItem(ORG_SETTINGS_BASE_KEY);
+    const legacy = legacyRaw ? JSON.parse(legacyRaw) : {};
     if (legacy && typeof legacy === "object" && Object.keys(legacy).length > 0 && orgId && orgId !== "default") {
+      // One-shot migrate into this org, then delete the unscoped key so a *new*
+      // workspace never inherits another org's branding (e.g. Landorahub → Patryk).
       saveOrgScoped(ORG_SETTINGS_BASE_KEY, legacy);
+      try {
+        localStorage.removeItem(ORG_SETTINGS_BASE_KEY);
+      } catch {
+        /* ignore */
+      }
       return legacy;
     }
     return legacy && typeof legacy === "object" ? legacy : {};

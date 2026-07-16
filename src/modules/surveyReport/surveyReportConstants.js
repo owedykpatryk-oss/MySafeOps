@@ -318,6 +318,8 @@ export function blankSurveyReport(overrides = {}) {
   return {
     id: `sr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     ref: "",
+    umJobNumber: "",
+    umClientCode: "",
     status: "draft",
     title: "",
     projectId: "",
@@ -369,6 +371,7 @@ export function blankSurveyReport(overrides = {}) {
       controlPointsNotes: "",
     },
     deliverables: [],
+    drawingSheets: [],
     recordsReferences: [],
     dbydEnquiries: [],
     undertakerResponses: [],
