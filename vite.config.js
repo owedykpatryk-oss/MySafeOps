@@ -635,6 +635,16 @@ export default defineConfig(({ mode }) => {
               // Survey catalog is a zero-dep leaf used by RAMS at module init — must not live in
               // survey-report or rams-builder (cross-chunk TDZ on SURVEY_CATALOG / Js).
               if (norm.includes("/utils/surveyContentCatalog")) return "survey-catalog";
+              // Utility Mapping print-only helpers — leaf shared by survey/GPR/RAMS/MS/PTW print.
+              // Do NOT include org/onboarding/seeds (those pull RAMS packs into this chunk).
+              if (
+                norm.includes("/utils/utilityMappingCovers") ||
+                norm.includes("/utils/utilityMappingPremiumPages") ||
+                norm.includes("/utils/utilityMappingPrintTheme") ||
+                norm.includes("/utils/utilityMappingClientPack")
+              ) {
+                return "utility-mapping-print";
+              }
               // Keep survey↔RAMS bridge helpers in the survey chunk (not rams-builder).
               if (
                 norm.includes("/utils/documentPropagation") ||
@@ -700,6 +710,12 @@ export default defineConfig(({ mode }) => {
                 norm.includes("/utils/fessExclusive") ||
                 norm.includes("/utils/fessOrg") ||
                 norm.includes("/utils/fessWorkspaceProfile") ||
+                // Light Utility Mapping gates/refs/clients — keep out of survey/permits print chunks.
+                norm.includes("/utils/utilityMappingOrg") ||
+                norm.includes("/utils/utilityMappingBranding") ||
+                norm.includes("/utils/utilityMappingClients") ||
+                norm.includes("/utils/utilityMappingDocRefs") ||
+                norm.includes("/utils/utilityMappingWorkspaceProfile") ||
                 norm.includes("/utils/ramsHazardPacksStorage") ||
                 norm.includes("/modules/rams/orgExclusiveQuickPacks") ||
                 norm.includes("/navigation/workspaceViewIds") ||

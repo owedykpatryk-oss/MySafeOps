@@ -24,7 +24,6 @@ import {
   isUtilityMappingExclusivePackId,
 } from "./utilityMappingWorkspaceProfile";
 import { mergeUtilityMappingBrandingDefaults } from "./utilityMappingBranding";
-import { seedUtilityMappingExclusiveContent } from "./utilityMappingExclusiveSeeds";
 
 export { INDUSTRY_PACKS, normalizeIndustryPackId } from "./industryPackCatalog";
 
@@ -108,7 +107,11 @@ export function applyIndustryPack(packKey, options = {}) {
   }
 
   if (isUtilityMappingExclusivePackId(id)) {
-    seedUtilityMappingExclusiveContent();
+    // Dynamic import keeps RAMS/MS/survey seed graphs out of the orgIndustryPacks sync chunk
+    // (avoids permits-lib ↔ survey-report circular Vite chunks).
+    void import("./utilityMappingExclusiveSeeds")
+      .then((m) => m.seedUtilityMappingExclusiveContent())
+      .catch(() => {});
   }
 
   if (typeof window !== "undefined") {
