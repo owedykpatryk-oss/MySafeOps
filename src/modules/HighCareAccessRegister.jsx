@@ -7,7 +7,9 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -224,7 +226,14 @@ export default function HighCareAccessRegister() {
       >
 
       {items.length === 0 ? (
-        <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No entries yet.</div>
+        <EmptyState
+          icon="🧼"
+          title="No entries yet"
+          description="Log visitor and contractor access to high-care zones with hygiene checks and tool reconciliation."
+          actionLabel="+ Add entry"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {listPg.visible(items).map((r) => (
@@ -267,11 +276,14 @@ export default function HighCareAccessRegister() {
               </div>
             </div>
           ))}
-          {listPg.hasMore(items) ? (
-            <button type="button" style={ss.btn} onClick={listPg.showMore}>
-              Show more
-            </button>
-          ) : null}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(items)}
+            remaining={listPg.remaining(items)}
+            showing={Math.min(listPg.cap, items.length)}
+            total={items.length}
+            onShowMore={listPg.showMore}
+            buttonStyle={ss.btn}
+          />
         </div>
       )}
 

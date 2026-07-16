@@ -4,6 +4,7 @@ import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
@@ -576,11 +577,15 @@ export default function CDMCompliance() {
                 </div>
               );
             })}
-            {listPg.hasMore(packs) ? (
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(packs)} remaining)
-              </button>
-            ) : null}
+            <RegisterListPagingFooter
+              hasMore={listPg.hasMore(packs)}
+              remaining={listPg.remaining(packs)}
+              showing={Math.min(listPg.cap, packs.length)}
+              total={packs.length}
+              onShowMore={listPg.showMore}
+              itemLabel="packs"
+              buttonStyle={ss.btn}
+            />
           </div>
         )}
       </RegisterModuleShell>

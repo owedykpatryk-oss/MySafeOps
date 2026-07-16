@@ -7,7 +7,9 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import {
   defaultIncidentTypeKey,
@@ -505,10 +507,14 @@ export default function RIDDORRegister() {
       </div>
 
       {reports.length===0 ? (
-        <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
-          <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>{content.emptyLabel}</p>
-          <button onClick={()=>setModal({type:"form"})} style={ss.btnR}>{content.newReportLabel}</button>
-        </div>
+        <EmptyState
+          icon="📢"
+          title={String(content.emptyLabel || "").replace(/\.$/, "") || "No records yet"}
+          description="Prepare reportable incident paperwork before notifying the regulator."
+          actionLabel={content.newReportLabel}
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {listPg.visible(reports).map(r=>{
@@ -546,11 +552,15 @@ export default function RIDDORRegister() {
               </div>
             );
           })}
-          {listPg.hasMore(reports) ? (
-            <button type="button" style={ss.btn} onClick={listPg.showMore}>
-              Show more ({listPg.remaining(reports)} remaining)
-            </button>
-          ) : null}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(reports)}
+            remaining={listPg.remaining(reports)}
+            showing={Math.min(listPg.cap, reports.length)}
+            total={reports.length}
+            onShowMore={listPg.showMore}
+            itemLabel="reports"
+            buttonStyle={ss.btn}
+          />
         </div>
       )}
       </RegisterModuleShell>

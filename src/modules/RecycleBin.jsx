@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import PageHero from "../components/PageHero";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { ms } from "../utils/moduleStyles";
 import {
   RECYCLE_RETENTION_DAYS,
@@ -110,11 +111,6 @@ export default function RecycleBin() {
           <div style={{ color: "var(--color-text-secondary)" }}>Recycle bin is empty.</div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
-            {listPg.hasMore(items) ? (
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                Showing {Math.min(listPg.cap, items.length)} of {items.length} items
-              </div>
-            ) : null}
             {listPg.visible(items).map((item) => (
               <div
                 key={item.id}
@@ -148,13 +144,15 @@ export default function RecycleBin() {
                 </div>
               </div>
             ))}
-            {listPg.hasMore(items) ? (
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-                <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                  Show more ({listPg.remaining(items)} remaining)
-                </button>
-              </div>
-            ) : null}
+            <RegisterListPagingFooter
+              hasMore={listPg.hasMore(items)}
+              remaining={listPg.remaining(items)}
+              showing={Math.min(listPg.cap, items.length)}
+              total={items.length}
+              onShowMore={listPg.showMore}
+              itemLabel="items"
+              buttonStyle={ss.btn}
+            />
           </div>
         )}
       </div>

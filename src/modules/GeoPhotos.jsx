@@ -8,6 +8,8 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import GeoPhotosMap from "../components/geoPhotos/GeoPhotosMap";
 import GeoPhotoCaptureModal from "../components/geoPhotos/GeoPhotoCaptureModal";
@@ -838,32 +840,24 @@ export default function GeoPhotos() {
           <GeoPhotosMap photos={filtered} height={320} satellite={satellite} onPhotoClick={setDetail} />
         </div>
       ) : safePhotos.length === 0 ? (
-        <div className="geo-photos-empty">
-          <div className="geo-photos-empty__icon" aria-hidden>
-            📍
-          </div>
-          <h3 className="geo-photos-empty__title">No geo-photos yet</h3>
-          <p className="geo-photos-empty__lead">
-            Capture access routes, hazards or site conditions from your phone — GPS and direction arrow included.
-          </p>
-          <button type="button" style={ms.btnP} onClick={() => setCaptureOpen(true)}>
-            + First geo-photo
-          </button>
-        </div>
+        <EmptyState
+          icon="📍"
+          title="No geo-photos yet"
+          description="Capture access routes, hazards or site conditions from your phone — GPS and direction arrow included."
+          actionLabel="+ First geo-photo"
+          onAction={() => setCaptureOpen(true)}
+          variant="dashed"
+        />
       ) : (
-        <div className="geo-photos-empty">
-          <div className="geo-photos-empty__icon" aria-hidden>
-            🔍
-          </div>
-          <h3 className="geo-photos-empty__title">No photos match your filters</h3>
-          <p className="geo-photos-empty__lead">
-            {safePhotos.length} geo-photo{safePhotos.length === 1 ? "" : "s"} in this org — try clearing filters or
-            choosing another project.
-          </p>
-          <button type="button" style={ms.btn} onClick={clearFilters}>
-            Clear filters
-          </button>
-        </div>
+        <EmptyState
+          icon="🔍"
+          title="No photos match your filters"
+          description={`${safePhotos.length} geo-photo${safePhotos.length === 1 ? "" : "s"} in this org — try clearing filters or choosing another project.`}
+          actionLabel="Clear filters"
+          onAction={clearFilters}
+          variant="dashed"
+          compact
+        />
       )}
 
       <div className="geo-photos-grid">
@@ -946,13 +940,15 @@ export default function GeoPhotos() {
         })}
       </div>
 
-      {listPg.hasMore(filtered) ? (
-        <div className="geo-photos-pager">
-          <button type="button" style={ms.btn} onClick={listPg.showMore}>
-            Show more ({listPg.remaining(filtered)} remaining)
-          </button>
-        </div>
-      ) : null}
+      <RegisterListPagingFooter
+        hasMore={listPg.hasMore(filtered)}
+        remaining={listPg.remaining(filtered)}
+        showing={Math.min(listPg.cap, filtered.length)}
+        total={filtered.length}
+        onShowMore={listPg.showMore}
+        itemLabel="photos"
+        buttonStyle={ms.btn}
+      />
 
       <button type="button" className="geo-photos-fab" onClick={() => setCaptureOpen(true)} aria-label="Add geo-photo">
         + Photo

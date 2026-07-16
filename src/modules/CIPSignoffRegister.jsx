@@ -7,7 +7,9 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -182,7 +184,14 @@ export default function CIPSignoffRegister() {
       >
 
       {items.length === 0 ? (
-        <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No CIP records.</div>
+        <EmptyState
+          icon="🧴"
+          title="No CIP records yet"
+          description="Record clean-in-place runs with ATP swab results and release-to-production time."
+          actionLabel="+ Add record"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {listPg.visible(items).map((r) => (
@@ -220,11 +229,14 @@ export default function CIPSignoffRegister() {
               </div>
             </div>
           ))}
-          {listPg.hasMore(items) ? (
-            <button type="button" style={ss.btn} onClick={listPg.showMore}>
-              Show more
-            </button>
-          ) : null}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(items)}
+            remaining={listPg.remaining(items)}
+            showing={Math.min(listPg.cap, items.length)}
+            total={items.length}
+            onShowMore={listPg.showMore}
+            buttonStyle={ss.btn}
+          />
         </div>
       )}
 

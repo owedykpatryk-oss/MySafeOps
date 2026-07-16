@@ -8,7 +8,9 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { UK_LEGISLATION_LIBRARY, seedLegislationRegister } from "../utils/ukLegislationLibrary";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { safeHttpUrl } from "../utils/safeUrl";
@@ -133,10 +135,27 @@ export default function LegislationRegister() {
           </div>
         }
       >
-        {filtered.length === 0 ? (
-          <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)", padding: 24 }}>
-            No legislation entries. Click <strong>Load UK library</strong> to seed {UK_LEGISLATION_LIBRARY.length} common UK refs.
-          </div>
+        {items.length === 0 ? (
+          <EmptyState
+            icon="📜"
+            title="No legislation entries yet"
+            description={`Load the UK library to seed ${UK_LEGISLATION_LIBRARY.length} common HSE and food safety refs, or add your own.`}
+            actionLabel="Load UK library"
+            onAction={seedLibrary}
+            secondaryLabel="+ Add entry"
+            onSecondary={() => setModal({ type: "form" })}
+            variant="dashed"
+          />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon="🔍"
+            title="No records match this filter"
+            description="Try All, or switch between Applicable and Review due."
+            actionLabel="Show all"
+            onAction={() => setFilter("all")}
+            variant="dashed"
+            compact
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {listPg.visible(filtered).map((item) => (
@@ -179,7 +198,14 @@ export default function LegislationRegister() {
                 ) : null}
               </div>
             ))}
-            {listPg.hasMore(filtered) ? <button type="button" style={ss.btn} onClick={listPg.showMore}>Show more</button> : null}
+            <RegisterListPagingFooter
+              hasMore={listPg.hasMore(filtered)}
+              remaining={listPg.remaining(filtered)}
+              showing={Math.min(listPg.cap, filtered.length)}
+              total={filtered.length}
+              onShowMore={listPg.showMore}
+              buttonStyle={ss.btn}
+            />
           </div>
         )}
       </RegisterModuleShell>

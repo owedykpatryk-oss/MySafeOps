@@ -51,6 +51,7 @@ import PageHero from "../../components/PageHero";
 import ConfettiCelebration from "../../components/ConfettiCelebration";
 import TouchSignaturePad from "../../components/TouchSignaturePad";
 import EmptyState from "../../components/EmptyState";
+import RegisterListPagingFooter from "../../components/RegisterListPagingFooter";
 import SimpleFormDialog from "../../components/SimpleFormDialog";
 import { geocodeAddressNominatim } from "../../utils/geocode";
 import { useToast } from "../../context/ToastContext";
@@ -5693,11 +5694,6 @@ function SavedList({
         </div>
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {listPg.hasMore(filtered) ? (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} documents
-            </div>
-          ) : null}
           {listPg.visible(filtered).map((doc) => {
             const statusKey = String(doc.documentStatus || doc.status || "draft").toLowerCase();
             const rowMod =
@@ -5820,13 +5816,15 @@ function SavedList({
             </div>
             );
           })}
-          {listPg.hasMore(filtered) ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(filtered)} remaining)
-              </button>
-            </div>
-          ) : null}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(filtered)}
+            remaining={listPg.remaining(filtered)}
+            showing={Math.min(listPg.cap, filtered.length)}
+            total={filtered.length}
+            onShowMore={listPg.showMore}
+            itemLabel="documents"
+            buttonStyle={ss.btn}
+          />
         </div>
       )}
     </div>

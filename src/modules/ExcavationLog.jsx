@@ -8,7 +8,9 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import StatusChip from "../components/StatusChip";
@@ -374,35 +376,31 @@ export default function ExcavationLog() {
           </span>
         </div>
 
-        {filtered.length === 0 ? (
-          <div
-            style={{
-              ...ss.card,
-              textAlign: "center",
-              color: "var(--color-text-secondary)",
-              padding: "2rem 1.25rem",
-              background: "linear-gradient(180deg, rgba(240,253,250,0.55) 0%, var(--color-background-primary, #fff) 70%)",
+        {items.length === 0 ? (
+          <EmptyState
+            icon="⛏️"
+            title="No excavation records yet"
+            description="Log open trenches and trial pits with depth, support, and utility confirmation before dig."
+            actionLabel="+ Add first record"
+            onAction={() => setModal({ type: "form" })}
+            variant="dashed"
+          />
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon="🔍"
+            title="No matches for this filter"
+            description="Try clearing search or switching status filter to All."
+            actionLabel="Clear filters"
+            onAction={() => {
+              setSearch("");
+              setStatusFilter("all");
+              listPg.reset();
             }}
-          >
-            <div style={{ fontWeight: 700, color: "var(--color-text)", marginBottom: 6 }}>
-              {items.length === 0 ? "No excavation records yet" : "No matches for this filter"}
-            </div>
-            <div style={{ fontSize: 13, marginBottom: 14 }}>
-              Log open trenches and trial pits with depth, support, and utility confirmation before dig.
-            </div>
-            {items.length === 0 ? (
-              <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-                + Add first record
-              </button>
-            ) : null}
-          </div>
+            variant="dashed"
+            compact
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {listPg.hasMore(filtered) ? (
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} records
-              </div>
-            ) : null}
             {listPg.visible(filtered).map((r) => {
               const meta = STATUS_META[r.status] || STATUS_META.open;
               return (
@@ -486,13 +484,14 @@ export default function ExcavationLog() {
                 </div>
               );
             })}
-            {listPg.hasMore(filtered) ? (
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-                <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                  Show more ({listPg.remaining(filtered)} remaining)
-                </button>
-              </div>
-            ) : null}
+            <RegisterListPagingFooter
+              hasMore={listPg.hasMore(filtered)}
+              remaining={listPg.remaining(filtered)}
+              showing={Math.min(listPg.cap, filtered.length)}
+              total={filtered.length}
+              onShowMore={listPg.showMore}
+              buttonStyle={ss.btn}
+            />
           </div>
         )}
       </RegisterModuleShell>

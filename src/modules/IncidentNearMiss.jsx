@@ -7,7 +7,9 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { pushRecycleBinItem } from "../utils/recycleBin";
@@ -688,15 +690,27 @@ export default function IncidentNearMiss() {
             ))}
           </div>
         }
-      >      {filtered.length === 0 ? (
-        <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No records match this filter.</div>
+      >      {items.length === 0 ? (
+        <EmptyState
+          icon="⚠️"
+          title="No incident records yet"
+          description="Log events and near misses on site. Use the RIDDOR module if a reportable incident may apply."
+          actionLabel="+ Add record"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon="🔍"
+          title="No records match this filter"
+          description="Try All, or switch between Near miss and Incident."
+          actionLabel="Show all"
+          onAction={() => setFilter("all")}
+          variant="dashed"
+          compact
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.hasMore(filtered) ? (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} records
-            </div>
-          ) : null}
           {listPg.visible(filtered).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 120px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -776,13 +790,14 @@ export default function IncidentNearMiss() {
               </div>
             </div>
           ))}
-          {listPg.hasMore(filtered) ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(filtered)} remaining)
-              </button>
-            </div>
-          ) : null}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(filtered)}
+            remaining={listPg.remaining(filtered)}
+            showing={Math.min(listPg.cap, filtered.length)}
+            total={filtered.length}
+            onShowMore={listPg.showMore}
+            buttonStyle={ss.btn}
+          />
         </div>
       )}
       </RegisterModuleShell>

@@ -5,7 +5,9 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { pushRecycleBinItem } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -488,15 +490,32 @@ export default function IncidentActionTracker() {
         </div>
 
         <div style={{ display: "grid", gap: 8 }}>
-          {filtered.length === 0 ? (
-            <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No actions found.</div>
+          {items.length === 0 ? (
+            <EmptyState
+              icon="✅"
+              title="No actions yet"
+              description="Track corrective actions from incidents, inspections and permits."
+              actionLabel="+ New action"
+              onAction={() => setModal({ item: null })}
+              variant="dashed"
+            />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon="🔍"
+              title="No actions found"
+              description="No actions match this search or filter."
+              actionLabel="Clear filters"
+              onAction={() => {
+                setSearch("");
+                setStatusFilter("");
+                setOwnerFilter("");
+                listPg.reset();
+              }}
+              variant="dashed"
+              compact
+            />
           ) : (
             <>
-              {listPg.hasMore(filtered) ? (
-                <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                  Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} actions
-                </div>
-              ) : null}
               {listPg.visible(filtered).map((row) => {
               const d = daysToDue(row.dueDate);
               const dueTone = row.status === "closed" ? "#64748b" : d == null ? "#64748b" : d < 0 ? "#b91c1c" : d <= 7 ? "#92400e" : "#1d4ed8";
@@ -539,13 +558,15 @@ export default function IncidentActionTracker() {
                 </div>
               );
             })}
-              {listPg.hasMore(filtered) ? (
-                <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-                  <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                    Show more ({listPg.remaining(filtered)} remaining)
-                  </button>
-                </div>
-              ) : null}
+              <RegisterListPagingFooter
+                hasMore={listPg.hasMore(filtered)}
+                remaining={listPg.remaining(filtered)}
+                showing={Math.min(listPg.cap, filtered.length)}
+                total={filtered.length}
+                onShowMore={listPg.showMore}
+                itemLabel="actions"
+                buttonStyle={ss.btn}
+              />
             </>
           )}
         </div>

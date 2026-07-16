@@ -6,8 +6,10 @@ import { useApp } from "../context/AppContext";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
@@ -923,59 +925,53 @@ export default function SnagRegister() {
         ) : null}
 
         {snags.length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "3rem 1rem",
-              border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)",
-              borderRadius: 12,
-            }}
-          >
-            <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>
-              No snag items recorded yet.
-            </p>
-            <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>
-              + Add first snag
-            </button>
-          </div>
+          <EmptyState
+            icon="🔧"
+            title="No snag items recorded yet"
+            description="Raise defects and snags so site teams can track close-out."
+            actionLabel="+ Add first snag"
+            onAction={() => setModal({ type: "form" })}
+            variant="dashed"
+          />
         ) : filtered.length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "2rem",
-              border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)",
-              borderRadius: 12,
-              color: "var(--color-text-secondary)",
-              fontSize: 13,
-            }}
-          >
-            No items match your filters.
-          </div>
+          <EmptyState
+            icon="🔍"
+            title="No items match your filters"
+            description="Clear status, priority or search filters to see the full snag list."
+            actionLabel="Clear filters"
+            onAction={clearFilters}
+            variant="dashed"
+            compact
+          />
         ) : (
-          listPg
-            .visible(filtered)
-            .map((s) => (
-              <SnagCard
-                key={s.id}
-                snag={s}
-                workers={workers}
-                onEdit={(sn) => setModal({ type: "form", data: sn })}
-                onDelete={deleteSnag}
-                onStatusChange={statusChange}
-                bulkMode={bulkMode}
-                selected={selected.has(s.id)}
-                onToggleSelect={toggleSelect}
-                canDelete={caps.deleteRecords}
-              />
-            ))
+          <>
+            {listPg
+              .visible(filtered)
+              .map((s) => (
+                <SnagCard
+                  key={s.id}
+                  snag={s}
+                  workers={workers}
+                  onEdit={(sn) => setModal({ type: "form", data: sn })}
+                  onDelete={deleteSnag}
+                  onStatusChange={statusChange}
+                  bulkMode={bulkMode}
+                  selected={selected.has(s.id)}
+                  onToggleSelect={toggleSelect}
+                  canDelete={caps.deleteRecords}
+                />
+              ))}
+            <RegisterListPagingFooter
+              hasMore={listPg.hasMore(filtered)}
+              remaining={listPg.remaining(filtered)}
+              showing={Math.min(listPg.cap, filtered.length)}
+              total={filtered.length}
+              onShowMore={listPg.showMore}
+              itemLabel="snags"
+              buttonStyle={ss.btn}
+            />
+          </>
         )}
-        {listPg.hasMore(filtered) ? (
-          <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
-            <button type="button" style={ss.btn} onClick={listPg.showMore}>
-              Show more ({listPg.remaining(filtered)} remaining)
-            </button>
-          </div>
-        ) : null}
       </RegisterModuleShell>
     </div>
   );

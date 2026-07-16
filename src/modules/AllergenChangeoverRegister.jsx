@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -80,6 +83,7 @@ export default function AllergenChangeoverRegister() {
   const [items, setItems] = useState(() => load(KEY, []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
+  const listPg = useRegisterListPaging();
 
   const { d1Hydrating: d1ItemsH, d1OutboxPending: d1ItemsO } = useD1OrgArraySync({
     storageKey: KEY,
@@ -136,10 +140,17 @@ export default function AllergenChangeoverRegister() {
       >
 
       {items.length === 0 ? (
-        <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No windows defined.</div>
+        <EmptyState
+          icon="🥜"
+          title="No windows defined yet"
+          description="Define time windows for automatic in-app allergen changeover awareness banners."
+          actionLabel="+ New window"
+          onAction={() => setModal({ type: "form" })}
+          variant="dashed"
+        />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {items.map((r) => (
+          {listPg.visible(items).map((r) => (
             <div key={r.id} style={{ ...ss.card }}>
               <strong>{r.label || "Changeover"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
@@ -177,6 +188,14 @@ export default function AllergenChangeoverRegister() {
               </div>
             </div>
           ))}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(items)}
+            remaining={listPg.remaining(items)}
+            showing={Math.min(listPg.cap, items.length)}
+            total={items.length}
+            onShowMore={listPg.showMore}
+            buttonStyle={ss.btn}
+          />
         </div>
       )}
 

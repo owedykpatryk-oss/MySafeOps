@@ -88,6 +88,7 @@ import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, g
 import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings } from "../../utils/surveyDxfAnalyzer";
 import CadImportPanel from "./CadImportPanel";
 import EmptyState from "../../components/EmptyState";
+import RegisterListPagingFooter from "../../components/RegisterListPagingFooter";
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import ModuleOverlay from "../../components/ModuleOverlay";
 import ConfirmDialog from "../../components/ConfirmDialog";
@@ -3277,11 +3278,6 @@ export default function SurveyReport() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.hasMore(filtered) && (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length}
-            </div>
-          )}
           {(() => {
             let rowIndex = 0;
             let lastGroup = null;
@@ -3324,13 +3320,15 @@ export default function SurveyReport() {
               );
             });
           })()}
-          {listPg.hasMore(filtered) && (
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(filtered)} remaining)
-              </button>
-            </div>
-          )}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(filtered)}
+            remaining={listPg.remaining(filtered)}
+            showing={Math.min(listPg.cap, filtered.length)}
+            total={filtered.length}
+            onShowMore={listPg.showMore}
+            itemLabel="reports"
+            buttonStyle={ss.btn}
+          />
         </div>
       )}
       <ConfirmDialog
