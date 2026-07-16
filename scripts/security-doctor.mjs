@@ -307,7 +307,6 @@ async function main() {
     issues += 1;
   }
 
-  const edgeFnDir = resolve(root, "supabase/functions");
   let wildcardCors = 0;
   for (const name of [
     "stripe-checkout",

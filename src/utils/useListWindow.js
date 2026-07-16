@@ -34,7 +34,7 @@ export function computeListWindow(length, scrollTop, opts = {}) {
  * @param {{ rowHeight?: number, overscan?: number, maxHeight?: number, enableAfter?: number }} [opts]
  */
 export function useListWindow(items, opts = {}) {
-  const list = Array.isArray(items) ? items : [];
+  const list = useMemo(() => (Array.isArray(items) ? items : []), [items]);
   const parentRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
 
