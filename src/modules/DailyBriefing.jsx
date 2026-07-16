@@ -1101,7 +1101,7 @@ export default function DailyBriefing() {
           ) : null
         }
       >
-        ) : briefings.length === 0 ? (
+        {briefings.length === 0 ? (
           <EmptyState
             icon="☀️"
             title="No briefing records yet"
