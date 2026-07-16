@@ -3,10 +3,13 @@ import { geoPhotoDisplayUrl, uploadGeoPhotoToR2 } from "./geoPhotoMedia.js";
 
 vi.mock("../lib/r2Storage.js", () => ({
   isR2StorageConfigured: vi.fn(() => true),
+  pickR2ViewUrl: vi.fn((meta) => meta?.signedUrl || meta?.publicUrl || null),
   uploadFileToR2Storage: vi.fn(async () => ({
     key: "geo-photos/test/photo.jpg",
     size: 3,
     publicUrl: "https://cdn.example/photo.jpg",
+    signedUrl: "https://worker.example/signed?k=1",
+    signedExpiresAt: Math.floor(Date.now() / 1000) + 3600,
   })),
 }));
 
@@ -39,6 +42,8 @@ describe("geoPhotoMedia", () => {
     expect(result).toEqual({
       photoStorageKey: "geo-photos/test/photo.jpg",
       photoPublicUrl: "https://cdn.example/photo.jpg",
+      photoSignedUrl: "https://worker.example/signed?k=1",
+      photoSignedExpiresAt: expect.any(Number),
     });
   });
 });

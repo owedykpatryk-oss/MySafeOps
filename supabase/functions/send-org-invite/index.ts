@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { checkEdgeRateLimit, checkDurableEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
+import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 
 function makeInviteToken() {
@@ -98,13 +98,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!checkEdgeRateLimit(`org-invite:user:${user.id}`, 12, 60 * 60_000)) {
-      return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!(await checkDurableEdgeRateLimit(supabase, `org-invite:user:${user.id}`, 12, 60 * 60_000))) {
+    if (!(await enforceEdgeRateLimits(supabase, `org-invite:user:${user.id}`, 12, 60 * 60_000))) {
       return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

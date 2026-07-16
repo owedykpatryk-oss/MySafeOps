@@ -4,7 +4,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
-import { checkEdgeRateLimit, checkDurableEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
+import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { detectIncomingWebhookKind, validateOutboundWebhookUrl } from "../_shared/webhookUrlValidation.ts";
 
 type PermitSlim = {
@@ -138,13 +138,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!checkEdgeRateLimit(`permit-webhook:${user.id}`, 30, 60_000)) {
-      return new Response(JSON.stringify({ error: "Too many requests" }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
-      });
-    }
-    if (!(await checkDurableEdgeRateLimit(supabase, `permit-webhook:${user.id}`, 30, 60_000))) {
+    if (!(await enforceEdgeRateLimits(supabase, `permit-webhook:${user.id}`, 30, 60_000))) {
       return new Response(JSON.stringify({ error: "Too many requests" }), {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },

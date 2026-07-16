@@ -4,7 +4,9 @@ import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
@@ -693,7 +695,7 @@ function BriefingCard({ brief, onDelete, onPrint }) {
   const isToday = brief.date === todayStr;
 
   return (
-    <div className="app-daily-briefing-card" style={{ ...ss.card, marginBottom: 8 }}>
+    <div className="app-daily-briefing-card" style={{ ...ss.card, marginBottom: 8, contentVisibility: "auto", containIntrinsicSize: "0 96px" }}>
       <div
         style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-start", cursor: "pointer" }}
         onClick={() => setExpanded((v) => !v)}
@@ -1099,47 +1101,39 @@ export default function DailyBriefing() {
           ) : null
         }
       >
-        {briefings.length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "3rem 1rem",
-              border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)",
-              borderRadius: 12,
-            }}
-          >
-            <p style={{ color: "var(--color-text-secondary)", fontSize: 13, marginBottom: 12 }}>
-              No briefing records yet.
-            </p>
-            <button type="button" onClick={() => setShowForm(true)} style={ss.btnO}>
-              + Record first briefing
-            </button>
-          </div>
+        ) : briefings.length === 0 ? (
+          <EmptyState
+            icon="☀️"
+            title="No briefing records yet"
+            description="Capture today's site briefing so attendance and topics stay auditable."
+            actionLabel="+ Record first briefing"
+            onAction={() => setShowForm(true)}
+            variant="dashed"
+          />
         ) : filtered.length === 0 ? (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "2rem",
-              border: "0.5px dashed var(--color-border-tertiary,#e5e5e5)",
-              borderRadius: 12,
-              color: "var(--color-text-secondary)",
-              fontSize: 13,
-            }}
-          >
-            No records match filters.
-          </div>
+          <EmptyState
+            icon="📋"
+            title="No records match filters"
+            description="Clear filters or record a new briefing for today's shift."
+            actionLabel="+ Record briefing"
+            onAction={() => setShowForm(true)}
+            variant="dashed"
+            compact
+          />
         ) : (
           <>
             {listPg.visible(filtered).map((b) => (
               <BriefingCard key={b.id} brief={b} onDelete={deleteBriefing} onPrint={printBriefing} />
             ))}
-            {listPg.hasMore(filtered) ? (
-              <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
-                <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                  Show more ({listPg.remaining(filtered)} remaining)
-                </button>
-              </div>
-            ) : null}
+            <RegisterListPagingFooter
+              hasMore={listPg.hasMore(filtered)}
+              remaining={listPg.remaining(filtered)}
+              showing={Math.min(listPg.cap, filtered.length)}
+              total={filtered.length}
+              onShowMore={listPg.showMore}
+              itemLabel="briefings"
+              buttonStyle={ss.btn}
+            />
           </>
         )}
       </RegisterModuleShell>

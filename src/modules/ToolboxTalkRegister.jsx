@@ -8,8 +8,10 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import PageHero from "../components/PageHero";
+import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
@@ -233,14 +235,16 @@ export default function ToolboxTalkRegister() {
         }
       >
         {items.length === 0 ? (
-          <div style={{ ...ss.card, textAlign: "center", color: "var(--color-text-secondary)" }}>No toolbox talks logged.</div>
+          <EmptyState
+            icon="💬"
+            title="No toolbox talks logged yet"
+            description="Record toolbox talks, topics and attendance for this site."
+            actionLabel="+ Add talk"
+            onAction={() => setModal({ type: "form" })}
+            variant="dashed"
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {listPg.hasMore(items) ? (
-              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                Showing {Math.min(listPg.cap, items.length)} of {items.length} talks
-              </div>
-            ) : null}
             {listPg.visible(items).map((r) => (
               <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -280,13 +284,14 @@ export default function ToolboxTalkRegister() {
                 </div>
               </div>
             ))}
-            {listPg.hasMore(items) ? (
-              <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
-                <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                  Show more ({listPg.remaining(items)} remaining)
-                </button>
-              </div>
-            ) : null}
+            <RegisterListPagingFooter
+              hasMore={listPg.hasMore(items)}
+              remaining={listPg.remaining(items)}
+              showing={Math.min(listPg.cap, items.length)}
+              total={items.length}
+              onShowMore={listPg.showMore}
+              buttonStyle={ss.btn}
+            />
           </div>
         )}
       </RegisterModuleShell>

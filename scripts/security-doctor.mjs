@@ -197,10 +197,13 @@ async function main() {
     ok("Supabase client has no hardcoded URL/anon fallback");
   }
 
-  if (fileIncludes("supabase/functions/send-permit-notification/index.ts", "checkEdgeRateLimit")) {
+  if (
+    fileIncludes("supabase/functions/send-permit-notification/index.ts", "enforceEdgeRateLimits") ||
+    fileIncludes("supabase/functions/send-permit-notification/index.ts", "checkEdgeRateLimit")
+  ) {
     ok("Permit notification Edge Function has isolate rate limit");
   } else {
-    fail("Permit notification missing checkEdgeRateLimit");
+    fail("Permit notification missing rate limit");
     issues += 1;
   }
 
@@ -252,10 +255,10 @@ async function main() {
     issues += 1;
   }
 
-  if (fileIncludes("supabase/functions/_shared/edgeRateLimit.ts", "claim_edge_rate_bucket")) {
+  if (fileIncludes("supabase/functions/_shared/edgeRateLimit.ts", "enforceEdgeRateLimits")) {
     ok("Edge rate limit helper supports durable Postgres buckets");
   } else {
-    fail("missing durable claim_edge_rate_bucket helper");
+    fail("missing durable enforceEdgeRateLimits helper");
     issues += 1;
   }
 

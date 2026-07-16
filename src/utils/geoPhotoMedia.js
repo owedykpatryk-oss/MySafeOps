@@ -1,14 +1,23 @@
 /**
  * Geo-photo image storage — prefer R2 when configured; keep JPEG data URL as offline fallback.
  */
-import { uploadFileToR2Storage, isR2StorageConfigured } from "../lib/r2Storage";
+import { uploadFileToR2Storage, isR2StorageConfigured, pickR2ViewUrl } from "../lib/r2Storage";
 import { dataUrlToBlob } from "./dataUrlBlob";
 import { getOrgId } from "./orgStorage";
 
-/** URL for thumbnails / survey import (R2 public URL or embedded data). */
+/** URL for thumbnails / survey import (embedded data first for offline, else signed/public R2). */
 export function geoPhotoDisplayUrl(photo) {
   if (!photo) return "";
-  return photo.photoDataUrl || photo.photoPublicUrl || "";
+  if (photo.photoDataUrl) return photo.photoDataUrl;
+  return (
+    pickR2ViewUrl({
+      signedUrl: photo.photoSignedUrl,
+      signedExpiresAt: photo.photoSignedExpiresAt,
+      publicUrl: photo.photoPublicUrl,
+    }) ||
+    photo.photoPublicUrl ||
+    ""
+  );
 }
 
 /**
@@ -34,6 +43,8 @@ export async function uploadGeoPhotoToR2(dataUrl, opts = {}) {
     return {
       photoStorageKey: uploaded.key,
       photoPublicUrl: uploaded.publicUrl || null,
+      photoSignedUrl: uploaded.signedUrl || null,
+      photoSignedExpiresAt: uploaded.signedExpiresAt || null,
     };
   } catch {
     return null;

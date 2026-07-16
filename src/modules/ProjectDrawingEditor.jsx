@@ -1216,6 +1216,8 @@ export default function ProjectDrawingEditor() {
           key: result.key,
           size: result.size,
           publicUrl: result.publicUrl,
+          signedUrl: result.signedUrl || null,
+          signedExpiresAt: result.signedExpiresAt || null,
           uploadedAt: new Date().toISOString(),
           source: "project-drawing-editor",
         };
@@ -1223,7 +1225,7 @@ export default function ProjectDrawingEditor() {
         saveR2UploadsList(next);
         pushAudit({ action: "r2_upload", entity: "document", detail: result.key });
         setToast(`Uploaded ${filename} to cloud library`);
-        return result.publicUrl || null;
+        return result.signedUrl || result.publicUrl || null;
       } catch (e) {
         setToast(e?.message || "Upload failed");
         return null;

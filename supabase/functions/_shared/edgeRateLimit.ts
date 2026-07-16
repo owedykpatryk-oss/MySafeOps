@@ -52,3 +52,14 @@ export async function checkDurableEdgeRateLimit(
     return true;
   }
 }
+
+/** Isolate then durable rate limit. Returns true if the request is allowed. */
+export async function enforceEdgeRateLimits(
+  supabase: RpcClient,
+  key: string,
+  max: number,
+  windowMs: number,
+): Promise<boolean> {
+  if (!checkEdgeRateLimit(key, max, windowMs)) return false;
+  return await checkDurableEdgeRateLimit(supabase, key, max, windowMs);
+}

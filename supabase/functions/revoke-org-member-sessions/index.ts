@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { checkEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
+import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 
 Deno.serve(async (req) => {
@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!checkEdgeRateLimit(`revoke-sessions:${user.id}`, 10, 60_000)) {
+    if (!(await enforceEdgeRateLimits(supabase, `revoke-sessions:${user.id}`, 10, 60_000))) {
       return new Response(JSON.stringify({ error: "Too many requests" }), {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

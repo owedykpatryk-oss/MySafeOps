@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { isR2StorageConfigured, uploadFileToR2Storage } from "../lib/r2Storage";
+import { isR2StorageConfigured, uploadFileToR2Storage, pickR2ViewUrl } from "../lib/r2Storage";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { safeHttpUrl } from "../utils/safeUrl";
@@ -128,6 +128,8 @@ export default function DocumentLibrary() {
           key: result.key,
           size: result.size,
           publicUrl: result.publicUrl,
+          signedUrl: result.signedUrl || null,
+          signedExpiresAt: result.signedExpiresAt || null,
           uploadedAt: new Date().toISOString(),
         };
         setR2Uploads((prev) => {
@@ -211,15 +213,15 @@ export default function DocumentLibrary() {
                   >
                     <strong>{u.name}</strong>
                     <div style={{ wordBreak: "break-all", color: "var(--color-text-secondary)" }}>{u.key}</div>
-                    {u.publicUrl && (() => {
-                      const pub = safeHttpUrl(u.publicUrl);
-                      return pub ? (
-                        <a href={pub} target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>
+                    {(() => {
+                      const view = safeHttpUrl(pickR2ViewUrl(u) || "");
+                      return view ? (
+                        <a href={view} target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>
                           Open link
                         </a>
-                      ) : (
+                      ) : u.publicUrl || u.signedUrl ? (
                         <span style={{ color: "var(--color-text-secondary)", fontSize: 11 }}>Invalid link URL</span>
-                      );
+                      ) : null;
                     })()}
                     <button type="button" style={{ ...ss.btn, fontSize: 12, marginTop: 6 }} onClick={() => removeR2Row(u.id)}>
                       Remove from list
@@ -284,15 +286,15 @@ export default function DocumentLibrary() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 500 }}>{u.name}</div>
                     <div style={{ color: "var(--color-text-secondary)", wordBreak: "break-all" }}>{u.key}</div>
-                    {u.publicUrl && (() => {
-                      const pub = safeHttpUrl(u.publicUrl);
-                      return pub ? (
-                        <a href={pub} target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488", fontSize: 12 }}>
-                          Open public link
+                    {(() => {
+                      const view = safeHttpUrl(pickR2ViewUrl(u) || "");
+                      return view ? (
+                        <a href={view} target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488", fontSize: 12 }}>
+                          Open link
                         </a>
-                      ) : (
-                        <span style={{ color: "var(--color-text-secondary)", fontSize: 11 }}>Invalid public URL</span>
-                      );
+                      ) : u.publicUrl || u.signedUrl ? (
+                        <span style={{ color: "var(--color-text-secondary)", fontSize: 11 }}>Invalid link URL</span>
+                      ) : null;
                     })()}
                   </div>
                   <button type="button" style={{ ...ss.btn, fontSize: 12 }} onClick={() => removeR2Row(u.id)}>
