@@ -1,11 +1,11 @@
-import {
-  getLocalOrgBrandingUpdatedAt,
-  loadOrgSettingsRaw,
-  pickCloudBrandingPayload,
-  saveOrgSettingsRaw,
-} from "./orgSettingsStorage";
-import { isValidIndustryPackId } from "./orgIndustryPacks";
-import { mergeCustomProfilesFromCloudSettings } from "./customWorkspaceProfiles";
+import { mergeCustomProfilesFromCloudSettings, isCustomWorkspacePackId } from "./customWorkspaceProfilesCloud";
+import { FESS_GROUP_PACK_ID } from "./fessWorkspaceProfile";
+import { isBuiltInIndustryPackId, normalizeIndustryPackId } from "./industryPackCatalog";
+
+function isCloudSafeIndustryPackId(packId) {
+  const id = normalizeIndustryPackId(packId);
+  return Boolean(id && (isBuiltInIndustryPackId(id) || isCustomWorkspacePackId(id) || id === FESS_GROUP_PACK_ID));
+}
 
 /** @param {Record<string, unknown>} settings */
 export async function resolveBrandingLogoUrl(settings) {
@@ -34,6 +34,12 @@ export async function resolveBrandingLogoUrl(settings) {
  */
 export async function syncOrgBrandingFromCloud(supabase, orgSlug) {
   if (!supabase || !orgSlug || orgSlug === "default") return false;
+
+  const {
+    getLocalOrgBrandingUpdatedAt,
+    loadOrgSettingsRaw,
+    saveOrgSettingsRaw,
+  } = await import("./orgSettingsStorage");
 
   const { data, error } = await supabase.rpc("get_my_org_branding");
   if (error) throw error;
@@ -66,8 +72,9 @@ export async function syncOrgBrandingFromCloud(supabase, orgSlug) {
  */
 export async function pushOrgBrandingToCloud(supabase, rawSettings) {
   if (!supabase) return null;
+  const { pickCloudBrandingPayload } = await import("./orgSettingsStorage");
   let payload = pickCloudBrandingPayload(rawSettings);
-  if (payload.industryPackId && !isValidIndustryPackId(payload.industryPackId)) {
+  if (payload.industryPackId && !isCloudSafeIndustryPackId(payload.industryPackId)) {
     delete payload.industryPackId;
   }
   if (payload.logo && payload.logoUrl && String(payload.logo).length > 120_000) {

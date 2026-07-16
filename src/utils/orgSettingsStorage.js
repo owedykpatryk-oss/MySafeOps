@@ -1,4 +1,5 @@
-import { getOrgId, loadOrgScoped, orgScopedKey, saveOrgScoped } from "./orgStorage";
+import { getOrgId, orgScopedKey } from "./orgId";
+import { loadOrgScoped, saveOrgScoped } from "./orgStorage";
 import { resolveMarketId, isValidMarketId } from "../config/markets";
 
 export const ORG_SETTINGS_BASE_KEY = "mysafeops_org_settings";

@@ -5,7 +5,7 @@
 import { escapeHtml as escHtml } from "./htmlEscape";
 import { canUseFessExclusiveFeatures } from "./fessExclusive";
 import { getRiskLevel, RISK_COLORS } from "../modules/rams/ramsRiskLevel.js";
-import { wrapRamsPrintDocument } from "../modules/rams/ramsPrintHtml.js";
+import { wrapRamsPrintDocument } from "../modules/rams/ramsPrintDocument.js";
 import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 
 const fmtDate = (iso) => {

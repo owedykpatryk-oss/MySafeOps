@@ -3,6 +3,22 @@
  */
 export const FESS_GROUP_PACK_ID = "fessGroup";
 
+/** Canonical Supabase / provision slugs for FESS Group. */
+export const FESS_ORG_SLUGS = new Set(["fess-group", "fess_group"]);
+
+/** Lightweight FESS tenant check for profile lists (no fessOrg/orgStorage cycle). */
+export function isFessOrgForWorkspaceList(orgId, settingsName = "") {
+  const slug = String(orgId || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+  if (FESS_ORG_SLUGS.has(slug)) return true;
+  const name = String(settingsName || "")
+    .trim()
+    .toLowerCase();
+  return name.includes("fess group") || name === "fess";
+}
+
 /** @returns {boolean} */
 export function isFessExclusivePackId(packId) {
   return String(packId || "").trim() === FESS_GROUP_PACK_ID;

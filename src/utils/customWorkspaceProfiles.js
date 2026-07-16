@@ -3,11 +3,15 @@
  */
 import { loadOrgScoped, saveOrgScoped } from "./orgStorage";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
-import { INDUSTRY_PACKS } from "./orgIndustryPacks";
-import { isFessOrg } from "./fessOrg";
-import { FESS_GROUP_PACK_ID, getFessGroupWorkspacePack } from "./fessWorkspaceProfile";
+import { INDUSTRY_PACKS } from "./industryPackCatalog";
+import {
+  FESS_GROUP_PACK_ID,
+  getFessGroupWorkspacePack,
+  isFessOrgForWorkspaceList,
+} from "./fessWorkspaceProfile";
+import { getOrgId } from "./orgId";
 import { MORE_TABS } from "../navigation/appModules";
-import { getRamsStarterLabel, isSurveyRamsStarterKey, isValidTradeRamsStarterKey } from "./ramsIndustryStarters";
+import { isCustomWorkspacePackId } from "./customWorkspaceProfilesCloud";
 
 const LEGACY_SCOPED_KEY = "custom_workspace_profiles";
 
@@ -58,14 +62,7 @@ function persistCustomWorkspaceProfiles(profiles) {
   saveOrgSettingsRaw({ ...raw, customWorkspaceProfiles: list });
 }
 
-/** Merge cloud-pulled profiles into local org settings (org-private). */
-export function mergeCustomProfilesFromCloudSettings(cloudSettings) {
-  if (!cloudSettings || !Array.isArray(cloudSettings.customWorkspaceProfiles)) return false;
-  const incoming = cloudSettings.customWorkspaceProfiles.map(normalizeProfile).filter(Boolean);
-  if (!incoming.length) return false;
-  persistCustomWorkspaceProfiles(incoming);
-  return true;
-}
+export { mergeCustomProfilesFromCloudSettings, isCustomWorkspacePackId } from "./customWorkspaceProfilesCloud";
 
 /** @returns {CustomWorkspaceProfile[]} */
 export function loadCustomWorkspaceProfiles() {
@@ -80,11 +77,6 @@ export function loadCustomWorkspaceProfiles() {
     return migrated;
   }
   return [];
-}
-
-/** @param {unknown} id */
-export function isCustomWorkspacePackId(id) {
-  return typeof id === "string" && id.startsWith("custom_");
 }
 
 /** @param {string} id @returns {CustomWorkspaceProfile | null} */
@@ -108,7 +100,7 @@ export function resolveWorkspacePack(packKey) {
 export function listWorkspaceProfilesForOrg() {
   const builtIn = Object.entries(INDUSTRY_PACKS).map(([id, pack]) => ({ id, ...pack, custom: false }));
   const fess =
-    isFessOrg() ?
+    isFessOrgForWorkspaceList(getOrgId(), loadOrgSettingsRaw()?.name) ?
       [{ id: FESS_GROUP_PACK_ID, ...getFessGroupWorkspacePack(), custom: false, orgExclusive: true }]
     : [];
   const custom = loadCustomWorkspaceProfiles().map((p) => ({ id: p.id, ...p }));
@@ -243,20 +235,4 @@ export function deleteCustomWorkspaceProfile(id) {
   return true;
 }
 
-/** RAMS starter options for profile editor. */
-export function ramsStarterOptionsForEditor() {
-  const tradeKeys = [
-    "general",
-    "electrical",
-    "refurb_build",
-    "groundworks",
-    "demolition",
-    "geospatial_intelligence",
-    "utility_mapping_survey",
-    "healthcare_fm",
-  ];
-  return tradeKeys.map((key) => ({
-    key,
-    label: isSurveyRamsStarterKey(key) || key === "geospatial_intelligence" ? getRamsStarterLabel(key) : getRamsStarterLabel(key),
-  })).filter((o) => isSurveyRamsStarterKey(o.key) || isValidTradeRamsStarterKey(o.key) || o.key === "geospatial_intelligence");
-}
+export { ramsStarterOptionsForEditor } from "./customProfileRamsOptions";

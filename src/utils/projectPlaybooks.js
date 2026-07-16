@@ -4,7 +4,7 @@
  */
 
 import { PROJECT_DOC_KEYS } from "./projectDashboard";
-import { isSurveyWorkflowEnabled } from "./projectHubIndustry";
+import { isSurveyWorkflowEnabled } from "./surveyWorkflowGate";
 import { loadOrgScoped as load, saveOrgScoped as save, asStorageArray } from "./orgStorage";
 import { blankSurveyReport } from "../modules/surveyReport/surveyReportConstants";
 import {

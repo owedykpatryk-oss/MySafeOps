@@ -2,36 +2,23 @@
  * Industry-aware project hub — survey workflow only for geodesy / PAS128 orgs.
  */
 
-import { getAppliedIndustryPackId, getWorkspacePack, INDUSTRY_PACKS } from "./orgIndustryPacks";
+import { getWorkspacePack } from "./orgIndustryPacks";
 import { resolveProfileBehaviorPackId } from "./customWorkspaceProfiles";
-import { getIndustryPackPreviewId } from "./industryPackPreview";
-import { isModuleVisible } from "./hiddenModules";
 import { PROJECT_PLAYBOOKS } from "./projectPlaybooks";
 import { isFessOrg } from "./fessOrg";
 import { FESS_PROJECT_PLAYBOOKS } from "./fessProjectPlaybooks";
 import { filterFessExclusivePlaybooks } from "./fessExclusive";
+import {
+  getOrgIndustryPackId,
+  isSurveyWorkflowEnabled,
+  isSurveyingOrg,
+} from "./surveyWorkflowGate";
+
+export { getOrgIndustryPackId, isSurveyWorkflowEnabled, isSurveyingOrg } from "./surveyWorkflowGate";
 
 function packHasSurveyWorkflow(packId) {
   const pack = getWorkspacePack(packId);
   return Boolean(pack?.surveyWorkflow);
-}
-
-/** Effective pack — preview (session) overrides saved profile for hub UI only. */
-export function getOrgIndustryPackId() {
-  return getIndustryPackPreviewId() || getAppliedIndustryPackId() || "generalContractor";
-}
-
-/** Survey deliverables (PAS128 reports) — surveying & hybrid orgs only. */
-export function isSurveyWorkflowEnabled() {
-  if (typeof window === "undefined") return false;
-  if (!isModuleVisible("survey-report")) return false;
-  const pack = getOrgIndustryPackId();
-  return packHasSurveyWorkflow(pack) || pack === "showEverything";
-}
-
-export function isSurveyingOrg() {
-  const pack = getOrgIndustryPackId();
-  return pack === "surveyingGeodesy" || pack === "contractorPlusSurveying" || packHasSurveyWorkflow(pack);
 }
 
 /** Playbooks shown in project create / hub — no PAS128 packs for pure contractors. */

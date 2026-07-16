@@ -1,4 +1,4 @@
-import { orgScopedKey, getOrgId } from "./orgStorage";
+import { orgScopedKey, getOrgId } from "./orgId";
 import { supabase } from "../lib/supabase";
 import { d1AppendServerAudit, isD1Configured } from "../lib/d1SyncClient";
 

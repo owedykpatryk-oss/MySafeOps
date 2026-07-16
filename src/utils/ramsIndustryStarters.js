@@ -3,7 +3,7 @@
  * Surveying keys (e.g. utility_mapping_survey) are handled in RAMSTemplateBuilder SURVEYING_PACKS.
  */
 
-import { getAppliedIndustryPackId, INDUSTRY_PACKS } from "./orgIndustryPacks";
+import { INDUSTRY_PACKS, normalizeIndustryPackId } from "./industryPackCatalog";
 import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 
 /** @typedef {{ key: string, label: string, scope: string, method: string, hazardTokens: string[], categories?: string[] }} TradeRamsStarter */
@@ -262,7 +262,7 @@ export function getOrgRamsStarterKey() {
     const saved = raw.ramsStarterKey;
     if (isValidTradeRamsStarterKey(saved) || isSurveyRamsStarterKey(saved)) return saved;
   }
-  const packId = getAppliedIndustryPackId();
+  const packId = normalizeIndustryPackId(raw.industryPackId);
   const fromPack = packId && INDUSTRY_PACKS[packId]?.ramsStarterKey;
   if (fromPack === null) return null;
   if (typeof fromPack === "string" && fromPack) return fromPack;

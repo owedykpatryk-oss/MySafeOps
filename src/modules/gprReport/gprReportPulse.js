@@ -1,5 +1,7 @@
 import { GPR_DELIVERABLES } from "./gprReportConstants";
-import { gprReportQuality } from "./gprReportHelpers";
+import { gprEvidenceStats, gprReportQuality } from "./gprReportHelpers";
+
+export { gprEvidenceStats } from "./gprReportHelpers";
 
 /** Deliverable checklist progress for scorecard UI. */
 export function gprDeliverableProgress(deliverables = {}) {
@@ -11,25 +13,6 @@ export function gprDeliverableProgress(deliverables = {}) {
   const done = items.filter((i) => i.done).length;
   const total = items.length;
   return { items, done, total, pct: total ? Math.round((done / total) * 100) : 0 };
-}
-
-/** Evidence counts for hero chips and list rows. */
-export function gprEvidenceStats(report) {
-  const radargrams = report?.radargrams?.length || 0;
-  const panels = report?.scanPanels?.length || 0;
-  const chainage = report?.chainageSegments?.length || 0;
-  const planFigures = report?.planFigures?.length || 0;
-  const anomalies = report?.anomalies?.length || 0;
-  const filtersApplied = (report?.processing?.filters || []).filter((f) => f.applied).length;
-  return {
-    radargrams,
-    panels,
-    chainage,
-    planFigures,
-    anomalies,
-    filtersApplied,
-    totalEvidence: radargrams + panels + chainage + planFigures,
-  };
 }
 
 /** Section health breakdown for deliverable scorecard rings. */

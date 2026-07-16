@@ -10,7 +10,6 @@ import {
   recommendAntennaMhz,
   interpretGeologyForGpr,
 } from "../../utils/gprGroundConditions";
-import { gprEvidenceStats } from "./gprReportPulse";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 
 export function normalizeGprReport(raw) {
@@ -116,6 +115,25 @@ export function gprReportQuality(report) {
   const score = Math.round((keys.filter((k) => passed[k]).length / keys.length) * 100);
   const missing = QUALITY_LABELS.filter((q) => !passed[q.key]).map((q) => q.label);
   return { score, missing, passed, checks: keys.length };
+}
+
+/** Evidence counts for hero chips and list rows. */
+export function gprEvidenceStats(report) {
+  const radargrams = report?.radargrams?.length || 0;
+  const panels = report?.scanPanels?.length || 0;
+  const chainage = report?.chainageSegments?.length || 0;
+  const planFigures = report?.planFigures?.length || 0;
+  const anomalies = report?.anomalies?.length || 0;
+  const filtersApplied = (report?.processing?.filters || []).filter((f) => f.applied).length;
+  return {
+    radargrams,
+    panels,
+    chainage,
+    planFigures,
+    anomalies,
+    filtersApplied,
+    totalEvidence: radargrams + panels + chainage + planFigures,
+  };
 }
 
 export function primaryAntennaMhz(report) {

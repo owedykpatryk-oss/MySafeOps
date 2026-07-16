@@ -1,11 +1,12 @@
 /**
  * FESS Group org detection — used for org-exclusive workspace profile, packs and modules.
  */
-import { getOrgId } from "./orgStorage";
+import { getOrgId } from "./orgId";
 import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 
-/** Canonical Supabase / provision slug (scripts/provision-fess-group.mjs). */
-export const FESS_ORG_SLUGS = new Set(["fess-group", "fess_group"]);
+import { FESS_ORG_SLUGS } from "./fessWorkspaceProfile";
+
+export { FESS_ORG_SLUGS } from "./fessWorkspaceProfile";
 
 /**
  * @param {string} [orgId]

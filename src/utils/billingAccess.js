@@ -1,4 +1,4 @@
-import { getBillingEntitlements, getTrialExtensionCount, getTrialStatus } from "./orgMembership";
+import { getBillingEntitlements, getTrialExtensionCount, getTrialStatus } from "./billingState";
 
 export const BILLING_WRITE_BLOCKED_EVENT = "mysafeops-billing-write-blocked";
 export const MAX_TRIAL_EXTENSIONS = 1;
