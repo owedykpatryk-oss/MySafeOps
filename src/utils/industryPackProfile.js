@@ -2,7 +2,7 @@
  * Industry pack profile — readiness gates, More pulse, site pack, and switch preview.
  */
 
-import { INDUSTRY_PACKS, getWorkspacePack, getWorkspacePackLabel } from "./orgIndustryPacks";
+import { getIndustryPackLabel } from "./industryPackLabel";
 import { getCustomWorkspaceProfile, resolveProfileBehaviorPackId, visibleModulesForProfile } from "./customWorkspaceProfiles";
 import { getOrgIndustryPackId, isSurveyWorkflowEnabled } from "./projectHubIndustry";
 import { getRamsStarterLabel } from "./ramsIndustryStarters";
@@ -12,6 +12,9 @@ import { todayIsoDate } from "./projectDashboard";
 import { evaluateSurveyFinalGate } from "./surveyCompletenessGates";
 import { getOrgMarketId } from "./orgMarket";
 import { localizeIndustryTerminology } from "./marketLabels";
+import { INDUSTRY_PACKS, getWorkspacePack } from "./orgIndustryPacks";
+
+export { getIndustryPackLabel } from "./industryPackLabel";
 
 function locPackCopy(text, marketId = getOrgMarketId()) {
   return localizeIndustryTerminology(String(text || ""), marketId);
@@ -278,11 +281,6 @@ const PACK_HIGHLIGHTS = {
     "Civils site pack for audit exports",
   ],
 };
-
-/** @param {string} [packId] */
-export function getIndustryPackLabel(packId = getOrgIndustryPackId()) {
-  return getWorkspacePackLabel(packId) || INDUSTRY_PACKS.generalContractor.label;
-}
 
 /** @param {string} [packId] @param {import("../config/markets").MarketId} [marketId] */
 export function getIndustrySitePackTitle(packId = getOrgIndustryPackId(), marketId = getOrgMarketId()) {

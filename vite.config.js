@@ -632,6 +632,14 @@ export default defineConfig(({ mode }) => {
               }
               if (norm.includes("/utils/surveyPermitLink")) return "permits-lib";
               if (norm.includes("/utils/projectRamsPresence")) return "shared-ui";
+              if (norm.includes("/utils/projectDocKeys") || norm.includes("/utils/ramsDocumentClone")) return "shared-ui";
+              if (
+                norm.includes("/utils/industryPackLabel") ||
+                norm.includes("/utils/industryPackCatalog") ||
+                norm.includes("/utils/industryPackPreview")
+              ) {
+                return "shared-ui";
+              }
               // Shared leaf utils — never absorb into feature chunks (avoids cross-chunk TDZ).
               if (
                 norm.includes("/utils/moduleStyles") ||

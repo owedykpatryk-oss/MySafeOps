@@ -43,7 +43,7 @@ import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
-import { duplicateRamsToProject, batchDuplicateRamsToProject } from "../../utils/documentPropagation";
+import { duplicateRamsToProject, batchDuplicateRamsToProject } from "../../utils/ramsDocumentClone";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
@@ -60,7 +60,7 @@ import {
   requiresCompetentReviewForRamsStatus,
   stampCompetentReview,
 } from "../../utils/competentReviewGate";
-import { getIndustryPackLabel } from "../../utils/industryPackProfile";
+import { getIndustryPackLabel } from "../../utils/industryPackLabel";
 import {
   findTradeStarterByKey,
   findHazardsForStarterTokens,
@@ -80,7 +80,7 @@ import {
 import { isFessOrg } from "../../utils/fessOrg";
 import { buildFessJobStarterFormPatch, getFessSiteBaselineHazards, getHazardsForFessJobStarter } from "../../utils/fessRamsWorkflow";
 import { getFessSitePlaybookSuggestion } from "../../utils/fessClientSites";
-import { getPlaybook } from "../../utils/projectPlaybooks";
+import { getFessPlaybook } from "../../utils/fessProjectPlaybooks";
 import { openFessSitePackWindow } from "../../utils/fessSitePack";
 import FessJobStarterSection from "./FessJobStarterSection";
 import { getOrgId, ORG_CHANGED_EVENT } from "../../utils/orgStorage";
@@ -4144,10 +4144,17 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
   const inkPadRef = useRef(null);
   const deferredForm = useDeferredValue(form);
   const deferredRows = useDeferredValue(rows);
-  const previewHtml = useMemo(
-    () => buildRamsPreviewHtml(deferredForm, deferredRows, workers, projects),
-    [deferredForm, deferredRows, workers, projects]
-  );
+  const previewHtml = useMemo(() => {
+    try {
+      return buildRamsPreviewHtml(deferredForm, deferredRows, workers, projects);
+    } catch (err) {
+      console.error("RAMS A4 preview failed", err);
+      return `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:24px;color:#b91c1c">
+        <h1 style="font-size:16px">Preview could not be built</h1>
+        <p style="font-size:13px">${String(err?.message || err || "Unknown error")}</p>
+      </body></html>`;
+    }
+  }, [deferredForm, deferredRows, workers, projects]);
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
   const projectMap = Object.fromEntries(projects.map(p=>[p.id,p.name]));
   const operatives = (form.operativeIds||[]).map(id=>workerMap[id]).filter(Boolean);
@@ -6146,7 +6153,7 @@ export default function RAMSTemplateBuilder() {
         location: formInit.location || p?.address || p?.site || "",
       };
       if (isFessOrg() && p) {
-        const playbook = p.playbookId ? getPlaybook(p.playbookId) : null;
+        const playbook = p.playbookId ? getFessPlaybook(p.playbookId) : null;
         const starterKey =
           playbook?.fessJobStarterKey ||
           p.fessSuggestedJobStarterKey ||

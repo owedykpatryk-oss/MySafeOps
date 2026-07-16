@@ -3,7 +3,7 @@
  * No AI: deterministic JSON recipes applied on project create or from project hub.
  */
 
-import { PROJECT_DOC_KEYS } from "./projectDashboard";
+import { PROJECT_DOC_KEYS } from "./projectDocKeys";
 import { isSurveyWorkflowEnabled } from "./surveyWorkflowGate";
 import { loadOrgScoped as load, saveOrgScoped as save } from "./orgStorage";
 import { projectHasRams, docsForProject } from "./projectRamsPresence";
