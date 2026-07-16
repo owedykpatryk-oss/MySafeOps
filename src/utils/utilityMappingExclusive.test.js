@@ -48,7 +48,7 @@ describe("Utility Mapping exclusive content", () => {
     expect(featured[0]).toMatch(/^um_/);
   });
 
-  it("seeds exclusive packs, MS and survey defaults on pack apply", () => {
+  it("seeds exclusive packs, MS and survey defaults on pack apply", async () => {
     setOrgId("utility-mapping");
     saveOrgSettingsRaw({
       name: "Utility Mapping",
@@ -56,7 +56,8 @@ describe("Utility Mapping exclusive content", () => {
       hiddenModules: ["survey-report"],
       hiddenModulesBootstrapped: true,
     });
-    applyIndustryPack(UTILITY_MAPPING_PACK_ID, { seedTemplates: true });
+    const { seedPromise } = applyIndustryPack(UTILITY_MAPPING_PACK_ID, { seedTemplates: true });
+    await seedPromise;
     expect(getAppliedIndustryPackId()).toBe(UTILITY_MAPPING_PACK_ID);
     expect(loadRamsHazardPacks([]).some((p) => p.id === UM_PAS128_BASELINE_PACK_DEF.id)).toBe(true);
     expect(getMsStepTemplate("pas128Mobilisation").length).toBeGreaterThanOrEqual(6);

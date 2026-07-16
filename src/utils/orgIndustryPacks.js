@@ -106,12 +106,13 @@ export function applyIndustryPack(packKey, options = {}) {
     seeded = seedRegistersForIndustryPack(seedKey).seeded;
   }
 
+  let seedPromise = Promise.resolve({ ok: false });
   if (isUtilityMappingExclusivePackId(id)) {
     // Dynamic import keeps RAMS/MS/survey seed graphs out of the orgIndustryPacks sync chunk
     // (avoids permits-lib ↔ survey-report circular Vite chunks).
-    void import("./utilityMappingExclusiveSeeds")
+    seedPromise = import("./utilityMappingExclusiveSeeds")
       .then((m) => m.seedUtilityMappingExclusiveContent())
-      .catch(() => {});
+      .catch(() => ({ ok: false }));
   }
 
   if (typeof window !== "undefined") {
@@ -119,7 +120,7 @@ export function applyIndustryPack(packKey, options = {}) {
       new CustomEvent("mysafeops-hidden-modules-updated", { detail: { orgId: raw.orgId } })
     );
   }
-  return { seeded };
+  return { seeded, seedPromise };
 }
 
 export function getAppliedIndustryPackId() {
