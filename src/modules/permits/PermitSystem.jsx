@@ -38,6 +38,8 @@ import { pickGeoPhotoAsPermitEvidence } from "../../utils/geoPhotoIntegrations";
 import { permitHasSiteEvidence, suggestedGeoPhotoPresetForPermit } from "../../utils/geoPhotoFields";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
+import { useListWindow } from "../../utils/useListWindow.js";
+import RegisterListPagingFooter from "../../components/RegisterListPagingFooter";
 import { mirrorPermitsToSupabase } from "../../utils/permitSupabaseMirror";
 import { attachRamsSnapshotOnIssue } from "../../utils/permitRamsSnapshot";
 import {
@@ -5075,6 +5077,16 @@ export default function PermitSystem() {
     handoverStateForPermit,
     blockedNowForPermit,
   ]);
+  const pagedPermits = useMemo(() => listPg.visible(filtered), [listPg, filtered, listPg.cap]);
+  const listWin = useListWindow(pagedPermits, {
+    rowHeight: cardDensity === "compact" ? 96 : cardDensity === "ops" ? 110 : 140,
+    maxHeight: 640,
+    overscan: 4,
+    enableAfter: 40,
+  });
+  useEffect(() => {
+    listWin.onScrollReset();
+  }, [search, filterType, filterStatus, filterHandoverDue, filterBlockedNow, filterBriefingPending, filterRamsMissing, viewMode, listWin.onScrollReset]);
   const permitCardContextById = useMemo(() => {
     const map = new Map();
     for (const p of filtered) {
@@ -9307,21 +9319,31 @@ export default function PermitSystem() {
         </Suspense>
       ) : (
         <>
-          {listPg.hasMore(filtered) ? (
-            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
-              Showing {Math.min(listPg.cap, filtered.length)} of {filtered.length} permits
-            </div>
-          ) : null}
           <div className="ptw-permit-list">
-          {listPg.visible(filtered).map(renderListPermitCard)}
+            {listWin.enabled ? (
+              <div
+                ref={listWin.parentRef}
+                style={{ maxHeight: listWin.maxHeight, overflow: "auto" }}
+              >
+                <div style={{ height: listWin.totalHeight, position: "relative" }}>
+                  <div style={{ position: "absolute", top: listWin.offsetY, left: 0, right: 0 }}>
+                    {listWin.visibleItems.map(renderListPermitCard)}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              listWin.visibleItems.map(renderListPermitCard)
+            )}
           </div>
-          {listPg.hasMore(filtered) ? (
-            <div style={{ display: "flex", justifyContent: "center", marginTop: 8, marginBottom: 8 }}>
-              <button type="button" style={ss.btn} onClick={listPg.showMore}>
-                Show more ({listPg.remaining(filtered)} remaining)
-              </button>
-            </div>
-          ) : null}
+          <RegisterListPagingFooter
+            hasMore={listPg.hasMore(filtered)}
+            remaining={listPg.remaining(filtered)}
+            showing={Math.min(listPg.cap, filtered.length)}
+            total={filtered.length}
+            onShowMore={listPg.showMore}
+            itemLabel="permits"
+            buttonStyle={ss.btn}
+          />
         </>
       ))}
       </div>

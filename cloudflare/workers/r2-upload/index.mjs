@@ -1,6 +1,10 @@
 /**
+ * R2 upload + authenticated object fetch for MySafeOps.
  * POST /upload — multipart form: file (required), key (optional path inside bucket)
- * Auth: Supabase JWT (preferred when SUPABASE_URL + SUPABASE_ANON_KEY are set) or legacy X-Upload-Token.
+ * GET  /object?key=… — stream object (Supabase JWT + org membership)
+ * GET  /signed?key=…&exp=…&sig=… — short-lived HMAC URL (no Authorization header)
+ * Auth: Supabase JWT required when SUPABASE_URL + SUPABASE_ANON_KEY are set.
+ * Legacy X-Upload-Token only when Supabase auth env is unset (local/dev).
  */
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -15,6 +19,7 @@ const BLOCKED_CONTENT_TYPES = new Set([
   "application/javascript",
   "application/x-javascript",
 ]);
+const SIGNED_TTL_SEC = 60 * 60; // 1 hour
 
 function contentTypeAllowed(fileName, contentType) {
   const name = String(fileName || "");
@@ -39,10 +44,6 @@ function timingSafeEqual(expected, received) {
   return out === 0;
 }
 
-// X-Upload-Token ships inside the client bundle (VITE_STORAGE_UPLOAD_TOKEN),
-// so it isn't a true secret once deployed. This isolate-local sliding-window
-// limiter bounds sustained abuse (bad-token brute force and storage-cost
-// abuse with a valid token) as a second layer of defence.
 const rateLimitBuckets = new Map();
 function checkRateLimit(key, max, windowMs) {
   const now = Date.now();
@@ -135,11 +136,10 @@ function corsHeaders(request, env) {
     .map((s) => s.trim())
     .filter(Boolean);
   const base = {
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Upload-Token, Authorization",
     "Access-Control-Max-Age": "86400",
   };
-  // Fail closed for browsers when ALLOWED_ORIGINS is unset — never echo '*'.
   if (!origin) return base;
   if (allowed.length === 0) {
     return { ...base, "Access-Control-Allow-Origin": "null" };
@@ -158,7 +158,6 @@ function isOriginAllowed(request, env) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  // Fail closed when allowlist is unset — never accept arbitrary browser Origins.
   if (allowed.length === 0) return !origin;
   if (!origin) return true;
   if (allowed.includes(origin)) return true;
@@ -175,15 +174,121 @@ function isOriginAllowed(request, env) {
   return false;
 }
 
+function safeAttachmentFilename(key) {
+  const base = String(key || "").split("/").pop() || "download";
+  return base.replace(/[^\w.-]+/g, "_").slice(0, 180);
+}
+
+function signingSecret(env) {
+  return String(env.SIGNING_SECRET || env.UPLOAD_TOKEN || "").trim();
+}
+
+async function hmacHex(secret, message) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function signObjectKey(env, key, expSec) {
+  const secret = signingSecret(env);
+  if (!secret) return null;
+  const payload = `${key}.${expSec}`;
+  const sig = await hmacHex(secret, payload);
+  return { exp: expSec, sig };
+}
+
+async function verifyObjectSignature(env, key, exp, sig) {
+  const secret = signingSecret(env);
+  if (!secret || !key || !exp || !sig) return false;
+  const expNum = Number(exp);
+  if (!Number.isFinite(expNum) || expNum * 1000 < Date.now()) return false;
+  const expected = await hmacHex(secret, `${key}.${expNum}`);
+  return timingSafeEqual(expected, String(sig));
+}
+
+function validateObjectKey(key) {
+  const k = String(key || "").replace(/^\/+/, "").slice(0, 900);
+  if (!KEY_RE.test(k) || k.includes("..") || !ORG_KEY_RE.test(k)) return null;
+  if (!ALLOWED_UPLOAD_EXT.test(k)) return null;
+  return k;
+}
+
+async function streamObject(env, key, c, { disposition = "attachment" } = {}) {
+  const obj = await env.BUCKET.get(key);
+  if (!obj) return json({ error: "Not found" }, 404, c);
+  const fileName = safeAttachmentFilename(key);
+  const headers = {
+    ...c,
+    "Content-Type": obj.httpMetadata?.contentType || "application/octet-stream",
+    "Content-Disposition": `${disposition}; filename="${fileName}"`,
+    "Cache-Control": "private, max-age=60",
+    "X-Content-Type-Options": "nosniff",
+  };
+  if (obj.size != null) headers["Content-Length"] = String(obj.size);
+  return new Response(obj.body, { status: 200, headers });
+}
+
 export default {
   async fetch(request, env) {
     const c = corsHeaders(request, env);
+    const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
       if (!isOriginAllowed(request, env)) {
         return json({ error: "Origin not allowed" }, 403, c);
       }
       return new Response(null, { status: 204, headers: c });
+    }
+
+    if (request.method === "GET" && url.pathname.endsWith("/signed")) {
+      const key = validateObjectKey(url.searchParams.get("key"));
+      if (!key) return json({ error: "Invalid key" }, 400, c);
+      const okSig = await verifyObjectSignature(
+        env,
+        key,
+        url.searchParams.get("exp"),
+        url.searchParams.get("sig")
+      );
+      if (!okSig) return json({ error: "Invalid or expired signature" }, 403, c);
+      const ip = clientIp(request);
+      if (!checkRateLimit(`signed:${ip}`, 120, 60_000)) {
+        return json({ error: "Too many requests" }, 429, { ...c, "Retry-After": "60" });
+      }
+      return streamObject(env, key, c, { disposition: "inline" });
+    }
+
+    if (request.method === "GET" && url.pathname.endsWith("/object")) {
+      if (!isOriginAllowed(request, env)) {
+        return json({ error: "Origin not allowed" }, 403, c);
+      }
+      const ip = clientIp(request);
+      if (!checkRateLimit(`get:${ip}`, 60, 60_000)) {
+        return json({ error: "Too many requests" }, 429, { ...c, "Retry-After": "60" });
+      }
+      const key = validateObjectKey(url.searchParams.get("key"));
+      if (!key) return json({ error: "Invalid key" }, 400, c);
+
+      const hasSupabaseAuth = Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY);
+      if (!hasSupabaseAuth) {
+        return json({ error: "Object fetch requires Supabase auth on the Worker" }, 501, c);
+      }
+      const bearer = parseBearer(request);
+      const sessionUser = bearer ? await verifySupabaseJwt(env, bearer) : null;
+      if (!sessionUser) return json({ error: "Unauthorized — sign in required" }, 401, c);
+
+      const orgSlug = orgSlugFromStorageKey(key);
+      if (orgSlug) {
+        const access = await verifyOrgSlugAccess(env, `Bearer ${bearer}`, orgSlug);
+        if (!access.ok) return json({ error: access.error || "Forbidden" }, 403, c);
+      }
+      return streamObject(env, key, c, { disposition: "attachment" });
     }
 
     if (request.method !== "POST") {
@@ -194,7 +299,6 @@ export default {
       return json({ error: "Origin not allowed" }, 403, c);
     }
 
-    const url = new URL(request.url);
     if (!url.pathname.endsWith("/upload")) {
       return json({ error: "Not found" }, 404, c);
     }
@@ -210,6 +314,7 @@ export default {
     const tokenOk = Boolean(env.UPLOAD_TOKEN && timingSafeEqual(env.UPLOAD_TOKEN, uploadToken));
     const hasSupabaseAuth = Boolean(env.SUPABASE_URL && env.SUPABASE_ANON_KEY);
 
+    // When Supabase is configured, JWT is mandatory — legacy upload token is ignored.
     if (hasSupabaseAuth) {
       if (!sessionUser) {
         return json({ error: "Unauthorized — sign in required" }, 401, c);
@@ -250,7 +355,6 @@ export default {
     if (!KEY_RE.test(key) || key.includes("..") || !ORG_KEY_RE.test(key)) {
       return json({ error: "Invalid key" }, 400, c);
     }
-    // Key may override the client file name — still require a safe extension on the object path.
     if (!ALLOWED_UPLOAD_EXT.test(key)) {
       return json({ error: "File type not allowed" }, 415, c);
     }
@@ -266,10 +370,20 @@ export default {
       }
     }
 
+    const fileName = safeAttachmentFilename(key);
     await env.BUCKET.put(key, file.stream(), {
-      httpMetadata: { contentType: file.type || "application/octet-stream" },
+      httpMetadata: {
+        contentType: file.type || "application/octet-stream",
+        contentDisposition: `attachment; filename="${fileName}"`,
+      },
     });
 
-    return json({ ok: true, key, size: file.size }, 200, c);
+    const exp = Math.floor(Date.now() / 1000) + SIGNED_TTL_SEC;
+    const signed = await signObjectKey(env, key, exp);
+    const signedUrl = signed
+      ? `${url.origin}/signed?key=${encodeURIComponent(key)}&exp=${signed.exp}&sig=${signed.sig}`
+      : null;
+
+    return json({ ok: true, key, size: file.size, signedUrl, signedExpiresAt: signed ? exp : null }, 200, c);
   },
 };

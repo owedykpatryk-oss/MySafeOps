@@ -1,6 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { checkEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
+import { checkEdgeRateLimit, checkDurableEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
+
+function makeInviteToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 Deno.serve(async (req) => {
   const corsHeaders = corsHeadersForRequest(req);
@@ -98,6 +104,12 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    if (!(await checkDurableEdgeRateLimit(supabase, `org-invite:user:${user.id}`, 12, 60 * 60_000))) {
+      return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { count: orgAttempts, error: orgRateErr } = await supabase
@@ -136,8 +148,24 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Rotate token when plaintext was cleared after a previous send (hash-only storage).
+    let liveToken = String(inv.invite_token || "").trim();
+    if (!liveToken) {
+      liveToken = makeInviteToken();
+      const { error: rotErr } = await supabase
+        .from("org_invites")
+        .update({ invite_token: liveToken })
+        .eq("id", inv.id);
+      if (rotErr) {
+        return new Response(JSON.stringify({ error: "Could not rotate invite token" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const orgName = org?.name ?? "MySafeOps";
-    const acceptUrl = `${siteUrl}/accept-invite?invite=${encodeURIComponent(inv.invite_token)}`;
+    const acceptUrl = `${siteUrl}/accept-invite?invite=${encodeURIComponent(liveToken)}`;
     const supportLine = Deno.env.get("SUPPORT_CONTACT_EMAIL")?.trim() || "support@mysafeops.com";
 
     const html = `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#0f172a">
@@ -181,6 +209,15 @@ Deno.serve(async (req) => {
       email_delivery_attempted_at: new Date().toISOString(),
       email_delivery_sent_at: new Date().toISOString(),
     });
+
+    // Clear plaintext after successful send — accept continues via invite_token_hash.
+    const { error: clearErr } = await supabase
+      .from("org_invites")
+      .update({ invite_token: null })
+      .eq("id", inv.id);
+    if (clearErr) {
+      console.warn("invite_token clear skipped", clearErr.message);
+    }
 
     return new Response(JSON.stringify({ ok: true, sent: true }), {
       status: 200,

@@ -17,3 +17,38 @@ export function checkEdgeRateLimit(key: string, max: number, windowMs: number): 
   }
   return entry.count <= max;
 }
+
+type RpcClient = {
+  rpc: (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: { message?: string } | null }>;
+};
+
+/**
+ * Durable shared rate limit via `claim_edge_rate_bucket` (Postgres).
+ * Falls open (returns true) if the RPC is missing / errors so deploys stay available.
+ */
+export async function checkDurableEdgeRateLimit(
+  supabase: RpcClient,
+  key: string,
+  max: number,
+  windowMs: number,
+): Promise<boolean> {
+  const windowSeconds = Math.max(1, Math.ceil(windowMs / 1000));
+  try {
+    const { data, error } = await supabase.rpc("claim_edge_rate_bucket", {
+      p_key: key,
+      p_max: max,
+      p_window_seconds: windowSeconds,
+    });
+    if (error) {
+      console.warn("claim_edge_rate_bucket skipped", error.message);
+      return true;
+    }
+    return data === true || data === "true";
+  } catch (e) {
+    console.warn("claim_edge_rate_bucket failed", e);
+    return true;
+  }
+}

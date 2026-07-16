@@ -64,6 +64,7 @@ async function main() {
     "supabase/migrations/20260716150000_org_invites_select_admin_only.sql",
     "supabase/migrations/20260716160000_user_module_guides_org_gate.sql",
     "supabase/migrations/20260716170000_org_invites_token_hash.sql",
+    "supabase/migrations/20260716180000_edge_rate_buckets_invite_token_col.sql",
   ];
   for (const m of migrations) {
     if (existsSync(resolve(root, m))) ok(`migration present — ${m}`);
@@ -237,6 +238,34 @@ async function main() {
     ok("D1 Worker rate-limits KV GET");
   } else {
     warn("D1 Worker may not rate-limit KV GET");
+    issues += 1;
+  }
+
+  if (
+    fileIncludes("cloudflare/workers/r2-upload/index.mjs", "contentDisposition") &&
+    fileIncludes("cloudflare/workers/r2-upload/index.mjs", "/signed") &&
+    fileIncludes("cloudflare/workers/r2-upload/index.mjs", "/object")
+  ) {
+    ok("R2 Worker sets Content-Disposition and exposes auth/signed GET");
+  } else {
+    fail("R2 Worker missing Content-Disposition or authenticated/signed GET paths");
+    issues += 1;
+  }
+
+  if (fileIncludes("supabase/functions/_shared/edgeRateLimit.ts", "claim_edge_rate_bucket")) {
+    ok("Edge rate limit helper supports durable Postgres buckets");
+  } else {
+    fail("missing durable claim_edge_rate_bucket helper");
+    issues += 1;
+  }
+
+  if (
+    fileIncludes("supabase/functions/send-org-invite/index.ts", "invite_token: null") ||
+    fileIncludes("supabase/functions/send-org-invite/index.ts", "invite_token:null")
+  ) {
+    ok("Invite email clears plaintext token after send");
+  } else {
+    fail("send-org-invite should clear invite_token after successful email");
     issues += 1;
   }
 

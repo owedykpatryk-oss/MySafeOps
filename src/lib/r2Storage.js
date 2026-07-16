@@ -1,6 +1,8 @@
 /**
  * Cloudflare R2 uploads via a small Worker (see cloudflare/workers/r2-upload).
- * Prefer Supabase session JWT when signed in; static upload token is legacy fallback.
+ * Prefer Supabase session JWT when signed in; static upload token is legacy fallback (dev only).
+ * Authenticated downloads: GET /object?key=… with Bearer JWT.
+ * Short-lived HMAC URLs: signedUrl from upload response (GET /signed?…).
  */
 
 import { supabase } from "./supabase.js";
@@ -21,7 +23,7 @@ export function getStorageUploadToken() {
   return String(import.meta.env.VITE_STORAGE_UPLOAD_TOKEN || "").trim();
 }
 
-async function buildUploadHeaders() {
+async function buildAuthHeaders() {
   const headers = {};
   if (supabase) {
     try {
@@ -35,7 +37,6 @@ async function buildUploadHeaders() {
       /* session optional */
     }
   }
-  // Production builds must use JWT — the Vite upload token ships in the bundle.
   if (import.meta.env.PROD) {
     return { headers: {}, ok: false, error: "no_upload_auth" };
   }
@@ -50,7 +51,7 @@ async function buildUploadHeaders() {
 /**
  * @param {File} file
  * @param {{ orgId: string, subPath?: string }} opts
- * @returns {Promise<{ key: string; size: number; publicUrl: string | null }>}
+ * @returns {Promise<{ key: string; size: number; publicUrl: string | null; signedUrl: string | null; signedExpiresAt: number | null }>}
  */
 export async function uploadFileToR2Storage(file, { orgId, subPath = "documents" }) {
   const base = getStorageApiBase();
@@ -68,7 +69,7 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   fd.append("file", file);
   fd.append("key", key);
 
-  const auth = await buildUploadHeaders();
+  const auth = await buildAuthHeaders();
   if (!auth.ok) {
     throw new Error("Sign in to upload to cloud storage.");
   }
@@ -91,6 +92,51 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   const returnedKey = json.key || key;
   const pub = getR2PublicBaseUrl();
   const publicUrl = pub ? `${pub}/${returnedKey}` : null;
+  const signedUrl = typeof json.signedUrl === "string" ? json.signedUrl : null;
+  const signedExpiresAt =
+    typeof json.signedExpiresAt === "number" ? json.signedExpiresAt : null;
 
-  return { key: returnedKey, size: json.size ?? file.size, publicUrl };
+  return {
+    key: returnedKey,
+    size: json.size ?? file.size,
+    publicUrl,
+    signedUrl,
+    signedExpiresAt,
+  };
+}
+
+/**
+ * Download an org object via the Worker (JWT + membership). Prefer this over bare public CDN for sensitive files.
+ * @param {string} key
+ * @returns {Promise<Blob>}
+ */
+export async function fetchR2ObjectBlob(key) {
+  const base = getStorageApiBase();
+  if (!base) throw new Error("Cloud storage is not configured.");
+  const auth = await buildAuthHeaders();
+  if (!auth.headers.Authorization) {
+    throw new Error("Sign in to download from cloud storage.");
+  }
+  const res = await fetch(`${base}/object?key=${encodeURIComponent(key)}`, {
+    method: "GET",
+    headers: auth.headers,
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json?.error || `Download failed (${res.status})`);
+  }
+  return res.blob();
+}
+
+/**
+ * Prefer Worker signed URL when present and not expired; else public CDN; else null.
+ * @param {{ signedUrl?: string | null, signedExpiresAt?: number | null, publicUrl?: string | null, key?: string }} meta
+ */
+export function pickR2ViewUrl(meta = {}) {
+  const exp = Number(meta.signedExpiresAt);
+  if (meta.signedUrl && Number.isFinite(exp) && exp * 1000 > Date.now() + 30_000) {
+    return meta.signedUrl;
+  }
+  if (meta.publicUrl) return meta.publicUrl;
+  return null;
 }

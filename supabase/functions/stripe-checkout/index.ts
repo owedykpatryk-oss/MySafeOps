@@ -11,7 +11,7 @@ import {
   type StripePricePlanId,
 } from "../_shared/stripeConfig.ts";
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
-import { checkEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
+import { checkEdgeRateLimit, checkDurableEdgeRateLimit } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 
 Deno.serve(async (req) => {
@@ -124,6 +124,12 @@ Deno.serve(async (req) => {
 
     const rateKey = `stripe-checkout:${user.id}`;
     if (!checkEdgeRateLimit(rateKey, 12, 60_000)) {
+      return new Response(JSON.stringify({ error: "Too many requests" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+      });
+    }
+    if (!(await checkDurableEdgeRateLimit(supabase, rateKey, 12, 60_000))) {
       return new Response(JSON.stringify({ error: "Too many requests" }), {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
