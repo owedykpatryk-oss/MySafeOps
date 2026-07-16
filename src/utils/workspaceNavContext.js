@@ -1,9 +1,7 @@
-import { workspaceViewLoaders } from "../navigation/workspaceViews.js";
+import { WORKSPACE_VIEW_ID_SET } from "../navigation/workspaceViewIds.js";
 import { WORKSPACE_SETTINGS_TAB_IDS } from "../config/workspaceSettingsTabs.js";
 
 const STORAGE_KEY = "mysafeops_workspace_nav_target";
-
-const VALID_WORKSPACE_VIEW_IDS = new Set(Object.keys(workspaceViewLoaders));
 
 export { WORKSPACE_SETTINGS_TAB_IDS };
 
@@ -28,7 +26,7 @@ export function openWorkspaceMoreSection(detail = {}) {
  */
 export function openWorkspaceView(detail = {}) {
   const viewId = detail?.viewId;
-  if (!viewId || !VALID_WORKSPACE_VIEW_IDS.has(viewId)) return;
+  if (!viewId || !WORKSPACE_VIEW_ID_SET.has(viewId)) return;
   try {
     window.dispatchEvent(new CustomEvent(OPEN_WORKSPACE_VIEW_EVENT, { detail: { viewId } }));
   } catch {
