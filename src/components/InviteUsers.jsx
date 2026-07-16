@@ -246,7 +246,7 @@ export default function InviteUsers() {
         .select("id")
         .single();
       if (error) throw error;
-      const url = `${window.location.origin}/accept-invite?invite=${encodeURIComponent(token)}&email=${encodeURIComponent(clean)}`;
+      const url = `${window.location.origin}/accept-invite?invite=${encodeURIComponent(token)}`;
       setLastInviteLink(url);
       setLastInviteEmail(clean);
       setEmail("");
@@ -367,8 +367,8 @@ export default function InviteUsers() {
     setBusy(false);
   };
 
-  const copyInviteLink = async (token, inviteEmailAddress) => {
-    const url = `${window.location.origin}/accept-invite?invite=${encodeURIComponent(token)}&email=${encodeURIComponent(inviteEmailAddress || "")}`;
+  const copyInviteLink = async (token) => {
+    const url = `${window.location.origin}/accept-invite?invite=${encodeURIComponent(token)}`;
     try {
       await navigator.clipboard.writeText(url);
       setStatus({ type: "success", text: "Invite link copied." });
@@ -539,7 +539,7 @@ export default function InviteUsers() {
                 )}
                 {canManage && row.status === "pending" && (
                   <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button type="button" style={ss.btn} disabled={busy} onClick={() => copyInviteLink(row.invite_token, row.email)}>
+                    <button type="button" style={ss.btn} disabled={busy} onClick={() => copyInviteLink(row.invite_token)}>
                       Copy link
                     </button>
                     <button type="button" style={ss.btn} disabled={busy} onClick={() => resendInviteEmail(row.id)}>

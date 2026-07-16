@@ -139,8 +139,10 @@ function corsHeaders(request, env) {
     "Access-Control-Allow-Headers": "Content-Type, X-Upload-Token, Authorization",
     "Access-Control-Max-Age": "86400",
   };
+  // Fail closed for browsers when ALLOWED_ORIGINS is unset — never echo '*'.
+  if (!origin) return base;
   if (allowed.length === 0) {
-    return base;
+    return { ...base, "Access-Control-Allow-Origin": "null" };
   }
   const allow = allowed.includes(origin) ? origin : null;
   return {
@@ -156,6 +158,8 @@ function isOriginAllowed(request, env) {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  // Fail closed when allowlist is unset — never accept arbitrary browser Origins.
+  if (allowed.length === 0) return !origin;
   if (!origin) return true;
   if (allowed.includes(origin)) return true;
   if (allowed.includes("vercel_preview:mysafeops")) {
@@ -168,7 +172,6 @@ function isOriginAllowed(request, env) {
       /* ignore */
     }
   }
-  if (allowed.length === 0) return true;
   return false;
 }
 

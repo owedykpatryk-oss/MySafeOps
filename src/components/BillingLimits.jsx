@@ -124,6 +124,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
     stripeTestReady &&
     isAdmin &&
     cloudOk &&
+    import.meta.env.DEV &&
     (showDevHints || import.meta.env.VITE_STRIPE_ALLOW_TEST_CHECKOUT === "true");
 
   useEffect(() => {

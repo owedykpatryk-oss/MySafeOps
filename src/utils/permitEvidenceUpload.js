@@ -4,9 +4,10 @@ const BUCKET = "permit-evidence";
 
 /**
  * Upload a site evidence image for a permit. Requires signed-in user and storage migration.
+ * Stores the private storage path only — signed URLs are minted short-lived at display time.
  * @param {File} file
  * @param {string} permitId
- * @returns {{ path: string, signedUrl: string }}
+ * @returns {{ path: string, signedUrl: string | null }}
  */
 export async function uploadPermitEvidencePhoto(file, permitId) {
   if (!supabase) throw new Error("Cloud storage is not configured.");
@@ -27,9 +28,10 @@ export async function uploadPermitEvidencePhoto(file, permitId) {
   });
   if (upErr) throw upErr;
 
-  const { data: signed, error: signErr } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 24 * 7);
-  if (signErr) throw signErr;
-  if (!signed?.signedUrl) throw new Error("Could not create access link for upload.");
+  // Optional short-lived URL for immediate UI preview only — do not persist this on the permit.
+  let signedUrl = null;
+  const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
+  if (signed?.signedUrl) signedUrl = signed.signedUrl;
 
-  return { path, signedUrl: signed.signedUrl };
+  return { path, signedUrl };
 }

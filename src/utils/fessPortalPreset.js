@@ -39,7 +39,7 @@ export function seedFessSitePortals() {
       allowRamsApproval: true,
       fessSiteTemplateId: tmpl.id,
       fessPortalPreset: true,
-      expiresAt: defaultPortalExpiryIso(180),
+      expiresAt: defaultPortalExpiryIso(30),
       createdAt: now,
       active: true,
       notes: tmpl.permitControllerHint || "Site permit controller — approve RAMS before work starts.",

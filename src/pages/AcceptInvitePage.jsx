@@ -53,6 +53,9 @@ export default function AcceptInvitePage() {
           return;
         }
         setPreview(row);
+        if (row.email || row.invite_email) {
+          setPendingInviteToken(invite, row.email || row.invite_email);
+        }
       })
       .catch(() => {
         if (!cancelled) setErr("Could not load invite.");
@@ -62,7 +65,8 @@ export default function AcceptInvitePage() {
     };
   }, [invite, email]);
 
-  const loginHref = `/login?invite=${encodeURIComponent(invite)}${email ? `&email=${encodeURIComponent(email)}` : ""}`;
+  const loginEmail = (preview?.email || preview?.invite_email || email || "").trim().toLowerCase();
+  const loginHref = `/login?invite=${encodeURIComponent(invite)}${loginEmail ? `&email=${encodeURIComponent(loginEmail)}` : ""}`;
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #E1F5EE 0%, #f8fafc 38%)", fontFamily: "DM Sans, system-ui, sans-serif", padding: "1.5rem 1rem 2rem" }}>
@@ -84,10 +88,10 @@ export default function AcceptInvitePage() {
             <>
               <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>
                 <strong>{preview.org_name}</strong> invited you to join their MySafeOps workspace
-                {email ? (
+                {loginEmail ? (
                   <>
                     {" "}
-                    as <strong>{preview.invite_email || email}</strong>
+                    as <strong>{loginEmail}</strong>
                   </>
                 ) : null}
                 .

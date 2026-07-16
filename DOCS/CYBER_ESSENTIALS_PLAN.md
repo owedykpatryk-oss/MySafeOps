@@ -123,10 +123,11 @@ To jest sekcja „**co audytor rozumie jako backend**”, spójna z kodem w tym 
 Wiele pozycji jest już w `DOCS/FESS/CURSOR_BRIEF_FESS_READINESS.md` (Phase 2). Skrót:
 
 1. **Już w repo:** nagłówki (`vercel.json`, `public/_headers`), `security.txt`, `SECURITY.md`, strona `/security` (trust + subprocessory + CI), E2E: `tests/e2e/security.spec.js` (Playwright w `.github/workflows/ci.yml`).
-2. **Supabase:** MFA dla wszystkich kont operacyjnych; polityka haseł; ewent. rate limit na logowanie (jeśli CAB pyta o brute-force). **Aplikacja:** `ProtectedAppRoute` wymaga AAL2 gdy MFA jest enrolled.
+2. **Supabase:** MFA dla wszystkich kont operacyjnych; polityka haseł; ewent. rate limit na logowanie (jeśli CAB pyta o brute-force). **Aplikacja:** `ProtectedAppRoute` wymaga AAL2 gdy MFA jest enrolled; sonda MFA **fail-closed** (retry UI). Client portal TTL domyślnie **14 dni**.
 3. **CI:** na każdym push/PR: `npm audit --audit-level=high`, lint, testy Vitest, Playwright (blog, landing, **security**), `npm run build` — plik `.github/workflows/ci.yml`. Utrzymuj zieloność; na critical reaguj w SLA z kwestionariusza (zwykle 14 dni).
 4. **Monitoring:** Sentry (`VITE_SENTRY_DSN`), uptime (np. Better Stack / UptimeRobot) — zrzut konfiguracji jako dowód. Sentry: `sendDefaultPii: false` + scrub e-mail / Bearer.
 5. **Backup:** potwierdzenie w R2 + **jeden** udokumentowany test restore (nawet na staging). Checklist poniżej.
+6. **Pozostałe luki architektury (nie blokują CE self-assessment):** signed GET dla R2 (zamiast public CDN), sesje httpOnly cookie (zamiast localStorage JWT), trwały rate-limit Edge (DB/Redis).
 
 ### 4.1 Dowód restore D1 (wpisz datę po wykonaniu)
 

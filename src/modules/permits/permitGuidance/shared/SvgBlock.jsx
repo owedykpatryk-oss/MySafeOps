@@ -1,6 +1,25 @@
-/** Inline SVG container for permit guidance panels. */
+import { useMemo } from "react";
+import DOMPurify from "dompurify";
+
+const SVG_SANITIZE = {
+  USE_PROFILES: { svg: true, svgFilters: true },
+  ADD_TAGS: ["use"],
+  FORBID_TAGS: ["script", "foreignObject", "iframe", "object", "embed"],
+  FORBID_ATTR: ["onerror", "onload", "onclick", "onmouseover", "onfocus", "onblur"],
+};
+
+/** Inline SVG container for permit guidance panels (DOMPurify SVG profile). */
 export default function SvgBlock({ html, title }) {
-  if (!html) return null;
+  const safe = useMemo(() => {
+    if (!html) return "";
+    try {
+      return DOMPurify.sanitize(String(html), SVG_SANITIZE);
+    } catch {
+      return "";
+    }
+  }, [html]);
+
+  if (!safe) return null;
   return (
     <div
       title={title}
@@ -11,7 +30,7 @@ export default function SvgBlock({ html, title }) {
         background: "#fff",
         overflow: "hidden",
       }}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: safe }}
     />
   );
 }

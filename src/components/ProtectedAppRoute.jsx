@@ -15,25 +15,38 @@ import { getSupportEmail } from "../config/supportContact";
 export default function ProtectedAppRoute({ children }) {
   const configured = isSupabaseConfigured();
   const { user, ready, supabase: client } = useSupabaseAuth();
-  const [mfa, setMfa] = useState({ checking: false, needsMfa: false });
+  const [mfa, setMfa] = useState({ checking: false, needsMfa: false, probeFailed: false, error: "" });
   const [mfaBusy, setMfaBusy] = useState(false);
   const [mfaTick, setMfaTick] = useState(0);
 
   useEffect(() => {
     if (!configured || !ready || !user || !client) {
-      setMfa({ checking: false, needsMfa: false });
+      setMfa({ checking: false, needsMfa: false, probeFailed: false, error: "" });
       return undefined;
     }
     let cancelled = false;
-    setMfa((prev) => ({ ...prev, checking: true }));
+    setMfa((prev) => ({ ...prev, checking: true, probeFailed: false, error: "" }));
     getRequiresMfaStep(client)
-      .then(({ needsMfa }) => {
-        if (!cancelled) setMfa({ checking: false, needsMfa: Boolean(needsMfa) });
+      .then(({ needsMfa, probeFailed, error }) => {
+        if (!cancelled) {
+          setMfa({
+            checking: false,
+            needsMfa: Boolean(needsMfa),
+            probeFailed: Boolean(probeFailed),
+            error: error || "",
+          });
+        }
       })
-      .catch(() => {
-        // Fail open on MFA API errors so a transient MFA probe does not lock users out;
-        // enrolled users still hit AAL checks on sensitive Edge/API paths via JWT.
-        if (!cancelled) setMfa({ checking: false, needsMfa: false });
+      .catch((e) => {
+        // Fail closed: do not load /app until MFA status is confirmed.
+        if (!cancelled) {
+          setMfa({
+            checking: false,
+            needsMfa: false,
+            probeFailed: true,
+            error: e?.message || "MFA status check failed",
+          });
+        }
       });
     return () => {
       cancelled = true;
@@ -68,6 +81,54 @@ export default function ProtectedAppRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login?next=%2Fapp" replace />;
+  }
+
+  if (mfa.probeFailed) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "DM Sans, system-ui, sans-serif",
+          padding: "1.5rem",
+          background: "var(--color-background-tertiary, #f8fafc)",
+        }}
+      >
+        <div style={{ maxWidth: 420, width: "100%" }}>
+          <h1 style={{ fontSize: 20, margin: "0 0 8px" }}>Security check unavailable</h1>
+          <p style={{ fontSize: 14, color: "#475569", margin: "0 0 16px" }}>
+            We could not confirm multi-factor authentication status. The workspace stays locked until this check succeeds.
+          </p>
+          {mfa.error ? (
+            <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 16px" }}>{mfa.error}</p>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setMfaTick((n) => n + 1)}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "none",
+              background: "#0d9488",
+              color: "#fff",
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Retry security check
+          </button>
+          <p style={{ fontSize: 12, color: "#64748b", marginTop: 16 }}>
+            Need help?{" "}
+            <a href={`mailto:${getSupportEmail()}`} style={{ color: "#0d9488" }}>
+              {getSupportEmail()}
+            </a>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (mfa.needsMfa && client) {

@@ -16,13 +16,14 @@ This document supports procurement and internal review. It is not a legal warran
 - **CSP (enforced)**: canonical policy in `src/config/contentSecurityPolicy.js`; `npm run csp:sync` writes it to `vercel.json` and `public/_headers`. `npm run security:doctor` fails on drift. Browser calls to Overpass and postcodes.io go through same-origin `/api/*` proxies in production; `connect-src` omits those upstream hosts.
 - **Platform owner (DB)**: superadmin RPCs use `public.platform_owner_email_allowlist` — add each owner email in Supabase SQL (in addition to **`VITE_PLATFORM_OWNER_EMAIL`** in the app).
 - **Insider hardening (D1)**: `DELETE /v1/kv` requires admin or supervisor (`user_can_delete_org_kv`); `PUT /v1/kv` checks `user_can_write_org_kv` (operative cannot overwrite workers/projects/training/CDM/timesheets namespaces); audit append validates `action`/`entity` and rate-limits per user; cloud UI role refreshes from `get_my_membership_role` every focus / 5 min; workspace banner on D1 403 (`D1WriteForbiddenBanner`).
-- **MFA gate**: accounts with TOTP enrolled must reach AAL2 before `/app` loads (`ProtectedAppRoute` + `mfaAal.js`) — not login-page only.
+- **MFA gate**: accounts with TOTP enrolled must reach AAL2 before `/app` loads (`ProtectedAppRoute` + `mfaAal.js`) — not login-page only. MFA status probe **fails closed** (retry UI) on API errors.
 - **Platform owner UI**: `VITE_PLATFORM_OWNER_EMAIL` allowlist only (fail closed if unset). DB RPCs still use `platform_owner_email_allowlist`.
-- **Invites**: `org_invites` SELECT is admin-only (migration `20260716150000_org_invites_select_admin_only`); accept/preview via security-definer RPCs.
+- **Invites**: `org_invites` SELECT is admin-only (migration `20260716150000_org_invites_select_admin_only`); accept/preview via security-definer RPCs. Invite links omit email from the query string; pending token prefers `sessionStorage`.
 - **Session revoke**: Edge Function `revoke-org-member-sessions` — admins sign out a member globally after role change or removal (`OrgMembers`).
 - **Outbound webhooks**: PTW Slack/Teams/custom URLs are validated (`src/utils/webhookUrlValidation.js`) — HTTPS only, private IPs blocked before save or dispatch.
-- **Edge CORS**: Supabase functions use `supabase/functions/_shared/corsHeaders.ts` (reflects `SITE_URL` / localhost dev — not `*`).
-- **Client portal**: default cloud expiry 90 days; publish events go to audit log.
+- **Edge CORS**: Supabase functions use `supabase/functions/_shared/corsHeaders.ts` (reflects `SITE_URL` / localhost dev — not `*`). R2 upload Worker fails closed when `ALLOWED_ORIGINS` is empty.
+- **Client portal**: default cloud expiry **14 days** (FESS presets 30); publish snapshots redact worker contact/NI fields; local-only copy warns until Publish cloud.
+- **Permit evidence**: store private storage path only; short-lived signed URLs at display time (not 7-day URLs persisted on the permit).
 - **Diagnostics**: `npm run security:doctor` — migrations present, npm audit, deploy checklist.
 
 ## What you must configure outside the repo

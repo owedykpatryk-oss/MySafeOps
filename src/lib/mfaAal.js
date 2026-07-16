@@ -1,24 +1,33 @@
 /**
  * Supabase MFA: after first factor, session may be AAL1 until TOTP is verified.
+ * Fail closed on probe errors so enrolled users are never admitted at AAL1 by accident.
  * @param {import("@supabase/supabase-js").SupabaseClient | null | undefined} client
- * @returns {Promise<{ needsMfa: boolean; error?: string }>}
+ * @returns {Promise<{ needsMfa: boolean; probeFailed?: boolean; error?: string }>}
  */
 export async function getRequiresMfaStep(client) {
   const mfa = client?.auth?.mfa;
   if (!mfa?.getAuthenticatorAssuranceLevel) {
     return { needsMfa: false };
   }
-  const { data, error } = await mfa.getAuthenticatorAssuranceLevel();
-  if (error) {
-    return { needsMfa: false, error: error.message };
+  try {
+    const { data, error } = await mfa.getAuthenticatorAssuranceLevel();
+    if (error) {
+      return { needsMfa: false, probeFailed: true, error: error.message };
+    }
+    if (!data) {
+      return { needsMfa: false, probeFailed: true, error: "MFA status unavailable" };
+    }
+    const { currentLevel, nextLevel } = data;
+    return {
+      needsMfa: nextLevel === "aal2" && currentLevel !== "aal2",
+    };
+  } catch (e) {
+    return {
+      needsMfa: false,
+      probeFailed: true,
+      error: e?.message || "MFA status check failed",
+    };
   }
-  if (!data) {
-    return { needsMfa: false };
-  }
-  const { currentLevel, nextLevel } = data;
-  return {
-    needsMfa: nextLevel === "aal2" && currentLevel !== "aal2",
-  };
 }
 
 /**

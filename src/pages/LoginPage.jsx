@@ -204,10 +204,10 @@ export default function LoginPage() {
     let cancelled = false;
     setAalState("unknown");
     (async () => {
-      const { needsMfa, error } = await getRequiresMfaStep(client);
+      const { needsMfa, probeFailed, error } = await getRequiresMfaStep(client);
       if (cancelled) return;
-      if (error) {
-        setMsg((m) => (m ? m : `Sign-in check: ${error}`));
+      if (probeFailed || error) {
+        setMsg((m) => (m ? m : `Sign-in check: ${error || "Could not confirm MFA status"}`));
         setAalState("form_error");
         return;
       }

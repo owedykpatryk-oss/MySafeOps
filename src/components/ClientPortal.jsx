@@ -389,10 +389,15 @@ export default function ClientPortal() {
     }
   };
 
-  const copyPortalLink = async (url) => {
+  const copyPortalLink = async (url, { cloudPublished = false } = {}) => {
     const ok = await copyTextToClipboard(url);
     if (ok) {
-      pushToast({ type: "success", message: "Portal link copied to clipboard." });
+      pushToast({
+        type: cloudPublished ? "success" : "warn",
+        message: cloudPublished
+          ? "Portal link copied. Recipients can open it on any device until expiry or revoke."
+          : "Link copied — works in this browser only until you use Publish cloud.",
+      });
     } else {
       pushToast({ type: "error", message: "Could not copy — select the link and copy manually." });
     }
@@ -413,7 +418,7 @@ export default function ClientPortal() {
       <PageHero
         badgeText="CL"
         title="Client portal"
-        lead="Share read-only compliance view with your clients — no login needed. Client links use neutral branding; your company logo stays on RAMS PDFs for your team."
+        lead="Share a read-only compliance view with clients. Default cloud links expire in 14 days. Without Publish cloud, links only work in this browser. Deactivate or delete to revoke."
         right={
           caps.clientPortalManage ? (
             <button type="button" onClick={() => setShowCreate(true)} style={ss.btnP}>
@@ -499,7 +504,7 @@ export default function ClientPortal() {
                   </div>
                   <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                     <button onClick={()=>setPreviewToken(p.token)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Preview</button>
-                    <button onClick={() => void copyPortalLink(portalUrl)} style={{ ...ss.btnP, fontSize:12, padding:"4px 10px" }}>Copy link</button>
+                    <button onClick={() => void copyPortalLink(portalUrl, { cloudPublished: publishedTokens.has(p.token) })} style={{ ...ss.btnP, fontSize:12, padding:"4px 10px" }}>Copy link</button>
                     {cloudReady && caps.clientPortalManage ? (
                       <button
                         type="button"

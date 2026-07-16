@@ -29,6 +29,24 @@ describe("clientPortalCloud", () => {
     expect(snap.publishedAt).toBeTruthy();
   });
 
+  it("buildPortalSnapshot redacts worker contact fields", () => {
+    save("mysafeops_workers", [
+      {
+        id: "w1",
+        name: "A",
+        projectIds: ["p1"],
+        email: "a@example.com",
+        phone: "07000",
+        niNumber: "AB123",
+      },
+    ]);
+    const snap = buildPortalSnapshot({ projectId: "p1" });
+    expect(snap.workers[0].name).toBe("A");
+    expect(snap.workers[0].email).toBeUndefined();
+    expect(snap.workers[0].phone).toBeUndefined();
+    expect(snap.workers[0].niNumber).toBeUndefined();
+  });
+
   it("buildPortalSnapshot tolerates corrupted non-array registers", () => {
     localStorage.setItem("snags_test-org", JSON.stringify({ broken: true }));
     const snap = buildPortalSnapshot({ projectId: "p1" });

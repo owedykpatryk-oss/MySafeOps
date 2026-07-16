@@ -47,7 +47,13 @@ export default function ResetPasswordPage() {
       trackAuthEvent("password_reset_success", { hasUser: Boolean(user) });
       setPassword("");
       setConfirmPassword("");
-      setMsg("Password updated. You can sign in now.");
+      // End this recovery session so the new password must be used at sign-in.
+      try {
+        await client.auth.signOut({ scope: "local" });
+      } catch {
+        /* best-effort */
+      }
+      setMsg("Password updated. Sign in with your new password. Other devices keep their sessions until they expire or an admin revokes access.");
     } catch (e) {
       trackAuthError("password_reset_failed", e, { hasUser: Boolean(user) });
       setMsg(e.message || "Could not update password");

@@ -5,7 +5,8 @@ import { loadOrgScoped as load, asStorageArray } from "./orgStorage";
 import { pushAudit } from "./auditLog";
 import { genOpaqueToken } from "./opaqueToken";
 
-export const PORTAL_DEFAULT_TTL_DAYS = 90;
+/** Default cloud portal link lifetime (Cyber Essentials / least privilege). */
+export const PORTAL_DEFAULT_TTL_DAYS = 14;
 
 /** @param {number} [days] */
 export function defaultPortalExpiryIso(days = PORTAL_DEFAULT_TTL_DAYS) {
@@ -35,14 +36,39 @@ function filterByProject(rows, projectId) {
   });
 }
 
+function redactWorkerRow(w) {
+  if (!w || typeof w !== "object") return w;
+  const next = { ...w };
+  for (const key of ["email", "phone", "mobile", "telephone", "niNumber", "nationalInsurance", "address", "homeAddress"]) {
+    if (key in next) delete next[key];
+  }
+  if (Array.isArray(next.certificates)) {
+    next.certificates = next.certificates.map((c) => {
+      if (!c || typeof c !== "object") return c;
+      const { certificateNumber, certNumber, ...rest } = c;
+      return rest;
+    });
+  }
+  return next;
+}
+
+function redactIncidentRow(row) {
+  if (!row || typeof row !== "object") return row;
+  const next = { ...row };
+  for (const key of ["injuredPartyContact", "witnessContact", "reporterEmail", "phone"]) {
+    if (key in next) delete next[key];
+  }
+  return next;
+}
+
 /** Build scoped snapshot for a portal definition (local org data). */
 export function buildPortalSnapshot(portal) {
   const projectId = portal?.projectId || "";
   return {
-    workers: filterByProject(load(SNAPSHOT_KEYS.workers, []), projectId),
+    workers: filterByProject(load(SNAPSHOT_KEYS.workers, []), projectId).map(redactWorkerRow),
     rams: filterByProject(load(SNAPSHOT_KEYS.rams, []), projectId),
     permits: filterByProject(load(SNAPSHOT_KEYS.permits, []), projectId),
-    incidents: filterByProject(load(SNAPSHOT_KEYS.incidents, []), projectId),
+    incidents: filterByProject(load(SNAPSHOT_KEYS.incidents, []), projectId).map(redactIncidentRow),
     snags: filterByProject(load(SNAPSHOT_KEYS.snags, []), projectId),
     publishedAt: new Date().toISOString(),
   };

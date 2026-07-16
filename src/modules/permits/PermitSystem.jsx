@@ -2535,8 +2535,9 @@ function PermitForm({
                     if (!f) return;
                     setEvidenceUploadBusy(true);
                     try {
-                      const { path, signedUrl } = await uploadPermitEvidencePhoto(f, form.id);
-                      setForm((prev) => ({ ...prev, evidencePhotoStoragePath: path, evidencePhotoUrl: signedUrl }));
+                      const { path } = await uploadPermitEvidencePhoto(f, form.id);
+                      // Persist storage path only — signed URLs are minted at display/print time.
+                      setForm((prev) => ({ ...prev, evidencePhotoStoragePath: path, evidencePhotoUrl: "" }));
                     } catch (err) {
                       window.alert(err?.message || String(err));
                     } finally {

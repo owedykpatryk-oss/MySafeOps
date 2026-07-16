@@ -146,8 +146,11 @@ async function postAnthropicMessagesBody(body) {
     }
     headers["x-api-key"] = apiKey;
   } else {
-    const secret = String(import.meta.env.VITE_AI_PROXY_SECRET || "").trim();
-    if (secret) headers["x-mysafeops-ai-secret"] = secret;
+    // Production: JWT only — never send a VITE_* "secret" (it ships in the bundle).
+    if (!import.meta.env.PROD) {
+      const secret = String(import.meta.env.VITE_AI_PROXY_SECRET || "").trim();
+      if (secret) headers["x-mysafeops-ai-secret"] = secret;
+    }
     if (supabase) {
       try {
         const { data } = await supabase.auth.getSession();
