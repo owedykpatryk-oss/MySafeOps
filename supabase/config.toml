@@ -188,6 +188,9 @@ minimum_password_length = 12
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = "letters_digits"
+# HaveIBeenPwned leaked-password check (Pro+). Enable in Dashboard if config push ignores this.
+# See https://supabase.com/docs/guides/auth/password-security
+password_hibp_enabled = true
 
 # Configure passkey sign-ins.
 # [auth.passkey]

@@ -2062,15 +2062,18 @@ function PermitForm({
               maxLength={getFieldConfig("description").maxLength || undefined}
               style={{ ...ss.ta, minHeight:50 }} />
             {getFieldConfig("description").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("description").helpText}</div> : null}
-            <div style={{ marginTop:6 }}>
+            <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
               <button
                 type="button"
                 className="ptw-smart-suggest"
-                style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}
+                style={{ ...ss.btnP, fontSize:12, padding:"6px 12px" }}
                 onClick={() => set("description", suggestPermitDescriptionText({ ...form, type }))}
               >
-                ✨ Smart suggest description
+                Draft scope from type / location
               </button>
+              <span style={{ fontSize:11, color:"var(--color-text-secondary)" }}>
+                Fills a starter description from permit type, location, and issued-to.
+              </span>
             </div>
           </div>
           ) : null}
