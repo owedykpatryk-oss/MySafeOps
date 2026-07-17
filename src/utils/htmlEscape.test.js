@@ -37,6 +37,11 @@ describe("safeImageSrc", () => {
     expect(safeImageSrc("https://example.com/logo.png")).toMatch(/^https:/);
     expect(safeImageSrc("data:image/png;base64,abcd1234+/=")).toBe("data:image/png;base64,abcd1234+/=");
   });
+
+  it("allows same-origin /branding logos for PWA chrome", () => {
+    expect(safeImageSrc("/branding/utility-mapping-logo.png")).toMatch(/\/branding\/utility-mapping-logo\.png$/);
+    expect(safeImageSrc("/branding/fess-group-logo.png")).toMatch(/\/branding\/fess-group-logo\.png$/);
+  });
 });
 
 describe("safeOpaqueToken", () => {

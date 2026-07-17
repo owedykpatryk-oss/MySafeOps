@@ -6,10 +6,10 @@ import { UTILITY_RECORDS_PRESETS } from "./surveyReportConstants";
 import { catalogDefaultDeliverables } from "../../utils/surveyContentCatalog";
 
 export const SURVEY_AUTOFIX_ACTIONS = [
-  { id: "records_pas128", label: "Apply PAS128 records preset", tab: "records" },
-  { id: "deliverables_default", label: "Add default deliverables", tab: "scope" },
-  { id: "calibration_template", label: "Add calibration row template", tab: "professional" },
-  { id: "limitations_typical", label: "Apply typical utility limitations", tab: "limitations" },
+  { id: "records_pas128", label: "Apply PAS128 records preset", tab: "records", anchor: "records" },
+  { id: "deliverables_default", label: "Add default deliverables", tab: "scope", anchor: "deliverables" },
+  { id: "calibration_template", label: "Add calibration row template", tab: "professional", anchor: "calibration" },
+  { id: "limitations_typical", label: "Apply typical utility limitations", tab: "limitations", anchor: "limitations" },
 ];
 
 const UTILITY_TYPES = new Set(["utility_mapping_survey", "eml_cat_survey", "gpr_survey"]);

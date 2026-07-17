@@ -27,6 +27,12 @@ export function normalizeGprReport(raw) {
     groundConditions: {
       ...base.groundConditions,
       ...(raw.groundConditions || {}),
+      nearbyBoreholes: Array.isArray(raw.groundConditions?.nearbyBoreholes)
+        ? raw.groundConditions.nearbyBoreholes
+        : base.groundConditions.nearbyBoreholes,
+      dielectricRange: Array.isArray(raw.groundConditions?.dielectricRange)
+        ? raw.groundConditions.dielectricRange
+        : base.groundConditions.dielectricRange,
       siteObservations: {
         ...base.groundConditions.siteObservations,
         ...(raw.groundConditions?.siteObservations || {}),

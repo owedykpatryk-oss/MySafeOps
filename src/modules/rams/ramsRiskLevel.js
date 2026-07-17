@@ -1,5 +1,7 @@
 /** Risk matrix banding — shared by builder, print HTML, and share view (no hazard library). */
-export function getRiskLevel({ RF }) {
+export function getRiskLevel(risk) {
+  const RF = Number(risk?.RF);
+  if (!Number.isFinite(RF)) return "low";
   if (RF >= 24) return "high";
   if (RF >= 12) return "medium";
   return "low";

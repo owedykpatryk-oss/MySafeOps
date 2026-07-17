@@ -16,6 +16,30 @@ describe("surveyReportBlockers", () => {
     const report = blankSurveyReport();
     const { blockers } = buildSurveyBlockers(report);
     expect(blockers.some((b) => b.tab === "details")).toBe(true);
+    expect(blockers.some((b) => b.anchor)).toBe(true);
+  });
+
+  it("routes photo final-gate items to photos tab", () => {
+    const report = blankSurveyReport({
+      title: "T",
+      surveyor: "A",
+      surveyType: "utility_mapping_survey",
+      sections: {
+        scope: "s",
+        methodology: "m",
+        findings: "f",
+        executiveSummary: "e",
+        recommendations: "r",
+      },
+      qaChecklist: { catScanBeforeWork: true },
+      standardsCited: ["pas128"],
+      equipmentCalibration: [{ id: "1", instrument: "x" }],
+      photos: [],
+    });
+    const { blockers } = buildSurveyBlockers(report);
+    const photo = blockers.find((b) => /photo/i.test(b.label));
+    expect(photo?.tab).toBe("photos");
+    expect(photo?.anchor).toBe("photos");
   });
 
   it("flags low QA progress", () => {

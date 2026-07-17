@@ -49,9 +49,42 @@ export const PAS128_METHODS = [
   { key: "M1", label: "M1 — Desktop utility search (Survey Type D)" },
   { key: "M2", label: "M2 — EML + GPR (real-time on site)" },
   { key: "M2P", label: "M2P — EML + GPR (2 m grid, post-processed)" },
+  { key: "M3", label: "M3 — EML + HD GPR (1 m grid, real-time)" },
   { key: "M3P", label: "M3P — EML + HD GPR (1 m grid, post-processed)" },
+  { key: "M4", label: "M4 — Full survey incl. MH/IC (1 m grid, real-time)" },
   { key: "M4P", label: "M4P — Full survey incl. MH/IC (1 m grid, post-processed)" },
 ];
+
+/** Per-undertaker / service record outcome for §5.1 scoreboard. */
+export const RECORD_STATUS_OPTIONS = [
+  { key: "located", label: "Located on site" },
+  { key: "not_located", label: "Not located" },
+  { key: "tfr", label: "TFR — taken from records" },
+  { key: "partial", label: "Partial / incomplete" },
+  { key: "no_response", label: "No undertaker response" },
+  { key: "cps", label: "CPS / cathodic protection related" },
+];
+
+export const RECORD_SERVICE_TYPES = [
+  { key: "gas", label: "Gas" },
+  { key: "water", label: "Water" },
+  { key: "electric", label: "Electric" },
+  { key: "telecoms", label: "Telecoms / BT / fibre" },
+  { key: "drainage", label: "Drainage / sewer" },
+  { key: "catv", label: "CATV / cable" },
+  { key: "district_heating", label: "District heating" },
+  { key: "other", label: "Other" },
+];
+
+/** Geo-photo group → one-line meaning for report thickbox headers. */
+export const GEO_PHOTO_GROUP_MEANINGS = {
+  "Access & logistics": "Documents access routes, traffic management and mobilisation constraints.",
+  "Site constraints & safety": "Records hazards, no-access areas and buried-services warnings that limit survey coverage.",
+  "Survey & utilities": "Evidence of EML/GPR setup, mark-up, trial pits and MH/IC inspection.",
+  "Ground investigation": "GI sampling and probe locations linked to this survey scope.",
+  "Site conditions": "Ground, vegetation and drainage conditions affecting detection methods.",
+  General: "Orientation and general site context photographs.",
+};
 
 /** Limitation rule keys → generated prose (checkbox → paragraph engine). */
 export const LIMITATION_RULES = [
@@ -249,6 +282,27 @@ export const UTILITY_TYPE_OPTIONS = [
   { key: "other", label: "Other / unknown" },
 ];
 
+export const UTILITY_SOURCE_OPTIONS = [
+  { key: "eml", label: "EML" },
+  { key: "gpr", label: "GPR" },
+  { key: "both", label: "EML + GPR" },
+  { key: "records", label: "Records / TFR" },
+  { key: "visual", label: "Visual / MH-IC" },
+  { key: "other", label: "Other" },
+];
+
+export const UTILITY_DETECT_STATUS = [
+  { key: "detected", label: "Detected" },
+  { key: "tfr", label: "TFR (records)" },
+  { key: "partial", label: "Partial" },
+  { key: "not_located", label: "Not located" },
+];
+
+export const PRINT_OUTLINE_OPTIONS = [
+  { key: "standard", label: "Full report (standard)" },
+  { key: "um_classic", label: "UM classic (1–5 + limitations)" },
+];
+
 export const DELIVERABLE_FORMAT_OPTIONS = [
   { key: "pdf_drawing", label: "PDF drawing" },
   { key: "dwg", label: "DWG / CAD" },
@@ -326,11 +380,38 @@ export function blankSurveyReport(overrides = {}) {
     projectName: "",
     client: "",
     siteAddress: "",
+    siteContextKey: "",
+    siteContextLabel: "",
     surveyDate: new Date().toISOString().slice(0, 10),
     surveyor: "",
     surveyType: "",
     pas128Ql: "",
     pas128Method: "",
+    pas128MethodSecondary: "",
+    printOutline: "standard",
+    geology: {
+      formation: "",
+      implications: "",
+      notes: "",
+      fetchedAt: null,
+      source: "",
+      scale: "",
+      resolution: "",
+      queryLat: null,
+      queryLng: null,
+      materialClass: "",
+      attenuationClass: "",
+      expectedPenetrationM: null,
+      superficialLabel: "",
+      bedrockLabel: "",
+      artificialLabel: "",
+      nearbyBoreholes: [],
+      samplePoints: [],
+      accuracyWarning: "",
+      coordSource: "",
+      disclaimer: "",
+    },
+    mhIcCards: [],
     limitationKeys: [],
     limitationsText: "",
     weather: {
@@ -372,6 +453,16 @@ export function blankSurveyReport(overrides = {}) {
     },
     deliverables: [],
     drawingSheets: [],
+    evidenceRows: [],
+    extentAreas: [],
+    recordItems: [],
+    recordItemsNarrative: "",
+    equipmentKit: [],
+    customSections: [],
+    gprAnomalyCards: [],
+    gprConclusions: "",
+    linkedGprReportId: "",
+    surveyAreas: [],
     recordsReferences: [],
     dbydEnquiries: [],
     undertakerResponses: [],

@@ -9,6 +9,7 @@ import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
 import { genOpaqueToken } from "../utils/opaqueToken";
+import { formatInviteEmailDeliveryDetail } from "../utils/inviteEmailDelivery";
 const ss = ms;
 const NO_MEMBERSHIP_MSG = "No organisation membership";
 
@@ -540,7 +541,7 @@ export default function InviteUsers() {
                 )}
                 {row.email_delivery_error && (
                   <div style={{ fontSize: 11, color: "#9a3412", marginTop: 4, lineHeight: 1.45 }}>
-                    Delivery detail: {String(row.email_delivery_error)}
+                    Delivery detail: {formatInviteEmailDeliveryDetail(row.email_delivery_error)}
                   </div>
                 )}
                 {canManage && row.status === "pending" && (

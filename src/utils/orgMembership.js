@@ -97,6 +97,22 @@ export async function refreshOrgFromSupabase(supabase) {
     /* non-fatal — local branding still works */
   }
   try {
+    const { ensureUtilityMappingBranding } = await import("./utilityMappingBranding");
+    let force = false;
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      force = String(authData?.user?.email || "")
+        .trim()
+        .toLowerCase()
+        .endsWith("@u-map.co.uk");
+    } catch {
+      /* ignore */
+    }
+    ensureUtilityMappingBranding(row.org_slug, { force });
+  } catch {
+    /* non-fatal */
+  }
+  try {
     await syncOrgMarketFromAuth(supabase);
   } catch {
     /* non-fatal */
@@ -152,6 +168,22 @@ export async function ensureUserOrgContext(supabase) {
   try {
     const { syncOrgBrandingFromCloud } = await import("./orgBrandingCloudSync");
     await syncOrgBrandingFromCloud(supabase, row.org_slug);
+  } catch {
+    /* non-fatal */
+  }
+  try {
+    const { ensureUtilityMappingBranding } = await import("./utilityMappingBranding");
+    let force = false;
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      force = String(authData?.user?.email || "")
+        .trim()
+        .toLowerCase()
+        .endsWith("@u-map.co.uk");
+    } catch {
+      /* ignore */
+    }
+    ensureUtilityMappingBranding(row.org_slug, { force });
   } catch {
     /* non-fatal */
   }

@@ -29,10 +29,21 @@ describe("Utility Mapping exclusive workspace profile", () => {
     expect(isUtilityMappingOrg()).toBe(true);
   });
 
-  it("detects org by u-map.co.uk email", () => {
-    setOrgId("acme-surveys");
-    saveOrgSettingsRaw({ name: "Acme", email: "patryk@u-map.co.uk", hiddenModules: [] });
+  it("detects Utility Mapping by org slug allowlist only", () => {
+    setOrgId("utility-mapping");
+    saveOrgSettingsRaw({ name: "Anything", website: "https://evil.example", hiddenModules: [] });
     expect(isUtilityMappingOrg()).toBe(true);
+  });
+
+  it("rejects website / email spoof without allowlisted slug", () => {
+    setOrgId("acme-surveys");
+    saveOrgSettingsRaw({
+      name: "Utility Mapping",
+      website: "https://u-map.co.uk/",
+      email: "patryk@u-map.co.uk",
+      hiddenModules: [],
+    });
+    expect(isUtilityMappingOrg()).toBe(false);
   });
 
   it("hides utilityMapping profile from other orgs", () => {

@@ -36,6 +36,14 @@ Jeśli masz już tylko `VITE_STORAGE_API_URL` i `VITE_STORAGE_UPLOAD_TOKEN`, **d
 
 **Supabase Edge Functions (Stripe billing)** — w Dashboard → Edge Functions → **Secrets** (nie Vercel): `STRIPE_SECRET_KEY`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_TEAM`, `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_ENTERPRISE`, `STRIPE_WEBHOOK_SECRET`, `SITE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (już często ustawione), zgodnie z `README.md`. Po `npm run stripe:seed-prices` wklej wydrukowane `price_…` dla wszystkich czterech planów.
 
+**Supabase Edge Functions (invite / permit email)** — te same Secrets (nie Vercel):
+- `RESEND_API_KEY` — klucz z [Resend](https://resend.com/api-keys) (`re_…`)
+- `SITE_URL` — origin aplikacji bez `/` na końcu (już zwykle ustawione)
+- opcjonalnie `INVITE_FROM_EMAIL` — np. `MySafeOps <notifications@yourdomain.com>` (domena zweryfikowana w Resend)
+- opcjonalnie `NOTIFY_FROM_EMAIL` — nadawca dla `send-permit-notification`
+
+Bez `RESEND_API_KEY` invite działa nadal przez skopiowany link; w UI pojawi się „email skipped”.
+
 ---
 
 ## 1. Warto ustawić w Vercel (produkcja)

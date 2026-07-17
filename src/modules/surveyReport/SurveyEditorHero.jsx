@@ -114,10 +114,22 @@ function SurveyEditorHero({
           />
         </div>
         {quality.missing.length > 0 ? (
-          <p className="app-survey-editor-hero__missing">
-            Still needed: {quality.missing.slice(0, 4).join(" · ")}
+          <div className="app-survey-editor-hero__missing">
+            Still needed:{" "}
+            {quality.missing.slice(0, 4).map((label, i) => (
+              <span key={label}>
+                {i > 0 ? " · " : ""}
+                <button
+                  type="button"
+                  className="app-survey-editor-hero__missing-link"
+                  onClick={() => onGoToTab?.(null, { label })}
+                >
+                  {label}
+                </button>
+              </span>
+            ))}
             {quality.missing.length > 4 ? ` · +${quality.missing.length - 4} more` : ""}
-          </p>
+          </div>
         ) : (
           <p className="app-survey-editor-hero__missing app-survey-editor-hero__missing--done">
             All quality checks passed

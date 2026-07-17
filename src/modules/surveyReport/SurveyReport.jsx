@@ -31,6 +31,9 @@ import {
   GI_METHOD_OPTIONS,
   UTILITY_TYPE_OPTIONS,
   UTILITY_CONFIDENCE_LEVELS,
+  UTILITY_SOURCE_OPTIONS,
+  UTILITY_DETECT_STATUS,
+  PRINT_OUTLINE_OPTIONS,
   DELIVERABLE_FORMAT_OPTIONS,
   RECORD_REF_STATUS_OPTIONS,
   EQUIPMENT_CALIBRATION_STATUS,
@@ -41,12 +44,16 @@ import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
 import { listUtilityMappingClients, getUtilityMappingClient, utilityMappingClientLogoUrl } from "../../utils/utilityMappingClients";
 import { formatUtilityMappingRef, utilityMappingJobYearYY, parseUtilityMappingRef } from "../../utils/utilityMappingDocRefs";
 import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
+import { siteContextBadgeLabel, inheritSiteContextOntoDoc } from "../../utils/inheritSiteContext";
+import { stripSurveyFormForSessionDraft, mergeSurveyDraftPhotos } from "../../utils/surveyEditorDraft";
+import { buildOrgShareUrlWithRef } from "../../utils/safeOrgWebsite";
 import {
   computeUtilityMappingDigRisk,
   buildUtilityMappingDrawingSheets,
 } from "../../utils/utilityMappingPremiumPages";
 import {
   downloadUtilityMappingClientPack,
+  downloadUtilityMappingA3BoardPack,
   buildUtilityMappingClientMailto,
 } from "../../utils/utilityMappingClientPack";
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
@@ -82,6 +89,7 @@ import {
   buildRecommendationsDraft,
   buildSurveyTypeDefaults,
   fetchWeatherIntoReport,
+  fetchGeologyIntoSurveyReport,
   generateAiSurveyDraft,
   mergeSitePlanIntoReport,
   pickRamsForProject,
@@ -97,12 +105,14 @@ import {
 } from "./surveyReportSmart";
 import SurveyBlockersPanel from "./SurveyBlockersPanel";
 import SurveyHandoverModal from "./SurveyHandoverModal";
+import { resolveSurveyFixTarget, scheduleSurveyFixScroll } from "./surveyFixNav";
 import SurveyPas128Dashboard from "./SurveyPas128Dashboard";
 import { applySurveyAutofix } from "./surveyAutofix";
 import { getSpecialistFindingsConfig } from "./surveySpecialistFindings";
 import { applyPas128MethodToReport, pas128MethodAppliesToSurveyType } from "./pas128MethodPresets";
 import { buildPas128Foreword } from "./pas128ReportBoilerplate";
 import { buildFindingsDraft } from "./pas128FindingsBuilder";
+import { applyTrialHolesToUtilities, seedTfrCadNotesFromRecords } from "./surveyGeologyUpgrades";
 import Pas128WorkflowStrip from "./Pas128WorkflowStrip";
 import { listProjectPlans, plansForProject } from "../permits/permitPlanOverlayRegistry";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
@@ -127,6 +137,7 @@ import SurveyLivePreviewDock from "./SurveyLivePreviewDock";
 import SurveyHandoverStrip from "./SurveyHandoverStrip";
 import SurveyKeyboardHints from "./SurveyKeyboardHints";
 import SurveyListRow from "./SurveyListRow";
+import SurveyPremiumFieldsEditor from "./SurveyPremiumFieldsEditor";
 import { useSurveyPreviewHtml } from "./useSurveyPreviewHtml";
 import { enrichSurveyListRows, surveyListGroupMeta } from "./surveyReportListRows";
 import { surveyListFilterCounts } from "./surveyListFilterCounts";
@@ -552,7 +563,7 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
                     marginRight: 4,
                     marginBottom: 4,
                   }}
-                  onClick={() => onGoToTab?.(step.tab)}
+                  onClick={() => onGoToTab?.(step.tab, { id: step.id, label: step.label })}
                 >
                   {step.label}
                 </button>
@@ -584,6 +595,14 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
             {assistBtn("Fetch weather", !project || !form.surveyDate || !hasCoords, async () =>
               fetchWeatherIntoReport(form, project)
             )}
+            {assistBtn("Fetch BGS geology", !project || !(hasCoords || project?.postcode), async () =>
+              fetchGeologyIntoSurveyReport(form, project, { overwrite: Boolean(form.geology?.formation) })
+            )}
+            {project && !hasCoords && project?.postcode ? (
+              <span style={{ fontSize: 11, color: "#b45309" }}>
+                No map pin — BGS will use postcode centroid (less accurate).
+              </span>
+            ) : null}
             {assistBtn("Import site plan", !plansWithMarkup.length, async () => {
               let next = mergeSitePlanIntoReport(form, plansWithMarkup);
               next = await attachSitePlanSnapshots(next, plansWithMarkup);
@@ -701,6 +720,7 @@ function ReportEditor({
   ramsDocs,
   projectPlans,
   geoPhotos = [],
+  gprReports = [],
   permits = [],
   reports = [],
   isNew,
@@ -753,7 +773,7 @@ function ReportEditor({
         confirmLabel: "Restore",
         cancelLabel: "Discard",
         onConfirm: () => {
-          setForm(normalizeSurveyReport(draft.form));
+          setForm((live) => normalizeSurveyReport(mergeSurveyDraftPhotos(draft.form, live)));
           setConfirmDialog(null);
         },
         onCancel: () => {
@@ -769,7 +789,11 @@ function ReportEditor({
   useEffect(() => {
     const t = setTimeout(() => {
       try {
-        const payload = JSON.stringify({ form, savedAt: Date.now(), reportId: form.id });
+        const payload = JSON.stringify({
+          form: stripSurveyFormForSessionDraft(form),
+          savedAt: Date.now(),
+          reportId: form.id,
+        });
         if (payload === lastDraftJsonRef.current) return;
         lastDraftJsonRef.current = payload;
         sessionStorage.setItem(SURVEY_DRAFT_KEY, payload);
@@ -941,7 +965,11 @@ function ReportEditor({
         siteAddress: p?.address || f.siteAddress,
         updatedAt: new Date().toISOString(),
       };
-      if (p) next = applyUtilityMappingProjectJobToDoc(next, p, "SR");
+      if (p) {
+        const rams = pickRamsForProject(ramsDocs, projectId);
+        next = inheritSiteContextOntoDoc(next, p, rams);
+        next = applyUtilityMappingProjectJobToDoc(next, p, "SR");
+      }
       return next;
     });
   };
@@ -1104,8 +1132,8 @@ function ReportEditor({
     [permits, form.projectId]
   );
   const blockersContext = useMemo(
-    () => ({ project: formProject, projectPlans: projectPlansForForm, geoPhotos }),
-    [formProject, projectPlansForForm, geoPhotos]
+    () => ({ project: formProject, projectPlans: projectPlansForForm, geoPhotos, gprReports }),
+    [formProject, projectPlansForForm, geoPhotos, gprReports]
   );
   const showTrialHolesTable =
     form.surveyType === "utility_mapping_survey" ||
@@ -1116,6 +1144,19 @@ function ReportEditor({
   const photoCoverage = useMemo(() => surveyPhotoCategoryCoverage(form.photos), [form.photos]);
   const showTopoClosure = ["topographical_survey", "setting_out", "gnss_control"].includes(form.surveyType);
   const blockersPanelRef = useRef(null);
+  const editorPanelRef = useRef(null);
+
+  const goToSurveyFix = useCallback((tabOrTarget, opts = {}) => {
+    const target =
+      tabOrTarget && typeof tabOrTarget === "object"
+        ? resolveSurveyFixTarget({ ...tabOrTarget, ...opts })
+        : resolveSurveyFixTarget({
+            tab: typeof tabOrTarget === "string" ? tabOrTarget : undefined,
+            ...opts,
+          });
+    setTab(target.tab);
+    scheduleSurveyFixScroll(target.anchor, { root: editorPanelRef.current });
+  }, []);
 
   const handleSurveyAutofix = useCallback(
     (fixId) => {
@@ -1161,9 +1202,18 @@ function ReportEditor({
     setPackProgress("Starting…");
     try {
       const { downloadSurveyHandoverZip } = await import("./surveyHandoverPack");
-      await downloadSurveyHandoverZip(form, printExtras, geoPhotos, {
-        onProgress: (phase) => setPackProgress(phase),
-      });
+      const org = getOrgSettings();
+      const shareUrl = form.ref
+        ? buildOrgShareUrlWithRef(org, form.ref, isUtilityMappingOrg() ? "https://u-map.co.uk/" : "https://mysafeops.com/")
+        : "";
+      await downloadSurveyHandoverZip(
+        form,
+        { ...printExtras, org, shareUrl },
+        geoPhotos,
+        {
+          onProgress: (phase) => setPackProgress(phase),
+        }
+      );
       pushAudit({ action: "survey_handover_pack", entity: "survey_report", detail: form.ref || form.id });
       pushToast({ type: "success", title: "Handover pack", message: "ZIP download started." });
     } catch (e) {
@@ -1340,6 +1390,7 @@ function ReportEditor({
         onAppendRams={appendSummaryToRams}
       />
       <div
+        ref={editorPanelRef}
         className={`app-module-overlay__panel app-survey-report-editor${livePreviewOpen ? " app-survey-report-editor--split" : ""}`}
         style={{ ...ss.card, maxWidth: livePreviewOpen ? 1280 : 920 }}
       >
@@ -1347,7 +1398,7 @@ function ReportEditor({
           form={form}
           project={formProject}
           onClose={onClose}
-          onGoToTab={setTab}
+          onGoToTab={goToSurveyFix}
           livePreviewOpen={livePreviewOpen}
           onToggleLivePreview={setLivePreviewOpen}
         />
@@ -1359,7 +1410,7 @@ function ReportEditor({
           linkedRams={linkedRams}
           projectPermits={projectPermits}
           geoPhotoCount={geoPhotoCount}
-          onGoToTab={setTab}
+          onGoToTab={goToSurveyFix}
         />
 
         <SmartAssistPanel
@@ -1370,7 +1421,7 @@ function ReportEditor({
           geoPhotos={geoPhotos}
           permits={permits}
           linkedRams={linkedRams}
-          onGoToTab={setTab}
+          onGoToTab={goToSurveyFix}
           simpleMode={simpleMode}
           onApply={(next) => setForm({ ...next, updatedAt: new Date().toISOString() })}
         />
@@ -1379,7 +1430,7 @@ function ReportEditor({
           <SurveyBlockersPanel
             report={form}
             context={blockersContext}
-            onGoToTab={setTab}
+            onGoToTab={goToSurveyFix}
             onAutofix={handleSurveyAutofix}
           />
         </div>
@@ -1415,8 +1466,9 @@ function ReportEditor({
         <div key={tab} className="app-survey-tab-panel">
         {showTab("details") && (
           <>
+            <div data-survey-anchor="tab-details" />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10 }}>
-              <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ gridColumn: "1 / -1" }} data-survey-anchor="title">
                 <label style={ss.lbl}>Report title *</label>
                 <input
                   style={ss.inp}
@@ -1542,15 +1594,15 @@ function ReportEditor({
                   })()}
                 </>
               ) : null}
-              <div>
+              <div data-survey-anchor="survey-date">
                 <label style={ss.lbl}>Survey date *</label>
                 <input type="date" style={ss.inp} value={form.surveyDate} onChange={(e) => set("surveyDate", e.target.value)} />
               </div>
-              <div>
+              <div data-survey-anchor="surveyor">
                 <label style={ss.lbl}>Surveyor / author *</label>
                 <input style={ss.inp} value={form.surveyor} onChange={(e) => set("surveyor", e.target.value)} placeholder="Name and role" />
               </div>
-              <div>
+              <div data-survey-anchor="project">
                 <label style={ss.lbl}>Project</label>
                 <select style={ss.inp} value={form.projectId} onChange={(e) => onProjectChange(e.target.value)}>
                   <option value="">— Select —</option>
@@ -1568,6 +1620,11 @@ function ReportEditor({
               <div style={{ gridColumn: "1 / -1" }}>
                 <label style={ss.lbl}>Site address</label>
                 <input style={ss.inp} value={form.siteAddress} onChange={(e) => set("siteAddress", e.target.value)} />
+                {siteContextBadgeLabel(form) ? (
+                  <div style={{ marginTop: 6, fontSize: 11, color: "#27500A", background: "#EAF3DE", display: "inline-block", padding: "2px 8px", borderRadius: 999 }}>
+                    Site context: {siteContextBadgeLabel(form)}
+                  </div>
+                ) : null}
               </div>
               {form.projectId ? (
                 <div className="app-survey-editor-quicklinks" style={{ gridColumn: "1 / -1" }}>
@@ -1624,7 +1681,7 @@ function ReportEditor({
                   </button>
                 </div>
               ) : null}
-              <div>
+              <div data-survey-anchor="survey-type">
                 <label style={ss.lbl}>Survey type *</label>
                 <select style={ss.inp} value={form.surveyType} onChange={(e) => onSurveyTypeChange(e.target.value)}>
                   <option value="">— Select —</option>
@@ -1635,7 +1692,7 @@ function ReportEditor({
                   ))}
                 </select>
               </div>
-              <div>
+              <div data-survey-anchor="pas128">
                 <label style={ss.lbl}>PAS128 quality level</label>
                 <select style={ss.inp} value={form.pas128Ql} onChange={(e) => set("pas128Ql", e.target.value)}>
                   <option value="">— Optional —</option>
@@ -1693,6 +1750,42 @@ function ReportEditor({
                       Re-apply method template
                     </button>
                   ) : null}
+                </div>
+              ) : null}
+              {pas128MethodAppliesToSurveyType(form.surveyType) ? (
+                <div>
+                  <label style={ss.lbl}>Secondary method (optional)</label>
+                  <select
+                    style={ss.inp}
+                    value={form.pas128MethodSecondary || ""}
+                    onChange={(e) => set("pas128MethodSecondary", e.target.value)}
+                  >
+                    <option value="">— None —</option>
+                    {PAS128_METHODS.filter((m) => m.key !== form.pas128Method).map((m) => (
+                      <option key={m.key} value={m.key}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "4px 0 0" }}>
+                    Cover shows combined methods (e.g. M2 + M4P) when both are set.
+                  </p>
+                </div>
+              ) : null}
+              {pas128MethodAppliesToSurveyType(form.surveyType) ? (
+                <div>
+                  <label style={ss.lbl}>Print outline</label>
+                  <select
+                    style={ss.inp}
+                    value={form.printOutline || "standard"}
+                    onChange={(e) => set("printOutline", e.target.value)}
+                  >
+                    {PRINT_OUTLINE_OPTIONS.map((o) => (
+                      <option key={o.key} value={o.key}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               ) : null}
             </div>
@@ -1769,7 +1862,7 @@ function ReportEditor({
                 </button>
               ) : null}
             </div>
-            <div style={{ marginTop: 14 }}>
+            <div style={{ marginTop: 14 }} data-survey-anchor="executive-summary">
               <label style={ss.lbl}>Executive summary</label>
               <textarea
                 style={{ ...ss.ta, minHeight: 72 }}
@@ -1778,6 +1871,7 @@ function ReportEditor({
                 placeholder="Brief overview for the client — what was done and key outcomes."
               />
             </div>
+            <div data-survey-anchor="document-control">
             <div style={ss.sectionHead}>Document control</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10 }}>
               <div>
@@ -1805,11 +1899,14 @@ function ReportEditor({
                 <input style={ss.inp} value={form.documentControl.approvedBy} onChange={(e) => setDocControl("approvedBy", e.target.value)} />
               </div>
             </div>
+            </div>
           </>
         )}
 
         {showTab("scope") && (
           <>
+            <div data-survey-anchor="tab-scope" />
+            <div data-survey-anchor="scope">
             <label style={ss.lbl}>Scope of works *</label>
             <textarea
               style={{ ...ss.ta, minHeight: 90 }}
@@ -1817,6 +1914,8 @@ function ReportEditor({
               onChange={(e) => setSection("scope", e.target.value)}
               placeholder="Describe the agreed survey scope, deliverables and any exclusions."
             />
+            </div>
+            <div data-survey-anchor="methodology">
             <div style={ss.sectionHead}>Methodology *</div>
             <textarea
               style={{ ...ss.ta, minHeight: 100 }}
@@ -1824,6 +1923,7 @@ function ReportEditor({
               onChange={(e) => setSection("methodology", e.target.value)}
               placeholder="Step-by-step method: control setup, detection techniques, QA checks, handover."
             />
+            </div>
             <div style={ss.sectionHead}>Equipment used</div>
             <textarea
               style={{ ...ss.ta, minHeight: 60 }}
@@ -1831,6 +1931,9 @@ function ReportEditor({
               onChange={(e) => setSection("equipmentUsed", e.target.value)}
               placeholder="e.g. RD8000 locator, IDS Stream C GPR, Leica GS18 rover…"
             />
+            <p style={{ fontSize: 12, color: "#64748b", margin: "4px 0 12px" }}>
+              Tip: use <strong>Equipment kit thickbox</strong> under Findings for manufacturer / appendix cards in the PDF.
+            </p>
             <div style={ss.sectionHead}>Survey extent</div>
             <textarea
               style={{ ...ss.ta, minHeight: 60 }}
@@ -1886,6 +1989,7 @@ function ReportEditor({
               onChange={(e) => setControl("controlPointsNotes", e.target.value)}
               placeholder="Control point IDs, residuals, independent checks…"
             />
+            <div data-survey-anchor="deliverables">
             <div style={ss.sectionHead}>Deliverables schedule</div>
             <RowTableEditor
               rows={form.deliverables}
@@ -1899,6 +2003,7 @@ function ReportEditor({
                 { key: "status", label: "Status", placeholder: "Issued with report" },
               ]}
             />
+            </div>
             {isUtilityMappingOrg() ? (
               <>
                 <div style={{ ...ss.sectionHead, marginTop: 16 }}>Drawing register</div>
@@ -1937,6 +2042,7 @@ function ReportEditor({
 
         {showTab("professional") && (
           <>
+            <div data-survey-anchor="tab-professional" />
             <div style={ss.sectionHead}>Survey programme</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
               <div>
@@ -1965,6 +2071,7 @@ function ReportEditor({
               value={form.surveyProgramme.siteAccessNotes}
               onChange={(e) => setProgramme("siteAccessNotes", e.target.value)}
             />
+            <div data-survey-anchor="qa">
             <div style={ss.sectionHead}>QA & verification ({qaProgress.checked}/{qaProgress.total})</div>
             <div
               className={`app-survey-qa-meter${qaProgress.complete ? " app-survey-qa-meter--complete" : ""}`}
@@ -2013,6 +2120,8 @@ function ReportEditor({
               </div>
             );
             })}
+            </div>
+            <div data-survey-anchor="standards">
             <div style={ss.sectionHead}>Standards referenced</div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 0, marginBottom: 8, lineHeight: 1.45 }}>
               Tick standards cited in this report — they appear in the PDF issue pack.
@@ -2022,6 +2131,7 @@ function ReportEditor({
               selected={form.standardsCited || []}
               onToggle={toggleStandardCited}
             />
+            </div>
             <div style={ss.sectionHead}>Health & safety cross-reference</div>
             {form.projectId ? (
               <div style={{ marginBottom: 10 }}>
@@ -2159,6 +2269,7 @@ function ReportEditor({
                 />
               </>
             ) : null}
+            <div data-survey-anchor="calibration">
             <div style={ss.sectionHead}>Equipment calibration</div>
             <RowTableEditor
               rows={form.equipmentCalibration}
@@ -2172,6 +2283,7 @@ function ReportEditor({
                 { key: "status", label: "Status", options: EQUIPMENT_CALIBRATION_STATUS },
               ]}
             />
+            </div>
             <div style={ss.sectionHead}>Revision history</div>
             <RowTableEditor
               rows={form.revisionHistory}
@@ -2209,6 +2321,7 @@ function ReportEditor({
 
         {showTab("weather") && (
           <>
+            <div data-survey-anchor="weather">
             {(form.weather?.tempC != null || form.weather?.windMph != null) && (
               <div
                 style={{
@@ -2289,11 +2402,13 @@ function ReportEditor({
                 placeholder="e.g. GPR attenuation on wet clay; GNSS held under tree cover."
               />
             </div>
+            </div>
           </>
         )}
 
         {showTab("records") && (
           <>
+            <div data-survey-anchor="records">
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
               {Object.entries(UTILITY_RECORDS_PRESETS).map(([key, p]) => (
                 <button key={key} type="button" style={{ ...ss.btn, fontSize: 11 }} onClick={() => applyRecordsPreset(key)}>
@@ -2331,6 +2446,7 @@ function ReportEditor({
               <label style={ss.lbl}>Gap explanation</label>
               <textarea style={{ ...ss.ta, minHeight: 48 }} value={form.utilityRecords.gapExplanation} onChange={(e) => setRecords("gapExplanation", e.target.value)} />
             </div>
+            <div data-survey-anchor="dbyd">
             <div style={ss.sectionHead}>LSBUD / DBYD enquiry log</div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
               Structured desktop utility records enquiries — supports HSG47 / PAS128 records review traceability.
@@ -2349,6 +2465,7 @@ function ReportEditor({
                 { key: "notes", label: "Notes", placeholder: "Partial pack — gas missing" },
               ]}
             />
+            </div>
             <div style={ss.sectionHead}>Undertaker response status</div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
               Per-undertaker desktop search outcomes (PAS 128 Survey Type D / M1). Status: Affected, Not affected, or No response.
@@ -2379,11 +2496,13 @@ function ReportEditor({
                 { key: "status", label: "Status", options: RECORD_REF_STATUS_OPTIONS },
               ]}
             />
+            </div>
           </>
         )}
 
         {showTab("limitations") && (
           <>
+            <div data-survey-anchor="limitations">
             <div style={ss.sectionHead}>Standard limitation clauses</div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
               Tick applicable items — text is assembled into the Limitations section of the printed report.
@@ -2418,13 +2537,15 @@ function ReportEditor({
                 onChange={(e) => set("accessLimitationsNotes", e.target.value)}
               />
             </div>
+            </div>
           </>
         )}
 
         {showTab("findings") && (
           <>
+            <div data-survey-anchor="tab-findings" />
             {specialistConfig ? (
-              <>
+              <div data-survey-anchor="specialist-table">
                 <div style={ss.sectionHead}>{specialistConfig.title}</div>
                 <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>{specialistConfig.hint}</p>
                 <RowTableEditor
@@ -2436,10 +2557,11 @@ function ReportEditor({
                   addLabel="+ Add row"
                   columns={specialistConfig.columns}
                 />
-              </>
+              </div>
             ) : null}
             {pas128Stats ? <SurveyPas128Dashboard stats={pas128Stats} /> : null}
             {form.pas128Method ? <Pas128WorkflowStrip methodKey={form.pas128Method} className="app-survey-workflow-strip--findings" /> : null}
+            <div data-survey-anchor="cad-import">
             <CadImportPanel
               cadImport={form.cadImport}
               utilitiesTable={form.utilitiesTable}
@@ -2449,8 +2571,9 @@ function ReportEditor({
               onLayerMappingsChange={handleCadLayerMappings}
               onClear={() => setForm((f) => ({ ...f, cadImport: null, updatedAt: new Date().toISOString() }))}
             />
+            </div>
             {isGiReport ? (
-              <>
+              <div data-survey-anchor="gi-locations">
                 <div style={ss.sectionHead}>GI location schedule</div>
                 <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
                   Structured table for trial pits, boreholes, DCP points and samples — links to geo-photo figures in the PDF.
@@ -2484,8 +2607,9 @@ function ReportEditor({
                     Import GI locations from geo-photos
                   </button>
                 )}
-              </>
+              </div>
             ) : null}
+            <div data-survey-anchor="utilities">
             <div style={ss.sectionHead}>Utility schedule (PAS128)</div>
             <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
               Structured table prints before narrative findings — ideal for utility mapping reports.
@@ -2497,15 +2621,38 @@ function ReportEditor({
               addLabel="+ Add utility"
               columns={[
                 { key: "utilityType", label: "Utility", options: UTILITY_TYPE_OPTIONS },
+                { key: "diameter", label: "Dia.", placeholder: "150 mm" },
+                { key: "material", label: "Material", placeholder: "PE / CI" },
                 { key: "depth", label: "Depth", placeholder: "0.8 m" },
+                { key: "source", label: "Source", options: UTILITY_SOURCE_OPTIONS },
+                { key: "detectStatus", label: "Status", options: UTILITY_DETECT_STATUS },
                 { key: "method", label: "Method", placeholder: "EML + GPR" },
                 { key: "pas128Ql", label: "PAS128 QL", options: PAS128_QUALITY_LEVELS },
                 { key: "confidence", label: "Confidence", options: UTILITY_CONFIDENCE_LEVELS },
-                { key: "notes", label: "Notes", placeholder: "Near substation" },
+                { key: "notes", label: "Notes", placeholder: "Near substation / TFR" },
               ]}
             />
+            {form.projectId && countGeoPhotosForReport(geoPhotos, form.projectId) > 0 && (
+              <button
+                type="button"
+                style={{ ...ss.btn, fontSize: 11, marginBottom: 12 }}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    utilitiesTable: geoPhotosToUtilitiesTable(geoPhotos, f.projectId, {
+                      existingRows: f.utilitiesTable,
+                      pas128Ql: f.pas128Ql,
+                    }),
+                    updatedAt: new Date().toISOString(),
+                  }))
+                }
+              >
+                Import utility rows from geo-photos
+              </button>
+            )}
+            </div>
             {showTrialHolesTable ? (
-              <>
+              <div data-survey-anchor="trial-holes">
                 <div style={ss.sectionHead}>Trial holes / Type B0 verification log</div>
                 <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
                   Record intrusive verification where PAS128 Type B0 or client brief requires exposed confirmation.
@@ -2525,26 +2672,70 @@ function ReportEditor({
                     { key: "notes", label: "Notes", placeholder: "Hand dig, 0.5 m buffer" },
                   ]}
                 />
-              </>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                  <button
+                    type="button"
+                    style={{ ...ss.btn, fontSize: 11 }}
+                    disabled={!(form.trialHolesTable || []).length}
+                    onClick={() => {
+                      const next = applyTrialHolesToUtilities(form);
+                      const stats = next._trialHoleApply || {};
+                      const { _trialHoleApply, ...clean } = next;
+                      setForm({ ...clean, updatedAt: new Date().toISOString() });
+                      pushToast({
+                        type: "success",
+                        title: "Trial holes applied",
+                        message: `Updated ${stats.updated || 0} utility row(s), created ${stats.created || 0} (QL-B0).`,
+                      });
+                    }}
+                  >
+                    Apply trial holes → utility QL-B0
+                  </button>
+                  <button
+                    type="button"
+                    style={{ ...ss.btn, fontSize: 11 }}
+                    disabled={!(form.recordItems || []).some((r) => r.status === "tfr" || r.tfr)}
+                    onClick={() => {
+                      setForm((f) => ({
+                        ...seedTfrCadNotesFromRecords(f),
+                        updatedAt: new Date().toISOString(),
+                      }));
+                      pushToast({
+                        type: "success",
+                        title: "TFR CAD notes",
+                        message: "TFR undertakers added to site plan / drawing notes.",
+                      });
+                    }}
+                  >
+                    Seed TFR → CAD / site-plan notes
+                  </button>
+                </div>
+              </div>
             ) : null}
-            {form.projectId && countGeoPhotosForReport(geoPhotos, form.projectId) > 0 && (
-              <button
-                type="button"
-                style={{ ...ss.btn, fontSize: 11, marginBottom: 12 }}
-                onClick={() =>
-                  setForm((f) => ({
-                    ...f,
-                    utilitiesTable: geoPhotosToUtilitiesTable(geoPhotos, f.projectId, {
-                      existingRows: f.utilitiesTable,
-                      pas128Ql: f.pas128Ql,
-                    }),
-                    updatedAt: new Date().toISOString(),
-                  }))
+            <SurveyPremiumFieldsEditor
+              form={form}
+              setForm={setForm}
+              gprReports={gprReports}
+              project={formProject}
+              onFetchGeology={async (overwrite) => {
+                try {
+                  const next = await fetchGeologyIntoSurveyReport(form, formProject, { overwrite: Boolean(overwrite) });
+                  setForm((f) => ({ ...f, ...next, updatedAt: new Date().toISOString() }));
+                  pushToast({
+                    type: "success",
+                    title: overwrite ? "BGS geology refreshed" : "BGS geology loaded",
+                    message: "DigMap 50k + boreholes when available — confirm against site observations / SI.",
+                  });
+                } catch (err) {
+                  pushToast({
+                    type: "error",
+                    title: "Geology lookup failed",
+                    message: err?.message || "Could not reach BGS geology.",
+                  });
                 }
-              >
-                Import utility rows from geo-photos
-              </button>
-            )}
+              }}
+            />
+            <div data-survey-anchor="findings">
             <label style={ss.lbl}>Findings & results *</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
               <button
@@ -2571,6 +2762,8 @@ function ReportEditor({
               onChange={(e) => setSection("findings", e.target.value)}
               placeholder="Summarise survey results: utilities detected, levels, defects, anomalies, confidence notes."
             />
+            </div>
+            <div data-survey-anchor="recommendations">
             <div style={ss.sectionHead}>Recommendations</div>
             <textarea
               style={{ ...ss.ta, minHeight: 80 }}
@@ -2578,6 +2771,7 @@ function ReportEditor({
               onChange={(e) => setSection("recommendations", e.target.value)}
               placeholder="Further works, verification, client actions, residual risks."
             />
+            </div>
             {(form.sitePlanSnapshots || []).length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <div style={ss.sectionHead}>Site plan images (PDF appendix)</div>
@@ -2602,6 +2796,7 @@ function ReportEditor({
 
         {showTab("photos") && (
           <>
+            <div data-survey-anchor="photos">
             {form.projectId && countGeoPhotosForReport(geoPhotos, form.projectId) > 0 ? (
               <div
                 style={{
@@ -2712,21 +2907,35 @@ function ReportEditor({
                 ))}
               </div>
             )}
+            </div>
           </>
         )}
 
         {showTab("preview") && (
           <>
+            <div data-survey-anchor="tab-preview" />
             {form.status !== "final" && !finalGate.allowed && finalGate.missing.length > 0 ? (
               <div className="app-survey-gate-callout app-survey-gate-callout--warn" role="status">
                 <strong>Before marking final</strong>
                 <ul>
                   {finalGate.missing.map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item}>
+                      <button
+                        type="button"
+                        className="app-survey-gate-callout__fix-link"
+                        onClick={() => goToSurveyFix(null, { label: item })}
+                      >
+                        {item}
+                      </button>
+                    </li>
                   ))}
                 </ul>
-                <button type="button" className="app-survey-gate-callout__action" onClick={() => setTab("professional")}>
-                  Open Professional tab
+                <button
+                  type="button"
+                  className="app-survey-gate-callout__action"
+                  onClick={() => goToSurveyFix("professional", { anchor: "qa" })}
+                >
+                  Open first blocker →
                 </button>
               </div>
             ) : null}
@@ -2736,7 +2945,15 @@ function ReportEditor({
                 <p>PDF print is available; batch export pack needs:</p>
                 <ul>
                   {exportGate.missing.map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item}>
+                      <button
+                        type="button"
+                        className="app-survey-gate-callout__fix-link"
+                        onClick={() => goToSurveyFix(null, { label: item })}
+                      >
+                        {item}
+                      </button>
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -2802,9 +3019,7 @@ function ReportEditor({
                 style={ss.btn}
                 onClick={() => {
                   const org = getOrgSettings();
-                  const shareUrl = form.ref
-                    ? `${String(org.website || "https://u-map.co.uk/").replace(/\/$/, "")}?ref=${encodeURIComponent(form.ref)}`
-                    : "";
+                  const shareUrl = form.ref ? buildOrgShareUrlWithRef(org, form.ref) : "";
                   if (downloadUtilityMappingClientPack(form, { org, shareUrl })) {
                     pushToast({ type: "success", title: "Client pack", message: "Executive HTML pack downloaded." });
                   } else {
@@ -2813,6 +3028,20 @@ function ReportEditor({
                 }}
               >
                 Client pack
+              </button>
+              <button
+                type="button"
+                style={ss.btn}
+                onClick={() => {
+                  const org = getOrgSettings();
+                  if (downloadUtilityMappingA3BoardPack(form, { org })) {
+                    pushToast({ type: "success", title: "A3 board pack", message: "Landscape board sheet downloaded." });
+                  } else {
+                    pushToast({ type: "warn", title: "A3 board pack", message: "Could not build A3 board pack." });
+                  }
+                }}
+              >
+                A3 board
               </button>
               <button
                 type="button"
@@ -2901,6 +3130,7 @@ export default function SurveyReport() {
   const [ramsDocs] = useState(() => load("rams_builder_docs", []));
   const [projectPlans] = useState(() => listProjectPlans());
   const [geoPhotos, setGeoPhotos] = useState(() => load("geo_photos", []));
+  const [gprReports] = useState(() => load("gpr_reports", []));
   const [permits] = useState(() => load("permits_v2", []));
   const [modal, setModal] = useState(null);
   const [filter, setFilter] = useState("all");
@@ -3096,14 +3326,26 @@ export default function SurveyReport() {
     (report) => {
       if (!isUtilityMappingOrg()) return;
       const org = getOrgSettings();
-      const shareUrl = report.ref
-        ? `${String(org.website || "https://u-map.co.uk/").replace(/\/$/, "")}?ref=${encodeURIComponent(report.ref)}`
-        : "";
+      const shareUrl = report.ref ? buildOrgShareUrlWithRef(org, report.ref) : "";
       if (downloadUtilityMappingClientPack(report, { org, shareUrl })) {
         pushToast({ type: "success", title: "Client pack", message: "Executive HTML pack downloaded." });
         pushAudit({ action: "survey_client_pack", entity: "survey_report", detail: report.ref || report.id });
       } else {
         pushToast({ type: "warn", title: "Client pack", message: "Could not build client pack." });
+      }
+    },
+    [pushToast]
+  );
+
+  const exportA3BoardForReport = useCallback(
+    (report) => {
+      if (!isUtilityMappingOrg()) return;
+      const org = getOrgSettings();
+      if (downloadUtilityMappingA3BoardPack(report, { org })) {
+        pushToast({ type: "success", title: "A3 board pack", message: "Landscape board sheet downloaded." });
+        pushAudit({ action: "survey_a3_board", entity: "survey_report", detail: report.ref || report.id });
+      } else {
+        pushToast({ type: "warn", title: "A3 board pack", message: "Could not build A3 board pack." });
       }
     },
     [pushToast]
@@ -3322,6 +3564,7 @@ export default function SurveyReport() {
           ramsDocs={ramsDocs.filter((d) => d.surveyWorkType || d.surveyMethodStatement)}
           projectPlans={projectPlans}
           geoPhotos={geoPhotos}
+          gprReports={gprReports}
           permits={permits}
           reports={reports}
           onSave={(r) => persist(r, modal.isNew)}
@@ -3537,6 +3780,7 @@ export default function SurveyReport() {
                   onDuplicate={duplicateReport}
                   onHtmlExport={exportHtmlForReport}
                   onClientPack={isUtilityMappingOrg() ? exportClientPackForReport : null}
+                  onA3Board={isUtilityMappingOrg() ? exportA3BoardForReport : null}
                   onGeoJsonExport={hasGeo ? handleGeoJsonExport : null}
                   onKmlExport={hasGeo ? handleKmlExport : null}
                   onKmzExport={hasGeo ? handleKmzExport : null}

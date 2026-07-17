@@ -42,7 +42,7 @@ export function safeCssColor(raw, fallback = "#0d9488") {
   return fallback;
 }
 
-/** http(s) URLs or safe data:image (png/jpeg/gif/webp) for print previews. */
+/** http(s) URLs (incl. same-origin relative paths) or safe data:image (png/jpeg/gif/webp). */
 export function safeImageSrc(raw) {
   const http = safeHttpUrl(raw);
   if (http) return http;

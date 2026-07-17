@@ -1,11 +1,11 @@
 /**
- * Utility Mapping product focus — only PAS128 / topo / GPR / EML / clearance.
- * Hides CCTV, UAV, laser, asbestos, GI campaign types from this tenant.
+ * Utility Mapping product focus — survey-related deliverables for this tenant.
+ * Includes PAS128, topo, GPR, CCTV, UAV, laser, clearance; excludes asbestos / food-hygiene types.
  */
 import { SURVEY_TYPES } from "../modules/surveyReport/surveyReportConstants";
 import { isUtilityMappingOrg } from "./utilityMappingOrg";
 
-/** Survey report types Utility Mapping actually deliver. */
+/** Survey report types Utility Mapping / surveying crews deliver. */
 export const UM_FOCUS_SURVEY_TYPE_KEYS = [
   "utility_mapping_survey",
   "topo_plus_utility_survey",
@@ -14,6 +14,13 @@ export const UM_FOCUS_SURVEY_TYPE_KEYS = [
   "eml_cat_survey",
   "service_clearance_survey",
   "gnss_control",
+  "setting_out",
+  "cctv_drainage_survey",
+  "drainage_connectivity_survey",
+  "uav_aerial",
+  "laser_scanning",
+  "general_site_survey",
+  "site_investigation_campaign",
 ];
 
 const UM_FOCUS_SURVEY_SET = new Set(UM_FOCUS_SURVEY_TYPE_KEYS);
@@ -23,6 +30,9 @@ export const UM_FOCUS_GLOBAL_PLAYBOOK_IDS = new Set([
   "utility_mapping",
   "topo_plus_utility",
   "general",
+  "drainage_connectivity",
+  "service_clearance",
+  "topographical",
 ]);
 
 /**
@@ -33,9 +43,13 @@ export function listSurveyTypesForOrg(types = SURVEY_TYPES, orgId) {
   const list = Array.isArray(types) ? types : SURVEY_TYPES;
   if (!isUtilityMappingOrg(orgId)) return list;
   const focused = list.filter((t) => UM_FOCUS_SURVEY_SET.has(t.key));
-  // Preserve UM order, then any unexpected allowed keys.
   const byKey = Object.fromEntries(focused.map((t) => [t.key, t]));
-  return UM_FOCUS_SURVEY_TYPE_KEYS.map((k) => byKey[k]).filter(Boolean);
+  const ordered = UM_FOCUS_SURVEY_TYPE_KEYS.map((k) => byKey[k]).filter(Boolean);
+  // Append any allowed keys not in the preferred order list
+  for (const t of focused) {
+    if (!ordered.some((o) => o.key === t.key)) ordered.push(t);
+  }
+  return ordered;
 }
 
 /** @param {string} surveyType @param {string} [orgId] */
@@ -45,7 +59,7 @@ export function isUtilityMappingFocusedSurveyType(surveyType, orgId) {
 }
 
 /**
- * Keep UM exclusive playbooks + a short list of utility/topo globals.
+ * Keep UM exclusive playbooks + surveying-related globals.
  * @param {object[]} playbooks
  * @param {string} [orgId]
  */
@@ -56,7 +70,6 @@ export function filterPlaybooksForUtilityMappingFocus(playbooks, orgId) {
     const id = String(p?.id || "");
     if (id.startsWith("um_")) return true;
     if (UM_FOCUS_GLOBAL_PLAYBOOK_IDS.has(id)) return true;
-    // Drop generic surveying playbooks this tenant will not use (CCTV, UAV, GI, etc.)
     if (p?.surveyType && !UM_FOCUS_SURVEY_SET.has(p.surveyType)) return false;
     if (p?.surveyType) return UM_FOCUS_SURVEY_SET.has(p.surveyType);
     return false;

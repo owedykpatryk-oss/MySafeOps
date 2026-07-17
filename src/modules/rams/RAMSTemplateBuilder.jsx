@@ -2,6 +2,15 @@ import { useState, useEffect, useMemo, useRef, useDeferredValue } from "react";
 import { loadRamsHazardLibrary } from "./ramsHazardLibraryLoader.js";
 import { getRiskLevel } from "./ramsRiskLevel.js";
 import {
+  listSiteContextOverlayOptions,
+  getSiteContextOverlay,
+  appendSiteContextScope,
+  formatSiteContextBriefing,
+  findHazardsForSiteContext,
+  mergeSiteContextHazardTokens,
+  mergeUniqueStrings,
+} from "./ramsSiteContextOverlays.js";
+import {
   RAMS_PRINT_SECTIONS,
   RAMS_SECTION_IDS,
   normalizePrintSections,
@@ -845,6 +854,8 @@ const RAMS_FORM_DEFAULTS = {
   revisionSummary: "",
   surveyWorkType: "",
   surveyWorkTypeLabel: "",
+  siteContextKey: "",
+  siteContextLabel: "",
   surveyMethodStatement: "",
   surveyDeliverables: "",
   surveyAssumptions: "",
@@ -894,16 +905,31 @@ const SURVEYING_PACKS_RAW = [
   {
     key: "topographical_survey",
     label: "Topographical land survey",
-    scope: "Topographical survey to capture levels, boundaries, structures and site features with agreed survey control and QA checks.",
+    scope:
+      "Topographical survey using robotic total station and/or GNSS (GPS) to capture levels, boundaries, structures and site features with agreed survey control and QA checks.",
     method:
-      "1. Set control points and verify datum/benchmark before data capture.\n\n2. Establish safe working routes around plant movement and public interfaces.\n\n3. Capture topo features with calibrated survey equipment.\n\n4. Perform repeat checks and closure checks to validate accuracy.\n\n5. Securely store field data and produce checked outputs for issue.",
-    hazardTokens: ["uneven ground", "slips", "trip", "adverse weather", "moving plant", "lone working", "work at height", "manual handling"],
+      "1. Establish or verify control — GNSS observations and/or total-station traverse; check datum/benchmark before capture.\n\n2. Establish safe working routes around plant movement and public interfaces; set tripod exclusion where needed.\n\n3. Capture topo features with calibrated robotic total station and/or GNSS rover to agreed detail level.\n\n4. Perform independent closure checks, check shots and residual review to validate accuracy.\n\n5. Securely store field data and produce checked CAD/PDF outputs for issue.",
+    hazardTokens: [
+      "uneven ground",
+      "slips",
+      "trip",
+      "adverse weather",
+      "moving plant",
+      "lone working",
+      "work at height",
+      "manual handling",
+      "tripod",
+      "gnss",
+      "total station",
+    ],
   },
   {
     key: "topo_plus_utility_survey",
     label: "Topographical + PAS128 utility survey",
-    scope: "",
-    method: "",
+    scope:
+      "Combined topographical land survey and PAS 128 utility mapping — shared control framework, topo base with utility overlay, and unified CAD/PDF deliverables.",
+    method:
+      "1. Pre-project meeting: agree extent, topo detail level, M-series interval and hold points.\n\n2. Establish/verify control network and topo capture of site features.\n\n3. QL-D/C utility records and walkover; mark surface identifiers.\n\n4. EML + GPR utility detection; lift MH/IC where safe with surface gas monitoring.\n\n5. Assign PAS 128 QL (B1–B4); record utilities on topo base.\n\n6. Combined CAD/PDF QC and handover with safe dig rules.",
     hazardTokens: ["utility", "buried", "topo", "manhole", "traffic", "pedestrian", "electrical"],
   },
   {
@@ -926,15 +952,19 @@ const SURVEYING_PACKS_RAW = [
   {
     key: "drainage_connectivity_survey",
     label: "Drainage connectivity survey",
-    scope: "Drainage connectivity survey — sonde tracing, chamber records and CAD connectivity drawing.",
-    method: "",
+    scope:
+      "Drainage connectivity survey — chamber lifting, sonde tracing, surface EML tracking and CAD connectivity drawing.",
+    method:
+      "1. Pre-project meeting: agree chamber list, tracing sequence and traffic/public controls.\n\n2. Cordon chamber; lift cover; record chamber details and inverts from surface.\n\n3. Insert sonde via duct rod; track route from surface with EML until end point or obstruction.\n\n4. Withdraw sonde; repeat for remaining connections; note blockages/defects.\n\n5. Survey MH positions and pipe routes; produce checked connectivity drawing.",
     hazardTokens: ["drainage", "manhole", "chamber", "sonde", "traffic", "slips", "contamination"],
   },
   {
     key: "service_clearance_survey",
     label: "Service clearance (pre-GI / intrusive)",
-    scope: "Targeted utility clearance around boreholes and trial pits before intrusive ground investigation.",
-    method: "",
+    scope:
+      "Targeted utility clearance around proposed boreholes, trial pits or probe positions — mark known and unknown services before intrusive ground investigation.",
+    method:
+      "1. Confirm GI dig locations and records search outcomes.\n\n2. Walkover and EML/GPR clearance grids around each intrusive point.\n\n3. Mark services on ground with biodegradable paint; photograph marks.\n\n4. Brief GI contractor on mark-up, exclusion zones and residual uncertainty.\n\n5. Issue clearance note and handover before dig starts.",
     hazardTokens: ["utility", "buried", "trial pit", "borehole", "permit-to-dig", "ground investigation"],
   },
   {
@@ -1159,38 +1189,45 @@ const SURVEYING_PACKS_RAW = [
   {
     key: "eml_cat_survey",
     label: "EML / CAT & Genny survey",
-    scope: "",
-    method: "",
+    scope:
+      "Electromagnetic location survey using CAT & Genny / RD-class locator — induction, connection and passive sweeps with UV mark-up.",
+    method:
+      "1. Pre-start briefing; confirm records and walkover surface identifiers.\n\n2. Battery / calibration check on locator and Genny.\n\n3. Active induction and connection modes on known services; passive Power/Radio sweeps for unknowns.\n\n4. Mark located lines with biodegradable paint and depth notes where available.\n\n5. Issue mark-up drawing / photo evidence with residual uncertainty stated.",
     hazardTokens: ["utility", "buried", "traffic", "pedestrian", "electrical", "slips", "trip", "manhole"],
   },
   {
     key: "gnss_control",
     label: "GNSS / control survey",
-    scope: "",
-    method: "",
+    scope: "GNSS control survey — redundant observations, post-processing QA and issued control schedule.",
+    method:
+      "1. Agree control point locations and observation window.\n\n2. Set tripods/targets safely away from traffic/plant interfaces.\n\n3. Capture redundant GNSS observations; log occupation times and metadata.\n\n4. Post-process and check residuals against specification.\n\n5. Issue control schedule with coordinates, heights and accuracy statement.",
     hazardTokens: ["traffic", "pedestrian", "uneven ground", "lone working", "tripod"],
   },
   {
     key: "setting_out",
     label: "Setting out / engineering survey",
-    scope: "",
-    method: "",
+    scope: "Engineering setting out — verified control, latest drawing revision, independent checks and as-built records.",
+    method:
+      "1. Verify control and latest issued drawing revision.\n\n2. Brief team on traffic/plant interfaces and hold points.\n\n3. Set out elements within specified tolerances.\n\n4. Independent check on critical points before cover-up or pour.\n\n5. Record as-built dimensions on completion sheets.",
     hazardTokens: ["traffic", "moving plant", "pedestrian", "work at height"],
   },
   {
     key: "general_site_survey",
     label: "General site survey",
-    scope: "",
-    method: "",
-    hazardTokens: ["site_access_restricted"],
+    scope: "General site survey and factual reporting of conditions and features within the agreed extent.",
+    method:
+      "1. Confirm brief, access and site constraints.\n\n2. Walkover and record features relevant to the brief.\n\n3. Capture measurements/photos with calibrated equipment as required.\n\n4. Note limitations and residual uncertainty.\n\n5. Issue factual report / drawing per client brief.",
+    hazardTokens: ["site_access_restricted", "uneven ground", "slips", "trip", "lone working"],
   },
   {
     // Aligned with survey report type `asbestos_survey`. Uses existing asb_001/asb_002
     // hazard library rows (see ramsHazardLibraryExtended.js) via hazardTokens below.
     key: "asbestos_survey",
     label: "Asbestos survey (management / refurbishment / demolition)",
-    scope: "",
-    method: "",
+    scope:
+      "Asbestos survey (management, refurbishment or demolition) — controlled access, ACM identification, sampling where authorised, and clear residual-risk communication.",
+    method:
+      "1. Confirm survey type (management / R&D), access plan and client asbestos register.\n\n2. Brief team on ACM recognition, PPE/RPE and decontamination.\n\n3. Inspect accessible areas; sample only if authorised and competent.\n\n4. Segregate samples; maintain chain of custody to UKAS lab.\n\n5. Issue survey report with material assessment and recommendations; no disturbance beyond survey scope.",
     hazardTokens: ["asbestos survey", "acms", "non-licensed asbestos", "asb_001", "asb_002"],
   },
   {
@@ -1605,8 +1642,14 @@ function stampHazardRow(h, rowSource) {
 }
 
 /** PAS128 / geodetic surveying packs — applied in Step 2 alongside hazard library picks. */
-function SurveyingPackSection({ form, onApplySurveyPack, suggestedPackKey = "" }) {
+function SurveyingPackSection({
+  form,
+  onApplySurveyPack,
+  onApplySiteContext,
+  suggestedPackKey = "",
+}) {
   const [surveyPackKey, setSurveyPackKey] = useState(form.surveyWorkType || suggestedPackKey || "");
+  const [siteContextKey, setSiteContextKey] = useState(form.siteContextKey || "");
   const [showSurveyAdvanced, setShowSurveyAdvanced] = useState(false);
   const selectedSurveyPack = useMemo(
     () => findSurveyPackByKey(surveyPackKey || form.surveyWorkType),
@@ -1616,10 +1659,18 @@ function SurveyingPackSection({ form, onApplySurveyPack, suggestedPackKey = "" }
     () => surveyPackMetaFor(selectedSurveyPack?.key || ""),
     [selectedSurveyPack]
   );
+  const selectedSiteContext = useMemo(
+    () => getSiteContextOverlay(siteContextKey || form.siteContextKey),
+    [siteContextKey, form.siteContextKey]
+  );
 
   useEffect(() => {
     setSurveyPackKey(form.surveyWorkType || suggestedPackKey || "");
   }, [form.surveyWorkType, suggestedPackKey]);
+
+  useEffect(() => {
+    setSiteContextKey(form.siteContextKey || "");
+  }, [form.siteContextKey]);
 
   return (
     <section
@@ -1631,7 +1682,7 @@ function SurveyingPackSection({ form, onApplySurveyPack, suggestedPackKey = "" }
         Hazard pack (surveying / geodesy)
       </h3>
       <div style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.45 }}>
-        Optional: apply a PAS128 / surveying pack to pre-fill scope, method addendum, and suggested hazard rows. Individual picks below remain the source of truth for your risk matrix.
+        Apply a surveying activity pack, then optionally a site-context overlay (treatment works, substation, rail, highway, brownfield). Overlays add location-specific hazards, briefing points and permit hints without replacing the activity method.
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <select
@@ -1667,6 +1718,39 @@ function SurveyingPackSection({ form, onApplySurveyPack, suggestedPackKey = "" }
           {showSurveyAdvanced ? "Hide requirements" : "Show requirements"}
         </button>
       </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 10 }}>
+        <select
+          value={siteContextKey}
+          onChange={(e) => setSiteContextKey(e.target.value)}
+          style={{ ...ss.inp, minWidth: 260 }}
+          aria-label="Site context overlay"
+        >
+          <option value="">— Site context (optional) —</option>
+          {listSiteContextOverlayOptions().map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={!siteContextKey}
+          onClick={() => onApplySiteContext?.(siteContextKey)}
+          style={{ ...ss.btnP, opacity: siteContextKey ? 1 : 0.45, minHeight: 40 }}
+        >
+          Apply site context
+        </button>
+        {!!form.siteContextKey && (
+          <span style={{ fontSize: 11, color: "#27500A", background: "#EAF3DE", padding: "2px 8px", borderRadius: 20 }}>
+            Site: {form.siteContextLabel || getSiteContextOverlay(form.siteContextKey)?.shortLabel || form.siteContextKey}
+          </span>
+        )}
+      </div>
+      {selectedSiteContext && (
+        <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 8, lineHeight: 1.45 }}>
+          {selectedSiteContext.description}
+        </div>
+      )}
       {selectedSurveyPack && showSurveyAdvanced && (
         <div
           style={{
@@ -1715,8 +1799,18 @@ function SurveyingPackSection({ form, onApplySurveyPack, suggestedPackKey = "" }
               </ul>
             </div>
           </div>
+          {selectedSiteContext && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>Site context photo checklist</div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
+                {selectedSiteContext.photoChecklist.map((x) => (
+                  <li key={`ph_${x}`}>{x}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 10, lineHeight: 1.45 }}>
-            Applying a pack updates document scope and communication fields in Step 1 (via Further details) and adds matching hazard rows here when found in the library.
+            Applying a pack updates document scope and communication fields in Step 1 (via Further details) and adds matching hazard rows here when found in the library. Site context adds location-specific hazards and briefing points on top.
           </div>
         </div>
       )}
@@ -2768,6 +2862,7 @@ function HazardPicker({
   onSurveyPackFilterChange,
   onClearSurveyPackFilter,
   onApplySurveyPack,
+  onApplySiteContext,
   onToggle,
   onClearSelected,
   onAddAllVisible,
@@ -3226,6 +3321,7 @@ function HazardPicker({
         <SurveyingPackSection
           form={form}
           onApplySurveyPack={onApplySurveyPack}
+          onApplySiteContext={onApplySiteContext}
           suggestedPackKey={surveySuggestedKey}
         />
       ) : null}
@@ -4875,6 +4971,9 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             {(form.surveyWorkType || "").trim() && (
               <div style={{ marginBottom:6, fontSize:11, color:"#0C447C" }}>
                 Work type: {form.surveyWorkTypeLabel || surveyingPacks().find((p) => p.key === form.surveyWorkType)?.label || form.surveyWorkType}
+                {(form.siteContextKey || "").trim()
+                  ? ` · Site: ${form.siteContextLabel || getSiteContextOverlay(form.siteContextKey)?.shortLabel || form.siteContextKey}`
+                  : ""}
               </div>
             )}
             <div style={{ fontSize:12, whiteSpace:"pre-wrap", lineHeight:1.55, color:"var(--color-text-secondary)" }}>
@@ -5871,6 +5970,8 @@ function formShapeForCompare(f) {
     revisionSummary: f.revisionSummary,
     surveyWorkType: f.surveyWorkType,
     surveyWorkTypeLabel: f.surveyWorkTypeLabel,
+    siteContextKey: f.siteContextKey,
+    siteContextLabel: f.siteContextLabel,
     surveyMethodStatement: f.surveyMethodStatement,
     surveyDeliverables: f.surveyDeliverables,
     surveyAssumptions: f.surveyAssumptions,
@@ -6691,9 +6792,14 @@ export default function RAMSTemplateBuilder() {
 
     setSurveyPackFilter({
       active: true,
-      tokens: pack.hazardTokens || [],
+      tokens: mergeSiteContextHazardTokens(
+        pack.hazardTokens || [],
+        getSiteContextOverlay(form.siteContextKey)
+      ),
       packKey: pack.key,
-      packLabel: pack.label,
+      packLabel: form.siteContextKey
+        ? `${pack.label} · ${getSiteContextOverlay(form.siteContextKey)?.shortLabel || form.siteContextKey}`
+        : pack.label,
     });
 
     const recommended = findHazardsForSurveyPack(pack, hazardLibRef.current?.library);
@@ -6743,6 +6849,72 @@ export default function RAMSTemplateBuilder() {
     }
 
     trackEvent("rams_survey_pack_applied", { pack: pack.key, hazardsAdded: toAdd.length });
+  };
+
+  const applySiteContext = (contextKey) => {
+    const overlay = getSiteContextOverlay(contextKey);
+    if (!overlay) return;
+    const briefing = formatSiteContextBriefing(overlay);
+    const photoBlock = [
+      `Site context photo checklist (${overlay.shortLabel}):`,
+      ...overlay.photoChecklist.map((p) => `- ${p}`),
+    ].join("\n");
+
+    setForm((prev) => {
+      const nextScope = appendSiteContextScope(prev.scope, overlay);
+      const plan = String(prev.communicationPlan || "").trim();
+      const nextPlan =
+        plan.includes(`Site context briefing (${overlay.shortLabel})`)
+          ? plan
+          : plan
+            ? `${plan}\n\n${briefing}`
+            : briefing;
+      const notes = String(prev.handoverNotes || "").trim();
+      const nextNotes =
+        notes.includes(`Site context photo checklist (${overlay.shortLabel})`)
+          ? notes
+          : notes
+            ? `${notes}\n\n${photoBlock}`
+            : photoBlock;
+      return {
+        ...prev,
+        siteContextKey: overlay.key,
+        siteContextLabel: overlay.label,
+        scope: nextScope,
+        communicationPlan: nextPlan,
+        handoverNotes: nextNotes,
+        surveyRequiredPermits: mergeUniqueStrings(prev.surveyRequiredPermits, overlay.permitHints),
+        surveyRequiredCerts: mergeUniqueStrings(prev.surveyRequiredCerts, overlay.requiredCerts),
+        surveyHoldPoints: mergeUniqueStrings(prev.surveyHoldPoints, overlay.holdPoints),
+        surveyEvidenceSet: mergeUniqueStrings(prev.surveyEvidenceSet, overlay.photoChecklist),
+      };
+    });
+
+    const pack = findSurveyPackByKey(form.surveyWorkType);
+    const mergedTokens = mergeSiteContextHazardTokens(pack?.hazardTokens || surveyPackFilter.tokens || [], overlay);
+    setSurveyPackFilter({
+      active: true,
+      tokens: mergedTokens,
+      packKey: form.surveyWorkType || overlay.key,
+      packLabel: form.surveyWorkTypeLabel
+        ? `${form.surveyWorkTypeLabel} · ${overlay.shortLabel}`
+        : overlay.shortLabel,
+    });
+
+    const recommended = findHazardsForSiteContext(overlay, hazardLibRef.current?.library);
+    const existing = new Set(selectedHazards.map((s) => s.id));
+    const toAdd = recommended.filter((h) => h && !existing.has(h.id));
+    if (toAdd.length > 0) {
+      setSelectedHazards((prev) => [...prev, ...toAdd]);
+      setEditedRows((rows) => [...rows, ...toAdd.map((h) => stampHazardRow(h, ROW_SOURCE.SURVEY_PACK))]);
+    }
+
+    pushToast({
+      type: "success",
+      title: "Site context applied",
+      message: `${overlay.shortLabel} — ${toAdd.length} hazard row${toAdd.length === 1 ? "" : "s"} added · briefing & permits updated.`,
+    });
+    trackEvent("rams_site_context_applied", { context: overlay.key, hazardsAdded: toAdd.length });
   };
 
   const applyFessJobStarter = (starterKey) => {
@@ -7590,6 +7762,7 @@ export default function RAMSTemplateBuilder() {
               setSurveyPackFilter({ active: false, tokens: [], packKey: "", packLabel: "" })
             }
             onApplySurveyPack={applySurveyPack}
+            onApplySiteContext={applySiteContext}
             onToggle={toggleHazard}
             onClearSelected={clearHazardSelection}
             onAddAllVisible={addHazardsVisible}

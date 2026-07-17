@@ -6,6 +6,7 @@ import CONSTRUCTION, { CONSTRUCTION_CATEGORIES } from "./constructionHazardLibra
 import SUPPLEMENT, { SUPPLEMENT_CATEGORIES } from "./ramsHazardLibrarySupplement";
 import GEOSPATIAL, { GEOSPATIAL_CATEGORIES } from "./ramsHazardLibraryGeospatial";
 import SITE_INVESTIGATION, { SITE_INVESTIGATION_CATEGORIES } from "./ramsHazardLibrarySiteInvestigation";
+import SITE_CONTEXT, { SITE_CONTEXT_CATEGORIES } from "./ramsHazardLibrarySiteContext";
 import FESS_EXCEL, { FESS_EXCEL_CATEGORIES } from "./fessExcelHazardLibrary";
 import { getRiskLevel, RISK_COLORS } from "./ramsRiskLevel.js";
 
@@ -32,10 +33,20 @@ export const TRADE_CATEGORIES = [
       !SUPPLEMENT_CATEGORIES.includes(c) &&
       !GEOSPATIAL_CATEGORIES.includes(c)
   ),
+  ...SITE_CONTEXT_CATEGORIES.filter(
+    (c) =>
+      !BASE_TRADE_CATEGORIES.includes(c) &&
+      !EXTENDED_CATEGORIES.includes(c) &&
+      !PRO_CATEGORIES.includes(c) &&
+      !CONSTRUCTION_CATEGORIES.includes(c) &&
+      !SUPPLEMENT_CATEGORIES.includes(c) &&
+      !GEOSPATIAL_CATEGORIES.includes(c) &&
+      !SITE_INVESTIGATION_CATEGORIES.includes(c)
+  ),
   ...FESS_EXCEL_CATEGORIES.filter((c) => !BASE_TRADE_CATEGORIES.includes(c) && !EXTENDED_CATEGORIES.includes(c) && !PRO_CATEGORIES.includes(c)),
 ];
 
-const CORE = [...BASE, ...EXT, ...PRO, ...CONSTRUCTION, ...SUPPLEMENT, ...GEOSPATIAL, ...SITE_INVESTIGATION];
+const CORE = [...BASE, ...EXT, ...PRO, ...CONSTRUCTION, ...SUPPLEMENT, ...GEOSPATIAL, ...SITE_INVESTIGATION, ...SITE_CONTEXT];
 const CORE_IDS = new Set(CORE.map((h) => h.id));
 const ALL = [...CORE, ...FESS_EXCEL.filter((h) => !CORE_IDS.has(h.id))];
 

@@ -32,6 +32,11 @@ import {
   primaryBottomNavIdSet,
   PRIMARY_BOTTOM_NAV_IDS,
 } from "../navigation/appModules";
+import {
+  buildSurveyingBottomNavTabDefs,
+  SURVEYING_BOTTOM_NAV_IDS,
+  isSurveyingBottomNavActive,
+} from "../utils/surveyingBottomNav";
 import { getMoreSectionDisplayTitle } from "../data/appUiCopy";
 import { getPinnedModuleIds, togglePinnedModule } from "../utils/pinnedModules";
 import { getSectionTone, getModuleIcon, canExportModulePdf, preloadModuleIcons } from "../navigation/moduleCatalogMeta";
@@ -291,6 +296,13 @@ function readInitialSettingsQuery() {
   };
 }
 
+function resolvePrimaryNavForView(viewId) {
+  if (isSurveyingBottomNavActive()) {
+    return SURVEYING_BOTTOM_NAV_IDS.includes(viewId) ? viewId : "more";
+  }
+  return primaryBottomNavIdSet.has(viewId) ? viewId : "more";
+}
+
 function getInitialLayoutState() {
   const settingsQ = readInitialSettingsQuery();
   if (settingsQ.openSettings) {
@@ -306,11 +318,12 @@ function getInitialLayoutState() {
   if (viewParam === "settings") {
     return { navTab: "more", view: "settings", settingsInitialTab: "cloud", checkoutReturn: null };
   }
+  const defaultView = isSurveyingBottomNavActive() ? "projects" : "dashboard";
   if (viewParam && WORKSPACE_LAYOUT_VIEW_IDS.has(viewParam) && viewParam !== "settings") {
     if (!isModuleVisible(viewParam)) {
-      return { navTab: "dashboard", view: "dashboard", settingsInitialTab: "cloud", checkoutReturn: null };
+      return { navTab: defaultView, view: defaultView, settingsInitialTab: "cloud", checkoutReturn: null };
     }
-    const nav = primaryBottomNavIdSet.has(viewParam) ? viewParam : "more";
+    const nav = resolvePrimaryNavForView(viewParam);
     const permitId = qs.get("permitId");
     if (viewParam === "permits" && permitId) {
       setWorkspaceNavTarget({ viewId: "permits", permitId: String(permitId) });
@@ -321,15 +334,15 @@ function getInitialLayoutState() {
     const last = sessionStorage.getItem(LAST_VIEW_STORAGE_KEY);
     if (last && WORKSPACE_LAYOUT_VIEW_IDS.has(last) && last !== "settings") {
       if (!isModuleVisible(last)) {
-        return { navTab: "dashboard", view: "dashboard", settingsInitialTab: "cloud", checkoutReturn: null };
+        return { navTab: defaultView, view: defaultView, settingsInitialTab: "cloud", checkoutReturn: null };
       }
-      const nav = primaryBottomNavIdSet.has(last) ? last : "more";
+      const nav = resolvePrimaryNavForView(last);
       return { navTab: nav, view: last, settingsInitialTab: "cloud", checkoutReturn: null };
     }
   } catch {
     /* ignore */
   }
-  return { navTab: "dashboard", view: "dashboard", settingsInitialTab: "cloud", checkoutReturn: null };
+  return { navTab: defaultView, view: defaultView, settingsInitialTab: "cloud", checkoutReturn: null };
 }
 
 const NAV_ICONS = {
@@ -344,11 +357,17 @@ const NAV_ICONS = {
 };
 
 /** Base bottom bar (More is last). Platform owner tab is inserted in layout when `isSuperadmin`. */
-function buildNavTabs(marketId = getOrgMarketId()) {
-  return NAV_TAB_IDS.map((t) => ({
+function buildNavTabs(marketId = getOrgMarketId(), surveying = false) {
+  const defs = surveying
+    ? buildSurveyingBottomNavTabDefs(marketId)
+    : NAV_TAB_IDS.map((t) => ({
+        id: t.id,
+        label: getModuleLabelForMarket(t.id, marketId) || t.label,
+      }));
+  return defs.map((t) => ({
     id: t.id,
-    label: getModuleLabelForMarket(t.id, marketId) || t.label,
-    icon: NAV_ICONS[t.id] || NAV_ICONS.more,
+    label: t.label,
+    icon: NAV_ICONS[t.id] || getModuleIcon(t.id) || NAV_ICONS.more,
   }));
 }
 
@@ -364,7 +383,14 @@ export default function MainAppLayout() {
     void orgMarketRev;
     return getOrgMarketId();
   }, [orgMarketRev]);
-  const navTabsBase = useMemo(() => buildNavTabs(orgMarketId), [orgMarketId]);
+  const surveyingNav = useMemo(() => {
+    void orgMarketRev;
+    return isSurveyingBottomNavActive();
+  }, [orgMarketRev]);
+  const navTabsBase = useMemo(
+    () => buildNavTabs(orgMarketId, surveyingNav),
+    [orgMarketId, surveyingNav]
+  );
   const [bottomSlotId, setBottomSlotId] = useState(() => resolveBottomNavSlotId());
   const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingWizardComplete());
   const hiddenModules = useMemo(() => {
@@ -402,6 +428,27 @@ export default function MainAppLayout() {
   }, []);
 
   const bottomNavTabs = useMemo(() => {
+    // Surveying tenants: fixed Projects / RAMS / Survey / GPR / Photos / More (no Bin slot).
+    if (surveyingNav) {
+      let tabs = navTabsBase.map((t) => ({ ...t, navKey: t.id }));
+      if (isSuperadmin) {
+        const more = tabs[tabs.length - 1];
+        const beforeMore = tabs.slice(0, -1);
+        tabs = [
+          ...beforeMore,
+          { id: "superadmin", navKey: "superadmin", label: "Owner", icon: NAV_ICONS.superadmin },
+          more,
+        ];
+      }
+      const seen = new Set();
+      return tabs.filter((t) => {
+        if (t.id === "more") return isModuleVisible(t.id, visibilityOpts);
+        if (!isModuleVisible(t.id, visibilityOpts)) return false;
+        if (seen.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      });
+    }
     const slotId = isBottomNavOccupiedId(bottomSlotId) ? DEFAULT_BOTTOM_NAV_FALLBACK_ID : bottomSlotId;
     let tabs = navTabsBase.map((t) =>
       t.id === "bin"
@@ -427,12 +474,13 @@ export default function MainAppLayout() {
       seen.add(t.id);
       return true;
     });
-  }, [isSuperadmin, visibilityOpts, bottomSlotId, navTabsBase]);
+  }, [isSuperadmin, visibilityOpts, bottomSlotId, navTabsBase, surveyingNav]);
   const primaryNavIdSet = useMemo(() => {
-    const s = new Set(filterVisibleModuleIds(PRIMARY_BOTTOM_NAV_IDS, visibilityOpts));
+    const baseIds = surveyingNav ? [...SURVEYING_BOTTOM_NAV_IDS] : PRIMARY_BOTTOM_NAV_IDS;
+    const s = new Set(filterVisibleModuleIds(baseIds, visibilityOpts));
     if (isSuperadmin) s.add("superadmin");
     return s;
-  }, [isSuperadmin, visibilityOpts]);
+  }, [isSuperadmin, visibilityOpts, surveyingNav]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [layoutSeed] = useState(() => getInitialLayoutState());
   const [navTab, setNavTab] = useState(layoutSeed.navTab);

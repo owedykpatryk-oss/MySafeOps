@@ -6,6 +6,7 @@
 
 import { PAS128_METHODS } from "./surveyReportConstants";
 import { applyPas128BoilerplateToReport } from "./pas128ReportBoilerplate";
+import { seedPremiumFieldsFromMethod } from "./surveyEvidencePack";
 
 export { PAS128_METHODS };
 
@@ -81,6 +82,21 @@ ${ONSITE_WORK_METHOD}`,
       "Electromagnetic location (EML/CAT) with signal generator where required.\nGround penetrating radar (GPR) — site-appropriate array with position integration.\nControl and digitisation: GNSS rover and robotic total station.",
     includeEmlGprLimitations: true,
   },
+  M3: {
+    label: "M3 — EML + HD GPR (1 m grid, real-time)",
+    gprGrid: "1 m survey grid; high-density array; real-time on-site interpretation",
+    defaultPas128Ql: "B1",
+    defaultLimitationKeys: ["eml_confidence", "gpr_depth_limit", "services_live"],
+    methodology: `Onsite utility survey to PAS 128 Type B requirements at method M3. Detection methods: EML and high-density array GPR on a 1 m grid with real-time on-site interpretation (no GPR post-processing).
+
+${ONSITE_WORK_METHOD}`,
+    workflow:
+      "MH/IC surveys → high-density array GPR (real-time) → EML survey → detected utilities digitisation (topographical) → CAD → assign quality levels & QC against utility records → issue CAD and report.",
+    workflowSteps: ["MH/IC", "HD GPR (real-time)", "EML", "Topo digitise", "CAD + QL", "QC", "Issue"],
+    equipmentUsed:
+      "Electromagnetic location (EML/CAT) with signal generator where required.\nGround penetrating radar (GPR) — high-density multi-channel array (real-time).\nControl and digitisation: GNSS rover and robotic total station.",
+    includeEmlGprLimitations: true,
+  },
   M3P: {
     label: "M3P — EML + HD GPR (1 m grid, post-processed)",
     gprGrid: "1 m survey grid; high-density array; GPR post-processed off site",
@@ -94,6 +110,21 @@ ${ONSITE_WORK_METHOD}`,
     workflowSteps: ["MH/IC", "HD GPR", "EML", "Topo digitise", "Post-process", "CAD + QL", "Issue"],
     equipmentUsed:
       "Electromagnetic location (EML/CAT) with signal generator where required.\nGround penetrating radar (GPR) — high-density multi-channel array.\nControl and digitisation: GNSS rover and robotic total station with GPR position integration.",
+    includeEmlGprLimitations: true,
+  },
+  M4: {
+    label: "M4 — Full survey incl. MH/IC (1 m grid, real-time)",
+    gprGrid: "1 m survey grid; MH/IC; high-density array; real-time on-site interpretation",
+    defaultPas128Ql: "B1",
+    defaultLimitationKeys: ["eml_confidence", "gpr_depth_limit", "services_live"],
+    methodology: `Onsite utility survey to PAS 128 Type B requirements at method M4 — full utility mapping including manhole and inspection chamber (MH/IC) surveys, EML and high-density GPR on a 1 m grid with real-time on-site interpretation.
+
+${ONSITE_WORK_METHOD}`,
+    workflow:
+      "MH/IC surveys and cards → high-density array GPR (real-time) → EML survey → detected utilities digitisation (topographical) → CAD → assign quality levels & QC against utility records → issue CAD and report.",
+    workflowSteps: ["MH/IC cards", "HD GPR (real-time)", "EML", "Topo digitise", "CAD + QL", "QC", "Issue"],
+    equipmentUsed:
+      "Electromagnetic location (EML/CAT) with signal generator where required.\nGround penetrating radar (GPR) — high-density multi-channel array (real-time).\nControl and digitisation: GNSS rover and robotic total station with GPR position integration.",
     includeEmlGprLimitations: true,
   },
   M4P: {
@@ -186,7 +217,8 @@ export function applyPas128MethodToReport(report, methodKey, { overwrite = false
     next.sections.equipmentUsed = preset.equipmentUsed;
   }
 
-  return applyPas128BoilerplateToReport(next, methodKey, { overwrite });
+  const withBoilerplate = applyPas128BoilerplateToReport(next, methodKey, { overwrite });
+  return seedPremiumFieldsFromMethod(withBoilerplate, methodKey);
 }
 
 export function buildPas128LimitationsHtml() {

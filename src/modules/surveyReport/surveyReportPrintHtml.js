@@ -25,11 +25,13 @@ import {
   renderUtilityMappingApprovalBlock,
   renderUtilityMappingAppendixDivider,
   utilityMappingPremiumPagesCss,
+  computeUtilityMappingDigRisk,
 } from "../../utils/utilityMappingPremiumPages.js";
 import { utilityMappingClientLogoUrl, getUtilityMappingClient } from "../../utils/utilityMappingClients.js";
 import { parseUtilityMappingRef } from "../../utils/utilityMappingDocRefs.js";
 import { buildUtilityMappingQrSrc } from "../../utils/utilityMappingClientPack.js";
 import { UTILITY_MAPPING_BRAND } from "../../utils/utilityMappingBranding.js";
+import { buildOrgShareUrlWithRef } from "../../utils/safeOrgWebsite.js";
 import {
   buildAccessLimitationsText,
   buildControlAccuracyNarrative,
@@ -47,6 +49,8 @@ import {
   surveyTypeLabel,
   utilityConfidenceLabel,
   utilityTypeLabel,
+  utilitySourceLabel,
+  utilityDetectStatusLabel,
   surveyReportQuality,
 } from "./surveyReportHelpers";
 import {
@@ -67,6 +71,35 @@ import {
 } from "./pas128MethodPresets";
 import { buildPas128QlBarsHtml, buildPas128WorkflowSvg } from "./pas128WorkflowDiagram";
 import { getSurveyReportDisclaimer } from "./pas128ReportBoilerplate";
+import {
+  buildEvidenceRowsHtml,
+  buildExtentAreasHtml,
+  buildWeatherThickboxHtml,
+  buildEquipmentThickboxHtml,
+  buildGeoPhotoGroupThickboxesHtml,
+  buildCustomSectionsHtml,
+  buildRecordsMatrixNarrative,
+  buildRecordsScoreboardHtml,
+  buildMethodLadderHtml,
+  buildConstraintChipsHtml,
+  buildTfrLegendStripHtml,
+  buildUndertakerFindingsBlocksHtml,
+  buildCoverInsightStripHtml,
+  buildQaChecklistProse,
+  buildGprAnomalyCardsHtml,
+  buildSurveyAreasFlipbookHtml,
+  SURVEY_EVIDENCE_PRINT_CSS,
+} from "./surveyEvidencePack";
+import {
+  formatDualPas128Method,
+  buildAocChainageRibbonHtml,
+  buildEquipmentAppendixHtml,
+  buildMhIcCardsHtml,
+  buildGeologyBlockHtml,
+  reorderSectionsForUmClassic,
+  umClassicSectionTitle,
+  SURVEY_PLAN_UPGRADE_CSS,
+} from "./surveyPlanRemaining";
 import { isUtilitySurveyType, pas128QlToleranceHtmlTable } from "../../utils/surveyContentCatalog";
 import { getQaChecklistGroupsForSurveyType } from "./surveyQaPack";
 import {
@@ -228,20 +261,21 @@ function coverPage(report, org, primary, accent, extras) {
   const quality = surveyReportQuality(report);
 
   if (isUtilityMappingPrintTheme()) {
-    const methodLabel = report.pas128Method
-      ? `PAS128 ${report.pas128Method}`
+    const dualMethod = formatDualPas128Method(report.pas128Method, report.pas128MethodSecondary);
+    const methodLabel = dualMethod
+      ? `PAS128 ${dualMethod}`
       : report.pas128Ql
         ? `PAS 128 ${pas128Short(report.pas128Ql)}`
         : "Utility Survey Report";
     const { methodBadge, qlBadge } = utilityMappingPas128CoverBadges(
-      report.pas128Method,
+      dualMethod || report.pas128Method,
       report.pas128Ql ? pas128Short(report.pas128Ql) : ""
     );
     const clientCode =
       report.umClientCode || parseUtilityMappingRef(report.ref)?.clientCode || "";
     const clientLogoSrc = utilityMappingClientLogoUrl(clientCode);
     const shareUrl = report.ref
-      ? `${String(org.website || UTILITY_MAPPING_BRAND.website || "https://u-map.co.uk/").replace(/\/$/, "")}?ref=${encodeURIComponent(report.ref)}`
+      ? buildOrgShareUrlWithRef(org, report.ref, UTILITY_MAPPING_BRAND.website || "https://u-map.co.uk/")
       : "";
     return renderUtilityMappingHeroCover({
       title: report.title || "PAS128 Utility Survey Report",
@@ -278,8 +312,9 @@ function coverPage(report, org, primary, accent, extras) {
   const qlBadge = report.pas128Ql
     ? `<span class="sr-ql-badge">PAS 128 ${esc(pas128Short(report.pas128Ql))}</span>`
     : "";
-  const methodBadge = report.pas128Method
-    ? `<span class="sr-ql-badge sr-ql-badge--method">${esc(report.pas128Method)}</span>`
+  const dualMethod = formatDualPas128Method(report.pas128Method, report.pas128MethodSecondary);
+  const methodBadge = dualMethod
+    ? `<span class="sr-ql-badge sr-ql-badge--method">${esc(dualMethod)}</span>`
     : "";
   const qualityColour = quality.score >= 80 ? primary : quality.score >= 50 ? "#f59e0b" : "#ea580c";
   const pas128Summary = pas128SummaryBlock(report, primary);
@@ -547,6 +582,26 @@ function weatherBlock(report) {
 
 function utilitiesTableBlock(rows, photoIndexByGeoId = {}) {
   if (!rows?.length) return "";
+  const rich = rows.some((r) => r.diameter || r.material || r.source || r.detectStatus);
+  if (rich) {
+    return dataTable(
+      ["Utility", "Dia.", "Material", "Depth", "Source", "Status", "QL", "Figure", "Notes"],
+      rows.map((r) => {
+        const fig = r.geoPhotoId && photoIndexByGeoId[r.geoPhotoId] ? `Fig. ${photoIndexByGeoId[r.geoPhotoId]}` : "";
+        return [
+          utilityTypeLabel(r.utilityType) || r.utilityType || r.label || "",
+          r.diameter || "",
+          r.material || "",
+          r.depth || "",
+          utilitySourceLabel(r.source) || r.source || r.method || "",
+          utilityDetectStatusLabel(r.detectStatus) || r.detectStatus || "",
+          r.pas128Ql ? { __html: qlBadgeHtml(r.pas128Ql) } : "",
+          fig,
+          r.notes || "",
+        ];
+      })
+    );
+  }
   return dataTable(
     ["Utility", "Approx. depth", "Method", "PAS128 QL", "Confidence", "Figure", "Notes"],
     rows.map((r) => {
@@ -845,6 +900,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
   const programmeText = buildSurveyProgrammeNarrative(r.surveyProgramme);
   const controlText = buildControlAccuracyNarrative(r.controlAccuracy);
   const qaText = buildQaChecklistNarrative(r.qaChecklist, r.surveyType);
+  const qaProse = buildQaChecklistProse(r.qaChecklist, r.surveyType);
   const standardsText = buildStandardsCitedNarrative(r.standardsCited);
 
   const hseParts = [];
@@ -868,6 +924,12 @@ export function buildSurveyReportHtml(report, extras = {}) {
   const sections = [];
   const toc = [];
   let sectionCounter = 0;
+  const umClassic = r.printOutline === "um_classic";
+  const dualMethodKeys = formatDualPas128Method(r.pas128Method, r.pas128MethodSecondary);
+  const dualMethodDisplay = formatDualPas128Method(
+    r.pas128Method ? pas128MethodLabel(r.pas128Method) : "",
+    r.pas128MethodSecondary ? pas128MethodLabel(r.pas128MethodSecondary) : ""
+  );
 
   const nextNum = () => {
     sectionCounter += 1;
@@ -876,9 +938,10 @@ export function buildSurveyReportHtml(report, extras = {}) {
 
   const pushSection = (title, id, body, includeInToc = true) => {
     if (!body?.trim()) return;
+    const displayTitle = umClassic ? umClassicSectionTitle(id, title) : title;
     const num = nextNum();
-    sections.push(section(title, body, id, num));
-    if (includeInToc) toc.push({ num, title, id });
+    sections.push({ id, html: section(displayTitle, body, id, num) });
+    if (includeInToc) toc.push({ num, title: displayTitle, id });
   };
 
   // UM uses branded page-2 document control after the hero cover — skip duplicate body section.
@@ -898,11 +961,21 @@ export function buildSurveyReportHtml(report, extras = {}) {
     ["Site", r.siteAddress || "—"],
     ["Survey type", surveyTypeLabel(r.surveyType) || "—"],
     ["PAS128 QL", r.pas128Ql ? pas128Label(r.pas128Ql) : "—"],
-    ["PAS128 method", r.pas128Method ? pas128MethodLabel(r.pas128Method) : "—"],
+    ["PAS128 method", dualMethodDisplay || dualMethodKeys || "—"],
     ["Surveyor / author", r.surveyor || "—"],
     ["Linked RAMS", extras.ramsTitle || "—"],
   ]);
   pushSection("Report information", "info", infoBody);
+
+  try {
+    const digRisk = umTheme ? computeUtilityMappingDigRisk(r) : null;
+    const insight = buildCoverInsightStripHtml(r, digRisk?.label ? digRisk : null);
+    if (insight) {
+      pushSection("Survey at a glance", "insight", insight);
+    }
+  } catch {
+    /* dig-risk optional */
+  }
 
   if (r.sections?.executiveSummary?.trim()) {
     pushSection("Executive summary", "exec", nl2p(r.sections.executiveSummary));
@@ -917,7 +990,8 @@ export function buildSurveyReportHtml(report, extras = {}) {
   }
 
   pushSection("Scope of works", "scope", nl2p(r.sections?.scope));
-  pushSection("Methodology", "method", nl2p(r.sections?.methodology));
+  const methodLadder = r.pas128Method ? buildMethodLadderHtml(r.pas128Method) : "";
+  pushSection("Methodology", "method", `${methodLadder}${nl2p(r.sections?.methodology)}`);
 
   if (isUtilitySurveyType(r.surveyType)) {
     pushSection(
@@ -933,8 +1007,10 @@ export function buildSurveyReportHtml(report, extras = {}) {
     pushSection("Survey workflow", "workflow", `${workflowSvg}${workflowText?.trim() && !workflowSvg ? nl2p(workflowText) : ""}`);
   }
 
-  if (r.sections?.equipmentUsed?.trim()) {
-    pushSection("Equipment used", "equipment", nl2p(r.sections.equipmentUsed));
+  if (r.sections?.equipmentUsed?.trim() || (r.equipmentKit || []).length) {
+    const kitHtml = buildEquipmentThickboxHtml(r.equipmentKit, "");
+    const prose = r.sections?.equipmentUsed?.trim() ? nl2p(r.sections.equipmentUsed) : "";
+    pushSection("Equipment used", "equipment", `${kitHtml}${prose ? `<div class="sr-narrative">${prose}</div>` : ""}`);
   }
 
   const equipCal = buildEquipmentCalibrationNarrative(r.equipmentCalibration);
@@ -946,16 +1022,34 @@ export function buildSurveyReportHtml(report, extras = {}) {
     );
   }
 
-  if (r.sections?.surveyExtent?.trim()) {
-    pushSection("Survey extent", "extent", nl2p(r.sections.surveyExtent));
+  const equipAppendix = buildEquipmentAppendixHtml(r.equipmentKit);
+  if (equipAppendix) {
+    pushSection("Equipment datasheets", "equipment-appendix", equipAppendix);
+  }
+
+  const geologyHtml = buildGeologyBlockHtml(r.geology);
+  if (geologyHtml) {
+    pushSection("Geological context", "geology", geologyHtml);
+  }
+
+  const extentPlates = buildExtentAreasHtml(r.extentAreas);
+  const areasFlipbook = buildSurveyAreasFlipbookHtml(r.surveyAreas);
+  const aocRibbon = buildAocChainageRibbonHtml(r.extentAreas, r.surveyAreas);
+  if (r.sections?.surveyExtent?.trim() || extentPlates || areasFlipbook || aocRibbon) {
+    pushSection(
+      "Survey extent",
+      "extent",
+      `${aocRibbon}${extentPlates}${areasFlipbook}${r.sections?.surveyExtent?.trim() ? `<div class="sr-narrative">${nl2p(r.sections.surveyExtent)}</div>` : ""}`
+    );
   }
 
   if (controlText) {
     pushSection("Control & accuracy", "control", nl2p(controlText));
   }
 
-  const weatherBody = weatherBlock(r);
-  if (weatherBody.trim()) {
+  const weatherThick = buildWeatherThickboxHtml(r.weather);
+  const weatherBody = weatherThick || weatherBlock(r);
+  if (String(weatherBody || "").trim()) {
     pushSection("Weather at site", "weather", weatherBody);
   }
 
@@ -965,29 +1059,48 @@ export function buildSurveyReportHtml(report, extras = {}) {
 
   const recordsRefs = recordsReferencesBlock(r.recordsReferences);
   if (recordsRefs) {
-    const num = nextNum();
-    sections.push(section("Records references", recordsRefs, "records-refs", num));
-    toc.push({ num, title: "Records references", id: "records-refs" });
+    pushSection("Records references", "records-refs", recordsRefs);
   }
 
   const dbydBlock = dbydEnquiriesBlock(r.dbydEnquiries);
   if (dbydBlock) {
-    const num = nextNum();
-    sections.push(section("LSBUD / DBYD enquiry log", dbydBlock, "dbyd-log", num));
-    toc.push({ num, title: "LSBUD / DBYD enquiry log", id: "dbyd-log" });
+    pushSection("LSBUD / DBYD enquiry log", "dbyd-log", dbydBlock);
   }
 
   const undertakerBlock = undertakerResponsesBlock(r.undertakerResponses);
   if (undertakerBlock) {
-    const num = nextNum();
-    sections.push(section("Undertaker response status", undertakerBlock, "undertaker-status", num));
-    toc.push({ num, title: "Undertaker response status", id: "undertaker-status" });
+    pushSection("Undertaker response status", "undertaker-status", undertakerBlock);
   }
 
   const photoBundle = photoGrid(r.photos);
   const photoIndexByGeoId = photoBundle.indexByGeoId || {};
 
   let findingsBody = "";
+  const constraintChips = buildConstraintChipsHtml(r);
+  const tfrLegend = isUtilitySurveyType(r.surveyType) || (r.recordItems || []).length ? buildTfrLegendStripHtml() : "";
+  const undertakerFindings = buildUndertakerFindingsBlocksHtml(r.recordItems, r.evidenceRows);
+  const recordsMatrix =
+    buildRecordsScoreboardHtml(r.recordItems) +
+    (buildRecordsMatrixNarrative(r.recordItems, r.recordItemsNarrative)
+      ? `<div class="sr-narrative">${nl2p(buildRecordsMatrixNarrative(r.recordItems, r.recordItemsNarrative))}</div>`
+      : "");
+  // Avoid duplicating evidence already shown under undertaker blocks
+  const linkedUndertakers = new Set(
+    (r.recordItems || []).map((x) => x.undertaker).filter(Boolean)
+  );
+  const orphanEvidence = (r.evidenceRows || []).filter(
+    (e) => !e.undertaker || !linkedUndertakers.has(e.undertaker)
+  );
+  const evidenceHtml = buildEvidenceRowsHtml(orphanEvidence);
+  if (constraintChips) findingsBody += constraintChips;
+  if (tfrLegend) findingsBody += tfrLegend;
+  if (recordsMatrix) findingsBody += recordsMatrix;
+  if (undertakerFindings) findingsBody += undertakerFindings;
+  if (evidenceHtml) findingsBody += evidenceHtml;
+  const gprAnomalyHtml = buildGprAnomalyCardsHtml(r.gprAnomalyCards, r.gprConclusions);
+  if (gprAnomalyHtml) findingsBody += gprAnomalyHtml;
+  const mhIcHtml = buildMhIcCardsHtml(r.mhIcCards);
+  if (mhIcHtml) findingsBody += mhIcHtml;
   if (r.cctvRunsTable?.length) findingsBody += cctvRunsBlock(r.cctvRunsTable);
   if (r.uavFlightsTable?.length) findingsBody += uavFlightsBlock(r.uavFlightsTable);
   if (r.laserScansTable?.length) findingsBody += laserScansBlock(r.laserScansTable);
@@ -1001,8 +1114,8 @@ export function buildSurveyReportHtml(report, extras = {}) {
   } else if (r.utilitiesTable?.length) {
     findingsBody += utilitiesTableBlock(r.utilitiesTable, photoIndexByGeoId);
     findingsBody += `<div class="sr-narrative">${nl2p(r.sections?.findings)}</div>`;
-  } else {
-    findingsBody = nl2p(r.sections?.findings);
+  } else if (r.sections?.findings?.trim()) {
+    findingsBody += nl2p(r.sections?.findings);
   }
   if (
     r.sections?.findings?.trim() ||
@@ -1011,10 +1124,25 @@ export function buildSurveyReportHtml(report, extras = {}) {
     r.uavFlightsTable?.length ||
     r.laserScansTable?.length ||
     r.acmRegisterTable?.length ||
-    r.trialHolesTable?.length
+    r.trialHolesTable?.length ||
+    (r.evidenceRows || []).length ||
+    (r.recordItems || []).length ||
+    (r.gprAnomalyCards || []).length ||
+    (r.mhIcCards || []).length ||
+    String(r.gprConclusions || "").trim()
   ) {
     const callout = keyFindingsCallout(r.sections?.findings);
     pushSection("Findings & results", "findings", `${callout}${findingsBody}`);
+  }
+
+  const geoThick = buildGeoPhotoGroupThickboxesHtml(r.photos);
+  if (geoThick) {
+    pushSection("Site evidence by category", "geophoto-groups", geoThick);
+  }
+
+  const customHtml = buildCustomSectionsHtml(r.customSections);
+  if (customHtml) {
+    pushSection("Additional notes", "custom-sections", customHtml);
   }
 
   if (r.cadImport?.summary?.length || r.cadImport?.narrative) {
@@ -1051,8 +1179,12 @@ export function buildSurveyReportHtml(report, extras = {}) {
     pushSection("Limitations of GPR", "limitations-gpr", methodLimits.gpr);
   }
 
-  if (accessText) {
-    pushSection("Site access limitations", "access", nl2p(accessText));
+  if (accessText || buildConstraintChipsHtml(r)) {
+    pushSection(
+      "Site access limitations",
+      "access",
+      `${buildConstraintChipsHtml(r)}${accessText ? `<div class="sr-narrative">${nl2p(accessText)}</div>` : ""}`
+    );
   }
 
   const deliverables = deliverablesBlock(r.deliverables);
@@ -1068,8 +1200,12 @@ export function buildSurveyReportHtml(report, extras = {}) {
     pushSection("Standards referenced", "standards", nl2p(standardsText));
   }
 
-  if (qaText) {
-    pushSection("QA & verification", "qa", qaChecklistBlock(r.qaChecklist, r.surveyType));
+  if (qaText || qaProse) {
+    pushSection(
+      "QA & verification",
+      "qa",
+      `${qaProse ? `<div class="sr-narrative">${nl2p(qaProse)}</div>` : ""}${qaChecklistBlock(r.qaChecklist, r.surveyType)}`
+    );
   }
 
   if (hseParts.length) {
@@ -1078,14 +1214,15 @@ export function buildSurveyReportHtml(report, extras = {}) {
 
   if (photoBundle.html) {
     if (umTheme) {
-      sections.push(
-        renderUtilityMappingAppendixDivider({
+      sections.push({
+        id: "photos-divider",
+        html: renderUtilityMappingAppendixDivider({
           letter: "A",
           title: "Photo appendix",
           subtitle: "Geo-photos and site evidence",
           reportRef: r.ref || "",
-        })
-      );
+        }),
+      });
     }
     pushSection("Photo appendix", "photos", photoBundle.html);
   }
@@ -1147,11 +1284,14 @@ export function buildSurveyReportHtml(report, extras = {}) {
       : `DRAFT · ${r.ref || "UM"}`
     : String(org.pdfWatermarkText || "").trim() || (r.status === "final" ? "FINAL" : "DRAFT");
   const umThemeCss = umTheme
-    ? `${utilityMappingCoverSystemCss()}${utilityMappingSurveyCoverCss(primary, accent)}${utilityMappingPremiumPagesCss(primary, accent)}`
-    : "";
+    ? `${utilityMappingCoverSystemCss()}${utilityMappingSurveyCoverCss(primary, accent)}${utilityMappingPremiumPagesCss(primary, accent)}${SURVEY_EVIDENCE_PRINT_CSS}${SURVEY_PLAN_UPGRADE_CSS}`
+    : `${SURVEY_EVIDENCE_PRINT_CSS}${SURVEY_PLAN_UPGRADE_CSS}`;
   const umHeader = umTheme ? renderUtilityMappingPageHeader(umLogo, r.ref || "") : "";
   const umFooter = umTheme ? renderUtilityMappingPageFooter(umLogo) : "";
   const umRibbon = umTheme ? renderUtilityMappingComplianceRibbon() : "";
+  const sectionHtml = (umClassic ? reorderSectionsForUmClassic(sections) : sections)
+    .map((s) => (typeof s === "string" ? s : s.html))
+    .join("");
 
   return `<!DOCTYPE html>
 <html lang="en-GB">
@@ -1654,7 +1794,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
       <span><strong>${esc(r.title || "Survey Report")}</strong></span>
       <span>${esc(footerRef)} · Generated ${now.toLocaleDateString("en-GB")}</span>
     </div>`}
-    ${sections.join("")}
+    ${sectionHtml}
     <div class="sr-disclaimer">
       ${esc(disclaimer)}${draftNote}
     </div>

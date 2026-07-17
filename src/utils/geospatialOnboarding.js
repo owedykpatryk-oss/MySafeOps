@@ -10,6 +10,8 @@ import { seedLegislationRegisterForMarket } from "./legislationLibrary";
 import { getOrgMarketId } from "./orgMarket";
 import { loadRamsHazardPacks, saveRamsHazardPacks } from "./ramsHazardPacksStorage";
 
+export { GEOSPATIAL_PACK_IDS, isGeospatialPackActive } from "./geospatialPackGate";
+
 const PROGRESS_KEY = "geospatial_onboarding_progress";
 const LEGISLATION_KEY = "legislation_register";
 
@@ -159,11 +161,4 @@ export function runGeospatialSetupAction(stepId) {
     default:
       return { ok: false, message: "Open the linked module to complete this step." };
   }
-}
-
-export const GEOSPATIAL_PACK_IDS = new Set(["surveyingGeodesy", "contractorPlusSurveying", "utilityMapping"]);
-
-export function isGeospatialPackActive() {
-  const id = loadOrgSettingsRaw().industryPackId;
-  return GEOSPATIAL_PACK_IDS.has(id);
 }

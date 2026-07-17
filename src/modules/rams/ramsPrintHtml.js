@@ -23,6 +23,8 @@ import { getOrgMarketId } from "../../utils/orgMarket.js";
 import { formatOrgDate, formatOrgDateTime } from "../../utils/orgLocale.js";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import { wrapRamsPrintDocument } from "./ramsPrintDocument.js";
+import { siteContextBadgeLabel } from "./ramsPlaybookEnrichment.js";
+import { safeHttpUrl } from "../../utils/safeUrl.js";
 
 export { wrapRamsPrintDocument } from "./ramsPrintDocument.js";
 
@@ -436,6 +438,8 @@ export function ramsHashPayload(form, rows) {
     scope: form.scope,
     surveyWorkType: form.surveyWorkType,
     surveyWorkTypeLabel: form.surveyWorkTypeLabel,
+    siteContextKey: form.siteContextKey,
+    siteContextLabel: form.siteContextLabel,
     surveyMethodStatement: form.surveyMethodStatement,
     surveyDeliverables: form.surveyDeliverables,
     surveyAssumptions: form.surveyAssumptions,
@@ -642,11 +646,11 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
       <td style="padding:8px;border:1px solid #e5e5e5;font-weight:500;vertical-align:top;font-size:12px">${idx + 1}. ${escHtml(r.activity)}</td>
       <td style="padding:8px;border:1px solid #e5e5e5;vertical-align:top;font-size:12px">${escHtml(r.hazard)}</td>
       <td style="padding:8px;border:1px solid #e5e5e5;text-align:center;vertical-align:top;font-size:12px;background:${RL[getRiskLevel(r.initialRisk)]?.bg}">
-        ${r.initialRisk.L}<br/>${r.initialRisk.S}<br/><strong>${riskScore(r.initialRisk)}</strong>
+        ${r.initialRisk?.L ?? "—"}<br/>${r.initialRisk?.S ?? "—"}<br/><strong>${riskScore(r.initialRisk)}</strong>
       </td>
       <td style="padding:8px;border:1px solid #e5e5e5;vertical-align:top;font-size:11px"><ol style="margin:0;padding-left:16px">${(r.controlMeasures || []).map((cm) => `<li style="margin-bottom:4px">${escHtml(cm)}</li>`).join("")}</ol></td>
       <td style="padding:8px;border:1px solid #e5e5e5;text-align:center;vertical-align:top;font-size:12px;background:${RL[getRiskLevel(r.revisedRisk)]?.bg}">
-        ${r.revisedRisk.L}<br/>${r.revisedRisk.S}<br/><strong>${riskScore(r.revisedRisk)}</strong>
+        ${r.revisedRisk?.L ?? "—"}<br/>${r.revisedRisk?.S ?? "—"}<br/><strong>${riskScore(r.revisedRisk)}</strong>
       </td>
     </tr>`
     )
@@ -688,7 +692,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
           const thumbUrl = staticSiteMapUrl(form.siteLat, form.siteLng);
           return `<h2 style="font-size:13px;margin:18px 0 8px">3. Site map / location</h2>
          ${thumbUrl ? `<img src="${escHtml(thumbUrl)}" alt="Site location map" style="width:100%;max-height:220px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;margin:0 0 10px"/>` : ""}
-         ${(form.siteMapUrl || "").trim() ? `<p style="font-size:12px;word-break:break-all"><a href="${escHtml(form.siteMapUrl)}">${escHtml(form.siteMapUrl)}</a></p>` : ""}
+         ${(form.siteMapUrl || "").trim() && safeHttpUrl(form.siteMapUrl) ? `<p style="font-size:12px;word-break:break-all"><a href="${escHtml(safeHttpUrl(form.siteMapUrl))}">${escHtml(form.siteMapUrl)}</a></p>` : ""}
          ${(form.siteLat || "").trim() && (form.siteLng || "").trim()
         ? `<p style="font-size:12px">Coordinates: ${escHtml(form.siteLat)}, ${escHtml(form.siteLng)}</p>`
         : ""}`;
@@ -702,8 +706,8 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
          <p style="font-size:11px;color:#64748b;margin:0 0 6px">${printLabels.hospitalHeading}</p>
          ${printLabels.emergencyLine ? `<p style="font-size:11px;color:#64748b;margin:0 0 6px">${printLabels.emergencyLine}</p>` : ""}
          ${(form.nearestHospital || "").trim() ? `<p style="font-size:12px;margin:4px 0">${escHtml(form.nearestHospital)}</p>` : ""}
-         ${(form.hospitalDirectionsUrl || "").trim()
-        ? `<p style="font-size:12px;word-break:break-all"><a href="${escHtml(form.hospitalDirectionsUrl)}">Directions</a></p>`
+         ${(form.hospitalDirectionsUrl || "").trim() && safeHttpUrl(form.hospitalDirectionsUrl)
+        ? `<p style="font-size:12px;word-break:break-all"><a href="${escHtml(safeHttpUrl(form.hospitalDirectionsUrl))}">Directions</a></p>`
         : ""}`
       : "";
 
@@ -904,7 +908,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
     <tbody>
       <tr>
         <td style="padding:6px;border:1px solid #e5e5e5;font-size:11px;color:#64748b;width:20%">Emergency route</td>
-        <td style="padding:6px;border:1px solid #e5e5e5;font-size:11px">${(form.hospitalDirectionsUrl || "").trim() ? `<a href="${escHtml(form.hospitalDirectionsUrl)}">${escHtml(form.hospitalDirectionsUrl)}</a>` : "—"}</td>
+        <td style="padding:6px;border:1px solid #e5e5e5;font-size:11px">${safeHttpUrl(form.hospitalDirectionsUrl) ? `<a href="${escHtml(safeHttpUrl(form.hospitalDirectionsUrl))}">${escHtml(form.hospitalDirectionsUrl)}</a>` : "—"}</td>
       </tr>
       <tr>
         <td style="padding:6px;border:1px solid #e5e5e5;font-size:11px;color:#64748b">Stop-work authority</td>
@@ -1166,8 +1170,8 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   const surveyingMethodBlock =
     (form.surveyMethodStatement || "").trim()
       ? `<h2 style="font-size:13px;margin:18px 0 8px">Surveying method statement addendum</h2>
-  ${(form.surveyWorkType || "").trim()
-    ? `<p style="font-size:10px;color:#0C447C;margin:0 0 8px">Work type: ${escHtml(form.surveyWorkTypeLabel || form.surveyWorkType)}</p>`
+  ${(form.surveyWorkType || "").trim() || (form.siteContextKey || "").trim()
+    ? `<p style="font-size:10px;color:#0C447C;margin:0 0 8px">${(form.surveyWorkType || "").trim() ? `Work type: ${escHtml(form.surveyWorkTypeLabel || form.surveyWorkType)}` : ""}${(form.surveyWorkType || "").trim() && siteContextBadgeLabel(form) ? " · " : ""}${siteContextBadgeLabel(form) ? `Site: ${escHtml(siteContextBadgeLabel(form))}` : ""}</p>`
     : ""}
   <div style="font-size:12px;line-height:1.55;white-space:pre-wrap;margin:0 0 12px">${escHtml(form.surveyMethodStatement)
     .replace(/^(\d+\.0[^\n]*)/gm, "<strong style=\"display:block;margin-top:10px;color:#0C447C\">$1</strong>")
@@ -1223,7 +1227,20 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
       ? `<p style="font-size:10px;color:#555;margin-top:16px;font-family:Consolas,monospace">Document fingerprint: ${escHtml(contentFingerprint)}</p>`
       : "";
   const liveShareUrl = buildRamsShareUrl(form);
-  const emergencyQuickUrl = String(form.hospitalDirectionsUrl || form.siteMapUrl || "").trim();
+  const emergencyQuickUrl =
+    safeHttpUrl(form.hospitalDirectionsUrl) || safeHttpUrl(form.siteMapUrl) || "";
+  const siteCtxBadge = siteContextBadgeLabel(form);
+  const umKitChips = ["PAS 128", "HSG47", "Safe dig", "EML", siteCtxBadge].filter(Boolean);
+  const umCoverMeta = [
+    ["Document no.", form.documentNo || "—"],
+    ["Issue date", fmtDate(form.issueDate)],
+    ["Location", form.location || "—"],
+    ["Project", projName || "—"],
+    ["Lead engineer", form.leadEngineer || "—"],
+    ["Revision", form.revision || "1A"],
+  ];
+  if (siteCtxBadge) umCoverMeta.splice(3, 0, ["Site context", siteCtxBadge]);
+
   const primaryQrText =
     liveShareUrl ||
     `${docShort} ${form.documentNo || "NO-DOC"} | ${form.title || "Untitled"} | Rev ${form.revision || "1A"} | ${statusLabel}`;
@@ -1241,17 +1258,10 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
         subtitle: form.scope || printLabels.defaultScope,
         badge: statusLabel,
         methodBadge: "RAMS",
-        kitChips: ["PAS 128", "HSG47", "Safe dig", "EML"],
+        kitChips: umKitChips,
         orgName,
         logoSrc,
-        meta: [
-          ["Document no.", form.documentNo || "—"],
-          ["Issue date", fmtDate(form.issueDate)],
-          ["Location", form.location || "—"],
-          ["Project", projName || "—"],
-          ["Lead engineer", form.leadEngineer || "—"],
-          ["Revision", form.revision || "1A"],
-        ],
+        meta: umCoverMeta,
         footerNote: orgTheme.org?.pdfFooter || "Utility Mapping · u-map.co.uk · Part of IS GROUP",
       })}${renderUtilityMappingDocControlPage({
         client: form.client || projName || "",
@@ -1289,6 +1299,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
         <div style="padding:6px 10px;border-radius:999px;background:${escHtml(badgeBg)};color:${escHtml(badgeColor)};font-size:11px;font-weight:700">${escHtml(statusLabel)}</div>
+        ${siteCtxBadge ? `<div style="padding:6px 10px;border-radius:999px;background:#EAF3DE;color:#27500A;font-size:11px;font-weight:700">Site: ${escHtml(siteCtxBadge)}</div>` : ""}
         ${form.strictMode ? `<div style="padding:6px 10px;border-radius:999px;background:#ede9fe;color:#4c1d95;font-size:11px;font-weight:700">STRICT MODE</div>` : ""}
         <div style="display:flex;gap:8px">
           <div style="border:1px solid #dbe2ea;border-radius:8px;padding:6px;background:#fff;text-align:center">
@@ -1306,6 +1317,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
       <div class="cover-kpi"><strong>Document no.</strong><br/>${escHtml(form.documentNo || "—")}</div>
       <div class="cover-kpi"><strong>Issue date</strong><br/>${escHtml(fmtDate(form.issueDate))}</div>
       <div class="cover-kpi"><strong>Location</strong><br/>${escHtml(form.location || "—")}</div>
+      ${siteCtxBadge ? `<div class="cover-kpi"><strong>Site context</strong><br/>${escHtml(siteCtxBadge)}</div>` : ""}
       <div class="cover-kpi"><strong>Project</strong><br/>${escHtml(projName || "—")}</div>
       <div class="cover-kpi"><strong>Lead engineer</strong><br/>${escHtml(form.leadEngineer || "—")}</div>
       <div class="cover-kpi"><strong>Revision</strong><br/>${escHtml(form.revision || "1A")}</div>

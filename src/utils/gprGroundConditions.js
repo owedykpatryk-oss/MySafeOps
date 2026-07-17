@@ -174,22 +174,163 @@ export function buildGprWeatherImpactNarrative(env = {}) {
 export function interpretGeologyForGpr(bgsPayload, { antennaMhz, siteObservations } = {}) {
   const bedrock = bgsPayload?.bedrock || null;
   const superficial = bgsPayload?.superficial || null;
+  const artificial = bgsPayload?.artificial || null;
+  const massMovement = bgsPayload?.massMovement || null;
+  const nearbyBoreholes = Array.isArray(bgsPayload?.nearbyBoreholes) ? bgsPayload.nearbyBoreholes : [];
+
+  const artClass = classifyGeologyLayer(artificial);
   const sup = classifyGeologyLayer(superficial);
   const bed = classifyGeologyLayer(bedrock);
-  const dominant = sup.materialClass !== "unknown" ? sup : bed;
+  // Artificial ground at point dominates GPR clutter / velocity uncertainty
+  let dominant = artClass.materialClass !== "unknown" && (artificial?.lexDescription || artificial?.rockDescription)
+    ? { ...artClass, materialClass: "made_ground", attenuation: artClass.attenuation === "moderate" ? "very_high" : artClass.attenuation }
+    : sup.materialClass !== "unknown"
+      ? sup
+      : bed;
+  if (artClass.materialClass === "made_ground" || /made|artificial|infilled|worked/i.test(String(artificial?.lexDescription || ""))) {
+    dominant = { materialClass: "made_ground", attenuation: "very_high", dielectric: [6, 15] };
+  }
+
   const freq = Number(antennaMhz) || 400;
+  let narrative = buildGprGroundNarrative({ bedrock, superficial, siteObservations, antennaMhz: freq });
+  if (artificial?.lexDescription) {
+    narrative += ` Artificial ground mapped (BGS 50k): ${artificial.lexDescription}${artificial.rockDescription ? ` — ${artificial.rockDescription}` : ""}.`;
+  }
+  if (massMovement?.lexDescription) {
+    narrative += ` Mass movement recorded nearby: ${massMovement.lexDescription}.`;
+  }
+  if (nearbyBoreholes.length) {
+    const nearest = nearbyBoreholes[0];
+    narrative += ` Nearest BGS borehole index: ${nearest.reference || nearest.name}${nearest.distanceM != null ? ` (~${nearest.distanceM} m)` : ""}${nearest.lengthM != null ? `, recorded length ${nearest.lengthM} m` : ""} — review scans for local lithology.`;
+  }
 
   return {
     fetchedAt: bgsPayload?.fetchedAt || null,
     source: bgsPayload?.source || "bgs-ogcapi",
     scale: bgsPayload?.scale || "1:625,000",
+    resolution: bgsPayload?.resolution || "",
+    disclaimer: bgsPayload?.disclaimer || "",
+    queryLat: bgsPayload?.lat ?? null,
+    queryLng: bgsPayload?.lng ?? null,
     bedrock,
     superficial,
+    artificial,
+    massMovement,
+    nearbyBoreholes,
     materialClass: dominant.materialClass,
     attenuationClass: dominant.attenuation,
     dielectricRange: dominant.dielectric,
     expectedPenetrationM: expectedPenetrationM(freq, dominant.attenuation),
     recommendedAntenna: recommendAntennaMhz(2, dominant.attenuation),
-    narrative: buildGprGroundNarrative({ bedrock, superficial, siteObservations, antennaMhz: freq }),
+    narrative,
   };
+}
+
+const MATERIAL_LABEL = {
+  clay_silt: "clay / silt-rich (higher attenuation)",
+  sand_gravel: "sand / gravel (lower attenuation)",
+  limestone_chalk: "limestone / chalk",
+  bedrock: "bedrock-dominated",
+  made_ground: "made / artificial ground",
+  mixed: "mixed / undifferentiated",
+  unknown: "unknown / not classified",
+};
+
+/**
+ * Map BGS payload → PAS128 survey geology fields (honest about 625k limits).
+ * @param {object} bgsPayload
+ * @param {{ weather?: object, antennaMhz?: number }} [opts]
+ */
+export function interpretGeologyForSurvey(bgsPayload, opts = {}) {
+  const gpr = interpretGeologyForGpr(bgsPayload, { antennaMhz: opts.antennaMhz || 400 });
+  const sup = gpr.superficial;
+  const bed = gpr.bedrock;
+  const art = gpr.artificial;
+  const formationParts = [];
+  if (art?.lexDescription) {
+    formationParts.push(
+      `Artificial ground: ${art.lexDescription}${art.rockDescription ? ` (${art.rockDescription})` : ""}`
+    );
+  }
+  if (sup?.lexDescription) {
+    formationParts.push(
+      `Superficial: ${sup.lexDescription}${sup.rockDescription ? ` (${sup.rockDescription})` : ""}`
+    );
+  }
+  if (bed?.lexDescription) {
+    formationParts.push(
+      `Bedrock: ${bed.lexDescription}${bed.rockDescription ? ` (${bed.rockDescription})` : ""}`
+    );
+  }
+
+  const mat = MATERIAL_LABEL[gpr.materialClass] || gpr.materialClass;
+  const implications = [
+    `Indicative ground class for detection: ${mat}.`,
+    gpr.materialClass === "clay_silt"
+      ? "Clay-rich ground typically reduces GPR penetration — rely more on EML where applicable and note depth uncertainty."
+      : gpr.materialClass === "sand_gravel"
+        ? "Sand/gravel generally favours GPR; still verify depths against known targets."
+        : gpr.materialClass === "made_ground"
+          ? "Made / artificial ground is heterogeneous — treat depths and continuity as indicative only."
+          : "Local fill, moisture and reinforcement can override mapped geology for EML/GPR performance.",
+  ];
+
+  if (gpr.massMovement?.lexDescription) {
+    implications.push(`Mass movement mapped: ${gpr.massMovement.lexDescription} — check slope stability / access for survey plant.`);
+  }
+
+  const weather = opts.weather || {};
+  if (weather.groundSurface === "waterlogged" || weather.groundSurface === "damp" || weather.rainDuringSurvey === "heavy") {
+    implications.push("Site weather/ground surface was wet — expect higher near-surface attenuation than the dry-ground BGS indication.");
+  }
+
+  const boreholes = gpr.nearbyBoreholes || [];
+  if (boreholes.length) {
+    const summary = boreholes
+      .slice(0, 3)
+      .map((b) => `${b.reference || b.name}${b.distanceM != null ? ` ~${b.distanceM}m` : ""}${b.lengthM != null ? ` (${b.lengthM}m)` : ""}`)
+      .join("; ");
+    implications.push(`Nearby BGS borehole index: ${summary}. Review scans for local lithology — map polygons may differ.`);
+  }
+
+  const disclaimer =
+    bgsPayload?.disclaimer ||
+    "BGS digital geology is desk-study mapping only — not a site investigation or trial-pit soil description.";
+
+  const accuracyWarning = String(opts.accuracyWarning || bgsPayload?.accuracyWarning || "").trim();
+  const coordNote =
+    gpr.queryLat != null && gpr.queryLng != null
+      ? `Lookup point: ${Number(gpr.queryLat).toFixed(5)}, ${Number(gpr.queryLng).toFixed(5)} (${gpr.scale || "BGS"})${opts.coordSource ? ` via ${opts.coordSource}` : ""}.`
+      : "";
+
+  return {
+    formation: formationParts.join(" · ") || "",
+    implications: implications.join(" "),
+    notes: [accuracyWarning, disclaimer, coordNote].filter(Boolean).join(" "),
+    fetchedAt: gpr.fetchedAt,
+    source: gpr.source,
+    scale: gpr.scale,
+    resolution: gpr.resolution,
+    queryLat: gpr.queryLat,
+    queryLng: gpr.queryLng,
+    materialClass: gpr.materialClass,
+    attenuationClass: gpr.attenuationClass,
+    expectedPenetrationM: gpr.expectedPenetrationM,
+    superficialLabel: sup?.lexDescription || "",
+    bedrockLabel: bed?.lexDescription || "",
+    artificialLabel: art?.lexDescription || "",
+    nearbyBoreholes: boreholes,
+    accuracyWarning,
+    coordSource: opts.coordSource || "",
+    disclaimer,
+  };
+}
+
+/**
+ * Whether project has an explicit map pin (preferred for BGS accuracy).
+ */
+export function projectHasMapPin(project) {
+  const lat = parseFloat(String(project?.lat ?? project?.siteLat ?? "").trim());
+  const lng = parseFloat(String(project?.lng ?? project?.siteLng ?? "").trim());
+  return Number.isFinite(lat) && Number.isFinite(lng);
 }

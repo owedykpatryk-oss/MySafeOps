@@ -14,26 +14,14 @@ export const UTILITY_MAPPING_ORG_SLUGS = new Set([
   "utility_mapping_group",
 ]);
 
-/** Lightweight tenant check for profile lists (no orgStorage cycle). */
+/** Lightweight tenant check — slug allowlist only (no website/name spoof). */
 export function isUtilityMappingOrgForWorkspaceList(orgId, settings = {}) {
+  void settings;
   const slug = String(orgId || "")
     .trim()
     .toLowerCase()
     .replace(/_/g, "-");
-  if (UTILITY_MAPPING_ORG_SLUGS.has(slug)) return true;
-  const name = String(settings?.name || "")
-    .trim()
-    .toLowerCase();
-  if (name.includes("utility mapping") || name === "u-map" || name === "umap") return true;
-  const website = String(settings?.website || "")
-    .trim()
-    .toLowerCase();
-  if (website.includes("u-map.co.uk")) return true;
-  const email = String(settings?.email || "")
-    .trim()
-    .toLowerCase();
-  if (email.endsWith("@u-map.co.uk")) return true;
-  return false;
+  return UTILITY_MAPPING_ORG_SLUGS.has(slug);
 }
 
 /** @returns {boolean} */

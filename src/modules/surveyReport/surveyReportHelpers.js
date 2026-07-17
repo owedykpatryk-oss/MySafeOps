@@ -11,6 +11,8 @@ import {
   SURVEY_TYPES,
   UTILITY_TYPE_OPTIONS,
   UTILITY_CONFIDENCE_LEVELS,
+  UTILITY_SOURCE_OPTIONS,
+  UTILITY_DETECT_STATUS,
   DELIVERABLE_FORMAT_OPTIONS,
   RECORD_REF_STATUS_OPTIONS,
   blankSurveyReport,
@@ -61,6 +63,21 @@ export function normalizeSurveyReport(report) {
     signatures: { ...blank.signatures, ...(report.signatures || {}) },
     equipmentCalibration: report.equipmentCalibration || [],
     deliverables: report.deliverables || [],
+    drawingSheets: report.drawingSheets || [],
+    evidenceRows: report.evidenceRows || [],
+    extentAreas: report.extentAreas || [],
+    recordItems: report.recordItems || [],
+    recordItemsNarrative: report.recordItemsNarrative || "",
+    equipmentKit: report.equipmentKit || [],
+    customSections: report.customSections || [],
+    gprAnomalyCards: report.gprAnomalyCards || [],
+    gprConclusions: report.gprConclusions || "",
+    linkedGprReportId: report.linkedGprReportId || "",
+    surveyAreas: report.surveyAreas || [],
+    printOutline: report.printOutline || "standard",
+    pas128MethodSecondary: report.pas128MethodSecondary || "",
+    geology: { ...blank.geology, ...(report.geology || {}) },
+    mhIcCards: report.mhIcCards || [],
     recordsReferences: report.recordsReferences || [],
     dbydEnquiries: report.dbydEnquiries || [],
     undertakerResponses: report.undertakerResponses || [],
@@ -153,6 +170,14 @@ export function utilityTypeLabel(key) {
 
 export function utilityConfidenceLabel(key) {
   return labelOf(UTILITY_CONFIDENCE_LEVELS, key);
+}
+
+export function utilitySourceLabel(key) {
+  return labelOf(UTILITY_SOURCE_OPTIONS, key);
+}
+
+export function utilityDetectStatusLabel(key) {
+  return labelOf(UTILITY_DETECT_STATUS, key);
 }
 
 export function deliverableFormatLabel(key) {

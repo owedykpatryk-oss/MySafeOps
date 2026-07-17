@@ -6,7 +6,9 @@ import { mapWeatherSnapshotToFields } from "../../utils/weatherFieldMap";
 import {
   buildGprWeatherImpactNarrative,
   interpretGeologyForGpr,
+  projectHasMapPin,
 } from "../../utils/gprGroundConditions";
+import { fetchGeologyAtPoint, BGS_POSTCODE_ACCURACY_WARNING } from "../../utils/bgsGeologyClient";
 import {
   buildLimitationsFromKeys,
   primaryAntennaMhz,
@@ -25,28 +27,16 @@ import {
   importChainageFromSurveyCad,
 } from "./gprLineLengthSummary.js";
 import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
-
-const GEOLOGY_PROXY = "/api/geology";
-
-async function fetchGeologyAtPoint(lat, lng) {
-  const u = new URL(GEOLOGY_PROXY, typeof window !== "undefined" ? window.location.origin : "http://localhost");
-  u.searchParams.set("lat", String(lat));
-  u.searchParams.set("lng", String(lng));
-  const r = await fetch(u.toString(), { credentials: "same-origin" });
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({}));
-    throw new Error(err.error || "Geology lookup failed");
-  }
-  return r.json();
-}
+import { inheritSiteContextOntoDoc } from "../../utils/inheritSiteContext";
 
 export async function fetchGeologyIntoReport(report, project) {
+  const hasPin = projectHasMapPin(project);
   const coords = await resolveSiteCoordinates(
     project?.lat ?? project?.siteLat,
     project?.lng ?? project?.siteLng,
     project?.postcode || report?.siteAddress,
   );
-  if (!coords) throw new Error("Could not resolve site coordinates for geology lookup");
+  if (!coords) throw new Error("Set a project map pin (lat/lng) or UK postcode for geology lookup");
 
   const bgs = await fetchGeologyAtPoint(coords.lat, coords.lng);
   const antennaMhz = primaryAntennaMhz(report);
@@ -55,11 +45,21 @@ export async function fetchGeologyIntoReport(report, project) {
     siteObservations: report.groundConditions?.siteObservations,
   });
 
+  const artLabel = String(interpreted.artificial?.lexDescription || "");
+  const madeFromMap = interpreted.materialClass === "made_ground" || /made|artificial|infilled|worked/i.test(artLabel);
+  const prevObs = report.groundConditions?.siteObservations || {};
+
   return {
     ...report,
     groundConditions: {
       ...report.groundConditions,
       ...interpreted,
+      accuracyWarning: hasPin ? "" : BGS_POSTCODE_ACCURACY_WARNING,
+      coordSource: hasPin ? "project map pin" : "postcode / geocode",
+      siteObservations: {
+        ...prevObs,
+        madeGround: madeFromMap ? true : Boolean(prevObs.madeGround),
+      },
     },
     smartFillAt: new Date().toISOString(),
   };
@@ -264,9 +264,9 @@ export async function runGprSmartFill(report, project) {
   return r;
 }
 
-export function prefillGprFromProject(report, project) {
+export function prefillGprFromProject(report, project, ramsDoc = null) {
   if (!project) return report;
-  const next = {
+  let next = {
     ...report,
     projectId: project.id || report.projectId,
     projectName: project.name || report.projectName,
@@ -274,6 +274,7 @@ export function prefillGprFromProject(report, project) {
     client: project.client || project.site || report.client,
     title: report.title || `GPR report — ${project.name || report.ref || "site"}`,
   };
+  next = inheritSiteContextOntoDoc(next, project, ramsDoc);
   return applyUtilityMappingProjectJobToDoc(next, project, "GPR");
 }
 
@@ -286,11 +287,18 @@ export { GPR_LIMITATION_RULES, ANOMALY_QUICK_TEMPLATES };
 /** Actionable tips for the editor banner. */
 export function gprSmartTips(report, project, linkedSurveyReport = null) {
   const tips = [];
-  if (!project?.lat && !project?.postcode && !report?.siteAddress) {
-    tips.push({ level: "warn", text: "Link a project with postcode or coordinates to enable BGS geology lookup." });
+  if (!projectHasMapPin(project) && !project?.postcode && !report?.siteAddress) {
+    tips.push({ level: "warn", text: "Link a project with a map pin (preferred) or postcode to enable BGS DigMap 50k geology." });
+  } else if (!projectHasMapPin(project) && (project?.postcode || report?.siteAddress)) {
+    tips.push({
+      level: "warn",
+      text: "No project map pin — BGS will use a postcode/address centroid (less accurate). Set lat/lng on the project.",
+    });
   }
   if (!report.groundConditions?.fetchedAt) {
-    tips.push({ level: "info", text: "Fetch BGS geology to auto-estimate penetration and limitations." });
+    tips.push({ level: "info", text: "Fetch BGS geology (50k + boreholes) to auto-estimate penetration and limitations." });
+  } else if (report.groundConditions?.resolution === "625k") {
+    tips.push({ level: "info", text: "Geology used 625k fallback — 50k was unavailable for this point." });
   }
   if (!report.environmental?.fetchedAt) {
     tips.push({ level: "info", text: "Fetch weather for survey date — moisture impact text is generated automatically." });

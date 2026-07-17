@@ -4,6 +4,7 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { ORG_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
 import { scrubFessExclusiveOrgStorage } from "../utils/fessExclusive";
 import { scrubUtilityMappingExclusiveOrgStorage } from "../utils/utilityMappingExclusive";
+import { ensureUtilityMappingBranding } from "../utils/utilityMappingBranding";
 import { clearRamsHazardLibraryCache } from "../modules/rams/ramsHazardLibraryLoader";
 import { getBillingEntitlements, getTrialExtensionCount, getTrialStatus, refreshMembershipRoleFromSupabase } from "../utils/orgMembership";
 import {
@@ -72,6 +73,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     scrubFessExclusiveOrgStorage(getOrgId());
     scrubUtilityMappingExclusiveOrgStorage(getOrgId());
+    ensureUtilityMappingBranding(getOrgId());
     if (isCloudAuthSession()) clearLocalWorkspaceOnlyFlag();
   }, []);
 
@@ -81,6 +83,7 @@ export function AppProvider({ children }) {
       setOrgIdState(String(next || "default"));
       scrubFessExclusiveOrgStorage(String(next || "default"));
       scrubUtilityMappingExclusiveOrgStorage(String(next || "default"));
+      ensureUtilityMappingBranding(String(next || "default"));
       clearRamsHazardLibraryCache();
     };
     window.addEventListener(ORG_CHANGED_EVENT, onOrgChanged);

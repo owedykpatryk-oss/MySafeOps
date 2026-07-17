@@ -24,6 +24,7 @@ function SurveyListRow({
   onDuplicate,
   onHtmlExport,
   onClientPack,
+  onA3Board,
   onGeoJsonExport,
   onKmlExport,
   onKmzExport,
@@ -148,6 +149,11 @@ function SurveyListRow({
                   {onClientPack ? (
                     <button type="button" onClick={() => onClientPack(r)}>
                       Client pack
+                    </button>
+                  ) : null}
+                  {onA3Board ? (
+                    <button type="button" onClick={() => onA3Board(r)}>
+                      A3 board
                     </button>
                   ) : null}
                   {onGeoJsonExport ? (

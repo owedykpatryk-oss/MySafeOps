@@ -48,10 +48,29 @@ function GprInsightPanel({ report, onApplyAntenna, onRecalcGround }) {
               ◫
             </span>
             <strong>BGS geology</strong>
-            {gc.fetchedAt ? <span className="app-gpr-insight-badge app-gpr-insight-badge--ok">Live</span> : null}
+            {gc.fetchedAt ? (
+              <span className="app-gpr-insight-badge app-gpr-insight-badge--ok">
+                {gc.resolution === "50k" ? "50k" : gc.resolution === "625k" ? "625k" : "Live"}
+              </span>
+            ) : null}
           </div>
-          {gc.superficial?.lexDescription || gc.bedrock?.lexDescription ? (
+          {gc.accuracyWarning ? (
+            <p className="app-gpr-insight-hint app-gpr-insight-hint--caution">{gc.accuracyWarning}</p>
+          ) : null}
+          {gc.artificial?.lexDescription || gc.superficial?.lexDescription || gc.bedrock?.lexDescription ? (
             <>
+              {gc.scale ? (
+                <p className="app-gpr-insight-card__line">
+                  <em>Scale</em> {gc.scale}
+                  {gc.coordSource ? ` · ${gc.coordSource}` : ""}
+                </p>
+              ) : null}
+              {gc.artificial?.lexDescription ? (
+                <p className="app-gpr-insight-card__line">
+                  <em>Artificial</em> {gc.artificial.lexDescription}
+                  {gc.artificial.rockDescription ? ` — ${gc.artificial.rockDescription}` : ""}
+                </p>
+              ) : null}
               {gc.superficial?.lexDescription ? (
                 <p className="app-gpr-insight-card__line">
                   <em>Superficial</em> {gc.superficial.lexDescription}
@@ -61,6 +80,14 @@ function GprInsightPanel({ report, onApplyAntenna, onRecalcGround }) {
               {gc.bedrock?.lexDescription ? (
                 <p className="app-gpr-insight-card__line">
                   <em>Bedrock</em> {gc.bedrock.lexDescription}
+                </p>
+              ) : null}
+              {(gc.nearbyBoreholes || []).length ? (
+                <p className="app-gpr-insight-card__line">
+                  <em>Boreholes</em> {(gc.nearbyBoreholes || []).length} nearby
+                  {gc.nearbyBoreholes[0]?.reference
+                    ? ` (nearest ${gc.nearbyBoreholes[0].reference}${gc.nearbyBoreholes[0].distanceM != null ? ` ~${gc.nearbyBoreholes[0].distanceM} m` : ""})`
+                    : ""}
                 </p>
               ) : null}
               <div className="app-gpr-insight-metrics">
@@ -73,7 +100,7 @@ function GprInsightPanel({ report, onApplyAntenna, onRecalcGround }) {
               </div>
             </>
           ) : (
-            <p className="app-gpr-insight-card__empty">Fetch BGS data from site coordinates</p>
+            <p className="app-gpr-insight-card__empty">Fetch DigMap 50k + boreholes from project map pin</p>
           )}
           {onRecalcGround && gc.fetchedAt ? (
             <button type="button" className="app-gpr-insight-card__action" onClick={onRecalcGround}>

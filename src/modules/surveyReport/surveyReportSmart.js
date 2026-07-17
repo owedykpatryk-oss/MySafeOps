@@ -3,6 +3,9 @@
  */
 import { fetchWeatherForDate, resolveSiteCoordinates } from "../../utils/weatherSummary";
 import { mapWeatherSnapshotToFields } from "../../utils/weatherFieldMap";
+import { fetchGeologyAtPoint, BGS_POSTCODE_ACCURACY_WARNING } from "../../utils/bgsGeologyClient";
+import { interpretGeologyForSurvey, projectHasMapPin } from "../../utils/gprGroundConditions";
+import { enrichGeologyWithSamplePoints } from "./surveyGeologyUpgrades";
 import { resolveUkPostcodeInput } from "../../utils/postcodeLookup";
 import { anthropicMessages, isAnthropicConfigured } from "../../utils/anthropicClient";
 import {
@@ -39,6 +42,7 @@ import {
 } from "./surveyQaPack";
 import { syncSurveyReportFromRams } from "./surveyRamsSync";
 import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
+import { inheritSiteContextOntoDoc } from "../../utils/inheritSiteContext";
 
 export { mapWeatherSnapshotToFields } from "../../utils/weatherFieldMap";
 
@@ -292,6 +296,24 @@ export function smartFillNextSteps(report, { project, projectPlans = [], geoPhot
   if (project?.lat && report.surveyDate && report.weather?.conditionsNarrative === "" && report.weather?.groundSurface === "unknown") {
     steps.push({ id: "weather", label: "Fetch weather for survey date", tab: "weather" });
   }
+  if (
+    !projectHasMapPin(project) &&
+    (project?.postcode || report.siteAddress) &&
+    !report.geology?.formation?.trim() &&
+    ["utility_mapping_survey", "eml_cat_survey", "gpr_survey", "topo_plus_utility_survey"].includes(report.surveyType)
+  ) {
+    steps.push({
+      id: "geology-pin",
+      label: "Set project map pin for accurate BGS geology",
+      tab: "details",
+    });
+  } else if (
+    (projectHasMapPin(project) || project?.postcode) &&
+    !report.geology?.formation?.trim() &&
+    ["utility_mapping_survey", "eml_cat_survey", "gpr_survey", "topo_plus_utility_survey"].includes(report.surveyType)
+  ) {
+    steps.push({ id: "geology", label: "Fetch BGS geology (50k + boreholes)", tab: "findings" });
+  }
   if (!report.utilityRecords?.sourcesConsulted?.length) {
     steps.push({ id: "records", label: "Records review checklist", tab: "records" });
   }
@@ -325,6 +347,12 @@ export function smartFillNextSteps(report, { project, projectPlans = [], geoPhot
   }
   if (!report.cadImport?.summary?.length && report.surveyType === "utility_mapping_survey") {
     steps.push({ id: "cad", label: "Import utility mapping DXF", tab: "findings" });
+  }
+  if (
+    ["utility_mapping_survey", "gpr_survey"].includes(report.surveyType) &&
+    !(report.gprAnomalyCards || []).length
+  ) {
+    steps.push({ id: "gpr", label: "Add or import GPR anomaly cards", tab: "findings" });
   }
   if (!report.sections?.executiveSummary?.trim()) steps.push({ id: "summary", label: "Draft executive summary", tab: "details" });
   if (!report.documentControl?.checkedBy?.trim()) steps.push({ id: "doc-control", label: "Document control (checked / approved)", tab: "details" });
@@ -400,6 +428,20 @@ export async function runSmartFillAll(report, ctx = {}) {
     r = applyPas128MethodToReport(r, r.pas128Method, { overwrite: false });
   }
 
+  try {
+    if (r.pas128Method) {
+      const { seedPremiumFieldsFromMethod, buildRecordsMatrixNarrative } = await import("./surveyEvidencePack");
+      r = seedPremiumFieldsFromMethod(r, r.pas128Method);
+      if (!r.recordItemsNarrative?.trim() && (r.recordItems || []).length) {
+        r.recordItemsNarrative = buildRecordsMatrixNarrative(r.recordItems, "");
+      }
+    }
+    const { seedSmartFillPremiumV2 } = await import("./surveyPlanRemaining");
+    r = seedSmartFillPremiumV2(r, { geoPhotos });
+  } catch {
+    /* optional premium pack */
+  }
+
   r = applyDefaultRecordsPreset(r);
 
   if (project?.lat && project?.lng && r.surveyDate) {
@@ -408,6 +450,14 @@ export async function runSmartFillAll(report, ctx = {}) {
     } catch {
       /* weather is best-effort in batch fill */
     }
+  }
+
+  try {
+    if (!r.geology?.formation?.trim() && (project?.lat || project?.postcode || r.siteAddress)) {
+      r = await fetchGeologyIntoSurveyReport(r, project, { overwrite: false });
+    }
+  } catch {
+    /* geology is best-effort — BGS may be offline */
   }
 
   const plansWithMarkup = (projectPlans || []).filter((p) => {
@@ -581,6 +631,7 @@ export function prefillReportFromProject(report, project, ramsDoc = null) {
   }
 
   next = prefillProfessionalFields(next, { project, ramsDoc });
+  next = inheritSiteContextOntoDoc(next, project, ramsDoc);
   return applyUtilityMappingProjectJobToDoc(next, project, "SR");
 }
 
@@ -666,6 +717,87 @@ export async function fetchWeatherIntoReport(report, project) {
       conditionsNarrative: report.weather?.conditionsNarrative?.trim() || narrative,
       equipmentMethodImpact: report.weather?.equipmentMethodImpact?.trim() || impact,
     },
+  };
+}
+
+/**
+ * Fetch BGS geology (50k preferred, 625k fallback + nearby boreholes) into survey fields.
+ * Prefer project map pin — postcode centroid is allowed but flagged as lower accuracy.
+ * @param {object} report
+ * @param {object} [project]
+ * @param {{ overwrite?: boolean }} [opts]
+ */
+export async function fetchGeologyIntoSurveyReport(report, project, opts = {}) {
+  const overwrite = Boolean(opts.overwrite);
+  const hasPin = projectHasMapPin(project);
+  const pcHint = resolveUkPostcodeInput(
+    project?.postcode,
+    project?.address,
+    project?.site,
+    report?.siteAddress
+  );
+  const coords = await resolveSiteCoordinates(
+    project?.lat ?? project?.siteLat,
+    project?.lng ?? project?.siteLng,
+    pcHint || report?.siteAddress
+  );
+  if (!coords) {
+    throw new Error("Set a project map pin (lat/lng) or UK postcode for geology lookup.");
+  }
+
+  const coordSource = hasPin ? "project map pin" : coords.postcode ? "postcode centroid" : "geocoded address";
+  const accuracyWarning = hasPin ? "" : BGS_POSTCODE_ACCURACY_WARNING;
+
+  const bgs = await fetchGeologyAtPoint(coords.lat, coords.lng);
+  const mapped = interpretGeologyForSurvey(bgs, {
+    weather: report?.weather,
+    accuracyWarning,
+    coordSource,
+  });
+  const prev = report?.geology || {};
+
+  let geology = {
+    ...prev,
+    ...mapped,
+    formation: overwrite || !prev.formation?.trim() ? mapped.formation : prev.formation,
+    implications: overwrite || !prev.implications?.trim() ? mapped.implications : prev.implications,
+    notes: overwrite || !prev.notes?.trim() ? mapped.notes : prev.notes,
+    fetchedAt: mapped.fetchedAt,
+    source: mapped.source,
+    scale: mapped.scale,
+    resolution: mapped.resolution,
+    queryLat: mapped.queryLat ?? coords.lat,
+    queryLng: mapped.queryLng ?? coords.lng,
+    materialClass: mapped.materialClass,
+    attenuationClass: mapped.attenuationClass,
+    expectedPenetrationM: mapped.expectedPenetrationM,
+    superficialLabel: mapped.superficialLabel,
+    bedrockLabel: mapped.bedrockLabel,
+    artificialLabel: mapped.artificialLabel,
+    nearbyBoreholes: mapped.nearbyBoreholes || [],
+    accuracyWarning: mapped.accuracyWarning,
+    coordSource: mapped.coordSource,
+    disclaimer: mapped.disclaimer,
+  };
+
+  try {
+    geology = await enrichGeologyWithSamplePoints(
+      { ...report, geology },
+      project,
+      {
+        primaryPayload: bgs,
+        primaryCoords: coords,
+        accuracyWarning,
+        coordSource,
+      }
+    );
+  } catch {
+    /* multi-point is best-effort */
+  }
+
+  return {
+    ...report,
+    geology,
   };
 }
 

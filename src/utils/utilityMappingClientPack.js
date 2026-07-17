@@ -17,6 +17,8 @@ import { parseUtilityMappingRef, utilityMappingExportBaseName } from "./utilityM
 import { UTILITY_MAPPING_BRAND } from "./utilityMappingBranding";
 import { downloadBlob } from "./downloadBlob.js";
 import { sanitizePdfFileSegment } from "./pdfFileName";
+import { buildA3BoardPackHtml } from "../modules/surveyReport/surveyEvidencePack.js";
+import { computeUtilityMappingDigRisk } from "./utilityMappingPremiumPages.js";
 
 function buildQrSrc(text, size = 120) {
   const t = encodeURIComponent(String(text || "").slice(0, 800));
@@ -117,6 +119,24 @@ export function downloadUtilityMappingClientPack(report, extras = {}) {
   const html = buildUtilityMappingClientPackHtml(report, extras);
   if (!html) return false;
   const base = utilityMappingExportBaseName(report, "ClientPack") || report.ref || "UM-ClientPack";
+  const name = `${sanitizePdfFileSegment(base, 48)}.html`;
+  return downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), name);
+}
+
+/**
+ * A3 landscape board pack — meeting sheet (map / dig risk / top TFR).
+ * @param {object} report
+ * @param {{ org?: object }} [extras]
+ */
+export function downloadUtilityMappingA3BoardPack(report, extras = {}) {
+  if (!isUtilityMappingPrintTheme() || !report) return false;
+  const digRisk = computeUtilityMappingDigRisk(report);
+  const html = buildA3BoardPackHtml(report, {
+    digRisk: digRisk?.label ? digRisk : { band: "medium", label: "Review dig readiness", score: digRisk?.score ?? "—" },
+    orgName: extras.org?.name || UTILITY_MAPPING_BRAND.name,
+  });
+  if (!html) return false;
+  const base = utilityMappingExportBaseName(report, "A3Board") || report.ref || "UM-A3Board";
   const name = `${sanitizePdfFileSegment(base, 48)}.html`;
   return downloadBlob(new Blob([html], { type: "text/html;charset=utf-8" }), name);
 }

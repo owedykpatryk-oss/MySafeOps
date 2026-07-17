@@ -7,6 +7,8 @@ import { pushAudit } from "../../utils/auditLog";
 import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { downloadBlob } from "../../utils/downloadBlob";
+import { safeHttpUrl } from "../../utils/safeUrl.js";
+import { siteContextBadgeLabel } from "../../utils/inheritSiteContext";
 import PageHero from "../../components/PageHero";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import EmptyState from "../../components/EmptyState";
@@ -382,7 +384,7 @@ export default function GprReport() {
       const next = await fetchGeologyIntoReport(form, project);
       setModal({ ...modal, data: normalizeGprReport(applyGprSmartNarratives(next)) });
     } catch (e) {
-      alert(e.message || "Geology lookup failed — check project coordinates or postcode");
+      alert(e.message || "Geology lookup failed — set a project map pin or postcode");
     } finally {
       setBusy("");
     }
@@ -602,6 +604,11 @@ export default function GprReport() {
       </Field>
       <Field label="Site / location reference">
         <input style={ss.input} value={form.siteAddress} onChange={(e) => patch({ siteAddress: e.target.value })} />
+        {siteContextBadgeLabel(form) ? (
+          <div style={{ marginTop: 6, fontSize: 11, color: "#27500A", background: "#EAF3DE", display: "inline-block", padding: "2px 8px", borderRadius: 999 }}>
+            Site context: {siteContextBadgeLabel(form)}
+          </div>
+        ) : null}
       </Field>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="Survey date">
@@ -925,14 +932,74 @@ export default function GprReport() {
           );
         }}
       />
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "16px 0" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "16px 0", alignItems: "center" }}>
         <button type="button" style={{ ...ss.btn, ...ss.btnP }} disabled={!!busy} onClick={fetchGeology}>
-          {busy === "geology" ? "Fetching BGS…" : "Fetch BGS geology"}
+          {busy === "geology" ? "Fetching BGS…" : "Fetch BGS geology (50k)"}
         </button>
         <button type="button" style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }} disabled={!!busy} onClick={fetchWeather}>
           {busy === "weather" ? "Fetching weather…" : "Fetch weather for survey date"}
         </button>
       </div>
+      <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 0 }}>
+        DigMap <strong>50k</strong> bedrock / superficial / artificial + nearby borehole index (625k fallback). Desk study only — not SI soils.
+      </p>
+      {project && !(project.lat && project.lng) ? (
+        <p style={{ fontSize: 12, color: "#b45309", marginTop: 0 }}>
+          No project map pin — lookup may use a postcode centroid (less accurate). Set lat/lng on the project.
+        </p>
+      ) : null}
+      {form.groundConditions?.accuracyWarning ? (
+        <p style={{ fontSize: 12, color: "#92400e", background: "#fffbeb", padding: 8, borderRadius: 8 }}>
+          {form.groundConditions.accuracyWarning}
+        </p>
+      ) : null}
+      {form.groundConditions?.fetchedAt ? (
+        <div style={{ fontSize: 12, color: "#0f766e", marginBottom: 12 }}>
+          Last fetch {new Date(form.groundConditions.fetchedAt).toLocaleString("en-GB")}
+          {form.groundConditions.scale ? ` · ${form.groundConditions.scale}` : ""}
+          {form.groundConditions.coordSource ? ` · ${form.groundConditions.coordSource}` : ""}
+          {(form.groundConditions.nearbyBoreholes || []).length
+            ? ` · ${form.groundConditions.nearbyBoreholes.length} nearby boreholes`
+            : ""}
+        </div>
+      ) : null}
+      {(form.groundConditions?.nearbyBoreholes || []).length ? (
+        <div style={{ marginBottom: 14, overflowX: "auto" }}>
+          <div style={ss.sectionHead}>Nearby BGS borehole index</div>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #e2e8f0" }}>Ref</th>
+                <th style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #e2e8f0" }}>Distance</th>
+                <th style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #e2e8f0" }}>Length</th>
+                <th style={{ textAlign: "left", padding: 6, borderBottom: "1px solid #e2e8f0" }}>Precision</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(form.groundConditions.nearbyBoreholes || []).slice(0, 6).map((b) => (
+                <tr key={b.reference || b.name}>
+                  <td style={{ padding: 6, borderBottom: "1px solid #f1f5f9" }}>
+                    {b.scanUrl && safeHttpUrl(b.scanUrl) ? (
+                      <a href={safeHttpUrl(b.scanUrl)} target="_blank" rel="noopener noreferrer">
+                        {b.reference || b.name || "Scan"}
+                      </a>
+                    ) : (
+                      b.reference || b.name || "—"
+                    )}
+                  </td>
+                  <td style={{ padding: 6, borderBottom: "1px solid #f1f5f9" }}>
+                    {b.distanceM != null ? `${b.distanceM} m` : "—"}
+                  </td>
+                  <td style={{ padding: 6, borderBottom: "1px solid #f1f5f9" }}>
+                    {b.lengthM != null ? `${b.lengthM} m` : "—"}
+                  </td>
+                  <td style={{ padding: 6, borderBottom: "1px solid #f1f5f9" }}>{b.precision || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
 
       <div style={ss.sectionHead}>Site observations</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

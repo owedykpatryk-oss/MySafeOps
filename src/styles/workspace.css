@@ -7797,6 +7797,45 @@
   cursor: pointer;
 }
 
+.app-survey-fix-target {
+  outline: 2px solid #00b4e4;
+  outline-offset: 4px;
+  border-radius: 10px;
+  animation: app-survey-fix-pulse 1.6s ease-out 1;
+  scroll-margin-top: 88px;
+}
+
+@keyframes app-survey-fix-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 180, 228, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(0, 180, 228, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 180, 228, 0);
+  }
+}
+
+.app-survey-editor-hero__missing-link,
+.app-survey-gate-callout__fix-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: #0f766e;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.app-survey-editor-hero__missing-link:hover,
+.app-survey-gate-callout__fix-link:hover {
+  color: #0b1d3a;
+}
+
 .app-survey-blockers__collapsed {
   margin: 0;
   padding: 0 12px 10px;

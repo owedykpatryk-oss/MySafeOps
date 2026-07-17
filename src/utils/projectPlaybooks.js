@@ -35,6 +35,10 @@ import { getUtilityMappingPlaybook } from "./utilityMappingProjectPlaybooks";
 import { isUtilityMappingOrg } from "./utilityMappingOrg";
 import { FESS_CLIENT_SITE_TEMPLATES } from "./fessClientSites";
 import ALL from "../modules/rams/ramsAllHazards.js";
+import { enrichRamsDraftFromPlaybookPack } from "../modules/rams/ramsPlaybookEnrichment.js";
+import {
+  getSiteContextOverlay,
+} from "../modules/rams/ramsSiteContextOverlays.js";
 
 export { projectHasRams, docsForProject };
 
@@ -318,9 +322,10 @@ function buildRamsRowsFromHazards(hazards) {
 }
 
 export function createRamsDraftFromPlaybook(project, playbook) {
-  const pack = playbook.ramsSurveyKey ? getPlaybookSurveyPack(playbook.ramsSurveyKey) : null;
+  const packKey = String(playbook.ramsSurveyKey || playbook.surveyType || "").trim();
+  const pack = packKey ? getPlaybookSurveyPack(packKey) : null;
   const location = String(project.address || project.site || project.name || "").trim();
-  const base = {
+  let base = {
     id: genId("rams"),
     title: `RAMS — ${project.name || "Site"}`,
     location,
@@ -334,10 +339,13 @@ export function createRamsDraftFromPlaybook(project, playbook) {
     documentStatus: "draft",
     status: "draft",
     rows: [],
-    surveyWorkType: playbook.surveyType || "",
+    scope: pack?.scope || "",
+    surveyWorkType: packKey,
     surveyWorkTypeLabel: pack?.label || "",
     surveyDeliverables: pack?.scope || "",
     surveyMethodStatement: pack?.method || "",
+    siteContextKey: playbook.siteContextKey || project.siteContextKey || "",
+    siteContextLabel: "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -363,6 +371,7 @@ export function createRamsDraftFromPlaybook(project, playbook) {
     };
   }
 
+  base = enrichRamsDraftFromPlaybookPack(base, playbook, pack, ALL, genId);
   return base;
 }
 
@@ -403,7 +412,7 @@ export function createGprDraftFromPlaybook(project, playbook, existingGpr = [], 
     title: `GPR report — ${project.name || ref}`,
     projectId: project.id,
   });
-  base = prefillGprFromProject(base, project);
+  base = prefillGprFromProject(base, project, ramsDoc);
   if (playbook.surveyType === "utility_mapping_survey" || playbook.gprPlaybook) {
     base.equipment = [
       {
@@ -625,6 +634,11 @@ export function applyProjectPlaybook(project, playbookId, existing = {}) {
     playbookId: playbook.id,
     playbookAppliedAt: new Date().toISOString(),
     industryStarter: playbook.industryStarter || project.industryStarter,
+    siteContextKey: playbook.siteContextKey || project.siteContextKey || "",
+    siteContextLabel:
+      getSiteContextOverlay(playbook.siteContextKey || project.siteContextKey)?.label ||
+      project.siteContextLabel ||
+      "",
     permitDefaults: {
       ...(project.permitDefaults || {}),
       requiredPermitTypes: playbook.permitTypes?.length

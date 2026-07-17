@@ -14,6 +14,11 @@ function SurveyBlockersPanel({ report, context, onGoToTab, onAutofix }) {
   const warnings = blockers.filter((b) => b.severity === "warn");
   const hints = blockers.filter((b) => b.severity === "info");
 
+  const goFix = (b) => {
+    if (!onGoToTab || !b?.tab) return;
+    onGoToTab(b.tab, { anchor: b.anchor, label: b.label });
+  };
+
   if (report?.status === "final" && blockers.length === 0) {
     return (
       <div className="app-survey-blockers app-survey-blockers--ok" role="status">
@@ -48,7 +53,7 @@ function SurveyBlockersPanel({ report, context, onGoToTab, onAutofix }) {
             <div key={b.id} className={`app-survey-blockers__row app-survey-blockers__row--${b.severity}`}>
               <span>{b.label}</span>
               {onGoToTab && b.tab ? (
-                <button type="button" className="app-survey-blockers__fix" onClick={() => onGoToTab(b.tab)}>
+                <button type="button" className="app-survey-blockers__fix" onClick={() => goFix(b)}>
                   Fix →
                 </button>
               ) : null}
@@ -65,7 +70,7 @@ function SurveyBlockersPanel({ report, context, onGoToTab, onAutofix }) {
                     className="app-survey-blockers__quick-btn"
                     onClick={() => {
                       onAutofix(a.id);
-                      if (a.tab && onGoToTab) onGoToTab(a.tab);
+                      if (a.tab && onGoToTab) onGoToTab(a.tab, { anchor: a.anchor });
                     }}
                   >
                     {a.label}

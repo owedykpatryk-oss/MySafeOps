@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { viteDevE2eParity } from "./scripts/viteDevE2eParity.mjs";
+import { fetchBgsGeologyAtPoint } from "./shared/bgsGeologyFetch.mjs";
 
 function supabaseDnsPrefetchOriginFromEnv(env) {
   const raw = String(env.VITE_SUPABASE_URL || "").trim();
@@ -339,51 +340,23 @@ export default defineConfig(({ mode }) => {
             if (req.method !== "GET" && req.method !== "HEAD") return next();
             const q = req.url?.includes("?") ? req.url.slice(req.url.indexOf("?") + 1) : "";
             const params = new URLSearchParams(q);
-            const lat = parseFloat(params.get("lat") || "");
-            const lng = parseFloat(params.get("lng") || params.get("lon") || "");
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-              res.statusCode = 400;
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ error: "invalid_coordinates" }));
-              return;
-            }
-            const delta = 0.002;
-            const bbox = [lng - delta, lat - delta, lng + delta, lat + delta].join(",");
-            const collections = ["bgsgeology625kbedrock", "bgsgeology625ksuperficial"];
             try {
-              const fetchLayer = async (id) => {
-                const u = `https://ogcapi.bgs.ac.uk/collections/${id}/items?bbox=${bbox}&limit=5&f=json`;
-                const r = await fetch(u, { headers: { Accept: "application/geo+json" } });
-                if (!r.ok) return null;
-                const j = await r.json();
-                const p = j.features?.[0]?.properties;
-                if (!p) return null;
-                return {
-                  lex: p.lex || "",
-                  lexDescription: p.lex_d || "",
-                  rock: p.rock || "",
-                  rockDescription: p.rock_d || "",
-                  maxSystem: p.max_system || "",
-                };
-              };
-              const [bedrock, superficial] = await Promise.all(collections.map(fetchLayer));
+              const lat = parseFloat(params.get("lat") || "");
+              const lng = parseFloat(params.get("lng") || params.get("lon") || "");
+              if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                res.statusCode = 400;
+                res.setHeader("Content-Type", "application/json");
+                res.end(JSON.stringify({ error: "invalid_coordinates" }));
+                return;
+              }
+              const payload = await fetchBgsGeologyAtPoint(lat, lng);
               res.statusCode = 200;
               res.setHeader("Content-Type", "application/json");
               if (req.method === "HEAD") {
                 res.end();
                 return;
               }
-              res.end(
-                JSON.stringify({
-                  lat,
-                  lng,
-                  fetchedAt: new Date().toISOString(),
-                  source: "bgs-ogcapi",
-                  scale: "1:625,000 (generalised)",
-                  bedrock,
-                  superficial,
-                })
-              );
+              res.end(JSON.stringify(payload));
             } catch {
               res.statusCode = 502;
               res.setHeader("Content-Type", "application/json");

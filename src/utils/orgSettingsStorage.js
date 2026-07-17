@@ -49,9 +49,11 @@ export function getLocalOrgBrandingUpdatedAt(orgId = getOrgId()) {
 
 export function getOrgSettings(orgId = getOrgId()) {
   const s = loadOrgSettingsRaw(orgId);
+  const logo = s.logo || s.logoUrl || null;
   return {
     name: s.name || "My Organisation",
-    logo: s.logo || null,
+    logo,
+    logoUrl: s.logoUrl || (typeof logo === "string" && logo.startsWith("/") ? logo : "") || "",
     address: s.address || "",
     phone: s.phone || "",
     email: s.email || "",

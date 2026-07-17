@@ -1,7 +1,10 @@
 /**
  * Generic PAS 128 report boilerplate — foreword, disclaimer, default deliverables.
  * No org-, client- or site-specific names; org may override disclaimer text only.
+ * Utility Mapping tenant cites PAS 128:2014 to match issued Word/PDF templates.
  */
+
+import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
 
 const mkDel = (format, description, status = "Issued with report", crs = "OSGB36") => ({
   id: `del_${format}_${description.slice(0, 8).replace(/\W/g, "")}`,
@@ -19,18 +22,28 @@ export function getSurveyReportDisclaimer(org = {}) {
   return custom || DEFAULT_SURVEY_REPORT_DISCLAIMER;
 }
 
-/** Generic foreword — PAS 128:2022 section 11.1 style, no client or site names. */
+/** PAS year for foreword — UM legacy pack uses 2014; others 2022. */
+export function pas128CitationYear() {
+  try {
+    return isUtilityMappingOrg() ? "2014" : "2022";
+  } catch {
+    return "2022";
+  }
+}
+
+/** Generic foreword — PAS 128 section 11.1 style, no client or site names. */
 export function buildPas128Foreword(report = {}) {
   const method = String(report.pas128Method || "").trim();
   const ql = String(report.pas128Ql || "").trim();
   const qlNote = ql ? ` Target quality level: ${ql}.` : "";
+  const year = pas128CitationYear();
 
   if (method === "M1") {
-    return `This report documents a desktop utility records search undertaken in accordance with PAS 128:2022 Survey Type D.${qlNote} Records are historical; positional accuracy is not guaranteed and onsite detection is required before breaking ground. The report supports CDM 2015 and HSG47 safe digging responsibilities.`;
+    return `This report documents a desktop utility records search undertaken in accordance with PAS 128:${year} Survey Type D.${qlNote} Records are historical; positional accuracy is not guaranteed and onsite detection is required before breaking ground. The report supports CDM 2015 and HSG47 safe digging responsibilities.`;
   }
 
   const methodNote = method ? ` Survey method: ${method}.` : "";
-  return `This report has been prepared in accordance with PAS 128:2022 — Specification for underground utility detection, verification and location (section 11.1). It relates to the agreed survey scope and extent described in this document.${methodNote}${qlNote} Residual uncertainty and safe dig rules apply until services are verified on site.`;
+  return `This report has been prepared in accordance with PAS 128:${year} — Specification for underground utility detection, verification and location (section 11.1). It relates to the agreed survey scope and extent described in this document.${methodNote}${qlNote} Residual uncertainty and safe dig rules apply until services are verified on site.`;
 }
 
 export function defaultDeliverablesForPas128Method(methodKey) {

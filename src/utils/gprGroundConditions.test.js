@@ -5,6 +5,7 @@ import {
   classifyGeologyLayer,
   expectedPenetrationM,
   interpretGeologyForGpr,
+  interpretGeologyForSurvey,
 } from "./gprGroundConditions.js";
 
 describe("gprGroundConditions", () => {
@@ -41,7 +42,7 @@ describe("gprGroundConditions", () => {
     expect(text).toMatch(/moisture|rain/i);
   });
 
-  it("interprets full BGS payload", () => {
+  it("interprets full BGS payload for GPR", () => {
     const result = interpretGeologyForGpr(
       {
         fetchedAt: "2026-01-01T00:00:00Z",
@@ -53,5 +54,27 @@ describe("gprGroundConditions", () => {
     );
     expect(result.expectedPenetrationM).toBeGreaterThan(0);
     expect(result.narrative).toBeTruthy();
+  });
+
+  it("maps BGS payload to honest survey geology fields", () => {
+    const mapped = interpretGeologyForSurvey(
+      {
+        lat: 51.5,
+        lng: -0.12,
+        fetchedAt: "2026-01-01T00:00:00Z",
+        source: "bgs-ogcapi",
+        scale: "1:625,000 (generalised)",
+        disclaimer: "BGS 1:625,000 digital geology is a regional overview only — not a site investigation.",
+        superficial: { lexDescription: "LONDON CLAY FORMATION", rockDescription: "CLAY AND SILT" },
+        bedrock: { lexDescription: "LONDON CLAY FORMATION" },
+      },
+      { weather: { groundSurface: "damp" } }
+    );
+    expect(mapped.formation).toMatch(/LONDON CLAY/i);
+    expect(mapped.materialClass).toBe("clay_silt");
+    expect(mapped.implications).toMatch(/attenuation|GPR|EML/i);
+    expect(mapped.disclaimer).toMatch(/not a site investigation/i);
+    expect(mapped.notes).toMatch(/51\.5/);
+    expect(mapped.implications).toMatch(/wet/i);
   });
 });
