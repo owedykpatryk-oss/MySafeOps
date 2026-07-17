@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     const { data: org } = await supabase.from("organizations").select("name").eq("id", inv.org_id).maybeSingle();
 
     const resendKey = Deno.env.get("RESEND_API_KEY");
-    const fromEmail = Deno.env.get("INVITE_FROM_EMAIL") ?? "MySafeOps <onboarding@resend.dev>";
+    const fromEmail = Deno.env.get("INVITE_FROM_EMAIL") ?? "MySafeOps <support@mysafeops.com>";
     const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "") || "http://localhost:5173";
 
     await updateDeliveryStatus(supabase, inv.id, {

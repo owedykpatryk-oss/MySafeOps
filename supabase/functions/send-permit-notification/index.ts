@@ -175,7 +175,7 @@ Deno.serve(async (req) => {
     const ramsDoc = body?.ramsDoc || null;
 
     const resendKey = Deno.env.get("RESEND_API_KEY");
-    const fromEmail = Deno.env.get("NOTIFY_FROM_EMAIL") ?? Deno.env.get("INVITE_FROM_EMAIL") ?? "MySafeOps <onboarding@resend.dev>";
+    const fromEmail = Deno.env.get("NOTIFY_FROM_EMAIL") ?? Deno.env.get("INVITE_FROM_EMAIL") ?? "MySafeOps <support@mysafeops.com>";
     if (!resendKey) {
       return new Response(JSON.stringify({ error: "RESEND_API_KEY not set" }), {
         status: 500,
