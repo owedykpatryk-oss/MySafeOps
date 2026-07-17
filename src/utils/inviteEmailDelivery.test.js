@@ -14,6 +14,18 @@ describe("formatInviteEmailDeliveryDetail", () => {
     expect(formatInviteEmailDeliveryDetail("Resend failed: 429")).toBe("Resend failed: 429");
   });
 
+  it("explains unverified domain errors from Resend", () => {
+    const out = formatInviteEmailDeliveryDetail(
+      JSON.stringify({
+        statusCode: 403,
+        message: "The mysafeops.com domain is not verified. Please, add and verify your domain on https://resend.com/domains",
+        name: "validation_error",
+      })
+    );
+    expect(out).toMatch(/not verified/i);
+    expect(out).toMatch(/GoDaddy/i);
+  });
+
   it("explains Resend test-mode / unverified domain errors", () => {
     const out = formatInviteEmailDeliveryDetail(
       JSON.stringify({
