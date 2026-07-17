@@ -25,6 +25,7 @@ import { safeHttpUrl } from "../../utils/safeUrl.js";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
 import { nextUtilityMappingRef } from "../../utils/utilityMappingDocRefs";
+import { captureSurveyRevisionSnapshot, buildRecordsRevisionDiff } from "./surveyFieldUpgrades.js";
 
 const labelOf = (options, key) => options.find((o) => o.key === key)?.label || key;
 
@@ -86,6 +87,8 @@ export function normalizeSurveyReport(report) {
     giLocationsTable: report.giLocationsTable || [],
     revisionHistory: report.revisionHistory || [],
     changesSincePrevious: report.changesSincePrevious || [],
+    recordsRevisionDiff: report.recordsRevisionDiff || null,
+    revisionBaselineSnapshot: report.revisionBaselineSnapshot || null,
     parentReportId: report.parentReportId || "",
     parentRevision: report.parentRevision || "",
     cadImport: report.cadImport || null,
@@ -510,6 +513,12 @@ export function buildDuplicateReportPayload(report, existingReports, { asRevisio
       },
     ];
     copy.changesSincePrevious = compareSurveyReports(report, copy);
+    const baseline = captureSurveyRevisionSnapshot(report);
+    copy.revisionBaselineSnapshot = baseline;
+    const recordsDiff = buildRecordsRevisionDiff(baseline, copy);
+    recordsDiff.fromRevision = prevRev;
+    recordsDiff.toRevision = nextRev;
+    copy.recordsRevisionDiff = recordsDiff;
   } else {
     copy.ref = ref;
     copy.title = `${report.title || report.ref || "Survey report"} (copy)`;
@@ -529,6 +538,8 @@ export function buildDuplicateReportPayload(report, existingReports, { asRevisio
       },
     ];
     copy.changesSincePrevious = [];
+    copy.revisionBaselineSnapshot = null;
+    copy.recordsRevisionDiff = null;
   }
 
   return copy;

@@ -1,6 +1,7 @@
 /**
  * Editor panels for UM premium survey fields — evidence, records, extent, kit, custom sections.
  */
+import { useState } from "react";
 import {
   RECORD_STATUS_OPTIONS,
   RECORD_SERVICE_TYPES,
@@ -20,6 +21,7 @@ import {
 } from "./surveyEvidencePack";
 import { blankMhIcCard } from "./surveyPlanRemaining";
 import { importGprReportIntoSurvey, listGprReportsForSurveyProject } from "./surveyGprBridge";
+import { appendEvidenceFromGeoPhotos, applyUndertakerPaste } from "./surveyFieldUpgrades";
 
 const box = {
   border: "1px solid var(--color-border-tertiary, #e2e8f0)",
@@ -65,12 +67,15 @@ export default function SurveyPremiumFieldsEditor({
   setForm,
   gprReports = [],
   project = null,
+  geoPhotos = [],
   onFetchGeology = null,
   geologyBusy = false,
+  onToast = null,
 }) {
   const bump = (patch) => setForm((f) => ({ ...f, ...patch, updatedAt: new Date().toISOString() }));
   const projectGpr = listGprReportsForSurveyProject(gprReports, form.projectId);
   const linkedGpr = projectGpr.find((g) => g.id === form.linkedGprReportId) || projectGpr[0];
+  const [undertakerPaste, setUndertakerPaste] = useState("");
 
   const importFromGpr = (mode = "merge") => {
     const gpr = projectGpr.find((g) => g.id === form.linkedGprReportId) || linkedGpr;
@@ -153,6 +158,31 @@ export default function SurveyPremiumFieldsEditor({
             Generate prose from ticks
           </button>
         </div>
+        <label style={{ ...lbl, marginTop: 12 }}>Paste undertaker / LSBUD email</label>
+        <textarea
+          style={{ ...inp, minHeight: 64 }}
+          value={undertakerPaste}
+          onChange={(e) => setUndertakerPaste(e.target.value)}
+          placeholder={"Cadent Gas: apparatus present\nBT Openreach: no plant\nUKPN: records only / TFR"}
+        />
+        <button
+          type="button"
+          style={{ ...btnPrimary, marginTop: 8 }}
+          onClick={() => {
+            const { report: next, added } = applyUndertakerPaste(form, undertakerPaste);
+            setForm((f) => ({ ...f, ...next }));
+            setUndertakerPaste("");
+            onToast?.({
+              type: added ? "success" : "warn",
+              title: added ? `Added ${added} undertaker row(s)` : "Nothing parsed",
+              message: added
+                ? "Review status chips, then Generate prose from ticks."
+                : "Paste lines like “Cadent Gas: apparatus present” or “BT: no plant”.",
+            });
+          }}
+        >
+          Parse paste → records matrix
+        </button>
         <label style={{ ...lbl, marginTop: 10 }}>Narrative override (editable)</label>
         <textarea
           style={{ ...inp, minHeight: 72 }}
@@ -164,6 +194,30 @@ export default function SurveyPremiumFieldsEditor({
 
       <div style={box}>
         <div style={{ fontWeight: 700, marginBottom: 8, color: "#0B1D3A" }}>Evidence rows (CAD | photo | notes)</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <button
+            type="button"
+            style={btnPrimary}
+            disabled={!geoPhotos?.length}
+            onClick={() => {
+              const next = appendEvidenceFromGeoPhotos(form, geoPhotos, { limit: 8 });
+              const added = (next.evidenceRows?.length || 0) - (form.evidenceRows?.length || 0);
+              bump({ evidenceRows: next.evidenceRows });
+              onToast?.({
+                type: added ? "success" : "warn",
+                title: added ? `Added ${added} evidence row(s)` : "No new geo-photos",
+                message: added
+                  ? "Fill CAD crop + explanation on each row."
+                  : "Mark geo-photos on this project first, or they are already linked.",
+              });
+            }}
+          >
+            One-tap from geo-photos
+          </button>
+          <button type="button" style={btn} onClick={() => bump({ evidenceRows: [...(form.evidenceRows || []), blankEvidenceRow()] })}>
+            + Empty evidence row
+          </button>
+        </div>
         {(form.evidenceRows || []).map((row) => (
           <div key={row.id} style={{ borderTop: "1px solid #e2e8f0", paddingTop: 10, marginTop: 10 }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>

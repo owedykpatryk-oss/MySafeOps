@@ -53,6 +53,7 @@ import {
 } from "../../utils/utilityMappingPremiumPages";
 import {
   downloadUtilityMappingClientPack,
+  downloadUtilityMappingClientPackPdf,
   downloadUtilityMappingA3BoardPack,
   buildUtilityMappingClientMailto,
 } from "../../utils/utilityMappingClientPack";
@@ -2717,6 +2718,8 @@ function ReportEditor({
               setForm={setForm}
               gprReports={gprReports}
               project={formProject}
+              geoPhotos={geoPhotos}
+              onToast={pushToast}
               onFetchGeology={async (overwrite) => {
                 try {
                   const next = await fetchGeologyIntoSurveyReport(form, formProject, { overwrite: Boolean(overwrite) });
@@ -3017,17 +3020,28 @@ function ReportEditor({
               <button
                 type="button"
                 style={ss.btn}
-                onClick={() => {
+                onClick={async () => {
                   const org = getOrgSettings();
-                  const shareUrl = form.ref ? buildOrgShareUrlWithRef(org, form.ref) : "";
-                  if (downloadUtilityMappingClientPack(form, { org, shareUrl })) {
-                    pushToast({ type: "success", title: "Client pack", message: "Executive HTML pack downloaded." });
-                  } else {
-                    pushToast({ type: "warn", title: "Client pack", message: "Could not build client pack." });
+                  const shareUrl = form.ref ? buildOrgShareUrlWithRef(org, form.ref, undefined, form.documentControl?.revision) : "";
+                  try {
+                    const ok = await downloadUtilityMappingClientPackPdf(form, { org, shareUrl });
+                    if (ok) {
+                      pushToast({ type: "success", title: "Client pack PDF", message: "Executive pack downloaded as PDF." });
+                    } else if (downloadUtilityMappingClientPack(form, { org, shareUrl })) {
+                      pushToast({ type: "success", title: "Client pack", message: "HTML pack downloaded (PDF unavailable)." });
+                    } else {
+                      pushToast({ type: "warn", title: "Client pack", message: "Could not build client pack." });
+                    }
+                  } catch (e) {
+                    if (downloadUtilityMappingClientPack(form, { org, shareUrl })) {
+                      pushToast({ type: "warn", title: "Client pack HTML", message: e?.message || "PDF failed — HTML downloaded instead." });
+                    } else {
+                      pushToast({ type: "error", title: "Client pack failed", message: e?.message || "Could not build pack." });
+                    }
                   }
                 }}
               >
-                Client pack
+                Client pack PDF
               </button>
               <button
                 type="button"
@@ -3323,12 +3337,24 @@ export default function SurveyReport() {
   }, [projectById, ramsById]);
 
   const exportClientPackForReport = useCallback(
-    (report) => {
+    async (report) => {
       if (!isUtilityMappingOrg()) return;
       const org = getOrgSettings();
-      const shareUrl = report.ref ? buildOrgShareUrlWithRef(org, report.ref) : "";
+      const shareUrl = report.ref
+        ? buildOrgShareUrlWithRef(org, report.ref, undefined, report.documentControl?.revision)
+        : "";
+      try {
+        const ok = await downloadUtilityMappingClientPackPdf(report, { org, shareUrl });
+        if (ok) {
+          pushToast({ type: "success", title: "Client pack PDF", message: "Executive pack downloaded as PDF." });
+          pushAudit({ action: "survey_client_pack_pdf", entity: "survey_report", detail: report.ref || report.id });
+          return;
+        }
+      } catch {
+        /* fall through to HTML */
+      }
       if (downloadUtilityMappingClientPack(report, { org, shareUrl })) {
-        pushToast({ type: "success", title: "Client pack", message: "Executive HTML pack downloaded." });
+        pushToast({ type: "success", title: "Client pack", message: "HTML pack downloaded." });
         pushAudit({ action: "survey_client_pack", entity: "survey_report", detail: report.ref || report.id });
       } else {
         pushToast({ type: "warn", title: "Client pack", message: "Could not build client pack." });

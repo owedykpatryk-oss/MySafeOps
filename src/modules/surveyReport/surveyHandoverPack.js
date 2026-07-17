@@ -8,7 +8,7 @@ import { sanitizePdfFileSegment } from "../../utils/pdfFileName";
 import { sanitizePrintPreviewHtml, escapeHtml, escapeAttr } from "../../utils/htmlEscape.js";
 import { downloadBlob } from "../../utils/downloadBlob.js";
 import { buildSurveyReportHtml } from "./surveyReportPrintHtml";
-import { generateSurveyReportPdfBlob } from "./surveyReportPdf";
+import { generateSurveyReportPdfBlob, generateHtmlDocumentPdfBlob } from "./surveyReportPdf";
 import { normalizeSurveyReport, utilityTypeLabel, utilityConfidenceLabel } from "./surveyReportHelpers";
 import { pas128MethodLabel } from "./pas128MethodPresets";
 import { UNDERTAKER_RESPONSE_STATUS } from "./surveyReportConstants";
@@ -21,6 +21,7 @@ import {
   buildUtilityMappingQrSrc,
 } from "../../utils/utilityMappingClientPack";
 import { buildA3BoardPackHtml } from "./surveyEvidencePack";
+import { buildHandoverChecklistHtml } from "./surveyFieldUpgrades";
 import { computeUtilityMappingDigRisk } from "../../utils/utilityMappingPremiumPages";
 import { UTILITY_MAPPING_BRAND } from "../../utils/utilityMappingBranding";
 
@@ -394,6 +395,17 @@ export async function buildSurveyHandoverZip(report, extras = {}, geoPhotos = []
     if (clientHtml) {
       files.push({ name: "client/client-pack.html", data: encodeText(clientHtml) });
       extraReadmeFiles.push("client/client-pack.html");
+      try {
+        onProgress("Client pack PDF");
+        const { blob: clientPdf } = await generateHtmlDocumentPdfBlob(clientHtml, {
+          fileName: "client-pack.pdf",
+          title: r.title || r.ref || "Client pack",
+        });
+        files.push({ name: "client/client-pack.pdf", data: new Uint8Array(await clientPdf.arrayBuffer()) });
+        extraReadmeFiles.push("client/client-pack.pdf");
+      } catch {
+        /* PDF optional if capture fails */
+      }
     }
     const a3 = buildA3BoardPackHtml(r, {
       digRisk: digRisk?.label ? digRisk : { band: "medium", label: "Review dig readiness", score: digRisk?.score ?? "—" },
@@ -432,6 +444,13 @@ export async function buildSurveyHandoverZip(report, extras = {}, geoPhotos = []
   });
   const pdfBytes = new Uint8Array(await pdfBlob.arrayBuffer());
   files.push({ name: `report/${pdfName.replace(/^.*[\\/]/, "")}`, data: pdfBytes });
+
+  const checklistNames = files.map((f) => f.name);
+  files.push({
+    name: "CHECKLIST.html",
+    data: encodeText(buildHandoverChecklistHtml(checklistNames, r)),
+  });
+  extraReadmeFiles.push("CHECKLIST.html");
 
   onProgress("README");
   files.push({

@@ -20,11 +20,16 @@ export function safeOrgWebsiteBase(org, fallback = DEFAULT_UM_SITE) {
 /**
  * @param {Record<string, unknown> | null | undefined} org
  * @param {string} [ref]
+ * @param {string} [revision]
  * @param {string} [fallback]
  */
-export function buildOrgShareUrlWithRef(org, ref, fallback = DEFAULT_UM_SITE) {
+export function buildOrgShareUrlWithRef(org, ref, fallback = DEFAULT_UM_SITE, revision = "") {
   const base = safeOrgWebsiteBase(org, fallback);
   const r = String(ref || "").trim();
-  if (!r) return base;
-  return `${base}?ref=${encodeURIComponent(r)}`;
+  const rev = String(revision || "").trim();
+  if (!r && !rev) return base;
+  const params = new URLSearchParams();
+  if (r) params.set("ref", r);
+  if (rev) params.set("rev", rev);
+  return `${base}?${params.toString()}`;
 }

@@ -158,6 +158,8 @@ export function buildGeologyBlockHtml(geology = {}) {
 export function reorderSectionsForUmClassic(sections = []) {
   const preferred = [
     "doc-control",
+    "changes",
+    "rev-records-diff",
     "info",
     "insight",
     "exec",
@@ -192,6 +194,7 @@ export function reorderSectionsForUmClassic(sections = []) {
     "standards",
     "qa",
     "photos",
+    "rev-verify",
     "signatures",
   ];
   const byId = new Map();

@@ -547,6 +547,120 @@ export function gprAnomalyClassLabel(key) {
   return GPR_ANOMALY_CLASSES.find((o) => o.key === key)?.label || key || "Anomaly";
 }
 
+/** Mid depth (m BGL) from min/max fields. */
+export function gprAnomalyMidDepthM(card) {
+  const a = parseFloat(card?.depthMinM);
+  const b = parseFloat(card?.depthMaxM);
+  if (!Number.isNaN(a) && !Number.isNaN(b)) return (a + b) / 2;
+  if (!Number.isNaN(a)) return a;
+  if (!Number.isNaN(b)) return b;
+  return null;
+}
+
+/**
+ * Gallions-style depth histogram (0–0.5 / 0.5–1 / 1–1.5 / 1.5+ m BGL).
+ * @param {object[]} cards
+ */
+export function buildGprDepthHistogramHtml(cards = []) {
+  const depths = (cards || []).map(gprAnomalyMidDepthM).filter((n) => n != null && n >= 0);
+  if (depths.length < 2) return "";
+  const bins = [
+    { key: "0-0.5", label: "0–0.5 m", max: 0.5 },
+    { key: "0.5-1", label: "0.5–1 m", max: 1 },
+    { key: "1-1.5", label: "1–1.5 m", max: 1.5 },
+    { key: "1.5+", label: "1.5 m+", max: Infinity },
+  ];
+  const counts = bins.map(() => 0);
+  for (const d of depths) {
+    const i = bins.findIndex((b) => d < b.max || b.max === Infinity);
+    const idx = i >= 0 ? i : bins.length - 1;
+    counts[idx] += 1;
+  }
+  const maxC = Math.max(...counts, 1);
+  const bars = bins
+    .map((b, i) => {
+      const h = Math.max(4, Math.round((counts[i] / maxC) * 72));
+      return `<div class="sr-gpr-hist__col">
+  <div class="sr-gpr-hist__bar" style="height:${h}px" title="${esc(String(counts[i]))}"></div>
+  <div class="sr-gpr-hist__n">${counts[i]}</div>
+  <div class="sr-gpr-hist__lbl">${esc(b.label)}</div>
+</div>`;
+    })
+    .join("");
+  return `<div class="sr-gpr-hist" aria-label="Anomaly depth distribution">
+  <div class="sr-gpr-hist__title">Anomaly depth distribution (m BGL)</div>
+  <div class="sr-gpr-hist__chart">${bars}</div>
+</div>`;
+}
+
+/**
+ * Cover collage — plan / site photo / CAD evidence (when ≥2 images available).
+ * @param {object} report
+ * @param {{ coverPhotoUrl?: string }} [extras]
+ */
+export function buildCoverHeroCollageHtml(report = {}, extras = {}) {
+  const slots = [];
+  const push = (url, caption) => {
+    const src = safeImageSrc(url);
+    if (!src || slots.some((s) => s.src === src)) return;
+    slots.push({ src, caption });
+  };
+  const extent = (report.extentAreas || [])[0] || (report.surveyAreas || [])[0];
+  push(extent?.planImageUrl, "Extent / plan");
+  push(extras.coverPhotoUrl || report.photos?.[0]?.dataUrl || report.photos?.[0]?.url, "Site");
+  const ev = (report.evidenceRows || []).find((e) => e.cadImageUrl || (e.photoUrls || [])[0]);
+  push(ev?.cadImageUrl || ev?.photoUrls?.[0], "Evidence");
+  push((extent?.photoUrls || [])[0], "AOC photo");
+  push(report.photos?.[1]?.dataUrl || report.photos?.[1]?.url, "Site");
+  const three = slots.slice(0, 3);
+  if (three.length < 2) return "";
+  return `<div class="sr-cover-collage" aria-label="Cover visual strip">
+  ${three
+    .map(
+      (s) =>
+        `<figure class="sr-cover-collage__cell"><img src="${escapeAttr(s.src)}" alt=""/><figcaption>${esc(s.caption)}</figcaption></figure>`
+    )
+    .join("")}
+</div>`;
+}
+
+/**
+ * Footer / signatures strip — revision verify QR (not dig-focused).
+ * @param {object} report
+ * @param {string} qrSrc
+ * @param {string} verifyUrl
+ */
+export function buildRevisionVerifyBlockHtml(report = {}, qrSrc = "", verifyUrl = "") {
+  const dc = report.documentControl || {};
+  const rev = String(dc.revision || "A").trim();
+  const ref = String(report.ref || "").trim();
+  const status = report.status === "final" ? "Controlled / issued" : "Draft — not controlled";
+  if (!qrSrc && !ref) return "";
+  return `<div class="sr-rev-verify">
+  ${qrSrc ? `<img class="sr-rev-verify__qr" src="${escapeAttr(qrSrc)}" alt="Revision QR"/>` : ""}
+  <div class="sr-rev-verify__meta">
+    <div class="sr-rev-verify__title">Verify this revision</div>
+    <div>${esc(ref || "—")}${rev ? ` · Rev ${esc(rev)}` : ""} · ${esc(status)}</div>
+    ${verifyUrl ? `<div class="sr-rev-verify__url">${esc(verifyUrl)}</div>` : ""}
+  </div>
+</div>`;
+}
+
+/** Survey records scoreboard for A3 board (replaces dig-first framing). */
+export function buildRecordsStatusBoardHtml(report = {}) {
+  const items = report.recordItems || [];
+  const located = items.filter((r) => r.status === "located").length;
+  const tfr = items.filter((r) => r.status === "tfr" || r.tfr).length;
+  const notFound = items.filter((r) => r.status === "not_located").length;
+  const partial = items.filter((r) => r.status === "partial" || r.status === "no_response").length;
+  return `<div class="a3-records">
+  <div class="a3-records__pill"><strong>${located}</strong><span>Located</span></div>
+  <div class="a3-records__pill a3-records__pill--tfr"><strong>${tfr}</strong><span>TFR</span></div>
+  <div class="a3-records__pill"><strong>${notFound}</strong><span>Not located</span></div>
+  <div class="a3-records__pill"><strong>${partial}</strong><span>Partial / NR</span></div>
+</div>`;
+}
+
 /** Gallions-style anomaly cards + conclusions dashboard. */
 export function buildGprAnomalyCardsHtml(cards = [], conclusionsText = "") {
   const list = (cards || []).filter((c) => c && (c.ref || c.interpretation || c.screenshotUrl));
@@ -557,20 +671,12 @@ export function buildGprAnomalyCardsHtml(cards = [], conclusionsText = "") {
     const k = c.classKey || "unknown";
     byClass[k] = (byClass[k] || 0) + 1;
   }
-  const depths = list
-    .map((c) => {
-      const a = parseFloat(c.depthMinM);
-      const b = parseFloat(c.depthMaxM);
-      if (!Number.isNaN(a) && !Number.isNaN(b)) return (a + b) / 2;
-      if (!Number.isNaN(a)) return a;
-      if (!Number.isNaN(b)) return b;
-      return null;
-    })
-    .filter((n) => n != null);
+  const depths = list.map(gprAnomalyMidDepthM).filter((n) => n != null);
   const depthNote =
     depths.length > 0
       ? `Typical depths ~${Math.min(...depths).toFixed(1)}–${Math.max(...depths).toFixed(1)} m BGL.`
       : "";
+  const hist = buildGprDepthHistogramHtml(list);
 
   const dash = `<div class="sr-gpr-dash">
   <div class="sr-gpr-dash__stat"><strong>${list.length}</strong><span>Anomalies</span></div>
@@ -579,6 +685,7 @@ export function buildGprAnomalyCardsHtml(cards = [], conclusionsText = "") {
   <div class="sr-gpr-dash__stat"><strong>${byClass.unknown || 0}</strong><span>Unknown</span></div>
 </div>
 ${depthNote ? `<p class="sr-gpr-dash__note">${esc(depthNote)}</p>` : ""}
+${hist}
 ${conclusionsText?.trim() ? `<div class="sr-narrative"><p>${esc(conclusionsText.trim())}</p></div>` : ""}`;
 
   const cardsHtml = list
@@ -633,22 +740,19 @@ export function buildSurveyAreasFlipbookHtml(areas = []) {
 }
 
 /**
- * A3 landscape board pack — one/two page client meeting sheet.
+ * A3 landscape board pack — client meeting sheet (records / extent, not dig-first).
  * @param {object} report
  * @param {{ digRisk?: object, orgName?: string }} [opts]
  */
 export function buildA3BoardPackHtml(report = {}, opts = {}) {
   const r = report;
-  const dig = opts.digRisk || {};
   const tfr = (r.recordItems || []).filter((x) => x.status === "tfr" || x.tfr).slice(0, 5);
   const tfrList = tfr.length
     ? `<ul>${tfr.map((x) => `<li><strong>${esc(x.undertaker || recordServiceLabel(x.serviceType))}</strong> — ${esc(x.notes || recordStatusLabel(x.status))}</li>`).join("")}</ul>`
     : `<p>No TFR rows logged.</p>`;
   const extent = (r.extentAreas || [])[0] || (r.surveyAreas || [])[0];
   const planSrc = safeImageSrc(extent?.planImageUrl || r.photos?.[0]?.dataUrl || r.photos?.[0]?.url);
-  const band = dig.band || "medium";
-  const digLabel = dig.label || "Dig readiness — review on site";
-  const digScore = dig.score != null ? dig.score : "—";
+  const recordsBoard = buildRecordsStatusBoardHtml(r);
 
   return `<!DOCTYPE html>
 <html lang="en-GB"><head><meta charset="utf-8"/>
@@ -664,10 +768,11 @@ export function buildA3BoardPackHtml(report = {}, opts = {}) {
   .a3-card { border: 1px solid #cbd5e1; border-radius: 12px; padding: 12px 14px; background: #f8fafc; }
   .a3-card h2 { margin: 0 0 8px; font-size: 12pt; color: #0B1D3A; }
   .a3-plan { width: 100%; max-height: 160mm; object-fit: contain; border-radius: 8px; background: #e2e8f0; }
-  .dig { font-size: 14pt; font-weight: 800; padding: 10px 14px; border-radius: 10px; display: inline-block; }
-  .dig-low { background: #bbf7d0; color: #14532d; }
-  .dig-medium { background: #fde68a; color: #78350f; }
-  .dig-high { background: #fecaca; color: #7f1d1d; }
+  .a3-records { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .a3-records__pill { background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; text-align: center; }
+  .a3-records__pill strong { display: block; font-size: 16pt; color: #0B1D3A; }
+  .a3-records__pill span { font-size: 8pt; color: #64748b; }
+  .a3-records__pill--tfr { border-color: #f59e0b; background: #fffbeb; }
   ul { margin: 0; padding-left: 18px; font-size: 10pt; }
   .foot { font-size: 8pt; color: #64748b; margin-top: auto; }
 </style></head><body>
@@ -685,19 +790,19 @@ export function buildA3BoardPackHtml(report = {}, opts = {}) {
   </div>
   <div class="a3-right">
     <div class="a3-card">
-      <h2>Dig readiness</h2>
-      <div class="dig dig-${esc(band)}">${esc(digLabel)} (${esc(String(digScore))})</div>
-      <p style="font-size:9.5pt;margin:10px 0 0">Treat TFR alignments as live until proven otherwise. Follow HSG47 / permit to dig.</p>
+      <h2>Records status</h2>
+      ${recordsBoard}
+      <p style="font-size:9.5pt;margin:10px 0 0">Survey deliverable — TFR alignments are records-derived until verified on site.</p>
     </div>
     <div class="a3-card">
-      <h2>Top TFR / records risks</h2>
+      <h2>Top TFR / records notes</h2>
       ${tfrList}
     </div>
     <div class="a3-card">
       <h2>Key message</h2>
       <p style="font-size:10pt">${esc(String(r.sections?.executiveSummary || r.sections?.recommendations || r.sections?.findings || "See full survey report for methodology, limitations and drawings.").slice(0, 480))}</p>
     </div>
-    <div class="foot">${esc(opts.orgName || "Utility Mapping")} · Controlled board pack · ${esc(r.ref || "")}</div>
+    <div class="foot">${esc(opts.orgName || "Utility Mapping")} · Controlled board pack · ${esc(r.ref || "")}${r.documentControl?.revision ? ` · Rev ${esc(r.documentControl.revision)}` : ""}</div>
   </div>
 </div>
 </body></html>`;
@@ -800,6 +905,21 @@ export const SURVEY_EVIDENCE_PRINT_CSS = `
 .sr-gpr-dash__stat strong { display: block; font-size: 16pt; color: #00B4E4; }
 .sr-gpr-dash__stat span { font-size: 8pt; opacity: 0.85; }
 .sr-gpr-dash__note { font-size: 9pt; color: #64748b; }
+.sr-gpr-hist { margin: 10px 0 14px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.sr-gpr-hist__title { font-size: 9pt; font-weight: 700; color: #0B1D3A; margin-bottom: 8px; }
+.sr-gpr-hist__chart { display: flex; align-items: flex-end; gap: 10px; min-height: 96px; }
+.sr-gpr-hist__col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
+.sr-gpr-hist__bar { width: 100%; max-width: 48px; background: linear-gradient(180deg, #00B4E4, #0B1D3A); border-radius: 6px 6px 2px 2px; }
+.sr-gpr-hist__n { font-size: 9pt; font-weight: 700; color: #0B1D3A; }
+.sr-gpr-hist__lbl { font-size: 7.5pt; color: #64748b; text-align: center; }
+.sr-cover-collage { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 4px; page-break-inside: avoid; }
+.sr-cover-collage__cell { margin: 0; border-radius: 10px; overflow: hidden; border: 1px solid #cbd5e1; background: #0B1D3A; }
+.sr-cover-collage__cell img { width: 100%; height: 88px; object-fit: cover; display: block; }
+.sr-cover-collage__cell figcaption { font-size: 7.5pt; padding: 4px 6px; color: #e2e8f0; background: #0B1D3A; }
+.sr-rev-verify { display: flex; align-items: center; gap: 14px; margin: 16px 0; padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 12px; background: #f8fafc; page-break-inside: avoid; }
+.sr-rev-verify__qr { width: 88px; height: 88px; border-radius: 8px; background: #fff; }
+.sr-rev-verify__title { font-weight: 800; color: #0B1D3A; font-size: 10.5pt; margin-bottom: 4px; }
+.sr-rev-verify__url { font-size: 8pt; color: #64748b; word-break: break-all; margin-top: 4px; }
 .sr-gpr-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .sr-gpr-card { display: grid; grid-template-columns: 100px 1fr; gap: 8px; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; page-break-inside: avoid; background: #fff; }
 .sr-gpr-card__media img, .sr-gpr-card__ph { width: 100%; height: 100%; min-height: 90px; object-fit: cover; background: #0B1D3A; color: #00B4E4; display: flex; align-items: center; justify-content: center; font-weight: 700; }

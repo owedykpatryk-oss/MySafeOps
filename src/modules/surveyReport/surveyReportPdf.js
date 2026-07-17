@@ -62,14 +62,10 @@ function buildFileName(report) {
   return `${orgBit}-${ref}${rev}.pdf`.replace(/--+/g, "-");
 }
 
-async function renderSurveyReportCanvas(report, extras, notify) {
-  // Regex sanitize keeps <style>; DOMPurify whole-document config applied when available.
-  const html = sanitizePrintPreviewHtml(buildSurveyReportHtml(report, extras));
-
+async function renderHtmlDocumentCanvas(html, notify, title = "PDF export") {
   notify("prepare");
   const iframe = document.createElement("iframe");
-  iframe.setAttribute("title", "Survey report PDF export");
-  // Keep visible to the compositor (opacity:0) — visibility:hidden often yields a blank html2canvas capture.
+  iframe.setAttribute("title", title);
   iframe.style.cssText =
     "position:fixed;left:0;top:0;width:794px;height:1123px;border:0;opacity:0;pointer-events:none;z-index:-1;";
   document.body.appendChild(iframe);
@@ -91,7 +87,7 @@ async function renderSurveyReportCanvas(report, extras, notify) {
   const captureRoot = doc.body;
   if (!captureRoot || !captureRoot.innerText?.trim()) {
     document.body.removeChild(iframe);
-    throw new Error("Survey report preview was empty — try Print preview first, then Download PDF again.");
+    throw new Error("PDF preview was empty — check content and try again.");
   }
 
   notify("capture");
@@ -127,10 +123,59 @@ async function renderSurveyReportCanvas(report, extras, notify) {
   }
 
   if (!canvas || canvas.width < 8 || canvas.height < 8) {
-    throw new Error("PDF capture produced a blank page — check the report has content, then try again.");
+    throw new Error("PDF capture produced a blank page — try again.");
   }
 
   return canvas;
+}
+
+/**
+ * Render arbitrary print HTML to a PDF blob (client pack, A3, etc.).
+ * @param {string} html
+ * @param {{ fileName?: string, title?: string, onProgress?: Function }} [opts]
+ */
+export async function generateHtmlDocumentPdfBlob(html, opts = {}) {
+  const notify = (phase) => opts.onProgress?.(phase);
+  const fileName = opts.fileName || "document.pdf";
+  const safeHtml = sanitizePrintPreviewHtml(html);
+  const canvas = await renderHtmlDocumentCanvas(safeHtml, notify, opts.title || "Document PDF");
+  notify("assemble");
+  const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  pdf.setProperties({ title: opts.title || fileName, subject: "Survey deliverable", author: "MySafeOps" });
+  const pageW = A4_W_MM;
+  const pageH = A4_H_MM;
+  const side = MARGIN_MM;
+  const usableW = pageW - side * 2;
+  const usableH = pageH - side * 2;
+  const imgData = canvas.toDataURL("image/jpeg", 0.9);
+  const imgProps = pdf.getImageProperties(imgData);
+  const imgHeightMm = (imgProps.height * usableW) / imgProps.width;
+  let heightLeft = imgHeightMm;
+  let pageNum = 0;
+  const totalPages = Math.max(1, Math.ceil(imgHeightMm / usableH));
+  pdf.addImage(imgData, "JPEG", side, side, usableW, imgHeightMm);
+  pageNum = 1;
+  pdf.setFontSize(7);
+  pdf.setTextColor(140, 140, 140);
+  pdf.text(`${pageNum} / ${totalPages}`, pageW - side, pageH - 4, { align: "right" });
+  heightLeft -= usableH;
+  while (heightLeft > 0.5) {
+    pdf.addPage();
+    pageNum += 1;
+    pdf.setFontSize(7);
+    pdf.setTextColor(140, 140, 140);
+    pdf.text(`${pageNum} / ${totalPages}`, pageW - side, pageH - 4, { align: "right" });
+    const y = side - (imgHeightMm - heightLeft);
+    pdf.addImage(imgData, "JPEG", side, y, usableW, imgHeightMm);
+    heightLeft -= usableH;
+  }
+  notify("save");
+  return { blob: pdf.output("blob"), fileName, pages: totalPages };
+}
+
+async function renderSurveyReportCanvas(report, extras, notify) {
+  const html = sanitizePrintPreviewHtml(buildSurveyReportHtml(report, extras));
+  return renderHtmlDocumentCanvas(html, notify, "Survey report PDF export");
 }
 
 function assembleSurveyReportPdf(report, canvas) {

@@ -124,6 +124,25 @@ export function downloadUtilityMappingClientPack(report, extras = {}) {
 }
 
 /**
+ * Download client pack as PDF (html2canvas).
+ * @param {object} report
+ * @param {{ org?: object, shareUrl?: string, onProgress?: Function }} [extras]
+ */
+export async function downloadUtilityMappingClientPackPdf(report, extras = {}) {
+  const html = buildUtilityMappingClientPackHtml(report, extras);
+  if (!html) return false;
+  const base = utilityMappingExportBaseName(report, "ClientPack") || report.ref || "UM-ClientPack";
+  const fileName = `${sanitizePdfFileSegment(base, 48)}.pdf`;
+  const { generateHtmlDocumentPdfBlob } = await import("../modules/surveyReport/surveyReportPdf.js");
+  const { blob } = await generateHtmlDocumentPdfBlob(html, {
+    fileName,
+    title: report.title || report.ref || "Client pack",
+    onProgress: extras.onProgress,
+  });
+  return downloadBlob(blob, fileName);
+}
+
+/**
  * A3 landscape board pack — meeting sheet (map / dig risk / top TFR).
  * @param {object} report
  * @param {{ org?: object }} [extras]

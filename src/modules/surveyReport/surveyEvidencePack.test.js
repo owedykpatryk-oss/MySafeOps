@@ -138,21 +138,36 @@ describe("survey evidence pack", () => {
     expect(seeded.surveyAreas[0].label).toBe("AOC1");
   });
 
-  it("renders GPR anomaly cards and multi-area flipbook", () => {
+  it("renders GPR anomaly cards, depth histogram and multi-area flipbook", () => {
     const gpr = buildGprAnomalyCardsHtml(
       [
         blankGprAnomalyCard({
           ref: "A-01",
           classKey: "linear",
-          depthMinM: "0.8",
-          depthMaxM: "1.2",
-          interpretation: "Possible duct",
+          depthMinM: "0.4",
+          depthMaxM: "0.5",
+          interpretation: "Shallow duct",
+        }),
+        blankGprAnomalyCard({
+          ref: "A-02",
+          classKey: "unknown",
+          depthMinM: "1.1",
+          depthMaxM: "1.3",
+          interpretation: "Deeper response",
+        }),
+        blankGprAnomalyCard({
+          ref: "A-03",
+          classKey: "linear",
+          depthMinM: "0.9",
+          depthMaxM: "1.0",
+          interpretation: "Mid depth",
         }),
       ],
       "Two linear responses warrant trial holes."
     );
     expect(gpr).toContain("sr-gpr-card");
     expect(gpr).toContain("A-01");
+    expect(gpr).toContain("sr-gpr-hist");
     expect(gpr).toMatch(/conclusions/i);
 
     const areas = buildSurveyAreasFlipbookHtml([
@@ -162,7 +177,7 @@ describe("survey evidence pack", () => {
     expect(areas).toContain("Corridor A");
   });
 
-  it("builds A3 board pack with dig strip", () => {
+  it("builds A3 board pack with records status (not dig-first)", () => {
     const html = buildA3BoardPackHtml(
       {
         title: "Board test",
@@ -170,14 +185,16 @@ describe("survey evidence pack", () => {
         client: "Acme",
         pas128Method: "M2P",
         pas128Ql: "B",
+        documentControl: { revision: "B" },
         recordItems: [blankRecordItem({ undertaker: "SGN", status: "tfr", notes: "180mm" })],
         sections: { executiveSummary: "Proceed with caution on gas TFR." },
       },
-      { digRisk: { band: "high", label: "High dig risk", score: 78 }, orgName: "Utility Mapping" }
+      { orgName: "Utility Mapping" }
     );
     expect(html).toContain("A3");
-    expect(html).toContain("High dig risk");
+    expect(html).toContain("Records status");
     expect(html).toContain("SGN");
+    expect(html).not.toMatch(/Dig readiness/i);
   });
 
   it("print HTML includes GPR cards and survey areas", () => {

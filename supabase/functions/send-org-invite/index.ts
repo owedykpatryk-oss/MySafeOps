@@ -1,6 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
+import {
+  buildOrgInviteEmailHtml,
+  buildOrgInviteEmailSubject,
+  buildOrgInviteEmailText,
+  resolveEmailLogoUrl,
+} from "../_shared/inviteEmailHtml.ts";
 
 function makeInviteToken() {
   const bytes = new Uint8Array(32);
@@ -118,11 +124,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: org } = await supabase.from("organizations").select("name").eq("id", inv.org_id).maybeSingle();
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name, branding_settings")
+      .eq("id", inv.org_id)
+      .maybeSingle();
+
+    const branding =
+      org?.branding_settings && typeof org.branding_settings === "object" && !Array.isArray(org.branding_settings)
+        ? (org.branding_settings as Record<string, unknown>)
+        : {};
 
     const resendKey = Deno.env.get("RESEND_API_KEY");
     const fromEmail = Deno.env.get("INVITE_FROM_EMAIL") ?? "MySafeOps <support@mysafeops.com>";
-    const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "") || "http://localhost:5173";
+    const siteUrl = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "") || "https://mysafeops.com";
 
     await updateDeliveryStatus(supabase, inv.id, {
       email_delivery_status: "pending",
@@ -158,17 +173,40 @@ Deno.serve(async (req) => {
       }
     }
 
-    const orgName = org?.name ?? "MySafeOps";
+    const orgName =
+      String(branding.name || "").trim() ||
+      String(org?.name || "").trim() ||
+      "MySafeOps";
     const acceptUrl = `${siteUrl}/accept-invite?invite=${encodeURIComponent(liveToken)}`;
     const supportLine = Deno.env.get("SUPPORT_CONTACT_EMAIL")?.trim() || "support@mysafeops.com";
+    const inviterName =
+      String(user.user_metadata?.full_name || user.user_metadata?.name || "").trim() ||
+      String(user.email || "").split("@")[0] ||
+      "";
 
-    const html = `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#0f172a">
-<p>You've been invited to join <strong>${escapeHtml(orgName)}</strong> on MySafeOps.</p>
-<p>Sign in with <strong>${escapeHtml(inv.email)}</strong> to accept.</p>
-<p><a href="${acceptUrl}" style="color:#0d9488;font-weight:600">Accept invite</a></p>
-<p style="font-size:13px;color:#64748b">If the button does not work, copy this link:<br/>${escapeHtml(acceptUrl)}</p>
-<p style="font-size:13px;color:#64748b">Support: ${escapeHtml(supportLine)}</p>
-</body></html>`;
+    const companyLogoUrl = resolveEmailLogoUrl(branding.logoUrl || branding.logo, siteUrl);
+    // Only use product logo when explicitly configured (avoid broken img if asset missing).
+    const productLogoUrl = resolveEmailLogoUrl(Deno.env.get("PRODUCT_LOGO_URL") || "", siteUrl);
+
+    const emailBrand = {
+      orgName,
+      inviteeEmail: String(inv.email || ""),
+      acceptUrl,
+      supportEmail: supportLine,
+      siteUrl,
+      companyLogoUrl: companyLogoUrl || undefined,
+      productLogoUrl: productLogoUrl || undefined,
+      primaryColor: String(branding.primaryColor || "").trim() || undefined,
+      accentColor: String(branding.accentColor || "").trim() || undefined,
+      website: String(branding.website || "").trim() || undefined,
+      address: String(branding.address || "").trim() || undefined,
+      phone: String(branding.phone || "").trim() || undefined,
+      inviterName: inviterName || undefined,
+    };
+
+    const html = buildOrgInviteEmailHtml(emailBrand);
+    const text = buildOrgInviteEmailText(emailBrand);
+    const subject = buildOrgInviteEmailSubject(orgName);
 
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -179,8 +217,9 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: fromEmail,
         to: [inv.email],
-        subject: `You're invited to ${orgName} on MySafeOps`,
+        subject,
         html,
+        text,
       }),
     });
 
@@ -225,14 +264,6 @@ Deno.serve(async (req) => {
     });
   }
 });
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 /** Keep invite delivery errors short — Resend sometimes returns Cloudflare HTML pages. */
 function summariseResendError(raw: string, status: number): string {
