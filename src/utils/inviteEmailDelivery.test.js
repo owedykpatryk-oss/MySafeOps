@@ -26,4 +26,13 @@ describe("formatInviteEmailDeliveryDetail", () => {
     expect(out).toMatch(/verify mysafeops\.com/i);
     expect(out).toMatch(/support@mysafeops\.com/i);
   });
+
+  it("explains Cloudflare HTML outage pages from Resend", () => {
+    const out = formatInviteEmailDeliveryDetail(
+      `<!DOCTYPE html><html><title>resend.com | 520: Web server is returning an unknown error</title><div class="cf-error-details">Error code 520</div></html>`
+    );
+    expect(out).toMatch(/temporarily unavailable/i);
+    expect(out).toMatch(/520/);
+    expect(out).not.toMatch(/<!DOCTYPE/i);
+  });
 });

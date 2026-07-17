@@ -185,10 +185,11 @@ Deno.serve(async (req) => {
     });
 
     if (!res.ok) {
-      const detail = await res.text();
+      const detailRaw = await res.text();
+      const detail = summariseResendError(detailRaw, res.status);
       await updateDeliveryStatus(supabase, inv.id, {
         email_delivery_status: "failed",
-        email_delivery_error: String(detail || "Resend failed").slice(0, 2000),
+        email_delivery_error: detail.slice(0, 2000),
         email_delivery_attempted_at: new Date().toISOString(),
       });
       return new Response(JSON.stringify({ error: "Resend failed", detail }), {
@@ -231,6 +232,17 @@ function escapeHtml(s: string) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Keep invite delivery errors short — Resend sometimes returns Cloudflare HTML pages. */
+function summariseResendError(raw: string, status: number): string {
+  const text = String(raw || "").trim();
+  if (!text) return `Resend failed (HTTP ${status})`;
+  if (/<!DOCTYPE\s+html/i.test(text) || /cf-error-details|Error code 5\d{2}/i.test(text)) {
+    const code = text.match(/Error code\s+(5\d{2})/i)?.[1] || text.match(/\b(520|521|522|523|524)\b/)?.[1] || String(status);
+    return `Resend API temporarily unavailable (Cloudflare ${code}). Retry in a minute.`;
+  }
+  return text.slice(0, 2000);
 }
 
 async function updateDeliveryStatus(
