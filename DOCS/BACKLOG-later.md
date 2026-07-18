@@ -16,7 +16,7 @@ Krótka lista rzeczy **świadomie odłożonych** (nie zrobione w ostatnim refakt
 - [x] **HaveIBeenPwned** + require current password on update — włączone w Auth → Email (2026-07-17).
 - [ ] **Osobny PR** dla niezacommitowanego WIP (~47 plików): Project Drawing, Workers, RAMS, `d1ArrayMerge`, demo SQL w `DOCS/FESS/Extra/_*` — **nie** wrzucać do main bez review.
 - [x] **DB harden** (2026-07-17): migracja `20260717120000_harden_security_perf` — RLS initplan, search_path, revoke `claim_edge_rate_bucket` od anon.
-- [ ] **Supabase invoices** — outstanding invoices banner na org (zapłać, żeby uniknąć disruption).
+- [x] **Supabase invoices** — outstanding invoices banner na org (2026-07-18: `PastDueBillingBanner` + BillingLimits alert).
 
 ### PTW — produkt (pozostało z roadmapy)
 
@@ -47,7 +47,7 @@ Zaimplementowane lokalnie, niezacommitowane: escape routes panel, map layers, re
 - [ ] **Toggle Auto-find A&E** przy otwarciu mapy.
 - [ ] **Smart snap** — rogi granicy, istniejące markery, opcjonalna siatka OS.
 - [ ] **Panel obiektów** — filtr, sort, „jump to on map”, grupowanie po typie.
-- [ ] **Mobile / tablet** — większe narzędzia, pinch zoom, tryb „place only”.
+- [x] **Mobile / tablet** — większe narzędzia, pinch zoom, tryb „place only” (2026-07-18).
 - [ ] **Legenda na eksporcie PNG** — mini-legenda kolorów/typów w rogu.
 - [ ] **Rozbicie `ProjectDrawingEditor.jsx`** (~3500 linii).
 - [ ] **Permits: pick from drawing** — wybór punktów/stref przy tworzeniu PTW.
@@ -63,7 +63,7 @@ Zaimplementowane lokalnie, niezacommitowane: escape routes panel, map layers, re
 
 ## Listy i render
 
-- [ ] **Dostępność (a11y) przy „Show more”**: `aria-live="polite"` przy zmianie liczby widocznych wierszy; opcjonalnie przeniesienie fokusu / scroll do pierwszego nowo pokazanego wiersza.
+- [x] **Dostępność (a11y) przy „Show more”**: `RegisterListPagingFooter` z `aria-live` (Workers + rejestry; 2026-07-18).
 - [ ] **Wirtualizacja** (@tanstack/react-virtual lub podobne) dla list rzadko ale potencjalnie bardzo długich (setki–tysiące wierszy w jednym widoku); „Show more” zostaje lub zamiana na nieskończony scroll.
 - [ ] **Wspólny komponent stopki** (np. `RegisterListPagingFooter`) — jeden JSX zamiast powielania w wielu modułach.
 - [ ] **Trwały rozmiar strony w sesji** — `sessionStorage` per moduł (opcjonalnie), żeby po odświeżeniu zachować „rozwinęliśmy listę”.
@@ -86,4 +86,4 @@ Zaimplementowane lokalnie, niezacommitowane: escape routes panel, map layers, re
 
 ---
 
-*Ostatnia aktualizacja: 2026-07-17 — P0/P1 harden (DB, Edge redeploy, HIBP, Turnstile secret, PTW draft-scope button).*
+*Ostatnia aktualizacja: 2026-07-18 — mobile/tablet (iOS zoom, survey grids, Drawing place-only + pinch), past_due billing banner, PTW/Workers touch/a11y.*

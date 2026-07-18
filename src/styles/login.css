@@ -3,8 +3,12 @@
 .login-page {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: "DM Sans", system-ui, sans-serif;
-  padding: 1.5rem 1rem 2rem;
+  padding: max(1.5rem, env(safe-area-inset-top, 0px))
+    max(1rem, env(safe-area-inset-right, 0px))
+    max(2rem, env(safe-area-inset-bottom, 0px))
+    max(1rem, env(safe-area-inset-left, 0px));
   overflow: hidden;
   background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 42%, #f8fafc 100%);
 }

@@ -95,10 +95,10 @@ const ss = {
   ...ms,
   ta: {
     width: "100%",
-    padding: "8px 10px",
+    padding: "10px 12px",
     border: "0.5px solid var(--color-border-secondary,#ccc)",
     borderRadius: 6,
-    fontSize: 13,
+    fontSize: 16,
     background: "var(--color-background-primary,#fff)",
     color: "var(--color-text-primary)",
     fontFamily: "DM Sans,sans-serif",
@@ -108,11 +108,12 @@ const ss = {
   },
   input: {
     width: "100%",
-    padding: "8px 10px",
+    padding: "10px 12px",
     border: "0.5px solid var(--color-border-secondary,#ccc)",
     borderRadius: 6,
-    fontSize: 13,
+    fontSize: 16,
     boxSizing: "border-box",
+    minHeight: 44,
   },
   sectionHead: {
     fontSize: 11,

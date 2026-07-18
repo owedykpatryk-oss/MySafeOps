@@ -167,10 +167,10 @@ const ss = {
   ...ms,
   ta: {
     width: "100%",
-    padding: "8px 10px",
+    padding: "10px 12px",
     border: "0.5px solid var(--color-border-secondary,#ccc)",
     borderRadius: 6,
-    fontSize: 13,
+    fontSize: 16,
     background: "var(--color-background-primary,#fff)",
     color: "var(--color-text-primary)",
     fontFamily: "DM Sans,sans-serif",
@@ -1736,7 +1736,7 @@ function ReportEditor({
                   {form.pas128Method ? (
                     <button
                       type="button"
-                      style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, marginTop: 6 }}
+                      style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 44, marginTop: 6 }}
                       onClick={() =>
                         setForm((f) => {
                           const next = applyPas128MethodToReport(f, f.pas128Method, { overwrite: true });
@@ -1810,20 +1810,20 @@ function ReportEditor({
                         Applied scope from RAMS {new Date(form.scopeFromRamsAt).toLocaleString("en-GB")}
                       </span>
                     ) : null}
-                    <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32 }} onClick={syncScopeFromRams}>
+                    <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 44 }} onClick={syncScopeFromRams}>
                       Sync from RAMS
                     </button>
                     {form.surveyType ? (
                       <button
                         type="button"
-                        style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, borderColor: "#0d9488", color: "#0f766e" }}
+                        style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 44, borderColor: "#0d9488", color: "#0f766e" }}
                         onClick={pushSurveyPackToRams}
                       >
                         Push pack to RAMS
                       </button>
                     ) : null}
                     {form.status === "final" ? (
-                      <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, borderColor: "#0d9488", color: "#0f766e" }} onClick={appendSummaryToRams}>
+                      <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 44, borderColor: "#0d9488", color: "#0f766e" }} onClick={appendSummaryToRams}>
                         Append to RAMS
                       </button>
                     ) : null}
@@ -1832,7 +1832,7 @@ function ReportEditor({
                 {!linkedRams && form.projectId && ramsDocs.some((d) => d.projectId === form.projectId) ? (
                   <button
                     type="button"
-                    style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, marginTop: 6 }}
+                    style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 44, marginTop: 6 }}
                     onClick={() => {
                       const doc = pickRamsForProject(ramsDocs, form.projectId);
                       if (doc) onRamsLink(doc.id);
@@ -1854,7 +1854,7 @@ function ReportEditor({
               {form.pas128Method ? (
                 <button
                   type="button"
-                  style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32, marginTop: 6 }}
+                  style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 44, marginTop: 6 }}
                   onClick={() =>
                     setSection("foreword", buildPas128Foreword(form))
                   }
@@ -2743,7 +2743,7 @@ function ReportEditor({
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
               <button
                 type="button"
-                style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32 }}
+                style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 44 }}
                 disabled={!(form.utilitiesTable?.length || form.undertakerResponses?.length)}
                 onClick={() =>
                   setForm((f) => ({

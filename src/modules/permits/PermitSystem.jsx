@@ -571,7 +571,7 @@ const ss = {
   ...ms,
   btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
   btnR: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #A32D2D", background:"#FCEBEB", color:"#791F1F", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
-  ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
+  ta:   { width:"100%", padding:"10px 12px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:16, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
 };
 
 const AUDIT_PAGE_SIZE = 20;
@@ -3378,8 +3378,8 @@ const PermitCard = memo(function PermitCard({
     ? {
         width: "100%",
         textAlign: "center",
-        minHeight: 38,
-        padding: "6px 8px",
+        minHeight: 44,
+        padding: "10px 8px",
         lineHeight: 1.2,
         whiteSpace: "normal",
         overflowWrap: "anywhere",
@@ -3589,7 +3589,7 @@ const PermitCard = memo(function PermitCard({
               {(decisionBanner.tone === "warn" || decisionBanner.tone === "critical" || decisionBanner.tone === "ok") ? (
                 <button
                   type="button"
-                  style={{ ...ss.btn, fontSize:11, padding:"3px 8px", minHeight:30 }}
+                  style={{ ...ss.btn, fontSize: 12, padding: "8px 12px", minHeight: 44 }}
                   onClick={() => {
                     if (decisionBanner.tone === "warn" && handoverState?.required && handoverState?.missing) return onOpenHandover?.(permit);
                     if (decisionBanner.tone === "warn" && briefingPending) return onConfirmBriefing?.(permit.id);

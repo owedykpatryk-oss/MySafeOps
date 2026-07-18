@@ -74,7 +74,7 @@ const pdeUi = {
     alignItems: "center",
   },
   toolBtn: (active) => ({
-    padding: "8px 16px",
+    padding: "10px 16px",
     borderRadius: 9,
     border: active ? "1px solid #0d9488" : "1px solid transparent",
     background: active ? "var(--color-background-primary,#fff)" : "transparent",
@@ -83,8 +83,9 @@ const pdeUi = {
     fontWeight: 600,
     cursor: "pointer",
     fontFamily: "DM Sans,sans-serif",
-    minHeight: 40,
+    minHeight: 44,
     lineHeight: 1.2,
+    touchAction: "manipulation",
     boxShadow: active ? "0 1px 4px rgba(15,23,42,0.08)" : "none",
     transition: "background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease",
   }),
@@ -102,12 +103,15 @@ const pdeUi = {
     alignSelf: "center",
   },
   zoomOverlayBtn: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
+    minWidth: 44,
+    minHeight: 44,
     borderRadius: 10,
     border: "1px solid var(--color-border-tertiary,#e5e5e5)",
     background: "rgba(255,255,255,0.96)",
     cursor: "pointer",
+    touchAction: "manipulation",
     fontSize: 20,
     lineHeight: 1,
     fontWeight: 500,
@@ -123,8 +127,8 @@ const pdeUi = {
   },
   btnCompact: {
     fontSize: 12,
-    minHeight: 38,
-    padding: "8px 12px",
+    minHeight: 44,
+    padding: "10px 12px",
   },
   toast: {
     position: "fixed",
@@ -227,12 +231,13 @@ function savePdeSession(partial) {
   }
 }
 
-function markerStyle(type, selected) {
+function markerStyle(type, selected, { placeOnly = false, largeHit = false } = {}) {
   const meta = drawingObjectTypeMeta(type);
+  const size = largeHit || placeOnly ? 28 : 16;
   const base = {
     position: "absolute",
-    width: 16,
-    height: 16,
+    width: size,
+    height: size,
     transform: "translate(-50%,-50%)",
     border: selected ? "3px solid #fff" : "2px solid #fff",
     boxShadow: selected
@@ -240,7 +245,7 @@ function markerStyle(type, selected) {
       : `0 0 0 1px ${meta.color}`,
     background: meta.color,
     pointerEvents: "auto",
-    cursor: "grab",
+    cursor: placeOnly ? "pointer" : "grab",
     zIndex: selected ? 3 : 2,
     touchAction: "none",
   };
@@ -331,6 +336,12 @@ export default function ProjectDrawingEditor() {
   const [tool, setTool] = useState(() => {
     const t = loadPdeSession().tool;
     return t === "select" || t === "pan" || t === "place" || t === "boundary" || t === "area" || t === "route" ? t : "place";
+  });
+  const [placeOnly, setPlaceOnly] = useState(() => {
+    const saved = loadPdeSession().placeOnly;
+    if (typeof saved === "boolean") return saved;
+    if (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches) return true;
+    return false;
   });
   const [areaKind, setAreaKind] = useState("exclusion");
   const [draftRing, setDraftRing] = useState([]);
@@ -693,6 +704,7 @@ export default function ProjectDrawingEditor() {
     savePdeSession({
       mapZoom,
       tool,
+      placeOnly,
       snapGrid,
       showMapLabels,
       showMapLegend,
@@ -709,7 +721,7 @@ export default function ProjectDrawingEditor() {
         geoAnchorByProject: { ...(p.geoAnchorByProject || {}), [projectId]: geoAnchor },
       });
     }
-  }, [mapZoom, tool, snapGrid, showMapLabels, showMapLegend, showGeoPreview, workSurface, mapBasemap, geoAnchor, projectId, planId, exportPermitRef]);
+  }, [mapZoom, tool, placeOnly, snapGrid, showMapLabels, showMapLegend, showGeoPreview, workSurface, mapBasemap, geoAnchor, projectId, planId, exportPermitRef]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -2161,6 +2173,11 @@ export default function ProjectDrawingEditor() {
       idsToMove = [row.id];
     }
 
+    // Place-only / tablet: select markers without starting a drag (avoids accidental moves)
+    if (placeOnly || tool === "place" || tool === "boundary" || tool === "area" || tool === "route") {
+      return;
+    }
+
     const wrap = mapContentRef.current;
     if (!wrap) return;
     pushHistory();
@@ -2281,6 +2298,44 @@ export default function ProjectDrawingEditor() {
     vp.addEventListener("wheel", fn, { passive: false });
     return () => vp.removeEventListener("wheel", fn);
   }, [selectedPlan?.id, tool, workSurface]);
+
+  // Pinch-to-zoom on plan viewport (iPhone / Windows tablets)
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp || workSurface !== "plan") return undefined;
+    const pointers = new Map();
+    let lastDist = null;
+    const onDown = (e) => {
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    };
+    const onMove = (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size < 2) return;
+      const pts = [...pointers.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (lastDist != null && lastDist > 0) {
+        const scale = dist / lastDist;
+        setMapZoom((z) => clamp(Number((z * scale).toFixed(2)), 0.5, 3));
+      }
+      lastDist = dist;
+      e.preventDefault();
+    };
+    const onUp = (e) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) lastDist = null;
+    };
+    vp.addEventListener("pointerdown", onDown);
+    vp.addEventListener("pointermove", onMove, { passive: false });
+    vp.addEventListener("pointerup", onUp);
+    vp.addEventListener("pointercancel", onUp);
+    return () => {
+      vp.removeEventListener("pointerdown", onDown);
+      vp.removeEventListener("pointermove", onMove);
+      vp.removeEventListener("pointerup", onUp);
+      vp.removeEventListener("pointercancel", onUp);
+    };
+  }, [selectedPlan?.id, workSurface]);
 
   const fitView = () => {
     setMapZoom(1);
@@ -2667,9 +2722,10 @@ export default function ProjectDrawingEditor() {
         <div className="pde-section pde-section--actions" style={{ marginTop: 12 }}>
           <div className="pde-section__label">Tools &amp; actions</div>
         <div style={{ display: "flex", gap: 10, marginTop: 4, flexWrap: "wrap", alignItems: "center", rowGap: 10 }}>
-            <div style={pdeUi.toolWrap} role="tablist" aria-label="Drawing tool">
+            <div className="pde-tool-wrap" style={pdeUi.toolWrap} role="tablist" aria-label="Drawing tool">
               <button
                 type="button"
+                className="pde-tool-btn"
                 role="tab"
                 aria-selected={tool === "place"}
                 style={pdeUi.toolBtn(tool === "place")}
@@ -2679,6 +2735,7 @@ export default function ProjectDrawingEditor() {
               </button>
               <button
                 type="button"
+                className="pde-tool-btn"
                 role="tab"
                 aria-selected={tool === "boundary"}
                 style={pdeUi.toolBtn(tool === "boundary")}
@@ -2689,6 +2746,7 @@ export default function ProjectDrawingEditor() {
               </button>
               <button
                 type="button"
+                className="pde-tool-btn"
                 role="tab"
                 aria-selected={tool === "area"}
                 style={pdeUi.toolBtn(tool === "area")}
@@ -2699,6 +2757,7 @@ export default function ProjectDrawingEditor() {
               </button>
               <button
                 type="button"
+                className="pde-tool-btn"
                 role="tab"
                 aria-selected={tool === "route"}
                 style={pdeUi.toolBtn(tool === "route")}
@@ -2709,6 +2768,7 @@ export default function ProjectDrawingEditor() {
               </button>
               <button
                 type="button"
+                className="pde-tool-btn"
                 role="tab"
                 aria-selected={tool === "select"}
                 style={pdeUi.toolBtn(tool === "select")}
@@ -2718,6 +2778,7 @@ export default function ProjectDrawingEditor() {
               </button>
               <button
                 type="button"
+                className="pde-tool-btn"
                 role="tab"
                 aria-selected={tool === "pan"}
                 style={pdeUi.toolBtn(tool === "pan")}
@@ -2738,6 +2799,10 @@ export default function ProjectDrawingEditor() {
               </select>
             </label>
           ) : null}
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={placeOnly} onChange={(e) => setPlaceOnly(e.target.checked)} />
+            Place only (no drag)
+          </label>
           <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
             <input type="checkbox" checked={snapGrid} onChange={(e) => setSnapGrid(e.target.checked)} />
             Snap 5% grid
@@ -3052,7 +3117,9 @@ export default function ProjectDrawingEditor() {
                     ? "Pan: drag the map. Zoom with +/− or mouse wheel."
                     : "Select: click a marker; Ctrl+click for multi-select. Drag a marker to move. Arrows nudge in degrees."
             : tool === "place"
-              ? "Place: click the image to drop a marker. Ctrl+wheel zooms; scrollbars pan when zoomed."
+              ? placeOnly
+                ? "Place only: tap the plan to drop a marker. Pinch or +/− to zoom; Pan tool to scroll."
+                : "Place: tap/click the plan to drop a marker. Pinch or Ctrl+wheel zooms; use Pan to scroll when zoomed."
               : tool === "boundary"
                 ? "Boundary: click plan corners for site outline. Uses anchor / affine for GPS when saved."
                 : tool === "area"
@@ -3060,8 +3127,10 @@ export default function ProjectDrawingEditor() {
                   : tool === "route"
                     ? "Escape route: click waypoints on the plan. GPS coordinates use anchor / affine calibration."
                     : tool === "pan"
-                    ? "Pan: drag the plan to scroll. Ctrl+wheel zooms."
-                    : "Select / move: Ctrl+click markers to multi-select; drag moves the whole group. Arrow keys nudge all selected. Delete removes selected when not typing."}
+                    ? "Pan: drag the plan to scroll. Pinch or Ctrl+wheel zooms."
+                    : placeOnly
+                      ? "Select: tap a marker (drag disabled in Place only). Turn off Place only to move markers."
+                      : "Select / move: Ctrl+click markers to multi-select; drag moves the whole group. Arrow keys nudge all selected. Delete removes selected when not typing."}
         </div>
 
         {workSurface === "plan" ? (
@@ -3332,11 +3401,12 @@ export default function ProjectDrawingEditor() {
                     : tool === "pan"
                       ? "grab"
                       : "default",
-                touchAction: tool === "pan" ? "none" : "auto",
+                touchAction: tool === "pan" ? "none" : "manipulation",
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.6)",
               }}
             >
               <div
+                className="pde-zoom-overlay"
                 role="presentation"
                 onPointerDown={(e) => e.stopPropagation()}
                 style={{
@@ -3351,6 +3421,7 @@ export default function ProjectDrawingEditor() {
               >
                 <button
                   type="button"
+                  className="pde-zoom-overlay-btn"
                   aria-label="Zoom plan in"
                   title="Zoom in"
                   style={pdeUi.zoomOverlayBtn}
@@ -3360,6 +3431,7 @@ export default function ProjectDrawingEditor() {
                 </button>
                 <button
                   type="button"
+                  className="pde-zoom-overlay-btn"
                   aria-label="Zoom plan out"
                   title="Zoom out"
                   style={pdeUi.zoomOverlayBtn}
@@ -3475,7 +3547,10 @@ export default function ProjectDrawingEditor() {
                         title={drawingObjectLabel(row)}
                         onPointerDown={(e) => onMarkerPointerDown(e, row)}
                         style={{
-                          ...markerStyle(row.type, selectedIds.includes(row.id)),
+                          ...markerStyle(row.type, selectedIds.includes(row.id), {
+                            placeOnly,
+                            largeHit: placeOnly || tool !== "select",
+                          }),
                           left: `${row.x}%`,
                           top: `${row.y}%`,
                         }}
