@@ -17,7 +17,6 @@ import { parseUtilityMappingRef, utilityMappingExportBaseName } from "./utilityM
 import { UTILITY_MAPPING_BRAND } from "./utilityMappingBranding";
 import { downloadBlob } from "./downloadBlob.js";
 import { sanitizePdfFileSegment } from "./pdfFileName";
-import { buildA3BoardPackHtml } from "../modules/surveyReport/surveyEvidencePack.js";
 import { computeUtilityMappingDigRisk } from "./utilityMappingPremiumPages.js";
 
 function buildQrSrc(text, size = 120) {
@@ -144,12 +143,14 @@ export async function downloadUtilityMappingClientPackPdf(report, extras = {}) {
 
 /**
  * A3 landscape board pack — meeting sheet (map / dig risk / top TFR).
+ * Dynamic-import surveyEvidencePack so utility-mapping-print ↛ survey-report (Vite TDZ).
  * @param {object} report
  * @param {{ org?: object }} [extras]
  */
-export function downloadUtilityMappingA3BoardPack(report, extras = {}) {
+export async function downloadUtilityMappingA3BoardPack(report, extras = {}) {
   if (!isUtilityMappingPrintTheme() || !report) return false;
   const digRisk = computeUtilityMappingDigRisk(report);
+  const { buildA3BoardPackHtml } = await import("../modules/surveyReport/surveyEvidencePack.js");
   const html = buildA3BoardPackHtml(report, {
     digRisk: digRisk?.label ? digRisk : { band: "medium", label: "Review dig readiness", score: digRisk?.score ?? "—" },
     orgName: extras.org?.name || UTILITY_MAPPING_BRAND.name,

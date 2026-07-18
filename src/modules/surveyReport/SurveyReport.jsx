@@ -3047,9 +3047,9 @@ function ReportEditor({
               <button
                 type="button"
                 style={ss.btn}
-                onClick={() => {
+                onClick={async () => {
                   const org = getOrgSettings();
-                  if (downloadUtilityMappingA3BoardPack(form, { org })) {
+                  if (await downloadUtilityMappingA3BoardPack(form, { org })) {
                     pushToast({ type: "success", title: "A3 board pack", message: "Landscape board sheet downloaded." });
                   } else {
                     pushToast({ type: "warn", title: "A3 board pack", message: "Could not build A3 board pack." });
@@ -3367,10 +3367,10 @@ export default function SurveyReport() {
   );
 
   const exportA3BoardForReport = useCallback(
-    (report) => {
+    async (report) => {
       if (!isUtilityMappingOrg()) return;
       const org = getOrgSettings();
-      if (downloadUtilityMappingA3BoardPack(report, { org })) {
+      if (await downloadUtilityMappingA3BoardPack(report, { org })) {
         pushToast({ type: "success", title: "A3 board pack", message: "Landscape board sheet downloaded." });
         pushAudit({ action: "survey_a3_board", entity: "survey_report", detail: report.ref || report.id });
       } else {
