@@ -2307,11 +2307,16 @@ export default function ProjectDrawingEditor() {
     let lastDist = null;
     const onDown = (e) => {
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try {
+        vp.setPointerCapture?.(e.pointerId);
+      } catch {
+        /* ignore */
+      }
     };
     const onMove = (e) => {
       if (!pointers.has(e.pointerId)) return;
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pointers.size < 2) return;
+      if (pointers.size !== 2) return;
       const pts = [...pointers.values()];
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       if (lastDist != null && lastDist > 0) {
@@ -2323,6 +2328,11 @@ export default function ProjectDrawingEditor() {
     };
     const onUp = (e) => {
       pointers.delete(e.pointerId);
+      try {
+        vp.releasePointerCapture?.(e.pointerId);
+      } catch {
+        /* ignore */
+      }
       if (pointers.size < 2) lastDist = null;
     };
     vp.addEventListener("pointerdown", onDown);

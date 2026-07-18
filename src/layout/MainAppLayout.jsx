@@ -73,7 +73,7 @@ import MoreSectionSpotlight from "../components/MoreSectionSpotlight";
 import MorePanelCommandCentre from "../components/MorePanelCommandCentre";
 import ModuleTileSparkline from "../components/ModuleTileSparkline";
 import { useToast } from "../context/ToastContext";
-import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
+import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT, STORAGE_QUOTA_EVENT } from "../utils/orgStorage";
 import { BILLING_WRITE_BLOCKED_EVENT, billingWriteBlockedMessage } from "../utils/billingAccess";
 import {
   BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
@@ -519,6 +519,18 @@ export default function MainAppLayout() {
     };
     window.addEventListener(BILLING_WRITE_BLOCKED_EVENT, onWriteBlocked);
     return () => window.removeEventListener(BILLING_WRITE_BLOCKED_EVENT, onWriteBlocked);
+  }, [pushToast]);
+
+  useEffect(() => {
+    const onQuota = () => {
+      pushToast({
+        type: "warning",
+        title: "Device storage full",
+        message: "Could not save locally. Remove old plans/photos or export a backup, then try again.",
+      });
+    };
+    window.addEventListener(STORAGE_QUOTA_EVENT, onQuota);
+    return () => window.removeEventListener(STORAGE_QUOTA_EVENT, onQuota);
   }, [pushToast]);
 
   useEffect(() => {

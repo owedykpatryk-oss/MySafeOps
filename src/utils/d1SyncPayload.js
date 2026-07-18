@@ -51,3 +51,18 @@ export function stripBriefingsForD1(rows) {
     return { ...row, attendees };
   });
 }
+
+/** GPR reports — strip radargram / plan figure base64 before D1 PUT */
+export function stripGprReportsForD1(reports) {
+  if (!Array.isArray(reports)) return reports;
+  return reports.map((row) => {
+    if (!row || typeof row !== "object") return row;
+    const radargrams = Array.isArray(row.radargrams)
+      ? row.radargrams.map((rg) => stripDataUrlField(rg))
+      : row.radargrams;
+    const planFigures = Array.isArray(row.planFigures)
+      ? row.planFigures.map((pf) => stripDataUrlField(pf))
+      : row.planFigures;
+    return { ...row, radargrams, planFigures };
+  });
+}
