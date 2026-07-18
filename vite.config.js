@@ -609,12 +609,12 @@ export default defineConfig(({ mode }) => {
               // survey-report or rams-builder (cross-chunk TDZ on SURVEY_CATALOG / Js).
               if (norm.includes("/utils/surveyContentCatalog")) return "survey-catalog";
               // Utility Mapping print-only helpers — leaf shared by survey/GPR/RAMS/MS/PTW print.
+              // Do NOT include clientPack (imports surveyEvidencePack / surveyReportPdf → circular with survey-report).
               // Do NOT include org/onboarding/seeds (those pull RAMS packs into this chunk).
               if (
                 norm.includes("/utils/utilityMappingCovers") ||
                 norm.includes("/utils/utilityMappingPremiumPages") ||
-                norm.includes("/utils/utilityMappingPrintTheme") ||
-                norm.includes("/utils/utilityMappingClientPack")
+                norm.includes("/utils/utilityMappingPrintTheme")
               ) {
                 return "utility-mapping-print";
               }
