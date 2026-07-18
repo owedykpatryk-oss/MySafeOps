@@ -33,6 +33,7 @@ const transient = (e) => /^http_(502|503|504|429)$/.test(String(e || ""));
  * @param {function} p.load – loadOrgScoped(base, fallback)
  * @param {function} p.save – saveOrgScoped(base, value)
  * @param {number} [p.debounceMs=1500]
+ * @param {(value: Array) => Array} [p.serializeForSync] – slim payload before D1 PUT/outbox (local state unchanged)
  * @returns {{ d1Ready: boolean, d1Hydrating: boolean, d1OutboxPending: boolean, d1Syncing: boolean }}
  */
 export function useD1OrgArraySync({
@@ -44,7 +45,16 @@ export function useD1OrgArraySync({
   load,
   save,
   debounceMs = 1500,
+  serializeForSync = null,
 }) {
+  const toSyncValue = (arr) => {
+    if (typeof serializeForSync !== "function") return arr;
+    try {
+      return serializeForSync(arr);
+    } catch {
+      return arr;
+    }
+  };
   const [d1Ready, setD1Ready] = useState(() => !isD1Configured());
   const [d1OrgEpoch, setD1OrgEpoch] = useState(0);
   const [d1OutboxPending, setD1OutboxPending] = useState(false);
@@ -159,7 +169,7 @@ export function useD1OrgArraySync({
       if (local.length > 0) {
         let put;
         try {
-          put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, local, null);
+          put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, toSyncValue(local), null);
         } catch {
           put = { ok: false, error: "fetch_failed" };
         }
@@ -241,16 +251,17 @@ export function useD1OrgArraySync({
     d1DebounceRef.current = setTimeout(async () => {
       const v = d1VersionRef.current;
       const useVersion = v > 0 ? v : undefined;
+      const syncPayload = toSyncValue(value);
       let put;
       try {
-        put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, value, useVersion);
+        put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, syncPayload, useVersion);
       } catch {
         put = { ok: false, error: "fetch_failed" };
       }
       if (!put.ok && transient(put.error)) {
         await new Promise((res) => setTimeout(res, 900));
         try {
-          put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, value, useVersion);
+          put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, syncPayload, useVersion);
         } catch {
           put = { ok: false, error: "fetch_failed" };
         }
@@ -282,7 +293,7 @@ export function useD1OrgArraySync({
             orgSlug,
             namespace,
             d1DataKey,
-            value,
+            value: syncPayload,
             clientVersion: d1VersionRef.current || 0,
           });
           setD1OutboxPending(true);

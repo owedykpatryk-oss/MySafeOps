@@ -29,26 +29,28 @@ function currentRateWindowStart() {
   return d.toISOString();
 }
 
-/** Sliding 60s window per bucket key; fails closed unless D1_RATE_LIMIT_FAIL_OPEN=true. */
+/** Sliding 60s window per bucket key; atomic upsert. Fails closed unless D1_RATE_LIMIT_FAIL_OPEN=true. */
 async function consumeRateLimit(env, bucketKey, maxPerMinute) {
   try {
     const windowStart = currentRateWindowStart();
-    const row = await env.DB.prepare(`SELECT count, window_start FROM org_api_rate WHERE bucket_key = ?`)
-      .bind(bucketKey)
+    const row = await env.DB.prepare(
+      `INSERT INTO org_api_rate (bucket_key, window_start, count)
+       VALUES (?, ?, 1)
+       ON CONFLICT(bucket_key) DO UPDATE SET
+         count = CASE
+           WHEN org_api_rate.window_start = excluded.window_start THEN org_api_rate.count + 1
+           ELSE 1
+         END,
+         window_start = CASE
+           WHEN org_api_rate.window_start = excluded.window_start THEN org_api_rate.window_start
+           ELSE excluded.window_start
+         END
+       RETURNING count`
+    )
+      .bind(bucketKey, windowStart)
       .first();
-    const sameWindow = row?.window_start === windowStart;
-    const next = sameWindow ? (Number(row.count) || 0) + 1 : 1;
-    if (next > maxPerMinute) return false;
-    if (row) {
-      await env.DB.prepare(`UPDATE org_api_rate SET count = ?, window_start = ? WHERE bucket_key = ?`)
-        .bind(next, windowStart, bucketKey)
-        .run();
-    } else {
-      await env.DB.prepare(`INSERT INTO org_api_rate (bucket_key, window_start, count) VALUES (?, ?, ?)`)
-        .bind(bucketKey, windowStart, next)
-        .run();
-    }
-    return true;
+    const next = Number(row?.count) || 0;
+    return next > 0 && next <= maxPerMinute;
   } catch {
     return String(env?.D1_RATE_LIMIT_FAIL_OPEN || "").toLowerCase() === "true";
   }

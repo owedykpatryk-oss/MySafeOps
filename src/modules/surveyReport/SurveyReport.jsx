@@ -46,6 +46,7 @@ import { formatUtilityMappingRef, utilityMappingJobYearYY, parseUtilityMappingRe
 import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
 import { siteContextBadgeLabel, inheritSiteContextOntoDoc } from "../../utils/inheritSiteContext";
 import { stripSurveyFormForSessionDraft, mergeSurveyDraftPhotos } from "../../utils/surveyEditorDraft";
+import { stripGeoPhotosForD1, stripSurveyReportsForD1 } from "../../utils/d1SyncPayload";
 import { buildOrgShareUrlWithRef } from "../../utils/safeOrgWebsite";
 import {
   computeUtilityMappingDigRisk,
@@ -3180,6 +3181,7 @@ export default function SurveyReport() {
     setValue: setReports,
     load,
     save,
+    serializeForSync: stripSurveyReportsForD1,
   });
   const { d1Hydrating: d1ProjH, d1OutboxPending: d1ProjO } = useD1OrgArraySync({
     storageKey: "mysafeops_projects",
@@ -3196,6 +3198,7 @@ export default function SurveyReport() {
     setValue: setGeoPhotos,
     load,
     save,
+    serializeForSync: stripGeoPhotosForD1,
   });
   const d1Hydrating = d1RepH || d1ProjH || d1GeoH;
   const d1OutboxPending = d1RepO || d1ProjO || d1GeoO;

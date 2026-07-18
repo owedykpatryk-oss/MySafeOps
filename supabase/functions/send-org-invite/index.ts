@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!(await enforceEdgeRateLimits(supabase, `org-invite:user:${user.id}`, 12, 60 * 60_000))) {
+    if (!(await enforceEdgeRateLimits(supabase, `org-invite:user:${user.id}`, 12, 60 * 60_000, { failClosed: true }))) {
       return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "../../styles/gpr-report.css";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
+import { stripGeoPhotosForD1 } from "../../utils/d1SyncPayload";
 import { useApp } from "../../context/AppContext";
 import { useToast } from "../../context/ToastContext";
 import { pushAudit } from "../../utils/auditLog";
@@ -211,6 +212,7 @@ export default function GprReport() {
     setValue: setGeoPhotos,
     load,
     save,
+    serializeForSync: stripGeoPhotosForD1,
   });
   const d1Hydrating = d1RepH || d1ProjH || d1GeoH;
   const d1OutboxPending = d1RepO || d1ProjO || d1GeoO;

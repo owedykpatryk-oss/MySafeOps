@@ -49,6 +49,7 @@ import {
   fetchAllPermitAuditRows,
   exportPermitAuditCsvViaServer,
 } from "../../utils/permitSupabaseAudit";
+import { mapPool } from "../../utils/mapPool";
 import { supabase } from "../../lib/supabase";
 import { uploadPermitEvidencePhoto } from "../../utils/permitEvidenceUpload";
 import { appendPermitAuditEntry } from "./permitAuditLog";
@@ -5986,7 +5987,7 @@ export default function PermitSystem() {
 
   const upsertBulkStatus = (fromStatuses, nextStatus, nextPatch = {}, workflowTargetState = "", workflowNote = "bulk_status") => {
     const fromSet = new Set(fromStatuses);
-    let changed = 0;
+    const auditJobs = [];
     setPermits((prev) =>
       prev.map((p) => {
         if (!selectedPermitIds[p.id]) return p;
@@ -6000,14 +6001,15 @@ export default function PermitSystem() {
           next = transitionPermitWorkflowWithPolicy(next, workflowTargetState, workflowNote);
         }
         const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
-        void logPermitAuditToSupabase(p, withLog, getOrgId());
-        changed += 1;
+        auditJobs.push({ prev: p, next: withLog });
         return withLog;
       })
     );
+    const orgSlug = getOrgId();
+    void mapPool(auditJobs, 4, ({ prev, next }) => logPermitAuditToSupabase(prev, next, orgSlug));
     clearPermitSelection();
-    trackEvent("permit_bulk_status", { nextStatus, changed });
-    return changed;
+    trackEvent("permit_bulk_status", { nextStatus, changed: auditJobs.length });
+    return auditJobs.length;
   };
 
   const bulkApproveSelected = () => {
@@ -6062,6 +6064,7 @@ export default function PermitSystem() {
       }
       if (warnConflictOverride) warnOverridesById[p.id] = warnConflictOverride;
     }
+    const auditJobs = [];
     setPermits((prev) =>
       prev.map((p) => {
         if (!selectedPermitIds[p.id]) return p;
@@ -6089,14 +6092,16 @@ export default function PermitSystem() {
               ].slice(-40),
             }
           : baseWithLog;
-        void logPermitAuditToSupabase(p, withLog, getOrgId());
+        auditJobs.push({ prev: p, next: withLog });
         if (warnOverridesById[p.id]) {
           const overrideAuditRow = { ...withLog, status: p.status, _auditAction: "conflict_warn_override" };
-          void logPermitAuditToSupabase(p, overrideAuditRow, getOrgId());
+          auditJobs.push({ prev: p, next: overrideAuditRow });
         }
         return withLog;
       })
     );
+    const orgSlug = getOrgId();
+    void mapPool(auditJobs, 4, ({ prev, next }) => logPermitAuditToSupabase(prev, next, orgSlug));
     clearPermitSelection();
     trackEvent("permit_bulk_status", { nextStatus: "active", changed: targets.length });
   };

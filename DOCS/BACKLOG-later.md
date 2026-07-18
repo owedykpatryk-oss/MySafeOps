@@ -33,6 +33,7 @@ Krótka lista rzeczy **świadomie odłożonych** (nie zrobione w ostatnim refakt
 
 - [ ] **Wirtualizacja listy permitów** (`@tanstack/react-virtual` / `react-window` — brak w `package.json`).
 - [x] **Webhook dispatch po stronie Edge** — klient woła `dispatch-permit-webhook`; w PROD brak fan-out z przeglądarki.
+- [x] **Scale harden (2026-07-18)** — atomic `claim_edge_rate_bucket`, fail-closed abuse RL, org-scoped notify/webhook/Stripe caps, notify bez N+1 Auth Admin, D1 strip base64, bulk audit `mapPool`, D1 rate upsert.
 - [ ] **Rozbicie `PermitSystem.jsx`** (~9k linii) → `usePermitAdmin`, `usePermitAudit`, `PermitOpsLayout`.
 
 ### Project Drawing — WIP lokalnie (pliki są, **nie** w PR #5)
@@ -86,4 +87,4 @@ Zaimplementowane lokalnie, niezacommitowane: escape routes panel, map layers, re
 
 ---
 
-*Ostatnia aktualizacja: 2026-07-18 — mobile/tablet (iOS zoom, survey grids, Drawing place-only + pinch), past_due billing banner, PTW/Workers touch/a11y.*
+*Ostatnia aktualizacja: 2026-07-18 — mobile/tablet + past_due billing + concurrency scale harden (Edge RL, notify N+1, D1 slim sync, bulk audit pool).*
