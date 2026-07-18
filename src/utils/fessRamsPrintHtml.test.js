@@ -43,6 +43,7 @@ describe("fessRamsPrintHtml", () => {
       { proj1: "2SFG Scunthorpe" }
     );
     expect(html).toMatch(/FESS Group/);
+    expect(html).toMatch(/fess-group-logo\.png|fess-rams-logo/);
     expect(html).toMatch(/Risk assessment/);
     expect(html).toMatch(/Control measures/);
     expect(html).toMatch(/FP1-DOLAV-2026-100/);

@@ -8,7 +8,6 @@ import {
 } from "./industryPackCatalog";
 import { PACK_DEFAULT_PERMIT_TYPES, normalizeEnabledPermitTypeIds } from "../modules/permits/permitPackDefaults";
 import {
-  getCustomWorkspaceProfile,
   isCustomWorkspacePackId,
   resolveWorkspacePack,
 } from "./customWorkspaceProfiles";
@@ -24,6 +23,7 @@ import {
   isUtilityMappingExclusivePackId,
 } from "./utilityMappingWorkspaceProfile";
 import { mergeUtilityMappingBrandingDefaults } from "./utilityMappingBranding";
+import { mergeFessBrandingDefaults } from "./fessBranding";
 
 export { INDUSTRY_PACKS, normalizeIndustryPackId } from "./industryPackCatalog";
 
@@ -95,6 +95,9 @@ export function applyIndustryPack(packKey, options = {}) {
   }
   if (isUtilityMappingExclusivePackId(id)) {
     next = mergeUtilityMappingBrandingDefaults(next);
+  }
+  if (isFessExclusivePackId(id)) {
+    next = mergeFessBrandingDefaults(next);
   }
   saveOrgSettingsRaw(next);
   clearIndustryPackPreview();

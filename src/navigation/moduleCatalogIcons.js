@@ -46,7 +46,6 @@ import {
   LayoutTemplate,
   Bot,
   Camera,
-  Navigation,
   Globe,
   TrendingUp,
   Building,
@@ -56,6 +55,8 @@ import {
   Crown,
   CircleHelp,
   Settings,
+  Factory,
+  LayoutDashboard,
 } from "lucide-react";
 
 export const DEFAULT_MODULE_ICON = FileText;
@@ -71,7 +72,9 @@ export const MODULE_ICONS = {
   signatures: PenLine,
   timesheets: Clock,
   snags: AlertTriangle,
-  "geo-photos": Navigation,
+  "geo-photos": Camera,
+  "fess-sites": Factory,
+  "fess-setup": LayoutDashboard,
   coshh: FlaskConical,
   inspections: ClipboardCheck,
   incidents: Siren,

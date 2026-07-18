@@ -5,6 +5,8 @@ import { ORG_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
 import { scrubFessExclusiveOrgStorage } from "../utils/fessExclusive";
 import { scrubUtilityMappingExclusiveOrgStorage } from "../utils/utilityMappingExclusive";
 import { ensureUtilityMappingBranding } from "../utils/utilityMappingBranding";
+import { ensureFessWorkspaceFocus } from "../utils/ensureFessWorkspaceFocus";
+import { ensureFessBranding } from "../utils/fessBranding";
 import { clearRamsHazardLibraryCache } from "../modules/rams/ramsHazardLibraryLoader";
 import { getBillingEntitlements, getTrialExtensionCount, getTrialStatus, refreshMembershipRoleFromSupabase } from "../utils/orgMembership";
 import {
@@ -74,6 +76,8 @@ export function AppProvider({ children }) {
     scrubFessExclusiveOrgStorage(getOrgId());
     scrubUtilityMappingExclusiveOrgStorage(getOrgId());
     ensureUtilityMappingBranding(getOrgId());
+    ensureFessBranding(getOrgId());
+    ensureFessWorkspaceFocus(getOrgId());
     if (isCloudAuthSession()) clearLocalWorkspaceOnlyFlag();
   }, []);
 
@@ -84,6 +88,8 @@ export function AppProvider({ children }) {
       scrubFessExclusiveOrgStorage(String(next || "default"));
       scrubUtilityMappingExclusiveOrgStorage(String(next || "default"));
       ensureUtilityMappingBranding(String(next || "default"));
+      ensureFessBranding(String(next || "default"));
+      ensureFessWorkspaceFocus(String(next || "default"));
       clearRamsHazardLibraryCache();
     };
     window.addEventListener(ORG_CHANGED_EVENT, onOrgChanged);
