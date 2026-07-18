@@ -123,10 +123,10 @@
 .landing-nav-mobile-toggle{display:none;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;border:1px solid var(--sl2);background:var(--w);color:var(--navy);cursor:pointer}
 .landing-mobile-overlay{position:fixed;inset:0;z-index:150;display:flex;justify-content:flex-end}
 .landing-mobile-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.45);border:0;cursor:pointer}
-.landing-mobile-panel{position:relative;width:min(320px,92vw);max-height:100vh;overflow:auto;background:var(--w);box-shadow:-8px 0 40px rgba(0,0,0,.12);padding:0 0 24px;animation:landingSlideIn .22s ease-out}
+.landing-mobile-panel{position:relative;width:min(320px,92vw);max-height:100vh;max-height:100dvh;overflow:auto;background:var(--w);box-shadow:-8px 0 40px rgba(0,0,0,.12);padding:0 0 max(24px, env(safe-area-inset-bottom, 0px));animation:landingSlideIn .22s ease-out}
 @keyframes landingSlideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
 .landing-mobile-panel-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--sl2)}
-.landing-mobile-close{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:0;border-radius:8px;background:transparent;cursor:pointer;color:var(--sl6)}
+.landing-mobile-close{display:flex;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;min-height:44px;border:0;border-radius:8px;background:transparent;cursor:pointer;touch-action:manipulation;color:var(--sl6)}
 .landing-mobile-links{display:flex;flex-direction:column;padding:12px 18px 0;gap:4px}
 .landing-mobile-links a,.landing-mobile-cta{display:block;padding:14px 12px;border-radius:10px;font-size:15px;font-weight:600;color:var(--navy);text-decoration:none}
 .landing-mobile-links a:hover{background:var(--sl1)}
@@ -760,10 +760,10 @@
 .missing p{font-size:clamp(1rem,2.2vw,1.125rem);color:var(--sl4);margin-bottom:8px;position:relative;max-width:52ch;margin-left:auto;margin-right:auto;line-height:1.55}
 .missing .sub{font-size:14px;color:var(--sl6);margin-bottom:32px;max-width:500px;margin-left:auto;margin-right:auto;position:relative}
 .mf{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;position:relative;margin-bottom:16px}
-.mf input{padding:14px 20px;border-radius:var(--r);border:2px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:var(--w);font-size:15px;width:260px;font-family:inherit;outline:none}
+.mf input{padding:14px 20px;border-radius:var(--r);border:2px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:var(--w);font-size:16px;width:260px;font-family:inherit;outline:none;min-height:48px}
 .mf input::placeholder,.mf textarea::placeholder{color:rgba(148,163,184,.75)}
 .mf input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(13,148,136,.2)}
-.mf textarea{padding:14px 20px;border-radius:var(--r);border:2px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:var(--w);font-size:14px;width:540px;max-width:100%;height:80px;font-family:inherit;outline:none;resize:vertical}
+.mf textarea{padding:14px 20px;border-radius:var(--r);border:2px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:var(--w);font-size:16px;width:540px;max-width:100%;height:80px;font-family:inherit;outline:none;resize:vertical}
 .mf textarea:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(13,148,136,.2)}
 
 /* COMPLIANCE */
@@ -1070,7 +1070,7 @@ html[data-blog-theme="dark"] .blog-figure figcaption{background:var(--sl1);color
 .blog-share-actions{display:flex;flex-wrap:wrap;gap:8px}
 .blog-share-btn{padding:6px 10px;border-radius:8px;border:1px solid var(--sl2);background:var(--w);font-size:12px;font-weight:700;color:var(--teal-d);text-decoration:none;cursor:pointer}
 .blog-share-btn:hover{background:rgba(13,148,136,.08)}
-.blog-theme-toggle{min-width:36px;min-height:36px;border-radius:999px;border:1px solid var(--sl2);background:var(--w);cursor:pointer;font-size:16px;line-height:1}
+.blog-theme-toggle{min-width:44px;min-height:44px;border-radius:999px;border:1px solid var(--sl2);background:var(--w);cursor:pointer;touch-action:manipulation;font-size:16px;line-height:1}
 html[data-blog-theme="dark"] .blog-layout,
 html[data-blog-theme="dark"] .blog-index-page,
 html[data-blog-theme="dark"] .blog-article-page{

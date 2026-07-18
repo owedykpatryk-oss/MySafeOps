@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "../../styles/gpr-report.css";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
+import { stripGeoPhotosForD1, stripGprReportsForD1 } from "../../utils/d1SyncPayload";
 import { useApp } from "../../context/AppContext";
 import { useToast } from "../../context/ToastContext";
 import { pushAudit } from "../../utils/auditLog";
@@ -95,10 +96,10 @@ const ss = {
   ...ms,
   ta: {
     width: "100%",
-    padding: "8px 10px",
+    padding: "10px 12px",
     border: "0.5px solid var(--color-border-secondary,#ccc)",
     borderRadius: 6,
-    fontSize: 13,
+    fontSize: 16,
     background: "var(--color-background-primary,#fff)",
     color: "var(--color-text-primary)",
     fontFamily: "DM Sans,sans-serif",
@@ -108,11 +109,12 @@ const ss = {
   },
   input: {
     width: "100%",
-    padding: "8px 10px",
+    padding: "10px 12px",
     border: "0.5px solid var(--color-border-secondary,#ccc)",
     borderRadius: 6,
-    fontSize: 13,
+    fontSize: 16,
     boxSizing: "border-box",
+    minHeight: 44,
   },
   sectionHead: {
     fontSize: 11,
@@ -194,6 +196,7 @@ export default function GprReport() {
     setValue: setReports,
     load,
     save,
+    serializeForSync: stripGprReportsForD1,
   });
   const { d1Hydrating: d1ProjH, d1OutboxPending: d1ProjO } = useD1OrgArraySync({
     storageKey: "mysafeops_projects",
@@ -210,6 +213,7 @@ export default function GprReport() {
     setValue: setGeoPhotos,
     load,
     save,
+    serializeForSync: stripGeoPhotosForD1,
   });
   const d1Hydrating = d1RepH || d1ProjH || d1GeoH;
   const d1OutboxPending = d1RepO || d1ProjO || d1GeoO;

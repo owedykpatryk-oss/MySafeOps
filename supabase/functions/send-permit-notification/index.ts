@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { buildRosterLinkedEmailSet } from "../_shared/permitNotificationRecipients.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
-import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
+import { enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 
 function escHtml(s: string) {
   return String(s || "")
@@ -61,13 +61,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!(await enforceEdgeRateLimits(supabase, `permit-notify:${user.id}`, 20, 60_000))) {
-      return new Response(JSON.stringify({ error: "Too many requests" }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
-      });
-    }
-
     // Only real org members can send permit notifications — closes an open-relay gap where any
     // authenticated (even org-less) account could email arbitrary addresses with a spoofed org name.
     const { data: mem, error: memErr } = await supabase
@@ -79,6 +72,22 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden: no organisation membership" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (
+      !(await enforceUserAndOrgEdgeRateLimits(supabase, {
+        userKey: `permit-notify:${user.id}`,
+        orgKey: `permit-notify:org:${mem.org_id}`,
+        userMax: 20,
+        orgMax: 40,
+        windowMs: 60_000,
+        failClosed: true,
+      }))
+    ) {
+      return new Response(JSON.stringify({ error: "Too many requests" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
       });
     }
 
@@ -100,21 +109,31 @@ Deno.serve(async (req) => {
     };
     addAllowed(user.email);
 
-    const { data: memberships } = await supabase
-      .from("org_memberships")
-      .select("user_id")
-      .eq("org_id", mem.org_id);
-    if (Array.isArray(memberships)) {
-      await Promise.all(
-        memberships.map(async ({ user_id }) => {
+    // One SQL join — not N× auth.admin.getUserById (Auth Admin melts under concurrent notify)
+    const { data: memberEmails, error: memberEmailErr } = await supabase.rpc("list_org_member_emails", {
+      p_org_id: mem.org_id,
+    });
+    if (!memberEmailErr && Array.isArray(memberEmails)) {
+      for (const row of memberEmails) {
+        addAllowed((row as { email?: string })?.email);
+      }
+    } else {
+      console.warn("list_org_member_emails fallback", memberEmailErr?.message);
+      const { data: memberships } = await supabase
+        .from("org_memberships")
+        .select("user_id")
+        .eq("org_id", mem.org_id)
+        .limit(200);
+      if (Array.isArray(memberships)) {
+        for (const { user_id } of memberships.slice(0, 40)) {
           try {
             const { data: authUser } = await supabase.auth.admin.getUserById(user_id);
             if (authUser?.user?.email) addAllowed(authUser.user.email);
           } catch {
             /* skip */
           }
-        })
-      );
+        }
+      }
     }
 
     const { data: invites } = await supabase.from("org_invites").select("email").eq("org_id", mem.org_id);

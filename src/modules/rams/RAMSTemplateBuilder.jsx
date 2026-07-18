@@ -4875,7 +4875,7 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
         <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", marginBottom:8 }}>Table of contents</div>
         <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
           {tocItems.map((s) => (
-            <button key={s.id} type="button" onClick={() => scrollToSection(s.id)} style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32 }}>
+            <button key={s.id} type="button" onClick={() => scrollToSection(s.id)} style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 44 }}>
               {s.short}
             </button>
           ))}
@@ -4906,7 +4906,7 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {tocItems.map((s) => (
-              <button key={`sticky-${s.id}`} type="button" onClick={() => scrollToSection(s.id)} style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 32 }}>
+              <button key={`sticky-${s.id}`} type="button" onClick={() => scrollToSection(s.id)} style={{ ...ss.btn, fontSize: 11, padding: "4px 10px", minHeight: 44 }}>
                 {s.short}
               </button>
             ))}
@@ -5516,7 +5516,7 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
           </div>
           <div style={{ display:"flex", flexWrap:"wrap", alignItems:"center", gap:8, marginBottom:6 }}>
             <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)" }}>Document integrity (preview)</div>
-            <button type="button" onClick={copyFingerprint} style={{ ...ss.btn, fontSize:11, padding:"4px 10px", minHeight:32 }}>
+            <button type="button" onClick={copyFingerprint} style={{ ...ss.btn, fontSize:11, padding:"4px 10px", minHeight:44 }}>
               {fpCopied ? "Copied" : "Copy fingerprint"}
             </button>
           </div>

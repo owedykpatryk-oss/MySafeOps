@@ -4,6 +4,7 @@
  */
 import { escapeHtml as escHtml } from "./htmlEscape";
 import { canUseFessExclusiveFeatures } from "./fessExclusive";
+import { getFessBrandLogoSrc } from "./fessBranding";
 
 const fmtDate = (iso) => {
   if (!iso) return "—";
@@ -17,6 +18,9 @@ const fmtDate = (iso) => {
 const pageStyle = `
   .fess-ms-page { margin-bottom: 18px; }
   .fess-ms-page + .fess-ms-page { page-break-before: always; break-before: page; }
+  .fess-ms-brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 2px solid #f97316; }
+  .fess-ms-logo { height: 40px; width: auto; max-width: 150px; object-fit: contain; }
+  .fess-ms-brand { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #c2410c; }
   .fess-ms-h { font-size: 13px; font-weight: 700; color: #0f172a; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.04em; }
   .fess-ms-sub { font-size: 10px; color: #64748b; margin: 0 0 10px; }
   .fess-ms-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
@@ -107,11 +111,20 @@ export function buildFessMethodStatementPackHtml(form, operatives = [], coshhIte
       </tr>`
     : "";
 
+  const logoSrc = getFessBrandLogoSrc();
+
   return `<style>${pageStyle}</style>
   <div class="fess-ms-pack">
     <div class="fess-ms-page">
+      <div class="fess-ms-brand-row">
+        <div>
+          <div class="fess-ms-brand">FESS Group · Method statement</div>
+          <div style="font-size:10px;color:#64748b;margin-top:2px">Food factory M&amp;E · controlled issue</div>
+        </div>
+        <img class="fess-ms-logo" src="${escHtml(logoSrc)}" alt="FESS Group" />
+      </div>
       <div class="fess-ms-h">Page 1 — Mobilisation &amp; document control</div>
-      <div class="fess-ms-sub">Food factory M&amp;E method statement · controlled issue</div>
+      <div class="fess-ms-sub">Standard 5-page layout mapped from FESS MC references</div>
       <div class="fess-ms-grid">
         <div class="fess-ms-cell"><div class="l">Title</div>${he(form.title || "Method statement")}</div>
         <div class="fess-ms-cell"><div class="l">Location</div>${he(form.location || "—")}</div>

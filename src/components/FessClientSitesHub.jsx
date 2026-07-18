@@ -22,6 +22,9 @@ import { publishAllFessSitePortals, getFessPortalPublishStatus } from "../utils/
 import { seedFessSiteMobilisation } from "../utils/fessSiteMobilisation";
 import { listFessJobStarters } from "../utils/fessJobStarters";
 import { loadPublishedPortalTokens } from "../utils/clientPortalPublished";
+import { runFessTodayOnSite } from "../utils/fessTodayOnSite";
+import { getFessBrandLogoSrc } from "../utils/fessBranding";
+import { loadOrgSettingsRaw } from "../utils/orgSettingsStorage";
 
 const ss = ms;
 
@@ -48,6 +51,7 @@ export default function FessClientSitesHub({
   const jobStarters = useMemo(() => listFessJobStarters(), []);
   const portalPublish = useMemo(() => getFessPortalPublishStatus(), [projects, rams]);
   const publishedTokens = useMemo(() => loadPublishedPortalTokens(), [projects, rams]);
+  const fessLogo = useMemo(() => getFessBrandLogoSrc(loadOrgSettingsRaw()), []);
 
   const directory = useMemo(
     () => buildFessClientDirectory({ projects, rams, permits, methodStatements }),
@@ -80,13 +84,45 @@ export default function FessClientSitesHub({
         ...ss.card,
         marginBottom: compact ? 16 : 0,
         padding: compact ? 16 : 20,
-        border: "1px solid #99f6e4",
-        background: "linear-gradient(165deg, #f0fdfa 0%, #ecfeff 45%, #fff 100%)",
+        border: "1px solid #fdba74",
+        background: "linear-gradient(165deg, #fff7ed 0%, #f0fdfa 42%, #fff 100%)",
+        boxShadow: "0 8px 28px rgba(249, 115, 22, 0.08)",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 4,
+          background: "linear-gradient(180deg, #f97316 0%, #0d9488 100%)",
+        }}
+      />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "#0f766e", textTransform: "uppercase" }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start", minWidth: 0 }}>
+          {fessLogo ? (
+            <img
+              src={fessLogo}
+              alt="FESS Group"
+              style={{
+                height: compact ? 40 : 52,
+                width: "auto",
+                maxWidth: 120,
+                objectFit: "contain",
+                flexShrink: 0,
+                background: "#fff",
+                borderRadius: 10,
+                padding: "6px 8px",
+                border: "1px solid #fed7aa",
+              }}
+            />
+          ) : null}
+          <div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", color: "#c2410c", textTransform: "uppercase" }}>
             FESS · Client & sites
           </div>
           <div style={{ fontSize: compact ? 17 : 22, fontWeight: 600, color: "#134e4a", marginTop: 4 }}>
@@ -94,7 +130,8 @@ export default function FessClientSitesHub({
           </div>
           <div style={{ fontSize: 13, color: "#115e59", marginTop: 6, maxWidth: 640, lineHeight: 1.5 }}>
             RAMS with standard site RA baseline, method statement, line clearance and LOTO — mapped from your MC reference jobs
-            (2SFG, Cranswick, Quorn, Butternut Box, Dovecoat).
+            (2SFG, Cranswick, Quorn, Butternut Box, Dovecoat). Use Photos for induction routes, site instructions and incident evidence.
+          </div>
           </div>
         </div>
         {!compact ? (
@@ -255,6 +292,32 @@ export default function FessClientSitesHub({
                     ) : null}
 
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        style={{
+                          ...ss.btnP,
+                          fontSize: 12,
+                          padding: "8px 12px",
+                          flex: "1 1 auto",
+                          minWidth: 140,
+                          background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
+                          borderColor: "#ea580c",
+                        }}
+                        title="Mobilise G&HP/LOTO/contacts + today's briefing"
+                        onClick={() => run(template.id, () => runFessTodayOnSite(template.id))}
+                      >
+                        {busy ? "Starting…" : "Today on site"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        style={{ ...ss.btn, fontSize: 11, padding: "6px 10px" }}
+                        title="Open Photos for entrance / zone instructions"
+                        onClick={() => run(template.id, () => runFessTodayOnSite(template.id, { openPhotos: true }))}
+                      >
+                        Photos
+                      </button>
                       <button
                         type="button"
                         disabled={busy}

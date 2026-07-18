@@ -7,6 +7,7 @@ import { canUseFessExclusiveFeatures } from "./fessExclusive";
 import { getRiskLevel, RISK_COLORS } from "../modules/rams/ramsRiskLevel.js";
 import { wrapRamsPrintDocument } from "../modules/rams/ramsPrintDocument.js";
 import { loadOrgSettingsRaw } from "./orgSettingsStorage";
+import { getFessBrandLogoSrc } from "./fessBranding";
 
 const fmtDate = (iso) => {
   if (!iso) return "—";
@@ -34,15 +35,17 @@ function riskScore(risk) {
 }
 
 const fessPrintCss = `
-  .fess-rams-cover { border: 2px solid #0f766e; border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; background: linear-gradient(165deg, #f0fdfa 0%, #fff 60%); }
-  .fess-rams-brand { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #0f766e; margin-bottom: 6px; }
-  .fess-rams-title { font-size: 18px; font-weight: 800; color: #134e4a; margin: 0 0 10px; }
+  .fess-rams-cover { border: 2px solid #f97316; border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; background: linear-gradient(165deg, #fff7ed 0%, #fff 60%); }
+  .fess-rams-cover-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .fess-rams-logo { height: 44px; width: auto; max-width: 160px; object-fit: contain; }
+  .fess-rams-brand { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #c2410c; margin-bottom: 6px; }
+  .fess-rams-title { font-size: 18px; font-weight: 800; color: #0f172a; margin: 0 0 10px; }
   .fess-rams-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
-  .fess-rams-cell { border: 0.5px solid #99f6e4; border-radius: 6px; padding: 6px 8px; background: #fff; font-size: 11px; }
+  .fess-rams-cell { border: 0.5px solid #fed7aa; border-radius: 6px; padding: 6px 8px; background: #fff; font-size: 11px; }
   .fess-rams-cell .l { font-size: 9px; color: #64748b; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
   .fess-rams-h2 { font-size: 12px; font-weight: 700; color: #0f172a; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
   table.fess-rams-ra { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; }
-  table.fess-rams-ra th { background: #134e4a; color: #fff; padding: 5px 6px; text-align: left; border: 1px solid #134e4a; font-size: 9px; }
+  table.fess-rams-ra th { background: #0f172a; color: #fff; padding: 5px 6px; text-align: left; border: 1px solid #0f172a; font-size: 9px; }
   table.fess-rams-ra td { padding: 5px 6px; border: 1px solid #e5e5e5; vertical-align: top; }
   table.fess-rams-ra .risk-cell { text-align: center; font-weight: 700; width: 42px; }
   .fess-rams-ms { font-size: 11px; white-space: pre-wrap; line-height: 1.45; margin: 0 0 12px; }
@@ -126,9 +129,17 @@ export function buildFessRamsPrintBodyHTML(form, rows, operatives, projectMap) {
        )}</div>`
     : "";
 
+  const logoSrc = getFessBrandLogoSrc();
+
   return `<style>${fessPrintCss}</style>
   <div class="fess-rams-cover">
-    <div class="fess-rams-brand">FESS Group · Risk Assessment & Method Statement</div>
+    <div class="fess-rams-cover-top">
+      <div>
+        <div class="fess-rams-brand">FESS Group · Risk Assessment & Method Statement</div>
+        <div style="font-size:10px;color:#64748b">Controlled document · food factory M&amp;E</div>
+      </div>
+      <img class="fess-rams-logo" src="${escHtml(logoSrc)}" alt="FESS Group" />
+    </div>
     <h1 class="fess-rams-title">${escHtml(form.title || "RAMS")}</h1>
     <div class="fess-rams-meta">
       <div class="fess-rams-cell"><div class="l">Document no.</div>${escHtml(form.documentNo || "—")}</div>

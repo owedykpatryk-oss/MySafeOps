@@ -2,12 +2,13 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspe
 import "../styles/workspace.css";
 import "../styles/workspace-more.css";
 import { useSearchParams } from "react-router-dom";
-import { BarChart2, FileCheck, ClipboardList, Users, Building2, Menu, Pin, Shield, Trash2, FileDown, EyeOff, Sparkles, Zap } from "lucide-react";
+import { BarChart2, FileCheck, ClipboardList, Users, Building2, Menu, Pin, Shield, Trash2, FileDown, EyeOff, Sparkles, Zap, Factory, Camera } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import D1WriteForbiddenBanner from "../components/D1WriteForbiddenBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import TrialBillingBanner from "../components/TrialBillingBanner";
+import PastDueBillingBanner from "../components/PastDueBillingBanner";
 import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
 import BillingUsageWarning from "../components/BillingUsageWarning";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
@@ -37,6 +38,12 @@ import {
   SURVEYING_BOTTOM_NAV_IDS,
   isSurveyingBottomNavActive,
 } from "../utils/surveyingBottomNav";
+import {
+  buildFessBottomNavTabDefs,
+  FESS_BOTTOM_NAV_IDS,
+  getFessDefaultWorkspaceView,
+  isFessBottomNavActive,
+} from "../utils/fessBottomNav";
 import { getMoreSectionDisplayTitle } from "../data/appUiCopy";
 import { getPinnedModuleIds, togglePinnedModule } from "../utils/pinnedModules";
 import { getSectionTone, getModuleIcon, canExportModulePdf, preloadModuleIcons } from "../navigation/moduleCatalogMeta";
@@ -72,7 +79,7 @@ import MoreSectionSpotlight from "../components/MoreSectionSpotlight";
 import MorePanelCommandCentre from "../components/MorePanelCommandCentre";
 import ModuleTileSparkline from "../components/ModuleTileSparkline";
 import { useToast } from "../context/ToastContext";
-import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
+import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT, STORAGE_QUOTA_EVENT } from "../utils/orgStorage";
 import { BILLING_WRITE_BLOCKED_EVENT, billingWriteBlockedMessage } from "../utils/billingAccess";
 import {
   BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
@@ -296,7 +303,16 @@ function readInitialSettingsQuery() {
   };
 }
 
+function resolveDefaultWorkspaceView() {
+  if (isFessBottomNavActive()) return getFessDefaultWorkspaceView();
+  if (isSurveyingBottomNavActive()) return "projects";
+  return "dashboard";
+}
+
 function resolvePrimaryNavForView(viewId) {
+  if (isFessBottomNavActive()) {
+    return FESS_BOTTOM_NAV_IDS.includes(viewId) ? viewId : "more";
+  }
   if (isSurveyingBottomNavActive()) {
     return SURVEYING_BOTTOM_NAV_IDS.includes(viewId) ? viewId : "more";
   }
@@ -318,7 +334,7 @@ function getInitialLayoutState() {
   if (viewParam === "settings") {
     return { navTab: "more", view: "settings", settingsInitialTab: "cloud", checkoutReturn: null };
   }
-  const defaultView = isSurveyingBottomNavActive() ? "projects" : "dashboard";
+  const defaultView = resolveDefaultWorkspaceView();
   if (viewParam && WORKSPACE_LAYOUT_VIEW_IDS.has(viewParam) && viewParam !== "settings") {
     if (!isModuleVisible(viewParam)) {
       return { navTab: defaultView, view: defaultView, settingsInitialTab: "cloud", checkoutReturn: null };
@@ -354,16 +370,21 @@ const NAV_ICONS = {
   bin: Trash2,
   superadmin: Shield,
   more: Menu,
+  "fess-sites": Factory,
+  "geo-photos": Camera,
 };
 
 /** Base bottom bar (More is last). Platform owner tab is inserted in layout when `isSuperadmin`. */
-function buildNavTabs(marketId = getOrgMarketId(), surveying = false) {
-  const defs = surveying
-    ? buildSurveyingBottomNavTabDefs(marketId)
-    : NAV_TAB_IDS.map((t) => ({
-        id: t.id,
-        label: getModuleLabelForMarket(t.id, marketId) || t.label,
-      }));
+function buildNavTabs(marketId = getOrgMarketId(), mode = "default") {
+  const defs =
+    mode === "fess"
+      ? buildFessBottomNavTabDefs(marketId)
+      : mode === "surveying"
+        ? buildSurveyingBottomNavTabDefs(marketId)
+        : NAV_TAB_IDS.map((t) => ({
+            id: t.id,
+            label: getModuleLabelForMarket(t.id, marketId) || t.label,
+          }));
   return defs.map((t) => ({
     id: t.id,
     label: t.label,
@@ -383,13 +404,20 @@ export default function MainAppLayout() {
     void orgMarketRev;
     return getOrgMarketId();
   }, [orgMarketRev]);
+  const fessNav = useMemo(() => {
+    void orgMarketRev;
+    return isFessBottomNavActive();
+  }, [orgMarketRev]);
   const surveyingNav = useMemo(() => {
     void orgMarketRev;
+    // FESS takes precedence over surveying bottom nav.
+    if (isFessBottomNavActive()) return false;
     return isSurveyingBottomNavActive();
   }, [orgMarketRev]);
+  const navMode = fessNav ? "fess" : surveyingNav ? "surveying" : "default";
   const navTabsBase = useMemo(
-    () => buildNavTabs(orgMarketId, surveyingNav),
-    [orgMarketId, surveyingNav]
+    () => buildNavTabs(orgMarketId, navMode),
+    [orgMarketId, navMode]
   );
   const [bottomSlotId, setBottomSlotId] = useState(() => resolveBottomNavSlotId());
   const [showOnboarding, setShowOnboarding] = useState(() => !isOnboardingWizardComplete());
@@ -428,8 +456,8 @@ export default function MainAppLayout() {
   }, []);
 
   const bottomNavTabs = useMemo(() => {
-    // Surveying tenants: fixed Projects / RAMS / Survey / GPR / Photos / More (no Bin slot).
-    if (surveyingNav) {
+    // FESS / surveying tenants: fixed primary destinations (no Bin slot).
+    if (fessNav || surveyingNav) {
       let tabs = navTabsBase.map((t) => ({ ...t, navKey: t.id }));
       if (isSuperadmin) {
         const more = tabs[tabs.length - 1];
@@ -474,13 +502,17 @@ export default function MainAppLayout() {
       seen.add(t.id);
       return true;
     });
-  }, [isSuperadmin, visibilityOpts, bottomSlotId, navTabsBase, surveyingNav]);
+  }, [isSuperadmin, visibilityOpts, bottomSlotId, navTabsBase, fessNav, surveyingNav]);
   const primaryNavIdSet = useMemo(() => {
-    const baseIds = surveyingNav ? [...SURVEYING_BOTTOM_NAV_IDS] : PRIMARY_BOTTOM_NAV_IDS;
+    const baseIds = fessNav
+      ? [...FESS_BOTTOM_NAV_IDS]
+      : surveyingNav
+        ? [...SURVEYING_BOTTOM_NAV_IDS]
+        : PRIMARY_BOTTOM_NAV_IDS;
     const s = new Set(filterVisibleModuleIds(baseIds, visibilityOpts));
     if (isSuperadmin) s.add("superadmin");
     return s;
-  }, [isSuperadmin, visibilityOpts, surveyingNav]);
+  }, [isSuperadmin, visibilityOpts, fessNav, surveyingNav]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [layoutSeed] = useState(() => getInitialLayoutState());
   const [navTab, setNavTab] = useState(layoutSeed.navTab);
@@ -502,8 +534,9 @@ export default function MainAppLayout() {
   useEffect(() => {
     if (view === "settings" || view === "help") return;
     if (!isModuleVisible(view, visibilityOpts)) {
-      setView("dashboard");
-      setNavTab("dashboard");
+      const fallback = resolveDefaultWorkspaceView();
+      setView(fallback);
+      setNavTab(resolvePrimaryNavForView(fallback));
     }
   }, [view, visibilityOpts]);
 
@@ -518,6 +551,18 @@ export default function MainAppLayout() {
     };
     window.addEventListener(BILLING_WRITE_BLOCKED_EVENT, onWriteBlocked);
     return () => window.removeEventListener(BILLING_WRITE_BLOCKED_EVENT, onWriteBlocked);
+  }, [pushToast]);
+
+  useEffect(() => {
+    const onQuota = () => {
+      pushToast({
+        type: "warning",
+        title: "Device storage full",
+        message: "Could not save locally. Remove old plans/photos or export a backup, then try again.",
+      });
+    };
+    window.addEventListener(STORAGE_QUOTA_EVENT, onQuota);
+    return () => window.removeEventListener(STORAGE_QUOTA_EVENT, onQuota);
   }, [pushToast]);
 
   useEffect(() => {
@@ -901,7 +946,7 @@ export default function MainAppLayout() {
   return (
     <div
       className="app-workspace-root"
-      style={{ ...orgBranding.cssVars, position: "relative", minHeight: "100vh", fontFamily: "DM Sans, system-ui, sans-serif" }}
+      style={{ ...orgBranding.cssVars, position: "relative", minHeight: "100dvh", fontFamily: "DM Sans, system-ui, sans-serif" }}
     >
       <a href="#main-content" className="app-skip-link">
         Skip to main content
@@ -909,6 +954,7 @@ export default function MainAppLayout() {
       <OfflineStatusBanner />
       <D1WriteForbiddenBanner />
       <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
+        <PastDueBillingBanner />
         <TrialBillingBanner />
         <BillingReadOnlyBanner />
         <BillingUsageWarning />

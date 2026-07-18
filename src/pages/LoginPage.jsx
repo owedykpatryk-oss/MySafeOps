@@ -472,7 +472,7 @@ export default function LoginPage() {
     return (
       <div
         style={{
-          minHeight: "100vh",
+          minHeight: "100dvh",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -495,7 +495,7 @@ export default function LoginPage() {
       return (
         <div
           style={{
-            minHeight: "100vh",
+            minHeight: "100dvh",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -632,7 +632,7 @@ export default function LoginPage() {
                     border: "none",
                     outline: "none",
                     width: "100%",
-                    fontSize: 14,
+                    fontSize: 16,
                     background: "transparent",
                     color: "var(--color-text-primary)",
                     fontFamily: "inherit",
@@ -671,7 +671,7 @@ export default function LoginPage() {
                     border: "none",
                     outline: "none",
                     width: "100%",
-                    fontSize: 14,
+                    fontSize: 16,
                     background: "transparent",
                     color: "var(--color-text-primary)",
                     fontFamily: "inherit",
@@ -847,7 +847,7 @@ export default function LoginPage() {
               <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
                 <button
                   type="button"
-                  style={{ ...ss.btn, padding: "6px 0", minHeight: 0, border: "none", background: "transparent", color: teal, fontWeight: 600, fontSize: 13 }}
+                  style={{ ...ss.btn, padding: "10px 0", minHeight: 44, border: "none", background: "transparent", color: teal, fontWeight: 600, fontSize: 14 }}
                   disabled={busy || passwordResetThrottle.isThrottled}
                   onClick={sendPasswordReset}
                 >
@@ -856,7 +856,7 @@ export default function LoginPage() {
                 <span style={{ color: "var(--color-border-tertiary)", fontSize: 12 }} aria-hidden>·</span>
                 <button
                   type="button"
-                  style={{ ...ss.btn, padding: "6px 0", minHeight: 0, border: "none", background: "transparent", color: teal, fontWeight: 600, fontSize: 13 }}
+                  style={{ ...ss.btn, padding: "10px 0", minHeight: 44, border: "none", background: "transparent", color: teal, fontWeight: 600, fontSize: 14 }}
                   disabled={busy || resendCooldown > 0}
                   onClick={resendConfirmationEmail}
                 >

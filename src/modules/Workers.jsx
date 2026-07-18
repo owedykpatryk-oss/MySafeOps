@@ -25,6 +25,7 @@ import {
 } from "../utils/siteAddressLookup";
 import EmptyState from "../components/EmptyState";
 import PageHero from "../components/PageHero";
+import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { getOrgId, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { sanitizeProjectForOrg } from "../utils/fessExclusive";
@@ -874,11 +875,6 @@ export function WorkersModule({ mode = "all" }) {
             compact
           />
         )}
-        {workersPg.hasMore(workers) ? (
-          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
-            Showing {Math.min(workersPg.cap, workers.length)} of {workers.length}
-          </div>
-        ) : null}
         {workersPg.visible(workers).map((w) => {
           const assignedProjects = (Array.isArray(w.projectIds) ? w.projectIds : [])
             .map((pid) => projects.find((p) => p.id === pid)?.name)
@@ -929,13 +925,15 @@ export function WorkersModule({ mode = "all" }) {
             </button>
           </div>
         );})}
-        {workersPg.hasMore(workers) ? (
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-            <button type="button" style={ss.btn} onClick={workersPg.showMore}>
-              Show more ({workersPg.remaining(workers)} remaining)
-            </button>
-          </div>
-        ) : null}
+        <RegisterListPagingFooter
+          hasMore={workersPg.hasMore(workers)}
+          remaining={workersPg.remaining(workers)}
+          showing={Math.min(workersPg.cap, workers.length)}
+          total={workers.length}
+          onShowMore={workersPg.showMore}
+          itemLabel="people"
+          buttonStyle={ss.btn}
+        />
       </div>
       </>
       ) : null}
@@ -960,11 +958,6 @@ export function WorkersModule({ mode = "all" }) {
             Click a project name to open its hub — documents, checklist and quick actions live there.
           </p>
         )}
-        {projectsPg.hasMore(projects) ? (
-          <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
-            Showing {Math.min(projectsPg.cap, projects.length)} of {projects.length}
-          </div>
-        ) : null}
         {projectsPg.visible(projects).map((p) => {
           const nextAction = pickNextActionForProject(p, projectActionCtx);
           return (
@@ -1082,13 +1075,15 @@ export function WorkersModule({ mode = "all" }) {
           </div>
           );
         })}
-        {projectsPg.hasMore(projects) ? (
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-            <button type="button" style={ss.btn} onClick={projectsPg.showMore}>
-              Show more ({projectsPg.remaining(projects)} remaining)
-            </button>
-          </div>
-        ) : null}
+        <RegisterListPagingFooter
+          hasMore={projectsPg.hasMore(projects)}
+          remaining={projectsPg.remaining(projects)}
+          showing={Math.min(projectsPg.cap, projects.length)}
+          total={projects.length}
+          onShowMore={projectsPg.showMore}
+          itemLabel="projects"
+          buttonStyle={ss.btn}
+        />
       </div>
       ) : null}
     </div>

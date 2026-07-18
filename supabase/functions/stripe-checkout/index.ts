@@ -11,7 +11,7 @@ import {
   type StripePricePlanId,
 } from "../_shared/stripeConfig.ts";
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
-import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
+import { enforceEdgeRateLimits, enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 
 Deno.serve(async (req) => {
@@ -122,14 +122,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    const rateKey = `stripe-checkout:${user.id}`;
-    if (!(await enforceEdgeRateLimits(supabase, rateKey, 12, 60_000))) {
-      return new Response(JSON.stringify({ error: "Too many requests" }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
-      });
-    }
-
     const body = await req.json().catch(() => ({}));
     const planId = body?.planId as StripePricePlanId | undefined;
     const testMode = Boolean(body?.testMode);
@@ -171,6 +163,23 @@ Deno.serve(async (req) => {
       .select("org_id, role")
       .eq("user_id", user.id)
       .maybeSingle();
+
+    const rateOk = mem?.org_id
+      ? await enforceUserAndOrgEdgeRateLimits(supabase, {
+          userKey: `stripe-checkout:${user.id}`,
+          orgKey: `stripe-checkout:org:${mem.org_id}`,
+          userMax: 12,
+          orgMax: 20,
+          windowMs: 60_000,
+          failClosed: true,
+        })
+      : await enforceEdgeRateLimits(supabase, `stripe-checkout:${user.id}`, 12, 60_000, { failClosed: true });
+    if (!rateOk) {
+      return new Response(JSON.stringify({ error: "Too many requests" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+      });
+    }
 
     if (memErr || !mem?.org_id) {
       return new Response(JSON.stringify({ error: "No organisation membership" }), {

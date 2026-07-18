@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { assertOrgSlugAccess } from "../_shared/orgAccess.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
-import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
+import { enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 
 function pushCorsHeaders(req: Request) {
   return {
@@ -82,15 +82,24 @@ Deno.serve(async (req) => {
     } = await supabase.auth.getUser(jwt);
     if (userErr || !user) return json(req,401, { error: "Unauthorized" });
 
-    if (!(await enforceEdgeRateLimits(supabase, `permit-web-push:${user.id}`, 30, 60_000))) {
-      return json(req, 429, { error: "Rate limit exceeded. Please try again later." });
-    }
-
     const body = await req.json().catch(() => ({}));
     const orgSlug = cleanOrgSlug(body?.orgSlug);
 
     const access = await assertOrgSlugAccess(supabase, user.id, orgSlug);
     if (!access.ok) return json(req,access.status, { error: access.error });
+
+    if (
+      !(await enforceUserAndOrgEdgeRateLimits(supabase, {
+        userKey: `permit-web-push:${user.id}`,
+        orgKey: `permit-web-push:org:${orgSlug}`,
+        userMax: 30,
+        orgMax: 60,
+        windowMs: 60_000,
+        failClosed: true,
+      }))
+    ) {
+      return json(req, 429, { error: "Rate limit exceeded. Please try again later." });
+    }
 
     const permit = (body?.permit || {}) as Record<string, unknown>;
     const title = String(body?.title || "Permit update");

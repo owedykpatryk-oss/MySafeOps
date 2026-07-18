@@ -13,6 +13,8 @@ import { ms } from "../utils/moduleStyles";
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
 import { isFessOrg } from "../utils/fessOrg";
 import { canUseFessExclusiveFeatures } from "../utils/fessExclusive";
+import { FESS_BRAND, getFessBrandLogoSrc } from "../utils/fessBranding";
+import { loadOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import PageHero from "./PageHero";
 
 const genRowId = () => `portal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -100,20 +102,30 @@ function PortalView({ token, portals, cloudBundle }) {
 
   const expiredCerts = filteredWorkers.flatMap(w=>(w.certifications||[]).filter(c=>c.expiryDate&&new Date(c.expiryDate)<now).map(c=>({...c,workerName:w.name})));
   const unsignedRAMS = filteredRAMS.filter(r=>!r.signed&&r.status!=="draft"&&!r.clientApproval?.at);
-  const activePermits = filteredPermits.filter(p=>p.status==="active");
+  const activePermits = filteredPermits.filter(p=>p.status==="active"||p.status==="issued"||p.status==="open");
+  const lineClearanceOpen = activePermits.filter(
+    (p) => p.permitType === "line_clearance" || p.type === "line_clearance"
+  );
   const openSnags = filteredSnags.filter(s=>s.status==="open");
+  const fessPortal = canUseFessExclusiveFeatures() || isFessOrg();
+  const fessLogo = fessPortal ? getFessBrandLogoSrc(loadOrgSettingsRaw()) : "";
 
   const complianceScore = Math.max(0, 100 - expiredCerts.length*5 - unsignedRAMS.length*5);
   const scoreColor = complianceScore>=80?"#27500A":complianceScore>=60?"#633806":"#791F1F";
   const scoreBg = complianceScore>=80?"#EAF3DE":complianceScore>=60?"#FAEEDA":"#FCEBEB";
 
   return (
-    <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", minHeight:"100vh", background:"var(--color-background-tertiary,#f7f7f5)" }}>
-      {/* Neutral client-facing header — contractor logo stays on internal PDFs only */}
-      <div style={{ background:"#0f172a", padding:"16px 24px", display:"flex", alignItems:"center", gap:16 }}>
+    <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", minHeight:"100vh", background: fessPortal ? "#fff7ed" : "var(--color-background-tertiary,#f7f7f5)" }}>
+      {/* FESS: branded header for site permit controllers. Other orgs stay neutral. */}
+      <div style={{ background: fessPortal ? FESS_BRAND.accentColor : "#0f172a", padding:"16px 24px", display:"flex", alignItems:"center", gap:16, borderBottom: fessPortal ? "3px solid #f97316" : "none" }}>
+        {fessPortal && fessLogo ? (
+          <img src={fessLogo} alt="FESS Group" style={{ height: 36, width: "auto", maxWidth: 120, objectFit: "contain", background: "#fff", borderRadius: 8, padding: "4px 8px" }} />
+        ) : null}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ color:"#fff", fontWeight:500, fontSize:15 }}>{portal.clientName}</div>
-          <div style={{ color:"#94a3b8", fontSize:12 }}>{portal.projectName||"All projects"} · Read-only compliance view</div>
+          <div style={{ color:"#94a3b8", fontSize:12 }}>
+            {portal.projectName||"All projects"} · {fessPortal ? "FESS site compliance portal" : "Read-only compliance view"}
+          </div>
         </div>
         <div style={{ marginLeft:"auto", fontSize:11, color:"#64748b", flexShrink: 0 }}>
           {readOnlyCloud ? "Cloud snapshot · " : ""}Updated: {fmtDateTime(snapshot?.publishedAt || new Date().toISOString())}
@@ -121,6 +133,19 @@ function PortalView({ token, portals, cloudBundle }) {
       </div>
 
       <div style={{ padding:"1.5rem", maxWidth:900, margin:"0 auto" }}>
+        {fessPortal ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: unsignedRAMS.length ? "#ffedd5" : "#dcfce7", color: unsignedRAMS.length ? "#9a3412" : "#166534" }}>
+              {unsignedRAMS.length ? `${unsignedRAMS.length} RAMS awaiting your approval` : "No RAMS waiting for approval"}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: lineClearanceOpen.length ? "#fee2e2" : "#f1f5f9", color: lineClearanceOpen.length ? "#991b1b" : "#475569" }}>
+              {lineClearanceOpen.length ? `${lineClearanceOpen.length} line clearance open` : "No open line clearance"}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 20, background: "#fff", border: "1px solid #fdba74", color: "#c2410c" }}>
+              Permit controller view · FESS Group
+            </span>
+          </div>
+        ) : null}
         {/* score cards */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:10, marginBottom:24 }}>
           {[
@@ -276,7 +301,9 @@ function PortalView({ token, portals, cloudBundle }) {
         )}
 
         <div style={{ textAlign:"center", fontSize:11, color:"var(--color-text-secondary)", marginTop:24, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
-          Read-only client view · Neutral portal branding (your contractor logo appears on issued RAMS PDFs, not here) · {fmtDateTime(new Date().toISOString())}
+          {fessPortal
+            ? `FESS Group client portal · Approve RAMS below when ready · ${fmtDateTime(new Date().toISOString())}`
+            : `Read-only client view · Neutral portal branding (your contractor logo appears on issued RAMS PDFs, not here) · ${fmtDateTime(new Date().toISOString())}`}
         </div>
       </div>
     </div>
@@ -290,7 +317,6 @@ export default function ClientPortal() {
   const { user, supabase } = useSupabaseAuth();
   const cloudReady = Boolean(user && supabase && isSupabaseConfigured());
   const [portals, setPortals] = useState(()=>load("client_portals",[]));
-  const [modal, setModal] = useState(null);
   const [previewToken, setPreviewToken] = useState(null);
   const [publishingId, setPublishingId] = useState(null);
   const [publishedTokens, setPublishedTokens] = useState(() => loadPublishedPortalTokens());

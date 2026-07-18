@@ -113,6 +113,24 @@ export async function refreshOrgFromSupabase(supabase) {
     /* non-fatal */
   }
   try {
+    const { ensureFessBranding } = await import("./fessBranding");
+    const { ensureFessWorkspaceFocus } = await import("./ensureFessWorkspaceFocus");
+    let forceFess = false;
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const email = String(authData?.user?.email || "")
+        .trim()
+        .toLowerCase();
+      forceFess = email.endsWith("@fessgroup.co.uk");
+    } catch {
+      /* ignore */
+    }
+    ensureFessBranding(row.org_slug, { force: forceFess });
+    ensureFessWorkspaceFocus(row.org_slug, { force: forceFess });
+  } catch {
+    /* non-fatal */
+  }
+  try {
     await syncOrgMarketFromAuth(supabase);
   } catch {
     /* non-fatal */
@@ -184,6 +202,24 @@ export async function ensureUserOrgContext(supabase) {
       /* ignore */
     }
     ensureUtilityMappingBranding(row.org_slug, { force });
+  } catch {
+    /* non-fatal */
+  }
+  try {
+    const { ensureFessBranding } = await import("./fessBranding");
+    const { ensureFessWorkspaceFocus } = await import("./ensureFessWorkspaceFocus");
+    let forceFess = false;
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const email = String(authData?.user?.email || "")
+        .trim()
+        .toLowerCase();
+      forceFess = email.endsWith("@fessgroup.co.uk");
+    } catch {
+      /* ignore */
+    }
+    ensureFessBranding(row.org_slug, { force: forceFess });
+    ensureFessWorkspaceFocus(row.org_slug, { force: forceFess });
   } catch {
     /* non-fatal */
   }

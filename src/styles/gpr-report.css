@@ -18,6 +18,7 @@
   position: sticky;
   top: 8px;
   max-height: calc(100vh - 120px);
+  max-height: calc(100dvh - 120px);
   overflow: auto;
 }
 
@@ -34,7 +35,10 @@
 }
 
 .app-gpr-module-overlay {
-  padding: 8px 12px 24px;
+  padding: max(8px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    max(24px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
 }
 
 .app-gpr-list-stats {

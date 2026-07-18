@@ -30,7 +30,9 @@ import {
 } from "../utils/orgMembership";
 import {
   canExtendOrgTrial,
+  isSubscriptionPastDueOrUnpaid,
   isTrialExpiredWithoutPaid,
+  pastDueBillingMessage,
   shouldShowTrialExtensionOffer,
   TRIAL_EXTENSION_DAYS,
 } from "../utils/billingAccess";
@@ -417,6 +419,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const paidActive =
     (billing?.subscriptionStatus === "active" || billing?.subscriptionStatus === "trialing") &&
     billing?.paidPlanId;
+  const pastDueOrUnpaid = isSubscriptionPastDueOrUnpaid(billing);
   const trialExtensionCount = getTrialExtensionCount();
   const expiredReadOnly = isTrialExpiredWithoutPaid({ trialStatus, billing, isPlatformOwner });
   const canExtend = canExtendOrgTrial({ billing, isPlatformOwner, trialExtensionCount });
@@ -559,8 +562,15 @@ export default function BillingLimits({ checkoutReturn = null }) {
           {trialStatus?.isActive && !paidActive
             ? ` · ${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left in trial`
             : ""}
-          {paidActive ? ` · Stripe: ${billing.subscriptionStatus}` : ""}
+          {paidActive || pastDueOrUnpaid ? ` · Stripe: ${billing.subscriptionStatus}` : ""}
         </p>
+        {pastDueOrUnpaid ? (
+          <InlineAlert
+            type="error"
+            text={`${pastDueBillingMessage(billing?.subscriptionStatus)} Use Manage billing below to open the Stripe portal and pay.`}
+            style={{ marginBottom: 10, fontSize: 12 }}
+          />
+        ) : null}
         {orgMarketId === "au" && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{AU_PRICING_FOOTNOTE}</p>
         )}
