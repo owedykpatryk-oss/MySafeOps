@@ -49,6 +49,7 @@ import {
   fetchAllPermitAuditRows,
   exportPermitAuditCsvViaServer,
 } from "../../utils/permitSupabaseAudit";
+import { mapPool } from "../../utils/mapPool";
 import { supabase } from "../../lib/supabase";
 import { uploadPermitEvidencePhoto } from "../../utils/permitEvidenceUpload";
 import { appendPermitAuditEntry } from "./permitAuditLog";
@@ -571,7 +572,7 @@ const ss = {
   ...ms,
   btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #c2410c", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
   btnR: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #A32D2D", background:"#FCEBEB", color:"#791F1F", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
-  ta:   { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
+  ta:   { width:"100%", padding:"10px 12px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:16, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", lineHeight:1.5 },
 };
 
 const AUDIT_PAGE_SIZE = 20;
@@ -3378,8 +3379,8 @@ const PermitCard = memo(function PermitCard({
     ? {
         width: "100%",
         textAlign: "center",
-        minHeight: 38,
-        padding: "6px 8px",
+        minHeight: 44,
+        padding: "10px 8px",
         lineHeight: 1.2,
         whiteSpace: "normal",
         overflowWrap: "anywhere",
@@ -3589,7 +3590,7 @@ const PermitCard = memo(function PermitCard({
               {(decisionBanner.tone === "warn" || decisionBanner.tone === "critical" || decisionBanner.tone === "ok") ? (
                 <button
                   type="button"
-                  style={{ ...ss.btn, fontSize:11, padding:"3px 8px", minHeight:30 }}
+                  style={{ ...ss.btn, fontSize: 12, padding: "8px 12px", minHeight: 44 }}
                   onClick={() => {
                     if (decisionBanner.tone === "warn" && handoverState?.required && handoverState?.missing) return onOpenHandover?.(permit);
                     if (decisionBanner.tone === "warn" && briefingPending) return onConfirmBriefing?.(permit.id);
@@ -5986,7 +5987,7 @@ export default function PermitSystem() {
 
   const upsertBulkStatus = (fromStatuses, nextStatus, nextPatch = {}, workflowTargetState = "", workflowNote = "bulk_status") => {
     const fromSet = new Set(fromStatuses);
-    let changed = 0;
+    const auditJobs = [];
     setPermits((prev) =>
       prev.map((p) => {
         if (!selectedPermitIds[p.id]) return p;
@@ -6000,14 +6001,15 @@ export default function PermitSystem() {
           next = transitionPermitWorkflowWithPolicy(next, workflowTargetState, workflowNote);
         }
         const withLog = { ...next, auditLog: appendPermitAuditEntry(p, next) };
-        void logPermitAuditToSupabase(p, withLog, getOrgId());
-        changed += 1;
+        auditJobs.push({ prev: p, next: withLog });
         return withLog;
       })
     );
+    const orgSlug = getOrgId();
+    void mapPool(auditJobs, 4, ({ prev, next }) => logPermitAuditToSupabase(prev, next, orgSlug));
     clearPermitSelection();
-    trackEvent("permit_bulk_status", { nextStatus, changed });
-    return changed;
+    trackEvent("permit_bulk_status", { nextStatus, changed: auditJobs.length });
+    return auditJobs.length;
   };
 
   const bulkApproveSelected = () => {
@@ -6062,6 +6064,7 @@ export default function PermitSystem() {
       }
       if (warnConflictOverride) warnOverridesById[p.id] = warnConflictOverride;
     }
+    const auditJobs = [];
     setPermits((prev) =>
       prev.map((p) => {
         if (!selectedPermitIds[p.id]) return p;
@@ -6089,14 +6092,16 @@ export default function PermitSystem() {
               ].slice(-40),
             }
           : baseWithLog;
-        void logPermitAuditToSupabase(p, withLog, getOrgId());
+        auditJobs.push({ prev: p, next: withLog });
         if (warnOverridesById[p.id]) {
           const overrideAuditRow = { ...withLog, status: p.status, _auditAction: "conflict_warn_override" };
-          void logPermitAuditToSupabase(p, overrideAuditRow, getOrgId());
+          auditJobs.push({ prev: p, next: overrideAuditRow });
         }
         return withLog;
       })
     );
+    const orgSlug = getOrgId();
+    void mapPool(auditJobs, 4, ({ prev, next }) => logPermitAuditToSupabase(prev, next, orgSlug));
     clearPermitSelection();
     trackEvent("permit_bulk_status", { nextStatus: "active", changed: targets.length });
   };

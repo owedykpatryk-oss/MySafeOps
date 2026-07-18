@@ -8,6 +8,7 @@ import OfflineStatusBanner from "../offline/OfflineStatusBanner";
 import D1WriteForbiddenBanner from "../components/D1WriteForbiddenBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import TrialBillingBanner from "../components/TrialBillingBanner";
+import PastDueBillingBanner from "../components/PastDueBillingBanner";
 import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
 import BillingUsageWarning from "../components/BillingUsageWarning";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
@@ -72,7 +73,7 @@ import MoreSectionSpotlight from "../components/MoreSectionSpotlight";
 import MorePanelCommandCentre from "../components/MorePanelCommandCentre";
 import ModuleTileSparkline from "../components/ModuleTileSparkline";
 import { useToast } from "../context/ToastContext";
-import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
+import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT, STORAGE_QUOTA_EVENT } from "../utils/orgStorage";
 import { BILLING_WRITE_BLOCKED_EVENT, billingWriteBlockedMessage } from "../utils/billingAccess";
 import {
   BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
@@ -521,6 +522,18 @@ export default function MainAppLayout() {
   }, [pushToast]);
 
   useEffect(() => {
+    const onQuota = () => {
+      pushToast({
+        type: "warning",
+        title: "Device storage full",
+        message: "Could not save locally. Remove old plans/photos or export a backup, then try again.",
+      });
+    };
+    window.addEventListener(STORAGE_QUOTA_EVENT, onQuota);
+    return () => window.removeEventListener(STORAGE_QUOTA_EVENT, onQuota);
+  }, [pushToast]);
+
+  useEffect(() => {
     const bump = () => {
       invalidateRegisterStatsCache();
       setRegisterStatsTick((t) => t + 1);
@@ -901,7 +914,7 @@ export default function MainAppLayout() {
   return (
     <div
       className="app-workspace-root"
-      style={{ ...orgBranding.cssVars, position: "relative", minHeight: "100vh", fontFamily: "DM Sans, system-ui, sans-serif" }}
+      style={{ ...orgBranding.cssVars, position: "relative", minHeight: "100dvh", fontFamily: "DM Sans, system-ui, sans-serif" }}
     >
       <a href="#main-content" className="app-skip-link">
         Skip to main content
@@ -909,6 +922,7 @@ export default function MainAppLayout() {
       <OfflineStatusBanner />
       <D1WriteForbiddenBanner />
       <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
+        <PastDueBillingBanner />
         <TrialBillingBanner />
         <BillingReadOnlyBanner />
         <BillingUsageWarning />

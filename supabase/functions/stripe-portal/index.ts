@@ -8,7 +8,7 @@ import {
   stripeDiagnostics,
 } from "../_shared/stripeConfig.ts";
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
-import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
+import { enforceEdgeRateLimits, enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 
 Deno.serve(async (req) => {
@@ -107,14 +107,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    const rateKey = `stripe-portal:${user.id}`;
-    if (!(await enforceEdgeRateLimits(supabase, rateKey, 20, 60_000))) {
-      return new Response(JSON.stringify({ error: "Too many requests" }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
-      });
-    }
-
     const body = await req.json().catch(() => ({}));
     const testMode = Boolean(body?.testMode);
 
@@ -139,6 +131,22 @@ Deno.serve(async (req) => {
     if (memErr || !mem?.org_id) {
       return new Response(JSON.stringify({ error: "No organisation membership" }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+      });
+    }
+
+    if (
+      !(await enforceUserAndOrgEdgeRateLimits(supabase, {
+        userKey: `stripe-portal:${user.id}`,
+        orgKey: `stripe-portal:org:${mem.org_id}`,
+        userMax: 20,
+        orgMax: 40,
+        windowMs: 60_000,
+        failClosed: true,
+      }))
+    ) {
+      return new Response(JSON.stringify({ error: "Too many requests" }), {
+        status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
       });
     }

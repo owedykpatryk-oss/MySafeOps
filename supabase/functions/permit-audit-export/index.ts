@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { assertOrgSlugAccess } from "../_shared/orgAccess.ts";
-import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
+import { enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 
 type AuditRow = {
@@ -90,10 +90,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!(await enforceEdgeRateLimits(supabase, `permit-audit-export:${user.id}`, 8, 60 * 60_000))) {
+    if (
+      !(await enforceUserAndOrgEdgeRateLimits(supabase, {
+        userKey: `permit-audit-export:${user.id}`,
+        orgKey: `permit-audit-export:org:${orgSlug}`,
+        userMax: 8,
+        orgMax: 20,
+        windowMs: 60 * 60_000,
+        failClosed: true,
+      }))
+    ) {
       return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
         status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "3600" },
       });
     }
 

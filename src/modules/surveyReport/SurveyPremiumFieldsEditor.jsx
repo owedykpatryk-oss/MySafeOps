@@ -33,20 +33,23 @@ const box = {
 const lbl = { display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4, color: "#334155" };
 const inp = {
   width: "100%",
-  padding: "8px 10px",
+  padding: "10px 12px",
   borderRadius: 8,
   border: "1px solid #cbd5e1",
-  fontSize: 13,
+  fontSize: 16,
   boxSizing: "border-box",
+  minHeight: 44,
 };
 const btn = {
-  padding: "6px 12px",
+  padding: "10px 14px",
   borderRadius: 8,
   border: "1px solid #cbd5e1",
   background: "#fff",
   cursor: "pointer",
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 600,
+  minHeight: 44,
+  touchAction: "manipulation",
 };
 const btnDanger = { ...btn, color: "#b91c1c", borderColor: "#fecaca" };
 const btnPrimary = { ...btn, background: "#0B1D3A", color: "#fff", borderColor: "#0B1D3A" };
@@ -95,7 +98,7 @@ export default function SurveyPremiumFieldsEditor({
           Tick outcomes per undertaker — the PDF writes a clear Located / TFR / Not located narrative you can still edit.
         </p>
         {(form.recordItems || []).map((row) => (
-          <div key={row.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, marginBottom: 8 }}>
+          <div key={row.id} className="survey-premium-fields__row survey-premium-fields__row--records" style={{ display: "grid", gap: 8, marginBottom: 8 }}>
             <input
               style={inp}
               placeholder="Undertaker (e.g. SGN)"
@@ -220,7 +223,7 @@ export default function SurveyPremiumFieldsEditor({
         </div>
         {(form.evidenceRows || []).map((row) => (
           <div key={row.id} style={{ borderTop: "1px solid #e2e8f0", paddingTop: 10, marginTop: 10 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div className="survey-premium-fields__row survey-premium-fields__row--2" style={{ display: "grid", gap: 8 }}>
               <input
                 style={inp}
                 placeholder="Title"
@@ -283,7 +286,7 @@ export default function SurveyPremiumFieldsEditor({
       <div style={box}>
         <div style={{ fontWeight: 700, marginBottom: 8, color: "#0B1D3A" }}>Survey extent AOC</div>
         {(form.extentAreas || []).map((row) => (
-          <div key={row.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+          <div key={row.id} className="survey-premium-fields__row survey-premium-fields__row--2" style={{ display: "grid", gap: 8, marginBottom: 10 }}>
             <input
               style={inp}
               placeholder="Label (e.g. AOC1)"
@@ -358,7 +361,7 @@ export default function SurveyPremiumFieldsEditor({
         ) : null}
         {(form.surveyAreas || []).map((row) => (
           <div key={row.id} style={{ borderTop: "1px solid #e2e8f0", paddingTop: 10, marginTop: 10 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div className="survey-premium-fields__row survey-premium-fields__row--2" style={{ display: "grid", gap: 8 }}>
               <input
                 style={inp}
                 placeholder="Area label"
@@ -422,7 +425,7 @@ export default function SurveyPremiumFieldsEditor({
           Gallions-style cards — import from a linked GPR report, or add manually. Screenshots attach when radargram line refs match.
         </p>
         {projectGpr.length > 0 ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, marginBottom: 10, alignItems: "end" }}>
+          <div className="survey-premium-fields__row survey-premium-fields__row--gpr-link" style={{ display: "grid", gap: 8, marginBottom: 10, alignItems: "end" }}>
             <div>
               <label style={lbl}>Linked GPR report</label>
               <select
@@ -461,7 +464,7 @@ export default function SurveyPremiumFieldsEditor({
         />
         {(form.gprAnomalyCards || []).map((row) => (
           <div key={row.id} style={{ borderTop: "1px solid #e2e8f0", paddingTop: 10, marginTop: 10 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div className="survey-premium-fields__row survey-premium-fields__row--3" style={{ display: "grid", gap: 8 }}>
               <input
                 style={inp}
                 placeholder="Ref (e.g. A-12)"
@@ -532,7 +535,7 @@ export default function SurveyPremiumFieldsEditor({
           Seed kit from PAS128 method
         </button>
         {(form.equipmentKit || []).map((row) => (
-          <div key={row.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+          <div key={row.id} className="survey-premium-fields__row survey-premium-fields__row--2" style={{ display: "grid", gap: 8, marginBottom: 8 }}>
             <input
               style={inp}
               placeholder="Technique"
@@ -585,7 +588,7 @@ export default function SurveyPremiumFieldsEditor({
           For M4 / M4P — cover and invert levels print as chamber cards in findings.
         </p>
         {(form.mhIcCards || []).map((row) => (
-          <div key={row.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+          <div key={row.id} className="survey-premium-fields__row survey-premium-fields__row--3" style={{ display: "grid", gap: 8, marginBottom: 8 }}>
             <input
               style={inp}
               placeholder="Ref (MH01)"

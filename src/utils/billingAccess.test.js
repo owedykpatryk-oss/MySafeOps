@@ -3,7 +3,9 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   canExtendOrgTrial,
   isBillingWriteBlocked,
+  isSubscriptionPastDueOrUnpaid,
   isTrialExpiredWithoutPaid,
+  pastDueBillingMessage,
   shouldShowTrialExtensionOffer,
 } from "./billingAccess";
 import { getEffectivePlanId } from "../lib/billingPlans";
@@ -51,5 +53,13 @@ describe("billingAccess", () => {
     expect(shouldShowTrialExtensionOffer()).toBe(true);
     localStorage.setItem("mysafeops_trial_extension_count", "1");
     expect(canExtendOrgTrial()).toBe(false);
+  });
+
+  it("flags past_due and unpaid subscription statuses", () => {
+    expect(isSubscriptionPastDueOrUnpaid({ subscriptionStatus: "past_due", paidPlanId: "team" })).toBe(true);
+    expect(isSubscriptionPastDueOrUnpaid({ subscriptionStatus: "unpaid", paidPlanId: "team" })).toBe(true);
+    expect(isSubscriptionPastDueOrUnpaid({ subscriptionStatus: "active", paidPlanId: "team" })).toBe(false);
+    expect(pastDueBillingMessage("unpaid")).toMatch(/unpaid/i);
+    expect(pastDueBillingMessage("past_due")).toMatch(/outstanding invoice/i);
   });
 });

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
+import { stripBriefingsForD1 } from "../utils/d1SyncPayload";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
@@ -918,6 +919,7 @@ export default function DailyBriefing() {
     setValue: setBriefings,
     load,
     save,
+    serializeForSync: stripBriefingsForD1,
   });
   const { d1Hydrating: d1WpH, d1OutboxPending: d1WpO } = useD1WorkersProjectsSync({
     workers,

@@ -4,7 +4,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
-import { enforceEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
+import { enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { detectIncomingWebhookKind, validateOutboundWebhookUrl } from "../_shared/webhookUrlValidation.ts";
 
 type PermitSlim = {
@@ -138,13 +138,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!(await enforceEdgeRateLimits(supabase, `permit-webhook:${user.id}`, 30, 60_000))) {
-      return new Response(JSON.stringify({ error: "Too many requests" }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
-      });
-    }
-
     const { data: mem, error: memErr } = await supabase
       .from("org_memberships")
       .select("org_id")
@@ -154,6 +147,22 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Forbidden: no organisation membership" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (
+      !(await enforceUserAndOrgEdgeRateLimits(supabase, {
+        userKey: `permit-webhook:${user.id}`,
+        orgKey: `permit-webhook:org:${mem.org_id}`,
+        userMax: 30,
+        orgMax: 60,
+        windowMs: 60_000,
+        failClosed: true,
+      }))
+    ) {
+      return new Response(JSON.stringify({ error: "Too many requests" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" },
       });
     }
 

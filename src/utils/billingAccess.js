@@ -12,6 +12,21 @@ export function isPaidSubscriptionActive(billing) {
   );
 }
 
+/** Stripe reports open invoices / failed collection — org should open the billing portal. */
+export function isSubscriptionPastDueOrUnpaid(billing) {
+  const b = billing ?? getBillingEntitlements();
+  const status = String(b?.subscriptionStatus || "").toLowerCase();
+  return status === "past_due" || status === "unpaid";
+}
+
+export function pastDueBillingMessage(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "unpaid") {
+    return "Payment failed and the subscription is unpaid. Open Billing to pay outstanding invoices and restore full access.";
+  }
+  return "There is an outstanding invoice on this organisation. Open Billing to pay now and avoid service disruption.";
+}
+
 /** Cloud org with an ended evaluation trial and no paid subscription. */
 export function isTrialExpiredWithoutPaid(options = {}) {
   if (options.isPlatformOwner) return false;

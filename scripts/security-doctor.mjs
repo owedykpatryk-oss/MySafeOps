@@ -198,6 +198,7 @@ async function main() {
   }
 
   if (
+    fileIncludes("supabase/functions/send-permit-notification/index.ts", "enforceUserAndOrgEdgeRateLimits") ||
     fileIncludes("supabase/functions/send-permit-notification/index.ts", "enforceEdgeRateLimits") ||
     fileIncludes("supabase/functions/send-permit-notification/index.ts", "checkEdgeRateLimit")
   ) {
