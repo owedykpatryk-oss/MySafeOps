@@ -62,4 +62,20 @@ describe("billingAccess", () => {
     expect(pastDueBillingMessage("unpaid")).toMatch(/unpaid/i);
     expect(pastDueBillingMessage("past_due")).toMatch(/outstanding invoice/i);
   });
+
+  it("blocks writes for past_due paid orgs once evaluation trial has ended", () => {
+    // past_due is not "active"/"trialing", so isPaidSubscriptionActive is false and the trial gate applies.
+    expect(
+      isBillingWriteBlocked({
+        trialStatus: { isActive: false, remainingDays: 0 },
+        billing: { subscriptionStatus: "past_due", paidPlanId: "team" },
+      })
+    ).toBe(true);
+    expect(
+      isBillingWriteBlocked({
+        trialStatus: { isActive: true, remainingDays: 3 },
+        billing: { subscriptionStatus: "past_due", paidPlanId: "team" },
+      })
+    ).toBe(false);
+  });
 });

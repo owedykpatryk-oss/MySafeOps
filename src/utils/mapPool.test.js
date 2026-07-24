@@ -16,4 +16,13 @@ describe("mapPool", () => {
   it("handles empty input", async () => {
     expect(await mapPool([], 3, async (x) => x)).toEqual([]);
   });
+
+  it("propagates worker errors", async () => {
+    await expect(
+      mapPool([1, 2, 3], 2, async (n) => {
+        if (n === 2) throw new Error("boom");
+        return n;
+      })
+    ).rejects.toThrow("boom");
+  });
 });
