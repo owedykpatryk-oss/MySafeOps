@@ -74,7 +74,7 @@
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "@sentry/react": "^9.47.1",
     "@supabase/supabase-js": "^2.102.1",
-    "dompurify": "3.4.11",
+    "dompurify": "3.4.12",
     "dxf-parser": "^1.1.2",
     "fflate": "^0.8.3",
     "html2canvas": "^1.4.1",
@@ -90,7 +90,9 @@
     "web-vitals": "^4.2.4"
   },
   "overrides": {
-    "dompurify": "3.4.11"
+    "brace-expansion@1": "1.1.16",
+    "brace-expansion@2": "2.1.2",
+    "dompurify": "3.4.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
