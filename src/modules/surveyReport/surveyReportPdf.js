@@ -10,6 +10,7 @@ import { sanitizePrintPreviewHtml } from "../../utils/htmlEscape.js";
 import { normalizeSurveyReport } from "./surveyReportHelpers";
 import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
 import { utilityMappingExportBaseName } from "../../utils/utilityMappingDocRefs";
+import { setPdfFont, ensurePdfUnicodeFont } from "../../utils/pdfUnicodeFont.js";
 
 const A4_W_MM = 210;
 const A4_H_MM = 297;
@@ -141,6 +142,7 @@ export async function generateHtmlDocumentPdfBlob(html, opts = {}) {
   const canvas = await renderHtmlDocumentCanvas(safeHtml, notify, opts.title || "Document PDF");
   notify("assemble");
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  await ensurePdfUnicodeFont(pdf);
   pdf.setProperties({ title: opts.title || fileName, subject: "Survey deliverable", author: "MySafeOps" });
   const pageW = A4_W_MM;
   const pageH = A4_H_MM;
@@ -155,6 +157,7 @@ export async function generateHtmlDocumentPdfBlob(html, opts = {}) {
   const totalPages = Math.max(1, Math.ceil(imgHeightMm / usableH));
   pdf.addImage(imgData, "JPEG", side, side, usableW, imgHeightMm);
   pageNum = 1;
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(140, 140, 140);
   pdf.text(`${pageNum} / ${totalPages}`, pageW - side, pageH - 4, { align: "right" });
@@ -162,6 +165,7 @@ export async function generateHtmlDocumentPdfBlob(html, opts = {}) {
   while (heightLeft > 0.5) {
     pdf.addPage();
     pageNum += 1;
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(7);
     pdf.setTextColor(140, 140, 140);
     pdf.text(`${pageNum} / ${totalPages}`, pageW - side, pageH - 4, { align: "right" });
@@ -178,8 +182,9 @@ async function renderSurveyReportCanvas(report, extras, notify) {
   return renderHtmlDocumentCanvas(html, notify, "Survey report PDF export");
 }
 
-function assembleSurveyReportPdf(report, canvas) {
+async function assembleSurveyReportPdf(report, canvas) {
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  await ensurePdfUnicodeFont(pdf);
   const r = normalizeSurveyReport(report);
   pdf.setProperties({
     title: r.title || r.ref || "Survey Report",
@@ -202,7 +207,7 @@ function assembleSurveyReportPdf(report, canvas) {
 
   pdf.addImage(imgData, "JPEG", side, side, usableW, imgHeightMm);
   pageNum = 1;
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(140, 140, 140);
   pdf.text(`${pageNum} / ${totalPages}`, pageW - side, pageH - 4, { align: "right" });
@@ -211,7 +216,7 @@ function assembleSurveyReportPdf(report, canvas) {
   while (heightLeft > 0.5) {
     pdf.addPage();
     pageNum += 1;
-    pdf.setFont("helvetica", "normal");
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(7);
     pdf.setTextColor(140, 140, 140);
     pdf.text(`${pageNum} / ${totalPages}`, pageW - side, pageH - 4, { align: "right" });
@@ -235,7 +240,7 @@ export async function generateSurveyReportPdfBlob(report, extras = {}, opts = {}
   const fileName = buildFileName(report);
   const canvas = await renderSurveyReportCanvas(report, extras, notify);
   notify("assemble");
-  const { pdf, totalPages } = assembleSurveyReportPdf(report, canvas);
+  const { pdf, totalPages } = await assembleSurveyReportPdf(report, canvas);
   notify("save");
   const blob = pdf.output("blob");
   return { blob, fileName, pages: totalPages };
@@ -252,7 +257,7 @@ export async function downloadSurveyReportPdf(report, extras = {}, opts = {}) {
   const fileName = buildFileName(report);
   const canvas = await renderSurveyReportCanvas(report, extras, notify);
   notify("assemble");
-  const { pdf, totalPages } = assembleSurveyReportPdf(report, canvas);
+  const { pdf, totalPages } = await assembleSurveyReportPdf(report, canvas);
   notify("save");
 
   // jsPDF.save is the most reliable path in Chromium; fall back to blob download.

@@ -5,7 +5,6 @@ import {
   listProjectPlans,
   planIsMarkable,
   readPlanUploadFile,
-  removePlanItem,
   saveProjectPlans,
   updateProjectPlan,
 } from "./permits/permitPlanOverlayRegistry";

@@ -1,5 +1,6 @@
 import { safeHttpUrl } from "../utils/safeUrl";
 import { useState, useEffect, useMemo, useCallback } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useApp } from "../context/AppContext";
@@ -10,7 +11,6 @@ import {
   getPlaybook,
 } from "../utils/projectPlaybooks";
 import { getPlaybooksForOrg } from "../utils/projectHubIndustry";
-import { isSuperAdminEmail } from "../utils/superAdmin";
 import { billingLimitMessage, checkBillingLimit } from "../utils/billingLimits";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { ms } from "../utils/moduleStyles";
@@ -27,6 +27,7 @@ import EmptyState from "../components/EmptyState";
 import PageHero from "../components/PageHero";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
 import { getOrgId, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { sanitizeProjectForOrg } from "../utils/fessExclusive";
 import {
@@ -44,6 +45,7 @@ import { buildPeopleNextSteps } from "../utils/peopleNextSteps";
 import PeopleNextSteps from "../components/PeopleNextSteps";
 import ComplianceDuePanel from "../components/ComplianceDuePanel";
 import { pushRecycleBinItem } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { openWorkspaceView, setWorkspaceNavTarget, consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { getNearestHospital } from "../utils/nearestHospital";
 import { fetchWeatherSummary, fetchWeatherForDate } from "../utils/weatherSummary";
@@ -85,6 +87,7 @@ import {
 } from "../utils/soloWorkspace";
 import { isModuleVisible } from "../utils/hiddenModules";
 
+import { localDateISO, todayLocalISO } from "../utils/localDate";
 const WORKERS_KEY = "mysafeops_workers";
 const PROJECTS_KEY = "mysafeops_projects";
 const PROJECT_WIZARD_DRAFT_KEY = "project_wizard_draft";
@@ -94,11 +97,11 @@ const load = (key) => loadOrgScoped(key, []);
 const save = (key, data) => saveOrgScoped(key, data);
 
 const genId = () => `w_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = todayLocalISO;
 const addDaysIso = (days) => {
   const d = new Date();
   d.setDate(d.getDate() + Math.max(0, Number(days || 0)));
-  return d.toISOString().slice(0, 10);
+  return localDateISO(d);
 };
 
 const PROJECT_STARTERS = [
@@ -284,10 +287,6 @@ function suggestProjectRisks(form) {
 
 const ss = { ...ms, btnO: { padding: "10px 14px", borderRadius: 6, border: "0.5px solid #c2410c", background: "#f97316", color: "#fff", fontSize: 13, cursor: "pointer", fontFamily: "DM Sans,sans-serif", minHeight: 44, lineHeight: 1.3 } };
 
-function toCsv(rows) {
-  return rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-}
-
 function certSummaryText(worker) {
   const certs = normalizeWorkerCertifications(worker);
   if (certs.length === 0) return "";
@@ -297,10 +296,9 @@ function certSummaryText(worker) {
 export function WorkersModule({ mode = "all" }) {
   const showPeople = mode === "all" || mode === "people";
   const showProjects = mode === "all" || mode === "projects";
-  const { trialStatus, billing } = useApp();
+  const { trialStatus, billing, isPlatformOwner } = useApp();
   const { user } = useSupabaseAuth();
   const { pushToast } = useToast();
-  const isPlatformOwner = isSuperAdminEmail(user?.email);
   const [workers, setWorkers] = useState(() => load(WORKERS_KEY, []));
   const [projects, setProjects] = useState(() => load(PROJECTS_KEY, []));
   const [modal, setModal] = useState(null);
@@ -395,12 +393,7 @@ export function WorkersModule({ mode = "all" }) {
   const exportWorkersCsv = () => {
     const header = ["Name", "Role", "Phone", "Email", "Certs / notes", "Structured certifications"];
     const rows = workers.map((w) => [w.name || "", w.role || "", w.phone || "", w.email || "", w.certs || "", certSummaryText(w)]);
-    const blob = new Blob([toCsv([header, ...rows])], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `workers_${getOrgId()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(header, rows, `workers_${getOrgId()}.csv`);
   };
 
   const saveWorker = (form) => {
@@ -442,7 +435,7 @@ export function WorkersModule({ mode = "all" }) {
               payload: victim,
             });
           }
-          return prev.filter((w) => w.id !== id);
+          return replaceWithTombstone(prev, id);
         });
         setConfirm(null);
       },
@@ -532,7 +525,7 @@ export function WorkersModule({ mode = "all" }) {
               payload: victim,
             });
           }
-          return prev.filter((p) => p.id !== id);
+          return replaceWithTombstone(prev, id);
         });
         setHubProject((p) => (p?.id === id ? null : p));
         setConfirm(null);
@@ -540,7 +533,10 @@ export function WorkersModule({ mode = "all" }) {
     });
   };
 
-  const certAlerts = workers
+  const liveWorkers = liveOrgArrayRows(workers);
+  const liveProjects = liveOrgArrayRows(projects);
+
+  const certAlerts = liveWorkers
     .flatMap((w) => getWorkerCertAlerts(w).map((a) => ({ ...a, worker: w })))
     .sort((a, b) => a.days - b.days);
   const criticalAlerts = certAlerts.filter((a) => a.severity === "expired" || a.severity === "critical");
@@ -548,14 +544,14 @@ export function WorkersModule({ mode = "all" }) {
   const vehicleAlerts = getVehicleDueAlerts();
   const trainingRecords = load("training_matrix");
   const complianceDueItems = useMemo(
-    () => collectComplianceDueItems({ workers, trainingRecords }),
-    [workers, trainingRecords]
+    () => collectComplianceDueItems({ workers: liveWorkers, trainingRecords }),
+    [liveWorkers, trainingRecords]
   );
   const handleComplianceDueSelect = useCallback(
     (item) => {
       if (!item) return;
       if (item.kind === "cert" && item.workerId) {
-        const worker = workers.find((w) => w.id === item.workerId);
+        const worker = liveWorkers.find((w) => w.id === item.workerId);
         if (worker) setModal({ type: "worker", data: worker });
         return;
       }
@@ -862,9 +858,9 @@ export function WorkersModule({ mode = "all" }) {
 
       <div id="people-register" className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
-          People ({workers.length})
+          People ({liveWorkers.length})
         </div>
-        {workers.length === 0 && (
+        {liveWorkers.length === 0 && (
           <EmptyState
             icon="👷"
             title="No people on the register yet"
@@ -875,7 +871,7 @@ export function WorkersModule({ mode = "all" }) {
             compact
           />
         )}
-        {workersPg.visible(workers).map((w) => {
+        {workersPg.visible(liveWorkers).map((w) => {
           const assignedProjects = (Array.isArray(w.projectIds) ? w.projectIds : [])
             .map((pid) => projects.find((p) => p.id === pid)?.name)
             .filter(Boolean);
@@ -902,7 +898,7 @@ export function WorkersModule({ mode = "all" }) {
                 <div style={{ fontSize: 11, color: "#0f766e", marginTop: 4 }}>
                   Projects: {assignedProjects.join(", ")}
                 </div>
-              ) : projects.length > 0 ? (
+              ) : liveProjects.length > 0 ? (
                 <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>No project assigned</div>
               ) : null}
               {normalizeWorkerCertifications(w).length > 0 ? (
@@ -926,10 +922,10 @@ export function WorkersModule({ mode = "all" }) {
           </div>
         );})}
         <RegisterListPagingFooter
-          hasMore={workersPg.hasMore(workers)}
-          remaining={workersPg.remaining(workers)}
-          showing={Math.min(workersPg.cap, workers.length)}
-          total={workers.length}
+          hasMore={workersPg.hasMore(liveWorkers)}
+          remaining={workersPg.remaining(liveWorkers)}
+          showing={Math.min(workersPg.cap, liveWorkers.length)}
+          total={liveWorkers.length}
           onShowMore={workersPg.showMore}
           itemLabel="people"
           buttonStyle={ss.btn}
@@ -941,9 +937,9 @@ export function WorkersModule({ mode = "all" }) {
       {showProjects && !(useInlineHub && hubProject) ? (
       <div className="app-surface-card" style={ss.card}>
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
-          Projects ({projects.length})
+          Projects ({liveProjects.length})
         </div>
-        {projects.length === 0 ? (
+        {liveProjects.length === 0 ? (
           <EmptyState
             icon="📍"
             title="No projects yet"
@@ -958,7 +954,7 @@ export function WorkersModule({ mode = "all" }) {
             Click a project name to open its hub — documents, checklist and quick actions live there.
           </p>
         )}
-        {projectsPg.visible(projects).map((p) => {
+        {projectsPg.visible(liveProjects).map((p) => {
           const nextAction = pickNextActionForProject(p, projectActionCtx);
           return (
           <div
@@ -1076,10 +1072,10 @@ export function WorkersModule({ mode = "all" }) {
           );
         })}
         <RegisterListPagingFooter
-          hasMore={projectsPg.hasMore(projects)}
-          remaining={projectsPg.remaining(projects)}
-          showing={Math.min(projectsPg.cap, projects.length)}
-          total={projects.length}
+          hasMore={projectsPg.hasMore(liveProjects)}
+          remaining={projectsPg.remaining(liveProjects)}
+          showing={Math.min(projectsPg.cap, liveProjects.length)}
+          total={liveProjects.length}
           onShowMore={projectsPg.showMore}
           itemLabel="projects"
           buttonStyle={ss.btn}
@@ -1224,17 +1220,17 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
   const visibleCatalog = certLibrary.filter((c) => c.label.toLowerCase().includes(certFilter.trim().toLowerCase()));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0 }}>{item ? "Edit worker" : "New worker"}</h2>
-        <label style={ss.lbl}>Name</label>
-        <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Role</label>
-        <input style={ss.inp} value={form.role} onChange={(e) => set("role", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Phone</label>
-        <input style={ss.inp} value={form.phone} onChange={(e) => set("phone", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Email</label>
-        <input style={ss.inp} value={form.email} onChange={(e) => set("email", e.target.value)} />
+        <label style={ss.lbl} htmlFor="workers-name">Name</label>
+        <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)}  id="workers-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-role">Role</label>
+        <input style={ss.inp} value={form.role} onChange={(e) => set("role", e.target.value)}  id="workers-role" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-phone">Phone</label>
+        <input style={ss.inp} value={form.phone} onChange={(e) => set("phone", e.target.value)}  id="workers-phone" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-email">Email</label>
+        <input style={ss.inp} value={form.email} onChange={(e) => set("email", e.target.value)}  id="workers-email" />
         {projects.length > 0 ? (
           <div style={{ marginTop: 12 }}>
             <label style={ss.lbl}>Assigned projects</label>
@@ -1254,10 +1250,10 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
             </div>
           </div>
         ) : null}
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Primary certificate (for dashboard expiry)</label>
-        <input style={ss.inp} value={form.certType || ""} onChange={(e) => set("certType", e.target.value)} placeholder={getCompetencyCardHint(getOrgMarketId())} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Certificate expiry</label>
-        <input type="date" style={ss.inp} value={form.certExpiry || ""} onChange={(e) => set("certExpiry", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-cert-type">Primary certificate (for dashboard expiry)</label>
+        <input style={ss.inp} value={form.certType || ""} onChange={(e) => set("certType", e.target.value)} placeholder={getCompetencyCardHint(getOrgMarketId())}  id="workers-cert-type" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-cert-expiry">Certificate expiry</label>
+        <input type="date" style={ss.inp} value={form.certExpiry || ""} onChange={(e) => set("certExpiry", e.target.value)}  id="workers-cert-expiry" />
         <div style={{ marginTop: 12, border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, padding: "10px 10px 8px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
             <strong style={{ fontSize: 13 }}>Ready-made certifications</strong>
@@ -1307,8 +1303,8 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
             })}
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Certificates / notes (free text)</label>
-        <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.certs} onChange={(e) => set("certs", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-certs">Certificates / notes (free text)</label>
+        <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.certs} onChange={(e) => set("certs", e.target.value)}  id="workers-certs" />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
@@ -1318,7 +1314,7 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -2055,20 +2051,20 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
           <div className="project-wizard-body">
             {step === 1 ? (
               <div className="project-wizard-section">
-                <label style={ss.lbl}>Project name</label>
-                <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus />
-                <label style={{ ...ss.lbl, marginTop: 10 }}>Site / client</label>
-                <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)} />
+                <label style={ss.lbl} htmlFor="workers-name-2">Project name</label>
+                <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus  id="workers-name-2" />
+                <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-site">Site / client</label>
+                <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)}  id="workers-site" />
                 {isUtilityMappingOrg() ? (
                   <>
-                    <label style={{ ...ss.lbl, marginTop: 14 }}>UM job number</label>
+                    <label style={{ ...ss.lbl, marginTop: 14 }} htmlFor="workers-um-job-number">UM job number</label>
                     <input
                       style={ss.inp}
                       value={form.umJobNumber || ""}
                       onChange={(e) => set("umJobNumber", e.target.value.replace(/\D/g, ""))}
                       placeholder="1234"
-                    />
-                    <label style={{ ...ss.lbl, marginTop: 10 }}>Client code</label>
+                     id="workers-um-job-number" />
+                    <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-um-client-code">Client code</label>
                     <select
                       style={ss.inp}
                       value={form.umClientCode || ""}
@@ -2082,7 +2078,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                           site: f.site || client?.name || "",
                         }));
                       }}
-                    >
+                     id="workers-um-client-code">
                       <option value="">— Select client —</option>
                       {listUtilityMappingClients().map((c) => (
                         <option key={c.code} value={c.code}>
@@ -2168,7 +2164,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                   </label>
                   {soloMode ? (
                     <>
-                      <label style={{ ...ss.lbl, marginTop: 10 }}>Your name and role</label>
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-solo-lead-name">Your name and role</label>
                       <input
                         style={ss.inp}
                         value={form.soloLeadName || ""}
@@ -2177,18 +2173,18 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                           setForm((f) => applySoloProjectRoles({ ...f, soloLeadName: v }, v));
                         }}
                         placeholder="e.g. Pat O — Principal contractor / HSE"
-                      />
+                       id="workers-solo-lead-name" />
                     </>
                   ) : (
                     <>
-                      <label style={{ ...ss.lbl, marginTop: 10 }}>Project owner</label>
-                      <input style={ss.inp} value={form.owner || ""} onChange={(e) => set("owner", e.target.value)} placeholder="e.g. PM / contract manager" />
-                      <label style={{ ...ss.lbl, marginTop: 10 }}>HSE lead</label>
-                      <input style={ss.inp} value={form.hseLead || ""} onChange={(e) => set("hseLead", e.target.value)} />
-                      <label style={{ ...ss.lbl, marginTop: 10 }}>Site manager</label>
-                      <input style={ss.inp} value={form.siteManager || ""} onChange={(e) => set("siteManager", e.target.value)} />
-                      <label style={{ ...ss.lbl, marginTop: 10 }}>Main contractor lead</label>
-                      <input style={ss.inp} value={form.contractorLead || ""} onChange={(e) => set("contractorLead", e.target.value)} />
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-owner">Project owner</label>
+                      <input style={ss.inp} value={form.owner || ""} onChange={(e) => set("owner", e.target.value)} placeholder="e.g. PM / contract manager"  id="workers-owner" />
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-hse-lead">HSE lead</label>
+                      <input style={ss.inp} value={form.hseLead || ""} onChange={(e) => set("hseLead", e.target.value)}  id="workers-hse-lead" />
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-site-manager">Site manager</label>
+                      <input style={ss.inp} value={form.siteManager || ""} onChange={(e) => set("siteManager", e.target.value)}  id="workers-site-manager" />
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-contractor-lead">Main contractor lead</label>
+                      <input style={ss.inp} value={form.contractorLead || ""} onChange={(e) => set("contractorLead", e.target.value)}  id="workers-contractor-lead" />
                     </>
                   )}
                 </div>
@@ -2209,8 +2205,8 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                         <span className="project-wizard-status">Awaiting location</span>
                       )}
                     </div>
-                    <label style={ss.lbl}>Address</label>
-                    <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)} />
+                    <label style={ss.lbl} htmlFor="workers-address">Address</label>
+                    <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)}  id="workers-address" />
                     <label style={{ ...ss.lbl, marginTop: 10 }}>Postcode</label>
                     <input
                       style={ss.inp}
@@ -2285,12 +2281,12 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                       <div className="project-wizard-advanced">
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <div>
-                            <label style={ss.lbl}>Latitude</label>
-                            <input style={ss.inp} inputMode="decimal" value={form.lat ?? ""} onChange={(e) => set("lat", e.target.value)} placeholder="e.g. 51.5" />
+                            <label style={ss.lbl} htmlFor="workers-lat">Latitude</label>
+                            <input style={ss.inp} inputMode="decimal" value={form.lat ?? ""} onChange={(e) => set("lat", e.target.value)} placeholder="e.g. 51.5"  id="workers-lat" />
                           </div>
                           <div>
-                            <label style={ss.lbl}>Longitude</label>
-                            <input style={ss.inp} inputMode="decimal" value={form.lng ?? ""} onChange={(e) => set("lng", e.target.value)} placeholder="e.g. -0.12" />
+                            <label style={ss.lbl} htmlFor="workers-lng">Longitude</label>
+                            <input style={ss.inp} inputMode="decimal" value={form.lng ?? ""} onChange={(e) => set("lng", e.target.value)} placeholder="e.g. -0.12"  id="workers-lng" />
                           </div>
                         </div>
                         <div className="project-wizard-actions" style={{ marginTop: 8 }}>
@@ -2379,12 +2375,12 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                     <h4 className="project-wizard-section__title">Target dates</h4>
                     <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
                       <div>
-                        <label style={ss.lbl}>Target start</label>
-                        <input type="date" style={ss.inp} value={form.timelineStart || ""} onChange={(e) => set("timelineStart", e.target.value)} />
+                        <label style={ss.lbl} htmlFor="workers-timeline-start">Target start</label>
+                        <input type="date" style={ss.inp} value={form.timelineStart || ""} onChange={(e) => set("timelineStart", e.target.value)}  id="workers-timeline-start" />
                       </div>
                       <div>
-                        <label style={ss.lbl}>Target end</label>
-                        <input type="date" style={ss.inp} value={form.timelineEnd || ""} onChange={(e) => set("timelineEnd", e.target.value)} />
+                        <label style={ss.lbl} htmlFor="workers-timeline-end">Target end</label>
+                        <input type="date" style={ss.inp} value={form.timelineEnd || ""} onChange={(e) => set("timelineEnd", e.target.value)}  id="workers-timeline-end" />
                       </div>
                     </div>
                     <div className="project-wizard-actions" style={{ marginTop: 10 }}>
@@ -2400,7 +2396,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                     ) : null}
                   </div>
                   <div className="project-wizard-section">
-                    <label style={ss.lbl}>Risk hints (editable)</label>
+                    <label style={ss.lbl} htmlFor="workers-risk-register">Risk hints (editable)</label>
                     <textarea
                       style={{ ...ss.inp, minHeight: 84, resize: "vertical" }}
                       value={(form.riskRegister || []).join("\n")}
@@ -2415,7 +2411,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                         )
                       }
                       placeholder="One risk per line"
-                    />
+                     id="workers-risk-register" />
                   </div>
                 </>
               ) : null}
@@ -2467,7 +2463,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                         </label>
                       ))}
                     </div>
-                    <label style={{ ...ss.lbl, marginTop: 10 }}>Required permit types (one per line)</label>
+                    <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-required-permit-types-one-per-line">Required permit types (one per line)</label>
                     <textarea
                       style={{ ...ss.inp, minHeight: 72, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
                       value={(form.permitDefaults?.requiredPermitTypes || starterMeta.defaultPermitFlow || []).join("\n")}
@@ -2485,7 +2481,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                         }))
                       }
                       placeholder="hot_work&#10;excavation&#10;electrical"
-                    />
+                     id="workers-required-permit-types-one-per-line" />
                     <div className="project-wizard-readiness">
                       <strong>Missing before go-live:</strong>{" "}
                       {missing.length === 0 ? (

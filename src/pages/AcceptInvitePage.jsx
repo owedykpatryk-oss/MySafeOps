@@ -19,6 +19,7 @@ export default function AcceptInvitePage() {
 
   const [preview, setPreview] = useState(null);
   const [err, setErr] = useState("");
+  const [understoodSwitch, setUnderstoodSwitch] = useState(false);
 
   useEffect(() => {
     const prev = document.title;
@@ -67,6 +68,7 @@ export default function AcceptInvitePage() {
 
   const loginEmail = (preview?.email || preview?.invite_email || email || "").trim().toLowerCase();
   const loginHref = `/login?invite=${encodeURIComponent(invite)}${loginEmail ? `&email=${encodeURIComponent(loginEmail)}` : ""}`;
+  const canContinue = Boolean(preview && understoodSwitch && invite && !err);
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #E1F5EE 0%, #f8fafc 38%)", fontFamily: "DM Sans, system-ui, sans-serif", padding: "1.5rem 1rem 2rem" }}>
@@ -97,8 +99,30 @@ export default function AcceptInvitePage() {
                 .
               </p>
               <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                Sign in or create an account with the same email to accept. Invite expires: {new Date(preview.expires_at).toLocaleString()}.
+                Sign in or create an account with the same email to accept. Invite expires:{" "}
+                {new Date(preview.expires_at).toLocaleString()}.
               </p>
+              <InlineAlert
+                type="warn"
+                text={`Joining ${preview.org_name} switches this login to that organisation. If you already have your own MySafeOps workspace, you will lose access to it from this account (data stays on that org; you need a new invite to return). One login can only belong to one organisation.`}
+                style={{ marginBottom: 14 }}
+              />
+              <label
+                htmlFor="invite-org-switch-ack"
+                style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, lineHeight: 1.45, marginBottom: 16, cursor: "pointer" }}
+              >
+                <input
+                  id="invite-org-switch-ack"
+                  type="checkbox"
+                  checked={understoodSwitch}
+                  onChange={(e) => setUnderstoodSwitch(e.target.checked)}
+                  style={{ marginTop: 3, flexShrink: 0 }}
+                />
+                <span>
+                  I understand that accepting this invite will disconnect this account from any existing organisation I
+                  own or belong to.
+                </span>
+              </label>
             </>
           ) : (
             <div
@@ -114,25 +138,49 @@ export default function AcceptInvitePage() {
           )}
 
           {invite && !err && (
-            <Link
-              to={loginHref}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "12px 20px",
-                borderRadius: 8,
-                background: teal,
-                color: "#f0fdfa",
-                textDecoration: "none",
-                fontSize: 15,
-                fontWeight: 600,
-                minHeight: 48,
-                border: "1px solid #085041",
-              }}
-            >
-              Continue to sign in
-            </Link>
+            canContinue ? (
+              <Link
+                to={loginHref}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "12px 20px",
+                  borderRadius: 8,
+                  background: teal,
+                  color: "#f0fdfa",
+                  textDecoration: "none",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  minHeight: 48,
+                  border: "1px solid #085041",
+                }}
+              >
+                Continue to sign in
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "12px 20px",
+                  borderRadius: 8,
+                  background: "#94a3b8",
+                  color: "#f8fafc",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  minHeight: 48,
+                  border: "1px solid #64748b",
+                  opacity: 0.85,
+                  cursor: "not-allowed",
+                }}
+              >
+                Continue to sign in
+              </button>
+            )
           )}
 
           <p style={{ marginTop: 16, fontSize: 13 }}>

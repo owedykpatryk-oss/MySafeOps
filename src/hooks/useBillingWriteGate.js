@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from "react";
 import { useApp } from "../context/AppContext";
-import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import {
   billingWriteBlockedMessage,
   canExtendOrgTrial,
@@ -9,16 +8,13 @@ import {
   notifyBillingWriteBlocked,
   shouldShowTrialExtensionOffer,
 } from "../utils/billingAccess";
-import { isSuperAdminEmail } from "../utils/superAdmin";
 
 /** Central read-only / trial billing gate for workspace modules. */
 export function useBillingWriteGate() {
-  const { trialStatus, billing, trialExtensionCount } = useApp();
-  const { user } = useSupabaseAuth();
-  const isPlatformOwner = isSuperAdminEmail(user?.email);
+  const { trialStatus, billing, trialExtensionCount, isPlatformOwner } = useApp();
 
   const opts = useMemo(
-    () => ({ trialStatus, billing, isPlatformOwner, trialExtensionCount }),
+    () => ({ trialStatus, billing, isPlatformOwner: Boolean(isPlatformOwner), trialExtensionCount }),
     [trialStatus, billing, isPlatformOwner, trialExtensionCount]
   );
 
@@ -44,6 +40,6 @@ export function useBillingWriteGate() {
     showExtensionOffer,
     message,
     guardAction,
-    isPlatformOwner,
+    isPlatformOwner: Boolean(isPlatformOwner),
   };
 }

@@ -1,12 +1,6 @@
 /** Org-scoped localStorage helpers — keys are `${baseKey}_${orgId}` (mysafeops_orgId). */
 import { isBillingWriteBlocked, notifyBillingWriteBlocked } from "./billingAccess";
-import {
-  ORG_ID_KEY,
-  ORG_CHANGED_EVENT,
-  getOrgId,
-  setOrgId,
-  orgScopedKey,
-} from "./orgId";
+import { orgScopedKey } from "./orgId";
 
 export { ORG_ID_KEY, ORG_CHANGED_EVENT, getOrgId, setOrgId, orgScopedKey } from "./orgId";
 

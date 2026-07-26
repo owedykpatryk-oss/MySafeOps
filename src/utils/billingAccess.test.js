@@ -62,4 +62,46 @@ describe("billingAccess", () => {
     expect(pastDueBillingMessage("unpaid")).toMatch(/unpaid/i);
     expect(pastDueBillingMessage("past_due")).toMatch(/outstanding invoice/i);
   });
+
+  it("keeps past_due writable inside grace window", () => {
+    const past = new Date(Date.now() - 86400000).toISOString();
+    localStorage.setItem("mysafeops_trial_ends_at", past);
+    localStorage.setItem("mysafeops_subscription_past_due_since", new Date(Date.now() - 2 * 86400000).toISOString());
+    expect(
+      isBillingWriteBlocked({
+        trialStatus: { isActive: false },
+        billing: {
+          subscriptionStatus: "past_due",
+          paidPlanId: "team",
+          pastDueSince: new Date(Date.now() - 2 * 86400000).toISOString(),
+        },
+      })
+    ).toBe(false);
+  });
+
+  it("blocks past_due after grace window", () => {
+    const past = new Date(Date.now() - 86400000).toISOString();
+    localStorage.setItem("mysafeops_trial_ends_at", past);
+    expect(
+      isBillingWriteBlocked({
+        trialStatus: { isActive: false },
+        billing: {
+          subscriptionStatus: "past_due",
+          paidPlanId: "team",
+          pastDueSince: new Date(Date.now() - 10 * 86400000).toISOString(),
+        },
+      })
+    ).toBe(true);
+  });
+
+  it("hard-blocks unpaid even with paidPlanId cached", () => {
+    const past = new Date(Date.now() - 86400000).toISOString();
+    localStorage.setItem("mysafeops_trial_ends_at", past);
+    expect(
+      isBillingWriteBlocked({
+        trialStatus: { isActive: false },
+        billing: { subscriptionStatus: "unpaid", paidPlanId: "team" },
+      })
+    ).toBe(true);
+  });
 });

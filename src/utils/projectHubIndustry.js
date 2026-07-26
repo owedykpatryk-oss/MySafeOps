@@ -16,7 +16,6 @@ import { UTILITY_MAPPING_PACK_ID } from "./utilityMappingWorkspaceProfile";
 import {
   getOrgIndustryPackId,
   isSurveyWorkflowEnabled,
-  isSurveyingOrg,
 } from "./surveyWorkflowGate";
 
 export { getOrgIndustryPackId, isSurveyWorkflowEnabled, isSurveyingOrg } from "./surveyWorkflowGate";

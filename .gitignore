@@ -16,3 +16,9 @@ DOCS/Survey/**
 !DOCS/Survey/README.local-only.md
 
 .vercel
+
+# Local build / agent scratch output
+build-output.txt
+lint-out.txt
+scripts/_tmp_*
+DOCS/**/_*

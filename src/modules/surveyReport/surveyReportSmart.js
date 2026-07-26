@@ -44,6 +44,7 @@ import { syncSurveyReportFromRams } from "./surveyRamsSync";
 import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
 import { inheritSiteContextOntoDoc } from "../../utils/inheritSiteContext";
 
+import { todayLocalISO } from "../../utils/localDate";
 export { mapWeatherSnapshotToFields } from "../../utils/weatherFieldMap";
 
 export { syncSurveyReportFromRams, buildRamsPatchFromSurveyReport, mergeRamsWithSurveyReport } from "./surveyRamsSync";
@@ -1001,7 +1002,7 @@ export function prefillProfessionalFields(report, { project, ramsDoc, permits = 
     next.revisionHistory = [
       {
         id: `rev_${Date.now()}`,
-        date: dc.issueDate || next.surveyDate || new Date().toISOString().slice(0, 10),
+        date: dc.issueDate || next.surveyDate || todayLocalISO(),
         revision: dc.revision || "A",
         author: dc.preparedBy || next.surveyor || "",
         description: "Initial issue",

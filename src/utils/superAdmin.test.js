@@ -1,28 +1,51 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-describe("superAdmin allowlist", () => {
-  const prev = import.meta.env.VITE_PLATFORM_OWNER_EMAIL;
+describe("superAdmin platform owner probe", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
   afterEach(() => {
-    import.meta.env.VITE_PLATFORM_OWNER_EMAIL = prev;
+    vi.restoreAllMocks();
     vi.resetModules();
   });
 
-  it("fails closed when VITE_PLATFORM_OWNER_EMAIL is unset", async () => {
-    import.meta.env.VITE_PLATFORM_OWNER_EMAIL = "";
-    vi.resetModules();
-    const { isSuperAdminEmail } = await import("./superAdmin.js");
-    expect(isSuperAdminEmail("mysafeops@gmail.com")).toBe(false);
+  it("fails closed before any server probe", async () => {
+    const { isSuperAdminEmail, SUPERADMIN_EMAIL, isPlatformOwnerCached } = await import("./superAdmin.js");
+    expect(isPlatformOwnerCached()).toBe(false);
     expect(isSuperAdminEmail("anyone@example.com")).toBe(false);
+    expect(SUPERADMIN_EMAIL).toBe("");
   });
 
-  it("matches configured allowlist emails", async () => {
-    import.meta.env.VITE_PLATFORM_OWNER_EMAIL = "owner@mysafeops.com, ops@mysafeops.com";
+  it("respects setPlatformOwnerCached for UI gates", async () => {
+    const { setPlatformOwnerCached, isSuperAdminEmail, isPlatformOwnerEmail } = await import("./superAdmin.js");
+    setPlatformOwnerCached(true);
+    expect(isSuperAdminEmail("ignored@example.com")).toBe(true);
+    expect(isPlatformOwnerEmail()).toBe(true);
+    setPlatformOwnerCached(false);
+    expect(isSuperAdminEmail("ignored@example.com")).toBe(false);
+  });
+
+  it("refreshPlatformOwnerFromSupabase uses RPC and fails closed on error", async () => {
+    vi.doMock("../lib/supabase", () => ({
+      isSupabaseConfigured: () => true,
+      supabase: {
+        rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
+      },
+    }));
+    const { refreshPlatformOwnerFromSupabase, isPlatformOwnerCached } = await import("./superAdmin.js");
+    await expect(refreshPlatformOwnerFromSupabase()).resolves.toBe(true);
+    expect(isPlatformOwnerCached()).toBe(true);
+
     vi.resetModules();
-    const { isSuperAdminEmail, SUPERADMIN_EMAIL } = await import("./superAdmin.js");
-    expect(isSuperAdminEmail("owner@mysafeops.com")).toBe(true);
-    expect(isSuperAdminEmail("OPS@mysafeops.com")).toBe(true);
-    expect(isSuperAdminEmail("other@example.com")).toBe(false);
-    expect(SUPERADMIN_EMAIL).toBe("owner@mysafeops.com");
+    vi.doMock("../lib/supabase", () => ({
+      isSupabaseConfigured: () => true,
+      supabase: {
+        rpc: vi.fn().mockResolvedValue({ data: null, error: { message: "nope" } }),
+      },
+    }));
+    const mod2 = await import("./superAdmin.js");
+    await expect(mod2.refreshPlatformOwnerFromSupabase()).resolves.toBe(false);
+    expect(mod2.isPlatformOwnerCached()).toBe(false);
   });
 });

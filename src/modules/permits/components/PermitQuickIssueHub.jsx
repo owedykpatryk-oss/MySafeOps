@@ -26,7 +26,7 @@ export default function PermitQuickIssueHub({
   favorites = { types: [], issuers: [], locations: [] },
   recentPermits = [],
   recentLocations = [],
-  projects = [],
+  projects: _projects = [],
   now = new Date(),
   onIssueType,
   onRepeatPermit,

@@ -9,6 +9,7 @@ import D1WriteForbiddenBanner from "../components/D1WriteForbiddenBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import TrialBillingBanner from "../components/TrialBillingBanner";
 import PastDueBillingBanner from "../components/PastDueBillingBanner";
+import PlEnglishUiBanner from "../components/PlEnglishUiBanner";
 import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
 import BillingUsageWarning from "../components/BillingUsageWarning";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
@@ -49,9 +50,7 @@ import { getPinnedModuleIds, togglePinnedModule } from "../utils/pinnedModules";
 import { getSectionTone, getModuleIcon, canExportModulePdf, preloadModuleIcons } from "../navigation/moduleCatalogMeta";
 import { recordRecentModule } from "../utils/recentModules";
 import { workspaceViewLoaders, workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_ID } from "../navigation/workspaceViews";
-import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useApp } from "../context/AppContext";
-import { isSuperAdminEmail } from "../utils/superAdmin";
 import { useOrgBranding } from "../hooks/useOrgBranding";
 import {
   filterVisibleModuleIds,
@@ -393,11 +392,10 @@ function buildNavTabs(marketId = getOrgMarketId(), mode = "default") {
 }
 
 export default function MainAppLayout() {
-  const { user } = useSupabaseAuth();
-  const { caps } = useApp();
+  const { caps, isPlatformOwner } = useApp();
   const { pushToast } = useToast();
   const orgBranding = useOrgBranding();
-  const isSuperadmin = isSuperAdminEmail(user?.email);
+  const isSuperadmin = Boolean(isPlatformOwner);
   const [hiddenRev, setHiddenRev] = useState(0);
   const [orgMarketRev, setOrgMarketRev] = useState(0);
   const orgMarketId = useMemo(() => {
@@ -955,6 +953,7 @@ export default function MainAppLayout() {
       <D1WriteForbiddenBanner />
       <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
         <PastDueBillingBanner />
+        <PlEnglishUiBanner />
         <TrialBillingBanner />
         <BillingReadOnlyBanner />
         <BillingUsageWarning />
@@ -1202,7 +1201,7 @@ export default function MainAppLayout() {
           justifyContent: "space-around",
           alignItems: "center",
           padding: "8px 6px calc(8px + var(--safe-bottom, 0px))",
-          zIndex: 40,
+          zIndex: "var(--z-nav, 40)",
         }}
       >
         {bottomNavTabs.map((t) => {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,6 +15,7 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
+import { todayLocalISO } from "../utils/localDate";
 const KEY = "ghp_register";
 const genId = () => `ghp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
 const ss = ms;
@@ -25,7 +28,7 @@ function Form({ item, onSave, onClose }) {
         zone: "",
         itemDescription: "",
         broughtBy: "",
-        dateIn: new Date().toISOString().slice(0, 10),
+        dateIn: todayLocalISO(),
         dateOut: "",
         breakageReported: false,
         breakageNotes: "",
@@ -35,28 +38,28 @@ function Form({ item, onSave, onClose }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit G&HP entry" : "Glass & hard plastic register entry"}</h2>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Food factory requirement — log brittle items brought into production/high-care areas.</p>
-        <label style={ss.lbl}>Item description</label>
-        <input style={ss.inp} value={form.itemDescription} onChange={(e) => set("itemDescription", e.target.value)} placeholder="e.g. Torx driver, glass thermometer" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Zone / area</label>
-        <input style={ss.inp} value={form.zone} onChange={(e) => set("zone", e.target.value)} placeholder="High-care / production line 2" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Brought on site by</label>
-        <input style={ss.inp} value={form.broughtBy} onChange={(e) => set("broughtBy", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date in</label>
-        <input type="date" style={ss.inp} value={form.dateIn} onChange={(e) => set("dateIn", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date out (optional)</label>
-        <input type="date" style={ss.inp} value={form.dateOut} onChange={(e) => set("dateOut", e.target.value)} />
+        <label style={ss.lbl} htmlFor="glass-hard-plastic-item-description">Item description</label>
+        <input style={ss.inp} value={form.itemDescription} onChange={(e) => set("itemDescription", e.target.value)} placeholder="e.g. Torx driver, glass thermometer"  id="glass-hard-plastic-item-description" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="glass-hard-plastic-zone">Zone / area</label>
+        <input style={ss.inp} value={form.zone} onChange={(e) => set("zone", e.target.value)} placeholder="High-care / production line 2"  id="glass-hard-plastic-zone" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="glass-hard-plastic-brought-by">Brought on site by</label>
+        <input style={ss.inp} value={form.broughtBy} onChange={(e) => set("broughtBy", e.target.value)}  id="glass-hard-plastic-brought-by" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="glass-hard-plastic-date-in">Date in</label>
+        <input type="date" style={ss.inp} value={form.dateIn} onChange={(e) => set("dateIn", e.target.value)}  id="glass-hard-plastic-date-in" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="glass-hard-plastic-date-out">Date out (optional)</label>
+        <input type="date" style={ss.inp} value={form.dateOut} onChange={(e) => set("dateOut", e.target.value)}  id="glass-hard-plastic-date-out" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={!!form.breakageReported} onChange={(e) => set("breakageReported", e.target.checked)} />
           Breakage reported
         </label>
         {form.breakageReported ? (
           <>
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Breakage / quarantine notes</label>
-            <textarea style={{ ...ss.inp, minHeight: 60 }} value={form.breakageNotes} onChange={(e) => set("breakageNotes", e.target.value)} />
+            <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="glass-hard-plastic-breakage-notes">Breakage / quarantine notes</label>
+            <textarea style={{ ...ss.inp, minHeight: 60 }} value={form.breakageNotes} onChange={(e) => set("breakageNotes", e.target.value)}  id="glass-hard-plastic-breakage-notes" />
           </>
         ) : null}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
@@ -64,7 +67,7 @@ function Form({ item, onSave, onClose }) {
           <button type="button" style={ss.btnP} onClick={() => onSave(form)}>Save</button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -82,13 +85,12 @@ export default function GlassHardPlasticRegister() {
     save,
   });
 
-  const onSite = items.filter((i) => !i.dateOut);
-  const breakage = items.filter((i) => i.breakageReported);
-
   const persist = (next) => {
     setItems(next);
     save(KEY, next);
   };
+
+  const liveItems = liveOrgArrayRows(items);
 
   return (
     <div>
@@ -102,8 +104,8 @@ export default function GlassHardPlasticRegister() {
         }
       />
       <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
-      <RegisterModuleShell moduleId="ghp-register" smartContext={{ items }} stats={buildRegisterModuleStats("ghp-register", items)}>
-        {items.length === 0 ? (
+      <RegisterModuleShell moduleId="ghp-register" smartContext={{ items: liveItems }} stats={buildRegisterModuleStats("ghp-register", liveItems)}>
+        {liveItems.length === 0 ? (
           <EmptyState
             icon="🫙"
             title="No G&HP items logged yet"
@@ -114,7 +116,7 @@ export default function GlassHardPlasticRegister() {
           />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {listPg.visible(items).map((item) => (
+            {listPg.visible(liveItems).map((item) => (
               <div key={item.id} style={{ ...ss.card, padding: 12 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{item.itemDescription || "Item"}</div>
                 <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
@@ -140,7 +142,7 @@ export default function GlassHardPlasticRegister() {
                               payload: item,
                             })
                           ) {
-                            persist(items.filter((x) => x.id !== item.id));
+                            persist(replaceWithTombstone(items, item.id));
                             pushAudit({ action: "delete", entityType: "ghp_register", entityId: item.id });
                           }
                         }}
@@ -153,10 +155,10 @@ export default function GlassHardPlasticRegister() {
               </div>
             ))}
             <RegisterListPagingFooter
-              hasMore={listPg.hasMore(items)}
-              remaining={listPg.remaining(items)}
-              showing={Math.min(listPg.cap, items.length)}
-              total={items.length}
+              hasMore={listPg.hasMore(liveItems)}
+              remaining={listPg.remaining(liveItems)}
+              showing={Math.min(listPg.cap, liveItems.length)}
+              total={liveItems.length}
               onShowMore={listPg.showMore}
               buttonStyle={ss.btn}
             />

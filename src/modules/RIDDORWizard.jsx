@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { escapeHtml, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
@@ -6,6 +6,7 @@ import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -19,52 +20,17 @@ import {
 import { getOrgMarketId } from "../utils/orgMarket";
 import { formatOrgDate } from "../utils/orgLocale";
 
+import { localDateISO, todayLocalISO } from "../utils/localDate";
 const genId = () => `riddor_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-const today = () => new Date().toISOString().slice(0,10);
+const today = todayLocalISO;
 const fmtDate = formatOrgDate;
-const addDays = (iso, days) => { const d=new Date(iso); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); };
+const addDays = (iso, days) => { const d=new Date(iso); d.setDate(d.getDate()+days); return localDateISO(d); };
 
 const ss = {
   ...ms,
   btnR: { padding:"7px 14px", borderRadius:6, border:"0.5px solid #A32D2D", background:"#FCEBEB", color:"#791F1F", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 },
   ta: { ...ms.inp, resize:"vertical", lineHeight:1.5 },
 };
-
-const RIDDOR_TYPES = {
-  fatality: { label:"Death / fatality", deadline:10, form:"F2508", urgent:true, description:"A worker or member of the public dies as a result of a work-related accident" },
-  specified: { label:"Specified injury (worker)", deadline:10, form:"F2508", urgent:true, description:"Fracture (not finger/toe), amputation, loss of sight, crush injury to head/torso, burn, degloving, loss of consciousness, harm from biological agent" },
-  over7day: { label:"Over-7-day incapacitation", deadline:15, form:"F2508", urgent:false, description:"Worker unable to perform normal duties for more than 7 consecutive days (not counting day of accident)" },
-  dangerous_occurrence: { label:"Dangerous occurrence", deadline:10, form:"F2508", urgent:true, description:"Scaffold collapse, crane overturning, explosion, train collision, building collapse, radiation source uncontrolled" },
-  gas_incident: { label:"Gas incident", deadline:10, form:"F2508G", urgent:true, description:"Flammable gas or vapour explosion or fire, or a gas fitting or appliance causing death or injury" },
-  disease: { label:"Occupational disease", deadline:null, form:"F2508A", urgent:false, description:"Doctor notifies employer of occupational disease: carpal tunnel, cramp, dermatitis, occupational asthma, tendinitis, vibration white finger" },
-  public_injury: { label:"Public injury (non-fatal)", deadline:10, form:"F2508", urgent:false, description:"Member of public taken from scene to hospital for treatment as a result of a work-related accident" },
-};
-
-const SPECIFIED_INJURIES = [
-  "Fracture (other than finger, thumb or toe)",
-  "Amputation of arm, hand, finger, thumb, leg, foot or toe",
-  "Loss of sight or reduction in sight",
-  "Crush injury to head or torso causing damage to brain or internal organs",
-  "Severe burn (covering more than 10% of body, or to face, hands, feet, genitals, major joint)",
-  "Degree of hypothermia requiring resuscitation or admission to hospital",
-  "Loss of consciousness caused by head injury or asphyxia",
-  "Any harm from absorption of any substance by inhalation, ingestion or through the skin",
-  "Any degree of harm requiring resuscitation",
-  "Hospitalisation for more than 24 hours",
-];
-
-const DANGEROUS_OCCURRENCES = [
-  "Collapse, overturning or failure of load-bearing part of any scaffold more than 5 metres high",
-  "Explosion or fire causing suspension of normal work for more than 24 hours",
-  "Collapse or partial collapse of a building under construction",
-  "Accidental release of any substance that may cause injury to any person",
-  "Failure of any closed vessel or associated pipework forming part of a pressure system",
-  "Electrical short circuit or overload attended by fire or explosion serious enough to stop plant operation",
-  "Explosion, collapse or burst of any closed vessel",
-  "Train collision or derailment",
-  "Unintended collapse of any building",
-  "Contact with overhead power line",
-];
 
 export function printNotifiableWorksheet(form, content) {
   void (async () => {
@@ -235,32 +201,32 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
         {step===1 && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div>
-              <label style={ss.lbl}>Date of incident *</label>
-              <input type="date" value={form.incidentDate} onChange={e=>set("incidentDate",e.target.value)} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="riddor-incident-date">Date of incident *</label>
+              <input type="date" value={form.incidentDate} onChange={e=>set("incidentDate",e.target.value)} style={ss.inp}  id="riddor-incident-date" />
             </div>
             <div>
-              <label style={ss.lbl}>Time of incident</label>
-              <input type="time" value={form.incidentTime||""} onChange={e=>set("incidentTime",e.target.value)} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="riddor-incident-time">Time of incident</label>
+              <input type="time" value={form.incidentTime||""} onChange={e=>set("incidentTime",e.target.value)} style={ss.inp}  id="riddor-incident-time" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Exact location where incident occurred *</label>
-              <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="e.g. Boiler room, Level 2, 2SFG Scunthorpe" style={ss.inp} />
+              <label style={ss.lbl} htmlFor="riddor-location">Exact location where incident occurred *</label>
+              <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="e.g. Boiler room, Level 2, 2SFG Scunthorpe" style={ss.inp}  id="riddor-location" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Site address</label>
-              <textarea value={form.siteAddress||""} onChange={e=>set("siteAddress",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:44 }} />
+              <label style={ss.lbl} htmlFor="riddor-site-address">Site address</label>
+              <textarea value={form.siteAddress||""} onChange={e=>set("siteAddress",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:44 }}  id="riddor-site-address" />
             </div>
             <div>
-              <label style={ss.lbl}>Project</label>
-              <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp}>
+              <label style={ss.lbl} htmlFor="riddor-project-id">Project</label>
+              <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="riddor-project-id">
                 <option value="">— Select —</option>
                 {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             {isSeriousInjuryType && (
               <div style={{ gridColumn:"1/-1" }}>
-                <label style={ss.lbl}>Type of serious / specified injury</label>
-                <select value={form.specifiedInjuryType||""} onChange={e=>set("specifiedInjuryType",e.target.value)} style={ss.inp}>
+                <label style={ss.lbl} htmlFor="riddor-specified-injury-type">Type of serious / specified injury</label>
+                <select value={form.specifiedInjuryType||""} onChange={e=>set("specifiedInjuryType",e.target.value)} style={ss.inp} id="riddor-specified-injury-type">
                   <option value="">— Select —</option>
                   {content.specifiedInjuries.map((i,idx)=><option key={idx} value={i}>{i}</option>)}
                 </select>
@@ -268,24 +234,24 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
             )}
             {isDangerousType && (
               <div style={{ gridColumn:"1/-1" }}>
-                <label style={ss.lbl}>Type of dangerous incident / occurrence</label>
-                <select value={form.dangerousOccurrenceType||""} onChange={e=>set("dangerousOccurrenceType",e.target.value)} style={ss.inp}>
+                <label style={ss.lbl} htmlFor="riddor-dangerous-occurrence-type">Type of dangerous incident / occurrence</label>
+                <select value={form.dangerousOccurrenceType||""} onChange={e=>set("dangerousOccurrenceType",e.target.value)} style={ss.inp} id="riddor-dangerous-occurrence-type">
                   <option value="">— Select —</option>
                   {content.dangerousOccurrences.map((i,idx)=><option key={idx} value={i}>{i}</option>)}
                 </select>
               </div>
             )}
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>What work was being done at time of incident? *</label>
-              <textarea value={form.workBeingDone||""} onChange={e=>set("workBeingDone",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:50 }} placeholder="Describe the activity taking place at the time of the incident…" />
+              <label style={ss.lbl} htmlFor="riddor-work-being-done">What work was being done at time of incident? *</label>
+              <textarea value={form.workBeingDone||""} onChange={e=>set("workBeingDone",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:50 }} placeholder="Describe the activity taking place at the time of the incident…"  id="riddor-work-being-done" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Description of what happened *</label>
-              <textarea value={form.incidentDescription||""} onChange={e=>set("incidentDescription",e.target.value)} rows={3} style={{ ...ss.ta, minHeight:70 }} placeholder="Provide a full description of how the incident occurred…" />
+              <label style={ss.lbl} htmlFor="riddor-incident-description">Description of what happened *</label>
+              <textarea value={form.incidentDescription||""} onChange={e=>set("incidentDescription",e.target.value)} rows={3} style={{ ...ss.ta, minHeight:70 }} placeholder="Provide a full description of how the incident occurred…"  id="riddor-incident-description" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Cause / contributing factors</label>
-              <textarea value={form.causeOfIncident||""} onChange={e=>set("causeOfIncident",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:50 }} placeholder="What were the direct and underlying causes?" />
+              <label style={ss.lbl} htmlFor="riddor-cause-of-incident">Cause / contributing factors</label>
+              <textarea value={form.causeOfIncident||""} onChange={e=>set("causeOfIncident",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:50 }} placeholder="What were the direct and underlying causes?"  id="riddor-cause-of-incident" />
             </div>
           </div>
         )}
@@ -294,27 +260,27 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
         {step===2 && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Full name of injured person</label>
-              <input value={form.injuredName||""} onChange={e=>set("injuredName",e.target.value)} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="riddor-injured-name">Full name of injured person</label>
+              <input value={form.injuredName||""} onChange={e=>set("injuredName",e.target.value)} style={ss.inp}  id="riddor-injured-name" />
             </div>
             <div>
-              <label style={ss.lbl}>Date of birth</label>
-              <input type="date" value={form.injuredDob||""} onChange={e=>set("injuredDob",e.target.value)} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="riddor-injured-dob">Date of birth</label>
+              <input type="date" value={form.injuredDob||""} onChange={e=>set("injuredDob",e.target.value)} style={ss.inp}  id="riddor-injured-dob" />
             </div>
             <div>
-              <label style={ss.lbl}>Gender</label>
-              <select value={form.injuredGender||""} onChange={e=>set("injuredGender",e.target.value)} style={ss.inp}>
+              <label style={ss.lbl} htmlFor="riddor-injured-gender">Gender</label>
+              <select value={form.injuredGender||""} onChange={e=>set("injuredGender",e.target.value)} style={ss.inp} id="riddor-injured-gender">
                 <option value="">— Select —</option>
                 <option>Male</option><option>Female</option><option>Prefer not to say</option>
               </select>
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Job title / trade</label>
-              <input value={form.injuredJobTitle||""} onChange={e=>set("injuredJobTitle",e.target.value)} placeholder="e.g. Pipefitter, Electrician, Site manager" style={ss.inp} />
+              <label style={ss.lbl} htmlFor="riddor-injured-job-title">Job title / trade</label>
+              <input value={form.injuredJobTitle||""} onChange={e=>set("injuredJobTitle",e.target.value)} placeholder="e.g. Pipefitter, Electrician, Site manager" style={ss.inp}  id="riddor-injured-job-title" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Witnesses</label>
-              <textarea value={form.witnesses||""} onChange={e=>set("witnesses",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:44 }} placeholder="Names of any witnesses to the incident…" />
+              <label style={ss.lbl} htmlFor="riddor-witnesses">Witnesses</label>
+              <textarea value={form.witnesses||""} onChange={e=>set("witnesses",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:44 }} placeholder="Names of any witnesses to the incident…"  id="riddor-witnesses" />
             </div>
           </div>
         )}
@@ -323,12 +289,12 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
         {step===3 && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Employer / organisation name</label>
-              <input value={form.employerName||""} onChange={e=>set("employerName",e.target.value)} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="riddor-employer-name">Employer / organisation name</label>
+              <input value={form.employerName||""} onChange={e=>set("employerName",e.target.value)} style={ss.inp}  id="riddor-employer-name" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Employer address</label>
-              <textarea value={form.employerAddress||""} onChange={e=>set("employerAddress",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:44 }} />
+              <label style={ss.lbl} htmlFor="riddor-employer-address">Employer address</label>
+              <textarea value={form.employerAddress||""} onChange={e=>set("employerAddress",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:44 }}  id="riddor-employer-address" />
             </div>
           </div>
         )}
@@ -337,8 +303,8 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
         {step===4 && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Treatment received</label>
-              <select value={form.treatmentReceived||""} onChange={e=>set("treatmentReceived",e.target.value)} style={ss.inp}>
+              <label style={ss.lbl} htmlFor="riddor-treatment-received">Treatment received</label>
+              <select value={form.treatmentReceived||""} onChange={e=>set("treatmentReceived",e.target.value)} style={ss.inp} id="riddor-treatment-received">
                 <option value="">— Select —</option>
                 <option>First aid on site only</option>
                 <option>Taken to hospital — A&E</option>
@@ -350,24 +316,24 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
             {(form.treatmentReceived==="Taken to hospital — A&E"||form.treatmentReceived==="Admitted to hospital") && (
               <>
                 <div>
-                  <label style={ss.lbl}>Hospital name</label>
-                  <input value={form.hospitalName||""} onChange={e=>set("hospitalName",e.target.value)} style={ss.inp} />
+                  <label style={ss.lbl} htmlFor="riddor-hospital-name">Hospital name</label>
+                  <input value={form.hospitalName||""} onChange={e=>set("hospitalName",e.target.value)} style={ss.inp}  id="riddor-hospital-name" />
                 </div>
                 <div>
-                  <label style={ss.lbl}>Date of treatment</label>
-                  <input type="date" value={form.treatmentDate||""} onChange={e=>set("treatmentDate",e.target.value)} style={ss.inp} />
+                  <label style={ss.lbl} htmlFor="riddor-treatment-date">Date of treatment</label>
+                  <input type="date" value={form.treatmentDate||""} onChange={e=>set("treatmentDate",e.target.value)} style={ss.inp}  id="riddor-treatment-date" />
                 </div>
               </>
             )}
             {form.riddorType==="over7day" && (
               <>
                 <div>
-                  <label style={ss.lbl}>Number of days absent</label>
-                  <input type="number" value={form.daysAbsent||""} onChange={e=>set("daysAbsent",e.target.value)} style={ss.inp} />
+                  <label style={ss.lbl} htmlFor="riddor-days-absent">Number of days absent</label>
+                  <input type="number" value={form.daysAbsent||""} onChange={e=>set("daysAbsent",e.target.value)} style={ss.inp}  id="riddor-days-absent" />
                 </div>
                 <div>
-                  <label style={ss.lbl}>Actual / expected return to work</label>
-                  <input type="date" value={form.returnToWorkDate||""} onChange={e=>set("returnToWorkDate",e.target.value)} style={ss.inp} />
+                  <label style={ss.lbl} htmlFor="riddor-return-to-work-date">Actual / expected return to work</label>
+                  <input type="date" value={form.returnToWorkDate||""} onChange={e=>set("returnToWorkDate",e.target.value)} style={ss.inp}  id="riddor-return-to-work-date" />
                 </div>
               </>
             )}
@@ -378,8 +344,8 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
         {step===5 && (
           <div>
             <div style={{ marginBottom:12 }}>
-              <label style={ss.lbl}>Immediate actions taken</label>
-              <textarea value={form.immediateActions||""} onChange={e=>set("immediateActions",e.target.value)} rows={3} style={{ ...ss.ta, minHeight:60 }} placeholder="Describe immediate actions taken: first aid given, area made safe, equipment isolated, emergency services called…" />
+              <label style={ss.lbl} htmlFor="riddor-immediate-actions">Immediate actions taken</label>
+              <textarea value={form.immediateActions||""} onChange={e=>set("immediateActions",e.target.value)} rows={3} style={{ ...ss.ta, minHeight:60 }} placeholder="Describe immediate actions taken: first aid given, area made safe, equipment isolated, emergency services called…"  id="riddor-immediate-actions" />
             </div>
             <div style={{ padding:"10px 14px", background:"#E6F1FB", borderRadius:8, fontSize:12, color:"#0C447C", marginBottom:14 }}>
               Official guidance: <a href={content.regulatorUrl} target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>{content.regulatorUrl.replace(/^https:\/\//, "")}</a>
@@ -394,12 +360,12 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
             {form.reportedToHSE && (
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
                 <div>
-                  <label style={ss.lbl}>Regulator reference number</label>
-                  <input value={form.hseReportRef||""} onChange={e=>set("hseReportRef",e.target.value)} placeholder="Reference from regulator confirmation" style={ss.inp} />
+                  <label style={ss.lbl} htmlFor="riddor-hse-report-ref">Regulator reference number</label>
+                  <input value={form.hseReportRef||""} onChange={e=>set("hseReportRef",e.target.value)} placeholder="Reference from regulator confirmation" style={ss.inp}  id="riddor-hse-report-ref" />
                 </div>
                 <div>
-                  <label style={ss.lbl}>Date reported</label>
-                  <input type="date" value={form.hseReportDate||""} onChange={e=>set("hseReportDate",e.target.value)} style={ss.inp} />
+                  <label style={ss.lbl} htmlFor="riddor-hse-report-date">Date reported</label>
+                  <input type="date" value={form.hseReportDate||""} onChange={e=>set("hseReportDate",e.target.value)} style={ss.inp}  id="riddor-hse-report-date" />
                 </div>
               </div>
             )}
@@ -463,6 +429,8 @@ export default function RIDDORRegister() {
 
   useEffect(()=>{ save("riddor_reports",reports); },[reports]);
 
+  const liveReports = liveOrgArrayRows(reports);
+
   const saveReport = (r) => {
     setReports(prev=>prev.find(x=>x.id===r.id)?prev.map(x=>x.id===r.id?r:x):[r,...prev]);
     setModal(null);
@@ -498,15 +466,15 @@ export default function RIDDORRegister() {
 
       <RegisterModuleShell
         moduleId={content.moduleId}
-        smartContext={{ items: reports, reports }}
-        pdfExportRows={reports}
-        stats={buildRegisterModuleStats(content.moduleId, reports)}
+        smartContext={{ items: liveReports, reports: liveReports }}
+        pdfExportRows={liveReports}
+        stats={buildRegisterModuleStats(content.moduleId, liveReports)}
       >
       <div style={{ padding:"10px 14px", background:"#E6F1FB", border:"0.5px solid #B5D4F4", borderRadius:8, fontSize:12, color:"#0C447C", marginBottom:20, lineHeight:1.6 }}>
         {content.lead} <a href={content.regulatorUrl} target="_blank" rel="noopener noreferrer" style={{ color:"#185FA5" }}>{content.regulatorLinkText.replace(" →", "")}</a>
       </div>
 
-      {reports.length===0 ? (
+      {liveReports.length===0 ? (
         <EmptyState
           icon="📢"
           title={String(content.emptyLabel || "").replace(/\.$/, "") || "No records yet"}
@@ -517,7 +485,7 @@ export default function RIDDORRegister() {
         />
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {listPg.visible(reports).map(r=>{
+          {listPg.visible(liveReports).map(r=>{
             const def = getIncidentTypeDef(content, r.riddorType);
             const status = getDeadlineStatus(r);
             return (
@@ -546,17 +514,17 @@ export default function RIDDORRegister() {
                       itemLabel: def?.label || r.injuredName || r.id,
                       sourceKey: "riddor_reports",
                       payload: r,
-                    })) setReports(prev=>prev.filter(x=>x.id!==r.id));
+                    })) setReports((prev) => replaceWithTombstone(prev, r.id));
                   }} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
                 </div>
               </div>
             );
           })}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(reports)}
-            remaining={listPg.remaining(reports)}
-            showing={Math.min(listPg.cap, reports.length)}
-            total={reports.length}
+            hasMore={listPg.hasMore(liveReports)}
+            remaining={listPg.remaining(liveReports)}
+            showing={Math.min(listPg.cap, liveReports.length)}
+            total={liveReports.length}
             onShowMore={listPg.showMore}
             itemLabel="reports"
             buttonStyle={ss.btn}

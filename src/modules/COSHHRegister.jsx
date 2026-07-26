@@ -13,6 +13,7 @@ import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `coshh_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 
@@ -60,7 +61,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
     hazardTypes:[], exposureRoutes:[], riskLevel:"medium",
     quantity:"", unit:"litres", storageLocation:"On-site store", storageNotes:"",
     ppeRequired:[], firstAid:"", spillProcedure:"", disposalMethod:"",
-    sdsUrl:"", sdsReviewDate:"", assessedBy:"", assessedDate:new Date().toISOString().slice(0,10),
+    sdsUrl:"", sdsReviewDate:"", assessedBy:"", assessedDate:todayLocalISO(),
     notes:"",
   };
   const [form, setForm] = useState(item ? {...item} : blank);
@@ -78,27 +79,27 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
         <div style={{ fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>Substance identification</div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Substance / product name *</label>
-            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. WD-40 Multi-Use Lubricant" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="coshh-name">Substance / product name *</label>
+            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. WD-40 Multi-Use Lubricant" style={ss.inp}  id="coshh-name" />
           </div>
           <div>
-            <label style={ss.lbl}>Manufacturer</label>
-            <input value={form.manufacturer} onChange={e=>set("manufacturer",e.target.value)} placeholder="e.g. WD-40 Company" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="coshh-manufacturer">Manufacturer</label>
+            <input value={form.manufacturer} onChange={e=>set("manufacturer",e.target.value)} placeholder="e.g. WD-40 Company" style={ss.inp}  id="coshh-manufacturer" />
           </div>
           <div>
-            <label style={ss.lbl}>Product / UN code</label>
-            <input value={form.productCode} onChange={e=>set("productCode",e.target.value)} placeholder="e.g. UN1950" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="coshh-product-code">Product / UN code</label>
+            <input value={form.productCode} onChange={e=>set("productCode",e.target.value)} placeholder="e.g. UN1950" style={ss.inp}  id="coshh-product-code" />
           </div>
           <div>
-            <label style={ss.lbl}>Project</label>
-            <select value={form.projectId} onChange={e=>set("projectId",e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="coshh-project-id">Project</label>
+            <select value={form.projectId} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="coshh-project-id">
               <option value="">— All projects —</option>
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Risk level</label>
-            <select value={form.riskLevel} onChange={e=>set("riskLevel",e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="coshh-risk-level">Risk level</label>
+            <select value={form.riskLevel} onChange={e=>set("riskLevel",e.target.value)} style={ss.inp} id="coshh-risk-level">
               {Object.entries(RISK_LEVELS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
             </select>
           </div>
@@ -119,24 +120,24 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
         <div style={{ fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>Storage</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:12 }}>
           <div>
-            <label style={ss.lbl}>Quantity on site</label>
-            <input value={form.quantity} onChange={e=>set("quantity",e.target.value)} placeholder="e.g. 5" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="coshh-quantity">Quantity on site</label>
+            <input value={form.quantity} onChange={e=>set("quantity",e.target.value)} placeholder="e.g. 5" style={ss.inp}  id="coshh-quantity" />
           </div>
           <div>
-            <label style={ss.lbl}>Unit</label>
-            <select value={form.unit} onChange={e=>set("unit",e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="coshh-unit">Unit</label>
+            <select value={form.unit} onChange={e=>set("unit",e.target.value)} style={ss.inp} id="coshh-unit">
               {["litres","ml","kg","g","cans","bottles","drums","other"].map(u=><option key={u}>{u}</option>)}
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Storage location</label>
-            <select value={form.storageLocation} onChange={e=>set("storageLocation",e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="coshh-storage-location">Storage location</label>
+            <select value={form.storageLocation} onChange={e=>set("storageLocation",e.target.value)} style={ss.inp} id="coshh-storage-location">
               {STORAGE_LOCATIONS.map(l=><option key={l}>{l}</option>)}
             </select>
           </div>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Storage conditions / notes</label>
-            <input value={form.storageNotes} onChange={e=>set("storageNotes",e.target.value)} placeholder="e.g. Keep away from heat sources, store upright" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="coshh-storage-notes">Storage conditions / notes</label>
+            <input value={form.storageNotes} onChange={e=>set("storageNotes",e.target.value)} placeholder="e.g. Keep away from heat sources, store upright" style={ss.inp}  id="coshh-storage-notes" />
           </div>
         </div>
 
@@ -149,42 +150,42 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
         {/* emergency */}
         <div style={{ fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>Emergency procedures</div>
         <div style={{ marginBottom:12 }}>
-          <label style={ss.lbl}>First aid measures</label>
-          <textarea value={form.firstAid} onChange={e=>set("firstAid",e.target.value)} style={ss.ta} placeholder="e.g. Skin contact: wash with soap and water for 15 min. Eye contact: flush with water, seek medical advice." />
+          <label style={ss.lbl} htmlFor="coshh-first-aid">First aid measures</label>
+          <textarea value={form.firstAid} onChange={e=>set("firstAid",e.target.value)} style={ss.ta} placeholder="e.g. Skin contact: wash with soap and water for 15 min. Eye contact: flush with water, seek medical advice."  id="coshh-first-aid" />
         </div>
         <div style={{ marginBottom:12 }}>
-          <label style={ss.lbl}>Spill / leak procedure</label>
-          <textarea value={form.spillProcedure} onChange={e=>set("spillProcedure",e.target.value)} style={ss.ta} placeholder="e.g. Contain spill with absorbent material, ventilate area, dispose as hazardous waste." />
+          <label style={ss.lbl} htmlFor="coshh-spill-procedure">Spill / leak procedure</label>
+          <textarea value={form.spillProcedure} onChange={e=>set("spillProcedure",e.target.value)} style={ss.ta} placeholder="e.g. Contain spill with absorbent material, ventilate area, dispose as hazardous waste."  id="coshh-spill-procedure" />
         </div>
         <div style={{ marginBottom:16 }}>
-          <label style={ss.lbl}>Disposal method</label>
-          <input value={form.disposalMethod} onChange={e=>set("disposalMethod",e.target.value)} placeholder="e.g. Dispose as hazardous waste via licensed contractor" style={ss.inp} />
+          <label style={ss.lbl} htmlFor="coshh-disposal-method">Disposal method</label>
+          <input value={form.disposalMethod} onChange={e=>set("disposalMethod",e.target.value)} placeholder="e.g. Dispose as hazardous waste via licensed contractor" style={ss.inp}  id="coshh-disposal-method" />
         </div>
 
         {/* SDS */}
         <div style={{ fontSize:12, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:10 }}>Safety Data Sheet (SDS)</div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>SDS link / reference</label>
-            <input value={form.sdsUrl} onChange={e=>set("sdsUrl",e.target.value)} placeholder="URL or document reference" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="coshh-sds-url">SDS link / reference</label>
+            <input value={form.sdsUrl} onChange={e=>set("sdsUrl",e.target.value)} placeholder="URL or document reference" style={ss.inp}  id="coshh-sds-url" />
           </div>
           <div>
-            <label style={ss.lbl}>SDS review date</label>
-            <input type="date" value={form.sdsReviewDate} onChange={e=>set("sdsReviewDate",e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="coshh-sds-review-date">SDS review date</label>
+            <input type="date" value={form.sdsReviewDate} onChange={e=>set("sdsReviewDate",e.target.value)} style={ss.inp}  id="coshh-sds-review-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Assessment date</label>
-            <input type="date" value={form.assessedDate} onChange={e=>set("assessedDate",e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="coshh-assessed-date">Assessment date</label>
+            <input type="date" value={form.assessedDate} onChange={e=>set("assessedDate",e.target.value)} style={ss.inp}  id="coshh-assessed-date" />
           </div>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Assessed by</label>
-            <input value={form.assessedBy} onChange={e=>set("assessedBy",e.target.value)} placeholder="Name / role of person who conducted assessment" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="coshh-assessed-by">Assessed by</label>
+            <input value={form.assessedBy} onChange={e=>set("assessedBy",e.target.value)} placeholder="Name / role of person who conducted assessment" style={ss.inp}  id="coshh-assessed-by" />
           </div>
         </div>
 
         <div style={{ marginBottom:16 }}>
-          <label style={ss.lbl}>Additional notes</label>
-          <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} style={ss.ta} placeholder="Any other relevant information…" />
+          <label style={ss.lbl} htmlFor="coshh-notes">Additional notes</label>
+          <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} style={ss.ta} placeholder="Any other relevant information…"  id="coshh-notes" />
         </div>
 
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
@@ -321,17 +322,11 @@ export default function COSHHRegister() {
     [items, filterRisk, filterProject, filterHazard, search]
   );
 
-  const stats = {
-    high: items.filter(i=>i.riskLevel==="high").length,
-    medium: items.filter(i=>i.riskLevel==="medium").length,
-    low: items.filter(i=>i.riskLevel==="low").length,
-  };
-
   const exportCSV = () => {
     const rows=[["Name","Manufacturer","Product code","Risk","Hazard types","Quantity","Unit","Storage","PPE required","SDS link","Assessed by","Assessed date"]];
     items.forEach(i=>rows.push([i.name,i.manufacturer||"",i.productCode||"",i.riskLevel,i.hazardTypes?.join("; ")||"",i.quantity||"",i.unit||"",i.storageLocation||"",i.ppeRequired?.join("; ")||"",i.sdsUrl||"",i.assessedBy||"",fmtDate(i.assessedDate)]));
     const csv=rows.map(r=>r.map(c=>`"${c}"`).join(",")).join("\n");
-    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download=`coshh_register_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download=`coshh_register_${todayLocalISO()}.csv`; a.click();
   };
 
   return (
@@ -355,10 +350,7 @@ export default function COSHHRegister() {
               <button
                 type="button"
                 onClick={() => {
-                  const res = printRegisterFormPack("coshh", filtered);
-                  if (!res.ok && res.reason === "popup_blocked") {
-                    window.alert("Allow pop-ups to print the COSHH A4 pack (Print → Save as PDF).");
-                  }
+                  printRegisterFormPack("coshh", filtered);
                 }}
                 style={ss.btn}
                 title="Print branded A4 assessment sheets for visible substances"

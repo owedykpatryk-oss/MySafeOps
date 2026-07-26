@@ -108,6 +108,10 @@ Tak, jeśli jest aktualne, czytelne na placu i ma ślad zatwierdzenia. Cyfrowe P
 
 M.in. ocenę ryzyka, szkolenia BHP, dokumentację organizacji robót, warunki pracy i reagowanie na zdarzenia. System dowodów ułatwia pokazanie, że kontrole działają na co dzień.
 
+### Czy system działa offline na budowie?
+
+Rdzeń MySafeOps działa w przeglądarce offline na wiele zadań (PTW, rejestry, podgląd). Opcjonalna chmura dodaje logowanie, synchronizację i backup, gdy wróci zasięg.
+
 ### Czy MySafeOps to porada prawna?
 
 Nie. To narzędzie do porządkowania IOR, pozwoleń i rejestrów. Za zgodność ustawową odpowiada pracodawca i kierownik budowy.

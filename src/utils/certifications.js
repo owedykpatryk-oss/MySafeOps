@@ -1,5 +1,6 @@
 import { getOrgMarketId } from "./orgMarket";
 
+import { localDateISO } from "./localDate";
 export const CERT_LIBRARY = [
   { code: "cscs", label: "CSCS", defaultValidityMonths: 60 },
   { code: "cpcs", label: "CPCS (plant)", defaultValidityMonths: 60 },
@@ -173,7 +174,7 @@ export function addMonthsIso(startIso, months) {
   if (!Number.isFinite(d.getTime())) return "";
   const x = new Date(d);
   x.setMonth(x.getMonth() + Number(months || 0));
-  return x.toISOString().slice(0, 10);
+  return localDateISO(x);
 }
 
 export function normalizeWorkerCertifications(worker) {

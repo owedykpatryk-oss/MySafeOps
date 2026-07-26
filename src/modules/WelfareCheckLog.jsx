@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `welf_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -41,14 +46,14 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 480, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 480 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit welfare check" : "Welfare check"}</h2>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>CDM 2015 Schedule 2 / site rules — tick what applies to your setup.</p>
-        <label style={ss.lbl}>Date</label>
-        <input type="date" style={ss.inp} value={form.checkDate} onChange={(e) => set("checkDate", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project / site</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="welfare-check-check-date">Date</label>
+        <input type="date" style={ss.inp} value={form.checkDate} onChange={(e) => set("checkDate", e.target.value)}  id="welfare-check-check-date" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="welfare-check-project-id">Project / site</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="welfare-check-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -70,20 +75,25 @@ function Form({ item, projects, onSave, onClose }) {
             {label}
           </label>
         ))}
-        <label style={{ ...ss.lbl, marginTop: 12 }}>Checked by</label>
-        <input style={ss.inp} value={form.checkedBy} onChange={(e) => set("checkedBy", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Issues / actions</label>
-        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.issues} onChange={(e) => set("issues", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 12 }} htmlFor="welfare-check-checked-by">Checked by</label>
+        <input style={ss.inp} value={form.checkedBy} onChange={(e) => set("checkedBy", e.target.value)}  id="welfare-check-checked-by" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="welfare-check-issues">Issues / actions</label>
+        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.issues} onChange={(e) => set("issues", e.target.value)}  id="welfare-check-issues" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["checkedBy","checkDate"], { checkedBy: "Checked by", checkDate: "Check date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -113,9 +123,11 @@ export default function WelfareCheckLog() {
   const d1Hydrating = d1WelfH || d1ProjH;
   const d1OutboxPending = d1WelfO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Date", "Project", "Toilets", "Wash", "Water", "Drying", "Rest", "Changing", "By", "Issues"];
-    const rows = items.map((r) => [
+    const rows = liveItems.map((r) => [
       r.checkDate,
       r.projectName || "",
       r.toiletsOk ? "Y" : "N",
@@ -127,12 +139,7 @@ export default function WelfareCheckLog() {
       r.checkedBy,
       r.issues,
     ]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `welfare_checks_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(h, rows, `welfare_checks_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -160,8 +167,8 @@ export default function WelfareCheckLog() {
         title="Welfare checks"
         lead="Toilets, rest, water, drying — welfare monitoring (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -173,11 +180,11 @@ export default function WelfareCheckLog() {
 
       <RegisterModuleShell
         moduleId="welfare"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("welfare", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("welfare", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="🚻"
           title="No welfare checks yet"
@@ -188,7 +195,7 @@ export default function WelfareCheckLog() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -216,7 +223,7 @@ export default function WelfareCheckLog() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "welfare_delete", entity: "welfare", detail: r.id });
                         }
                       }}
@@ -229,10 +236,10 @@ export default function WelfareCheckLog() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

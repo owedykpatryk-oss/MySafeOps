@@ -18,6 +18,7 @@ describe("d1WriteForbidden", () => {
   it("detects forbidden D1 errors", () => {
     expect(isForbiddenD1Write("Forbidden: cannot write")).toBe(true);
     expect(isForbiddenD1Write("http_403")).toBe(true);
+    expect(isForbiddenD1Write("billing_write_blocked")).toBe(true);
     expect(isForbiddenD1Write("version_conflict")).toBe(false);
   });
 
@@ -27,5 +28,11 @@ describe("d1WriteForbidden", () => {
     const ev = window.dispatchEvent.mock.calls[0][0];
     expect(ev.type).toBe(D1_WRITE_FORBIDDEN_EVENT);
     expect(ev.detail.message).toMatch(/workers/i);
+  });
+
+  it("uses billing copy for billing_write_blocked", () => {
+    notifyD1WriteForbidden("permits_v2", "billing_write_blocked");
+    const ev = window.dispatchEvent.mock.calls[0][0];
+    expect(ev.detail.message).toMatch(/trial|subscribe|billing/i);
   });
 });

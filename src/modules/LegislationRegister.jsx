@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { UK_LEGISLATION_LIBRARY, seedLegislationRegister } from "../utils/ukLegislationLibrary";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
@@ -40,33 +42,33 @@ function Form({ item, onSave, onClose }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 560, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit legislation entry" : "Add legislation"}</h2>
-        <label style={ss.lbl}>Short name</label>
-        <input style={ss.inp} value={form.shortName} onChange={(e) => set("shortName", e.target.value)} placeholder="e.g. LOLER 1998" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Full title</label>
-        <input style={ss.inp} value={form.fullName} onChange={(e) => set("fullName", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Summary / relevance to your work</label>
-        <textarea style={{ ...ss.inp, minHeight: 50 }} value={form.summary} onChange={(e) => set("summary", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Legislation URL</label>
-        <input style={ss.inp} value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="https://www.legislation.gov.uk/..." />
+        <label style={ss.lbl} htmlFor="legislation-short-name">Short name</label>
+        <input style={ss.inp} value={form.shortName} onChange={(e) => set("shortName", e.target.value)} placeholder="e.g. LOLER 1998"  id="legislation-short-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="legislation-full-name">Full title</label>
+        <input style={ss.inp} value={form.fullName} onChange={(e) => set("fullName", e.target.value)}  id="legislation-full-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="legislation-summary">Summary / relevance to your work</label>
+        <textarea style={{ ...ss.inp, minHeight: 50 }} value={form.summary} onChange={(e) => set("summary", e.target.value)}  id="legislation-summary" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="legislation-url">Legislation URL</label>
+        <input style={ss.inp} value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="https://www.legislation.gov.uk/..."  id="legislation-url" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={!!form.applicable} onChange={(e) => set("applicable", e.target.checked)} />
           Applicable to our organisation
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Last reviewed</label>
-        <input type="date" style={ss.inp} value={form.lastReviewed} onChange={(e) => set("lastReviewed", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Next review</label>
-        <input type="date" style={ss.inp} value={form.nextReview} onChange={(e) => set("nextReview", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 40 }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="legislation-last-reviewed">Last reviewed</label>
+        <input type="date" style={ss.inp} value={form.lastReviewed} onChange={(e) => set("lastReviewed", e.target.value)}  id="legislation-last-reviewed" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="legislation-next-review">Next review</label>
+        <input type="date" style={ss.inp} value={form.nextReview} onChange={(e) => set("nextReview", e.target.value)}  id="legislation-next-review" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="legislation-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 40 }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="legislation-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>Cancel</button>
           <button type="button" style={ss.btnP} onClick={() => onSave(form)}>Save</button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -85,14 +87,15 @@ export default function LegislationRegister() {
     save,
   });
 
+  const liveItems = liveOrgArrayRows(items);
   const filtered = useMemo(() => {
-    if (filter === "applicable") return items.filter((i) => i.applicable);
+    if (filter === "applicable") return liveItems.filter((i) => i.applicable);
     if (filter === "review") {
       const now = new Date();
-      return items.filter((i) => i.nextReview && new Date(i.nextReview) <= now);
+      return liveItems.filter((i) => i.nextReview && new Date(i.nextReview) <= now);
     }
-    return items;
-  }, [items, filter]);
+    return liveItems;
+  }, [liveItems, filter]);
 
   const persist = (next) => {
     setItems(next);
@@ -125,8 +128,8 @@ export default function LegislationRegister() {
       <D1ModuleSyncBanner hydrating={d1Hydrating} outboxPending={d1OutboxPending} />
       <RegisterModuleShell
         moduleId="legislation"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("legislation", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("legislation", liveItems)}
         filters={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {[["all", "All"], ["applicable", "Applicable"], ["review", "Review due"]].map(([k, lbl]) => (
@@ -135,7 +138,7 @@ export default function LegislationRegister() {
           </div>
         }
       >
-        {items.length === 0 ? (
+        {liveItems.length === 0 ? (
           <EmptyState
             icon="📜"
             title="No legislation entries yet"
@@ -187,7 +190,7 @@ export default function LegislationRegister() {
                         style={{ ...ss.btn, fontSize: 12, color: "#791F1F" }}
                         onClick={() => {
                           if (softDeleteToRecycleBin({ moduleId: "legislation", moduleLabel: "Legislation", itemType: "leg_entry", itemLabel: item.shortName, sourceKey: KEY, payload: item })) {
-                            persist(items.filter((x) => x.id !== item.id));
+                            persist(replaceWithTombstone(items, item.id));
                           }
                         }}
                       >

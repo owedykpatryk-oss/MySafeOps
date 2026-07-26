@@ -1,5 +1,12 @@
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
-import { openPrintWindow, safeImageSrc, escapeAttr, sanitizePrintPreviewHtml, writePrintWindowDocument } from "../../utils/htmlEscape.js";
+import {
+  openPrintWindowOrWarn,
+  notifyAppToast,
+  safeImageSrc,
+  escapeAttr,
+  sanitizePrintPreviewHtml,
+  writePrintWindowDocument,
+} from "../../utils/htmlEscape.js";
 import { downloadBlob } from "../../utils/downloadBlob.js";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import {
@@ -151,13 +158,6 @@ function nl2p(text) {
     .join("");
 }
 
-function nl2list(text) {
-  const t = String(text || "").trim();
-  if (!t) return "";
-  const lines = t.split(/\n/).filter(Boolean);
-  if (lines.length <= 1) return nl2p(t);
-  return `<ul class="sr-list">${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
-}
 
 function section(title, body, id, num) {
   const label = num ? `<span class="sr-sec-num">${num}</span> ${esc(title)}` : esc(title);
@@ -202,7 +202,7 @@ function staticSiteMapUrl(lat, lng) {
   return buildStaticMapUrl(lat, lng, { width: 520, height: 220, zoom: 15, label: "Site location" });
 }
 
-function pas128SummaryBlock(report, primary = "#0d9488") {
+function pas128SummaryBlock(report, _primary = "#0d9488") {
   const stats = buildPas128SummaryStats(report);
   if (!stats) return "";
   const qlBars = buildPas128QlBarsHtml(stats.byQl, { total: stats.total });
@@ -1855,18 +1855,19 @@ export function buildSurveyReportHtml(report, extras = {}) {
 export function openSurveyReportPrint(report, extras) {
   void (async () => {
     const html = buildSurveyReportHtml(report, extras);
-    const win = openPrintWindow();
-    if (!win) {
-      window.alert("Pop-up blocked — allow pop-ups for MySafeOps to print / save PDF.");
-      return;
-    }
+    const win = openPrintWindowOrWarn();
+    if (!win) return;
     await writePrintWindowDocument(win, html);
     win.focus();
     setTimeout(() => {
       try {
         win.print();
       } catch {
-        window.alert("Could not open the print dialog. Try Download PDF instead.");
+        notifyAppToast({
+          type: "warning",
+          title: "Print failed",
+          message: "Could not open the print dialog. Try Download PDF instead.",
+        });
       }
     }, 400);
   })();
@@ -1878,6 +1879,10 @@ export function downloadSurveyReportHtml(report, extras) {
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const name = `${(report.ref || report.id || "survey_report").replace(/\s+/g, "_")}.html`;
   if (!downloadBlob(blob, name)) {
-    window.alert("Download blocked — allow downloads for this site and try again.");
+    notifyAppToast({
+      type: "warning",
+      title: "Download blocked",
+      message: "Allow downloads for this site and try again.",
+    });
   }
 }

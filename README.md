@@ -43,7 +43,7 @@ A minimal **web app manifest** is at [public/manifest.webmanifest](public/manife
 
 ## Configuration
 
-Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project root and fill in any optional values. Never commit `.env.local`. After editing, run **`npm run env:check`** for a read-only checklist (no secret values printed). For **Vercel → Environment Variables** (co skopiować, Production vs Preview, Supabase redirect URLs), use **[DOCS/VERCEL_ENV_CHECKLIST.md](DOCS/VERCEL_ENV_CHECKLIST.md)**. Anti-bot (Cloudflare Turnstile on `/login`): **`npm run setup:turnstile`** and **[DOCS/TURNSTILE_SETUP.md](DOCS/TURNSTILE_SETUP.md)**.
+Copy [.env.local.example](.env.local.example) to **`.env.local`** in the project root and fill in any optional values. Never commit `.env.local`. After editing, run **`npm run env:check`** for a read-only checklist (no secret values printed). For **Vercel → Environment Variables** (co skopiować, Production vs Preview, Supabase redirect URLs), use **[DOCS/VERCEL_ENV_CHECKLIST.md](DOCS/VERCEL_ENV_CHECKLIST.md)**. Anti-bot (Cloudflare Turnstile on `/login`): **`npm run setup:turnstile`** and **[DOCS/TURNSTILE_SETUP.md](DOCS/TURNSTILE_SETUP.md)**. For local login without a production widget, set the Cloudflare **test** site key `VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA` (`npm run env:turnstile`) and pair the matching test secret in Supabase Auth — a production site key that omits `localhost` will leave Sign in disabled until the challenge loads.
 
 | Area | Purpose |
 |------|---------|
@@ -132,7 +132,7 @@ Use this before production go-live:
 - [ ] Invite links use `/accept-invite?invite=...` (then sign-in) and are accepted only for the invited email.
 - [ ] Optional Sentry: set `VITE_SENTRY_DSN` (browser DSN) to load `@sentry/react` at startup.
 - [ ] Support contact: set `VITE_SUPPORT_EMAIL` on the host (default in app: `support@mysafeops.com`).
-- [ ] Platform owner: `VITE_PLATFORM_OWNER_EMAIL` matches Supabase superadmin RPC allow-list (see `supabase/migrations/*superadmin*`).
+- [ ] Platform owner: JWT email is on the server allow-list (`platform_owner_email_allowlist` / `user_is_platform_owner` RPC). Do not set `VITE_PLATFORM_OWNER_EMAIL` — the client ignores it and must not embed owner emails.
 
 ## Billing transparency & limits
 

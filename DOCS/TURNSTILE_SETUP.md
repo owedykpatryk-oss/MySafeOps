@@ -44,7 +44,21 @@ npm run setup:turnstile:all
 Cloudflare test **site** key: `1x00000000000000000000AA`  
 Matching **secret** for `supabase start`: see `supabase/config.toml` `[auth.captcha]` (test secret is already set for local CLI).
 
+```bash
+npm run env:turnstile   # writes the test site key into .env.local
+```
+
 Test keys always pass the challenge — fine for dev, **replace in production**.
+
+**Do not** use a production Turnstile site key on localhost unless `localhost` / `127.0.0.1` are on that widget’s hostname allow-list. If the widget fails to load (wrong host, ad blocker, corporate firewall), the app **fail-closes**: Sign in stays disabled and shows a clear error — it will not send auth without `captcha_token` (which Supabase would reject and which previously burned lockout attempts).
+
+## Fail-closed behaviour
+
+| State | Behaviour |
+|-------|-----------|
+| No `VITE_TURNSTILE_SITE_KEY` | Captcha skipped client-side (only OK if Supabase captcha is also off) |
+| Key set, widget OK | Sign in / sign-up / reset require a live token |
+| Key set, widget blocked | Clear error + retry; submit buttons disabled; lockout **not** incremented for `no captcha_token` / Turnstile errors |
 
 ## Verify
 

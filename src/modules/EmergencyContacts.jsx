@@ -15,6 +15,7 @@ import {
 } from "../utils/emergencySiteExtras";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 
 const genRowId = () => `ec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
@@ -80,9 +81,11 @@ export default function EmergencyContacts() {
     ) {
       return;
     }
-    setRows((r) => r.filter((x) => x.id !== id));
+    setRows((r) => replaceWithTombstone(r, id));
     pushAudit({ action: "emergency_contacts_remove", entity: "contacts", detail: id });
   };
+
+  const liveRows = liveOrgArrayRows(rows);
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14, color: "var(--color-text-primary)" }}>
@@ -94,9 +97,9 @@ export default function EmergencyContacts() {
 
       <RegisterModuleShell
         moduleId="emergency"
-        smartContext={{ items: rows }}
-        stats={buildRegisterModuleStats("emergency", rows)}
-        pdfExportRows={rows}
+        smartContext={{ items: liveRows }}
+        stats={buildRegisterModuleStats("emergency", liveRows)}
+        pdfExportRows={liveRows}
       >
 
 
@@ -110,40 +113,40 @@ export default function EmergencyContacts() {
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
           <div style={{ gridColumn: "1 / -1" }}>
-            <label style={ss.lbl}>Default site address (for maps search)</label>
+            <label style={ss.lbl} htmlFor="emergency-contacts-site-address">Default site address (for maps search)</label>
             <input
               style={ss.inp}
               value={siteExtras.siteAddress || ""}
               onChange={(e) => setExtra("siteAddress", e.target.value)}
               placeholder="e.g. Postcode or street, town"
-            />
+             id="emergency-contacts-site-address" />
           </div>
           <div>
-            <label style={ss.lbl}>Nearest A&amp;E / hospital</label>
+            <label style={ss.lbl} htmlFor="emergency-contacts-nearest-hospital">Nearest A&amp;E / hospital</label>
             <input
               style={ss.inp}
               value={siteExtras.nearestHospital || ""}
               onChange={(e) => setExtra("nearestHospital", e.target.value)}
               placeholder="Hospital name"
-            />
+             id="emergency-contacts-nearest-hospital" />
           </div>
           <div>
-            <label style={ss.lbl}>Directions URL (Google Maps)</label>
+            <label style={ss.lbl} htmlFor="emergency-contacts-hospital-directions-url">Directions URL (Google Maps)</label>
             <input
               style={ss.inp}
               value={siteExtras.hospitalDirectionsUrl || ""}
               onChange={(e) => setExtra("hospitalDirectionsUrl", e.target.value)}
               placeholder="https://maps.google.com/…"
-            />
+             id="emergency-contacts-hospital-directions-url" />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <label style={ss.lbl}>Map link (OSM / other)</label>
+            <label style={ss.lbl} htmlFor="emergency-contacts-site-map-url">Map link (OSM / other)</label>
             <input
               style={ss.inp}
               value={siteExtras.siteMapUrl || ""}
               onChange={(e) => setExtra("siteMapUrl", e.target.value)}
               placeholder="Optional link copied into RAMS"
-            />
+             id="emergency-contacts-site-map-url" />
           </div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -176,7 +179,7 @@ export default function EmergencyContacts() {
           Contact list
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {listPg.visible(rows).map((row) => (
+          {listPg.visible(liveRows).map((row) => (
             <div
               key={row.id}
               style={{
@@ -195,12 +198,12 @@ export default function EmergencyContacts() {
                 </button>
               </div>
               <div>
-                <label style={ss.lbl}>Name / role</label>
-                <input style={ss.inp} value={row.label} onChange={(e) => update(row.id, "label", e.target.value)} placeholder="e.g. Site manager" />
+                <label style={ss.lbl} htmlFor={`emergency-contacts-label-${row.id}`}>Name / role</label>
+                <input style={ss.inp} value={row.label} onChange={(e) => update(row.id, "label", e.target.value)} placeholder="e.g. Site manager"  id={`emergency-contacts-label-${row.id}`} />
               </div>
               <div>
-                <label style={ss.lbl}>Telephone</label>
-                <input style={ss.inp} value={row.phone} onChange={(e) => update(row.id, "phone", e.target.value)} inputMode="tel" />
+                <label style={ss.lbl} htmlFor={`emergency-contacts-phone-${row.id}`}>Telephone</label>
+                <input style={ss.inp} value={row.phone} onChange={(e) => update(row.id, "phone", e.target.value)} inputMode="tel"  id={`emergency-contacts-phone-${row.id}`} />
                 {row.phone && (
                   <a href={`tel:${row.phone.replace(/\s/g, "")}`} style={{ fontSize: 12, color: "#0d9488", marginTop: 4, display: "inline-block" }}>
                     Call
@@ -208,16 +211,16 @@ export default function EmergencyContacts() {
                 )}
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={ss.lbl}>Notes</label>
-                <input style={ss.inp} value={row.notes || ""} onChange={(e) => update(row.id, "notes", e.target.value)} placeholder="Optional" />
+                <label style={ss.lbl} htmlFor={`emergency-contacts-notes-${row.id}`}>Notes</label>
+                <input style={ss.inp} value={row.notes || ""} onChange={(e) => update(row.id, "notes", e.target.value)} placeholder="Optional"  id={`emergency-contacts-notes-${row.id}`} />
               </div>
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(rows)}
-            remaining={listPg.remaining(rows)}
-            showing={Math.min(listPg.cap, rows.length)}
-            total={rows.length}
+            hasMore={listPg.hasMore(liveRows)}
+            remaining={listPg.remaining(liveRows)}
+            showing={Math.min(listPg.cap, liveRows.length)}
+            total={liveRows.length}
             onShowMore={listPg.showMore}
             itemLabel="contacts"
             buttonStyle={ss.btn}

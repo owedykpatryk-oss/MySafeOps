@@ -1,9 +1,11 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -11,9 +13,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `waste_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -42,13 +47,13 @@ function WasteForm({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 560, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0 }}>{item ? "Edit waste transfer" : "New waste transfer note"}</h2>
-        <label style={ss.lbl}>WTN / reference</label>
-        <input style={ss.inp} value={form.wtnRef} onChange={(e) => set("wtnRef", e.target.value)} placeholder="e.g. WTN-2026-0042" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="waste-wtn-ref">WTN / reference</label>
+        <input style={ss.inp} value={form.wtnRef} onChange={(e) => set("wtnRef", e.target.value)} placeholder="e.g. WTN-2026-0042"  id="waste-wtn-ref" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="waste-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -56,12 +61,12 @@ function WasteForm({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Waste description</label>
-        <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.description} onChange={(e) => set("description", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>EWC / List of Waste code</label>
-        <input style={ss.inp} value={form.ewcCode} onChange={(e) => set("ewcCode", e.target.value)} placeholder="e.g. 17 09 04" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Waste category</label>
-        <select style={ss.inp} value={form.wasteCategory || ""} onChange={(e) => set("wasteCategory", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-description">Waste description</label>
+        <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.description} onChange={(e) => set("description", e.target.value)}  id="waste-description" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-ewc-code">EWC / List of Waste code</label>
+        <input style={ss.inp} value={form.ewcCode} onChange={(e) => set("ewcCode", e.target.value)} placeholder="e.g. 17 09 04"  id="waste-ewc-code" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-waste-category">Waste category</label>
+        <select style={ss.inp} value={form.wasteCategory || ""} onChange={(e) => set("wasteCategory", e.target.value)} id="waste-waste-category">
           <option value="">—</option>
           {WASTE_CODES.map((c) => (
             <option key={c} value={c}>
@@ -71,26 +76,26 @@ function WasteForm({ item, projects, onSave, onClose }) {
         </select>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Quantity</label>
-            <input style={ss.inp} value={form.quantity} onChange={(e) => set("quantity", e.target.value)} />
+            <label style={ss.lbl} htmlFor="waste-quantity">Quantity</label>
+            <input style={ss.inp} value={form.quantity} onChange={(e) => set("quantity", e.target.value)}  id="waste-quantity" />
           </div>
           <div>
-            <label style={ss.lbl}>Unit</label>
-            <select style={ss.inp} value={form.unit} onChange={(e) => set("unit", e.target.value)}>
+            <label style={ss.lbl} htmlFor="waste-unit">Unit</label>
+            <select style={ss.inp} value={form.unit} onChange={(e) => set("unit", e.target.value)} id="waste-unit">
               <option value="tonnes">tonnes</option>
               <option value="m3">m³</option>
               <option value="loads">loads</option>
             </select>
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Carrier name</label>
-        <input style={ss.inp} value={form.carrierName} onChange={(e) => set("carrierName", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Carrier registration (if applicable)</label>
-        <input style={ss.inp} value={form.carrierReg} onChange={(e) => set("carrierReg", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Receiver / disposal site</label>
-        <input style={ss.inp} value={form.receiverSite} onChange={(e) => set("receiverSite", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Transfer date</label>
-        <input type="date" style={ss.inp} value={form.transferDate} onChange={(e) => set("transferDate", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-carrier-name">Carrier name</label>
+        <input style={ss.inp} value={form.carrierName} onChange={(e) => set("carrierName", e.target.value)}  id="waste-carrier-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-carrier-reg">Carrier registration (if applicable)</label>
+        <input style={ss.inp} value={form.carrierReg} onChange={(e) => set("carrierReg", e.target.value)}  id="waste-carrier-reg" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-receiver-site">Receiver / disposal site</label>
+        <input style={ss.inp} value={form.receiverSite} onChange={(e) => set("receiverSite", e.target.value)}  id="waste-receiver-site" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-transfer-date">Transfer date</label>
+        <input type="date" style={ss.inp} value={form.transferDate} onChange={(e) => set("transferDate", e.target.value)}  id="waste-transfer-date" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, fontSize: 13 }}>
           <input type="checkbox" checked={form.dutySigned} onChange={(e) => set("dutySigned", e.target.checked)} />
           Duty of care checklist completed (descriptions accurate, secure transport, valid carriers)
@@ -99,12 +104,17 @@ function WasteForm({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["description","transferDate"], { description: "Waste description", transferDate: "Transfer date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -133,9 +143,11 @@ export default function WasteRegister() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const header = ["WTN ref", "Date", "Project", "Description", "EWC", "Qty", "Unit", "Carrier", "Receiver", "Duty signed"];
-    const rows = items.map((w) => [
+    const rows = liveItems.map((w) => [
       w.wtnRef,
       w.transferDate,
       w.projectName || "",
@@ -147,12 +159,7 @@ export default function WasteRegister() {
       w.receiverSite,
       w.dutySigned ? "yes" : "no",
     ]);
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `waste_register_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(header, rows, `waste_register_${today()}.csv`);
   };
 
   return (
@@ -183,8 +190,8 @@ export default function WasteRegister() {
         lead="Waste transfer notes, duty of care, EWC codes — UK Environment Agency expectations (local record only)."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {items.length > 0 && (
-              <button type="button" style={ss.btn} onClick={exportCsv}>
+            {liveItems.length > 0 && (
+              <button type="button" style={ss.btn} onClick={handleExportCsv}>
                 Export CSV
               </button>
             )}
@@ -197,11 +204,11 @@ export default function WasteRegister() {
 
       <RegisterModuleShell
         moduleId="waste"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("waste", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("waste", liveItems)}
       >
 
-      {items.length === 0 ? (
+      {liveItems.length === 0 ? (
         <EmptyState
           icon="♻️"
           title="No waste transfers recorded yet"
@@ -212,7 +219,7 @@ export default function WasteRegister() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((w) => (
+          {listPg.visible(liveItems).map((w) => (
             <div key={w.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -238,7 +245,7 @@ export default function WasteRegister() {
                           payload: w,
                         })
                       ) {
-                        setItems((p) => p.filter((x) => x.id !== w.id));
+                        setItems((p) => replaceWithTombstone(p, w.id));
                       }
                     }}
                   >
@@ -249,10 +256,10 @@ export default function WasteRegister() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

@@ -1,4 +1,5 @@
 import { sanitizePdfFileSegment } from "./pdfFileName";
+import { setPdfFont, ensurePdfUnicodeFont } from "./pdfUnicodeFont.js";
 
 export { sanitizePdfFileSegment } from "./pdfFileName";
 
@@ -137,7 +138,7 @@ function drawRasterHeaderFooter(pdf, p) {
   let textY = side + 4;
   const maxW = pageWidth - side * 2;
 
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(10);
   pdf.setTextColor(30, 41, 59);
   if (title) {
@@ -146,7 +147,7 @@ function drawRasterHeaderFooter(pdf, p) {
     textY += lines.length * 4.25 + 1;
   }
 
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(71, 85, 105);
   if (subtitle) {
@@ -197,7 +198,7 @@ function drawCoverPage(pdf, o) {
     }
   }
 
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(20);
   pdf.setTextColor(15, 23, 42);
   if (o.title) {
@@ -206,7 +207,7 @@ function drawCoverPage(pdf, o) {
     y += lines.length * 7.5 + 4;
   }
 
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(11);
   pdf.setTextColor(71, 85, 105);
   if (o.subtitle) {
@@ -247,9 +248,10 @@ function drawCoverPage(pdf, o) {
  * @param {{ title?: string; items: { label: string; value: string }[] }[]} sections
  * @param {{ noteMm?: number }} [countOpts]
  */
-function countSummaryPages(sections, jsPDF, countOpts = {}) {
+async function countSummaryPages(sections, jsPDF, countOpts = {}) {
   const noteMm = typeof countOpts.noteMm === "number" ? countOpts.noteMm : 0;
   const measure = new jsPDF({ unit: "mm", format: "a4", compress: true });
+  await ensurePdfUnicodeFont(measure);
   const pageHeight = measure.internal.pageSize.getHeight();
   const pageWidth = measure.internal.pageSize.getWidth();
   const side = MM.side;
@@ -313,7 +315,7 @@ function drawSummaryPages(pdf, o) {
     if (pagesDrawn > 0) pdf.addPage();
     pagesDrawn += 1;
     y = 14;
-    pdf.setFont("helvetica", "bold");
+    setPdfFont(pdf, "bold");
     pdf.setFontSize(firstSummaryPage ? 14 : 11);
     pdf.setTextColor(15, 23, 42);
     pdf.text(firstSummaryPage ? "Key figures (selectable text)" : "Key figures (continued)", side, y);
@@ -324,13 +326,13 @@ function drawSummaryPages(pdf, o) {
   startSummarySheet();
 
   if (o.summaryHeaderNote && pagesDrawn === 1) {
-    pdf.setFont("helvetica", "italic");
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(8);
     pdf.setTextColor(100, 116, 139);
     const hLines = pdf.splitTextToSize(String(o.summaryHeaderNote), maxW).slice(0, 2);
     pdf.text(hLines, side, y);
     y += hLines.length * 3.85 + 2;
-    pdf.setFont("helvetica", "normal");
+    setPdfFont(pdf, "normal");
   }
 
   const needNew = (blockH) => y + blockH > yMax;
@@ -338,7 +340,7 @@ function drawSummaryPages(pdf, o) {
   for (const sec of o.sections || []) {
     if (!sec?.items?.length) continue;
 
-    pdf.setFont("helvetica", "bold");
+    setPdfFont(pdf, "bold");
     pdf.setFontSize(10);
     pdf.setTextColor(13, 148, 136);
     const secTitle = String(sec.title || "Section");
@@ -350,7 +352,7 @@ function drawSummaryPages(pdf, o) {
     pdf.text(secTitle, side, y);
     y += 6;
 
-    pdf.setFont("helvetica", "normal");
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(9.5);
     pdf.setTextColor(30, 41, 59);
     for (const row of sec.items) {
@@ -361,12 +363,12 @@ function drawSummaryPages(pdf, o) {
         drawFooter();
         docPage += 1;
         startSummarySheet();
-        pdf.setFont("helvetica", "bold");
+        setPdfFont(pdf, "bold");
         pdf.setFontSize(10);
         pdf.setTextColor(13, 148, 136);
         pdf.text(`${secTitle} (cont.)`, side, y);
         y += 6;
-        pdf.setFont("helvetica", "normal");
+        setPdfFont(pdf, "normal");
         pdf.setFontSize(9.5);
         pdf.setTextColor(30, 41, 59);
       }
@@ -469,7 +471,9 @@ export async function exportDashboardToPdf(element, opts = {}) {
         : presetName
           ? `Export preset: ${presetName}`
           : undefined;
-  const summaryPageCount = includeSummary ? countSummaryPages(sections, jsPDF, { noteMm: summaryHeaderNote ? 8.5 : 0 }) : 0;
+  const summaryPageCount = includeSummary
+    ? await countSummaryPages(sections, jsPDF, { noteMm: summaryHeaderNote ? 8.5 : 0 })
+    : 0;
   const fileName = opts.fileName || defaultFileName;
   const waitForFontsFlag =
     typeof opts.waitForFonts === "boolean" ? opts.waitForFonts : preset.waitForFonts !== false;
@@ -535,6 +539,7 @@ export async function exportDashboardToPdf(element, opts = {}) {
 
   notifyPhase("assemble");
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  await ensurePdfUnicodeFont(pdf);
   applyPdfMetadata(pdf, {
     title: opts.title,
     subtitle: opts.subtitle,

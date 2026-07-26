@@ -22,6 +22,7 @@ import { seedFessGhpRegister } from "./fessGhpDefaults";
 import { seedFessLotoRegister } from "./fessLotoDefaults";
 import { getFessPortalPublishStatus } from "./fessPortalPublish";
 
+import { todayLocalISO } from "./localDate";
 const PROGRESS_KEY = "fess_onboarding_progress";
 const LEGISLATION_KEY = "legislation_register";
 
@@ -156,7 +157,7 @@ export const FESS_SETUP_STEPS = [
     hint: "Food factory mobilisation topics — line clearance, hygiene, LOTO and RAMS scope.",
     viewId: "daily-briefing",
     autoCheck: () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayLocalISO();
       const briefings = load("daily_briefings", []);
       return briefings.some(
         (b) => b.fessBriefingPreset && String(b.date || "").slice(0, 10) === today

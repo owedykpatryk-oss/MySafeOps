@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -13,7 +14,10 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { pushRecycleBinItem } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
+import { exportCsv } from "../utils/exportCsv";
 
+import { todayLocalISO } from "../utils/localDate";
 const INCIDENTS_KEY = "mysafeops_incidents";
 const LEGACY_INCIDENT_KEY = "incident_register";
 const ACTIONS_KEY = "incident_actions_v1";
@@ -39,7 +43,7 @@ function loadIncidentsMerged() {
 }
 
 const genId = () => `inc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -339,36 +343,23 @@ function IncidentForm({ item, projects, onSave, onClose }) {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "rgba(0,0,0,0.45)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "1.5rem 1rem",
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        overflow: "auto",
-      }}
-    >
-      <div style={{ ...ss.card, width: "100%", maxWidth: 560, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0, fontSize: 18, fontWeight: 600 }}>{item ? "Edit record" : "New incident / near miss"}</h2>
-        <label style={ss.lbl}>Type</label>
-        <select style={ss.inp} value={form.type} onChange={(e) => set("type", e.target.value)}>
+        <label style={ss.lbl} htmlFor="incident-near-miss-type">Type</label>
+        <select style={ss.inp} value={form.type} onChange={(e) => set("type", e.target.value)} id="incident-near-miss-type">
           {TYPES.map((t) => (
             <option key={t.id} value={t.id}>
               {t.label}
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date & time</label>
-        <input type="datetime-local" style={ss.inp} value={form.occurredAt} onChange={(e) => set("occurredAt", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Location / area</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. Scaffold bay 3" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project (optional)</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-near-miss-occurred-at">Date & time</label>
+        <input type="datetime-local" style={ss.inp} value={form.occurredAt} onChange={(e) => set("occurredAt", e.target.value)}  id="incident-near-miss-occurred-at" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-near-miss-location">Location / area</label>
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} placeholder="e.g. Scaffold bay 3"  id="incident-near-miss-location" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-near-miss-project-id">Project (optional)</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="incident-near-miss-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -376,13 +367,13 @@ function IncidentForm({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Description</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-near-miss-description">Description</label>
         <textarea
           style={{ ...ss.inp, minHeight: 88, resize: "vertical" }}
           value={form.description}
           onChange={(e) => set("description", e.target.value)}
           placeholder="What happened?"
-        />
+         id="incident-near-miss-description" />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Quick tags</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {QUICK_FLAGS.map((f) => {
@@ -407,17 +398,17 @@ function IncidentForm({ item, projects, onSave, onClose }) {
             );
           })}
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Quick summary</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-near-miss-quick-summary">Quick summary</label>
         <input
           style={ss.inp}
           value={form.quickSummary || ""}
           onChange={(e) => set("quickSummary", e.target.value)}
           placeholder={buildQuickSummary(form.quickFlags || [], "") || "Auto-generated from quick tags"}
-        />
+         id="incident-near-miss-quick-summary" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Severity</label>
-            <select style={ss.inp} value={form.severity} onChange={(e) => set("severity", e.target.value)}>
+            <label style={ss.lbl} htmlFor="incident-near-miss-severity">Severity</label>
+            <select style={ss.inp} value={form.severity} onChange={(e) => set("severity", e.target.value)} id="incident-near-miss-severity">
               {SEVERITY.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.label}
@@ -426,8 +417,8 @@ function IncidentForm({ item, projects, onSave, onClose }) {
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Status</label>
-            <select style={ss.inp} value={form.status} onChange={(e) => set("status", e.target.value)}>
+            <label style={ss.lbl} htmlFor="incident-near-miss-status">Status</label>
+            <select style={ss.inp} value={form.status} onChange={(e) => set("status", e.target.value)} id="incident-near-miss-status">
               {STATUS.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.label}
@@ -440,10 +431,10 @@ function IncidentForm({ item, projects, onSave, onClose }) {
           <input type="checkbox" checked={form.injuryInvolved} onChange={(e) => set("injuryInvolved", e.target.checked)} />
           Injury or ill-health involved
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Immediate actions taken</label>
-        <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.immediateActions} onChange={(e) => set("immediateActions", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Reported by</label>
-        <input style={ss.inp} value={form.reportedBy} onChange={(e) => set("reportedBy", e.target.value)} placeholder="Name / role" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-near-miss-immediate-actions">Immediate actions taken</label>
+        <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.immediateActions} onChange={(e) => set("immediateActions", e.target.value)}  id="incident-near-miss-immediate-actions" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-near-miss-reported-by">Reported by</label>
+        <input style={ss.inp} value={form.reportedBy} onChange={(e) => set("reportedBy", e.target.value)} placeholder="Name / role"  id="incident-near-miss-reported-by" />
         <label style={{ ...ss.lbl, marginTop: 10 }}>Photo evidence</label>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <button type="button" style={ss.btn} onClick={() => photoRef.current?.click()}>
@@ -495,7 +486,7 @@ function IncidentForm({ item, projects, onSave, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -540,10 +531,11 @@ export default function IncidentNearMiss() {
     listPg.reset();
   }, [filter]);
 
+  const liveItems = liveOrgArrayRows(items);
   const filtered = useMemo(() => {
     if (filter === "all") return items;
-    return items.filter((x) => x.type === filter);
-  }, [items, filter]);
+    return liveItems.filter((x) => x.type === filter);
+  }, [liveItems, filter]);
 
   const labelType = (id) => TYPES.find((t) => t.id === id)?.label || id;
   const labelSev = (id) => SEVERITY.find((s) => s.id === id)?.label || id;
@@ -557,7 +549,7 @@ export default function IncidentNearMiss() {
     return map;
   }, [actions]);
 
-  const exportCsv = () => {
+  const handleExportCsv = () => {
     const header = ["Type", "Date/time", "Location", "Project", "Severity", "Status", "Injury", "Reported by", "Description", "Quick tags", "GPS", "Photo count"];
     const rows = items.map((r) => [
       labelType(r.type),
@@ -573,12 +565,7 @@ export default function IncidentNearMiss() {
       r.gpsLat && r.gpsLng ? `${Number(r.gpsLat).toFixed(6)},${Number(r.gpsLng).toFixed(6)}` : "",
       Array.isArray(r.photos) ? r.photos.length : 0,
     ]);
-    const csv = [header, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `incidents_near_miss_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(header, rows, `incidents_near_miss_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -652,7 +639,7 @@ export default function IncidentNearMiss() {
         right={
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {items.length > 0 && (
-              <button type="button" style={ss.btn} onClick={exportCsv}>
+              <button type="button" style={ss.btn} onClick={handleExportCsv}>
                 Export CSV
               </button>
             )}
@@ -779,7 +766,7 @@ export default function IncidentNearMiss() {
                           sourceKey: INCIDENTS_KEY,
                           payload: r,
                         });
-                        setItems((p) => p.filter((x) => x.id !== r.id));
+                        setItems((p) => replaceWithTombstone(p, r.id));
                         pushAudit({ action: "incident_delete", entity: "incident", detail: r.id });
                       }}
                     >

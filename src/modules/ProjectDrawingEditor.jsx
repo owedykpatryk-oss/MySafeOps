@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { ms } from "../utils/moduleStyles";
+import { exportCsv } from "../utils/exportCsv";
 import PageHero from "../components/PageHero";
 import { getOrgId, loadOrgScoped as load, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { consumeWorkspaceNavTarget, openWorkspaceView } from "../utils/workspaceNavContext";
@@ -135,7 +136,7 @@ const pdeUi = {
     bottom: 28,
     left: "50%",
     transform: "translateX(-50%)",
-    zIndex: 2000,
+    zIndex: "var(--z-toast, 80)",
     padding: "12px 20px",
     borderRadius: 12,
     fontSize: 14,
@@ -199,12 +200,6 @@ const PDE_SESSION_KEY = "mysafeops_pde_session_v1";
 const R2_UPLOADS_KEY = "mysafeops_r2_uploads";
 
 const emptyControlPoint = () => ({ px: "", py: "", lat: "", lng: "" });
-
-function escapeCsvCell(val) {
-  const s = String(val ?? "");
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
 
 function loadR2UploadsList() {
   const list = loadOrgScoped(R2_UPLOADS_KEY, []);
@@ -314,11 +309,6 @@ export default function ProjectDrawingEditor() {
     () => (currentProject ? parseProjectBoundaryRing(currentProject) : null),
     [currentProject]
   );
-
-  const projectSiteLabel = useMemo(() => {
-    if (!currentProject) return "";
-    return [currentProject.postcode, currentProject.address, currentProject.site].filter(Boolean).join(" · ");
-  }, [currentProject]);
 
   const updateProjectRecord = useCallback(
     (updated) => {
@@ -1173,35 +1163,27 @@ export default function ProjectDrawingEditor() {
     reader.readAsText(file);
   };
 
-  const exportCsv = () => {
+  const handleExportCsv = () => {
     if (!projectId || objects.length === 0) return;
     const permitRef = String(exportPermitRef || "").trim();
-    const header = "id,objectType,label,placement,xPercent,yPercent,lat,lng,projectId,planId,permitRef";
-    const lines = [header];
-    for (const row of objects) {
+    const headers = ["id", "objectType", "label", "placement", "xPercent", "yPercent", "lat", "lng", "projectId", "planId", "permitRef"];
+    const rows = objects.map((row) => {
       const { lat, lng } = getObjectLatLng(row, geoAnchor, effectiveAffine);
-      lines.push(
-        [
-          escapeCsvCell(row.id),
-          escapeCsvCell(row.type),
-          escapeCsvCell(row.label || drawingObjectLabel(row)),
-          escapeCsvCell(row.placement || "plan"),
-          escapeCsvCell(row.x),
-          escapeCsvCell(row.y),
-          escapeCsvCell(lat),
-          escapeCsvCell(lng),
-          escapeCsvCell(row.projectId),
-          escapeCsvCell(row.planId),
-          escapeCsvCell(permitRef),
-        ].join(",")
-      );
-    }
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `project-drawing-${projectId || "export"}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+      return [
+        row.id,
+        row.type,
+        row.label || drawingObjectLabel(row),
+        row.placement || "plan",
+        row.x,
+        row.y,
+        lat,
+        lng,
+        row.projectId,
+        row.planId,
+        permitRef,
+      ];
+    });
+    exportCsv(headers, rows, `project-drawing-${projectId || "export"}.csv`);
     setToast("CSV export started");
   };
 
@@ -2568,7 +2550,7 @@ export default function ProjectDrawingEditor() {
           <div className="pde-section__label">Project &amp; objects</div>
         <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))" }}>
           <div>
-            <label style={ss.lbl}>Project</label>
+            <label style={ss.lbl} htmlFor="project-drawing-project">Project</label>
             <select
               value={projectId}
               onChange={(e) => {
@@ -2576,7 +2558,7 @@ export default function ProjectDrawingEditor() {
                 setSelectedIds([]);
               }}
               style={ss.inp}
-            >
+             id="project-drawing-project">
               <option value="">Select project</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -2586,8 +2568,8 @@ export default function ProjectDrawingEditor() {
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Plan overlay</label>
-            <select value={planId} onChange={(e) => setPlanId(e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="project-drawing-plan-overlay">Plan overlay</label>
+            <select value={planId} onChange={(e) => setPlanId(e.target.value)} style={ss.inp} id="project-drawing-plan-overlay">
               <option value="">No plan selected</option>
               {plansForCurrentProject.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -2597,8 +2579,8 @@ export default function ProjectDrawingEditor() {
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Object type (new)</label>
-            <select value={objectType} onChange={(e) => setObjectType(e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="project-drawing-object-type-new">Object type (new)</label>
+            <select value={objectType} onChange={(e) => setObjectType(e.target.value)} style={ss.inp} id="project-drawing-object-type-new">
               {drawingObjectCategories().map((cat) => (
                 <optgroup key={cat.id} label={cat.label}>
                   {PROJECT_DRAWING_OBJECT_TYPES.filter((t) => t.category === cat.id && !t.isArea).map((t) => (
@@ -2611,8 +2593,8 @@ export default function ProjectDrawingEditor() {
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Visible on map</label>
-            <select value={visibleType} onChange={(e) => setVisibleType(e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="project-drawing-visible-on-map">Visible on map</label>
+            <select value={visibleType} onChange={(e) => setVisibleType(e.target.value)} style={ss.inp} id="project-drawing-visible-on-map">
               <option value="all">All object types</option>
               {PROJECT_DRAWING_OBJECT_TYPES.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -2924,7 +2906,7 @@ export default function ProjectDrawingEditor() {
             <button type="button" style={{ ...ss.btn, ...pdeUi.btnCompact }} disabled={!projectId || objects.length === 0} onClick={exportGeoJson}>
               GeoJSON
             </button>
-            <button type="button" style={{ ...ss.btn, ...pdeUi.btnCompact }} disabled={!projectId || objects.length === 0} onClick={exportCsv} title="CSV with WGS84 from anchor or affine">
+            <button type="button" style={{ ...ss.btn, ...pdeUi.btnCompact }} disabled={!projectId || objects.length === 0} onClick={handleExportCsv} title="CSV with WGS84 from anchor or affine">
               CSV
             </button>
             <button
@@ -3755,12 +3737,12 @@ export default function ProjectDrawingEditor() {
                       }}
                     >
                       <div>
-                        <label style={ss.lbl}>Area classification</label>
+                        <label style={ss.lbl} htmlFor="project-drawing-meta">Area classification</label>
                         <select
                           style={ss.inp}
                           value={row.meta?.areaClassification || ""}
                           onChange={(e) => upsertObject(row.id, { meta: { areaClassification: e.target.value } })}
-                        >
+                         id="project-drawing-meta">
                           <option value="">—</option>
                           {["zone_0", "zone_1", "zone_2", "zone_20", "zone_21", "zone_22", "safe"].map((z) => (
                             <option key={z} value={z}>
@@ -3770,12 +3752,12 @@ export default function ProjectDrawingEditor() {
                         </select>
                       </div>
                       <div>
-                        <label style={ss.lbl}>Atmosphere</label>
+                        <label style={ss.lbl} htmlFor="project-drawing-meta-2">Atmosphere</label>
                         <select
                           style={ss.inp}
                           value={row.meta?.atmosphereType || ""}
                           onChange={(e) => upsertObject(row.id, { meta: { atmosphereType: e.target.value } })}
-                        >
+                         id="project-drawing-meta-2">
                           <option value="">—</option>
                           {["gas", "dust", "mist", "hybrid"].map((z) => (
                             <option key={z} value={z}>
@@ -3785,30 +3767,30 @@ export default function ProjectDrawingEditor() {
                         </select>
                       </div>
                       <div style={{ gridColumn: "1 / -1" }}>
-                        <label style={ss.lbl}>Substance / vapour (if applicable)</label>
+                        <label style={ss.lbl} htmlFor="project-drawing-meta-3">Substance / vapour (if applicable)</label>
                         <input
                           style={ss.inp}
                           value={row.meta?.substance || ""}
                           onChange={(e) => upsertObject(row.id, { meta: { substance: e.target.value } })}
-                        />
+                         id="project-drawing-meta-3" />
                       </div>
                       <div>
-                        <label style={ss.lbl}>T class</label>
+                        <label style={ss.lbl} htmlFor="project-drawing-meta-4">T class</label>
                         <input
                           style={ss.inp}
                           value={row.meta?.temperatureClass || ""}
                           onChange={(e) => upsertObject(row.id, { meta: { temperatureClass: e.target.value } })}
                           placeholder="e.g. T3"
-                        />
+                         id="project-drawing-meta-4" />
                       </div>
                       <div>
-                        <label style={ss.lbl}>Equipment group</label>
+                        <label style={ss.lbl} htmlFor="project-drawing-meta-5">Equipment group</label>
                         <input
                           style={ss.inp}
                           value={row.meta?.equipmentGroup || ""}
                           onChange={(e) => upsertObject(row.id, { meta: { equipmentGroup: e.target.value } })}
                           placeholder="e.g. II A"
-                        />
+                         id="project-drawing-meta-5" />
                       </div>
                       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, gridColumn: "1 / -1" }}>
                         <input
@@ -3842,27 +3824,27 @@ export default function ProjectDrawingEditor() {
         </div>
         <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", marginBottom: showGeoPreview ? 12 : 0 }}>
           <div>
-            <label style={ss.lbl}>Center lat</label>
+            <label style={ss.lbl} htmlFor="project-drawing-lat">Center lat</label>
             <input
               type="number"
               step="0.0001"
               value={geoAnchor.lat}
               onChange={(e) => setGeoAnchor((a) => ({ ...a, lat: Number(e.target.value) || a.lat }))}
               style={ss.inp}
-            />
+             id="project-drawing-lat" />
           </div>
           <div>
-            <label style={ss.lbl}>Center lng</label>
+            <label style={ss.lbl} htmlFor="project-drawing-lng">Center lng</label>
             <input
               type="number"
               step="0.0001"
               value={geoAnchor.lng}
               onChange={(e) => setGeoAnchor((a) => ({ ...a, lng: Number(e.target.value) || a.lng }))}
               style={ss.inp}
-            />
+             id="project-drawing-lng" />
           </div>
           <div>
-            <label style={ss.lbl}>Span lat (°)</label>
+            <label style={ss.lbl} htmlFor="project-drawing-span-lat">Span lat (°)</label>
             <input
               type="number"
               step="0.0001"
@@ -3872,10 +3854,10 @@ export default function ProjectDrawingEditor() {
                 setGeoAnchor((a) => ({ ...a, spanLat: clamp(Number(e.target.value) || a.spanLat, 0.0005, 5) }))
               }
               style={ss.inp}
-            />
+             id="project-drawing-span-lat" />
           </div>
           <div>
-            <label style={ss.lbl}>Span lng (°)</label>
+            <label style={ss.lbl} htmlFor="project-drawing-span-lng">Span lng (°)</label>
             <input
               type="number"
               step="0.0001"
@@ -3885,7 +3867,7 @@ export default function ProjectDrawingEditor() {
                 setGeoAnchor((a) => ({ ...a, spanLng: clamp(Number(e.target.value) || a.spanLng, 0.0005, 5) }))
               }
               style={ss.inp}
-            />
+             id="project-drawing-span-lng" />
           </div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexWrap: "wrap" }}>
             <button
@@ -4034,7 +4016,7 @@ export default function ProjectDrawingEditor() {
             position: "fixed",
             inset: 0,
             background: "rgba(15,23,42,0.45)",
-            zIndex: 1000,
+            zIndex: "var(--z-dialog, 60)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -4113,7 +4095,7 @@ export default function ProjectDrawingEditor() {
         <div
           className="app-module-dialog-overlay"
           role="presentation"
-          style={{ zIndex: 70 }}
+          style={{ zIndex: "var(--z-palette, 70)" }}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setCopyFallbackText("");
           }}

@@ -370,7 +370,7 @@ export default function SitePresenceMap() {
                   }}
                 >
                   <div style={{ fontWeight: 600, marginBottom: 8 }}>{w.name || "Unnamed"}</div>
-                  <label style={{ ...ss.lbl, fontSize: 11 }}>Project / site</label>
+                  <label style={{ ...ss.lbl, fontSize: 11 }} htmlFor="site-presence-map-project-id">Project / site</label>
                   <select
                     style={ss.inp}
                     value={pr.projectId || ""}
@@ -395,7 +395,7 @@ export default function SitePresenceMap() {
                       }));
                       pushAudit({ action: "site_presence_update", entity: "site_map", detail: w.id });
                     }}
-                  >
+                   id="site-presence-map-project-id">
                     <option value="">— Not set —</option>
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -403,7 +403,7 @@ export default function SitePresenceMap() {
                       </option>
                     ))}
                   </select>
-                  <label style={{ ...ss.lbl, fontSize: 11, marginTop: 10 }}>Activity / task</label>
+                  <label style={{ ...ss.lbl, fontSize: 11, marginTop: 10 }} htmlFor="site-presence-map-activity">Activity / task</label>
                   <input
                     style={ss.inp}
                     value={pr.activity || ""}
@@ -431,7 +431,7 @@ export default function SitePresenceMap() {
                       }));
                       pushAudit({ action: "site_presence_update", entity: "site_map", detail: w.id });
                     }}
-                  />
+                   id="site-presence-map-activity" />
                   <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 6 }}>
                     {pr.updatedAt ? `Last updated: ${new Date(pr.updatedAt).toLocaleString("en-GB")}` : " "}
                   </div>

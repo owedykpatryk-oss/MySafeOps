@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { saveOrgScoped } from "./orgStorage";
 import { getVehicleDueAlerts } from "./vehicleComplianceDue.js";
 
+import { localDateISO } from "./localDate";
 describe("vehicleComplianceDue", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -17,7 +18,7 @@ describe("vehicleComplianceDue", () => {
       {
         id: "v1",
         registration: "AB12 CDE",
-        motDue: due.toISOString().slice(0, 10),
+        motDue: localDateISO(due),
         status: "active",
       },
     ]);
@@ -29,7 +30,7 @@ describe("vehicleComplianceDue", () => {
   it("ignores disposed vehicles", () => {
     const due = new Date();
     due.setDate(due.getDate() - 2);
-    saveOrgScoped("vehicle_register", [{ id: "v1", registration: "XY01", motDue: due.toISOString().slice(0, 10), status: "disposed" }]);
+    saveOrgScoped("vehicle_register", [{ id: "v1", registration: "XY01", motDue: localDateISO(due), status: "disposed" }]);
     expect(getVehicleDueAlerts(new Date())).toHaveLength(0);
   });
 });

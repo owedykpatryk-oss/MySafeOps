@@ -2,7 +2,7 @@ import { lazy, Suspense, useMemo, useState } from "react";
 import { useCountUp } from "../../hooks/useCountUp";
 import { Link } from "react-router-dom";
 import { loginLinkPrefetchProps, prefetchLoginPage } from "../../utils/routePrefetch";
-import { PRICE_ADJUSTMENT_SHORT } from "../../lib/billingPlans";
+import { getPriceAdjustmentShort } from "../../lib/billingPlans";
 import { getLandingFeatures, getModuleTicker } from "../../data/landingMarketContent";
 import { getLandingSectionsCopy, getReadinessTone } from "../../data/landingSectionsCopy";
 import LandingBlogSection from "./LandingBlogSection";
@@ -194,7 +194,7 @@ function RoiEstimatorSection({ market, defaultRate, loginTo }) {
             <p>{copy.disclaimer}</p>
             <p style={{ fontSize: 13, color: "var(--sl5)", marginTop: 12, lineHeight: 1.5 }}>
               {copy.orgPricing}{" "}
-              <a href="#pricing" style={{ color: "var(--teal)", fontWeight: 600 }}>
+              <a href="#pricing" className="landing-touch-link" style={{ color: "var(--teal)", fontWeight: 600 }}>
                 {copy.pricingLink}
               </a>
               .
@@ -350,7 +350,7 @@ export default function LandingContentSections({ market, copy, supportEmail, fea
             {copy.pricingFootnote}
           </p>
           <p style={{ textAlign: "center", fontSize: 13, color: "var(--sl5)", marginTop: 10, maxWidth: 640, marginLeft: "auto", marginRight: "auto", lineHeight: 1.5 }}>
-            {PRICE_ADJUSTMENT_SHORT}{" "}
+            {getPriceAdjustmentShort(market.id)}{" "}
             <Link to={market.termsPath} style={{ color: "var(--sl4)", textDecoration: "underline" }}>
               {copy.pricingDisclaimer}
             </Link>
@@ -373,11 +373,37 @@ export default function LandingContentSections({ market, copy, supportEmail, fea
           <p>{sections.missing.intro}</p>
           <div className="sub">{sections.missing.sub(supportEmail)}</div>
           <div className="mf">
-            <input type="email" placeholder={sections.missing.emailPh} value={featureForm.email} onChange={(e) => onChangeFeature("email", e.target.value)} autoComplete="email" />
-            <input type="text" placeholder={sections.missing.namePh} value={featureForm.name} onChange={(e) => onChangeFeature("name", e.target.value)} />
+            <label className="landing-sr-only" htmlFor="landing-feature-email">{sections.missing.emailLabel}</label>
+            <input
+              id="landing-feature-email"
+              type="email"
+              placeholder={sections.missing.emailPh}
+              value={featureForm.email}
+              onChange={(e) => onChangeFeature("email", e.target.value)}
+              autoComplete="email"
+              aria-label={sections.missing.emailLabel}
+            />
+            <label className="landing-sr-only" htmlFor="landing-feature-name">{sections.missing.nameLabel}</label>
+            <input
+              id="landing-feature-name"
+              type="text"
+              placeholder={sections.missing.namePh}
+              value={featureForm.name}
+              onChange={(e) => onChangeFeature("name", e.target.value)}
+              autoComplete="organization"
+              aria-label={sections.missing.nameLabel}
+            />
           </div>
           <div className="mf">
-            <textarea placeholder={sections.missing.descPh} value={featureForm.desc} onChange={(e) => onChangeFeature("desc", e.target.value)} rows={4} />
+            <label className="landing-sr-only" htmlFor="landing-feature-desc">{sections.missing.descLabel}</label>
+            <textarea
+              id="landing-feature-desc"
+              placeholder={sections.missing.descPh}
+              value={featureForm.desc}
+              onChange={(e) => onChangeFeature("desc", e.target.value)}
+              rows={4}
+              aria-label={sections.missing.descLabel}
+            />
           </div>
           <div className="mf">
             <button type="button" className="btn btn-p" onClick={onSubmitFeature}>{sections.missing.cta}</button>
@@ -409,12 +435,16 @@ export default function LandingContentSections({ market, copy, supportEmail, fea
           <h2>{sections.cta.title}</h2>
           <p>{sections.cta.intro}</p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", position: "relative" }}>
+            <label className="landing-sr-only" htmlFor="landing-cta-email">{sections.cta.emailLabel}</label>
             <input
+              id="landing-cta-email"
               type="email"
               placeholder={sections.cta.emailPh}
               value={ctaEmail}
               onChange={(e) => onCtaEmailChange(e.target.value)}
               onFocus={prefetchLoginPage}
+              autoComplete="email"
+              aria-label={sections.cta.emailLabel}
               style={{
                 padding: "14px 24px",
                 borderRadius: "var(--r)",

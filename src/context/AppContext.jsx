@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { hasPersistedSupabaseSession, clearLocalWorkspaceOnlyFlag } from "../lib/authPrefs";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-import { ORG_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
+import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT, getOrgId } from "../utils/orgStorage";
 import { scrubFessExclusiveOrgStorage } from "../utils/fessExclusive";
 import { scrubUtilityMappingExclusiveOrgStorage } from "../utils/utilityMappingExclusive";
 import { ensureUtilityMappingBranding } from "../utils/utilityMappingBranding";
@@ -14,7 +14,8 @@ import {
   isBillingWriteBlocked,
   isTrialExpiredWithoutPaid,
 } from "../utils/billingAccess";
-
+import { refreshPlatformOwnerFromSupabase, setPlatformOwnerCached } from "../utils/superAdmin";
+import { runLocalRetentionJobs } from "../utils/dataRetention";
 const Ctx = createContext(null);
 
 const ROLES = ["admin", "supervisor", "operative"];
@@ -67,6 +68,7 @@ export function AppProvider({ children }) {
   const [trialStatus, setTrialStatus] = useState(() => getTrialStatus());
   const [billing, setBilling] = useState(() => getBillingEntitlements());
   const [trialExtensionCount, setTrialExtensionCount] = useState(() => getTrialExtensionCount());
+  const [isPlatformOwner, setIsPlatformOwner] = useState(false);
 
   useEffect(() => {
     setRoleState(resolveMembershipRole());
@@ -79,6 +81,11 @@ export function AppProvider({ children }) {
     ensureFessBranding(getOrgId());
     ensureFessWorkspaceFocus(getOrgId());
     if (isCloudAuthSession()) clearLocalWorkspaceOnlyFlag();
+    try {
+      runLocalRetentionJobs();
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   useEffect(() => {
@@ -97,7 +104,7 @@ export function AppProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const sync = () => {
+    const syncBilling = () => {
       const nextTrial = getTrialStatus();
       const nextBilling = getBillingEntitlements();
       setTrialStatus((prev) =>
@@ -108,13 +115,27 @@ export function AppProvider({ children }) {
           : nextTrial
       );
       setBilling((prev) =>
-        prev?.subscriptionStatus === nextBilling?.subscriptionStatus && prev?.paidPlanId === nextBilling?.paidPlanId
+        prev?.subscriptionStatus === nextBilling?.subscriptionStatus &&
+        prev?.paidPlanId === nextBilling?.paidPlanId &&
+        prev?.pastDueSince === nextBilling?.pastDueSince
           ? prev
           : nextBilling
       );
+      setTrialExtensionCount(getTrialExtensionCount());
     };
-    const id = window.setInterval(sync, 60_000);
-    return () => window.clearInterval(id);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncBilling();
+    };
+    window.addEventListener("mysafeops-org-updated", syncBilling);
+    window.addEventListener(ORG_DATA_CHANGED_EVENT, syncBilling);
+    window.addEventListener("focus", syncBilling);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("mysafeops-org-updated", syncBilling);
+      window.removeEventListener(ORG_DATA_CHANGED_EVENT, syncBilling);
+      window.removeEventListener("focus", syncBilling);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -130,22 +151,41 @@ export function AppProvider({ children }) {
     return () => window.removeEventListener("mysafeops-org-updated", onOrgUpdated);
   }, []);
 
-  /** Cloud: re-fetch role from Supabase so DevTools localStorage edits cannot persist. */
+  /** Cloud: re-fetch role + platform-owner flag from Supabase (not localStorage). */
   useEffect(() => {
-    if (!isSupabaseConfigured() || !supabase) return undefined;
-    if (!hasPersistedSupabaseSession()) return undefined;
+    if (!isSupabaseConfigured() || !supabase) {
+      setPlatformOwnerCached(false);
+      setIsPlatformOwner(false);
+      return undefined;
+    }
+    if (!hasPersistedSupabaseSession()) {
+      setPlatformOwnerCached(false);
+      setIsPlatformOwner(false);
+      return undefined;
+    }
     clearLocalWorkspaceOnlyFlag();
 
     let cancelled = false;
     const syncRole = () => {
       if (cancelled || !hasPersistedSupabaseSession()) return;
       refreshMembershipRoleFromSupabase(supabase)
-        .then((role) => {
+        .then((nextRole) => {
           if (cancelled) return;
-          if (role && ROLES.includes(role)) setRoleState(role);
+          if (nextRole && ROLES.includes(nextRole)) setRoleState(nextRole);
         })
         .catch(() => {
           if (!cancelled) setRoleState("operative");
+        });
+      refreshPlatformOwnerFromSupabase(supabase)
+        .then((owner) => {
+          if (cancelled) return;
+          setIsPlatformOwner(owner);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setPlatformOwnerCached(false);
+            setIsPlatformOwner(false);
+          }
         });
     };
 
@@ -193,12 +233,12 @@ export function AppProvider({ children }) {
 
   const billingAccess = useMemo(
     () => ({
-      writeBlocked: isBillingWriteBlocked({ trialStatus, billing }),
-      trialExpired: isTrialExpiredWithoutPaid({ trialStatus, billing }),
-      canExtendTrial: canExtendOrgTrial({ trialStatus, billing, trialExtensionCount }),
+      writeBlocked: isBillingWriteBlocked({ trialStatus, billing, isPlatformOwner }),
+      trialExpired: isTrialExpiredWithoutPaid({ trialStatus, billing, isPlatformOwner }),
+      canExtendTrial: canExtendOrgTrial({ trialStatus, billing, isPlatformOwner, trialExtensionCount }),
       trialExtensionCount,
     }),
-    [trialStatus, billing, trialExtensionCount]
+    [trialStatus, billing, trialExtensionCount, isPlatformOwner]
   );
 
   const value = useMemo(
@@ -212,8 +252,9 @@ export function AppProvider({ children }) {
       billing,
       trialExtensionCount,
       billingAccess,
+      isPlatformOwner,
     }),
-    [role, setRole, caps, orgId, trialStatus, billing, trialExtensionCount, billingAccess]
+    [role, setRole, caps, orgId, trialStatus, billing, trialExtensionCount, billingAccess, isPlatformOwner]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -7,8 +7,9 @@ import { ensureFessSiteProject } from "./fessClientSites";
 import { getFessJobStarter } from "./fessJobStarters";
 import { normalizeWorkerCertifications, getWorkerCertAlerts, certLabel } from "./certifications";
 
+import { todayLocalISO } from "./localDate";
 const genId = () => `brief_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = todayLocalISO;
 
 export const FESS_FOOD_FACTORY_BRIEFING_TOPICS = [
   "Line clearance / production isolation confirmed with site permit controller",

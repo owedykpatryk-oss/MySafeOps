@@ -4,6 +4,7 @@
 import { loadOrgScoped as load, saveOrgScoped as save } from "./orgStorage";
 import { isFessOrg } from "./fessOrg";
 
+import { todayLocalISO } from "./localDate";
 const genId = () => `coshh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
 export const FESS_COSHH_STARTER_SUBSTANCES = [
@@ -79,7 +80,7 @@ export function seedFessCoshhRegister() {
   const existing = load(key, []);
   const list = Array.isArray(existing) ? [...existing] : [];
   const byName = new Set(list.map((i) => String(i.name || "").trim().toLowerCase()));
-  const now = new Date().toISOString().slice(0, 10);
+  const now = todayLocalISO();
   let created = 0;
 
   for (const tmpl of FESS_COSHH_STARTER_SUBSTANCES) {

@@ -1,10 +1,11 @@
 /**
  * Survey field upgrades — revision A→B records diff, one-tap evidence, undertaker paste.
  */
-import { escapeHtml, escapeAttr, safeImageSrc } from "../../utils/htmlEscape.js";
+import { escapeHtml } from "../../utils/htmlEscape.js";
 import { blankEvidenceRow, blankRecordItem, recordServiceLabel, recordStatusLabel } from "./surveyEvidencePack.js";
 import { geoPhotoPreset } from "../../utils/geoPhotoPresets.js";
 
+import { todayLocalISO } from "../../utils/localDate";
 const esc = escapeHtml;
 
 function uid(prefix = "row") {
@@ -296,7 +297,7 @@ export function parseUndertakerPaste(text) {
             ? "no_response"
             : "affected",
       notes: line.slice(0, 200),
-      date: new Date().toISOString().slice(0, 10),
+      date: todayLocalISO(),
     });
   }
 

@@ -4,6 +4,7 @@ import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -12,8 +13,9 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `insp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-const today = () => new Date().toISOString().slice(0,10);
+const today = todayLocalISO;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}); };
 const daysUntil = (iso) => { if (!iso) return null; return Math.ceil((new Date(iso)-new Date())/(1000*60*60*24)); };
 
@@ -67,60 +69,60 @@ function InspectionForm({ item, onSave, onClose, projects }) {
 
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Inspection type</label>
-            <select value={form.type} onChange={e=>set("type",e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="inspection-type">Inspection type</label>
+            <select value={form.type} onChange={e=>set("type",e.target.value)} style={ss.inp} id="inspection-type">
               {Object.entries(INSPECTION_TYPES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
             </select>
             <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>Frequency: {def.freq} · {def.regs}</div>
           </div>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Equipment / item name *</label>
-            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. 2-tonne chain block, 110V drill, MEWP Genie GS-1930" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="inspection-name">Equipment / item name *</label>
+            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. 2-tonne chain block, 110V drill, MEWP Genie GS-1930" style={ss.inp}  id="inspection-name" />
           </div>
           <div>
-            <label style={ss.lbl}>Serial / asset number</label>
-            <input value={form.serialNo||""} onChange={e=>set("serialNo",e.target.value)} placeholder="Asset tag or serial no." style={ss.inp} />
+            <label style={ss.lbl} htmlFor="inspection-serial-no">Serial / asset number</label>
+            <input value={form.serialNo||""} onChange={e=>set("serialNo",e.target.value)} placeholder="Asset tag or serial no." style={ss.inp}  id="inspection-serial-no" />
           </div>
           <div>
-            <label style={ss.lbl}>Manufacturer / model</label>
-            <input value={form.manufacturer||""} onChange={e=>set("manufacturer",e.target.value)} placeholder="e.g. Yale / 2T chainblock" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="inspection-manufacturer">Manufacturer / model</label>
+            <input value={form.manufacturer||""} onChange={e=>set("manufacturer",e.target.value)} placeholder="e.g. Yale / 2T chainblock" style={ss.inp}  id="inspection-manufacturer" />
           </div>
           {(form.type==="loler"||form.type==="mewp"||form.type==="lifting") && (
             <div>
-              <label style={ss.lbl}>Safe working load (SWL)</label>
-              <input value={form.swl||""} onChange={e=>set("swl",e.target.value)} placeholder="e.g. 2000 kg" style={ss.inp} />
+              <label style={ss.lbl} htmlFor="inspection-swl">Safe working load (SWL)</label>
+              <input value={form.swl||""} onChange={e=>set("swl",e.target.value)} placeholder="e.g. 2000 kg" style={ss.inp}  id="inspection-swl" />
             </div>
           )}
           <div>
-            <label style={ss.lbl}>Location / project</label>
-            <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="Where is item kept?" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="inspection-location">Location / project</label>
+            <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="Where is item kept?" style={ss.inp}  id="inspection-location" />
           </div>
           <div>
-            <label style={ss.lbl}>Project</label>
-            <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="inspection-project-id">Project</label>
+            <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="inspection-project-id">
               <option value="">— General / all projects —</option>
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Last inspection date</label>
-            <input type="date" value={form.lastInspectionDate} onChange={e=>set("lastInspectionDate",e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="inspection-last-inspection-date">Last inspection date</label>
+            <input type="date" value={form.lastInspectionDate} onChange={e=>set("lastInspectionDate",e.target.value)} style={ss.inp}  id="inspection-last-inspection-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Next inspection due</label>
-            <input type="date" value={form.nextInspectionDate||""} onChange={e=>set("nextInspectionDate",e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="inspection-next-inspection-date">Next inspection due</label>
+            <input type="date" value={form.nextInspectionDate||""} onChange={e=>set("nextInspectionDate",e.target.value)} style={ss.inp}  id="inspection-next-inspection-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Inspected / tested by</label>
-            <input value={form.inspectedBy||""} onChange={e=>set("inspectedBy",e.target.value)} placeholder="Name or company" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="inspection-inspected-by">Inspected / tested by</label>
+            <input value={form.inspectedBy||""} onChange={e=>set("inspectedBy",e.target.value)} placeholder="Name or company" style={ss.inp}  id="inspection-inspected-by" />
           </div>
           <div>
-            <label style={ss.lbl}>Certificate / report number</label>
-            <input value={form.certNumber||""} onChange={e=>set("certNumber",e.target.value)} placeholder="Reference number" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="inspection-cert-number">Certificate / report number</label>
+            <input value={form.certNumber||""} onChange={e=>set("certNumber",e.target.value)} placeholder="Reference number" style={ss.inp}  id="inspection-cert-number" />
           </div>
           <div>
-            <label style={ss.lbl}>Result</label>
-            <select value={form.result||"pass"} onChange={e=>set("result",e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="inspection-result">Result</label>
+            <select value={form.result||"pass"} onChange={e=>set("result",e.target.value)} style={ss.inp} id="inspection-result">
               <option value="pass">Pass — in service</option>
               <option value="pass_minor">Pass with minor defects noted</option>
               <option value="fail">Fail — removed from service</option>
@@ -128,8 +130,8 @@ function InspectionForm({ item, onSave, onClose, projects }) {
             </select>
           </div>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Notes / defects / observations</label>
-            <textarea value={form.notes||""} onChange={e=>set("notes",e.target.value)} style={ss.ta} placeholder="Inspection notes, defects, repairs required…" />
+            <label style={ss.lbl} htmlFor="inspection-notes">Notes / defects / observations</label>
+            <textarea value={form.notes||""} onChange={e=>set("notes",e.target.value)} style={ss.ta} placeholder="Inspection notes, defects, repairs required…"  id="inspection-notes" />
           </div>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl}>Photo of inspection label / certificate</label>
@@ -193,9 +195,11 @@ export default function InspectionTracker() {
     setModal(null);
   };
 
+  const liveItems = liveOrgArrayRows(items);
+
   const filtered = useMemo(
     () =>
-      items.filter((i) => {
+      liveItems.filter((i) => {
         if (filterType && i.type !== filterType) return false;
         if (filterResult && i.result !== filterResult) return false;
         if (search && !i.name?.toLowerCase().includes(search.toLowerCase()) && !i.serialNo?.toLowerCase().includes(search.toLowerCase()) && !i.location?.toLowerCase().includes(search.toLowerCase())) return false;
@@ -205,13 +209,13 @@ export default function InspectionTracker() {
         if (filterDue === "ok" && !(days === null || days > 30)) return false;
         return true;
       }),
-    [items, filterType, filterResult, filterDue, search]
+    [liveItems, filterType, filterResult, filterDue, search]
   );
 
   const stats = {
-    overdue: items.filter(i=>daysUntil(i.nextInspectionDate)<0).length,
-    due30: items.filter(i=>{const d=daysUntil(i.nextInspectionDate);return d!==null&&d>=0&&d<=30;}).length,
-    fail: items.filter(i=>i.result==="fail"||i.result==="quarantine").length,
+    overdue: liveItems.filter(i=>daysUntil(i.nextInspectionDate)<0).length,
+    due30: liveItems.filter(i=>{const d=daysUntil(i.nextInspectionDate);return d!==null&&d>=0&&d<=30;}).length,
+    fail: liveItems.filter(i=>i.result==="fail"||i.result==="quarantine").length,
     total: items.length,
   };
 
@@ -246,10 +250,7 @@ export default function InspectionTracker() {
                 type="button"
                 style={ss.btn}
                 onClick={() => {
-                  const res = printRegisterFormPack("inspections", filtered);
-                  if (!res.ok && res.reason === "popup_blocked") {
-                    window.alert("Allow pop-ups to print the inspection A4 pack (Print → Save as PDF).");
-                  }
+                  printRegisterFormPack("inspections", filtered);
                 }}
                 title="Print branded A4 forms for visible inspection records"
               >
@@ -343,7 +344,7 @@ export default function InspectionTracker() {
                         itemLabel: item.name || item.serialNo || item.id,
                         sourceKey: "inspection_records",
                         payload: item,
-                      })) setItems((prev) => prev.filter((x) => x.id !== item.id));
+                      })) setItems((prev) => replaceWithTombstone(prev, item.id));
                     }} style={{ ...ss.btn, fontSize: 12, padding: "4px 8px", color: "#A32D2D", borderColor: "#F09595" }}>×</button>
                   </div>
                 </div>

@@ -8,6 +8,7 @@ import { downloadBlob } from "../../utils/downloadBlob";
 import { buildGprReportHtml } from "./gprReportPrintHtml";
 import { sanitizePrintPreviewHtml } from "../../utils/htmlEscape.js";
 import { normalizeGprReport } from "./gprReportHelpers";
+import { setPdfFont, ensurePdfUnicodeFont } from "../../utils/pdfUnicodeFont.js";
 
 const A4_W_MM = 210;
 const A4_H_MM = 297;
@@ -94,6 +95,7 @@ export async function downloadGprReportPdf(report, extras = {}, opts = {}) {
 
   notify("assemble");
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  await ensurePdfUnicodeFont(pdf);
   const r = normalizeGprReport(report);
   pdf.setProperties({
     title: r.title || r.ref || "GPR Report",
@@ -116,7 +118,7 @@ export async function downloadGprReportPdf(report, extras = {}, opts = {}) {
 
   pdf.addImage(imgData, "JPEG", side, side, usableW, imgHeightMm);
   pageNum = 1;
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(140, 140, 140);
   pdf.text(`${pageNum} / ${totalPages}`, pageW - side, pageH - 4, { align: "right" });
@@ -125,7 +127,7 @@ export async function downloadGprReportPdf(report, extras = {}, opts = {}) {
   while (heightLeft > 0.5) {
     pdf.addPage();
     pageNum += 1;
-    pdf.setFont("helvetica", "normal");
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(7);
     pdf.setTextColor(140, 140, 140);
     pdf.text(`${pageNum} / ${totalPages}`, pageW - side, pageH - 4, { align: "right" });

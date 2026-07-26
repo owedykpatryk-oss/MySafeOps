@@ -292,7 +292,6 @@ export default function SignatureManager() {
   useEffect(()=>{ saveJSON("signatures",allSigs); },[allSigs]);
 
   const docTypes = ["RAMS","Method Statement","Permit","Toolbox Talk","Induction","Inspection","Other"];
-  const initials = (n) => (n||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
 
   const addDoc = () => {
     if (!newDoc.title.trim()) return;

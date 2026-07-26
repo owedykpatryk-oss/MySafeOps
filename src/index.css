@@ -49,6 +49,12 @@
   --glass-border: rgba(255, 255, 255, 0.55);
   --glass-blur: 16px;
   --status-active-glow: 0 0 0 1px rgba(13, 148, 136, 0.22), 0 8px 24px rgba(13, 148, 136, 0.12);
+  /* Stacking scale — keep overlays / dialogs / toasts ordered */
+  --z-nav: 40;
+  --z-overlay: 50;
+  --z-dialog: 60;
+  --z-palette: 70;
+  --z-toast: 80;
 }
 
 /* Mobile / touch: darker muted text for outdoor readability (small labels were too pale) */

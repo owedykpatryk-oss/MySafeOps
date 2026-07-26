@@ -15,16 +15,16 @@ import {
 } from "../utils/cloudSync";
 import { formatBytes, getEffectivePlan } from "../lib/billingPlans";
 import { isBillingWriteBlocked, billingWriteBlockedMessage } from "../utils/billingAccess";
-import { isSuperAdminEmail } from "../utils/superAdmin";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
 import InlineAlert from "../components/InlineAlert";
 
+import { todayLocalISO } from "../utils/localDate";
 const ss = ms;
 
 export default function BackupExport() {
-  const { caps, orgId, trialStatus, billing } = useApp();
+  const { caps, orgId, trialStatus, billing, isPlatformOwner } = useApp();
   const { supabase, user, ready } = useSupabaseAuth();
   const [msg, setMsg] = useState("");
   const [cloudBusy, setCloudBusy] = useState(false);
@@ -35,14 +35,14 @@ export default function BackupExport() {
 
   const cloudEnabled = isSupabaseConfigured() && supabase;
   const d1Enabled = isD1Configured();
-  const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner: isSuperAdminEmail(user?.email) });
+  const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner: Boolean(isPlatformOwner) });
   const readOnly = isBillingWriteBlocked({
     trialStatus,
     billing,
-    isPlatformOwner: isSuperAdminEmail(user?.email),
+    isPlatformOwner: Boolean(isPlatformOwner),
   });
 
-  const blockWriteAction = (action) => {
+  const blockWriteAction = (_action) => {
     if (!readOnly) return true;
     setMsg(billingWriteBlockedMessage());
     return false;
@@ -79,7 +79,7 @@ export default function BackupExport() {
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `mysafeops-backup-${orgId}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `mysafeops-backup-${orgId}-${todayLocalISO()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
     const detail = `${Object.keys(bundle.keys).length} keys${includeGeocodeCache ? " + geocode cache" : ""}`;

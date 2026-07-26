@@ -12,6 +12,7 @@ import {
 } from "./industryPackProfile";
 import { getPlaybooksForOrg, getProjectHubTailStep, isSurveyWorkflowEnabled } from "./projectHubIndustry";
 
+import { todayLocalISO } from "./localDate";
 const PACK_IDS = Object.keys(INDUSTRY_PACKS);
 
 function baseGates() {
@@ -117,7 +118,7 @@ describe("industryPackMatrix", () => {
 
   it("food pharma more action prioritises active allergen window", () => {
     applyIndustryPack("foodPharma");
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalISO();
     const action = pickIndustryMoreNextAction("foodPharma", {
       pat: [],
       hotWork: [],

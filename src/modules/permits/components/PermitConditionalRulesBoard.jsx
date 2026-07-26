@@ -187,8 +187,8 @@ export default function PermitConditionalRulesBoard({
                     <div className="ptw-rule-card__block-label">THEN</div>
                     <div className="ptw-rule-card__then-grid">
                       <div>
-                        <label style={{ ...ss.lbl, marginBottom: 4 }}>Action</label>
-                        <select value={rule.action || "required"} onChange={(e) => onUpdateRule(rule.id, { action: e.target.value })} style={ss.inp}>
+                        <label style={{ ...ss.lbl, marginBottom: 4 }} htmlFor="permit-conditional-rules-board-action">Action</label>
+                        <select value={rule.action || "required"} onChange={(e) => onUpdateRule(rule.id, { action: e.target.value })} style={ss.inp} id="permit-conditional-rules-board-action">
                           <option value="required">{labelRuleAction("required")}</option>
                           <option value="optional">{labelRuleAction("optional")}</option>
                           <option value="show">{labelRuleAction("show")}</option>
@@ -197,8 +197,8 @@ export default function PermitConditionalRulesBoard({
                         </select>
                       </div>
                       <div>
-                        <label style={{ ...ss.lbl, marginBottom: 4 }}>Field</label>
-                        <select value={rule.thenField || ""} onChange={(e) => onUpdateRule(rule.id, { thenField: e.target.value })} style={ss.inp}>
+                        <label style={{ ...ss.lbl, marginBottom: 4 }} htmlFor="permit-conditional-rules-board-then-field">Field</label>
+                        <select value={rule.thenField || ""} onChange={(e) => onUpdateRule(rule.id, { thenField: e.target.value })} style={ss.inp} id="permit-conditional-rules-board-then-field">
                           {fieldCatalog.map((field) => (
                             <option key={field.id} value={field.id}>
                               {field.label}
@@ -207,13 +207,13 @@ export default function PermitConditionalRulesBoard({
                         </select>
                       </div>
                       <div>
-                        <label style={{ ...ss.lbl, marginBottom: 4 }}>Block message</label>
+                        <label style={{ ...ss.lbl, marginBottom: 4 }} htmlFor="permit-conditional-rules-board-message">Block message</label>
                         <input
                           value={rule.message || ""}
                           onChange={(e) => onUpdateRule(rule.id, { message: e.target.value })}
                           placeholder="Shown when action = block"
                           style={ss.inp}
-                        />
+                         id="permit-conditional-rules-board-message" />
                       </div>
                     </div>
                   </section>

@@ -5,6 +5,7 @@ import { suggestedGeoPhotoPresetForPlaybook } from "../utils/geoPhotoFields";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 import { permitReadinessForProject } from "../modules/permits/permitProjectDefaults";
 
+import { todayLocalISO } from "../utils/localDate";
 function fmtDay(iso) {
   if (!iso) return "";
   try {
@@ -15,7 +16,7 @@ function fmtDay(iso) {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalISO();
 }
 
 function buildActivityFeed(projectId, { rams = [], permits = [], surveyReports = [], geoPhotos = [] }) {

@@ -3,10 +3,11 @@
  */
 import { MODULE_PDF_REGISTRY } from "../navigation/moduleCatalogMeta";
 import { loadOrgScoped, saveOrgScoped } from "./orgStorage";
+import { todayLocalISO } from "./localDate";
 
 const genId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const now = () => new Date().toISOString();
-const today = () => now().slice(0, 10);
+const today = todayLocalISO;
 
 /** @type {Record<string, () => object>} */
 const SEED_FACTORIES = {

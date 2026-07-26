@@ -1,7 +1,7 @@
 /**
  * Geo-photo integrations — survey report, exports, project matching, snags.
  */
-import { geoPhotoPreset, geoPhotoPresetLabel, presetsByGroup } from "./geoPhotoPresets";
+import { geoPhotoPreset, geoPhotoPresetLabel } from "./geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
 import {
   GEO_PHOTO_GI_TYPES,
@@ -11,6 +11,7 @@ import {
 } from "./geoPhotoFields";
 import { buildStaticMapUrl } from "./staticMapUrl.js";
 
+import { todayLocalISO } from "./localDate";
 export const GEO_PHOTOS_FINDINGS_MARKER = "=== Geo-photos (field capture) ===";
 
 const EARTH_RADIUS_M = 6371000;
@@ -278,7 +279,7 @@ export function downloadGeoJson(photos, fileName) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = fileName || `geo-photos-${new Date().toISOString().slice(0, 10)}.geojson`;
+  a.download = fileName || `geo-photos-${todayLocalISO()}.geojson`;
   a.click();
   URL.revokeObjectURL(url);
 }

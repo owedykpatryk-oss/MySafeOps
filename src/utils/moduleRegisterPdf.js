@@ -1,7 +1,7 @@
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { loadOrgScoped } from "./orgStorage";
 import { sanitizePdfFileSegment } from "./pdfFileName";
-import { MODULE_PDF_REGISTRY, canExportModulePdf, getModulePdfConfig } from "../navigation/moduleCatalogMeta";
+import { canExportModulePdf, getModulePdfConfig } from "../navigation/moduleCatalogMeta";
 import { getModuleTilePresentation } from "./moduleTileIntelligence";
 import { MORE_SECTIONS, getMoreTabsForSection } from "../navigation/appModules";
 import { prepareRegisterExport, renderDailyBriefingDetailPages, renderGeoPhotoDetailPages } from "./registerPdfAdapters";
@@ -16,12 +16,27 @@ import {
   drawPremiumPdfFooter,
   drawWatermark,
   buildDocReference,
+  setPdfFont,
+  ensurePdfUnicodeFont,
 } from "./pdfBranding.js";
 
+import { todayLocalISO } from "./localDate";
 let jsPDFPromise = null;
 async function loadJsPDF() {
   if (!jsPDFPromise) jsPDFPromise = import("jspdf").then((m) => m.jsPDF);
   return jsPDFPromise;
+}
+
+async function savePdf(pdf, fileName) {
+  try {
+    pdf.save(fileName);
+  } catch (e) {
+    const { downloadBlob } = await import("./downloadBlob.js");
+    const blob = pdf.output("blob");
+    if (!downloadBlob(blob, fileName)) {
+      throw e instanceof Error ? e : new Error("PDF download was blocked by the browser.");
+    }
+  }
 }
 
 const PAGE_W = PDF_PAGE.W;
@@ -145,12 +160,12 @@ function renderModuleOverviewPage(pdf, moduleId, label, org, rgb, accentRgb, the
   });
   y += 4;
 
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(10);
   pdf.setTextColor(...rgb);
   pdf.text("Smart suggestion", MARGIN, y);
   y += 5;
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(9);
   pdf.setTextColor(51, 65, 85);
   const smartLines = pdf.splitTextToSize(
@@ -160,12 +175,12 @@ function renderModuleOverviewPage(pdf, moduleId, label, org, rgb, accentRgb, the
   pdf.text(smartLines, MARGIN, y);
   y += smartLines.length * 4.2 + 8;
 
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(10);
   pdf.setTextColor(...rgb);
   pdf.text("Pre-built quick start", MARGIN, y);
   y += 5;
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(9.5);
   pdf.setTextColor(15, 23, 42);
   pdf.text(String(pres.prebuild?.label || "Use Quick start on the More tile."), MARGIN, y);
@@ -196,15 +211,17 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, accen
   const headerColors = tableHeaderColors(theme, rgb);
 
   const drawTableHeaderRow = () => {
+    const headerLineSets = columns.map((col) => pdf.splitTextToSize(String(col.l || ""), colW - 3).slice(0, 2));
+    const headerH = Math.max(6.5, ...headerLineSets.map((ls) => ls.length * 3.6)) + 2;
     pdf.setFillColor(...headerColors.fill);
-    pdf.rect(MARGIN, y, usableW, 6.5, "F");
-    pdf.setFont("helvetica", "bold");
+    pdf.rect(MARGIN, y, usableW, headerH, "F");
+    setPdfFont(pdf, "bold");
     pdf.setFontSize(7.5);
     pdf.setTextColor(...headerColors.text);
-    columns.forEach((col, i) => {
-      pdf.text(col.l, MARGIN + i * colW + 1.5, y + 4.4);
+    headerLineSets.forEach((lines, i) => {
+      pdf.text(lines, MARGIN + i * colW + 1.5, y + 4);
     });
-    y += 8;
+    y += headerH + 1.5;
   };
 
   const ensureSpace = (need) => {
@@ -223,12 +240,12 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, accen
     drawTableHeaderRow();
   };
 
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(theme === "executive" ? 11 : 10);
   pdf.setTextColor(15, 23, 42);
   pdf.text("Register data", MARGIN, y);
   y += 5;
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(100, 116, 139);
   pdf.text(`${rows.length} record(s) · controlled export`, MARGIN, y);
@@ -258,7 +275,7 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, accen
       pdf.rect(MARGIN, y - 1, usableW, rowH, "F");
     }
 
-    pdf.setFont("helvetica", "normal");
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(7.5);
     pdf.setTextColor(30, 41, 59);
     lineSets.forEach((lines, i) => {
@@ -280,7 +297,7 @@ function finalizePdf(pdf, org, theme, rgb, accentRgb) {
 }
 
 function buildFileName(org, slugPart) {
-  const ts = new Date().toISOString().slice(0, 10);
+  const ts = todayLocalISO();
   return `${sanitizePdfFileSegment(org.name, 20) || "MySafeOps"}-${slugPart}-${ts}.pdf`.replace(/--+/g, "-");
 }
 
@@ -363,6 +380,7 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
   const { theme, rgb, accentRgb } = pdfBrandingContext(org);
   const label = opts.label || humanizeKey(moduleId);
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  await ensurePdfUnicodeFont(pdf);
   const docRef = buildDocReference(org, label);
 
   if (cfg.overview && rows.length === 0) {
@@ -371,12 +389,9 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
     const slug = sanitizePdfFileSegment(label, 36) || sanitizePdfFileSegment(moduleId, 36) || "module";
     const fileName = buildFileName(org, slug);
     try {
-      pdf.save(fileName);
+      await savePdf(pdf, fileName);
     } catch {
-      const { downloadBlob } = await import("./downloadBlob.js");
-      if (!downloadBlob(pdf.output("blob"), fileName)) {
-        return { ok: false, error: "download_blocked" };
-      }
+      return { ok: false, error: "download_blocked" };
     }
     return { ok: true, fileName, rows: 0, overview: true };
   }
@@ -460,15 +475,7 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
 
   const slug = sanitizePdfFileSegment(label, 36) || sanitizePdfFileSegment(moduleId, 36) || "register";
   const fileName = buildFileName(org, slug);
-  try {
-    pdf.save(fileName);
-  } catch (e) {
-    const { downloadBlob } = await import("./downloadBlob.js");
-    const blob = pdf.output("blob");
-    if (!downloadBlob(blob, fileName)) {
-      throw e instanceof Error ? e : new Error("PDF download was blocked by the browser.");
-    }
-  }
+  await savePdf(pdf, fileName);
   return { ok: true, fileName, rows: rows.length };
 }
 
@@ -486,6 +493,7 @@ export async function exportMoreSectionPdf(section) {
   const org = getOrgSettings();
   const { theme, rgb, accentRgb } = pdfBrandingContext(org);
   const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+  await ensurePdfUnicodeFont(pdf);
 
   renderModulesIntoPdf(pdf, {
     org,
@@ -499,7 +507,7 @@ export async function exportMoreSectionPdf(section) {
 
   const slug = sanitizePdfFileSegment(section.title, 32) || "section";
   const fileName = buildFileName(org, slug);
-  pdf.save(fileName);
+  await savePdf(pdf, fileName);
   return { ok: true, fileName, modules: modules.length };
 }
 

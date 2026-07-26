@@ -5,7 +5,6 @@ import { saveOrgSettingsRaw } from "./orgSettingsStorage";
 import {
   formatUtilityMappingRef,
   parseUtilityMappingRef,
-  nextUtilityMappingRef,
   nextUtilityMappingJobNumber,
   formatUtilityMappingTypedRef,
   utilityMappingExportBaseName,
@@ -21,7 +20,6 @@ import {
   renderUtilityMappingExecutivePage,
   renderUtilityMappingDigReadinessPage,
   renderUtilityMappingDeliverablesPage,
-  renderUtilityMappingDrawingsPage,
   renderUtilityMappingAppendixDivider,
   computeUtilityMappingDigRisk,
 } from "./utilityMappingPremiumPages";

@@ -3,7 +3,8 @@
  */
 import { itemNeedsAttention } from "./moduleRegisterStats";
 
-const monthPrefix = () => new Date().toISOString().slice(0, 7);
+import { localMonthISO } from "./localDate";
+const monthPrefix = localMonthISO;
 
 function countAttention(items) {
   return (items || []).filter((i) => itemNeedsAttention(i)).length;

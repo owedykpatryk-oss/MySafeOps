@@ -8,14 +8,16 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { escapeHtml, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { assessComplianceNotification, getCompliancePackContent } from "../config/compliancePackContent";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { buildHealthSafetyFileInventory } from "../utils/hsFileAccumulator";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `cdm_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-const today = () => new Date().toISOString().slice(0,10);
+const today = todayLocalISO;
 const fmtDate = (iso, locale = "en-GB") => {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" });
@@ -134,8 +136,8 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
             </div>
             )}
             <div style={{ gridColumn: "1/-1" }}>
-              <label style={ss.lbl}>{isUkCdm ? "Your CDM role (this organisation)" : "Your WHS role (this organisation)"}</label>
-              <select value={form.cdmOrgRole || "contractor"} onChange={(e) => set("cdmOrgRole", e.target.value)} style={ss.inp}>
+              <label style={ss.lbl} htmlFor="cdm-compliance-cdm-org-role">{isUkCdm ? "Your CDM role (this organisation)" : "Your WHS role (this organisation)"}</label>
+              <select value={form.cdmOrgRole || "contractor"} onChange={(e) => set("cdmOrgRole", e.target.value)} style={ss.inp} id="cdm-compliance-cdm-org-role">
                 <option value="client">Client</option>
                 <option value="principal_designer">Principal designer</option>
                 <option value="principal_contractor">Principal contractor</option>
@@ -144,81 +146,81 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
               </select>
             </div>
             <div style={{ gridColumn: "1/-1" }}>
-              <label style={ss.lbl}>Pre-construction information (PCI) summary</label>
+              <label style={ss.lbl} htmlFor="cdm-compliance-pci-summary">Pre-construction information (PCI) summary</label>
               <textarea
                 value={form.pciSummary || ""}
                 onChange={(e) => set("pciSummary", e.target.value)}
                 placeholder="Key PCI received / issued — surveys, asbestos, utilities, design risks…"
                 rows={3}
                 style={ss.ta}
-              />
+               id="cdm-compliance-pci-summary" />
             </div>
             <div style={{ gridColumn: "1/-1" }}>
-              <label style={ss.lbl}>Health &amp; Safety File — accumulation plan</label>
+              <label style={ss.lbl} htmlFor="cdm-compliance-hs-file-summary">Health &amp; Safety File — accumulation plan</label>
               <textarea
                 value={form.hsFileSummary || ""}
                 onChange={(e) => set("hsFileSummary", e.target.value)}
                 placeholder="What will be handed to the client; RAMS, permits, as-built safety info…"
                 rows={3}
                 style={ss.ta}
-              />
+               id="cdm-compliance-hs-file-summary" />
             </div>
             {isUkCdm ? (
             <div style={{ gridColumn: "1/-1" }}>
-              <label style={ss.lbl}>CDM 2026 tracking notes</label>
+              <label style={ss.lbl} htmlFor="cdm-compliance-cdm2026notes">CDM 2026 tracking notes</label>
               <textarea
                 value={form.cdm2026Notes || ""}
                 onChange={(e) => set("cdm2026Notes", e.target.value)}
                 placeholder="Links to HSE consultations, internal review dates…"
                 rows={2}
                 style={ss.ta}
-              />
+               id="cdm-compliance-cdm2026notes" />
             </div>
             ) : null}
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Project title *</label>
-              <input value={form.projectTitle||""} onChange={e=>set("projectTitle",e.target.value)} placeholder="e.g. Kettle replacement — 2SFG Scunthorpe" style={ss.inp} />
+              <label style={ss.lbl} htmlFor="cdm-compliance-project-title">Project title *</label>
+              <input value={form.projectTitle||""} onChange={e=>set("projectTitle",e.target.value)} placeholder="e.g. Kettle replacement — 2SFG Scunthorpe" style={ss.inp}  id="cdm-compliance-project-title" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Site address</label>
-              <input value={form.siteAddress||""} onChange={e=>set("siteAddress",e.target.value)} placeholder="Full site address" style={ss.inp} />
+              <label style={ss.lbl} htmlFor="cdm-compliance-site-address">Site address</label>
+              <input value={form.siteAddress||""} onChange={e=>set("siteAddress",e.target.value)} placeholder="Full site address" style={ss.inp}  id="cdm-compliance-site-address" />
             </div>
             <div>
-              <label style={ss.lbl}>Client name</label>
-              <input value={form.clientName||""} onChange={e=>set("clientName",e.target.value)} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="cdm-compliance-client-name">Client name</label>
+              <input value={form.clientName||""} onChange={e=>set("clientName",e.target.value)} style={ss.inp}  id="cdm-compliance-client-name" />
             </div>
             <div>
-              <label style={ss.lbl}>Project (MySafeOps)</label>
-              <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp}>
+              <label style={ss.lbl} htmlFor="cdm-compliance-project-id">Project (MySafeOps)</label>
+              <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="cdm-compliance-project-id">
                 <option value="">— Link to project —</option>
                 {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div>
-              <label style={ss.lbl}>Construction start date</label>
-              <input type="date" value={form.startDate||""} onChange={e=>set("startDate",e.target.value)} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="cdm-compliance-start-date">Construction start date</label>
+              <input type="date" value={form.startDate||""} onChange={e=>set("startDate",e.target.value)} style={ss.inp}  id="cdm-compliance-start-date" />
             </div>
             <div>
-              <label style={ss.lbl}>Estimated end date</label>
-              <input type="date" value={form.endDate||""} onChange={e=>set("endDate",e.target.value)} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="cdm-compliance-end-date">Estimated end date</label>
+              <input type="date" value={form.endDate||""} onChange={e=>set("endDate",e.target.value)} style={ss.inp}  id="cdm-compliance-end-date" />
             </div>
             <div>
-              <label style={ss.lbl}>Max simultaneous workers</label>
-              <input type="number" value={form.estimatedWorkers||""} onChange={e=>set("estimatedWorkers",e.target.value)} placeholder="e.g. 12" style={ss.inp} />
+              <label style={ss.lbl} htmlFor="cdm-compliance-estimated-workers">Max simultaneous workers</label>
+              <input type="number" value={form.estimatedWorkers||""} onChange={e=>set("estimatedWorkers",e.target.value)} placeholder="e.g. 12" style={ss.inp}  id="cdm-compliance-estimated-workers" />
             </div>
             <div>
-              <label style={ss.lbl}>Total person-days</label>
-              <input type="number" value={form.estimatedPersonDays||""} onChange={e=>set("estimatedPersonDays",e.target.value)} placeholder="e.g. 350" style={ss.inp} />
+              <label style={ss.lbl} htmlFor="cdm-compliance-estimated-person-days">Total person-days</label>
+              <input type="number" value={form.estimatedPersonDays||""} onChange={e=>set("estimatedPersonDays",e.target.value)} placeholder="e.g. 350" style={ss.inp}  id="cdm-compliance-estimated-person-days" />
             </div>
             <div>
-              <label style={ss.lbl}>Construction phase calendar days (optional)</label>
+              <label style={ss.lbl} htmlFor="cdm-compliance-calendar-phase-days">Construction phase calendar days (optional)</label>
               <input
                 type="number"
                 value={form.calendarPhaseDays || ""}
                 onChange={(e) => set("calendarPhaseDays", e.target.value)}
                 placeholder="e.g. 35 — flag if &gt; 30 for review"
                 style={ss.inp}
-              />
+               id="cdm-compliance-calendar-phase-days" />
             </div>
             <div style={{ gridColumn:"1/-1", padding:"8px 12px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8, fontSize:12, color:"var(--color-text-secondary)" }}>
               {NOTIFICATION_THRESHOLDS}
@@ -229,16 +231,16 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
             {notifiable && (
               <>
                 <div>
-                  <label style={ss.lbl}>{isUkCdm ? "F10 submitted?" : "Regulator notified?"}</label>
-                  <select value={form.f10Submitted?"yes":"no"} onChange={e=>set("f10Submitted",e.target.value==="yes")} style={ss.inp}>
+                  <label style={ss.lbl} htmlFor="cdm-compliance-f10submitted">{isUkCdm ? "F10 submitted?" : "Regulator notified?"}</label>
+                  <select value={form.f10Submitted?"yes":"no"} onChange={e=>set("f10Submitted",e.target.value==="yes")} style={ss.inp} id="cdm-compliance-f10submitted">
                     <option value="no">Not yet submitted</option>
                     <option value="yes">Submitted</option>
                   </select>
                 </div>
                 {form.f10Submitted && (
                   <div>
-                    <label style={ss.lbl}>{isUkCdm ? "F10 submission date" : "Notification date"}</label>
-                    <input type="date" value={form.f10Date||""} onChange={e=>set("f10Date",e.target.value)} style={ss.inp} />
+                    <label style={ss.lbl} htmlFor="cdm-compliance-f10date">{isUkCdm ? "F10 submission date" : "Notification date"}</label>
+                    <input type="date" value={form.f10Date||""} onChange={e=>set("f10Date",e.target.value)} style={ss.inp}  id="cdm-compliance-f10date" />
                   </div>
                 )}
               </>
@@ -259,8 +261,8 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
                   {fields.map(([k,l])=>(
                     <div key={k}>
-                      <label style={ss.lbl}>{l}</label>
-                      <input value={form[k]||""} onChange={e=>set(k,e.target.value)} style={ss.inp} />
+                      <label style={ss.lbl} htmlFor="cdm-compliance-l">{l}</label>
+                      <input value={form[k]||""} onChange={e=>set(k,e.target.value)} style={ss.inp}  id="cdm-compliance-l" />
                     </div>
                   ))}
                 </div>
@@ -295,12 +297,12 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
             </div>
             {CPP_SECTIONS.map(sec=>(
               <div key={sec.key} style={{ marginBottom:14 }}>
-                <label style={ss.lbl}>
+                <label style={ss.lbl} htmlFor="cdm-compliance-cpp-sections">
                   {sec.label}
                   {form.cppSections?.[sec.key]?.trim() && <span style={{ marginLeft:6, color:"#1D9E75", fontSize:11 }}>✓</span>}
                 </label>
                 <textarea value={form.cppSections?.[sec.key]||""} onChange={e=>setNested("cppSections",sec.key,e.target.value)}
-                  rows={3} placeholder={sec.placeholder} style={{ ...ss.ta, minHeight:60 }} />
+                  rows={3} placeholder={sec.placeholder} style={{ ...ss.ta, minHeight:60 }}  id="cdm-compliance-cpp-sections" />
               </div>
             ))}
           </div>
@@ -478,6 +480,8 @@ export default function CDMCompliance() {
     setModal(null);
   };
 
+  const livePacks = liveOrgArrayRows(packs);
+
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {modal?.type==="form" && <CDMForm cdm={modal.data} onSave={savePack} onClose={()=>setModal(null)} pack={pack} marketId={marketId} />}
@@ -495,23 +499,23 @@ export default function CDMCompliance() {
 
       <RegisterModuleShell
         moduleId={pack.moduleId}
-        smartContext={{ packs }}
+        smartContext={{ packs: livePacks }}
         stats={
-          packs.length > 0
+          livePacks.length > 0
             ? [
                 {
-                  label: pack.packNoun + (packs.length === 1 ? "" : "s"),
-                  value: packs.length,
+                  label: pack.packNoun + (livePacks.length === 1 ? "" : "s"),
+                  value: livePacks.length,
                   tone: "neutral",
                 },
                 {
                   label: "Incomplete checklists",
-                  value: packs.filter((p) => Object.values(p.dutyholderChecks || {}).filter(Boolean).length < checkCount).length,
-                  tone: packs.some((p) => Object.values(p.dutyholderChecks || {}).filter(Boolean).length < checkCount) ? "warn" : "good",
+                  value: livePacks.filter((p) => Object.values(p.dutyholderChecks || {}).filter(Boolean).length < checkCount).length,
+                  tone: livePacks.some((p) => Object.values(p.dutyholderChecks || {}).filter(Boolean).length < checkCount) ? "warn" : "good",
                 },
                 {
                   label: pack.notifiableBadge,
-                  value: packs.filter((p) => computeNotifiable(p, marketId)).length,
+                  value: livePacks.filter((p) => computeNotifiable(p, marketId)).length,
                   tone: "neutral",
                 },
               ]
@@ -522,14 +526,14 @@ export default function CDMCompliance() {
           {pack.infoBanner}
         </div>
 
-        {packs.length===0 ? (
+        {livePacks.length===0 ? (
           <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
             <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>{pack.emptyLabel}</p>
             <button type="button" onClick={()=>setModal({type:"form"})} style={ss.btnP}>{pack.newPackLabel}</button>
           </div>
         ) : (
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {listPg.visible(packs).map(packRow=>{
+            {listPg.visible(livePacks).map(packRow=>{
               const notifiable = computeNotifiable(packRow, marketId);
               const checked = Object.values(packRow.dutyholderChecks||{}).filter(Boolean).length;
               const cppPct = Math.round((pack.planSections.filter(s=>packRow.cppSections?.[s.key]?.trim()).length/pack.planSections.length)*100);
@@ -567,7 +571,7 @@ export default function CDMCompliance() {
                         ) {
                           return;
                         }
-                        setPacks((p) => p.filter((x) => x.id !== packRow.id));
+                        setPacks((p) => replaceWithTombstone(p, packRow.id));
                       }}
                       style={{ ...ss.btn, fontSize: 12, padding: "4px 8px", color: "#A32D2D", borderColor: "#F09595" }}
                     >
@@ -578,10 +582,10 @@ export default function CDMCompliance() {
               );
             })}
             <RegisterListPagingFooter
-              hasMore={listPg.hasMore(packs)}
-              remaining={listPg.remaining(packs)}
-              showing={Math.min(listPg.cap, packs.length)}
-              total={packs.length}
+              hasMore={listPg.hasMore(livePacks)}
+              remaining={listPg.remaining(livePacks)}
+              showing={Math.min(listPg.cap, livePacks.length)}
+              total={livePacks.length}
               onShowMore={listPg.showMore}
               itemLabel="packs"
               buttonStyle={ss.btn}

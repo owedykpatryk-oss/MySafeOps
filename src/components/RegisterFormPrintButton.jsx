@@ -13,10 +13,7 @@ export default function RegisterFormPrintButton({
   disabled = false,
 }) {
   const onClick = () => {
-    const res = printRegisterForm(moduleId, record);
-    if (!res.ok && res.reason === "popup_blocked") {
-      window.alert("Allow pop-ups to print this A4 form (then use Print → Save as PDF).");
-    }
+    printRegisterForm(moduleId, record);
   };
 
   return (

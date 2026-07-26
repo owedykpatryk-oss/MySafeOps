@@ -1,5 +1,6 @@
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 
+import { todayLocalISO } from "../../utils/localDate";
 const TEMPLATE_STORE_KEY = "permit_templates_v1";
 
 function fallbackTemplateForType(type, def) {
@@ -13,7 +14,7 @@ function fallbackTemplateForType(type, def) {
     templateType: type,
     templateVersion: 1,
     matrixVersion: "uk-v1",
-    effectiveFrom: new Date().toISOString().slice(0, 10),
+    effectiveFrom: todayLocalISO(),
     checklistItems: checklist,
     extraFields: def?.extraFields || [],
     ui: {
@@ -52,7 +53,7 @@ export function saveOrgTemplate(type, templatePatch, permitTypes = {}) {
     templateType: type,
     templateId: base.templateId || `permit.${type}.org`,
     templateVersion: Number(base.templateVersion || 1) + 1,
-    effectiveFrom: new Date().toISOString().slice(0, 10),
+    effectiveFrom: todayLocalISO(),
     updatedAt: new Date().toISOString(),
   };
   const stored = load(TEMPLATE_STORE_KEY, {});

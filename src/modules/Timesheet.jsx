@@ -9,6 +9,8 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
+import { localDateISO, localMonthISO } from "../utils/localDate";
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "mysafeops_timesheets";
 const WORKERS_KEY = "mysafeops_workers";
@@ -23,8 +25,8 @@ const getWeekStart = (offset = 0) => {
   const d = new Date();
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1) + offset * 7;
-  const monday = new Date(d.setDate(diff));
-  monday.setHours(0,0,0,0);
+  const monday = new Date(d.getFullYear(), d.getMonth(), diff);
+  monday.setHours(0, 0, 0, 0);
   return monday;
 };
 
@@ -647,7 +649,7 @@ export default function Timesheet() {
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterTask, setFilterTask] = useState("");
-  const [exportMonth, setExportMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [exportMonth, setExportMonth] = useState(() => localMonthISO());
   const [sortKey, setSortKey] = useState("");
   const [sortAsc, setSortAsc] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -700,7 +702,7 @@ export default function Timesheet() {
   const weekStart = getWeekStart(weekOffset);
   const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
   const weekLabel = `${formatDate(weekStart)} – ${formatDate(weekEnd)}`;
-  const weekKey = weekStart.toISOString().slice(0,10);
+  const weekKey = localDateISO(weekStart);
   const isoMeta = isoWeekMetaFromMonday(weekStart);
 
   // filter entries for current week
@@ -807,7 +809,7 @@ export default function Timesheet() {
 
   const copyFromPreviousWeek = () => {
     const prevStart = getWeekStart(weekOffset - 1);
-    const prevKey = prevStart.toISOString().slice(0, 10);
+    const prevKey = localDateISO(prevStart);
     const prevEntries = entries.filter((e) => e.weekKey === prevKey);
     if (!prevEntries.length) return;
     if (weekEntries.length > 0) {
@@ -827,7 +829,7 @@ export default function Timesheet() {
   };
 
   const prevWeekStart = getWeekStart(weekOffset - 1);
-  const prevWeekKey = prevWeekStart.toISOString().slice(0, 10);
+  const prevWeekKey = localDateISO(prevWeekStart);
   const prevWeekHasEntries = entries.some((e) => e.weekKey === prevWeekKey);
 
   const workerWeekTotals = hoursTotalsByWorker(weekEntries);

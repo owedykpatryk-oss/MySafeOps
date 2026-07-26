@@ -175,7 +175,7 @@ export async function d1OutboxTryFlush(ctx) {
   }
   if (isForbiddenD1Write(put.error)) {
     await d1OutboxDelete(ctx.orgSlug, ctx.namespace, ctx.d1DataKey);
-    notifyD1WriteForbidden(ctx.namespace);
+    notifyD1WriteForbidden(ctx.namespace, put.error);
     return "forbidden";
   }
   if (put.error === "version_conflict") {

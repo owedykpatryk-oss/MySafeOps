@@ -1,7 +1,7 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.3.4";
+const SW_VERSION = "mysafeops-v1.3.5";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -156,34 +156,9 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
-// ─── Background sync — queue actions taken offline ───────────────────────────
-const SYNC_QUEUE_KEY = "mysafeops_sync_queue";
-
-self.addEventListener("sync", (event) => {
-  if (event.tag === "mysafeops-sync") {
-    event.waitUntil(processSyncQueue());
-  }
-});
-
-async function processSyncQueue() {
-  // Notify all clients that sync is starting
-  const clients = await self.clients.matchAll();
-  clients.forEach(client =>
-    client.postMessage({ type: "SYNC_START" })
-  );
-
-  // In a real backend implementation, you would:
-  // 1. Read the sync queue from IndexedDB
-  // 2. POST each queued action to your API
-  // 3. Clear processed items from the queue
-  // For localStorage-only apps, just notify clients to merge any pending state
-
-  clients.forEach(client =>
-    client.postMessage({ type: "SYNC_COMPLETE" })
-  );
-}
-
 // ─── Push notifications ───────────────────────────────────────────────────────
+// Offline write sync is owned by the D1 outbox (useD1OrgArraySync), not this SW.
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
@@ -193,8 +168,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body: data.body || "",
-    icon: data.icon || "/vite.svg",
-    badge: data.badge || "/vite.svg",
+    icon: data.icon || "/icons/icon-192.png",
+    badge: data.badge || "/icons/badge-72.png",
     tag: data.tag || "mysafeops-notification",
     data: data.url ? { url: data.url } : {},
     actions: data.actions || [],

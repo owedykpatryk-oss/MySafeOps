@@ -31,6 +31,7 @@ import { filterGprReports, groupGprReportsByProject, suggestDeliverableFlags, GP
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { countGprGeoPhotos, importGeoPhotosIntoGprReport } from "../../utils/gprGeoIntegrations";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
 import {
   ANOMALY_CONFIDENCE,
   ANOMALY_TYPES,
@@ -246,7 +247,7 @@ export default function GprReport() {
   }, [reports, projects]);
 
   const filtered = useMemo(
-    () => filterGprReports(reports, { search, status: listStatus, projectId: listProject }),
+    () => filterGprReports(liveOrgArrayRows(reports), { search, status: listStatus, projectId: listProject }),
     [reports, search, listStatus, listProject]
   );
 
@@ -2049,7 +2050,7 @@ export default function GprReport() {
         onCancel={() => setConfirmDelete(null)}
         onConfirm={() => {
           pushRecycleBinItem({ type: "gpr_report", label: confirmDelete.ref, payload: confirmDelete });
-          persist(reports.filter((r) => r.id !== confirmDelete.id));
+          persist(replaceWithTombstone(reports, confirmDelete.id));
           pushAudit({ action: "gpr_report_delete", entity: "gpr_report", detail: confirmDelete.ref });
           setConfirmDelete(null);
         }}

@@ -5,10 +5,7 @@
 import { readFileSync, writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { createRequire } from "module";
-
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const require = createRequire(import.meta.url);
 
 function read(rel) {
   return readFileSync(join(root, rel), "utf8");
@@ -121,27 +118,6 @@ function loadMoreSections() {
   return fn();
 }
 
-function extractCategories(files) {
-  const cats = new Set();
-  for (const f of files) {
-    const src = read(f);
-    const m = src.match(/(?:TRADE_CATEGORIES|EXTENDED_CATEGORIES|PRO_CATEGORIES|CONSTRUCTION_CATEGORIES|SUPPLEMENT_CATEGORIES|term|GEOSPATIAL_CATEGORIES|SITE_INVESTIGATION_CATEGORIES|FESS_EXCEL_CATEGORIES)\s*=\s*(\[[\s\S]*?\]);/);
-    if (m) {
-      try {
-        const arr = new Function(`return ${m[1]}`)();
-        arr.forEach((c) => cats.add(c));
-      } catch { /* skip */ }
-    }
-    // Also extract from export const X_CATEGORIES
-    for (const cm of src.matchAll(/export const (\w+_CATEGORIES)\s*=\s*(\[[\s\S]*?\]);/g)) {
-      try {
-        new Function(`return ${cm[2]}`)().forEach((c) => cats.add(c));
-      } catch { /* skip */ }
-    }
-  }
-  return [...cats];
-}
-
 const libraryFiles = [
   "src/modules/rams/ramsHazardLibrary.js",
   "src/modules/rams/ramsHazardLibraryExtended.js",
@@ -166,7 +142,6 @@ for (const f of libraryFiles.slice(0, -1)) {
 const FESS = loadHazardArray("src/modules/rams/fessExcelHazardLibrary.js");
 const ALL = [...CORE, ...FESS.filter((h) => !CORE_IDS.has(h.id))];
 
-const TRADE_CATEGORIES = extractCategories(libraryFiles);
 // Ensure order from merged list
 const catOrder = [];
 for (const h of ALL) {

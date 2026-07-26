@@ -5,7 +5,6 @@ function DepthScale({ velocityCmNs, timeWindowNs, height = 320 }) {
   const ticks = useMemo(() => {
     const v = Number(velocityCmNs) || 10;
     const maxNs = Number(timeWindowNs) || 80;
-    const maxDepth = depthFromTwoWayTime(maxNs, v) || 4;
     const steps = 5;
     return Array.from({ length: steps + 1 }, (_, i) => {
       const frac = i / steps;

@@ -2,7 +2,6 @@
  * Industry pack profile — readiness gates, More pulse, site pack, and switch preview.
  */
 
-import { getIndustryPackLabel } from "./industryPackLabel";
 import { getCustomWorkspaceProfile, resolveProfileBehaviorPackId, visibleModulesForProfile } from "./customWorkspaceProfiles";
 import { getOrgIndustryPackId, isSurveyWorkflowEnabled } from "./projectHubIndustry";
 import { getRamsStarterLabel } from "./ramsIndustryStarters";

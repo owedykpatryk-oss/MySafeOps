@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef, memo } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { isAnthropicConfigured, checkAnthropicProxyReady } from "../../utils/anthropicClient";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
@@ -68,7 +68,7 @@ function umFieldsFromRef(ref) {
     umClientCode: p.clientCode === "XXX" ? "" : p.clientCode,
   };
 }
-import { getQaChecklistGroupsForSurveyType, getQaChecklistProgress, getQaGroupProgress, patchQaGroup, mergeStandardsCited, applyMobilisationQaPrefill, suggestStandardsCitedForSurveyType, SURVEY_PUBLIC_STANDARDS } from "./surveyQaPack";
+import { getQaChecklistGroupsForSurveyType, getQaChecklistProgress, getQaGroupProgress, patchQaGroup, mergeStandardsCited, applyMobilisationQaPrefill, SURVEY_PUBLIC_STANDARDS } from "./surveyQaPack";
 import {
   buildLimitationsFromKeys,
   nextSurveyRef,
@@ -119,6 +119,7 @@ import Pas128WorkflowStrip from "./Pas128WorkflowStrip";
 import { listProjectPlans, plansForProject } from "../permits/permitPlanOverlayRegistry";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
 import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable, geoPhotosToGiLocationsTable } from "../../utils/geoPhotoIntegrations";
 import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings } from "../../utils/surveyDxfAnalyzer";
 import CadImportPanel from "./CadImportPanel";
@@ -1471,22 +1472,22 @@ function ReportEditor({
             <div data-survey-anchor="tab-details" />
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10 }}>
               <div style={{ gridColumn: "1 / -1" }} data-survey-anchor="title">
-                <label style={ss.lbl}>Report title *</label>
+                <label style={ss.lbl} htmlFor="survey-report-title">Report title *</label>
                 <input
                   style={ss.inp}
                   value={form.title}
                   onChange={(e) => set("title", e.target.value)}
                   placeholder="e.g. PAS128 QLB utility mapping — Phase 1"
-                />
+                 id="survey-report-title" />
               </div>
               <div>
-                <label style={ss.lbl}>Report ref</label>
-                <input style={ss.inp} value={form.ref} onChange={(e) => set("ref", e.target.value)} placeholder={isUtilityMappingOrg() ? "UM26-1234-WSP" : ""} />
+                <label style={ss.lbl} htmlFor="survey-report-ref">Report ref</label>
+                <input style={ss.inp} value={form.ref} onChange={(e) => set("ref", e.target.value)} placeholder={isUtilityMappingOrg() ? "UM26-1234-WSP" : ""}  id="survey-report-ref" />
               </div>
               {isUtilityMappingOrg() ? (
                 <>
                   <div>
-                    <label style={ss.lbl}>Job number</label>
+                    <label style={ss.lbl} htmlFor="survey-report-um-job-number">Job number</label>
                     <input
                       style={ss.inp}
                       value={form.umJobNumber || ""}
@@ -1506,10 +1507,10 @@ function ReportEditor({
                         });
                       }}
                       placeholder="1234"
-                    />
+                     id="survey-report-um-job-number" />
                   </div>
                   <div>
-                    <label style={ss.lbl}>Client code</label>
+                    <label style={ss.lbl} htmlFor="survey-report-um-client-code">Client code</label>
                     <select
                       style={ss.inp}
                       value={form.umClientCode || ""}
@@ -1534,7 +1535,7 @@ function ReportEditor({
                           return next;
                         });
                       }}
-                    >
+                     id="survey-report-um-client-code">
                       <option value="">— Select client —</option>
                       {listUtilityMappingClients().map((c) => (
                         <option key={c.code} value={c.code}>
@@ -1597,16 +1598,16 @@ function ReportEditor({
                 </>
               ) : null}
               <div data-survey-anchor="survey-date">
-                <label style={ss.lbl}>Survey date *</label>
-                <input type="date" style={ss.inp} value={form.surveyDate} onChange={(e) => set("surveyDate", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-survey-date">Survey date *</label>
+                <input type="date" style={ss.inp} value={form.surveyDate} onChange={(e) => set("surveyDate", e.target.value)}  id="survey-report-survey-date" />
               </div>
               <div data-survey-anchor="surveyor">
-                <label style={ss.lbl}>Surveyor / author *</label>
-                <input style={ss.inp} value={form.surveyor} onChange={(e) => set("surveyor", e.target.value)} placeholder="Name and role" />
+                <label style={ss.lbl} htmlFor="survey-report-surveyor">Surveyor / author *</label>
+                <input style={ss.inp} value={form.surveyor} onChange={(e) => set("surveyor", e.target.value)} placeholder="Name and role"  id="survey-report-surveyor" />
               </div>
               <div data-survey-anchor="project">
-                <label style={ss.lbl}>Project</label>
-                <select style={ss.inp} value={form.projectId} onChange={(e) => onProjectChange(e.target.value)}>
+                <label style={ss.lbl} htmlFor="survey-report-project-id">Project</label>
+                <select style={ss.inp} value={form.projectId} onChange={(e) => onProjectChange(e.target.value)} id="survey-report-project-id">
                   <option value="">— Select —</option>
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -1616,12 +1617,12 @@ function ReportEditor({
                 </select>
               </div>
               <div>
-                <label style={ss.lbl}>Client</label>
-                <input style={ss.inp} value={form.client} onChange={(e) => set("client", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-client">Client</label>
+                <input style={ss.inp} value={form.client} onChange={(e) => set("client", e.target.value)}  id="survey-report-client" />
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={ss.lbl}>Site address</label>
-                <input style={ss.inp} value={form.siteAddress} onChange={(e) => set("siteAddress", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-site-address">Site address</label>
+                <input style={ss.inp} value={form.siteAddress} onChange={(e) => set("siteAddress", e.target.value)}  id="survey-report-site-address" />
                 {siteContextBadgeLabel(form) ? (
                   <div style={{ marginTop: 6, fontSize: 11, color: "#27500A", background: "#EAF3DE", display: "inline-block", padding: "2px 8px", borderRadius: 999 }}>
                     Site context: {siteContextBadgeLabel(form)}
@@ -1684,8 +1685,8 @@ function ReportEditor({
                 </div>
               ) : null}
               <div data-survey-anchor="survey-type">
-                <label style={ss.lbl}>Survey type *</label>
-                <select style={ss.inp} value={form.surveyType} onChange={(e) => onSurveyTypeChange(e.target.value)}>
+                <label style={ss.lbl} htmlFor="survey-report-survey-type">Survey type *</label>
+                <select style={ss.inp} value={form.surveyType} onChange={(e) => onSurveyTypeChange(e.target.value)} id="survey-report-survey-type">
                   <option value="">— Select —</option>
                   {listSurveyTypesForOrg(SURVEY_TYPES).map((t) => (
                     <option key={t.key} value={t.key}>
@@ -1695,8 +1696,8 @@ function ReportEditor({
                 </select>
               </div>
               <div data-survey-anchor="pas128">
-                <label style={ss.lbl}>PAS128 quality level</label>
-                <select style={ss.inp} value={form.pas128Ql} onChange={(e) => set("pas128Ql", e.target.value)}>
+                <label style={ss.lbl} htmlFor="survey-report-pas128ql">PAS128 quality level</label>
+                <select style={ss.inp} value={form.pas128Ql} onChange={(e) => set("pas128Ql", e.target.value)} id="survey-report-pas128ql">
                   <option value="">— Optional —</option>
                   {PAS128_QUALITY_LEVELS.map((q) => (
                     <option key={q.key} value={q.key}>
@@ -1707,7 +1708,7 @@ function ReportEditor({
               </div>
               {pas128MethodAppliesToSurveyType(form.surveyType) ? (
                 <div>
-                  <label style={ss.lbl}>PAS128 method (M-series)</label>
+                  <label style={ss.lbl} htmlFor="survey-report-pas128method">PAS128 method (M-series)</label>
                   <select
                     style={ss.inp}
                     value={form.pas128Method || ""}
@@ -1726,7 +1727,7 @@ function ReportEditor({
                         };
                       });
                     }}
-                  >
+                   id="survey-report-pas128method">
                     <option value="">— Optional —</option>
                     {PAS128_METHODS.map((m) => (
                       <option key={m.key} value={m.key}>
@@ -1756,12 +1757,12 @@ function ReportEditor({
               ) : null}
               {pas128MethodAppliesToSurveyType(form.surveyType) ? (
                 <div>
-                  <label style={ss.lbl}>Secondary method (optional)</label>
+                  <label style={ss.lbl} htmlFor="survey-report-pas128method-secondary">Secondary method (optional)</label>
                   <select
                     style={ss.inp}
                     value={form.pas128MethodSecondary || ""}
                     onChange={(e) => set("pas128MethodSecondary", e.target.value)}
-                  >
+                   id="survey-report-pas128method-secondary">
                     <option value="">— None —</option>
                     {PAS128_METHODS.filter((m) => m.key !== form.pas128Method).map((m) => (
                       <option key={m.key} value={m.key}>
@@ -1776,12 +1777,12 @@ function ReportEditor({
               ) : null}
               {pas128MethodAppliesToSurveyType(form.surveyType) ? (
                 <div>
-                  <label style={ss.lbl}>Print outline</label>
+                  <label style={ss.lbl} htmlFor="survey-report-print-outline">Print outline</label>
                   <select
                     style={ss.inp}
                     value={form.printOutline || "standard"}
                     onChange={(e) => set("printOutline", e.target.value)}
-                  >
+                   id="survey-report-print-outline">
                     {PRINT_OUTLINE_OPTIONS.map((o) => (
                       <option key={o.key} value={o.key}>
                         {o.label}
@@ -1793,8 +1794,8 @@ function ReportEditor({
             </div>
             {ramsDocs.length > 0 && (
               <div style={{ marginTop: 14 }}>
-                <label style={ss.lbl}>Link RAMS (prefill scope & method)</label>
-                <select style={ss.inp} value={form.linkedRamsId} onChange={(e) => onRamsLink(e.target.value)}>
+                <label style={ss.lbl} htmlFor="survey-report-linked-rams-id">Link RAMS (prefill scope & method)</label>
+                <select style={ss.inp} value={form.linkedRamsId} onChange={(e) => onRamsLink(e.target.value)} id="survey-report-linked-rams-id">
                   <option value="">— None —</option>
                   {ramsDocs.map((d) => (
                     <option key={d.id} value={d.id}>
@@ -1845,13 +1846,13 @@ function ReportEditor({
               </div>
             )}
             <div style={{ marginTop: 14 }}>
-              <label style={ss.lbl}>Foreword</label>
+              <label style={ss.lbl} htmlFor="survey-report-sections">Foreword</label>
               <textarea
                 style={{ ...ss.ta, minHeight: 56 }}
                 value={form.sections.foreword || ""}
                 onChange={(e) => setSection("foreword", e.target.value)}
                 placeholder="PAS 128 foreword — auto-filled when you select a method, or write your own."
-              />
+               id="survey-report-sections" />
               {form.pas128Method ? (
                 <button
                   type="button"
@@ -1865,40 +1866,40 @@ function ReportEditor({
               ) : null}
             </div>
             <div style={{ marginTop: 14 }} data-survey-anchor="executive-summary">
-              <label style={ss.lbl}>Executive summary</label>
+              <label style={ss.lbl} htmlFor="survey-report-sections-2">Executive summary</label>
               <textarea
                 style={{ ...ss.ta, minHeight: 72 }}
                 value={form.sections.executiveSummary}
                 onChange={(e) => setSection("executiveSummary", e.target.value)}
                 placeholder="Brief overview for the client — what was done and key outcomes."
-              />
+               id="survey-report-sections-2" />
             </div>
             <div data-survey-anchor="document-control">
             <div style={ss.sectionHead}>Document control</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10 }}>
               <div>
-                <label style={ss.lbl}>Issue no.</label>
-                <input style={ss.inp} value={form.documentControl.issueNumber} onChange={(e) => setDocControl("issueNumber", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-document-control">Issue no.</label>
+                <input style={ss.inp} value={form.documentControl.issueNumber} onChange={(e) => setDocControl("issueNumber", e.target.value)}  id="survey-report-document-control" />
               </div>
               <div>
-                <label style={ss.lbl}>Revision</label>
-                <input style={ss.inp} value={form.documentControl.revision} onChange={(e) => setDocControl("revision", e.target.value)} placeholder="A" />
+                <label style={ss.lbl} htmlFor="survey-report-document-control-2">Revision</label>
+                <input style={ss.inp} value={form.documentControl.revision} onChange={(e) => setDocControl("revision", e.target.value)} placeholder="A"  id="survey-report-document-control-2" />
               </div>
               <div>
-                <label style={ss.lbl}>Issue date</label>
-                <input type="date" style={ss.inp} value={form.documentControl.issueDate} onChange={(e) => setDocControl("issueDate", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-document-control-3">Issue date</label>
+                <input type="date" style={ss.inp} value={form.documentControl.issueDate} onChange={(e) => setDocControl("issueDate", e.target.value)}  id="survey-report-document-control-3" />
               </div>
               <div>
-                <label style={ss.lbl}>Prepared by</label>
-                <input style={ss.inp} value={form.documentControl.preparedBy} onChange={(e) => setDocControl("preparedBy", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-document-control-4">Prepared by</label>
+                <input style={ss.inp} value={form.documentControl.preparedBy} onChange={(e) => setDocControl("preparedBy", e.target.value)}  id="survey-report-document-control-4" />
               </div>
               <div>
-                <label style={ss.lbl}>Checked by</label>
-                <input style={ss.inp} value={form.documentControl.checkedBy} onChange={(e) => setDocControl("checkedBy", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-document-control-5">Checked by</label>
+                <input style={ss.inp} value={form.documentControl.checkedBy} onChange={(e) => setDocControl("checkedBy", e.target.value)}  id="survey-report-document-control-5" />
               </div>
               <div>
-                <label style={ss.lbl}>Approved by</label>
-                <input style={ss.inp} value={form.documentControl.approvedBy} onChange={(e) => setDocControl("approvedBy", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-document-control-6">Approved by</label>
+                <input style={ss.inp} value={form.documentControl.approvedBy} onChange={(e) => setDocControl("approvedBy", e.target.value)}  id="survey-report-document-control-6" />
               </div>
             </div>
             </div>
@@ -1909,13 +1910,13 @@ function ReportEditor({
           <>
             <div data-survey-anchor="tab-scope" />
             <div data-survey-anchor="scope">
-            <label style={ss.lbl}>Scope of works *</label>
+            <label style={ss.lbl} htmlFor="survey-report-sections-3">Scope of works *</label>
             <textarea
               style={{ ...ss.ta, minHeight: 90 }}
               value={form.sections.scope}
               onChange={(e) => setSection("scope", e.target.value)}
               placeholder="Describe the agreed survey scope, deliverables and any exclusions."
-            />
+             id="survey-report-sections-3" />
             </div>
             <div data-survey-anchor="methodology">
             <div style={ss.sectionHead}>Methodology *</div>
@@ -1946,51 +1947,51 @@ function ReportEditor({
             <div style={ss.sectionHead}>Control & accuracy</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={ss.lbl}>Coordinate system</label>
-                <input style={ss.inp} value={form.controlAccuracy.coordinateSystem} onChange={(e) => setControl("coordinateSystem", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-control-accuracy">Coordinate system</label>
+                <input style={ss.inp} value={form.controlAccuracy.coordinateSystem} onChange={(e) => setControl("coordinateSystem", e.target.value)}  id="survey-report-control-accuracy" />
               </div>
               <div>
-                <label style={ss.lbl}>Control source</label>
-                <input style={ss.inp} value={form.controlAccuracy.controlSource} onChange={(e) => setControl("controlSource", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-control-accuracy-2">Control source</label>
+                <input style={ss.inp} value={form.controlAccuracy.controlSource} onChange={(e) => setControl("controlSource", e.target.value)}  id="survey-report-control-accuracy-2" />
               </div>
               <div>
-                <label style={ss.lbl}>Horizontal tolerance</label>
-                <input style={ss.inp} value={form.controlAccuracy.horizontalTolerance} onChange={(e) => setControl("horizontalTolerance", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-control-accuracy-3">Horizontal tolerance</label>
+                <input style={ss.inp} value={form.controlAccuracy.horizontalTolerance} onChange={(e) => setControl("horizontalTolerance", e.target.value)}  id="survey-report-control-accuracy-3" />
               </div>
               <div>
-                <label style={ss.lbl}>Vertical tolerance</label>
-                <input style={ss.inp} value={form.controlAccuracy.verticalTolerance} onChange={(e) => setControl("verticalTolerance", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-control-accuracy-4">Vertical tolerance</label>
+                <input style={ss.inp} value={form.controlAccuracy.verticalTolerance} onChange={(e) => setControl("verticalTolerance", e.target.value)}  id="survey-report-control-accuracy-4" />
               </div>
               {showTopoClosure ? (
                 <>
                   <div>
-                    <label style={ss.lbl}>Traverse closure</label>
+                    <label style={ss.lbl} htmlFor="survey-report-control-accuracy-5">Traverse closure</label>
                     <input
                       style={ss.inp}
                       value={form.controlAccuracy.traverseClosure}
                       onChange={(e) => setControl("traverseClosure", e.target.value)}
                       placeholder="e.g. 1:50,000 / 8 mm"
-                    />
+                     id="survey-report-control-accuracy-5" />
                   </div>
                   <div>
-                    <label style={ss.lbl}>Level closure</label>
+                    <label style={ss.lbl} htmlFor="survey-report-control-accuracy-6">Level closure</label>
                     <input
                       style={ss.inp}
                       value={form.controlAccuracy.levelClosure}
                       onChange={(e) => setControl("levelClosure", e.target.value)}
                       placeholder="e.g. ±3 mm"
-                    />
+                     id="survey-report-control-accuracy-6" />
                   </div>
                 </>
               ) : null}
             </div>
-            <label style={ss.lbl}>Control points / notes</label>
+            <label style={ss.lbl} htmlFor="survey-report-control-accuracy-7">Control points / notes</label>
             <textarea
               style={{ ...ss.ta, minHeight: 56 }}
               value={form.controlAccuracy.controlPointsNotes}
               onChange={(e) => setControl("controlPointsNotes", e.target.value)}
               placeholder="Control point IDs, residuals, independent checks…"
-            />
+             id="survey-report-control-accuracy-7" />
             <div data-survey-anchor="deliverables">
             <div style={ss.sectionHead}>Deliverables schedule</div>
             <RowTableEditor
@@ -2048,31 +2049,31 @@ function ReportEditor({
             <div style={ss.sectionHead}>Survey programme</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
               <div>
-                <label style={ss.lbl}>Start time</label>
-                <input type="time" style={ss.inp} value={form.surveyProgramme.startTime} onChange={(e) => setProgramme("startTime", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-survey-programme">Start time</label>
+                <input type="time" style={ss.inp} value={form.surveyProgramme.startTime} onChange={(e) => setProgramme("startTime", e.target.value)}  id="survey-report-survey-programme" />
               </div>
               <div>
-                <label style={ss.lbl}>End time</label>
-                <input type="time" style={ss.inp} value={form.surveyProgramme.endTime} onChange={(e) => setProgramme("endTime", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-survey-programme-2">End time</label>
+                <input type="time" style={ss.inp} value={form.surveyProgramme.endTime} onChange={(e) => setProgramme("endTime", e.target.value)}  id="survey-report-survey-programme-2" />
               </div>
               <div>
-                <label style={ss.lbl}>Hours on site</label>
-                <input style={ss.inp} value={form.surveyProgramme.hoursOnSite} onChange={(e) => setProgramme("hoursOnSite", e.target.value)} placeholder="e.g. 6.5" />
+                <label style={ss.lbl} htmlFor="survey-report-survey-programme-3">Hours on site</label>
+                <input style={ss.inp} value={form.surveyProgramme.hoursOnSite} onChange={(e) => setProgramme("hoursOnSite", e.target.value)} placeholder="e.g. 6.5"  id="survey-report-survey-programme-3" />
               </div>
             </div>
-            <label style={ss.lbl}>Personnel on site</label>
+            <label style={ss.lbl} htmlFor="survey-report-survey-programme-4">Personnel on site</label>
             <input
               style={{ ...ss.inp, marginBottom: 10 }}
               value={form.surveyProgramme.personnel}
               onChange={(e) => setProgramme("personnel", e.target.value)}
               placeholder="Surveyor, assistant, client rep…"
-            />
-            <label style={ss.lbl}>Site access notes</label>
+             id="survey-report-survey-programme-4" />
+            <label style={ss.lbl} htmlFor="survey-report-survey-programme-5">Site access notes</label>
             <textarea
               style={{ ...ss.ta, minHeight: 48, marginBottom: 14 }}
               value={form.surveyProgramme.siteAccessNotes}
               onChange={(e) => setProgramme("siteAccessNotes", e.target.value)}
-            />
+             id="survey-report-survey-programme-5" />
             <div data-survey-anchor="qa">
             <div style={ss.sectionHead}>QA & verification ({qaProgress.checked}/{qaProgress.total})</div>
             <div
@@ -2187,21 +2188,21 @@ function ReportEditor({
             ) : null}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10, marginBottom: 10 }}>
               <div>
-                <label style={ss.lbl}>Permit reference</label>
-                <input style={ss.inp} value={form.hseRefs.permitRef} onChange={(e) => setHse("permitRef", e.target.value)} placeholder="Auto-filled from permits if linked" />
+                <label style={ss.lbl} htmlFor="survey-report-hse-refs">Permit reference</label>
+                <input style={ss.inp} value={form.hseRefs.permitRef} onChange={(e) => setHse("permitRef", e.target.value)} placeholder="Auto-filled from permits if linked"  id="survey-report-hse-refs" />
               </div>
               <div>
-                <label style={ss.lbl}>CAT scan reference</label>
-                <input style={ss.inp} value={form.hseRefs.catScanRef} onChange={(e) => setHse("catScanRef", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-hse-refs-2">CAT scan reference</label>
+                <input style={ss.inp} value={form.hseRefs.catScanRef} onChange={(e) => setHse("catScanRef", e.target.value)}  id="survey-report-hse-refs-2" />
               </div>
             </div>
-            <label style={ss.lbl}>RAMS excerpt (optional)</label>
+            <label style={ss.lbl} htmlFor="survey-report-hse-refs-3">RAMS excerpt (optional)</label>
             <textarea
               style={{ ...ss.ta, minHeight: 56, marginBottom: 14 }}
               value={form.hseRefs.ramsExcerpt}
               onChange={(e) => setHse("ramsExcerpt", e.target.value)}
               placeholder="Short method statement excerpt for the PDF."
-            />
+             id="survey-report-hse-refs-3" />
             {form.surveyType === "uav_aerial" ? (
               <>
                 <div style={ss.sectionHead}>UAV / CAA compliance</div>
@@ -2210,65 +2211,65 @@ function ReportEditor({
                 </p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))", gap: 10, marginBottom: 14 }}>
                   <div>
-                    <label style={ss.lbl}>CAA Operator ID</label>
+                    <label style={ss.lbl} htmlFor="survey-report-uav-compliance">CAA Operator ID</label>
                     <input
                       style={ss.inp}
                       value={form.uavCompliance.caaOperatorId}
                       onChange={(e) => setUavCompliance("caaOperatorId", e.target.value)}
                       placeholder="GBR-OP-XXXXXXXX"
-                    />
+                     id="survey-report-uav-compliance" />
                   </div>
                   <div>
-                    <label style={ss.lbl}>Flyer ID(s)</label>
+                    <label style={ss.lbl} htmlFor="survey-report-uav-compliance-2">Flyer ID(s)</label>
                     <input
                       style={ss.inp}
                       value={form.uavCompliance.flyerIds}
                       onChange={(e) => setUavCompliance("flyerIds", e.target.value)}
                       placeholder="GBR-FLY-XXXXXXXX"
-                    />
+                     id="survey-report-uav-compliance-2" />
                   </div>
                   <div>
-                    <label style={ss.lbl}>GVC / A2 CofC reference</label>
+                    <label style={ss.lbl} htmlFor="survey-report-uav-compliance-3">GVC / A2 CofC reference</label>
                     <input
                       style={ss.inp}
                       value={form.uavCompliance.authorisationRef}
                       onChange={(e) => setUavCompliance("authorisationRef", e.target.value)}
                       placeholder="Operational authorisation ref"
-                    />
+                     id="survey-report-uav-compliance-3" />
                   </div>
                   <div>
-                    <label style={ss.lbl}>Drone registration / serial</label>
+                    <label style={ss.lbl} htmlFor="survey-report-uav-compliance-4">Drone registration / serial</label>
                     <input
                       style={ss.inp}
                       value={form.uavCompliance.droneRegistration}
                       onChange={(e) => setUavCompliance("droneRegistration", e.target.value)}
-                    />
+                     id="survey-report-uav-compliance-4" />
                   </div>
                   <div>
-                    <label style={ss.lbl}>Insurance policy reference</label>
+                    <label style={ss.lbl} htmlFor="survey-report-uav-compliance-5">Insurance policy reference</label>
                     <input
                       style={ss.inp}
                       value={form.uavCompliance.insurancePolicyRef}
                       onChange={(e) => setUavCompliance("insurancePolicyRef", e.target.value)}
-                    />
+                     id="survey-report-uav-compliance-5" />
                   </div>
                   <div>
-                    <label style={ss.lbl}>NOTAM reference</label>
+                    <label style={ss.lbl} htmlFor="survey-report-uav-compliance-6">NOTAM reference</label>
                     <input
                       style={ss.inp}
                       value={form.uavCompliance.notamRef}
                       onChange={(e) => setUavCompliance("notamRef", e.target.value)}
                       placeholder="If filed for this flight"
-                    />
+                     id="survey-report-uav-compliance-6" />
                   </div>
                 </div>
-                <label style={ss.lbl}>Ground exclusion / emergency landing plan (optional)</label>
+                <label style={ss.lbl} htmlFor="survey-report-uav-compliance-7">Ground exclusion / emergency landing plan (optional)</label>
                 <textarea
                   style={{ ...ss.ta, minHeight: 48, marginBottom: 14 }}
                   value={form.uavCompliance.groundExclusionPlanRef}
                   onChange={(e) => setUavCompliance("groundExclusionPlanRef", e.target.value)}
                   placeholder="Ground crew exclusion zone and emergency landing plan reference."
-                />
+                 id="survey-report-uav-compliance-7" />
               </>
             ) : null}
             <div data-survey-anchor="calibration">
@@ -2302,20 +2303,20 @@ function ReportEditor({
             <div style={ss.sectionHead}>Sign-off</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10 }}>
               <div>
-                <label style={ss.lbl}>Surveyor name</label>
-                <input style={ss.inp} value={form.signatures.surveyorName} onChange={(e) => setSig("surveyorName", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-signatures">Surveyor name</label>
+                <input style={ss.inp} value={form.signatures.surveyorName} onChange={(e) => setSig("surveyorName", e.target.value)}  id="survey-report-signatures" />
               </div>
               <div>
-                <label style={ss.lbl}>Surveyor sign date</label>
-                <input type="date" style={ss.inp} value={form.signatures.surveyorSignedDate} onChange={(e) => setSig("surveyorSignedDate", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-signatures-2">Surveyor sign date</label>
+                <input type="date" style={ss.inp} value={form.signatures.surveyorSignedDate} onChange={(e) => setSig("surveyorSignedDate", e.target.value)}  id="survey-report-signatures-2" />
               </div>
               <div>
-                <label style={ss.lbl}>Client name (optional)</label>
-                <input style={ss.inp} value={form.signatures.clientName} onChange={(e) => setSig("clientName", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-signatures-3">Client name (optional)</label>
+                <input style={ss.inp} value={form.signatures.clientName} onChange={(e) => setSig("clientName", e.target.value)}  id="survey-report-signatures-3" />
               </div>
               <div>
-                <label style={ss.lbl}>Client acceptance date</label>
-                <input type="date" style={ss.inp} value={form.signatures.clientAcceptedDate} onChange={(e) => setSig("clientAcceptedDate", e.target.value)} />
+                <label style={ss.lbl} htmlFor="survey-report-signatures-4">Client acceptance date</label>
+                <input type="date" style={ss.inp} value={form.signatures.clientAcceptedDate} onChange={(e) => setSig("clientAcceptedDate", e.target.value)}  id="survey-report-signatures-4" />
               </div>
             </div>
           </>
@@ -2354,8 +2355,8 @@ function ReportEditor({
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))", gap: 10, marginBottom: 14 }}>
               <div>
-                <label style={ss.lbl}>Ground surface</label>
-                <select style={ss.inp} value={form.weather.groundSurface} onChange={(e) => setWeather("groundSurface", e.target.value)}>
+                <label style={ss.lbl} htmlFor="survey-report-weather">Ground surface</label>
+                <select style={ss.inp} value={form.weather.groundSurface} onChange={(e) => setWeather("groundSurface", e.target.value)} id="survey-report-weather">
                   {GROUND_SURFACE_OPTIONS.map((o) => (
                     <option key={o.key} value={o.key}>
                       {o.label}
@@ -2364,8 +2365,8 @@ function ReportEditor({
                 </select>
               </div>
               <div>
-                <label style={ss.lbl}>Rain during survey</label>
-                <select style={ss.inp} value={form.weather.rainDuringSurvey} onChange={(e) => setWeather("rainDuringSurvey", e.target.value)}>
+                <label style={ss.lbl} htmlFor="survey-report-weather-2">Rain during survey</label>
+                <select style={ss.inp} value={form.weather.rainDuringSurvey} onChange={(e) => setWeather("rainDuringSurvey", e.target.value)} id="survey-report-weather-2">
                   {RAIN_DURING_SURVEY.map((o) => (
                     <option key={o.key} value={o.key}>
                       {o.label}
@@ -2387,22 +2388,22 @@ function ReportEditor({
               onToggle={(key) => setWeather("methodsAffected", toggleArray(form.weather.methodsAffected, key))}
             />
             <div style={{ marginTop: 14 }}>
-              <label style={ss.lbl}>Conditions narrative</label>
+              <label style={ss.lbl} htmlFor="survey-report-weather-3">Conditions narrative</label>
               <textarea
                 style={{ ...ss.ta, minHeight: 56 }}
                 value={form.weather.conditionsNarrative}
                 onChange={(e) => setWeather("conditionsNarrative", e.target.value)}
                 placeholder="Describe weather at site and any impact on survey programme."
-              />
+               id="survey-report-weather-3" />
             </div>
             <div style={{ marginTop: 10 }}>
-              <label style={ss.lbl}>Equipment / method impact</label>
+              <label style={ss.lbl} htmlFor="survey-report-weather-4">Equipment / method impact</label>
               <textarea
                 style={{ ...ss.ta, minHeight: 56 }}
                 value={form.weather.equipmentMethodImpact}
                 onChange={(e) => setWeather("equipmentMethodImpact", e.target.value)}
                 placeholder="e.g. GPR attenuation on wet clay; GNSS held under tree cover."
-              />
+               id="survey-report-weather-4" />
             </div>
             </div>
           </>
@@ -2437,16 +2438,16 @@ function ReportEditor({
               onToggle={(key) => setRecords("informationGaps", toggleArray(form.utilityRecords.informationGaps, key))}
             />
             <div style={{ marginTop: 14 }}>
-              <label style={ss.lbl}>What was found in records</label>
-              <textarea style={{ ...ss.ta, minHeight: 56 }} value={form.utilityRecords.whatWasFound} onChange={(e) => setRecords("whatWasFound", e.target.value)} />
+              <label style={ss.lbl} htmlFor="survey-report-utility-records">What was found in records</label>
+              <textarea style={{ ...ss.ta, minHeight: 56 }} value={form.utilityRecords.whatWasFound} onChange={(e) => setRecords("whatWasFound", e.target.value)}  id="survey-report-utility-records" />
             </div>
             <div style={{ marginTop: 10 }}>
-              <label style={ss.lbl}>What was not found / not available</label>
-              <textarea style={{ ...ss.ta, minHeight: 56 }} value={form.utilityRecords.whatWasNotFound} onChange={(e) => setRecords("whatWasNotFound", e.target.value)} />
+              <label style={ss.lbl} htmlFor="survey-report-utility-records-2">What was not found / not available</label>
+              <textarea style={{ ...ss.ta, minHeight: 56 }} value={form.utilityRecords.whatWasNotFound} onChange={(e) => setRecords("whatWasNotFound", e.target.value)}  id="survey-report-utility-records-2" />
             </div>
             <div style={{ marginTop: 10 }}>
-              <label style={ss.lbl}>Gap explanation</label>
-              <textarea style={{ ...ss.ta, minHeight: 48 }} value={form.utilityRecords.gapExplanation} onChange={(e) => setRecords("gapExplanation", e.target.value)} />
+              <label style={ss.lbl} htmlFor="survey-report-utility-records-3">Gap explanation</label>
+              <textarea style={{ ...ss.ta, minHeight: 48 }} value={form.utilityRecords.gapExplanation} onChange={(e) => setRecords("gapExplanation", e.target.value)}  id="survey-report-utility-records-3" />
             </div>
             <div data-survey-anchor="dbyd">
             <div style={ss.sectionHead}>LSBUD / DBYD enquiry log</div>
@@ -2511,12 +2512,12 @@ function ReportEditor({
             </p>
             <CheckboxGrid options={LIMITATION_RULES} selected={form.limitationKeys} onToggle={toggleLimitation} />
             <div style={{ marginTop: 14 }}>
-              <label style={ss.lbl}>Limitations text (editable)</label>
+              <label style={ss.lbl} htmlFor="survey-report-limitations-text">Limitations text (editable)</label>
               <textarea
                 style={{ ...ss.ta, minHeight: 90 }}
                 value={form.limitationsText || buildLimitationsFromKeys(form.limitationKeys)}
                 onChange={(e) => set("limitationsText", e.target.value)}
-              />
+               id="survey-report-limitations-text" />
               <button
                 type="button"
                 style={{ ...ss.btn, fontSize: 11, marginTop: 6 }}
@@ -2532,12 +2533,12 @@ function ReportEditor({
               onToggle={(key) => set("accessLimitations", toggleArray(form.accessLimitations, key))}
             />
             <div style={{ marginTop: 10 }}>
-              <label style={ss.lbl}>Access notes</label>
+              <label style={ss.lbl} htmlFor="survey-report-access-limitations-notes">Access notes</label>
               <textarea
                 style={{ ...ss.ta, minHeight: 48 }}
                 value={form.accessLimitationsNotes}
                 onChange={(e) => set("accessLimitationsNotes", e.target.value)}
-              />
+               id="survey-report-access-limitations-notes" />
             </div>
             </div>
           </>
@@ -2871,7 +2872,7 @@ function ReportEditor({
                   <div key={ph.id || idx} style={{ display: "flex", gap: 12, alignItems: "flex-start", border: "0.5px solid #e5e7eb", borderRadius: 8, padding: 10 }}>
                     <img src={ph.dataUrl} alt="" style={{ width: 100, height: 75, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
                     <div style={{ flex: 1 }}>
-                      <label style={ss.lbl}>Category</label>
+                      <label style={ss.lbl} htmlFor={`survey-report-category-${ph.id}`}>Category</label>
                       <select
                         style={{ ...ss.inp, marginBottom: 6 }}
                         value={ph.category || "field_work"}
@@ -2881,7 +2882,7 @@ function ReportEditor({
                             photos: f.photos.map((p, i) => (i === idx ? { ...p, category: e.target.value } : p)),
                           }))
                         }
-                      >
+                       id={`survey-report-category-${ph.id}`}>
                         {SURVEY_PHOTO_CATEGORIES.map((c) => (
                           <option key={c.key} value={c.key}>
                             {c.label}
@@ -3204,7 +3205,7 @@ export default function SurveyReport() {
   const d1OutboxPending = d1RepO || d1ProjO || d1GeoO;
 
   const filtered = useMemo(() => {
-    let rows = reports;
+    let rows = liveOrgArrayRows(reports);
     if (filter === "draft") rows = rows.filter((r) => r.status !== "final");
     if (filter === "final") rows = rows.filter((r) => r.status === "final");
     if (filter === "ready") {
@@ -3218,8 +3219,9 @@ export default function SurveyReport() {
     return sortSurveyReports(rows, listSort);
   }, [reports, filter, projectFilter, listSearch, listSort]);
 
-  const listSummary = useMemo(() => summarizeSurveyReportList(reports), [reports]);
-  const filterCounts = useMemo(() => surveyListFilterCounts(reports), [reports]);
+  const liveReports = useMemo(() => liveOrgArrayRows(reports), [reports]);
+  const listSummary = useMemo(() => summarizeSurveyReportList(liveReports), [liveReports]);
+  const filterCounts = useMemo(() => surveyListFilterCounts(liveReports), [liveReports]);
 
   const groupedReports = useMemo(
     () => groupSurveyReportsByProject(filtered, projects),
@@ -3386,7 +3388,7 @@ export default function SurveyReport() {
   );
 
   const batchExportFinalPacks = useCallback(async () => {
-    const finals = reports.filter((r) => r.status === "final");
+    const finals = liveOrgArrayRows(reports).filter((r) => r.status === "final");
     const eligible = finals.filter((r) => evaluateSurveyExportGate(r).allowed);
     if (!eligible.length) {
       pushToast({
@@ -3492,7 +3494,7 @@ export default function SurveyReport() {
           sourceKey: STORAGE_KEY,
           payload: r,
         });
-        setReports((p) => p.filter((x) => x.id !== r.id));
+        setReports((p) => replaceWithTombstone(p, r.id));
         pushAudit({ action: "survey_report_delete", entity: "survey_report", detail: r.id });
         setListConfirm(null);
       },
@@ -3732,7 +3734,7 @@ export default function SurveyReport() {
             Needs work ({listSummary.needsWork})
           </button>
         )}
-        {reports.filter((r) => r.status === "final").length > 0 ? (
+        {liveReports.filter((r) => r.status === "final").length > 0 ? (
           <>
           <button type="button" style={{ ...ss.btn, fontSize: 12 }} onClick={() => void batchExportFinalPacks()}>
             Bulk export finals (PDF pack)

@@ -57,6 +57,7 @@ import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
 import { duplicateRamsToProject, batchDuplicateRamsToProject } from "../../utils/ramsDocumentClone";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import PageHero from "../../components/PageHero";
@@ -65,6 +66,7 @@ import TouchSignaturePad from "../../components/TouchSignaturePad";
 import EmptyState from "../../components/EmptyState";
 import RegisterListPagingFooter from "../../components/RegisterListPagingFooter";
 import SimpleFormDialog from "../../components/SimpleFormDialog";
+import { exportCsv } from "../../utils/exportCsv";
 import { geocodeAddressNominatim } from "../../utils/geocode";
 import { useToast } from "../../context/ToastContext";
 import { copyCapabilityLink } from "../../utils/copyCapabilityLink";
@@ -105,8 +107,10 @@ import { syncFessMsFromRams } from "../../utils/fessMsSync";
 import FessRamsCompletenessBadge from "../../components/FessRamsCompletenessBadge";
 import { genOpaqueToken } from "../../utils/opaqueToken";
 
+import { localDateISO, todayLocalISO } from "../../utils/localDate";
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
+const RAMS_DRAFT_SAVED_EVENT = "mysafeops-rams-draft-saved";
 const RAMS_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const RAMS_ORG_ACTIVITIES_KEY = "rams_org_activity_templates";
 const RAMS_HAZARD_PREFS_KEY = "rams_hazard_picker_prefs";
@@ -118,7 +122,7 @@ const HAZARD_PACK_STATUS = {
 };
 
 const genId = () => `rams_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-const today = () => new Date().toISOString().slice(0,10);
+const today = todayLocalISO;
 const fmtDate = formatOrgDate;
 const fmtDateTime = formatOrgDateTime;
 const riskScore = (risk) => Number(risk?.L || 0) * Number(risk?.S || 0);
@@ -1890,8 +1894,8 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
       }
     };
     tick();
-    const t = setInterval(tick, 4000);
-    return () => clearInterval(t);
+    window.addEventListener(RAMS_DRAFT_SAVED_EVENT, tick);
+    return () => window.removeEventListener(RAMS_DRAFT_SAVED_EVENT, tick);
   }, []);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
@@ -2282,10 +2286,10 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             )}
           </div>
           <div>
-            <label style={ss.lbl}>Location / site *</label>
+            <label style={ss.lbl} htmlFor="rams-template-location">Location / site *</label>
             <input value={form.location||""} onChange={e=>set("location",e.target.value)}
               onBlur={(e) => saveRecentHeaderValue("locations", e.target.value)}
-              placeholder="e.g. Two Sisters Scunthorpe" style={ss.inp} />
+              placeholder="e.g. Two Sisters Scunthorpe" style={ss.inp}  id="rams-template-location" />
             {smartFields && recentHeaderValues.locations.length > 0 && (
               <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6 }}>
                 {recentHeaderValues.locations.map((v) => (
@@ -2295,8 +2299,8 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             )}
           </div>
           <div>
-            <label style={ss.lbl}>RAMS date</label>
-            <input type="date" value={form.date||today()} onChange={e=>set("date",e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="rams-template-date">RAMS date</label>
+            <input type="date" value={form.date||today()} onChange={e=>set("date",e.target.value)} style={ss.inp}  id="rams-template-date" />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={ss.lbl}>Job / document title *</label>
@@ -2338,16 +2342,16 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             </div>
           </div>
           <div>
-            <label style={ss.lbl}>Revision</label>
-            <input value={form.revision||"1A"} onChange={e=>set("revision",e.target.value)} placeholder="1A" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="rams-template-revision">Revision</label>
+            <input value={form.revision||"1A"} onChange={e=>set("revision",e.target.value)} placeholder="1A" style={ss.inp}  id="rams-template-revision" />
           </div>
           <div>
-            <label style={ss.lbl}>Issue date</label>
-            <input type="date" value={form.issueDate||""} onChange={e=>set("issueDate",e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="rams-template-issue-date">Issue date</label>
+            <input type="date" value={form.issueDate||""} onChange={e=>set("issueDate",e.target.value)} style={ss.inp}  id="rams-template-issue-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Document status</label>
-            <select value={form.documentStatus||"draft"} onChange={e=>set("documentStatus",e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="rams-template-document-status">Document status</label>
+            <select value={form.documentStatus||"draft"} onChange={e=>set("documentStatus",e.target.value)} style={ss.inp} id="rams-template-document-status">
               {RAMS_STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, " ")}
@@ -2356,37 +2360,37 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Review due date</label>
-            <input type="date" value={form.reviewDate||""} onChange={e=>set("reviewDate",e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="rams-template-review-date">Review due date</label>
+            <input type="date" value={form.reviewDate||""} onChange={e=>set("reviewDate",e.target.value)} style={ss.inp}  id="rams-template-review-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Approved by</label>
+            <label style={ss.lbl} htmlFor="rams-template-approved-by">Approved by</label>
             <input value={form.approvedBy||""} onChange={e=>set("approvedBy",e.target.value)}
-              placeholder="e.g. Operations manager" style={ss.inp} />
+              placeholder="e.g. Operations manager" style={ss.inp}  id="rams-template-approved-by" />
           </div>
           <div>
-            <label style={ss.lbl}>Approval date</label>
-            <input type="date" value={form.approvalDate||""} onChange={e=>set("approvalDate",e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="rams-template-approval-date">Approval date</label>
+            <input type="date" value={form.approvalDate||""} onChange={e=>set("approvalDate",e.target.value)} style={ss.inp}  id="rams-template-approval-date" />
           </div>
           {isFessOrg() ? (
             <>
               <div>
-                <label style={ss.lbl}>Site permit controller</label>
+                <label style={ss.lbl} htmlFor="rams-template-permit-controller-name">Site permit controller</label>
                 <input
                   value={form.permitControllerName || ""}
                   onChange={(e) => set("permitControllerName", e.target.value)}
                   placeholder="e.g. Client permit controller"
                   style={ss.inp}
-                />
+                 id="rams-template-permit-controller-name" />
               </div>
               <div>
-                <label style={ss.lbl}>Permit controller sign-off date</label>
+                <label style={ss.lbl} htmlFor="rams-template-permit-controller-sign-date">Permit controller sign-off date</label>
                 <input
                   type="date"
                   value={form.permitControllerSignDate || ""}
                   onChange={(e) => set("permitControllerSignDate", e.target.value)}
                   style={ss.inp}
-                />
+                 id="rams-template-permit-controller-sign-date" />
               </div>
             </>
           ) : null}
@@ -2410,10 +2414,10 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
         <h3 id="rams-h-team" className="app-rams-header-section-title">Team &amp; job reference</h3>
         <div className="app-rams-header-section-grid">
           <div>
-            <label style={ss.lbl}>Lead engineer / supervisor</label>
+            <label style={ss.lbl} htmlFor="rams-template-lead-engineer">Lead engineer / supervisor</label>
             <input value={form.leadEngineer||""} onChange={e=>set("leadEngineer",e.target.value)}
               onBlur={(e) => saveRecentHeaderValue("leads", e.target.value)}
-              placeholder="e.g. D Anderson" style={ss.inp} />
+              placeholder="e.g. D Anderson" style={ss.inp}  id="rams-template-lead-engineer" />
             {smartFields && recentHeaderValues.leads.length > 0 && (
               <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:6 }}>
                 {recentHeaderValues.leads.map((v) => (
@@ -2423,10 +2427,10 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             )}
           </div>
           <div>
-            <label style={ss.lbl}>Job reference</label>
+            <label style={ss.lbl} htmlFor="rams-template-job-ref">Job reference</label>
             <input value={form.jobRef||""} onChange={e=>set("jobRef",e.target.value)}
               onBlur={(e) => saveRecentHeaderValue("refs", e.target.value)}
-              placeholder="e.g. FP1-DOLAV-001" style={ss.inp} />
+              placeholder="e.g. FP1-DOLAV-001" style={ss.inp}  id="rams-template-job-ref" />
             {!String(form.jobRef || "").trim() && (
               <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>
                 Suggested format: PRJ-{new Date().getFullYear()}-###
@@ -2502,7 +2506,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
         </label>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:10, opacity:form.strictMode?1:0.65 }}>
           <div>
-            <label style={ss.lbl}>Minimum controls per row</label>
+            <label style={ss.lbl} htmlFor="rams-template-strict-min-controls">Minimum controls per row</label>
             <input
               type="number"
               min={2}
@@ -2511,7 +2515,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
               onChange={(e) => set("strictMinControls", Math.max(2, Math.min(10, Number(e.target.value) || 3)))}
               style={ss.inp}
               disabled={!form.strictMode}
-            />
+             id="rams-template-strict-min-controls" />
           </div>
           <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, cursor:"pointer", marginTop:24 }}>
             <input
@@ -2527,9 +2531,9 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
       </div>
 
       <div style={{ marginBottom:20 }}>
-        <label style={ss.lbl}>Scope of works</label>
+        <label style={ss.lbl} htmlFor="rams-template-scope">Scope of works</label>
         <textarea value={form.scope||""} onChange={e=>set("scope",e.target.value)}
-          placeholder="Describe the work to be carried out…" style={ss.ta} rows={3} />
+          placeholder="Describe the work to be carried out…" style={ss.ta} rows={3}  id="rams-template-scope" />
       </div>
       </>
       )}
@@ -2630,23 +2634,23 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))", gap: 10 }}>
             <div>
-              <label style={ss.lbl}>Active allergen changeover (ref / window)</label>
+              <label style={ss.lbl} htmlFor="rams-template-allergen-changeover-ref">Active allergen changeover (ref / window)</label>
               <input
                 value={form.allergenChangeoverRef || ""}
                 onChange={(e) => set("allergenChangeoverRef", e.target.value)}
                 placeholder="e.g. Line 3 — nut to dairy changeover 09:00–14:00"
                 style={ss.inp}
-              />
+               id="rams-template-allergen-changeover-ref" />
             </div>
             <div style={{ gridColumn: "1 / -1" }}>
-              <label style={ss.lbl}>Allergen controls for this work</label>
+              <label style={ss.lbl} htmlFor="rams-template-allergen-controls-note">Allergen controls for this work</label>
               <textarea
                 value={form.allergenControlsNote || ""}
                 onChange={(e) => set("allergenControlsNote", e.target.value)}
                 placeholder="Cross-contamination controls, cleaning verification, PPE, exclusion from production zones…"
                 style={ss.ta}
                 rows={3}
-              />
+               id="rams-template-allergen-controls-note" />
             </div>
           </div>
         </section>
@@ -2668,53 +2672,53 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
           <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:6 }}>Quick dates</div>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
             <button type="button" onClick={() => set("date", today())} style={{ ...ss.btn, fontSize:11, minHeight:28 }}>RAMS date: today</button>
-            <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 7); set("reviewDate", d.toISOString().slice(0,10)); }} style={{ ...ss.btn, fontSize:11, minHeight:28 }}>Review +7 days</button>
-            <button type="button" onClick={() => { const d = new Date(); const eom = new Date(d.getFullYear(), d.getMonth() + 1, 0); set("reviewDate", eom.toISOString().slice(0,10)); }} style={{ ...ss.btn, fontSize:11, minHeight:28 }}>Review end of month</button>
+            <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 7); set("reviewDate", localDateISO(d)); }} style={{ ...ss.btn, fontSize:11, minHeight:28 }}>Review +7 days</button>
+            <button type="button" onClick={() => { const d = new Date(); const eom = new Date(d.getFullYear(), d.getMonth() + 1, 0); set("reviewDate", localDateISO(eom)); }} style={{ ...ss.btn, fontSize:11, minHeight:28 }}>Review end of month</button>
           </div>
         </div>
 
       <div style={{ marginBottom:20 }}>
-        <label style={ss.lbl}>Revision note / change summary</label>
+        <label style={ss.lbl} htmlFor="rams-template-revision-summary">Revision note / change summary</label>
         <textarea
           value={form.revisionSummary||""}
           onChange={e=>set("revisionSummary",e.target.value)}
           placeholder="What changed in this revision and why?"
           style={ss.ta}
           rows={2}
-        />
+         id="rams-template-revision-summary" />
       </div>
 
       <div style={{ marginBottom:20 }}>
-        <label style={ss.lbl}>Survey deliverables / outputs</label>
+        <label style={ss.lbl} htmlFor="rams-template-survey-deliverables">Survey deliverables / outputs</label>
         <textarea
           value={form.surveyDeliverables||""}
           onChange={e=>set("surveyDeliverables",e.target.value)}
           placeholder="e.g. RAMS PDF, marked utility sketch, CAD extract, QA checklist"
           style={ss.ta}
           rows={2}
-        />
+         id="rams-template-survey-deliverables" />
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(220px, 100%), 1fr))", gap:10, marginBottom:20 }}>
         <div>
-          <label style={ss.lbl}>Key assumptions</label>
+          <label style={ss.lbl} htmlFor="rams-template-survey-assumptions">Key assumptions</label>
           <textarea
             value={form.surveyAssumptions||""}
             onChange={e=>set("surveyAssumptions",e.target.value)}
             placeholder="What must be true for this RAMS to remain valid?"
             style={ss.ta}
             rows={3}
-          />
+           id="rams-template-survey-assumptions" />
         </div>
         <div>
-          <label style={ss.lbl}>Communication & permit controls</label>
+          <label style={ss.lbl} htmlFor="rams-template-communication-plan">Communication & permit controls</label>
           <textarea
             value={form.communicationPlan||""}
             onChange={e=>set("communicationPlan",e.target.value)}
             placeholder="Briefing, stop-work authority, permit interfaces, escalation route"
             style={ss.ta}
             rows={3}
-          />
+           id="rams-template-communication-plan" />
         </div>
       </div>
 
@@ -2724,27 +2728,27 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(180px, 100%), 1fr))", gap:10, marginBottom:10 }}>
           <div>
-            <label style={ss.lbl}>Client / company</label>
-            <input value={form.handoverClientName||""} onChange={e=>set("handoverClientName",e.target.value)} placeholder="Client name" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="rams-template-handover-client-name">Client / company</label>
+            <input value={form.handoverClientName||""} onChange={e=>set("handoverClientName",e.target.value)} placeholder="Client name" style={ss.inp}  id="rams-template-handover-client-name" />
           </div>
           <div>
-            <label style={ss.lbl}>Receiver name</label>
-            <input value={form.handoverReceiver||""} onChange={e=>set("handoverReceiver",e.target.value)} placeholder="Person receiving RAMS" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="rams-template-handover-receiver">Receiver name</label>
+            <input value={form.handoverReceiver||""} onChange={e=>set("handoverReceiver",e.target.value)} placeholder="Person receiving RAMS" style={ss.inp}  id="rams-template-handover-receiver" />
           </div>
           <div>
-            <label style={ss.lbl}>Handover date</label>
-            <input type="date" value={form.handoverDate||""} onChange={e=>set("handoverDate",e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="rams-template-handover-date">Handover date</label>
+            <input type="date" value={form.handoverDate||""} onChange={e=>set("handoverDate",e.target.value)} style={ss.inp}  id="rams-template-handover-date" />
           </div>
         </div>
         <div>
-          <label style={ss.lbl}>Handover notes</label>
+          <label style={ss.lbl} htmlFor="rams-template-handover-notes">Handover notes</label>
           <textarea
             value={form.handoverNotes||""}
             onChange={e=>set("handoverNotes",e.target.value)}
             placeholder="Critical brief, residual risks communicated, permit confirmations..."
             style={ss.ta}
             rows={2}
-          />
+           id="rams-template-handover-notes" />
         </div>
       </div>
 
@@ -2774,12 +2778,12 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(140px, 100%), 1fr))", gap:10, marginBottom:12 }}>
         <div>
-          <label style={ss.lbl}>Latitude (for weather)</label>
-          <input value={form.siteLat || ""} onChange={(e) => set("siteLat", e.target.value)} placeholder="e.g. 53.58" inputMode="decimal" style={ss.inp} />
+          <label style={ss.lbl} htmlFor="rams-template-site-lat">Latitude (for weather)</label>
+          <input value={form.siteLat || ""} onChange={(e) => set("siteLat", e.target.value)} placeholder="e.g. 53.58" inputMode="decimal" style={ss.inp}  id="rams-template-site-lat" />
         </div>
         <div>
-          <label style={ss.lbl}>Longitude (for weather)</label>
-          <input value={form.siteLng || ""} onChange={(e) => set("siteLng", e.target.value)} placeholder="e.g. -0.65" inputMode="decimal" style={ss.inp} />
+          <label style={ss.lbl} htmlFor="rams-template-site-lng">Longitude (for weather)</label>
+          <input value={form.siteLng || ""} onChange={(e) => set("siteLng", e.target.value)} placeholder="e.g. -0.65" inputMode="decimal" style={ss.inp}  id="rams-template-site-lng" />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "flex-end" }}>
           <button
@@ -2796,21 +2800,21 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
         </div>
       </div>
       <div style={{ marginBottom:12 }}>
-        <label style={ss.lbl}>Site weather note</label>
-        <textarea value={form.siteWeatherNote || ""} onChange={(e) => set("siteWeatherNote", e.target.value)} rows={2} placeholder="Conditions for the work date — fetch via postcode (in location) or lat/lng" style={ss.ta} />
+        <label style={ss.lbl} htmlFor="rams-template-site-weather-note">Site weather note</label>
+        <textarea value={form.siteWeatherNote || ""} onChange={(e) => set("siteWeatherNote", e.target.value)} rows={2} placeholder="Conditions for the work date — fetch via postcode (in location) or lat/lng" style={ss.ta}  id="rams-template-site-weather-note" />
       </div>
       <div style={{ marginBottom:12 }}>
-        <label style={ss.lbl}>Map / OSM link (optional)</label>
-        <input value={form.siteMapUrl || ""} onChange={(e) => set("siteMapUrl", e.target.value)} placeholder="https://…" style={ss.inp} />
+        <label style={ss.lbl} htmlFor="rams-template-site-map-url">Map / OSM link (optional)</label>
+        <input value={form.siteMapUrl || ""} onChange={(e) => set("siteMapUrl", e.target.value)} placeholder="https://…" style={ss.inp}  id="rams-template-site-map-url" />
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap:10, marginBottom:12 }}>
         <div>
-          <label style={ss.lbl}>{getEmergencyHospitalHeading(getOrgMarketId())}</label>
-          <input value={form.nearestHospital || ""} onChange={(e) => set("nearestHospital", e.target.value)} placeholder="Hospital name and area" style={ss.inp} />
+          <label style={ss.lbl} htmlFor="rams-template-nearest-hospital">{getEmergencyHospitalHeading(getOrgMarketId())}</label>
+          <input value={form.nearestHospital || ""} onChange={(e) => set("nearestHospital", e.target.value)} placeholder="Hospital name and area" style={ss.inp}  id="rams-template-nearest-hospital" />
         </div>
         <div>
-          <label style={ss.lbl}>Directions URL (Google Maps)</label>
-          <input value={form.hospitalDirectionsUrl || ""} onChange={(e) => set("hospitalDirectionsUrl", e.target.value)} placeholder="https://maps.google.com/…" style={ss.inp} />
+          <label style={ss.lbl} htmlFor="rams-template-hospital-directions-url">Directions URL (Google Maps)</label>
+          <input value={form.hospitalDirectionsUrl || ""} onChange={(e) => set("hospitalDirectionsUrl", e.target.value)} placeholder="https://maps.google.com/…" style={ss.inp}  id="rams-template-hospital-directions-url" />
         </div>
       </div>
 
@@ -3703,28 +3707,28 @@ function HazardPicker({
         {showOrgForm && (
           <div style={{ marginTop:10, display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:8 }}>
             <div>
-              <label style={ss.lbl}>Category</label>
-              <input value={orgDraft.category} onChange={(e)=>setOrgDraft((d)=>({ ...d, category:e.target.value }))} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="rams-template-category">Category</label>
+              <input value={orgDraft.category} onChange={(e)=>setOrgDraft((d)=>({ ...d, category:e.target.value }))} style={ss.inp}  id="rams-template-category" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Activity *</label>
-              <input value={orgDraft.activity} onChange={(e)=>setOrgDraft((d)=>({ ...d, activity:e.target.value }))} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="rams-template-activity">Activity *</label>
+              <input value={orgDraft.activity} onChange={(e)=>setOrgDraft((d)=>({ ...d, activity:e.target.value }))} style={ss.inp}  id="rams-template-activity" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Hazard *</label>
-              <textarea value={orgDraft.hazard} onChange={(e)=>setOrgDraft((d)=>({ ...d, hazard:e.target.value }))} rows={2} style={ss.ta} />
+              <label style={ss.lbl} htmlFor="rams-template-hazard">Hazard *</label>
+              <textarea value={orgDraft.hazard} onChange={(e)=>setOrgDraft((d)=>({ ...d, hazard:e.target.value }))} rows={2} style={ss.ta}  id="rams-template-hazard" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
-              <label style={ss.lbl}>Default controls (one per line or ; separated)</label>
-              <textarea value={orgDraft.controls} onChange={(e)=>setOrgDraft((d)=>({ ...d, controls:e.target.value }))} rows={3} style={ss.ta} />
+              <label style={ss.lbl} htmlFor="rams-template-controls">Default controls (one per line or ; separated)</label>
+              <textarea value={orgDraft.controls} onChange={(e)=>setOrgDraft((d)=>({ ...d, controls:e.target.value }))} rows={3} style={ss.ta}  id="rams-template-controls" />
             </div>
             <div>
-              <label style={ss.lbl}>PPE (comma or line separated)</label>
-              <input value={orgDraft.ppe} onChange={(e)=>setOrgDraft((d)=>({ ...d, ppe:e.target.value }))} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="rams-template-ppe">PPE (comma or line separated)</label>
+              <input value={orgDraft.ppe} onChange={(e)=>setOrgDraft((d)=>({ ...d, ppe:e.target.value }))} style={ss.inp}  id="rams-template-ppe" />
             </div>
             <div>
-              <label style={ss.lbl}>Regulations (comma or line separated)</label>
-              <input value={orgDraft.regs} onChange={(e)=>setOrgDraft((d)=>({ ...d, regs:e.target.value }))} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="rams-template-regs">Regulations (comma or line separated)</label>
+              <input value={orgDraft.regs} onChange={(e)=>setOrgDraft((d)=>({ ...d, regs:e.target.value }))} style={ss.inp}  id="rams-template-regs" />
             </div>
             <div>
               <label style={ss.lbl}>Initial L / S</label>
@@ -4169,12 +4173,12 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                 <div style={{ marginTop:14, paddingTop:14, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
                     <div>
-                      <label style={ss.lbl}>Activity</label>
-                      <input value={r.activity} onChange={e=>updateRow(r.id,"activity",e.target.value)} style={ss.inp} />
+                      <label style={ss.lbl} htmlFor={`rams-template-activity-2-${r.id}`}>Activity</label>
+                      <input value={r.activity} onChange={e=>updateRow(r.id,"activity",e.target.value)} style={ss.inp}  id={`rams-template-activity-2-${r.id}`} />
                     </div>
                     <div>
-                      <label style={ss.lbl}>Hazard / additional hazard</label>
-                      <input value={r.hazard} onChange={e=>updateRow(r.id,"hazard",e.target.value)} style={ss.inp} />
+                      <label style={ss.lbl} htmlFor={`rams-template-hazard-2-${r.id}`}>Hazard / additional hazard</label>
+                      <input value={r.hazard} onChange={e=>updateRow(r.id,"hazard",e.target.value)} style={ss.inp}  id={`rams-template-hazard-2-${r.id}`} />
                     </div>
                   </div>
 
@@ -4185,8 +4189,8 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
                         {[["L","Likelihood (H=6 M=4 L=2)","initialRisk"],["S","Severity (Fatal=6 Major=4 Minor=2)","initialRisk"]].map(([k,hint,obj])=>(
                           <div key={k}>
-                            <label style={{ ...ss.lbl, marginBottom:2 }}>{k} <span style={{ fontWeight:400 }}>({hint})</span></label>
-                            <select value={r[obj][k]} onChange={e=>updateRow(r.id,obj,{...r[obj],[k]:parseInt(e.target.value),RF:parseInt(e.target.value)*(k==="L"?r[obj].S:r[obj].L)})} style={{ ...ss.inp, width:"auto" }}>
+                            <label style={{ ...ss.lbl, marginBottom:2 }} htmlFor="rams-template-k-hint">{k} <span style={{ fontWeight:400 }}>({hint})</span></label>
+                            <select value={r[obj][k]} onChange={e=>updateRow(r.id,obj,{...r[obj],[k]:parseInt(e.target.value),RF:parseInt(e.target.value)*(k==="L"?r[obj].S:r[obj].L)})} style={{ ...ss.inp, width:"auto" }} id="rams-template-k-hint">
                               {[2,4,6].map(v=><option key={v} value={v}>{v}</option>)}
                             </select>
                           </div>
@@ -4197,10 +4201,10 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                     <div style={{ padding:"10px 12px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8 }}>
                       <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:8 }}>Revised risk (after controls)</div>
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
-                        {[["L","Likelihood","revisedRisk"],["S","Severity","revisedRisk"]].map(([k,hint,obj])=>(
+                        {[["L","Likelihood","revisedRisk"],["S","Severity","revisedRisk"]].map(([k,_hint,obj])=>(
                           <div key={k}>
-                            <label style={{ ...ss.lbl, marginBottom:2 }}>{k}</label>
-                            <select value={r[obj][k]} onChange={e=>updateRow(r.id,obj,{...r[obj],[k]:parseInt(e.target.value),RF:parseInt(e.target.value)*(k==="L"?r[obj].S:r[obj].L)})} style={{ ...ss.inp, width:"auto" }}>
+                            <label style={{ ...ss.lbl, marginBottom:2 }} htmlFor="rams-template-k">{k}</label>
+                            <select value={r[obj][k]} onChange={e=>updateRow(r.id,obj,{...r[obj],[k]:parseInt(e.target.value),RF:parseInt(e.target.value)*(k==="L"?r[obj].S:r[obj].L)})} style={{ ...ss.inp, width:"auto" }} id="rams-template-k">
                               {[2,4,6].map(v=><option key={v} value={v}>{v}</option>)}
                             </select>
                           </div>
@@ -4236,10 +4240,10 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
 
                   {/* PPE */}
                   <div>
-                    <label style={ss.lbl}>PPE required</label>
+                    <label style={ss.lbl} htmlFor="rams-template-ppe-required">PPE required</label>
                     <input value={(r.ppeRequired||[]).join(", ")}
                       onChange={e=>updateRow(r.id,"ppeRequired",e.target.value.split(",").map(s=>s.trim()).filter(Boolean))}
-                      placeholder="e.g. Hard hat, Safety glasses, Gloves" style={ss.inp} />
+                      placeholder="e.g. Hard hat, Safety glasses, Gloves" style={ss.inp}  id="rams-template-ppe-required" />
                     <div style={{ fontSize:11, color:"var(--color-text-tertiary,#aaa)", marginTop:4 }}>Comma-separated list</div>
                   </div>
                 </div>
@@ -5581,19 +5585,20 @@ function SavedList({
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState({});
   const listPg = useRegisterListPaging(50);
-  const favoriteCount = useMemo(() => ramsDocs.filter((d) => !!d.isFavorite).length, [ramsDocs]);
+  const liveRamsDocs = useMemo(() => liveOrgArrayRows(ramsDocs), [ramsDocs]);
+  const favoriteCount = useMemo(() => liveRamsDocs.filter((d) => !!d.isFavorite).length, [liveRamsDocs]);
   const statusCounts = useMemo(() => {
     let draft = 0;
     let issued = 0;
     let approved = 0;
-    for (const d of ramsDocs) {
+    for (const d of liveRamsDocs) {
       const s = String(d.documentStatus || d.status || "draft").toLowerCase();
       if (s === "approved") approved += 1;
       else if (s === "issued") issued += 1;
       else draft += 1;
     }
-    return { all: ramsDocs.length, draft, issued, approved, favorites: favoriteCount };
-  }, [ramsDocs, favoriteCount]);
+    return { all: liveRamsDocs.length, draft, issued, approved, favorites: favoriteCount };
+  }, [liveRamsDocs, favoriteCount]);
   const importRef = useRef(null);
 
   const onImportFile = (e) => {
@@ -5614,7 +5619,7 @@ function SavedList({
   };
 
   const sortedByDate = useMemo(() => {
-    return [...ramsDocs].sort((a, b) => {
+    return [...liveRamsDocs].sort((a, b) => {
       const fa = a.isFavorite ? 1 : 0;
       const fb = b.isFavorite ? 1 : 0;
       if (fb !== fa) return fb - fa;
@@ -5622,7 +5627,7 @@ function SavedList({
       const tb = new Date(b.updatedAt || b.createdAt || 0).getTime();
       return tb - ta;
     });
-  }, [ramsDocs]);
+  }, [liveRamsDocs]);
 
   const filtered = useMemo(() => {
     let base = sortedByDate;
@@ -5697,7 +5702,7 @@ function SavedList({
             </button>
           </div>
         </div>
-        {ramsDocs.length > 0 ? (
+        {liveRamsDocs.length > 0 ? (
           <div className="app-rams-hub__stats">
             <div className="app-rams-hub__stat">
               <strong>{statusCounts.all}</strong>
@@ -5720,7 +5725,7 @@ function SavedList({
       </section>
 
       <div className="app-rams-list-toolbar">
-        {ramsDocs.length > 0 ? (
+        {liveRamsDocs.length > 0 ? (
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -5747,7 +5752,7 @@ function SavedList({
         ) : null}
       </div>
 
-      {ramsDocs.length > 0 ? (
+      {liveRamsDocs.length > 0 ? (
         <div className="app-rams-list-filters" role="toolbar" aria-label="Filter RAMS">
           {[
             ["all", "All", statusCounts.all],
@@ -5799,7 +5804,7 @@ function SavedList({
         </div>
       ) : null}
 
-      {ramsDocs.length===0 ? (
+      {liveRamsDocs.length===0 ? (
         <EmptyState
           icon="⚠️"
           title="No RAMS yet"
@@ -6154,6 +6159,9 @@ export default function RAMSTemplateBuilder() {
             savedAt: Date.now(),
           })
         );
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent(RAMS_DRAFT_SAVED_EVENT));
+        }
       } catch (e) {
         /* quota or private mode */
       }
@@ -6598,7 +6606,7 @@ export default function RAMSTemplateBuilder() {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `rams_quick_packs_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `rams_quick_packs_${todayLocalISO()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -7153,6 +7161,42 @@ export default function RAMSTemplateBuilder() {
       updatedAt: new Date().toISOString(),
       contentHash,
     };
+    const becomingLocked =
+      ["approved", "issued"].includes(resolvedStatus) &&
+      !["approved", "issued"].includes(previousStatus);
+    const lockedContentChange =
+      ["approved", "issued"].includes(resolvedStatus) &&
+      ["approved", "issued"].includes(previousStatus) &&
+      hasContentChanged;
+    if (becomingLocked || lockedContentChange) {
+      const priorHistory = Array.isArray(editingDoc?.versionHistory) ? editingDoc.versionHistory : [];
+      const snapSource = editingDoc
+        ? {
+            ...editingDoc,
+            versionHistory: undefined,
+          }
+        : null;
+      docBase.versionHistory = [
+        {
+          id: `rv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+          at: new Date().toISOString(),
+          by: String(form.approvedBy || form.leadEngineer || "").trim() || "Document controller",
+          note: becomingLocked
+            ? `Status → ${resolvedStatus} — immutable checkpoint`
+            : "Content change while approved/issued — immutable checkpoint",
+          fromStatus: previousStatus,
+          toStatus: resolvedStatus,
+          revision: String(editingDoc?.revision || form.revision || nextRevision || ""),
+          contentHash: editingDoc?.contentHash || null,
+          snapshot: snapSource ? JSON.parse(JSON.stringify(snapSource)) : null,
+        },
+        ...priorHistory,
+      ].slice(0, 30);
+    } else if (editingDoc && Array.isArray(editingDoc.versionHistory)) {
+      docBase.versionHistory = editingDoc.versionHistory;
+    } else {
+      docBase.versionHistory = [];
+    }
     const usedTemplateIds = Array.from(
       new Set(
         (editedRows || [])
@@ -7212,7 +7256,7 @@ export default function RAMSTemplateBuilder() {
           payload: victim,
         });
       }
-      return prev.filter((d) => d.id !== id);
+      return replaceWithTombstone(prev, id);
     });
   };
 
@@ -7440,7 +7484,6 @@ export default function RAMSTemplateBuilder() {
       lowResidual: rows.filter((r) => getRiskLevel(r.revisedRisk) === "low").length,
       operatives: opCount,
     };
-    const csvEsc = (value) => `"${String(value == null ? "" : value).replace(/"/g, '""')}"`;
     const csvRows = [];
     csvRows.push(["section","key","value"]);
     csvRows.push(["document","documentNo", doc.documentNo || doc.id || ""]);
@@ -7480,13 +7523,8 @@ export default function RAMSTemplateBuilder() {
     csvRows.push(["handover","date", doc.handoverDate || ""]);
     csvRows.push(["handover","notes", doc.handoverNotes || ""]);
     const safe = (doc.title || "rams_compliance").replace(/[^\w\-\s]/g, "").replace(/\s+/g, "_").slice(0, 48);
-    const csv = csvRows.map((row) => row.map(csvEsc).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${safe}_${(doc.id || "").slice(-8)}_compliance.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const [headers, ...dataRows] = csvRows;
+    exportCsv(headers, dataRows, `${safe}_${(doc.id || "").slice(-8)}_compliance.csv`);
   };
 
   const importRamsJson = (parsed) => {

@@ -2,7 +2,7 @@ import { getBillingEntitlements } from "../utils/orgMembership";
 import { AU_PLAN_PRICE_LABELS } from "../config/auPricing";
 import { PL_PLAN_PRICE_LABELS } from "../config/plPricing";
 
-/** Effectively unlimited limits for the platform owner login — client-side UX only (`VITE_PLATFORM_OWNER_EMAIL`). */
+/** Effectively unlimited limits for the platform owner login — client UX after `user_is_platform_owner` RPC. */
 export const PLATFORM_OWNER_PLAN = {
   id: "platform_owner",
   name: "Platform owner",
@@ -22,13 +22,35 @@ export const STRIPE_SUBSCRIBABLE_PLAN_IDS = ["starter", "team", "business", "ent
 /** Annual list-price review cap — keep in sync with Terms §7.5 and pricing footnotes. */
 export const ANNUAL_PRICE_INCREASE_PERCENT = 10;
 
-/** Short footnote for pricing tables and billing (not a headline). */
+/** Short footnote for pricing tables and billing (UK / default English). */
 export const PRICE_ADJUSTMENT_SHORT =
   "Published list prices are reviewed once a year (up to 10% at renewal, with at least 30 days’ notice). Your current billing period is never repriced mid-term.";
 
-/** FAQ / longer copy with legal pointer. */
+/** FAQ / longer copy with legal pointer (UK / default English). */
 export const PRICE_ADJUSTMENT_DETAIL =
   "We review published list prices once a year. Any increase is capped at 10% and applies from your next renewal after at least 30 days’ email notice — never mid-term on your current period. Enterprise Plus is agreed separately in writing.";
+
+const PRICE_ADJUSTMENT_SHORT_PL =
+  "Opublikowane ceny katalogowe są przeglądane raz w roku (do 10% przy odnowieniu, z co najmniej 30-dniowym wyprzedzeniem). Bieżący okres rozliczeniowy nie jest nigdy zmieniany w trakcie trwania.";
+
+const PRICE_ADJUSTMENT_DETAIL_PL =
+  "Przeglądamy opublikowane ceny katalogowe raz w roku. Podwyżka jest ograniczona do 10% i obowiązuje od kolejnego odnowienia po co najmniej 30 dniach powiadomienia e-mailem — nigdy w trakcie bieżącego okresu. Enterprise Plus ustalane jest osobno na piśmie.";
+
+/**
+ * @param {import("../config/markets").MarketId | string} [marketId]
+ * @returns {string}
+ */
+export function getPriceAdjustmentShort(marketId = "uk") {
+  return marketId === "pl" ? PRICE_ADJUSTMENT_SHORT_PL : PRICE_ADJUSTMENT_SHORT;
+}
+
+/**
+ * @param {import("../config/markets").MarketId | string} [marketId]
+ * @returns {string}
+ */
+export function getPriceAdjustmentDetail(marketId = "uk") {
+  return marketId === "pl" ? PRICE_ADJUSTMENT_DETAIL_PL : PRICE_ADJUSTMENT_DETAIL;
+}
 
 /** Row order for the in-app comparison table (includes non-Stripe tiers). */
 export const BILLING_COMPARISON_PLAN_IDS = [
@@ -219,6 +241,8 @@ export function getEffectivePlanId(trialStatus, billing) {
   const paidActive =
     (b.subscriptionStatus === "active" || b.subscriptionStatus === "trialing") && b.paidPlanId;
   if (paidActive) return b.paidPlanId;
+  // Keep paid limits during past_due dunning (write access gated separately by grace window).
+  if (b.subscriptionStatus === "past_due" && b.paidPlanId) return b.paidPlanId;
   if (trialStatus?.isActive) return "trial";
   if (trialStatus && !trialStatus.isActive) return "expired";
   return "local";
