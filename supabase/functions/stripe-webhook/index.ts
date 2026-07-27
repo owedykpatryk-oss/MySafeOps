@@ -12,6 +12,11 @@ import {
 } from "../_shared/stripeConfig.ts";
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
+import {
+  isCustomerOrgBindingMismatch,
+  mapStripeStatus,
+  stripeUnixToIso,
+} from "../_shared/stripeWebhookMapping.ts";
 
 type Diagnostics = {
   function: string;
@@ -34,22 +39,6 @@ type Diagnostics = {
   pendingFailures: number | null;
   requestId: string;
 };
-
-function mapStripeStatus(status: string): "none" | "active" | "trialing" | "past_due" | "canceled" | "unpaid" {
-  switch (status) {
-    case "active":
-      return "active";
-    case "trialing":
-      return "trialing";
-    case "past_due":
-      return "past_due";
-    case "canceled":
-    case "unpaid":
-      return status;
-    default:
-      return "none";
-  }
-}
 
 async function applySubscription(
   supabase: ReturnType<typeof createClient>,
@@ -81,7 +70,7 @@ async function applySubscription(
     return;
   }
   const boundCustomerId = livemode ? existingOrg.stripe_customer_id : existingOrg.stripe_test_customer_id;
-  if (boundCustomerId && customerId && boundCustomerId !== customerId) {
+  if (isCustomerOrgBindingMismatch(boundCustomerId, customerId)) {
     console.error(
       "stripe-webhook: customer/org binding mismatch — refusing to apply subscription",
       { subscriptionId: sub.id, orgId, boundCustomerId, customerId, livemode },
@@ -89,16 +78,40 @@ async function applySubscription(
     return;
   }
 
+  const mappedStatus = mapStripeStatus(sub.status);
+  const periodEnd = stripeUnixToIso(sub.current_period_end);
+  const trialEnd = stripeUnixToIso(sub.trial_end);
+
   const row: Record<string, unknown> = {
     stripe_subscription_id: sub.id,
-    subscription_status: mapStripeStatus(sub.status),
+    subscription_status: mappedStatus,
     billing_plan: plan,
+    stripe_current_period_end: periodEnd,
+    stripe_cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+    stripe_trial_end: trialEnd,
   };
 
   if (livemode) {
     row.stripe_customer_id = customerId ?? null;
   } else {
     row.stripe_test_customer_id = customerId ?? null;
+  }
+
+  if (mappedStatus === "past_due") {
+    // Only stamp the first transition into past_due (grace window start).
+    const { data: existingBilling } = await supabase
+      .from("organizations")
+      .select("subscription_status, subscription_past_due_since")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (
+      existingBilling?.subscription_status !== "past_due" ||
+      !existingBilling?.subscription_past_due_since
+    ) {
+      row.subscription_past_due_since = new Date().toISOString();
+    }
+  } else {
+    row.subscription_past_due_since = null;
   }
 
   if (sub.status === "canceled" || sub.status === "unpaid") {
@@ -129,16 +142,41 @@ async function findOrgIdByCustomerId(
 async function recordWebhookEvent(
   supabase: ReturnType<typeof createClient>,
   event: Stripe.Event,
-): Promise<"inserted" | "duplicate" | "failed"> {
+): Promise<"inserted" | "duplicate" | "pending_retry" | "failed"> {
   const { error } = await supabase.from("stripe_webhook_events").insert({
     event_id: event.id,
     event_type: event.type,
     livemode: event.livemode ?? false,
+    processed_at: null,
   });
   if (!error) return "inserted";
-  if (error.code === "23505") return "duplicate";
+  if (error.code === "23505") {
+    const { data: existing, error: selErr } = await supabase
+      .from("stripe_webhook_events")
+      .select("processed_at")
+      .eq("event_id", event.id)
+      .maybeSingle();
+    if (selErr) {
+      console.error("recordWebhookEvent duplicate lookup error", selErr);
+      return "failed";
+    }
+    // Prior attempt inserted the id then failed before stamping processed_at — allow retry.
+    if (!existing?.processed_at) return "pending_retry";
+    return "duplicate";
+  }
   console.error("recordWebhookEvent error", error);
   return "failed";
+}
+
+async function markWebhookEventProcessed(
+  supabase: ReturnType<typeof createClient>,
+  eventId: string,
+) {
+  const { error } = await supabase
+    .from("stripe_webhook_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("event_id", eventId);
+  if (error) console.error("markWebhookEventProcessed error", error);
 }
 
 async function recordWebhookFailure(
@@ -241,13 +279,39 @@ async function buildDiagnostics(
 async function clearSubscription(
   supabase: ReturnType<typeof createClient>,
   orgId: string,
+  opts: { customerId?: string | null; livemode?: boolean } = {},
 ) {
+  if (opts.customerId) {
+    const { data: existingOrg, error: existingOrgErr } = await supabase
+      .from("organizations")
+      .select("id, stripe_customer_id, stripe_test_customer_id")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (existingOrgErr || !existingOrg) {
+      console.error("stripe-webhook: org not found for clearSubscription", orgId, existingOrgErr);
+      return;
+    }
+    const livemode = opts.livemode !== false;
+    const boundCustomerId = livemode ? existingOrg.stripe_customer_id : existingOrg.stripe_test_customer_id;
+    if (isCustomerOrgBindingMismatch(boundCustomerId, opts.customerId)) {
+      console.error(
+        "stripe-webhook: customer/org binding mismatch — refusing to clear subscription",
+        { orgId, boundCustomerId, customerId: opts.customerId, livemode },
+      );
+      return;
+    }
+  }
+
   const { error } = await supabase
     .from("organizations")
     .update({
       stripe_subscription_id: null,
       subscription_status: "canceled",
       billing_plan: null,
+      stripe_current_period_end: null,
+      stripe_cancel_at_period_end: false,
+      stripe_trial_end: null,
+      subscription_past_due_since: null,
     })
     .eq("id", orgId);
   if (error) console.error("clearSubscription error", error);
@@ -391,6 +455,7 @@ Deno.serve(async (req) => {
       eventId: event.id,
       eventType: event.type,
       livemode: event.livemode ?? false,
+      retry: eventStore === "pending_retry",
     });
 
     switch (event.type) {
@@ -413,12 +478,18 @@ Deno.serve(async (req) => {
         const sub = event.data.object as Stripe.Subscription;
         const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
         const orgId = sub.metadata?.org_id ?? (await findOrgIdByCustomerId(supabase, customerId));
-        if (orgId) await clearSubscription(supabase, orgId);
+        if (orgId) {
+          await clearSubscription(supabase, orgId, {
+            customerId,
+            livemode: event.livemode ?? false,
+          });
+        }
         break;
       }
       default:
         break;
     }
+    await markWebhookEventProcessed(supabase, event.id);
     await markWebhookFailureResolved(supabase, event.id);
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);

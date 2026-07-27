@@ -142,6 +142,6 @@ export function pickCloudBrandingPayload(raw) {
   return out;
 }
 
-export function orgSettingsStorageKey(orgId = getOrgId()) {
+export function orgSettingsStorageKey(_orgId = getOrgId()) {
   return orgScopedKey(ORG_SETTINGS_BASE_KEY);
 }

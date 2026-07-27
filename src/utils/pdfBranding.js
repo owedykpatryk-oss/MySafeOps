@@ -1,9 +1,13 @@
 /**
  * Shared premium print/PDF branding — org logo, MySafeOps mark, meta strips, footers.
  */
-import { hexToRgb as hexToRgbBase, normalizeHex, shadeHex } from "./orgBrandingTheme";
+import { hexToRgb as hexToRgbBase, shadeHex } from "./orgBrandingTheme";
 import { formatCustomFieldsLine, renderCustomFieldsHtml } from "./orgCustomFields.js";
 import { escapeHtml, escapeAttr, safeCssColor, safeImageSrc } from "./htmlEscape.js";
+import { setPdfFont } from "./pdfUnicodeFont.js";
+
+import { todayLocalISO } from "./localDate";
+export { setPdfFont, ensurePdfUnicodeFont, PDF_FONT_FAMILY } from "./pdfUnicodeFont.js";
 
 export const PDF_PAGE = {
   W: 210,
@@ -73,11 +77,11 @@ export function drawMySafeOpsBadgeJsPdf(pdf, rightX, topY, rgb, accentRgb) {
   pdf.setLineWidth(0.55);
   pdf.line(x + 3.1, topY + 4.8, x + 4.4, topY + 6.1);
   pdf.line(x + 4.4, topY + 6.1, x + 6.2, topY + 3.8);
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(7);
   pdf.setTextColor(r, g, b);
   pdf.text("MySafeOps", x + 8, topY + 5.8);
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(5.2);
   pdf.setTextColor(ar ?? 100, accentRgb[1] ?? 116, accentRgb[2] ?? 139);
   pdf.text("mysafeops.com", x + 8, topY + 8.6);
@@ -100,7 +104,7 @@ export function buildDocReference(org, moduleLabel) {
     .replace(/[^a-zA-Z0-9]+/g, "")
     .slice(0, 8)
     .toUpperCase();
-  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const stamp = todayLocalISO().replace(/-/g, "");
   return `${prefix}-${slug}-${stamp}`;
 }
 
@@ -155,22 +159,22 @@ export function drawPremiumPdfHeader(pdf, meta, yStart = PDF_PAGE.MARGIN) {
 
   const stamp = formatPdfTimestamp();
   const docRef = meta.docRef || buildDocReference(org, meta.title);
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(100, 116, 139);
   pdf.text(stamp, rightX, bodyY + 13, { align: "right" });
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(7);
   pdf.setTextColor(r, g, b);
   pdf.text(docRef, rightX, bodyY + 17, { align: "right" });
 
   let y = bodyY + 5.5;
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(theme === "executive" ? 12.5 : 11);
   pdf.setTextColor(theme === "classic" ? 0 : 15, theme === "classic" ? 0 : 23, theme === "classic" ? 0 : 42);
   y = pdfTextBlock(pdf, String(org?.name || "MySafeOps").slice(0, 56), textX, y, leftMaxW, 4.2);
 
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(71, 85, 105);
   const headerLine = org?.pdfHeader ? String(org.pdfHeader).slice(0, 90) : "UK construction & site safety workspace";
@@ -178,25 +182,26 @@ export function drawPremiumPdfHeader(pdf, meta, yStart = PDF_PAGE.MARGIN) {
 
   const customLine = formatCustomFieldsLine(org?.customFields, 3);
   if (customLine) {
-    pdf.setFont("helvetica", "normal");
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(7);
     pdf.setTextColor(100, 116, 139);
     y = pdfTextBlock(pdf, customLine.slice(0, 120), textX, y + 1, leftMaxW, 3.2);
   }
 
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(theme === "executive" ? 10 : 9.5);
   pdf.setTextColor(r, g, b);
   y = pdfTextBlock(pdf, String(meta.title || "Document").slice(0, 72), textX, y + 1, leftMaxW, 4);
 
+  let endY = y;
   if (meta.subtitle) {
-    pdf.setFont("helvetica", "normal");
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(7.5);
     pdf.setTextColor(100, 116, 139);
-    pdfTextBlock(pdf, String(meta.subtitle).slice(0, 100), textX, y + 0.5, leftMaxW, 3.6);
+    endY = pdfTextBlock(pdf, String(meta.subtitle).slice(0, 100), textX, y + 0.5, leftMaxW, 3.6);
   }
 
-  return Math.max(yStart + PDF_PAGE.HEADER_H, bodyY + 22);
+  return Math.max(yStart + PDF_PAGE.HEADER_H, bodyY + 22, endY + 4);
 }
 
 /**
@@ -235,11 +240,11 @@ export function drawPdfMetaStrip(pdf, org, docMeta, rgb, yStart) {
 
   rows.forEach((col, i) => {
     const x = margin + 4 + i * colW;
-    pdf.setFont("helvetica", "bold");
+    setPdfFont(pdf, "bold");
     pdf.setFontSize(6);
     pdf.setTextColor(r, g, b);
     pdf.text(col.label.toUpperCase(), x, yStart + 4.5);
-    pdf.setFont("helvetica", "normal");
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(6.8);
     pdf.setTextColor(51, 65, 85);
     const lines = pdf.splitTextToSize(String(col.value).slice(0, 140), colW - 8);
@@ -267,12 +272,12 @@ export function drawRegisterHeroBlock(pdf, opts) {
   pdf.setFillColor(r, g, b);
   pdf.rect(margin, y, 2.5, blockH, "F");
 
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(12);
   pdf.setTextColor(15, 23, 42);
   pdf.text(String(moduleLabel || "Register"), margin + 6, y + 7);
 
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(8.5);
   pdf.setTextColor(71, 85, 105);
   pdf.text(`${stats.total} record(s) in ${String(org?.name || "organisation").slice(0, 40)}`, margin + 6, y + 12);
@@ -292,7 +297,7 @@ export function drawRegisterHeroBlock(pdf, opts) {
     const fill = idx % 2 === 0 ? [r, g, b] : accentRgb;
     pdf.setFillColor(...fill);
     pdf.roundedRect(chipX, chipY - 3.5, chipW, 5, 1.2, 1.2, "F");
-    pdf.setFont("helvetica", "bold");
+    setPdfFont(pdf, "bold");
     pdf.setFontSize(6);
     pdf.setTextColor(255, 255, 255);
     pdf.text(label, chipX + 3, chipY);
@@ -317,17 +322,17 @@ export function drawEmptyRegisterState(pdf, opts) {
 
   pdf.setFillColor(r, g, b);
   pdf.circle(margin + 10, y + 12, 5, "F");
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(10);
   pdf.setTextColor(255, 255, 255);
   pdf.text("0", margin + 10, y + 13.2, { align: "center" });
 
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(11);
   pdf.setTextColor(15, 23, 42);
   pdf.text(`No ${String(moduleLabel || "register").toLowerCase()} records yet`, margin + 20, y + 10);
 
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(8.5);
   pdf.setTextColor(71, 85, 105);
   const msg = pdf.splitTextToSize(
@@ -339,13 +344,13 @@ export function drawEmptyRegisterState(pdf, opts) {
   if (prebuildLabel) {
     pdf.setFillColor(...accentRgb);
     pdf.roundedRect(margin + 20, y + 28, Math.min(w - 24, pdf.getTextWidth(prebuildLabel) + 10), 6, 1.5, 1.5, "F");
-    pdf.setFont("helvetica", "bold");
+    setPdfFont(pdf, "bold");
     pdf.setFontSize(7);
     pdf.setTextColor(255, 255, 255);
     pdf.text(`Quick start: ${prebuildLabel}`.slice(0, 70), margin + 25, y + 32);
   }
 
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(148, 163, 184);
   const contact = [org?.email, org?.website].filter(Boolean).join(" · ");
@@ -369,7 +374,7 @@ export function drawPremiumPdfFooter(pdf, org, pageNum, pageTotal, theme, rgb, a
     pdf.line(margin, y - 2, PDF_PAGE.W - margin, y - 2);
   }
 
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(6.8);
   pdf.setTextColor(71, 85, 105);
   const footer = org?.pdfFooter || "Generated by MySafeOps — mysafeops.com";
@@ -384,15 +389,15 @@ export function drawPremiumPdfFooter(pdf, org, pageNum, pageTotal, theme, rgb, a
     pdf.text(compLines.slice(0, 1), margin, y + 2 + footerLines.length * 3.2);
   }
 
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(7);
   pdf.setTextColor(r, g, b);
   pdf.text("MySafeOps", PDF_PAGE.W - margin, y + 2, { align: "right" });
-  pdf.setFont("helvetica", "normal");
+  setPdfFont(pdf, "normal");
   pdf.setFontSize(6.2);
   pdf.setTextColor(148, 163, 184);
   pdf.text("mysafeops.com", PDF_PAGE.W - margin, y + 5.5, { align: "right" });
-  pdf.setFont("helvetica", "bold");
+  setPdfFont(pdf, "bold");
   pdf.setFontSize(7.5);
   pdf.setTextColor(r, g, b);
   pdf.text(`Page ${pageNum} of ${pageTotal}`, PDF_PAGE.W - margin, y + 10.5, { align: "right" });
@@ -408,7 +413,7 @@ export function drawWatermark(pdf, org) {
     try {
       if (typeof pdf.saveGraphicsState === "function") pdf.saveGraphicsState();
       pdf.setTextColor(220, 220, 220);
-      pdf.setFont("helvetica", "bold");
+      setPdfFont(pdf, "bold");
       pdf.setFontSize(42);
       pdf.text(text.toUpperCase(), PDF_PAGE.W / 2, PDF_PAGE.H / 2, {
         align: "center",

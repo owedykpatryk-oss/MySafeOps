@@ -55,7 +55,7 @@ export function suggestedGeoPhotoPresetForPlaybook(playbookId) {
 }
 
 /** Parse location ID from free-text notes (fallback). */
-export function parseLocationIdFromNotes(notes, fallbackPrefix = "GI") {
+export function parseLocationIdFromNotes(notes, _fallbackPrefix = "GI") {
   const t = String(notes || "");
   const m =
     t.match(/\b(BH|TP|WS|DCP|HA|PZ|S)[\s_-]?(\d{1,3})\b/i) ||

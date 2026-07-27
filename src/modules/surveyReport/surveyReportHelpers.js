@@ -27,6 +27,7 @@ import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
 import { nextUtilityMappingRef } from "../../utils/utilityMappingDocRefs";
 import { captureSurveyRevisionSnapshot, buildRecordsRevisionDiff } from "./surveyFieldUpgrades.js";
 
+import { localDateISO } from "../../utils/localDate";
 const labelOf = (options, key) => options.find((o) => o.key === key)?.label || key;
 
 function sanitizeSurveyPhoto(photo) {
@@ -342,7 +343,7 @@ export function toggleArray(arr, key) {
 export function finalizeReportRevision(report) {
   const r = normalizeSurveyReport(report);
   const now = new Date();
-  const isoDate = now.toISOString().slice(0, 10);
+  const isoDate = localDateISO(now);
   const dc = {
     ...r.documentControl,
     issueDate: r.documentControl.issueDate || r.surveyDate || isoDate,
@@ -478,7 +479,7 @@ export function buildDuplicateReportPayload(report, existingReports, { asRevisio
   const copy = normalizeSurveyReport(JSON.parse(JSON.stringify(report)));
   const ref = nextSurveyRef(existingReports);
   const now = new Date().toISOString();
-  const isoDate = now.slice(0, 10);
+  const isoDate = localDateISO();
 
   copy.id = `sr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   copy.status = "draft";

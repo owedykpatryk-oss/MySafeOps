@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, beforeEach } from "vitest";
-import { loadOrgScoped, saveOrgScoped } from "./orgStorage";
+import { saveOrgScoped } from "./orgStorage";
 import { getEquipmentDueAlerts } from "./equipmentInspectionDue.js";
 
+import { localDateISO } from "./localDate";
 describe("equipmentInspectionDue", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -16,7 +17,7 @@ describe("equipmentInspectionDue", () => {
     const due = new Date();
     due.setDate(due.getDate() + 3);
     saveOrgScoped("inspection_records", [
-      { id: "i1", assetRef: "Chain hoist", nextInspectionDate: due.toISOString().slice(0, 10) },
+      { id: "i1", assetRef: "Chain hoist", nextInspectionDate: localDateISO(due) },
     ]);
     const alerts = getEquipmentDueAlerts(new Date());
     expect(alerts.some((a) => a.name.includes("Chain"))).toBe(true);
@@ -26,7 +27,7 @@ describe("equipmentInspectionDue", () => {
   it("ignores items due beyond 30 days", () => {
     const due = new Date();
     due.setDate(due.getDate() + 45);
-    saveOrgScoped("plant_register", [{ id: "p1", assetRef: "EXC-1", nextDue: due.toISOString().slice(0, 10) }]);
+    saveOrgScoped("plant_register", [{ id: "p1", assetRef: "EXC-1", nextDue: localDateISO(due) }]);
     expect(getEquipmentDueAlerts(new Date())).toHaveLength(0);
   });
 
@@ -39,8 +40,8 @@ describe("equipmentInspectionDue", () => {
       {
         id: "p2",
         assetRef: "GPR-1",
-        nextDue: later.toISOString().slice(0, 10),
-        calibrationDue: due.toISOString().slice(0, 10),
+        nextDue: localDateISO(later),
+        calibrationDue: localDateISO(due),
       },
     ]);
     const alerts = getEquipmentDueAlerts(new Date());

@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, beforeEach } from "vitest";
-import { saveOrgSettingsRaw, loadOrgSettingsRaw } from "./orgSettingsStorage";
+import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 import { pickCloudBrandingPayload } from "./orgSettingsStorage";
 import {
   createCustomWorkspaceProfile,

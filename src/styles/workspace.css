@@ -2806,7 +2806,7 @@
 .app-module-overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-overlay, 50);
   background: rgba(0, 0, 0, 0.45);
   overflow: auto;
   -webkit-overflow-scrolling: touch;
@@ -2827,7 +2827,7 @@
 .app-module-dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: var(--z-dialog, 60);
   background: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
@@ -8210,9 +8210,10 @@
   border-radius: 999px;
   font-size: 10px;
   font-weight: 700;
-  background: color-mix(in srgb, var(--conf-color) 15%, white);
+  /* Pre-computed — html2canvas 1.4.1 cannot parse color-mix() */
+  background: rgba(13, 148, 136, 0.15);
   color: var(--conf-color);
-  border: 1px solid color-mix(in srgb, var(--conf-color) 35%, transparent);
+  border: 1px solid rgba(13, 148, 136, 0.35);
 }
 
 .app-survey-workflow-strip {
@@ -10166,7 +10167,7 @@
   font-weight: 700;
   background: var(--permit-col-tint, #f8fafc);
   color: var(--permit-col-accent, #64748b);
-  border: 1px solid color-mix(in srgb, var(--permit-col-accent, #cbd5e1) 28%, transparent);
+  border: 1px solid rgba(203, 213, 225, 0.55);
 }
 
 .app-permit-board-col__empty {
@@ -10179,7 +10180,7 @@
   text-align: center;
   font-size: 12px;
   color: var(--color-text-secondary);
-  border: 1px dashed color-mix(in srgb, var(--permit-col-accent, #cbd5e1) 35%, transparent);
+  border: 1px dashed rgba(203, 213, 225, 0.65);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.55);
 }

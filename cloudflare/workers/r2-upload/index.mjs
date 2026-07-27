@@ -45,7 +45,8 @@ function timingSafeEqual(expected, received) {
 }
 
 const rateLimitBuckets = new Map();
-function checkRateLimit(key, max, windowMs) {
+/** Best-effort per-isolate fallback when durable limit is unavailable. */
+function checkMemoryRateLimit(key, max, windowMs) {
   const now = Date.now();
   let entry = rateLimitBuckets.get(key);
   if (!entry || now - entry.start > windowMs) {
@@ -59,6 +60,45 @@ function checkRateLimit(key, max, windowMs) {
     }
   }
   return entry.count <= max;
+}
+
+/**
+ * Durable rate limit via Supabase `claim_edge_rate_bucket` (service_role).
+ * Set SUPABASE_SERVICE_ROLE_KEY on the worker — same Postgres buckets as Edge Functions.
+ * Falls back to in-memory only when service role is unset (dev).
+ */
+async function checkRateLimit(env, key, max, windowMs) {
+  const url = String(env.SUPABASE_URL || "").trim().replace(/\/$/, "");
+  const serviceKey = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  if (url && serviceKey) {
+    try {
+      const res = await fetch(`${url}/rest/v1/rpc/claim_edge_rate_bucket`, {
+        method: "POST",
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          p_key: key,
+          p_max: max,
+          p_window_seconds: Math.max(1, Math.ceil(windowMs / 1000)),
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data === true || data === "true";
+      }
+      // Fail closed for abuse-sensitive upload routes when RPC is misconfigured.
+      console.warn("claim_edge_rate_bucket HTTP", res.status);
+      return false;
+    } catch (e) {
+      console.warn("claim_edge_rate_bucket failed", e);
+      return false;
+    }
+  }
+  return checkMemoryRateLimit(key, max, windowMs);
 }
 
 function parseBearer(request) {
@@ -258,7 +298,7 @@ export default {
       );
       if (!okSig) return json({ error: "Invalid or expired signature" }, 403, c);
       const ip = clientIp(request);
-      if (!checkRateLimit(`signed:${ip}`, 120, 60_000)) {
+      if (!(await checkRateLimit(env, `signed:${ip}`, 120, 60_000))) {
         return json({ error: "Too many requests" }, 429, { ...c, "Retry-After": "60" });
       }
       return streamObject(env, key, c, { disposition: "inline" });
@@ -269,7 +309,7 @@ export default {
         return json({ error: "Origin not allowed" }, 403, c);
       }
       const ip = clientIp(request);
-      if (!checkRateLimit(`get:${ip}`, 60, 60_000)) {
+      if (!(await checkRateLimit(env, `get:${ip}`, 60, 60_000))) {
         return json({ error: "Too many requests" }, 429, { ...c, "Retry-After": "60" });
       }
       const key = validateObjectKey(url.searchParams.get("key"));
@@ -304,7 +344,7 @@ export default {
     }
 
     const ip = clientIp(request);
-    if (!checkRateLimit(`auth:${ip}`, 30, 5 * 60_000)) {
+    if (!(await checkRateLimit(env, `auth:${ip}`, 30, 5 * 60_000))) {
       return json({ error: "Too many requests" }, 429, { ...c, "Retry-After": "60" });
     }
 
@@ -323,7 +363,7 @@ export default {
       return json({ error: "Unauthorized" }, 401, c);
     }
 
-    if (!checkRateLimit(`upload:${ip}`, 15, 60_000)) {
+    if (!(await checkRateLimit(env, `upload:${ip}`, 15, 60_000))) {
       return json({ error: "Too many requests" }, 429, { ...c, "Retry-After": "60" });
     }
 

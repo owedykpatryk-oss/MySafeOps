@@ -4,7 +4,14 @@
 import { getRiskLevel } from "./ramsRiskLevel.js";
 import { normalizePrintSections, RAMS_SECTION_IDS, documentContentHash } from "./ramsSectionConfig";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
-import { openPrintWindow, safeCssColor, safeImageSrc, escapeAttr, writePrintWindowDocument } from "../../utils/htmlEscape.js";
+import {
+  openPrintWindowOrWarn,
+  notifyAppToast,
+  safeCssColor,
+  safeImageSrc,
+  escapeAttr,
+  writePrintWindowDocument,
+} from "../../utils/htmlEscape.js";
 import { renderMySafeOpsMarkSvg } from "../../utils/pdfBranding.js";
 import { isFessOrg } from "../../utils/fessOrg.js";
 import { generateFessPrintHTML, buildFessRamsPrintBodyHTML } from "../../utils/fessRamsPrintHtml.js";
@@ -13,8 +20,6 @@ import {
   renderUtilityMappingHeroCover,
   renderUtilityMappingDocControlPage,
   utilityMappingCoverSystemCss,
-  renderUtilityMappingPageHeader,
-  renderUtilityMappingPageFooter,
   resolveUtilityMappingLogoSrc,
 } from "../../utils/utilityMappingCovers.js";
 import { utilityMappingBodyPrintCss } from "../../utils/utilityMappingPrintTheme.js";
@@ -1463,13 +1468,11 @@ export async function openRamsDocumentWindow(form, rows, workers, projects, opti
       Array.isArray(permits) && permits.length > 0
         ? await generateRamsProjectPackHTML(safeForm, safeRows, safeWorkers, safeProjects, permits, options.sitePackMeta || null)
         : generatePrintHTML(safeForm, safeRows, operatives, projectMap, pf, fp, safeWorkers);
-    const win = openPrintWindow();
-    if (!win) {
-      window.alert(
-        "Could not open a new window — your browser may be blocking pop-ups. Allow pop-ups for this site, then use Preview or Print again."
-      );
-      return;
-    }
+    const win = openPrintWindowOrWarn({
+      message:
+        "Could not open a new window — allow pop-ups for this site, then use Preview or Print again.",
+    });
+    if (!win) return;
     await writePrintWindowDocument(win, html);
     if (doPrint) {
       let didPrint = false;
@@ -1514,7 +1517,11 @@ export async function openRamsDocumentWindow(form, rows, workers, projects, opti
       }
     }
   } catch (err) {
-    window.alert("Preview could not be opened. Check RAMS data and try again.");
+    notifyAppToast({
+      type: "error",
+      title: "Preview failed",
+      message: "Preview could not be opened. Check RAMS data and try again.",
+    });
     console.error("RAMS preview failed", err);
   }
 }

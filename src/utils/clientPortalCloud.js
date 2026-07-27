@@ -45,7 +45,7 @@ function redactWorkerRow(w) {
   if (Array.isArray(next.certificates)) {
     next.certificates = next.certificates.map((c) => {
       if (!c || typeof c !== "object") return c;
-      const { certificateNumber, certNumber, ...rest } = c;
+      const { certificateNumber: _certificateNumber, certNumber: _certNumber, ...rest } = c;
       return rest;
     });
   }

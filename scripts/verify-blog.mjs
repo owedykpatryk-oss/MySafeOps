@@ -83,7 +83,7 @@ for (const post of LANDING_BLOG_POSTS) {
     warn(`${post.slug}: fewer than 2 internal blog links (SEO cluster)`);
   }
 
-  const voiceHits = checkBlogVoice(body);
+  const voiceHits = checkBlogVoice(body, { marketId: post.marketId || "uk" });
   for (const h of voiceHits) {
     warn(`${post.slug}: voice — ${h.label}`);
   }

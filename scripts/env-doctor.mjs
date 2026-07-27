@@ -55,7 +55,7 @@ function run() {
 const viteRows = [
   ["VITE_SUPABASE_URL", "Supabase project URL"],
   ["VITE_SUPABASE_ANON_KEY", "Supabase anon (public) key"],
-  ["VITE_TURNSTILE_SITE_KEY", "Cloudflare Turnstile site key — pair with captcha secret in Supabase Auth"],
+  ["VITE_TURNSTILE_SITE_KEY", "Cloudflare Turnstile site key (local: test key 1x000…AA via npm run env:turnstile)"],
   ["VITE_VAPID_PUBLIC_KEY", "Web Push public key — pair with Supabase secrets VAPID_*"],
   ["VITE_STORAGE_API_URL", "R2 upload Worker URL (optional)"],
   ["VITE_STORAGE_UPLOAD_TOKEN", "Worker upload token (optional)"],
@@ -77,7 +77,6 @@ const viteRows = [
   ["VITE_SENTRY_DSN", "Optional Sentry browser DSN for client error reporting"],
   ["VITE_PUBLIC_DOCS_PATH", "Footer /docs link: path (default /docs) or https URL to external documentation"],
   ["VITE_PUBLIC_STATUS_URL", "Optional external status page URL; else in-app /status is used"],
-  ["VITE_PLATFORM_OWNER_EMAIL", "Superadmin / owner JWT email(s), comma-separated — pair with DB migrations"],
 ];
 
 const cliRows = [

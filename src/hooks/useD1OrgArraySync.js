@@ -174,7 +174,7 @@ export function useD1OrgArraySync({
           put = { ok: false, error: "fetch_failed" };
         }
         if (put.ok) d1VersionRef.current = put.version || 0;
-        else if (isForbiddenD1Write(put.error)) notifyD1WriteForbidden(namespace);
+        else if (isForbiddenD1Write(put.error)) notifyD1WriteForbidden(namespace, put.error);
       }
       await d1OutboxTryFlush(flushCtxBase());
       await refreshPending();
@@ -286,7 +286,7 @@ export function useD1OrgArraySync({
           save(storageKey, merged);
         }
       } else if (isForbiddenD1Write(put.error)) {
-        notifyD1WriteForbidden(namespace);
+        notifyD1WriteForbidden(namespace, put.error);
       } else {
         try {
           await d1OutboxEnqueue({

@@ -7,6 +7,7 @@ import {
 } from "./projectNextAction";
 import { saveOrgSettingsRaw } from "./orgSettingsStorage";
 
+import { todayLocalISO } from "./localDate";
 describe("projectNextAction", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -35,7 +36,7 @@ describe("projectNextAction", () => {
     saveOrgSettingsRaw({ industryPackId: "surveyingGeodesy" });
     const old = new Date();
     old.setDate(old.getDate() - 20);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalISO();
     const ctx = buildProjectActionContext({
       rams: [{ id: "r1", projectId: "p1" }],
       permits: [{ id: "ptw1", projectId: "p1", type: "excavation", status: "active", location: "Site A", linkedRamsId: "r1" }],

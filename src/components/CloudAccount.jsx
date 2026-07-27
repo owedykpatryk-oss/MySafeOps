@@ -20,6 +20,7 @@ import { getInboxUrl } from "../utils/emailInbox";
 import { MIN_PASSWORD_LENGTH_SIGNUP } from "../config/authPolicy";
 import { useAuthCaptcha } from "../hooks/useAuthCaptcha";
 import TurnstileWidget from "./TurnstileWidget";
+import { isAuthCaptchaInfrastructureError } from "../lib/authCaptcha";
 import {
   clearAuthFailures,
   formatLockoutRemaining,
@@ -54,8 +55,8 @@ function mapAuthErrorMessage(error, fallback = "Authentication request failed") 
   if (m.includes("rate limit") || m.includes("too many requests")) {
     return "Too many attempts right now. Please wait a moment and try again.";
   }
-  if (m.includes("captcha") || m.includes("turnstile")) {
-    return "Security check failed or expired. Complete the check and try again.";
+  if (m.includes("captcha") || m.includes("turnstile") || m.includes("captcha_token") || (m.includes("request disallowed") && m.includes("token"))) {
+    return "Security check failed or could not load. Disable ad blockers for this site, complete the check, and try again.";
   }
   return raw || fallback;
 }
@@ -230,7 +231,11 @@ function CloudTotpMfaPanel({ client }) {
 export default function CloudAccount() {
   const navigate = useNavigate();
   const { supabase: client, user, loading, ready } = useSupabaseAuth();
-  const { trialStatus, orgId } = useApp();
+  const { trialStatus, orgId, caps } = useApp();
+  const [deleteConfirmSlug, setDeleteConfirmSlug] = useState("");
+  const [deletionStatus, setDeletionStatus] = useState(null);
+  const [deletionBusy, setDeletionBusy] = useState(false);
+  const [deletionMsg, setDeletionMsg] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -249,6 +254,8 @@ export default function CloudAccount() {
   const signUpThrottle = getSignUpThrottleState(Date.now());
   const {
     turnstileConfigured,
+    captchaToken,
+    captchaBlocksSubmit,
     setCaptchaToken,
     setCaptchaUnavailable,
     turnstileNonce,
@@ -297,6 +304,28 @@ export default function CloudAccount() {
       /* ignore */
     }
   }, []);
+
+  const refreshDeletionStatus = useCallback(async () => {
+    if (!client || !user || !caps?.orgSettings) {
+      setDeletionStatus(null);
+      return;
+    }
+    try {
+      const { data, error } = await client.rpc("get_my_org_deletion_status");
+      if (error) {
+        setDeletionStatus(null);
+        return;
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      setDeletionStatus(row || null);
+    } catch {
+      setDeletionStatus(null);
+    }
+  }, [client, user, caps?.orgSettings]);
+
+  useEffect(() => {
+    void refreshDeletionStatus();
+  }, [refreshDeletionStatus]);
 
   if (!isSupabaseConfigured() || !client) {
     return (
@@ -393,7 +422,11 @@ export default function CloudAccount() {
       const maybeEmail = email.trim().toLowerCase();
       const unconfirmed = String(e?.message || "").toLowerCase().includes("email not confirmed");
       if (unconfirmed && maybeEmail) setPendingConfirmationEmail(maybeEmail);
-      else recordAuthFailure(normalizedEmail, Date.now());
+      else if (isAuthCaptchaInfrastructureError(e)) {
+        setMsg(mapAuthErrorMessage(e, "Security check failed"));
+        resetCaptcha();
+        return;
+      } else recordAuthFailure(normalizedEmail, Date.now());
       const state = getAuthLockoutState(normalizedEmail, Date.now());
       if (state.isLocked) {
         setMsg(`Too many failed attempts. Try again in ${formatLockoutRemaining(state.remainingMs)}.`);
@@ -546,6 +579,55 @@ export default function CloudAccount() {
     }
   };
 
+  const scheduleOrgDeletion = async () => {
+    if (!client || !caps?.orgSettings) return;
+    setDeletionBusy(true);
+    setDeletionMsg("");
+    try {
+      const { data: sessionData } = await client.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("Not signed in");
+      const base = (import.meta.env.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
+      const res = await fetch(`${base}/functions/v1/schedule-org-deletion`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+        },
+        body: JSON.stringify({ action: "schedule", confirmSlug: deleteConfirmSlug.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `http_${res.status}`);
+      setDeletionMsg(body.message || "Deletion scheduled.");
+      pushAudit({ action: "org_deletion_scheduled", entity: "organisation", detail: orgId });
+      setDeleteConfirmSlug("");
+      await refreshDeletionStatus();
+    } catch (e) {
+      setDeletionMsg(e?.message || "Could not schedule deletion");
+    } finally {
+      setDeletionBusy(false);
+    }
+  };
+
+  const cancelOrgDeletion = async () => {
+    if (!client || !caps?.orgSettings) return;
+    setDeletionBusy(true);
+    setDeletionMsg("");
+    try {
+      const { data, error } = await client.rpc("cancel_my_org_deletion");
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      setDeletionMsg(row?.cancelled ? "Deletion cancelled." : "Updated.");
+      pushAudit({ action: "org_deletion_cancelled", entity: "organisation", detail: orgId });
+      await refreshDeletionStatus();
+    } catch (e) {
+      setDeletionMsg(e?.message || "Could not cancel deletion");
+    } finally {
+      setDeletionBusy(false);
+    }
+  };
+
   if (user && mfaForSession) {
     return (
       <>
@@ -604,6 +686,67 @@ export default function CloudAccount() {
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Two-step sign-in (TOTP)</div>
           <CloudTotpMfaPanel client={client} />
         </div>
+        {caps?.orgSettings ? (
+          <div
+            style={{
+              ...ss.card,
+              marginBottom: 24,
+              borderColor: "var(--color-danger-border, #fecaca)",
+              background: "var(--color-danger-bg, #fef2f2)",
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 8, color: "#991b1b" }}>Delete organisation</div>
+            <p style={{ fontSize: 12, margin: "0 0 12px", color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+              GDPR right to erasure: schedule permanent deletion of this organisation and its cloud membership data.
+              There is a <strong>30-day grace period</strong> — an admin can cancel before then. Export a backup first
+              (Settings → Backup). Local device copies are not automatically wiped.
+            </p>
+            {deletionStatus?.deletion_scheduled_at ? (
+              <>
+                <p style={{ fontSize: 13, margin: "0 0 12px" }}>
+                  Scheduled: <strong>{new Date(deletionStatus.deletion_scheduled_at).toLocaleString("en-GB")}</strong>
+                  {deletionStatus.purge_after
+                    ? ` · Erasure on or after ${new Date(deletionStatus.purge_after).toLocaleDateString("en-GB")}`
+                    : null}
+                </p>
+                <button type="button" style={ss.btn} onClick={() => void cancelOrgDeletion()} disabled={deletionBusy}>
+                  Cancel scheduled deletion
+                </button>
+              </>
+            ) : (
+              <>
+                <label style={{ ...ss.lbl, display: "block" }} htmlFor="org-delete-confirm-slug">
+                  Type organisation slug <code>{orgId}</code> to confirm
+                </label>
+                <input
+                  id="org-delete-confirm-slug"
+                  style={{ ...ss.inp, marginBottom: 10 }}
+                  value={deleteConfirmSlug}
+                  onChange={(e) => setDeleteConfirmSlug(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  style={{
+                    ...ss.btnP,
+                    background: deleteConfirmSlug.trim() === orgId ? "#b91c1c" : "#94a3b8",
+                    borderColor: "transparent",
+                  }}
+                  disabled={deletionBusy || deleteConfirmSlug.trim() !== orgId}
+                  onClick={() => void scheduleOrgDeletion()}
+                >
+                  Schedule deletion (30-day grace)
+                </button>
+              </>
+            )}
+            {deletionMsg ? (
+              <p style={{ fontSize: 12, margin: "12px 0 0", color: "#991b1b" }} role="status">
+                {deletionMsg}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </>
     );
   }
@@ -766,10 +909,20 @@ export default function CloudAccount() {
         />
       )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-        <button type="button" style={ss.btnP} disabled={busy || lockout.isLocked} onClick={signIn}>
+        <button
+          type="button"
+          style={ss.btnP}
+          disabled={busy || lockout.isLocked || captchaBlocksSubmit}
+          title={
+            turnstileConfigured && !captchaToken
+              ? "Complete the security check before signing in"
+              : undefined
+          }
+          onClick={signIn}
+        >
           Sign in
         </button>
-        <button type="button" style={ss.btn} disabled={busy || !acceptLegalTerms || signUpThrottle.isThrottled} onClick={signUp}>
+        <button type="button" style={ss.btn} disabled={busy || !acceptLegalTerms || signUpThrottle.isThrottled || captchaBlocksSubmit} onClick={signUp}>
           Create account
         </button>
       </div>
@@ -788,7 +941,7 @@ export default function CloudAccount() {
             >
               Open inbox
             </a>
-            <button type="button" style={ss.btn} onClick={resendConfirmationEmail} disabled={busy || resendCooldown > 0}>
+            <button type="button" style={ss.btn} onClick={resendConfirmationEmail} disabled={busy || resendCooldown > 0 || captchaBlocksSubmit}>
               {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend confirmation email"}
             </button>
           </div>

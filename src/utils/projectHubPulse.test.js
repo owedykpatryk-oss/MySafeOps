@@ -7,6 +7,7 @@ import {
 } from "./projectHubPulse";
 import { saveOrgSettingsRaw } from "./orgSettingsStorage";
 
+import { todayLocalISO } from "./localDate";
 describe("projectHubPulse", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -28,7 +29,7 @@ describe("projectHubPulse", () => {
     methodStatements: [{ id: "ms1" }],
     cdmPacks: [{ id: "c1" }],
     plans: [{ id: "pl1" }],
-    dailyBriefings: [{ id: "b1", projectId: "p1", date: new Date().toISOString().slice(0, 10), attendees: [{ present: true, sig: "x" }] }],
+    dailyBriefings: [{ id: "b1", projectId: "p1", date: todayLocalISO(), attendees: [{ present: true, sig: "x" }] }],
     team: [{ id: "w1", name: "Bob" }],
     permitReady: { required: 1, issued: 1, complete: true },
     totals: { documents: 8, briefingToday: true, activePermits: 1, openSnags: 0, permitsMissingRams: 0 },

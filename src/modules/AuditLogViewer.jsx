@@ -10,6 +10,7 @@ import { supabase } from "../lib/supabase";
 import { d1ListServerAudit, isD1Configured } from "../lib/d1SyncClient";
 import { useListWindow } from "../utils/useListWindow.js";
 
+import { todayLocalISO } from "../utils/localDate";
 const ss = ms;
 const AUDIT_PAGE = 120;
 
@@ -195,7 +196,7 @@ export default function AuditLogViewer() {
             const blob = new Blob([exportOpsLogJson()], { type: "application/json;charset=utf-8" });
             const a = document.createElement("a");
             a.href = URL.createObjectURL(blob);
-            a.download = `mysafeops-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+            a.download = `mysafeops-diagnostics-${todayLocalISO()}.json`;
             a.click();
             URL.revokeObjectURL(a.href);
           }}

@@ -13,6 +13,7 @@ import {
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
 import { enforceEdgeRateLimits, enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
+import { resolveBillingMembership } from "../_shared/resolveBillingMembership.ts";
 
 Deno.serve(async (req) => {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
@@ -127,6 +128,7 @@ Deno.serve(async (req) => {
     const testMode = Boolean(body?.testMode);
     const marketRaw = String(body?.market || "uk").trim().toLowerCase();
     const market = marketRaw === "au" ? "au" : marketRaw === "pl" ? "pl" : "uk";
+    const orgSlug = typeof body?.orgSlug === "string" ? body.orgSlug : null;
     if (!planId || !["starter", "team", "business", "enterprise"].includes(planId)) {
       return new Response(JSON.stringify({ error: "planId must be starter, team, business, or enterprise" }), {
         status: 400,
@@ -154,15 +156,11 @@ Deno.serve(async (req) => {
             ? "Stripe test Price ID not configured for this plan."
             : "Stripe Price ID not configured for this plan. Set STRIPE_PRICE_STARTER / TEAM / BUSINESS / ENTERPRISE.",
         }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId } },
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId } },
       );
     }
 
-    const { data: mem, error: memErr } = await supabase
-      .from("org_memberships")
-      .select("org_id, role")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const mem = await resolveBillingMembership(supabase, user.id, orgSlug);
 
     const rateOk = mem?.org_id
       ? await enforceUserAndOrgEdgeRateLimits(supabase, {
@@ -181,7 +179,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (memErr || !mem?.org_id) {
+    if (!mem?.org_id) {
       return new Response(JSON.stringify({ error: "No organisation membership" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },

@@ -9,6 +9,8 @@ import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { getTemplateForType, saveOrgTemplate } from "./permitTemplateCatalog";
 import { evaluatePermitCompliance } from "./permitComplianceChecks";
 import { buildPermitEvidencePack, buildEvidencePackCsv } from "./permitEvidencePack";
+import { exportCsv } from "../../utils/exportCsv";
+import { downloadBlob } from "../../utils/downloadBlob.js";
 import {
   loadPermitComplianceProfiles,
   savePermitComplianceProfiles,
@@ -90,10 +92,10 @@ import {
 import PermitQuickIssueHub from "./components/PermitQuickIssueHub";
 import PermitStudioShell, { PermitStudioPanel, PERMIT_FIELD_SECTIONS } from "./components/PermitStudioShell";
 import PermitFirstRunGuide from "./components/PermitFirstRunGuide";
-import { labelWorkflowState } from "./permitWorkflowLabels";
 import PermitContextTips from "./components/PermitContextTips";
 import PermitNextSteps from "./components/PermitNextSteps";
 
+import { localDateISO, todayLocalISO } from "../../utils/localDate";
 const PermitBoardView = lazy(() => import("./components/PermitBoard"));
 const PermitTimelineView = lazy(() => import("./components/PermitTimeline"));
 const PermitLiveWall = lazy(() => import("./components/PermitLiveWall"));
@@ -177,6 +179,7 @@ import {
 } from "./permitIntegrationAdapters";
 import { evaluateWorkerPermitEligibility } from "../../utils/certifications";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import { genOpaqueToken } from "../../utils/opaqueToken";
 
@@ -204,10 +207,6 @@ function getOrgLocale() {
   return resolved;
 }
 
-const fmtDate = (iso) => {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(getOrgLocale(), { day: "2-digit", month: "short", year: "numeric" });
-};
 const fmtDateTime = (iso) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString(getOrgLocale(), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -744,13 +743,13 @@ function auditActionLabel(row) {
 }
 
 function todayDateInputValue() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalISO();
 }
 
 function dateDaysAgoValue(days) {
   const d = new Date();
   d.setDate(d.getDate() - Math.max(0, Number(days || 0)));
-  return d.toISOString().slice(0, 10);
+  return localDateISO(d);
 }
 
 const PERMIT_VERSION_DIFF_FIELDS = [
@@ -877,10 +876,6 @@ function PermitForm({
     [fieldConfig, type]
   );
   const isFieldRequired = useCallback((fieldId) => Boolean(getFieldConfig(fieldId)?.required), [getFieldConfig]);
-  const fieldLabel = useCallback(
-    (fieldId, fallback) => `${getFieldConfig(fieldId)?.label || fallback}${isFieldRequired(fieldId) ? " *" : ""}`,
-    [getFieldConfig, isFieldRequired]
-  );
   const typeMeta = getTypeComplianceMeta(type);
   const initChecklist = (items) => Object.fromEntries((items || []).map((item) => [item.id, false]));
   const template = getTemplateForType(defaultType, permitTypes);
@@ -1878,12 +1873,7 @@ function PermitForm({
       .replace(/[^\w\-\s]/g, "")
       .replace(/\s+/g, "_")
       .slice(0, 48);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${safe}_${String(form.id || "").slice(-8)}_evidence_pack.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${safe}_${String(form.id || "").slice(-8)}_evidence_pack.csv`);
   };
 
   const step1DescriptionOk = isFieldRequiredEffective("description") ? !!String(form.description || "").trim() : true;
@@ -2057,11 +2047,11 @@ function PermitForm({
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
           {isFieldVisible("description") ? (
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>{fieldLabelResolved("description", "Description of work")}</label>
+            <label style={ss.lbl} htmlFor="permit-description">{fieldLabelResolved("description", "Description of work")}</label>
             <textarea value={form.description||""} onChange={e=>set("description",e.target.value)} rows={2}
               placeholder={getFieldConfig("description").placeholder || "Describe the specific work to be carried out under this permit..."}
               maxLength={getFieldConfig("description").maxLength || undefined}
-              style={{ ...ss.ta, minHeight:50 }} />
+              style={{ ...ss.ta, minHeight:50 }}  id="permit-description" />
             {getFieldConfig("description").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("description").helpText}</div> : null}
             <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
               <button
@@ -2080,7 +2070,7 @@ function PermitForm({
           ) : null}
           {isFieldVisible("location") ? (
           <div>
-            <label style={ss.lbl}>{fieldLabelResolved("location", "Location")}</label>
+            <label style={ss.lbl} htmlFor="permit-location">{fieldLabelResolved("location", "Location")}</label>
             <input
               value={form.location||""}
               onChange={e=>{
@@ -2093,7 +2083,7 @@ function PermitForm({
               placeholder={getFieldConfig("location").placeholder || "Where will work be carried out?"}
               maxLength={getFieldConfig("location").maxLength || undefined}
               style={ss.inp}
-            />
+             id="permit-location" />
             {form.projectId ? (
               <div style={{ marginTop: 6, display: "grid", gap: 6 }}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
@@ -2260,7 +2250,7 @@ function PermitForm({
           ) : null}
           {isFieldVisible("issuedTo") ? (
           <div>
-            <label style={ss.lbl}>{fieldLabelResolved("linkedRamsId", "Linked RAMS")}</label>
+            <label style={ss.lbl} htmlFor="permit-linked-rams-id">{fieldLabelResolved("linkedRamsId", "Linked RAMS")}</label>
             <select
               value={form.linkedRamsId || ""}
               onChange={(e) => {
@@ -2268,7 +2258,7 @@ function PermitForm({
                 if (e.target.value) trackEvent("permit_linked_rams", { permitType: type });
               }}
               style={ss.inp}
-            >
+             id="permit-linked-rams-id">
               <option value="">— None —</option>
               {ramsDocs
                 .filter((d) => !form.projectId || d.projectId === form.projectId)
@@ -2417,21 +2407,21 @@ function PermitForm({
           ) : null}
           {isFieldVisible("startDateTime") ? (
           <div>
-            <label style={ss.lbl}>{fieldLabelResolved("startDateTime", "Start date / time")}</label>
-            <input type="datetime-local" value={toLocalInput(form.startDateTime)} onChange={e=>set("startDateTime",new Date(e.target.value).toISOString())} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="permit-start-date-time">{fieldLabelResolved("startDateTime", "Start date / time")}</label>
+            <input type="datetime-local" value={toLocalInput(form.startDateTime)} onChange={e=>set("startDateTime",new Date(e.target.value).toISOString())} style={ss.inp}  id="permit-start-date-time" />
             {getFieldConfig("startDateTime").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("startDateTime").helpText}</div> : null}
           </div>
           ) : null}
           {isFieldVisible("endDateTime") ? (
           <div>
-            <label style={ss.lbl}>{fieldLabelResolved("endDateTime", "Expiry date / time")}</label>
-            <input type="datetime-local" value={toLocalInput(form.endDateTime)} onChange={e=>set("endDateTime",new Date(e.target.value).toISOString())} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="permit-end-date-time">{fieldLabelResolved("endDateTime", "Expiry date / time")}</label>
+            <input type="datetime-local" value={toLocalInput(form.endDateTime)} onChange={e=>set("endDateTime",new Date(e.target.value).toISOString())} style={ss.inp}  id="permit-end-date-time" />
             {getFieldConfig("endDateTime").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("endDateTime").helpText}</div> : null}
           </div>
           ) : null}
           {isFieldVisible("authorisedByRole") ? (
           <div style={{ gridColumn: "1/-1" }}>
-            <label style={ss.lbl}>{fieldLabelResolved("authorisedByRole", "Authorising role / competency reference")}</label>
+            <label style={ss.lbl} htmlFor="permit-authorised-by-role">{fieldLabelResolved("authorisedByRole", "Authorising role / competency reference")}</label>
             <input
               value={form.authorisedByRole||""}
               onChange={(e)=>set("authorisedByRole",e.target.value)}
@@ -2439,7 +2429,7 @@ function PermitForm({
               maxLength={getFieldConfig("authorisedByRole").maxLength || undefined}
               style={ss.inp}
               list="permit-competency-suggestions"
-            />
+             id="permit-authorised-by-role" />
             {getFieldConfig("authorisedByRole").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("authorisedByRole").helpText}</div> : null}
             <datalist id="permit-competency-suggestions">
               {competencySuggestions.map((label) => (
@@ -2461,15 +2451,15 @@ function PermitForm({
           ) : null}
           {isFieldVisible("briefingConfirmedAt") ? (
           <div>
-            <label style={ss.lbl}>{fieldLabelResolved("briefingConfirmedAt", "Briefing confirmed at")}</label>
-            <input type="datetime-local" value={toLocalInput(form.briefingConfirmedAt)} onChange={(e)=>set("briefingConfirmedAt", e.target.value ? new Date(e.target.value).toISOString() : "")} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="permit-briefing-confirmed-at">{fieldLabelResolved("briefingConfirmedAt", "Briefing confirmed at")}</label>
+            <input type="datetime-local" value={toLocalInput(form.briefingConfirmedAt)} onChange={(e)=>set("briefingConfirmedAt", e.target.value ? new Date(e.target.value).toISOString() : "")} style={ss.inp}  id="permit-briefing-confirmed-at" />
             {getFieldConfig("briefingConfirmedAt").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("briefingConfirmedAt").helpText}</div> : null}
           </div>
           ) : null}
           {isFieldVisible("evidencePhotoUrl") ? (
           <div style={{ gridColumn: "1/-1" }}>
-            <label style={ss.lbl}>{fieldLabelResolved("evidencePhotoUrl", "Site evidence photo URL")}</label>
-            <input value={form.evidencePhotoUrl||""} onChange={(e)=>set("evidencePhotoUrl",e.target.value)} placeholder={getFieldConfig("evidencePhotoUrl").placeholder || "https://..."} maxLength={getFieldConfig("evidencePhotoUrl").maxLength || undefined} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="permit-evidence-photo-url">{fieldLabelResolved("evidencePhotoUrl", "Site evidence photo URL")}</label>
+            <input value={form.evidencePhotoUrl||""} onChange={(e)=>set("evidencePhotoUrl",e.target.value)} placeholder={getFieldConfig("evidencePhotoUrl").placeholder || "https://..."} maxLength={getFieldConfig("evidencePhotoUrl").maxLength || undefined} style={ss.inp}  id="permit-evidence-photo-url" />
             {getFieldConfig("evidencePhotoUrl").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("evidencePhotoUrl").helpText}</div> : null}
             {(form.evidencePhotoUrl || form.evidencePhotoStoragePath) ? (
               <div style={{ marginTop:8 }}>
@@ -2530,7 +2520,7 @@ function PermitForm({
             />
             {supabase ? (
               <div style={{ marginTop:8 }}>
-                <label style={{ ...ss.lbl, fontSize:12 }}>Or upload image (signed in; 7-day view link)</label>
+                <label style={{ ...ss.lbl, fontSize:12 }} htmlFor="permit-or-upload-image-signed-in-7-day-view-link">Or upload image (signed in; 7-day view link)</label>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
@@ -2551,15 +2541,15 @@ function PermitForm({
                     }
                   }}
                   style={{ display:"block", marginTop:4, fontSize:12 }}
-                />
+                 id="permit-or-upload-image-signed-in-7-day-view-link" />
               </div>
             ) : null}
           </div>
           ) : null}
           {isFieldVisible("evidenceNotes") ? (
           <div style={{ gridColumn: "1/-1" }}>
-            <label style={ss.lbl}>{fieldLabelResolved("evidenceNotes", "Evidence notes")}</label>
-            <textarea value={form.evidenceNotes||""} onChange={(e)=>set("evidenceNotes",e.target.value)} rows={2} placeholder={getFieldConfig("evidenceNotes").placeholder || "Toolbox talk reference, barrier ID, etc."} maxLength={getFieldConfig("evidenceNotes").maxLength || undefined} style={{ ...ss.ta, minHeight:44 }} />
+            <label style={ss.lbl} htmlFor="permit-evidence-notes">{fieldLabelResolved("evidenceNotes", "Evidence notes")}</label>
+            <textarea value={form.evidenceNotes||""} onChange={(e)=>set("evidenceNotes",e.target.value)} rows={2} placeholder={getFieldConfig("evidenceNotes").placeholder || "Toolbox talk reference, barrier ID, etc."} maxLength={getFieldConfig("evidenceNotes").maxLength || undefined} style={{ ...ss.ta, minHeight:44 }}  id="permit-evidence-notes" />
             {getFieldConfig("evidenceNotes").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("evidenceNotes").helpText}</div> : null}
             <div style={{ marginTop:6, display:"flex", gap:6, flexWrap:"wrap" }}>
               <button type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={rememberEvidenceNote}>
@@ -2647,7 +2637,7 @@ function PermitForm({
             {fieldCaptureOpen ? (
               <div
                 className="app-module-dialog-overlay"
-                style={{ zIndex: 75 }}
+                style={{ zIndex: "var(--z-toast, 80)" }}
                 role="presentation"
                 onMouseDown={(e) => {
                   if (e.target === e.currentTarget) setFieldCaptureOpen(false);
@@ -2655,16 +2645,16 @@ function PermitForm({
               >
                 <div role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: 440, background: "#fff", borderRadius: 10, border: "1px solid #e5e5e5", padding: 16 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Field capture entry</div>
-                  <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }}>Type</label>
-                  <select style={{ ...ss.inp, width: "100%", marginBottom: 10 }} value={fieldCaptureKind} onChange={(e) => setFieldCaptureKind(e.target.value)}>
+                  <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }} htmlFor="permit-type">Type</label>
+                  <select style={{ ...ss.inp, width: "100%", marginBottom: 10 }} value={fieldCaptureKind} onChange={(e) => setFieldCaptureKind(e.target.value)} id="permit-type">
                     <option value="scan_proof">Scan proof</option>
                     <option value="gas_test">Gas test</option>
                     <option value="expose_verification">Expose verification</option>
                     <option value="sample_reading">Sample reading</option>
                     <option value="chain_of_custody">Chain of custody</option>
                   </select>
-                  <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }}>Note</label>
-                  <textarea style={{ ...ss.inp, minHeight: 72, width: "100%", marginBottom: 12 }} value={fieldCaptureNote} onChange={(e) => setFieldCaptureNote(e.target.value)} />
+                  <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }} htmlFor="permit-note">Note</label>
+                  <textarea style={{ ...ss.inp, minHeight: 72, width: "100%", marginBottom: 12 }} value={fieldCaptureNote} onChange={(e) => setFieldCaptureNote(e.target.value)}  id="permit-note" />
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                     <button type="button" style={ss.btn} onClick={() => setFieldCaptureOpen(false)}>Cancel</button>
                     <button type="button" style={ss.btnO} onClick={() => void commitFieldCaptureEntry()}>Add entry</button>
@@ -2675,7 +2665,7 @@ function PermitForm({
             {checklistImportOpen ? (
               <div
                 className="app-module-dialog-overlay"
-                style={{ zIndex: 75 }}
+                style={{ zIndex: "var(--z-toast, 80)" }}
                 role="presentation"
                 onMouseDown={(e) => {
                   if (e.target === e.currentTarget) setChecklistImportOpen(false);
@@ -2699,7 +2689,7 @@ function PermitForm({
             {signatureDialog ? (
               <div
                 className="app-module-dialog-overlay"
-                style={{ zIndex: 80 }}
+                style={{ zIndex: "var(--z-toast, 80)" }}
                 onMouseDown={(e) => {
                   if (e.target === e.currentTarget) setSignatureDialog(null);
                 }}
@@ -2781,11 +2771,11 @@ function PermitForm({
         )}
         {isFieldVisible("notes") ? (
         <div style={{ marginBottom:16 }}>
-          <label style={ss.lbl}>{fieldLabelResolved("notes", "Additional conditions / notes")}</label>
+          <label style={ss.lbl} htmlFor="permit-notes">{fieldLabelResolved("notes", "Additional conditions / notes")}</label>
           <textarea value={form.notes||""} onChange={e=>set("notes",e.target.value)} rows={2}
             placeholder={getFieldConfig("notes").placeholder || "Any specific conditions, restrictions or additional requirements..."}
             maxLength={getFieldConfig("notes").maxLength || undefined}
-            style={{ ...ss.ta, minHeight:50 }} />
+            style={{ ...ss.ta, minHeight:50 }}  id="permit-notes" />
           {getFieldConfig("notes").helpText ? <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>{getFieldConfig("notes").helpText}</div> : null}
           <div style={{ marginTop:6, display:"flex", gap:6, flexWrap:"wrap" }}>
             <button type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={rememberConditionNote}>
@@ -2822,8 +2812,8 @@ function PermitForm({
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
               {def.extraFields.map(f=>(
                 <div key={f.key}>
-                  <label style={ss.lbl}>{f.label}</label>
-                  <input type={f.type||"text"} value={form.extraFields?.[f.key]||""} onChange={e=>setExtra(f.key,e.target.value)} style={ss.inp} />
+                  <label style={ss.lbl} htmlFor="permit-extra-fields">{f.label}</label>
+                  <input type={f.type||"text"} value={form.extraFields?.[f.key]||""} onChange={e=>setExtra(f.key,e.target.value)} style={ss.inp}  id="permit-extra-fields" />
                 </div>
               ))}
             </div>
@@ -2927,14 +2917,14 @@ function PermitForm({
                 </div>
               </div>
               <div style={{ marginTop:8 }}>
-                <label style={ss.lbl}>Custom legal references (one per line)</label>
+                <label style={ss.lbl} htmlFor="permit-custom-legal-references-one-per-line">Custom legal references (one per line)</label>
                 <textarea
                   rows={3}
                   value={(complianceProfile.legalReferences || []).join("\n")}
                   onChange={(e) => updateComplianceRefs(e.target.value)}
                   placeholder={"e.g.\nWAHR Reg 6 planning\nLOLER Reg 8 organisation\nPUWER Reg 4 suitability"}
                   style={{ ...ss.ta, minHeight:70 }}
-                />
+                 id="permit-custom-legal-references-one-per-line" />
               </div>
             </div>
           )}
@@ -4852,8 +4842,25 @@ export default function PermitSystem() {
         );
         next = transitionPermitWorkflowWithPolicy(next, "approved", "manual_approve");
         const withLog = { ...next, auditLog: appendPermitAuditEntry(row, next) };
-        void logPermitAuditToSupabase(row, withLog, getOrgId());
-        return withLog;
+        const history = Array.isArray(row.versionHistory) ? row.versionHistory : [];
+        const versionEntry = createPermitVersionEntry(
+          row,
+          withLog,
+          permitActorLabel,
+          "Approved — immutable checkpoint"
+        );
+        const frozen = versionEntry
+          ? {
+              ...withLog,
+              versionHistory: [
+                { ...versionEntry, snapshot: JSON.parse(JSON.stringify(withLog)) },
+                ...history,
+              ].slice(0, 60),
+              lastVersionNote: "Approved — immutable checkpoint",
+            }
+          : withLog;
+        void logPermitAuditToSupabase(row, frozen, getOrgId());
+        return frozen;
       });
     });
     if (didApprove) setCelebratePermitApproval(true);
@@ -5004,7 +5011,7 @@ export default function PermitSystem() {
         void logPermitDeletedToSupabase(victim, getOrgId());
         void dispatchPermitWebhook("deleted", victim);
       }
-      return prev.filter((p) => p.id !== id);
+      return replaceWithTombstone(prev, id);
     });
   };
 
@@ -5012,9 +5019,10 @@ export default function PermitSystem() {
   // dependency evaluation per row) on every keystroke — React can keep the input
   // responsive and catch up the list render a beat later.
   const deferredSearch = useDeferredValue(search);
+  const livePermits = useMemo(() => liveOrgArrayRows(permits), [permits]);
   const permitDerivedById = useMemo(() => {
     const map = new Map();
-    for (const p of permits) {
+    for (const p of livePermits) {
       const endIso = permitEndIso(p);
       const endDate = endIso ? new Date(endIso) : null;
       const derived = derivePermitStatus(p, now);
@@ -5026,11 +5034,11 @@ export default function PermitSystem() {
       map.set(p.id, { derived, endIso, endDate, hay });
     }
     return map;
-  }, [permits, now, effectivePermitTypes]);
+  }, [livePermits, now, effectivePermitTypes]);
   const filtered = useMemo(() => {
     const tick = now;
     const q = deferredSearch ? deferredSearch.toLowerCase() : "";
-    return permits.filter((p) => {
+    return livePermits.filter((p) => {
     const meta = permitDerivedById.get(p.id);
     const derived = meta?.derived ?? derivePermitStatus(p, tick);
     const endDate = meta?.endDate ?? (permitEndIso(p) ? new Date(permitEndIso(p)) : null);
@@ -5068,7 +5076,7 @@ export default function PermitSystem() {
     return true;
     });
   }, [
-    permits,
+    livePermits,
     now,
     permitDerivedById,
     filterType,
@@ -5413,31 +5421,17 @@ export default function PermitSystem() {
 
   const exportAuditCsv = () => {
     if (!auditRows.length) return;
-    const esc = (v) => `"${String(v ?? "").replace(/"/g, "\"\"")}"`;
-    const header = ["occurred_at", "permit_id", "action", "from_status", "to_status", "location", "type"];
-    const lines = [header.join(",")];
-    auditRows.forEach((r) => {
-      lines.push(
-        [
-          esc(r.occurred_at),
-          esc(r.permit_id),
-          esc(r.action),
-          esc(r.from_status),
-          esc(r.to_status),
-          esc(r.detail?.location),
-          esc(r.detail?.type),
-        ].join(",")
-      );
-    });
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `permit-audit-page-${auditPage}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    const headers = ["occurred_at", "permit_id", "action", "from_status", "to_status", "location", "type"];
+    const rows = auditRows.map((r) => [
+      r.occurred_at,
+      r.permit_id,
+      r.action,
+      r.from_status,
+      r.to_status,
+      r.detail?.location,
+      r.detail?.type,
+    ]);
+    exportCsv(headers, rows, `permit-audit-page-${auditPage}.csv`);
   };
 
   const toggleAuditAction = (action) => {
@@ -6189,7 +6183,7 @@ export default function PermitSystem() {
         });
         void logPermitDeletedToSupabase(p, getOrgId());
       });
-      return prev.filter((p) => !selectedIds.has(p.id));
+      return [...selectedIds].reduce((acc, id) => replaceWithTombstone(acc, id), prev);
     });
     clearPermitSelection();
     trackEvent("permit_bulk_delete", { count: selectedPermits.length });
@@ -6197,32 +6191,18 @@ export default function PermitSystem() {
 
   const bulkExportSelectedCsv = () => {
     if (!hasSelectedPermits) return;
-    const esc = (v) => `"${String(v ?? "").replace(/"/g, "\"\"")}"`;
-    const header = ["permit_id", "type", "status", "location", "issued_to", "issued_by", "start", "end"];
-    const lines = [header.join(",")];
-    selectedPermits.forEach((p) => {
-      lines.push(
-        [
-          esc(p.id),
-          esc((effectivePermitTypes[p.type] || effectivePermitTypes.general).label),
-          esc(derivePermitStatus(p, now)),
-          esc(p.location),
-          esc(p.issuedTo),
-          esc(p.issuedBy),
-          esc(p.startDateTime),
-          esc(permitEndIso(p)),
-        ].join(",")
-      );
-    });
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `permits-selected-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    const headers = ["permit_id", "type", "status", "location", "issued_to", "issued_by", "start", "end"];
+    const rows = selectedPermits.map((p) => [
+      p.id,
+      (effectivePermitTypes[p.type] || effectivePermitTypes.general).label,
+      derivePermitStatus(p, now),
+      p.location,
+      p.issuedTo,
+      p.issuedBy,
+      p.startDateTime,
+      permitEndIso(p),
+    ]);
+    exportCsv(headers, rows, `permits-selected-${todayLocalISO()}.csv`);
     trackEvent("permit_bulk_export_csv", { count: selectedPermits.length });
   };
 
@@ -6269,7 +6249,7 @@ export default function PermitSystem() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `permit-site-pack-v2-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `permit-site-pack-v2-${todayLocalISO()}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -6517,31 +6497,17 @@ export default function PermitSystem() {
         actions: auditActions.length ? auditActions : undefined,
       });
       if (!allRows.length) return;
-      const esc = (v) => `"${String(v ?? "").replace(/"/g, "\"\"")}"`;
-      const header = ["occurred_at", "permit_id", "action", "from_status", "to_status", "location", "type"];
-      const lines = [header.join(",")];
-      allRows.forEach((r) => {
-        lines.push(
-          [
-            esc(r.occurred_at),
-            esc(r.permit_id),
-            esc(r.action),
-            esc(r.from_status),
-            esc(r.to_status),
-            esc(r.detail?.location),
-            esc(r.detail?.type),
-          ].join(",")
-        );
-      });
-      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "permit-audit-full-export.csv";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const headers = ["occurred_at", "permit_id", "action", "from_status", "to_status", "location", "type"];
+      const rows = allRows.map((r) => [
+        r.occurred_at,
+        r.permit_id,
+        r.action,
+        r.from_status,
+        r.to_status,
+        r.detail?.location,
+        r.detail?.type,
+      ]);
+      exportCsv(headers, rows, "permit-audit-full-export.csv");
       if (truncated) {
         setAuditExportNotice(`Export reached safety cap (${maxRows} rows). Narrow filters for a complete dataset.`);
       } else {
@@ -6835,7 +6801,7 @@ export default function PermitSystem() {
   const addCorrectiveActionToIncident = (incidentId) => {
     const incident = incidents.find((i) => i.id === incidentId);
     if (!incident) return;
-    const defaultDue = new Date(Date.now() + 2 * 24 * 3600000).toISOString().slice(0, 10);
+    const defaultDue = localDateISO(new Date(Date.now() + 2 * 24 * 3600000));
     setSimpleFormDialog({
       title: "Corrective action",
       description: incident.title ? `Follow-up for: ${incident.title}` : "Add a corrective action for this incident.",
@@ -6892,7 +6858,7 @@ export default function PermitSystem() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `permit-sla-digest-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `permit-sla-digest-${todayLocalISO()}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -6926,15 +6892,7 @@ export default function PermitSystem() {
         toDate: auditToDate || undefined,
         actions: auditActions.length ? auditActions : undefined,
       });
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName || "permit-audit-server-export.csv";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), fileName || "permit-audit-server-export.csv");
       if (truncated) {
         setAuditExportNotice(`Server export done (${rowCount} rows, capped at ${maxRows}).`);
       } else {
@@ -7186,7 +7144,7 @@ export default function PermitSystem() {
       {conflictOverrideDialog && (
         <div
           className="app-module-dialog-overlay"
-          style={{ zIndex: 70 }}
+          style={{ zIndex: "var(--z-palette, 70)" }}
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) closeConflictOverrideDialog(null);
@@ -7225,7 +7183,7 @@ export default function PermitSystem() {
                   .join(", ")}
               </div>
             ) : null}
-            <label style={{ ...ss.lbl, marginBottom: 4 }}>Override reason</label>
+            <label style={{ ...ss.lbl, marginBottom: 4 }} htmlFor="permit-reason">Override reason</label>
             <textarea
               style={{ ...ss.inp, minHeight: 84, resize: "vertical", width: "100%", boxSizing: "border-box" }}
               value={conflictOverrideDialog.reason}
@@ -7233,8 +7191,8 @@ export default function PermitSystem() {
                 setConflictOverrideDialog((d) => (d ? { ...d, reason: e.target.value, error: "" } : d))
               }
               placeholder="Explain how this overlap will be controlled."
-            />
-            <label style={{ ...ss.lbl, marginBottom: 4, marginTop: 8 }}>Approver (name/role)</label>
+             id="permit-reason" />
+            <label style={{ ...ss.lbl, marginBottom: 4, marginTop: 8 }} htmlFor="permit-approved-by">Approver (name/role)</label>
             <input
               style={ss.inp}
               value={conflictOverrideDialog.approvedBy}
@@ -7242,7 +7200,7 @@ export default function PermitSystem() {
                 setConflictOverrideDialog((d) => (d ? { ...d, approvedBy: e.target.value, error: "" } : d))
               }
               placeholder="e.g. Area Authority"
-            />
+             id="permit-approved-by" />
             {conflictOverrideDialog.error ? (
               <div style={{ marginTop: 8, fontSize: 12, color: "#A32D2D" }}>{conflictOverrideDialog.error}</div>
             ) : null}
@@ -7297,13 +7255,13 @@ export default function PermitSystem() {
                 );
               })()}
             </div>
-            <label style={{ ...ss.lbl, marginBottom: 4 }}>Lessons learned (optional)</label>
+            <label style={{ ...ss.lbl, marginBottom: 4 }} htmlFor="permit-lessons">Lessons learned (optional)</label>
             <textarea
               style={{ ...ss.inp, minHeight: 88, resize: "vertical", width: "100%", boxSizing: "border-box" }}
               value={closePermitDialog.lessons}
               onChange={(e) => setClosePermitDialog((d) => (d ? { ...d, lessons: e.target.value } : d))}
               placeholder="e.g. isolate earlier, extend fire watch, improve briefing…"
-            />
+             id="permit-lessons" />
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
               <button type="button" style={ss.btn} onClick={() => setClosePermitDialog(null)}>
                 Cancel
@@ -7328,7 +7286,7 @@ export default function PermitSystem() {
       {handoverDialog && (
         <div
           className="app-module-dialog-overlay"
-          style={{ zIndex: 62 }}
+          style={{ zIndex: "var(--z-dialog, 60)" }}
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setHandoverDialog(null);
@@ -7356,18 +7314,18 @@ export default function PermitSystem() {
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 10 }}>
               Capture what changed, remaining high-risk work, and dual supervisor acknowledgements.
             </div>
-            <label style={{ ...ss.lbl, marginBottom: 4 }}>What changed since previous shift?</label>
+            <label style={{ ...ss.lbl, marginBottom: 4 }} htmlFor="permit-what-changed">What changed since previous shift?</label>
             <textarea
               style={{ ...ss.inp, minHeight: 70, resize: "vertical", width: "100%", boxSizing: "border-box" }}
               value={handoverDialog.whatChanged}
               onChange={(e) => setHandoverDialog((d) => (d ? { ...d, whatChanged: e.target.value, error: "" } : d))}
-            />
-            <label style={{ ...ss.lbl, marginBottom: 4, marginTop: 8 }}>What remains high-risk?</label>
+             id="permit-what-changed" />
+            <label style={{ ...ss.lbl, marginBottom: 4, marginTop: 8 }} htmlFor="permit-remaining-high-risk">What remains high-risk?</label>
             <textarea
               style={{ ...ss.inp, minHeight: 70, resize: "vertical", width: "100%", boxSizing: "border-box" }}
               value={handoverDialog.remainingHighRisk}
               onChange={(e) => setHandoverDialog((d) => (d ? { ...d, remainingHighRisk: e.target.value, error: "" } : d))}
-            />
+             id="permit-remaining-high-risk" />
             <div style={{ marginTop: 8 }}>
               <label style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
                 <input
@@ -7380,22 +7338,22 @@ export default function PermitSystem() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap: 8, marginTop: 10 }}>
               <div>
-                <label style={{ ...ss.lbl, marginBottom: 4 }}>Outgoing supervisor</label>
+                <label style={{ ...ss.lbl, marginBottom: 4 }} htmlFor="permit-outgoing-supervisor">Outgoing supervisor</label>
                 <input
                   style={ss.inp}
                   value={handoverDialog.outgoingSupervisor}
                   onChange={(e) => setHandoverDialog((d) => (d ? { ...d, outgoingSupervisor: e.target.value, error: "" } : d))}
                   placeholder="Name / role"
-                />
+                 id="permit-outgoing-supervisor" />
               </div>
               <div>
-                <label style={{ ...ss.lbl, marginBottom: 4 }}>Incoming supervisor</label>
+                <label style={{ ...ss.lbl, marginBottom: 4 }} htmlFor="permit-incoming-supervisor">Incoming supervisor</label>
                 <input
                   style={ss.inp}
                   value={handoverDialog.incomingSupervisor}
                   onChange={(e) => setHandoverDialog((d) => (d ? { ...d, incomingSupervisor: e.target.value, error: "" } : d))}
                   placeholder="Name / role"
-                />
+                 id="permit-incoming-supervisor" />
               </div>
             </div>
             {handoverDialog.error ? (
@@ -7598,21 +7556,21 @@ export default function PermitSystem() {
               <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
                 {ackPortalPermit.description || "No description"}
               </div>
-              <label style={{ ...ss.lbl, marginBottom: 0 }}>Name / email</label>
+              <label style={{ ...ss.lbl, marginBottom: 0 }} htmlFor="permit-name-email">Name / email</label>
               <input
                 style={{ ...ss.inp, minHeight: 44, fontSize: 16 }}
                 value={ackActorName}
                 onChange={(e) => setAckActorName(e.target.value)}
                 placeholder="e.g. subcontractor@company.com"
                 autoComplete="name"
-              />
-              <label style={{ ...ss.lbl, marginBottom: 0 }}>Note (optional)</label>
+               id="permit-name-email" />
+              <label style={{ ...ss.lbl, marginBottom: 0 }} htmlFor="permit-note-optional">Note (optional)</label>
               <input
                 style={{ ...ss.inp, minHeight: 44, fontSize: 16 }}
                 value={ackActorNote}
                 onChange={(e) => setAckActorNote(e.target.value)}
                 placeholder="Optional note"
-              />
+               id="permit-note-optional" />
               <label style={{ ...ss.lbl, marginBottom: 0 }}>Signature</label>
               <TouchSignaturePad ref={ackPadRef} height={160} placeholder="Draw signature here" />
               <div>
@@ -8314,8 +8272,8 @@ export default function PermitSystem() {
         <div className={`ptw-field-editor${isNarrow ? " ptw-field-editor--narrow" : ""}`}>
           <div className="ptw-field-editor__sidebar">
             <div>
-              <label style={ss.lbl}>Target permit type</label>
-              <select value={fieldEditorType} onChange={(e) => setFieldEditorType(e.target.value)} style={ss.inp}>
+              <label style={ss.lbl} htmlFor="permit-target-permit-type">Target permit type</label>
+              <select value={fieldEditorType} onChange={(e) => setFieldEditorType(e.target.value)} style={ss.inp} id="permit-target-permit-type">
                 <option value="_all">All permit types (baseline)</option>
                 {Object.entries(effectivePermitTypes).map(([k, v]) => (
                   <option key={k} value={k}>{v.label}</option>
@@ -8323,13 +8281,13 @@ export default function PermitSystem() {
               </select>
             </div>
             <div>
-              <label style={ss.lbl}>Filter fields</label>
+              <label style={ss.lbl} htmlFor="permit-filter-fields">Filter fields</label>
               <input
                 value={fieldEditorFilter}
                 onChange={(e) => setFieldEditorFilter(e.target.value)}
                 placeholder="Search by label, id, section…"
                 style={ss.inp}
-              />
+               id="permit-filter-fields" />
             </div>
             <div className="ptw-field-editor__sections" role="group" aria-label="Field sections">
               <button
@@ -8385,15 +8343,15 @@ export default function PermitSystem() {
                     </div>
                     <div className="ptw-field-card__grid">
                       <div>
-                        <label style={{ ...ss.lbl, marginBottom:4 }}>Placeholder</label>
+                        <label style={{ ...ss.lbl, marginBottom:4 }} htmlFor="permit-placeholder">Placeholder</label>
                         <input
                           value={cfg.placeholder || ""}
                           onChange={(e) => updatePermitFieldSetting(field.id, { placeholder: e.target.value })}
                           style={ss.inp}
-                        />
+                         id="permit-placeholder" />
                       </div>
                       <div>
-                        <label style={{ ...ss.lbl, marginBottom:4 }}>Max length</label>
+                        <label style={{ ...ss.lbl, marginBottom:4 }} htmlFor="permit-max-length">Max length</label>
                         <input
                           type="number"
                           min={20}
@@ -8401,15 +8359,15 @@ export default function PermitSystem() {
                           value={cfg.maxLength || ""}
                           onChange={(e) => updatePermitFieldSetting(field.id, { maxLength: Number(e.target.value || 0) })}
                           style={ss.inp}
-                        />
+                         id="permit-max-length" />
                       </div>
                       <div className="ptw-field-card__grid-full">
-                        <label style={{ ...ss.lbl, marginBottom:4 }}>Helper text</label>
+                        <label style={{ ...ss.lbl, marginBottom:4 }} htmlFor="permit-help-text">Helper text</label>
                         <input
                           value={cfg.helpText || ""}
                           onChange={(e) => updatePermitFieldSetting(field.id, { helpText: e.target.value })}
                           style={ss.inp}
-                        />
+                         id="permit-help-text" />
                       </div>
                     </div>
                   </div>
@@ -8447,34 +8405,34 @@ export default function PermitSystem() {
         </div>
         <div style={{ marginTop:10, display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
           <div>
-            <label style={ss.lbl}>Default issued by</label>
+            <label style={ss.lbl} htmlFor="permit-default-issued-by">Default issued by</label>
             <input
               value={permitFormDefaults.defaultIssuedBy}
               onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultIssuedBy: e.target.value }))}
               placeholder="e.g. John Smith — Site manager"
               style={ss.inp}
-            />
+             id="permit-default-issued-by" />
           </div>
           <div>
-            <label style={ss.lbl}>Default issued to</label>
+            <label style={ss.lbl} htmlFor="permit-default-issued-to">Default issued to</label>
             <input
               value={permitFormDefaults.defaultIssuedTo}
               onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultIssuedTo: e.target.value }))}
               placeholder="e.g. Internal maintenance team"
               style={ss.inp}
-            />
+             id="permit-default-issued-to" />
           </div>
           <div>
-            <label style={ss.lbl}>Default authorising role / competency</label>
+            <label style={ss.lbl} htmlFor="permit-default-authorising-role">Default authorising role / competency</label>
             <input
               value={permitFormDefaults.defaultAuthorisingRole}
               onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultAuthorisingRole: e.target.value }))}
               placeholder="e.g. AP electrical, lifting supervisor"
               style={ss.inp}
-            />
+             id="permit-default-authorising-role" />
           </div>
           <div>
-            <label style={ss.lbl}>Default validity (hours)</label>
+            <label style={ss.lbl} htmlFor="permit-default-validity-hours">Default validity (hours)</label>
             <input
               type="number"
               min={1}
@@ -8482,15 +8440,15 @@ export default function PermitSystem() {
               value={permitFormDefaults.defaultValidityHours}
               onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultValidityHours: Number(e.target.value || 8) }))}
               style={ss.inp}
-            />
+             id="permit-default-validity-hours" />
           </div>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Default signature policy</label>
+            <label style={ss.lbl} htmlFor="permit-signature-policy">Default signature policy</label>
             <select
               value={permitFormDefaults.signaturePolicy}
               onChange={(e) => setPermitFormDefaults((d) => ({ ...d, signaturePolicy: e.target.value === "required_now" ? "required_now" : "allow_later" }))}
               style={ss.inp}
-            >
+             id="permit-signature-policy">
               <option value="allow_later">Allow issue and collect signatures later</option>
               <option value="required_now">Require signatures before issue</option>
             </select>
@@ -8512,22 +8470,22 @@ export default function PermitSystem() {
             Require evidence photo before issue
           </label>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Default additional conditions template</label>
+            <label style={ss.lbl} htmlFor="permit-default-conditions-template">Default additional conditions template</label>
             <textarea
               value={permitFormDefaults.defaultConditionsTemplate}
               onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultConditionsTemplate: e.target.value }))}
               style={{ ...ss.ta, minHeight:64 }}
               placeholder="Standard restrictions and controls used by your company..."
-            />
+             id="permit-default-conditions-template" />
           </div>
           <div style={{ gridColumn:"1/-1" }}>
-            <label style={ss.lbl}>Default evidence notes template</label>
+            <label style={ss.lbl} htmlFor="permit-default-evidence-notes-template">Default evidence notes template</label>
             <textarea
               value={permitFormDefaults.defaultEvidenceNotesTemplate}
               onChange={(e) => setPermitFormDefaults((d) => ({ ...d, defaultEvidenceNotesTemplate: e.target.value }))}
               style={{ ...ss.ta, minHeight:64 }}
               placeholder="Standard evidence wording for toolbox/barriers/LOTO references..."
-            />
+             id="permit-default-evidence-notes-template" />
           </div>
         </div>
       </div>
@@ -8560,7 +8518,7 @@ export default function PermitSystem() {
         </div>
         {conflictMatrixEditorOpen ? (
           <div style={{ marginTop:10 }}>
-            <label style={{ ...ss.lbl, marginBottom:4 }}>Overrides JSON (key: typeA+typeB)</label>
+            <label style={{ ...ss.lbl, marginBottom:4 }} htmlFor="permit-overrides-json-key-typea-typeb">Overrides JSON (key: typeA+typeB)</label>
             <textarea
               style={{ ...ss.ta, minHeight:140 }}
               value={conflictMatrixEditorText}
@@ -8569,7 +8527,7 @@ export default function PermitSystem() {
                 setConflictMatrixEditorError("");
               }}
               spellCheck={false}
-            />
+             id="permit-overrides-json-key-typea-typeb" />
             {conflictMatrixEditorError ? (
               <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{conflictMatrixEditorError}</div>
             ) : null}
@@ -8607,24 +8565,24 @@ export default function PermitSystem() {
         {permitTypeEditorOpen ? (
           <div style={{ marginTop:10, display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
             <div style={{ display:"grid", gap:8, alignContent:"start" }}>
-              <label style={ss.lbl}>Permit type</label>
-              <select value={permitTypeEditorType} onChange={(e) => setPermitTypeEditorType(e.target.value)} style={ss.inp}>
+              <label style={ss.lbl} htmlFor="permit-permit-type">Permit type</label>
+              <select value={permitTypeEditorType} onChange={(e) => setPermitTypeEditorType(e.target.value)} style={ss.inp} id="permit-permit-type">
                 {Object.entries(effectivePermitTypes).map(([k,v]) => (
                   <option key={k} value={k}>{v.label}</option>
                 ))}
               </select>
-              <label style={ss.lbl}>Display label</label>
-              <input value={permitTypeEditorDraft.label} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, label: e.target.value }))} style={ss.inp} />
-              <label style={ss.lbl}>Description</label>
-              <textarea value={permitTypeEditorDraft.description} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, description: e.target.value }))} style={{ ...ss.ta, minHeight:70 }} />
+              <label style={ss.lbl} htmlFor="permit-label">Display label</label>
+              <input value={permitTypeEditorDraft.label} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, label: e.target.value }))} style={ss.inp}  id="permit-label" />
+              <label style={ss.lbl} htmlFor="permit-description-2">Description</label>
+              <textarea value={permitTypeEditorDraft.description} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, description: e.target.value }))} style={{ ...ss.ta, minHeight:70 }}  id="permit-description-2" />
               <div style={{ display:"grid", gridTemplateColumns: isUltraNarrow ? "1fr" : "repeat(2,minmax(0,1fr))", gap:8 }}>
                 <div>
-                  <label style={ss.lbl}>Text color</label>
-                  <input value={permitTypeEditorDraft.color} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, color: e.target.value }))} placeholder="#9A3412" style={ss.inp} />
+                  <label style={ss.lbl} htmlFor="permit-color">Text color</label>
+                  <input value={permitTypeEditorDraft.color} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, color: e.target.value }))} placeholder="#9A3412" style={ss.inp}  id="permit-color" />
                 </div>
                 <div>
-                  <label style={ss.lbl}>Background color</label>
-                  <input value={permitTypeEditorDraft.bg} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, bg: e.target.value }))} placeholder="#FFEDD5" style={ss.inp} />
+                  <label style={ss.lbl} htmlFor="permit-bg">Background color</label>
+                  <input value={permitTypeEditorDraft.bg} onChange={(e) => setPermitTypeEditorDraft((d) => ({ ...d, bg: e.target.value }))} placeholder="#FFEDD5" style={ss.inp}  id="permit-bg" />
                 </div>
               </div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -8681,7 +8639,7 @@ export default function PermitSystem() {
         </div>
         <div style={{ marginTop:10, display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,1fr) auto", gap:8, alignItems:"end" }}>
           <div>
-            <label style={{ ...ss.lbl, marginBottom:4 }}>Boundary hours (0-23, comma separated)</label>
+            <label style={{ ...ss.lbl, marginBottom:4 }} htmlFor="permit-boundary-hours-0-23-comma-separated">Boundary hours (0-23, comma separated)</label>
             <input
               value={shiftBoundaryHoursDraft}
               onChange={(e) => {
@@ -8690,7 +8648,7 @@ export default function PermitSystem() {
               }}
               placeholder="e.g. 6, 18"
               style={ss.inp}
-            />
+             id="permit-boundary-hours-0-23-comma-separated" />
             {shiftBoundaryHoursError ? (
               <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{shiftBoundaryHoursError}</div>
             ) : null}
@@ -8806,22 +8764,22 @@ export default function PermitSystem() {
 
               <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
                 <div style={{ minWidth: isNarrow ? "100%" : 170 }}>
-                  <label style={{ ...ss.lbl, fontSize:11 }}>From date</label>
+                  <label style={{ ...ss.lbl, fontSize:11 }} htmlFor="permit-from-date">From date</label>
                   <input
                     type="date"
                     value={auditFromDate}
                     onChange={(e) => setAuditFromDate(e.target.value)}
                     style={{ ...ss.inp, width:"100%" }}
-                  />
+                   id="permit-from-date" />
                 </div>
                 <div style={{ minWidth: isNarrow ? "100%" : 170 }}>
-                  <label style={{ ...ss.lbl, fontSize:11 }}>To date</label>
+                  <label style={{ ...ss.lbl, fontSize:11 }} htmlFor="permit-to-date">To date</label>
                   <input
                     type="date"
                     value={auditToDate}
                     onChange={(e) => setAuditToDate(e.target.value)}
                     style={{ ...ss.inp, width:"100%" }}
-                  />
+                   id="permit-to-date" />
                 </div>
                 {(auditFromDate || auditToDate) ? (
                   <button type="button" onClick={() => { setAuditFromDate(""); setAuditToDate(""); }} style={{ ...ss.btn, fontSize:12, alignSelf:"flex-end" }}>
@@ -8955,7 +8913,7 @@ export default function PermitSystem() {
         />
         {workflowEditorOpen ? (
           <div style={{ marginTop:10 }}>
-            <label style={{ ...ss.lbl, marginBottom:4 }}>Workflow overrides JSON (state -&gt; allowed next states[])</label>
+            <label style={{ ...ss.lbl, marginBottom:4 }} htmlFor="permit-workflow-overrides-json-state-andgt-allowed-next">Workflow overrides JSON (state -&gt; allowed next states[])</label>
             <textarea
               style={{ ...ss.ta, minHeight:160 }}
               value={workflowEditorText}
@@ -8964,7 +8922,7 @@ export default function PermitSystem() {
                 setWorkflowEditorError("");
               }}
               spellCheck={false}
-            />
+             id="permit-workflow-overrides-json-state-andgt-allowed-next" />
             {workflowEditorError ? (
               <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{workflowEditorError}</div>
             ) : null}
@@ -9009,7 +8967,7 @@ export default function PermitSystem() {
         />
         {workflowRoleEditorOpen ? (
           <div style={{ marginTop:10 }}>
-            <label style={{ ...ss.lbl, marginBottom:4 }}>Role policy JSON (target state -&gt; allowed roles[])</label>
+            <label style={{ ...ss.lbl, marginBottom:4 }} htmlFor="permit-role-policy-json-target-state-andgt-allowed-role">Role policy JSON (target state -&gt; allowed roles[])</label>
             <textarea
               style={{ ...ss.ta, minHeight:130 }}
               value={workflowRoleEditorText}
@@ -9018,7 +8976,7 @@ export default function PermitSystem() {
                 setWorkflowRoleEditorError("");
               }}
               spellCheck={false}
-            />
+             id="permit-role-policy-json-target-state-andgt-allowed-role" />
             {workflowRoleEditorError ? <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{workflowRoleEditorError}</div> : null}
             <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
               Example: {`{"approved":["admin","supervisor"],"issued":["admin","supervisor"],"closed":["admin"]}`}
@@ -9050,8 +9008,8 @@ export default function PermitSystem() {
         </div>
         <div style={{ marginTop:10, display:"grid", gap:8 }}>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-            <label style={ss.lbl}>Permit type</label>
-            <select value={dependencyEditorType} onChange={(e) => setDependencyEditorType(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto", minWidth:180 }}>
+            <label style={ss.lbl} htmlFor="permit-permit-type-2">Permit type</label>
+            <select value={dependencyEditorType} onChange={(e) => setDependencyEditorType(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto", minWidth:180 }} id="permit-permit-type-2">
               {Object.entries(effectivePermitTypes).map(([k, v]) => (
                 <option key={`dep-type-${k}`} value={k}>{v.label}</option>
               ))}
@@ -9071,25 +9029,25 @@ export default function PermitSystem() {
               <div key={`dep-row-${dependencyEditorType}-${idx}`} style={{ border:"1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius:8, padding:"8px 10px", display:"grid", gap:8 }}>
                 <div style={{ display:"grid", gridTemplateColumns:isNarrow ? "1fr" : "minmax(0,220px) minmax(0,1fr) auto", gap:8, alignItems:"end" }}>
                   <div>
-                    <label style={ss.lbl}>Requires active type</label>
+                    <label style={ss.lbl} htmlFor={`permit-requires-active-type-${row.id}`}>Requires active type</label>
                     <select
                       value={row.requiresActiveType || ""}
                       onChange={(e) => updateDependencyRuleRow(dependencyEditorType, idx, { requiresActiveType: e.target.value })}
                       style={ss.inp}
-                    >
+                     id={`permit-requires-active-type-${row.id}`}>
                       {Object.entries(effectivePermitTypes)
                         .filter(([k]) => k !== dependencyEditorType)
                         .map(([k, v]) => <option key={`dep-req-${dependencyEditorType}-${k}`} value={k}>{v.label}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label style={ss.lbl}>Reason (shown on gate block)</label>
+                    <label style={ss.lbl} htmlFor={`permit-reason-${row.id}`}>Reason (shown on gate block)</label>
                     <input
                       value={row.reason || ""}
                       onChange={(e) => updateDependencyRuleRow(dependencyEditorType, idx, { reason: e.target.value })}
                       style={ss.inp}
                       placeholder="Explain why dependency is required"
-                    />
+                     id={`permit-reason-${row.id}`} />
                   </div>
                   <button type="button" onClick={() => removeDependencyRuleRow(dependencyEditorType, idx)} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>
                     Remove
@@ -9101,7 +9059,7 @@ export default function PermitSystem() {
         </div>
         {dependencyEditorOpen ? (
           <div style={{ marginTop:10 }}>
-            <label style={{ ...ss.lbl, marginBottom:4 }}>Dependency rules JSON (permit type -&gt; dependencies[])</label>
+            <label style={{ ...ss.lbl, marginBottom:4 }} htmlFor="permit-dependency-rules-json-permit-type-andgt-dependen">Dependency rules JSON (permit type -&gt; dependencies[])</label>
             <textarea
               style={{ ...ss.ta, minHeight:140 }}
               value={dependencyEditorText}
@@ -9110,7 +9068,7 @@ export default function PermitSystem() {
                 setDependencyEditorError("");
               }}
               spellCheck={false}
-            />
+             id="permit-dependency-rules-json-permit-type-andgt-dependen" />
             {dependencyEditorError ? <div style={{ marginTop:6, fontSize:12, color:"#A32D2D" }}>{dependencyEditorError}</div> : null}
             <div style={{ marginTop:8, fontSize:11, color:"var(--color-text-secondary)" }}>
               Example: {`{"confined_space":[{"requiresActiveType":"loto","reason":"Confined space entry requires active LOTOTO isolation permit."}]}`}

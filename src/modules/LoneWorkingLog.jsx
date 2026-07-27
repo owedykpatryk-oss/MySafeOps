@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `lw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -42,17 +47,17 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 540, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 540 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit lone working" : "Lone working record"}</h2>
-        <label style={ss.lbl}>Person</label>
-        <input style={ss.inp} value={form.workerName} onChange={(e) => set("workerName", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Task</label>
-        <input style={ss.inp} value={form.task} onChange={(e) => set("task", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Location</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="lone-working-worker-name">Person</label>
+        <input style={ss.inp} value={form.workerName} onChange={(e) => set("workerName", e.target.value)}  id="lone-working-worker-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-task">Task</label>
+        <input style={ss.inp} value={form.task} onChange={(e) => set("task", e.target.value)}  id="lone-working-task" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-location">Location</label>
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="lone-working-location" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="lone-working-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -60,42 +65,47 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date</label>
-        <input type="date" style={ss.inp} value={form.workDate} onChange={(e) => set("workDate", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-work-date">Date</label>
+        <input type="date" style={ss.inp} value={form.workDate} onChange={(e) => set("workDate", e.target.value)}  id="lone-working-work-date" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Start</label>
-            <input type="time" style={ss.inp} value={form.startTime} onChange={(e) => set("startTime", e.target.value)} />
+            <label style={ss.lbl} htmlFor="lone-working-start-time">Start</label>
+            <input type="time" style={ss.inp} value={form.startTime} onChange={(e) => set("startTime", e.target.value)}  id="lone-working-start-time" />
           </div>
           <div>
-            <label style={ss.lbl}>Expected finish</label>
-            <input type="time" style={ss.inp} value={form.expectedEnd} onChange={(e) => set("expectedEnd", e.target.value)} />
+            <label style={ss.lbl} htmlFor="lone-working-expected-end">Expected finish</label>
+            <input type="time" style={ss.inp} value={form.expectedEnd} onChange={(e) => set("expectedEnd", e.target.value)}  id="lone-working-expected-end" />
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Check-in contact number</label>
-        <input style={ss.inp} inputMode="tel" value={form.contactNumber} onChange={(e) => set("contactNumber", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-contact-number">Check-in contact number</label>
+        <input style={ss.inp} inputMode="tel" value={form.contactNumber} onChange={(e) => set("contactNumber", e.target.value)}  id="lone-working-contact-number" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={form.signedOff} onChange={(e) => set("signedOff", e.target.checked)} />
           Signed off / task completed safely
         </label>
         {form.signedOff && (
           <>
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Signed off at (optional)</label>
-            <input type="datetime-local" style={ss.inp} value={form.signedOffAt || ""} onChange={(e) => set("signedOffAt", e.target.value)} />
+            <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-signed-off-at">Signed off at (optional)</label>
+            <input type="datetime-local" style={ss.inp} value={form.signedOffAt || ""} onChange={(e) => set("signedOffAt", e.target.value)}  id="lone-working-signed-off-at" />
           </>
         )}
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="lone-working-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["workerName","workDate"], { workerName: "Worker name", workDate: "Work date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -125,15 +135,12 @@ export default function LoneWorkingLog() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Date", "Person", "Task", "Location", "Project", "Start", "End", "Contact", "Signed off", "Notes"];
-    const rows = items.map((r) => [r.workDate, r.workerName, r.task, r.location, r.projectName || "", r.startTime, r.expectedEnd, r.contactNumber, r.signedOff ? "yes" : "no", r.notes]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `lone_working_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.workDate, r.workerName, r.task, r.location, r.projectName || "", r.startTime, r.expectedEnd, r.contactNumber, r.signedOff ? "yes" : "no", r.notes]);
+    exportCsv(h, rows, `lone_working_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -159,8 +166,8 @@ export default function LoneWorkingLog() {
         title="Lone working"
         lead="Check-ins and lone worker welfare records (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -172,11 +179,11 @@ export default function LoneWorkingLog() {
 
       <RegisterModuleShell
         moduleId="lone-working"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("lone-working", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("lone-working", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="📡"
           title="No lone working records"
@@ -187,7 +194,7 @@ export default function LoneWorkingLog() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -215,7 +222,7 @@ export default function LoneWorkingLog() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "lone_working_delete", entity: "lone_working", detail: r.id });
                         }
                       }}
@@ -228,10 +235,10 @@ export default function LoneWorkingLog() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

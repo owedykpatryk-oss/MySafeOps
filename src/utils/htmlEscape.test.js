@@ -111,14 +111,18 @@ describe("sanitizePrintPreviewHtml", () => {
 });
 
 describe("openPrintWindowOrWarn", () => {
-  it("alerts when the print window cannot open", () => {
-    const alert = vi.fn();
+  it("dispatches an in-app toast when the print window cannot open", () => {
     const open = vi.fn(() => null);
-    vi.stubGlobal("alert", alert);
+    const dispatchEvent = vi.fn();
     vi.stubGlobal("open", open);
+    vi.stubGlobal("window", { open, dispatchEvent, alert: vi.fn() });
     const win = openPrintWindowOrWarn();
     expect(win).toBeNull();
-    expect(alert).toHaveBeenCalled();
+    expect(dispatchEvent).toHaveBeenCalled();
+    const ev = dispatchEvent.mock.calls[0][0];
+    expect(ev.type).toBe("mysafeops-ops-toast");
+    expect(ev.detail.message).toMatch(/pop-up blocked/i);
+    expect(globalThis.window.alert).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 });

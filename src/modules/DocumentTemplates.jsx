@@ -3,6 +3,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 
 const genId = () => `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -62,7 +63,7 @@ export default function DocumentTemplates() {
     ) {
       return;
     }
-    setTemplates((p) => p.filter((x) => x.id !== id));
+    setTemplates((p) => replaceWithTombstone(p, id));
     pushAudit({ action: "template_delete", entity: victim.type, detail: victim.name });
   };
 
@@ -86,6 +87,8 @@ export default function DocumentTemplates() {
     pushAudit({ action: "template_clone", entity: t.type, detail: t.name });
     alert(`Cloned to ${t.type === "rams" ? "RAMS" : "Method statements"} — open that module to edit.`);
   };
+
+  const liveTemplates = liveOrgArrayRows(templates);
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
@@ -117,11 +120,11 @@ export default function DocumentTemplates() {
         </button>
       </div>
       <div style={ss.card}>
-        <div style={{ fontWeight: 600, marginBottom: 10 }}>Saved templates ({templates.length})</div>
-        {templates.length === 0 ? (
+        <div style={{ fontWeight: 600, marginBottom: 10 }}>Saved templates ({liveTemplates.length})</div>
+        {liveTemplates.length === 0 ? (
           <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>None yet.</div>
         ) : (
-          templates.map((t) => (
+          liveTemplates.map((t) => (
             <div key={t.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "10px 0", borderBottom: "0.5px solid #eee" }}>
               <div style={{ flex: "1 1 200px" }}>
                 <strong>{t.name}</strong>

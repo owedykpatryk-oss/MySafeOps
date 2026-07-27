@@ -1,9 +1,7 @@
 import { useMemo, useState } from "react";
 import { Download, Lock, Sparkles } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-import { isSuperAdminEmail } from "../utils/superAdmin";
 import {
   billingWriteBlockedMessage,
   canExtendOrgTrial,
@@ -18,11 +16,9 @@ import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavC
  * One-time modal when cloud evaluation ends — explains read-only mode and next steps.
  */
 export default function TrialExpiredModal() {
-  const { orgId, trialStatus, billing, role } = useApp();
-  const { user } = useSupabaseAuth();
+  const { orgId, trialStatus, billing, role, isPlatformOwner } = useApp();
   const [dismissed, setDismissed] = useState(false);
   const [extending, setExtending] = useState(false);
-  const isPlatformOwner = isSuperAdminEmail(user?.email);
   const isAdmin = role === "admin";
   const cloudOk = isSupabaseConfigured() && supabase;
 

@@ -2,7 +2,9 @@
  * MySafeOps D1 API — org-scoped JSON key/value + append-only hash-chained audit.
  *
  * Auth: Authorization: Bearer <Supabase user JWT>
- *       X-Org-Slug: <organisations.slug> (membership via Supabase RPC)
+ *       X-Org-Slug: <organisations.slug>
+ *       Reads: membership via user_can_access_org_slug
+ *       Writes: membership + billing via user_can_write_org_slug (+ role RPCs for KV)
  *
  * GET  /v1/health
  * GET  /v1/kv?namespace=&key=   |  ?namespace=&list=1
@@ -185,6 +187,49 @@ async function verifyOrgAccess(env, authHeader, orgSlug) {
   const allowed = data === true || data === "true";
   if (!allowed) {
     return { ok: false, error: "Forbidden: not a member of this organisation" };
+  }
+  return { ok: true };
+}
+
+/**
+ * Membership + subscription/trial write gate for mutating routes.
+ * Falls back to membership-only when RPC is not deployed yet (404).
+ */
+async function verifyOrgCloudWrite(env, authHeader, orgSlug) {
+  const url = (env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const anon = env.SUPABASE_ANON_KEY || "";
+  if (!url || !anon) {
+    return { ok: false, error: "Server misconfiguration: missing SUPABASE_URL or SUPABASE_ANON_KEY" };
+  }
+  if (!orgSlug || !authHeader || !String(authHeader).toLowerCase().startsWith("bearer ")) {
+    return { ok: false, error: "Missing Authorization or X-Org-Slug" };
+  }
+
+  const res = await fetch(`${url}/rest/v1/rpc/user_can_write_org_slug`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: anon,
+      Authorization: authHeader,
+    },
+    body: JSON.stringify({ p_org_slug: orgSlug }),
+  });
+
+  if (res.status === 404) {
+    return verifyOrgAccess(env, authHeader, orgSlug);
+  }
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, error: "Unauthorized" };
+  }
+  if (!res.ok) {
+    const t = await res.text();
+    return { ok: false, error: `Supabase error ${res.status}: ${t.slice(0, 200)}` };
+  }
+
+  const data = await res.json();
+  const allowed = data === true || data === "true";
+  if (!allowed) {
+    return { ok: false, error: "billing_write_blocked" };
   }
   return { ok: true };
 }
@@ -601,7 +646,7 @@ export default {
       const auth = request.headers.get("Authorization") || "";
       const orgSlug = (request.headers.get("X-Org-Slug") || "").trim();
       if (!orgSlug) return json({ error: "missing_org_slug" }, 400, c);
-      const gate = await verifyOrgAccess(env, auth, orgSlug);
+      const gate = await verifyOrgCloudWrite(env, auth, orgSlug);
       if (!gate.ok) {
         const status = gate.error === "Unauthorized" ? 401 : 403;
         return json({ error: gate.error || "forbidden" }, status, c);
@@ -645,19 +690,29 @@ export default {
     if (!orgSlug) {
       return json({ error: "missing_org_slug" }, 400, c);
     }
-    const gate = await verifyOrgAccess(env, auth, orgSlug);
-    if (!gate.ok) {
-      const status = gate.error === "Unauthorized" ? 401 : 403;
-      return json({ error: gate.error || "forbidden" }, status, c);
-    }
 
     if (request.method === "GET") {
+      const gate = await verifyOrgAccess(env, auth, orgSlug);
+      if (!gate.ok) {
+        const status = gate.error === "Unauthorized" ? 401 : 403;
+        return json({ error: gate.error || "forbidden" }, status, c);
+      }
       return handleKvGet(request, env, orgSlug, c, auth);
     }
     if (request.method === "PUT") {
+      const writeGate = await verifyOrgCloudWrite(env, auth, orgSlug);
+      if (!writeGate.ok) {
+        const status = writeGate.error === "Unauthorized" ? 401 : 403;
+        return json({ error: writeGate.error || "forbidden" }, status, c);
+      }
       return handleKvPut(request, env, orgSlug, auth, c);
     }
     if (request.method === "DELETE") {
+      const writeGate = await verifyOrgCloudWrite(env, auth, orgSlug);
+      if (!writeGate.ok) {
+        const status = writeGate.error === "Unauthorized" ? 401 : 403;
+        return json({ error: writeGate.error || "forbidden", request_id: requestId }, status, c);
+      }
       const deleteGate = await verifyOrgKvDelete(env, auth, orgSlug);
       if (!deleteGate.ok) {
         const status = deleteGate.error === "Unauthorized" ? 401 : 403;

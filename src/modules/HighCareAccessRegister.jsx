@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,12 +7,14 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
 
 const KEY = "high_care_access_register";
 const genId = () => `hca_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
@@ -58,18 +61,18 @@ function Form({ item, projects, onSave, onClose }) {
   const toolOk = inList.length === outList.length && inList.every((t, i) => t === outList[i]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 560, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit access record" : "High-care / high-risk access"}</h2>
-        <label style={ss.lbl}>Zone name</label>
-        <input style={ss.inp} value={form.zoneName} onChange={(e) => set("zoneName", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Zone class</label>
-        <select style={ss.inp} value={form.zoneClass} onChange={(e) => set("zoneClass", e.target.value)}>
+        <label style={ss.lbl} htmlFor="high-care-access-zone-name">Zone name</label>
+        <input style={ss.inp} value={form.zoneName} onChange={(e) => set("zoneName", e.target.value)}  id="high-care-access-zone-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-zone-class">Zone class</label>
+        <select style={ss.inp} value={form.zoneClass} onChange={(e) => set("zoneClass", e.target.value)} id="high-care-access-zone-class">
           <option value="high_risk">High risk</option>
           <option value="high_care">High care</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="high-care-access-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -77,14 +80,14 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Visitor / engineer name</label>
-        <input style={ss.inp} value={form.visitorName} onChange={(e) => set("visitorName", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Company</label>
-        <input style={ss.inp} value={form.visitorCompany} onChange={(e) => set("visitorCompany", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Purpose</label>
-        <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.purpose} onChange={(e) => set("purpose", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Escorted by</label>
-        <input style={ss.inp} value={form.escortedBy} onChange={(e) => set("escortedBy", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-visitor-name">Visitor / engineer name</label>
+        <input style={ss.inp} value={form.visitorName} onChange={(e) => set("visitorName", e.target.value)}  id="high-care-access-visitor-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-visitor-company">Company</label>
+        <input style={ss.inp} value={form.visitorCompany} onChange={(e) => set("visitorCompany", e.target.value)}  id="high-care-access-visitor-company" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-purpose">Purpose</label>
+        <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.purpose} onChange={(e) => set("purpose", e.target.value)}  id="high-care-access-purpose" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-escorted-by">Escorted by</label>
+        <input style={ss.inp} value={form.escortedBy} onChange={(e) => set("escortedBy", e.target.value)}  id="high-care-access-escorted-by" />
 
         <div style={{ fontWeight: 600, marginTop: 14, fontSize: 12 }}>Hygiene confirmations</div>
         {[
@@ -101,21 +104,21 @@ function Form({ item, projects, onSave, onClose }) {
         ))}
 
         <div style={{ fontWeight: 600, marginTop: 14, fontSize: 12 }}>Tool reconciliation (comma-separated, same order in/out)</div>
-        <label style={ss.lbl}>Tools brought in</label>
-        <input style={ss.inp} value={form.toolsIn} onChange={(e) => set("toolsIn", e.target.value)} placeholder="torx T20, shifter" />
-        <label style={{ ...ss.lbl, marginTop: 8 }}>Tools taken out</label>
-        <input style={ss.inp} value={form.toolsOut} onChange={(e) => set("toolsOut", e.target.value)} placeholder="must match in count and order for auto-check" />
+        <label style={ss.lbl} htmlFor="high-care-access-tools-in">Tools brought in</label>
+        <input style={ss.inp} value={form.toolsIn} onChange={(e) => set("toolsIn", e.target.value)} placeholder="torx T20, shifter"  id="high-care-access-tools-in" />
+        <label style={{ ...ss.lbl, marginTop: 8 }} htmlFor="high-care-access-tools-out">Tools taken out</label>
+        <input style={ss.inp} value={form.toolsOut} onChange={(e) => set("toolsOut", e.target.value)} placeholder="must match in count and order for auto-check"  id="high-care-access-tools-out" />
         <div style={{ fontSize: 12, marginTop: 6, color: toolOk ? "#166534" : "#A32D2D", fontWeight: 600 }}>
           {toolOk ? "Tool list matches (count + order)." : "Mismatch — verify before sign-out."}
         </div>
 
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Exit time (leave blank if still on site)</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-exit-timestamp">Exit time (leave blank if still on site)</label>
         <input
           type="datetime-local"
           style={ss.inp}
           value={form.exitTimestamp ? new Date(form.exitTimestamp).toISOString().slice(0, 16) : ""}
           onChange={(e) => set("exitTimestamp", e.target.value ? new Date(e.target.value).getTime() : null)}
-        />
+         id="high-care-access-exit-timestamp" />
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
@@ -126,7 +129,7 @@ function Form({ item, projects, onSave, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -156,11 +159,13 @@ export default function HighCareAccessRegister() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
+  const liveItems = liveOrgArrayRows(items);
+
   const openOnSite = items.filter((r) => !r.exitTimestamp);
 
-  const exportCsv = () => {
+  const handleExportCsv = () => {
     const h = ["Zone", "Class", "Visitor", "Company", "In", "Out", "Tools OK", "Project"];
-    const rows = items.map((r) => [
+    const rows = liveItems.map((r) => [
       r.zoneName,
       r.zoneClass,
       r.visitorName,
@@ -170,12 +175,7 @@ export default function HighCareAccessRegister() {
       r.toolReconciliationOk ? "yes" : "no",
       r.projectName || "",
     ]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = "high_care_access.csv";
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(h, rows, "high_care_access.csv");
   };
 
   const persist = (f, isNew) => {
@@ -207,8 +207,8 @@ export default function HighCareAccessRegister() {
                 {openOnSite.length} on site
               </span>
             )}
-            {items.length > 0 && (
-              <button type="button" style={ss.btn} onClick={exportCsv}>
+            {liveItems.length > 0 && (
+              <button type="button" style={ss.btn} onClick={handleExportCsv}>
                 Export CSV
               </button>
             )}
@@ -221,11 +221,11 @@ export default function HighCareAccessRegister() {
 
       <RegisterModuleShell
         moduleId="high-care-access"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("high-care-access", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("high-care-access", liveItems)}
       >
 
-      {items.length === 0 ? (
+      {liveItems.length === 0 ? (
         <EmptyState
           icon="🧼"
           title="No entries yet"
@@ -236,7 +236,7 @@ export default function HighCareAccessRegister() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div>
@@ -265,7 +265,7 @@ export default function HighCareAccessRegister() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                         }
                       }}
                     >
@@ -277,10 +277,10 @@ export default function HighCareAccessRegister() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

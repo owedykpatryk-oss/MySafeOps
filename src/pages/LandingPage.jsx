@@ -130,11 +130,21 @@ export default function LandingPage({ marketId = "uk" }) {
 
   const alternateLocales = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return getAlternateMarkets(market.id).map((alt) => ({
+    const self = {
+      hreflang: market.locale,
+      href: `${origin}${market.homePath === "/" ? "/" : market.homePath}`,
+    };
+    const alts = getAlternateMarkets(market.id).map((alt) => ({
       hreflang: alt.locale,
-      href: `${origin}${alt.homePath}`,
+      href: `${origin}${alt.homePath === "/" ? "/" : alt.homePath}`,
     }));
-  }, [market.id]);
+    // Complete reciprocal cluster + x-default (UK home). Never use alternateMarketId alone.
+    return [
+      { hreflang: "x-default", href: `${origin}/` },
+      self,
+      ...alts,
+    ];
+  }, [market.id, market.locale, market.homePath]);
 
   const landingJsonLd = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";

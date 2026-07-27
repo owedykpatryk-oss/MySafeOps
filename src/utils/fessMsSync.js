@@ -5,6 +5,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "./orgStorage";
 import { isFessOrg } from "./fessOrg";
 import { buildMsStepsFromRams } from "./fessMsWorkflow";
 import { getMsStepTemplate } from "./msOrgTemplates";
+import { todayLocalISO } from "./localDate";
 
 const MS_KEY = "method_statements";
 const genStepId = () => `msstep_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -76,7 +77,7 @@ export function syncFessMsFromRams(ramsDoc, options = {}) {
       id: genMsId(),
       ...patch,
       revision: "1A",
-      date: now.slice(0, 10),
+      date: todayLocalISO(),
       plant: [],
       materials: [],
       ppeRequired: ["Hard hat", "Safety footwear", "Hi-vis vest"],

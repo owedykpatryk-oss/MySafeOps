@@ -3,6 +3,7 @@ import { FileDown } from "lucide-react";
 import { ms } from "../utils/moduleStyles";
 import { canExportModulePdf } from "../navigation/moduleCatalogMeta";
 import { useRegisterPdfExportState } from "../context/RegisterPdfExportContext";
+import { notifyAppToast } from "../utils/htmlEscape";
 
 /**
  * A4 register snapshot — same engine as More grid tile export.
@@ -25,16 +26,23 @@ export default function RegisterPdfExportButton({ moduleId, label, compact = fal
         filterNote: override?.filterNote,
       });
       if (!result?.ok) {
-        window.alert(
-          result?.error === "no_pdf_config"
-            ? "This module cannot export a register PDF."
-            : result?.error === "download_blocked"
-              ? "Browser blocked the PDF download — allow downloads for this site and try again."
-              : "Could not export this register to PDF."
-        );
+        notifyAppToast({
+          type: "warning",
+          title: "PDF export",
+          message:
+            result?.error === "no_pdf_config"
+              ? "This module cannot export a register PDF."
+              : result?.error === "download_blocked"
+                ? "Browser blocked the PDF download — allow downloads for this site and try again."
+                : "Could not export this register to PDF.",
+        });
       }
     } catch (e) {
-      window.alert(e?.message || "PDF export failed. Check that downloads are allowed for this site.");
+      notifyAppToast({
+        type: "error",
+        title: "PDF export failed",
+        message: e?.message || "Check that downloads are allowed for this site.",
+      });
     } finally {
       setBusy(false);
     }

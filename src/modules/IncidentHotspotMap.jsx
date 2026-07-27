@@ -6,7 +6,6 @@ import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 import PageHero from "../components/PageHero";
 import { useToast } from "../context/ToastContext";
-import { copyTextToClipboard } from "../utils/copyToClipboard";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";

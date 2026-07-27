@@ -2,6 +2,7 @@ import { supabase } from "../lib/supabase";
 import { getOrgId } from "./orgStorage";
 import { describePermitAuditEvent, permitAuditDetailSnapshot } from "../modules/permits/permitAuditLog";
 
+import { todayLocalISO } from "./localDate";
 /**
  * @param {object | undefined} prevPermit
  * @param {object} nextPermit
@@ -154,7 +155,7 @@ export async function exportPermitAuditCsvViaServer(opts = {}) {
   if (!csv) throw new Error("Server export returned no CSV payload.");
   return {
     csv,
-    fileName: String(data?.fileName || `permit-audit-${new Date().toISOString().slice(0, 10)}.csv`),
+    fileName: String(data?.fileName || `permit-audit-${todayLocalISO()}.csv`),
     rowCount: Number(data?.rowCount || 0),
     truncated: Boolean(data?.truncated),
     maxRows: Number(data?.maxRows || 10000),

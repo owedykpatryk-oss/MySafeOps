@@ -4,7 +4,7 @@
 import { loadOrgScoped as load } from "./orgStorage";
 import { isFessOrg } from "./fessOrg";
 import { canUseFessExclusiveFeatures } from "./fessExclusive";
-import { openPrintWindow, writePrintWindowDocument } from "./htmlEscape";
+import { openPrintWindowOrWarn, writePrintWindowDocument } from "./htmlEscape";
 import {
   buildSitePackSummaryHtml,
   wrapRamsPrintDocument,
@@ -203,11 +203,10 @@ export async function openFessSitePackWindow(
     ms,
     coshhItems
   );
-  const win = openPrintWindow();
-  if (!win) {
-    window.alert("Could not open print window — allow pop-ups for this site.");
-    return false;
-  }
+  const win = openPrintWindowOrWarn({
+    message: "Could not open print window — allow pop-ups for this site.",
+  });
+  if (!win) return false;
   await writePrintWindowDocument(win, html);
   if (print) win.print();
   return true;

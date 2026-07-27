@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { ms } from "../../utils/moduleStyles";
-import { geoPhotoPreset, geoPhotoPresetLabel } from "../../utils/geoPhotoPresets";
+import { geoPhotoPreset } from "../../utils/geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "../../utils/geoPhotoMedia";
 import { resolvedGiLocationId } from "../../utils/geoPhotoFields";
 

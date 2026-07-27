@@ -4,7 +4,7 @@
  * Run: npm run setup:sentry
  */
 import dotenv from "dotenv";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 

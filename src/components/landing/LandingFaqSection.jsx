@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { PRICE_ADJUSTMENT_DETAIL } from "../../lib/billingPlans";
+import { getPriceAdjustmentDetail } from "../../lib/billingPlans";
 import { getLandingFaqCopy } from "../../data/landingMarketContent";
 
 /** @param {{ market: import("../../config/markets").MarketConfig }} props */
@@ -42,7 +42,7 @@ export default function LandingFaqSection({ market }) {
       q: market.id === "pl" ? "Czy ceny subskrypcji mogą wzrosnąć?" : "Can subscription prices go up?",
       a: (
         <>
-          {PRICE_ADJUSTMENT_DETAIL}{" "}
+          {getPriceAdjustmentDetail(market.id)}{" "}
           <Link to={market.termsPath}>{market.id === "pl" ? "Regulamin" : "Full terms"} (§7.5)</Link>.
         </>
       ),

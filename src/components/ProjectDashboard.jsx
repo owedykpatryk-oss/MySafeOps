@@ -13,7 +13,7 @@ import { getFeaturedPlaybooksForOrg, isSurveyWorkflowEnabled } from "../utils/pr
 import { getIndustryPackLabel } from "../utils/industryPackProfile";
 import { isIndustryPackPreviewActive } from "../utils/industryPackPreview";
 import { PERMIT_TYPES } from "../modules/permits/permitTypes";
-import { buildPermitDraftFromProject, requiredPermitTypesForProject } from "../modules/permits/permitProjectDefaults";
+import { requiredPermitTypesForProject } from "../modules/permits/permitProjectDefaults";
 import { filterPermitTypesForOrg, getEnabledPermitTypeIds } from "../modules/permits/permitOrgPrefs";
 import { loadOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import { getOrgMarketId } from "../utils/orgMarket";
@@ -23,6 +23,7 @@ import { isModuleAllowedForMarket } from "../config/marketModules";
 import { surveyReportQuality, surveyTypeLabel } from "../modules/surveyReport/surveyReportHelpers";
 import { gprReportQuality } from "../modules/gprReport/gprReportHelpers";
 
+import { todayLocalISO } from "../utils/localDate";
 const EMPTY_ROUTES = [];
 
 function ReadinessRing({ pct, tone, size = 104 }) {
@@ -685,7 +686,7 @@ export default function ProjectDashboard({
               meta={[b.date, b.conductedBy, `${(b.attendees || []).filter((a) => a.present).length} present`]
                 .filter(Boolean)
                 .join(" · ")}
-              badge={b.date === new Date().toISOString().slice(0, 10) ? "today" : ""}
+              badge={b.date === todayLocalISO() ? "today" : ""}
               onClick={() => go("daily-briefing", "view", { briefingId: b.id })}
             />
           ))}

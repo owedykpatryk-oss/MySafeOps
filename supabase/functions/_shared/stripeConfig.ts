@@ -77,13 +77,26 @@ export function resolveStripeConfig(mode: StripeMode, market: StripeMarketId = "
   };
 
   // Fall back to GBP price IDs when market-specific prices are not configured yet.
-  if (market !== "uk" && !Object.values(prices).every(isValidPriceId)) {
+  // Per-plan: keep whatever valid price IDs exist; priceForPlan() rejects missing plans.
+  if (market !== "uk" && !Object.values(prices).some(isValidPriceId)) {
     const uk = resolveStripeConfig(mode, "uk");
     if (!uk) return null;
     return { ...uk, billingMarket: "uk" };
   }
 
-  if (!Object.values(prices).every(isValidPriceId)) return null;
+  if (market !== "uk" && !Object.values(prices).every(isValidPriceId) && Object.values(prices).some(isValidPriceId)) {
+    // Partial market prices — fill gaps from UK when available.
+    const uk = resolveStripeConfig(mode, "uk");
+    if (uk) {
+      for (const plan of Object.keys(prices) as StripePricePlanId[]) {
+        if (!isValidPriceId(prices[plan]) && isValidPriceId(uk.prices[plan])) {
+          prices[plan] = uk.prices[plan];
+        }
+      }
+    }
+  }
+
+  if (!Object.values(prices).some(isValidPriceId)) return null;
 
   const webhookSecret =
     mode === "test" ? envTrim("STRIPE_WEBHOOK_SECRET_TEST") : envTrim("STRIPE_WEBHOOK_SECRET");

@@ -85,7 +85,7 @@ export async function pushOrgBrandingToCloud(supabase, rawSettings) {
     delete payload.industryPackId;
   }
   if (payload.logo && payload.logoUrl && String(payload.logo).length > 120_000) {
-    const { logo, ...rest } = payload;
+    const { logo: _logo, ...rest } = payload;
     payload = rest;
   }
   const { data, error } = await supabase.rpc("update_my_org_branding", { p_settings: payload });

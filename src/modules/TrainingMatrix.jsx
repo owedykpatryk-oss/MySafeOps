@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -21,12 +23,15 @@ import { buildPeopleNextSteps } from "../utils/peopleNextSteps";
 import PeopleNextSteps from "../components/PeopleNextSteps";
 import { openWorkspaceView } from "../utils/workspaceNavContext";
 import { getOrgId } from "../utils/orgStorage";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 import { useToast } from "../context/ToastContext";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { syncAllTrainingToWorkers, syncTrainingRecordToWorkers } from "../utils/trainingWorkerCertSync";
+import { exportCsv } from "../utils/exportCsv";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `tr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -55,11 +60,11 @@ function Form({ item, workers, onSave, onClose }) {
   const wm = Object.fromEntries(workers.map((w) => [w.id, w.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit training" : "Training record"}</h2>
-        <label style={ss.lbl}>Worker</label>
-        <select style={ss.inp} value={form.workerId} onChange={(e) => set("workerId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="training-worker-id">Worker</label>
+        <select style={ss.inp} value={form.workerId} onChange={(e) => set("workerId", e.target.value)} id="training-worker-id">
           <option value="">—</option>
           {workers.map((w) => (
             <option key={w.id} value={w.id}>
@@ -67,22 +72,22 @@ function Form({ item, workers, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Course / qualification</label>
-        <input style={ss.inp} value={form.courseName} onChange={(e) => set("courseName", e.target.value)} placeholder="e.g. CSCS, IPAF, asbestos awareness" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Provider</label>
-        <input style={ss.inp} value={form.provider} onChange={(e) => set("provider", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="training-course-name">Course / qualification</label>
+        <input style={ss.inp} value={form.courseName} onChange={(e) => set("courseName", e.target.value)} placeholder="e.g. CSCS, IPAF, asbestos awareness"  id="training-course-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="training-provider">Provider</label>
+        <input style={ss.inp} value={form.provider} onChange={(e) => set("provider", e.target.value)}  id="training-provider" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Completed</label>
-            <input type="date" style={ss.inp} value={form.completedDate} onChange={(e) => set("completedDate", e.target.value)} />
+            <label style={ss.lbl} htmlFor="training-completed-date">Completed</label>
+            <input type="date" style={ss.inp} value={form.completedDate} onChange={(e) => set("completedDate", e.target.value)}  id="training-completed-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Expiry (optional)</label>
-            <input type="date" style={ss.inp} value={form.expiryDate || ""} onChange={(e) => set("expiryDate", e.target.value)} />
+            <label style={ss.lbl} htmlFor="training-expiry-date">Expiry (optional)</label>
+            <input type="date" style={ss.inp} value={form.expiryDate || ""} onChange={(e) => set("expiryDate", e.target.value)}  id="training-expiry-date" />
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="training-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="training-notes" />
         {form.workerId && form.expiryDate ? (
           <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 12, fontSize: 13 }}>
             <input type="checkbox" checked={syncToPeople} onChange={(e) => setSyncToPeople(e.target.checked)} style={{ marginTop: 3 }} />
@@ -101,13 +106,18 @@ function Form({ item, workers, onSave, onClose }) {
           <button
             type="button"
             style={ss.btnP}
-            onClick={() => onSave({ ...form, workerName: wm[form.workerId] || form.workerName || "" }, { syncToPeople })}
+            onClick={() => {
+              const payload = { ...form, workerName: wm[form.workerId] || form.workerName || "" };
+              const check = validateRequiredFields(payload, ["workerId", "courseName"], { workerId: "Worker", courseName: "Course name" });
+              if (!check.ok) { window.alert(check.message); return; }
+              onSave(payload, { syncToPeople });
+            }}
           >
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -139,8 +149,10 @@ export default function TrainingMatrix() {
   const d1Hydrating = d1TrainH || d1WorkersH;
   const d1OutboxPending = d1TrainO || d1WorkersO;
 
-  const expiring = useMemo(() => items.filter((r) => r.expiryDate && daysUntil(r.expiryDate) <= 60 && daysUntil(r.expiryDate) >= 0), [items]);
-  const expired = useMemo(() => items.filter((r) => r.expiryDate && daysUntil(r.expiryDate) < 0), [items]);
+  const liveItems = liveOrgArrayRows(items);
+
+  const expiring = useMemo(() => liveItems.filter((r) => r.expiryDate && daysUntil(r.expiryDate) <= 60 && daysUntil(r.expiryDate) >= 0), [liveItems]);
+  const expired = useMemo(() => liveItems.filter((r) => r.expiryDate && daysUntil(r.expiryDate) < 0), [liveItems]);
   const certAlerts = useMemo(
     () => workers.flatMap((w) => getWorkerCertAlerts(w).map((a) => ({ ...a, worker: w }))),
     [workers]
@@ -247,15 +259,10 @@ export default function TrainingMatrix() {
     pushToast(`Synced ${out.synced} training record(s) to People certificates.`, "success");
   }, [items, workers, marketId, pushToast]);
 
-  const exportCsv = () => {
+  const handleExportCsv = () => {
     const h = ["Worker", "Course", "Provider", "Completed", "Expiry", "Notes"];
-    const rows = items.map((r) => [r.workerName, r.courseName, r.provider, r.completedDate, r.expiryDate || "", r.notes]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `training_matrix_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.workerName, r.courseName, r.provider, r.completedDate, r.expiryDate || "", r.notes]);
+    exportCsv(h, rows, `training_matrix_${today()}.csv`);
   };
 
   const persist = (f, isNew, opts = {}) => {
@@ -292,22 +299,19 @@ export default function TrainingMatrix() {
                 Sync all to People
               </button>
             )}
-            {items.length > 0 && (
+            {liveItems.length > 0 && (
               <>
                 <button
                   type="button"
                   style={ss.btn}
                   onClick={() => {
-                    const res = printRegisterFormPack("training", items);
-                    if (!res.ok && res.reason === "popup_blocked") {
-                      window.alert("Allow pop-ups to print the training A4 pack (Print → Save as PDF).");
-                    }
+                    printRegisterFormPack("training", items);
                   }}
                   title="Print branded A4 competence forms"
                 >
                   Print forms pack
                 </button>
-                <button type="button" style={ss.btn} onClick={exportCsv}>
+                <button type="button" style={ss.btn} onClick={handleExportCsv}>
                   Export CSV
                 </button>
               </>
@@ -325,8 +329,8 @@ export default function TrainingMatrix() {
 
       <RegisterModuleShell
         moduleId="training"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("training", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("training", liveItems)}
       >
 
       {(expired.length > 0 || expiring.length > 0) && (
@@ -335,7 +339,7 @@ export default function TrainingMatrix() {
           {expiring.length > 0 && <div>Expiring within 60 days: {expiring.length} record(s).</div>}
         </div>
       )}
-      {items.length === 0 ? (
+      {liveItems.length === 0 ? (
         <EmptyState
           icon="🎓"
           title="No training records yet"
@@ -346,7 +350,7 @@ export default function TrainingMatrix() {
         />
       ) : (
         <div id="training-register" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => {
+          {listPg.visible(liveItems).map((r) => {
             const d = r.expiryDate ? daysUntil(r.expiryDate) : null;
             return (
               <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
@@ -385,7 +389,7 @@ export default function TrainingMatrix() {
                               payload: r,
                             })
                           ) {
-                            setItems((p) => p.filter((x) => x.id !== r.id));
+                            setItems((p) => replaceWithTombstone(p, r.id));
                             pushAudit({ action: "training_delete", entity: "training", detail: r.id });
                           }
                         }}
@@ -399,10 +403,10 @@ export default function TrainingMatrix() {
             );
           })}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

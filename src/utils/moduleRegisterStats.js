@@ -6,6 +6,7 @@ import { MODULE_PDF_REGISTRY } from "../navigation/moduleCatalogMeta";
 import { MORE_SECTIONS, MORE_TABS } from "../navigation/appModules";
 import { todayIsoDate } from "./projectDashboard";
 
+import { localDateISO } from "./localDate";
 export const HSE_SECTION_TITLE = "Health, safety & environment";
 export const SITE_SECTION_TITLE = "Site operations";
 
@@ -164,7 +165,7 @@ function buildSparklineFromItems(items, days = 7) {
   for (let i = 0; i < days; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - (days - 1 - i));
-    bucketDates.push(d.toISOString().slice(0, 10));
+    bucketDates.push(localDateISO(d));
   }
   for (const item of items) {
     const ts = itemTimestamp(item);

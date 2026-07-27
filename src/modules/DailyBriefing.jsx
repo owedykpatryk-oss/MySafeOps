@@ -10,14 +10,16 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { escapeHtml, safeImageSrc, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `brief_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 const fmtDate = (iso) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
@@ -338,25 +340,25 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
           }}
         >
           <div>
-            <label style={ss.lbl}>Date</label>
-            <input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="daily-briefing-date">Date</label>
+            <input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} style={ss.inp}  id="daily-briefing-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Time</label>
-            <input type="time" value={form.time} onChange={(e) => set("time", e.target.value)} style={ss.inp} />
+            <label style={ss.lbl} htmlFor="daily-briefing-time">Time</label>
+            <input type="time" value={form.time} onChange={(e) => set("time", e.target.value)} style={ss.inp}  id="daily-briefing-time" />
           </div>
           <div>
-            <label style={ss.lbl}>Location / site *</label>
+            <label style={ss.lbl} htmlFor="daily-briefing-location">Location / site *</label>
             <input
               value={form.location}
               onChange={(e) => set("location", e.target.value)}
               placeholder="e.g. 2SFG Scunthorpe — FP1 area"
               style={ss.inp}
-            />
+             id="daily-briefing-location" />
           </div>
           <div>
-            <label style={ss.lbl}>Project</label>
-            <select value={form.projectId} onChange={(e) => set("projectId", e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="daily-briefing-project-id">Project</label>
+            <select value={form.projectId} onChange={(e) => set("projectId", e.target.value)} style={ss.inp} id="daily-briefing-project-id">
               <option value="">— Select project —</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -417,12 +419,12 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10, marginBottom: 16 }}>
           <div>
-            <label style={ss.lbl}>Weather conditions</label>
+            <label style={ss.lbl} htmlFor="daily-briefing-weather-conditions">Weather conditions</label>
             <select
               value={form.weatherConditions}
               onChange={(e) => set("weatherConditions", e.target.value)}
               style={ss.inp}
-            >
+             id="daily-briefing-weather-conditions">
               <option value="">— Select —</option>
               {[
                 "Dry and sunny",
@@ -441,14 +443,14 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Temperature (°C)</label>
+            <label style={ss.lbl} htmlFor="daily-briefing-temperature">Temperature (°C)</label>
             <input
               value={form.temperature}
               onChange={(e) => set("temperature", e.target.value)}
               placeholder="e.g. 12"
               type="number"
               style={ss.inp}
-            />
+             id="daily-briefing-temperature" />
           </div>
         </div>
 
@@ -505,14 +507,14 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
           ))}
         </div>
         <div style={{ marginBottom: 16 }}>
-          <label style={ss.lbl}>Additional topics / notes on topics covered</label>
+          <label style={ss.lbl} htmlFor="daily-briefing-custom-topics">Additional topics / notes on topics covered</label>
           <textarea
             value={form.customTopics}
             onChange={(e) => set("customTopics", e.target.value)}
             rows={2}
             placeholder="Any additional topics discussed today…"
             style={{ ...ss.ta, minHeight: 50 }}
-          />
+           id="daily-briefing-custom-topics" />
         </div>
 
         {/* section: attendees */}
@@ -664,14 +666,14 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
 
         {/* notes */}
         <div style={{ marginBottom: 20 }}>
-          <label style={ss.lbl}>Additional notes / actions</label>
+          <label style={ss.lbl} htmlFor="daily-briefing-notes">Additional notes / actions</label>
           <textarea
             value={form.notes}
             onChange={(e) => set("notes", e.target.value)}
             rows={2}
             placeholder="Any actions raised, issues noted, or follow-up required…"
             style={{ ...ss.ta, minHeight: 50 }}
-          />
+           id="daily-briefing-notes" />
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
@@ -979,13 +981,14 @@ export default function DailyBriefing() {
     ) {
       return;
     }
-    setBriefings((prev) => prev.filter((b) => b.id !== id));
+    setBriefings((prev) => replaceWithTombstone(prev, id));
   };
 
-  const todayCount = briefings.filter((b) => b.date === today()).length;
-  const totalSigs = briefings.reduce((s, b) => (b.attendees || []).filter((a) => a.sig).length + s, 0);
+  const liveBriefings = liveOrgArrayRows(briefings);
+  const todayCount = liveBriefings.filter((b) => b.date === today()).length;
+  const totalSigs = liveBriefings.reduce((s, b) => (b.attendees || []).filter((a) => a.sig).length + s, 0);
 
-  const filtered = briefings.filter((b) => {
+  const filtered = liveBriefings.filter((b) => {
     if (filterProject && b.projectId !== filterProject) return false;
     if (filterDate && b.date !== filterDate) return false;
     if (
@@ -1046,19 +1049,19 @@ export default function DailyBriefing() {
 
       <RegisterModuleShell
         moduleId="daily-briefing"
-        smartContext={{ briefings, workers, projects }}
+        smartContext={{ briefings: liveBriefings, workers, projects }}
         pdfExportRows={filtered}
         stats={
-          briefings.length > 0
+          liveBriefings.length > 0
             ? [
                 { label: "Today's briefings", value: todayCount, tone: todayCount ? "good" : "warn" },
-                { label: "Total records", value: briefings.length, tone: "neutral" },
+                { label: "Total records", value: liveBriefings.length, tone: "neutral" },
                 { label: "Total signatures", value: totalSigs, tone: "neutral" },
               ]
             : []
         }
         filters={
-          briefings.length > 0 ? (
+          liveBriefings.length > 0 ? (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <input
                 value={search}
@@ -1103,7 +1106,7 @@ export default function DailyBriefing() {
           ) : null
         }
       >
-        {briefings.length === 0 ? (
+        {liveBriefings.length === 0 ? (
           <EmptyState
             icon="☀️"
             title="No briefing records yet"

@@ -14,13 +14,15 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `snag_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (iso) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const PRIORITIES = {
   low: { label: "Low", bg: "#EAF3DE", color: "#27500A" },
@@ -228,12 +230,12 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
           }}
         >
           <div>
-            <label style={ss.lbl}>Reference</label>
-            <input value={form.ref} onChange={(e) => set("ref", e.target.value)} placeholder="SN-001" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="snag-ref">Reference</label>
+            <input value={form.ref} onChange={(e) => set("ref", e.target.value)} placeholder="SN-001" style={ss.inp}  id="snag-ref" />
           </div>
           <div>
-            <label style={ss.lbl}>Project *</label>
-            <select value={form.projectId} onChange={(e) => set("projectId", e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="snag-project-id">Project *</label>
+            <select value={form.projectId} onChange={(e) => set("projectId", e.target.value)} style={ss.inp} id="snag-project-id">
               <option value="">— Select project —</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -245,38 +247,38 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={ss.lbl}>Title / description of defect *</label>
+          <label style={ss.lbl} htmlFor="snag-title">Title / description of defect *</label>
           <input
             value={form.title}
             onChange={(e) => set("title", e.target.value)}
             placeholder="e.g. Cable tray not secured at junction box"
             style={ss.inp}
-          />
+           id="snag-title" />
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={ss.lbl}>Detail notes</label>
+          <label style={ss.lbl} htmlFor="snag-description">Detail notes</label>
           <textarea
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
             rows={3}
             placeholder="Additional details, measurements, observations…"
             style={{ ...ss.inp, resize: "vertical" }}
-          />
+           id="snag-description" />
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
           <div>
-            <label style={ss.lbl}>Category</label>
-            <select value={form.category} onChange={(e) => set("category", e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="snag-category">Category</label>
+            <select value={form.category} onChange={(e) => set("category", e.target.value)} style={ss.inp} id="snag-category">
               {CATEGORIES.map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Priority</label>
-            <select value={form.priority} onChange={(e) => set("priority", e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="snag-priority">Priority</label>
+            <select value={form.priority} onChange={(e) => set("priority", e.target.value)} style={ss.inp} id="snag-priority">
               {Object.entries(PRIORITIES).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v.label}
@@ -285,8 +287,8 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Status</label>
-            <select value={form.status} onChange={(e) => set("status", e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="snag-status">Status</label>
+            <select value={form.status} onChange={(e) => set("status", e.target.value)} style={ss.inp} id="snag-status">
               {Object.entries(STATUSES).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v.label}
@@ -305,17 +307,17 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
           }}
         >
           <div>
-            <label style={ss.lbl}>Location on site</label>
+            <label style={ss.lbl} htmlFor="snag-location">Location on site</label>
             <input
               value={form.location}
               onChange={(e) => set("location", e.target.value)}
               placeholder="e.g. Level 2, Zone B, near pump room"
               style={ss.inp}
-            />
+             id="snag-location" />
           </div>
           <div>
-            <label style={ss.lbl}>Assigned to</label>
-            <select value={form.assignedTo} onChange={(e) => set("assignedTo", e.target.value)} style={ss.inp}>
+            <label style={ss.lbl} htmlFor="snag-assigned-to">Assigned to</label>
+            <select value={form.assignedTo} onChange={(e) => set("assignedTo", e.target.value)} style={ss.inp} id="snag-assigned-to">
               <option value="">— Unassigned —</option>
               {workers.map((w) => (
                 <option key={w.id} value={w.id}>
@@ -327,13 +329,13 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <label style={ss.lbl}>Due date</label>
+          <label style={ss.lbl} htmlFor="snag-due-date">Due date</label>
           <input
             type="date"
             value={form.dueDate}
             onChange={(e) => set("dueDate", e.target.value)}
             style={{ ...ss.inp, width: "auto" }}
-          />
+           id="snag-due-date" />
         </div>
 
         <div style={{ marginBottom: 16 }}>
@@ -599,7 +601,7 @@ export default function SnagRegister() {
     ) {
       return;
     }
-    setSnags((prev) => prev.filter((s) => s.id !== id));
+    setSnags((prev) => replaceWithTombstone(prev, id));
     setModal(null);
   };
   const toggleSelect = (id) => {
@@ -669,8 +671,9 @@ export default function SnagRegister() {
     setSelected(new Set());
   };
 
+  const liveSnags = liveOrgArrayRows(snags);
   const filtered = useMemo(() => {
-    const list = snags.filter((s) => {
+    const list = liveSnags.filter((s) => {
       if (filterStatus && s.status !== filterStatus) return false;
       if (filterPriority && s.priority !== filterPriority) return false;
       if (filterProject && s.projectId !== filterProject) return false;
@@ -696,14 +699,14 @@ export default function SnagRegister() {
       if (sort === "due") return (a.dueDate || "9999") > (b.dueDate || "9999") ? 1 : -1;
       return 0;
     });
-  }, [snags, filterStatus, filterPriority, filterProject, filterCategory, filterAssigned, search, sort]);
+  }, [liveSnags, filterStatus, filterPriority, filterProject, filterCategory, filterAssigned, search, sort]);
 
   const stats = {
-    open: snags.filter((s) => s.status === "open").length,
-    in_progress: snags.filter((s) => s.status === "in_progress").length,
-    closed: snags.filter((s) => s.status === "closed").length,
-    high: snags.filter((s) => s.priority === "high" && s.status !== "closed").length,
-    overdue: snags.filter((s) => s.dueDate && s.status === "open" && new Date(s.dueDate) < new Date()).length,
+    open: liveSnags.filter((s) => s.status === "open").length,
+    in_progress: liveSnags.filter((s) => s.status === "in_progress").length,
+    closed: liveSnags.filter((s) => s.status === "closed").length,
+    high: liveSnags.filter((s) => s.priority === "high" && s.status !== "closed").length,
+    overdue: liveSnags.filter((s) => s.dueDate && s.status === "open" && new Date(s.dueDate) < new Date()).length,
   };
 
   const exportCSV = () => {

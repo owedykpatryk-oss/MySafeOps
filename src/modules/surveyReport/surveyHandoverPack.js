@@ -25,6 +25,7 @@ import { buildHandoverChecklistHtml } from "./surveyFieldUpgrades";
 import { computeUtilityMappingDigRisk } from "../../utils/utilityMappingPremiumPages";
 import { UTILITY_MAPPING_BRAND } from "../../utils/utilityMappingBranding";
 
+import { todayLocalISO } from "../../utils/localDate";
 function csvCell(value) {
   const s = String(value ?? "").replace(/"/g, '""');
   return /[",\n\r]/.test(s) ? `"${s}"` : s;
@@ -220,7 +221,7 @@ export function buildVerificationSheetHtml(report = {}, opts = {}) {
 /** Plain-text README for the handover folder. */
 export function buildHandoverReadme(report, opts = {}) {
   const r = normalizeSurveyReport(report);
-  const issued = r.issueDate || r.documentControl?.issueDate || new Date().toISOString().slice(0, 10);
+  const issued = r.issueDate || r.documentControl?.issueDate || todayLocalISO();
   const method = r.pas128Method ? pas128MethodLabel(r.pas128Method) : "Not specified";
   const ql = r.pas128Ql || "—";
   const utilCount = (r.utilitiesTable || []).length;

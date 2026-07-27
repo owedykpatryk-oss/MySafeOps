@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGeoPhotoMobilisationChecklist,
-  geoPhotoGroupCoverage,
   MOBILISATION_MIN_REPORT_PHOTOS,
 } from "./geoPhotoMobilisation.js";
 

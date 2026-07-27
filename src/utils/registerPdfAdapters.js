@@ -7,6 +7,7 @@ import {
   PDF_PAGE,
   drawPdfMetaStrip,
   buildDocReference,
+  setPdfFont,
 } from "./pdfBranding.js";
 
 const he = (s) =>
@@ -266,11 +267,11 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
       const row = Math.floor(i / 2);
       const x = margin + 4 + col * colW;
       const cy = y + 5 + row * 11;
-      pdf.setFont("helvetica", "bold");
+      setPdfFont(pdf, "bold");
       pdf.setFontSize(6.5);
       pdf.setTextColor(...rgb);
       pdf.text(String(k).toUpperCase(), x, cy);
-      pdf.setFont("helvetica", "normal");
+      setPdfFont(pdf, "normal");
       pdf.setFontSize(8);
       pdf.setTextColor(30, 41, 59);
       const lines = pdf.splitTextToSize(String(v).slice(0, 80), colW - 8);
@@ -339,12 +340,12 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
       let yy = ensureSpace(yStart, 14 + bodyLines.length * 3.8, brief, docRef);
       pdf.setFillColor(...rgb);
       pdf.rect(margin, yy, 2, 6, "F");
-      pdf.setFont("helvetica", "bold");
+      setPdfFont(pdf, "bold");
       pdf.setFontSize(8);
       pdf.setTextColor(...rgb);
       pdf.text(title, margin + 4, yy + 4.5);
       yy += 8;
-      pdf.setFont("helvetica", "normal");
+      setPdfFont(pdf, "normal");
       pdf.setFontSize(8.5);
       pdf.setTextColor(51, 65, 85);
       pdf.text(bodyLines, margin + 2, yy);
@@ -369,7 +370,7 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
     }
 
     y = ensureSpace(y, 20, brief, docRef);
-    pdf.setFont("helvetica", "bold");
+    setPdfFont(pdf, "bold");
     pdf.setFontSize(8);
     pdf.setTextColor(...rgb);
     pdf.text("ATTENDANCE & SIGNATURES", margin, y);
@@ -393,7 +394,7 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
       pdf.setDrawColor(226, 232, 240);
       pdf.setFillColor(255, 255, 255);
       pdf.rect(startX, y, contentW, rowH, "FD");
-      pdf.setFont("helvetica", "normal");
+      setPdfFont(pdf, "normal");
       pdf.setFontSize(8);
       pdf.setTextColor(30, 41, 59);
       let cx = startX + 2;
@@ -482,7 +483,7 @@ export function renderGeoPhotoDetailPages(pdf, photos, helpers) {
     if (imgUrl) {
       const added = tryAddGeoPhotoImage(pdf, imgUrl, 12, y, imgW, imgH);
       if (!added) {
-        pdf.setFont("helvetica", "italic");
+        setPdfFont(pdf, "normal");
         pdf.setFontSize(9);
         pdf.setTextColor(120, 120, 120);
         pdf.text("Image could not be embedded (use on-device capture or synced URL).", 12, y + 8);
@@ -490,7 +491,7 @@ export function renderGeoPhotoDetailPages(pdf, photos, helpers) {
       y += imgH + 6;
     }
 
-    pdf.setFont("helvetica", "normal");
+    setPdfFont(pdf, "normal");
     pdf.setFontSize(9);
     pdf.setTextColor(51, 65, 85);
     const meta = [
@@ -509,11 +510,11 @@ export function renderGeoPhotoDetailPages(pdf, photos, helpers) {
 
     if (photo.notes?.trim()) {
       y += 2;
-      pdf.setFont("helvetica", "bold");
+      setPdfFont(pdf, "bold");
       pdf.setFontSize(8);
       pdf.text("NOTES", 12, y);
       y += 4;
-      pdf.setFont("helvetica", "normal");
+      setPdfFont(pdf, "normal");
       pdf.setFontSize(8.5);
       const noteLines = pdf.splitTextToSize(String(photo.notes).trim(), 186);
       pdf.text(noteLines, 12, y);

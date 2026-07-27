@@ -1,13 +1,29 @@
 import { useCallback, useState } from "react";
 import { isTurnstileEnabled } from "../config/turnstile";
-import { requireCaptchaToken, withCaptchaOptions } from "../lib/authCaptcha";
+import {
+  captchaBlocksAuthSubmit,
+  validateAuthCaptchaState,
+  withCaptchaOptions,
+} from "../lib/authCaptcha";
 
+/**
+ * Turnstile gate for auth forms.
+ * - Not configured → skip captcha (local without VITE_TURNSTILE_SITE_KEY).
+ * - Configured + unavailable → fail-closed (do not send auth without token).
+ * - Configured + ready → require token before submit.
+ */
 export function useAuthCaptcha() {
   const [captchaToken, setCaptchaToken] = useState("");
   const [turnstileNonce, setTurnstileNonce] = useState(0);
   const [captchaUnavailable, setCaptchaUnavailable] = useState(false);
   const turnstileConfigured = isTurnstileEnabled();
-  const enabled = turnstileConfigured && !captchaUnavailable;
+  /** Widget should render whenever a site key is configured (even after load failure). */
+  const enabled = turnstileConfigured;
+  const captchaBlocksSubmit = captchaBlocksAuthSubmit({
+    configured: turnstileConfigured,
+    unavailable: captchaUnavailable,
+    token: captchaToken,
+  });
 
   const resetCaptcha = useCallback(() => {
     setCaptchaToken("");
@@ -16,9 +32,12 @@ export function useAuthCaptcha() {
   }, []);
 
   const validateCaptcha = useCallback(() => {
-    if (!enabled) return null;
-    return requireCaptchaToken(captchaToken);
-  }, [enabled, captchaToken]);
+    return validateAuthCaptchaState({
+      configured: turnstileConfigured,
+      unavailable: captchaUnavailable,
+      token: captchaToken,
+    });
+  }, [turnstileConfigured, captchaUnavailable, captchaToken]);
 
   const wrapAuthOptions = useCallback(
     (options = {}) => withCaptchaOptions(options, captchaToken),
@@ -28,7 +47,9 @@ export function useAuthCaptcha() {
   return {
     enabled,
     turnstileConfigured,
+    captchaUnavailable,
     captchaToken,
+    captchaBlocksSubmit,
     setCaptchaToken,
     setCaptchaUnavailable,
     turnstileNonce,

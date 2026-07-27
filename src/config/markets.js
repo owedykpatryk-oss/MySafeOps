@@ -28,7 +28,7 @@
  *   dpaPath: string;
  *   accessibilityPath: string;
  *   loginPath: string;
- *   alternateMarketId: MarketId;
+ *   alternateMarketId: MarketId; // primary switcher hint only — use getAlternateMarkets() for hreflang
  *   legislationLibraryId: string;
  * }} MarketConfig */
 

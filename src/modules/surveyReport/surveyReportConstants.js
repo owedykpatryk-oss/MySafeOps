@@ -1,6 +1,7 @@
 import { blankQaChecklistState, GI_QA_CHECKLIST_ITEMS, QA_CHECKLIST_ITEMS } from "./surveyQaPack";
 import { blankSpecialistTablesState } from "./surveySpecialistFindings";
 
+import { todayLocalISO } from "../../utils/localDate";
 export { QA_CHECKLIST_ITEMS, GI_QA_CHECKLIST_ITEMS };
 
 /** Site photo evidence categories — audit-friendly grouping in editor and PDF. */
@@ -382,7 +383,7 @@ export function blankSurveyReport(overrides = {}) {
     siteAddress: "",
     siteContextKey: "",
     siteContextLabel: "",
-    surveyDate: new Date().toISOString().slice(0, 10),
+    surveyDate: todayLocalISO(),
     surveyor: "",
     surveyType: "",
     pas128Ql: "",

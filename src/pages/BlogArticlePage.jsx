@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import DOMPurify from "dompurify";
-import { getBundledPostMarkdown } from "../blog/loadPostMarkdown";
+import { getBundledPostMarkdown, hasBundledPostMarkdown } from "../blog/loadPostMarkdown";
 import LandingFooter from "../components/landing/LandingFooter";
 import BlogAppCta from "../components/blog/BlogAppCta";
 import BlogArticleToc from "../components/blog/BlogArticleToc";
@@ -71,24 +71,60 @@ export default function BlogArticlePage() {
   const articleRef = useRef(null);
 
   const meta = slug ? getPostMetaBySlug(slug) : null;
+  const [html, setHtml] = useState("");
+  const [toc, setToc] = useState([]);
+  const [loadError, setLoadError] = useState(null);
+  const [loadingMd, setLoadingMd] = useState(true);
 
-  const { html, toc, loadError } = useMemo(() => {
+  useEffect(() => {
+    let cancelled = false;
     if (!slug || !isValidBlogSlug(slug)) {
-      return { html: "", toc: [], loadError: null };
+      setHtml("");
+      setToc([]);
+      setLoadError(null);
+      setLoadingMd(false);
+      return undefined;
     }
-    const raw = getBundledPostMarkdown(slug);
-    if (!raw) {
-      return { html: "", toc: [], loadError: "missing" };
+    if (!hasBundledPostMarkdown(slug)) {
+      setHtml("");
+      setToc([]);
+      setLoadError("missing");
+      setLoadingMd(false);
+      return undefined;
     }
-    try {
-      const { html: rawHtml, toc: headings } = parseBlogPostHtml(raw);
-      const safe = DOMPurify.sanitize(rawHtml, BLOG_HTML_SANITIZE);
-      const withLinks = addExternalLinkAttributes(safe);
-      const withLazyImages = addLazyLoadingToBlogImages(withLinks);
-      return { html: withLazyImages, toc: headings, loadError: null };
-    } catch {
-      return { html: "", toc: [], loadError: "parse" };
-    }
+    setLoadingMd(true);
+    setLoadError(null);
+    (async () => {
+      try {
+        const raw = await getBundledPostMarkdown(slug);
+        if (cancelled) return;
+        if (!raw) {
+          setHtml("");
+          setToc([]);
+          setLoadError("missing");
+          setLoadingMd(false);
+          return;
+        }
+        const { html: rawHtml, toc: headings } = parseBlogPostHtml(raw);
+        const safe = DOMPurify.sanitize(rawHtml, BLOG_HTML_SANITIZE);
+        const withLinks = addExternalLinkAttributes(safe);
+        const withLazyImages = addLazyLoadingToBlogImages(withLinks);
+        setHtml(withLazyImages);
+        setToc(headings);
+        setLoadError(null);
+      } catch {
+        if (!cancelled) {
+          setHtml("");
+          setToc([]);
+          setLoadError("parse");
+        }
+      } finally {
+        if (!cancelled) setLoadingMd(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [slug]);
 
   useBlogArticleLinkDelegate(articleRef, html);
@@ -155,6 +191,21 @@ export default function BlogArticlePage() {
   }
 
   const category = meta?.category ? getCategoryBySlug(meta.category) : undefined;
+
+  if (loadingMd && !loadError) {
+    return (
+      <BlogLayout navCurrent="article">
+        <div className="blog-article-page">
+          <div className="blog-article-main">
+            <div className="ctn blog-article-state">
+              <p className="landing-blog-lead">Loading article…</p>
+            </div>
+          </div>
+        </div>
+        <LandingFooter supportEmail={SUPPORT_EMAIL} />
+      </BlogLayout>
+    );
+  }
 
   if (loadError) {
     return (

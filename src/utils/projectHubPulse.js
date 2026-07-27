@@ -2,7 +2,7 @@
  * Project hub pulse — computed readiness, pipeline gates, compliance strip, A4 site pack.
  */
 
-import { openPrintWindow, escapeHtml, writePrintWindowDocument } from "./htmlEscape.js";
+import { openPrintWindowOrWarn, escapeHtml, writePrintWindowDocument } from "./htmlEscape.js";
 import { healthTone, todayIsoDate, fmtProjectDay } from "./projectDashboard";
 import { missingRequiredPermits } from "../modules/permits/permitProjectDefaults";
 import { isSurveyWorkflowEnabled, getProjectHubTailStep } from "./projectHubIndustry";
@@ -282,7 +282,7 @@ function gateRowsHtml(gates) {
 /**
  * A4 print summary for one project — client / handover snapshot.
  */
-export function printProjectSitePack(project, dash, workers = []) {
+export function printProjectSitePack(project, dash, _workers = []) {
   void (async () => {
   if (!project) return;
   const industryCtx = {
@@ -291,11 +291,8 @@ export function printProjectSitePack(project, dash, workers = []) {
   };
   const pulse = buildProjectHubPulse(project, dash, industryCtx);
   const addr = [project.site, project.address, project.postcode].filter(Boolean).join(" · ");
-  const win = openPrintWindow();
-  if (!win) {
-    window.alert("Allow pop-ups to print the site pack.");
-    return;
-  }
+  const win = openPrintWindowOrWarn({ message: "Allow pop-ups to print the site pack." });
+  if (!win) return;
 
   await writePrintWindowDocument(win, `<!DOCTYPE html><html><head><meta charset="utf-8"/>
   <title>${he(getIndustrySitePackTitle(industryCtx.packId))} — ${he(project.name || "Project")}</title>

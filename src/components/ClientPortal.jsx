@@ -17,6 +17,7 @@ import { FESS_BRAND, getFessBrandLogoSrc } from "../utils/fessBranding";
 import { loadOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import PageHero from "./PageHero";
 
+import { todayLocalISO } from "../utils/localDate";
 const genRowId = () => `portal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 const fmtDateTime = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" }); };
@@ -67,7 +68,7 @@ function PortalView({ token, portals, cloudBundle }) {
       window.alert("Enter your name to approve this RAMS.");
       return;
     }
-    const signDate = new Date().toISOString().slice(0, 10);
+    const signDate = todayLocalISO();
     const next = ramsDocs.map((r) =>
       r.id === ramsId
         ? {

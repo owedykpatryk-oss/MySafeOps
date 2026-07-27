@@ -10,6 +10,7 @@ import {
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
 import { enforceEdgeRateLimits, enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
+import { resolveBillingMembership } from "../_shared/resolveBillingMembership.ts";
 
 Deno.serve(async (req) => {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
@@ -109,6 +110,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const testMode = Boolean(body?.testMode);
+    const orgSlug = typeof body?.orgSlug === "string" ? body.orgSlug : null;
 
     const stripeConfig = resolveStripeConfig(testMode ? "test" : "live");
     if (!stripeConfig) {
@@ -122,13 +124,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: mem, error: memErr } = await supabase
-      .from("org_memberships")
-      .select("org_id, role")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const mem = await resolveBillingMembership(supabase, user.id, orgSlug);
 
-    if (memErr || !mem?.org_id) {
+    if (!mem?.org_id) {
       return new Response(JSON.stringify({ error: "No organisation membership" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },

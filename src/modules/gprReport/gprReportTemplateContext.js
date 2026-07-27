@@ -4,7 +4,7 @@
  * No client, site, or third-party branding.
  */
 
-import { blankGprScanPanel, blankGprChainageSegment, GPR_DELIVERABLES, PROCESSING_FILTER_CATALOG } from "./gprReportConstants";
+import { blankGprScanPanel, GPR_DELIVERABLES, PROCESSING_FILTER_CATALOG } from "./gprReportConstants";
 
 export const GENERIC_GPR_FOREWORD = [
   "This report presents the findings of a ground penetrating radar (GPR) survey undertaken at the subject location.",

@@ -14,9 +14,6 @@ import {
   primaryAntennaMhz,
   buildProcessingStepsNarrative,
   recalcGroundPenetration,
-  buildAnomaliesSummaryTable,
-  buildAcquisitionNarrative,
-  buildVelocityNarrative,
 } from "./gprReportHelpers";
 import { blankGprReport, GPR_LIMITATION_RULES, ANOMALY_QUICK_TEMPLATES, blankGprAnomaly } from "./gprReportConstants";
 import { applyIndustryGprTemplate } from "./gprReportTemplateContext";
@@ -29,6 +26,7 @@ import {
 import { applyUtilityMappingProjectJobToDoc } from "../../utils/utilityMappingProjectJob";
 import { inheritSiteContextOntoDoc } from "../../utils/inheritSiteContext";
 
+import { todayLocalISO } from "../../utils/localDate";
 export async function fetchGeologyIntoReport(report, project) {
   const hasPin = projectHasMapPin(project);
   const coords = await resolveSiteCoordinates(
@@ -73,7 +71,7 @@ export async function fetchEnvironmentalIntoReport(report, project) {
   );
   if (!coords) throw new Error("Could not resolve coordinates for weather");
 
-  const date = report.surveyDate || new Date().toISOString().slice(0, 10);
+  const date = report.surveyDate || todayLocalISO();
   const snap = await fetchWeatherForDate(coords.lat, coords.lng, date, {
     postcode: project?.postcode,
   });

@@ -3,6 +3,7 @@ import { PROJECT_DOC_KEYS } from "./projectDocKeys";
 import { plansForProject, listProjectPlans } from "../modules/permits/permitPlanOverlayRegistry";
 import { permitReadinessForProject } from "../modules/permits/permitProjectDefaults";
 
+import { localDateISO, todayLocalISO } from "./localDate";
 export { PROJECT_DOC_KEYS } from "./projectDocKeys";
 
 
@@ -20,12 +21,12 @@ function weekStartMonday(offset = 0) {
 }
 
 export function todayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalISO();
 }
 
 export function summarizeTimesheetsForProject(entries = [], projectId) {
   const rows = filterByProject(projectId, entries);
-  const weekKey = weekStartMonday(0).toISOString().slice(0, 10);
+  const weekKey = localDateISO(weekStartMonday(0));
   const thisWeek = rows.filter((e) => e.weekKey === weekKey);
   const hoursThisWeek = thisWeek.reduce((s, e) => s + totalTimesheetHours(e.days), 0);
   const workersThisWeek = new Set(thisWeek.map((e) => e.workerId).filter(Boolean)).size;

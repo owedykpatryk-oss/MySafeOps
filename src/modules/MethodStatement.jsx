@@ -12,6 +12,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import TouchSignaturePad from "../components/TouchSignaturePad";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { escapeHtml, escapeAttr, safeImageSrc, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
@@ -37,8 +38,9 @@ import { buildMsStepsFromRams } from "../utils/fessMsWorkflow";
 import { sanitizeMsDocForOrg } from "../utils/fessExclusive";
 import { getOrgId } from "../utils/orgStorage";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-const today = () => new Date().toISOString().slice(0,10);
+const today = todayLocalISO;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
 
 const ss = {
@@ -138,23 +140,23 @@ function StepEditor({ steps, setSteps }) {
             <div style={{ width:24, height:24, borderRadius:"50%", background:"#0d9488", color:"#E1F5EE", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:500, flexShrink:0 }}>{s.seq}</div>
             <div style={{ flex:1, display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
               <div>
-                <label style={ss.lbl}>Step title</label>
-                <input value={s.title} onChange={e=>updateStep(s.id,"title",e.target.value)} style={ss.inp} placeholder="e.g. Isolate electrical supply" />
+                <label style={ss.lbl} htmlFor={`method-statement-title-${s.id}`}>Step title</label>
+                <input value={s.title} onChange={e=>updateStep(s.id,"title",e.target.value)} style={ss.inp} placeholder="e.g. Isolate electrical supply"  id={`method-statement-title-${s.id}`} />
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
                 <div>
-                  <label style={ss.lbl}>Responsible</label>
-                  <input value={s.responsible||""} onChange={e=>updateStep(s.id,"responsible",e.target.value)} style={ss.inp} placeholder="e.g. Electrician" />
+                  <label style={ss.lbl} htmlFor={`method-statement-responsible-${s.id}`}>Responsible</label>
+                  <input value={s.responsible||""} onChange={e=>updateStep(s.id,"responsible",e.target.value)} style={ss.inp} placeholder="e.g. Electrician"  id={`method-statement-responsible-${s.id}`} />
                 </div>
                 <div>
-                  <label style={ss.lbl}>Duration</label>
-                  <input value={s.duration||""} onChange={e=>updateStep(s.id,"duration",e.target.value)} style={ss.inp} placeholder="e.g. 30 min" />
+                  <label style={ss.lbl} htmlFor={`method-statement-duration-${s.id}`}>Duration</label>
+                  <input value={s.duration||""} onChange={e=>updateStep(s.id,"duration",e.target.value)} style={ss.inp} placeholder="e.g. 30 min"  id={`method-statement-duration-${s.id}`} />
                 </div>
               </div>
               <div style={{ gridColumn:"1/-1" }}>
-                <label style={ss.lbl}>Description / detail</label>
+                <label style={ss.lbl} htmlFor={`method-statement-description-${s.id}`}>Description / detail</label>
                 <textarea value={s.description||""} onChange={e=>updateStep(s.id,"description",e.target.value)}
-                  rows={2} style={{ ...ss.ta, minHeight:42 }} placeholder="Detailed description of this step…" />
+                  rows={2} style={{ ...ss.ta, minHeight:42 }} placeholder="Detailed description of this step…"  id={`method-statement-description-${s.id}`} />
               </div>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:4, flexShrink:0 }}>
@@ -278,13 +280,13 @@ function MSForm({ ms, onSave, onClose }) {
           <div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
               <div style={{ gridColumn:"1/-1" }}>
-                <label style={ss.lbl}>Method statement title *</label>
+                <label style={ss.lbl} htmlFor="method-statement-title">Method statement title *</label>
                 <input value={form.title} onChange={e=>set("title",e.target.value)}
-                  placeholder="e.g. Replacement of kettle tank — 2SFG Scunthorpe" style={ss.inp} />
+                  placeholder="e.g. Replacement of kettle tank — 2SFG Scunthorpe" style={ss.inp}  id="method-statement-title" />
               </div>
               <div>
-                <label style={ss.lbl}>Location / site *</label>
-                <input value={form.location} onChange={e=>set("location",e.target.value)} placeholder="Site address" style={ss.inp} />
+                <label style={ss.lbl} htmlFor="method-statement-location">Location / site *</label>
+                <input value={form.location} onChange={e=>set("location",e.target.value)} placeholder="Site address" style={ss.inp}  id="method-statement-location" />
               </div>
               <div>
                 <label style={ss.lbl}>Project</label>
@@ -311,68 +313,68 @@ function MSForm({ ms, onSave, onClose }) {
                 </select>
               </div>
               <div>
-                <label style={ss.lbl}>Client</label>
-                <input value={form.client||""} onChange={e=>set("client",e.target.value)} placeholder="Client company name" style={ss.inp} />
+                <label style={ss.lbl} htmlFor="method-statement-client">Client</label>
+                <input value={form.client||""} onChange={e=>set("client",e.target.value)} placeholder="Client company name" style={ss.inp}  id="method-statement-client" />
               </div>
               <div>
-                <label style={ss.lbl}>Job reference</label>
-                <input value={form.jobRef||""} onChange={e=>set("jobRef",e.target.value)} placeholder={isUtilityMappingOrg() ? "UM26-1234-WSP-MS" : "e.g. FP1-KETTLE-001"} style={ss.inp} />
+                <label style={ss.lbl} htmlFor="method-statement-job-ref">Job reference</label>
+                <input value={form.jobRef||""} onChange={e=>set("jobRef",e.target.value)} placeholder={isUtilityMappingOrg() ? "UM26-1234-WSP-MS" : "e.g. FP1-KETTLE-001"} style={ss.inp}  id="method-statement-job-ref" />
               </div>
               <div>
-                <label style={ss.lbl}>Date</label>
-                <input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={ss.inp} />
+                <label style={ss.lbl} htmlFor="method-statement-date">Date</label>
+                <input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={ss.inp}  id="method-statement-date" />
               </div>
               <div>
-                <label style={ss.lbl}>Revision</label>
-                <input value={form.revision||"1A"} onChange={e=>set("revision",e.target.value)} style={{ ...ss.inp, width:"auto" }} />
+                <label style={ss.lbl} htmlFor="method-statement-revision">Revision</label>
+                <input value={form.revision||"1A"} onChange={e=>set("revision",e.target.value)} style={{ ...ss.inp, width:"auto" }}  id="method-statement-revision" />
               </div>
               <div>
-                <label style={ss.lbl}>Lead engineer</label>
-                <input value={form.leadEngineer||""} onChange={e=>set("leadEngineer",e.target.value)} placeholder="Name" style={ss.inp} />
+                <label style={ss.lbl} htmlFor="method-statement-lead-engineer">Lead engineer</label>
+                <input value={form.leadEngineer||""} onChange={e=>set("leadEngineer",e.target.value)} placeholder="Name" style={ss.inp}  id="method-statement-lead-engineer" />
               </div>
               <div>
-                <label style={ss.lbl}>Prepared by</label>
-                <input value={form.preparedBy||""} onChange={e=>set("preparedBy",e.target.value)} placeholder="Name / position" style={ss.inp} />
+                <label style={ss.lbl} htmlFor="method-statement-prepared-by">Prepared by</label>
+                <input value={form.preparedBy||""} onChange={e=>set("preparedBy",e.target.value)} placeholder="Name / position" style={ss.inp}  id="method-statement-prepared-by" />
               </div>
               <div>
-                <label style={ss.lbl}>Approved by</label>
-                <input value={form.approvedBy||""} onChange={e=>set("approvedBy",e.target.value)} placeholder="Name / position" style={ss.inp} />
+                <label style={ss.lbl} htmlFor="method-statement-approved-by">Approved by</label>
+                <input value={form.approvedBy||""} onChange={e=>set("approvedBy",e.target.value)} placeholder="Name / position" style={ss.inp}  id="method-statement-approved-by" />
               </div>
               {isFessOrg() ? (
                 <>
                   <div>
-                    <label style={ss.lbl}>Site permit controller</label>
+                    <label style={ss.lbl} htmlFor="method-statement-permit-controller-name">Site permit controller</label>
                     <input
                       value={form.permitControllerName || ""}
                       onChange={(e) => set("permitControllerName", e.target.value)}
                       placeholder="Client permit controller"
                       style={ss.inp}
-                    />
+                     id="method-statement-permit-controller-name" />
                   </div>
                   <div>
-                    <label style={ss.lbl}>Permit controller sign-off</label>
+                    <label style={ss.lbl} htmlFor="method-statement-permit-controller-sign-date">Permit controller sign-off</label>
                     <input
                       type="date"
                       value={form.permitControllerSignDate || ""}
                       onChange={(e) => set("permitControllerSignDate", e.target.value)}
                       style={ss.inp}
-                    />
+                     id="method-statement-permit-controller-sign-date" />
                   </div>
                 </>
               ) : null}
               <div style={{ gridColumn:"1/-1" }}>
-                <label style={ss.lbl}>Scope of works</label>
+                <label style={ss.lbl} htmlFor="method-statement-scope">Scope of works</label>
                 <textarea value={form.scope||""} onChange={e=>set("scope",e.target.value)} rows={3}
-                  placeholder="Describe the full scope of work covered by this method statement…" style={ss.ta} />
+                  placeholder="Describe the full scope of work covered by this method statement…" style={ss.ta}  id="method-statement-scope" />
               </div>
               <div style={{ gridColumn:"1/-1" }}>
-                <label style={ss.lbl}>Restrictions / constraints</label>
+                <label style={ss.lbl} htmlFor="method-statement-restrictions">Restrictions / constraints</label>
                 <textarea value={form.restrictions||""} onChange={e=>set("restrictions",e.target.value)} rows={2}
-                  placeholder="e.g. Works only during non-production hours. Client's site rules apply." style={ss.ta} />
+                  placeholder="e.g. Works only during non-production hours. Client's site rules apply." style={ss.ta}  id="method-statement-restrictions" />
               </div>
               <div style={{ gridColumn:"1/-1" }}>
-                <label style={ss.lbl}>Linked RAMS document</label>
-                <select value={form.relatedRamsId||""} onChange={e=>set("relatedRamsId",e.target.value)} style={ss.inp}>
+                <label style={ss.lbl} htmlFor="method-statement-related-rams-id">Linked RAMS document</label>
+                <select value={form.relatedRamsId||""} onChange={e=>set("relatedRamsId",e.target.value)} style={ss.inp} id="method-statement-related-rams-id">
                   <option value="">— None —</option>
                   {ramsDocs.map(r=><option key={r.id} value={r.id}>{r.title}</option>)}
                 </select>
@@ -505,14 +507,14 @@ function MSForm({ ms, onSave, onClose }) {
 
             <div style={ss.sec}>Emergency & waste</div>
             <div style={{ marginBottom:12 }}>
-              <label style={ss.lbl}>Emergency procedure</label>
+              <label style={ss.lbl} htmlFor="method-statement-emergency-procedure">Emergency procedure</label>
               <textarea value={form.emergencyProcedure||""} onChange={e=>set("emergencyProcedure",e.target.value)} rows={3}
-                placeholder="e.g. In the event of an emergency, stop all works, raise the alarm and evacuate to muster point…" style={ss.ta} />
+                placeholder="e.g. In the event of an emergency, stop all works, raise the alarm and evacuate to muster point…" style={ss.ta}  id="method-statement-emergency-procedure" />
             </div>
             <div>
-              <label style={ss.lbl}>Waste disposal method</label>
+              <label style={ss.lbl} htmlFor="method-statement-waste-disposal">Waste disposal method</label>
               <textarea value={form.wasteDisposal||""} onChange={e=>set("wasteDisposal",e.target.value)} rows={2}
-                placeholder="e.g. All waste to be segregated and removed by licensed waste carrier…" style={ss.ta} />
+                placeholder="e.g. All waste to be segregated and removed by licensed waste carrier…" style={ss.ta}  id="method-statement-waste-disposal" />
             </div>
           </div>
         )}
@@ -575,7 +577,7 @@ function MSForm({ ms, onSave, onClose }) {
   );
 }
 
-function printMS(form, workers, projects) {
+function printMS(form, workers, _projects) {
   void (async () => {
   const he = escapeHtml;
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
@@ -831,17 +833,18 @@ export default function MethodStatement() {
     ) {
       return;
     }
-    setDocs((prev) => prev.filter((d) => d.id !== id));
+    setDocs((prev) => replaceWithTombstone(prev, id));
   };
 
+  const liveDocs = liveOrgArrayRows(docs);
   const filtered = useMemo(
     () =>
-      docs.filter((d) => {
+      liveDocs.filter((d) => {
         if (filterStatus && d.status !== filterStatus) return false;
         if (search && !d.title?.toLowerCase().includes(search.toLowerCase()) && !d.location?.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       }),
-    [docs, filterStatus, search]
+    [liveDocs, filterStatus, search]
   );
 
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
@@ -881,7 +884,7 @@ export default function MethodStatement() {
           </div>
         }
       >
-      {docs.length===0 ? (
+      {liveDocs.length===0 ? (
         <EmptyState
           icon="📝"
           title="No method statements yet"

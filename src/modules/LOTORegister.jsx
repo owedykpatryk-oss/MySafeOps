@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -14,11 +16,13 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { orgHasFoodIndustrialPack } from "../utils/industrialSectors";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
 
+import { todayLocalISO } from "../utils/localDate";
 const STORAGE_KEY = "loto_register";
 const genId = () => `loto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const genIsoId = () => `iso_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -190,21 +194,8 @@ function DetailModal({ item, projects, onSave, onClose }) {
   const foodPack = orgHasFoodIndustrialPack();
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "rgba(0,0,0,0.45)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "1.5rem 1rem",
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        overflow: "auto",
-      }}
-    >
-      <div style={{ ...ss.card, width: "100%", maxWidth: 720, marginTop: 16, marginBottom: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 720 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "LOTO workflow" : "New LOTO workflow"}</h2>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 0 }}>
           Lock → independent verification → zero-energy proof → authorise. Hot work in food environments should link to a live LOTO on the same equipment.
@@ -214,14 +205,14 @@ function DetailModal({ item, projects, onSave, onClose }) {
           <strong>Phase:</strong> {phaseLabel(form.phase || "draft")}
         </div>
 
-        <label style={ss.lbl}>Equipment name</label>
-        <input style={ss.inp} value={form.equipmentName || ""} onChange={(e) => set("equipmentName", e.target.value)} placeholder="e.g. CIP skid 3" />
+        <label style={ss.lbl} htmlFor="loto-equipment-name">Equipment name</label>
+        <input style={ss.inp} value={form.equipmentName || ""} onChange={(e) => set("equipmentName", e.target.value)} placeholder="e.g. CIP skid 3"  id="loto-equipment-name" />
 
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Equipment tag / ID</label>
-        <input style={ss.inp} value={form.equipmentTag || ""} onChange={(e) => set("equipmentTag", e.target.value)} placeholder="e.g. CIP-03" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="loto-equipment-tag">Equipment tag / ID</label>
+        <input style={ss.inp} value={form.equipmentTag || ""} onChange={(e) => set("equipmentTag", e.target.value)} placeholder="e.g. CIP-03"  id="loto-equipment-tag" />
 
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId || ""} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="loto-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId || ""} onChange={(e) => set("projectId", e.target.value)} id="loto-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -247,8 +238,8 @@ function DetailModal({ item, projects, onSave, onClose }) {
           >
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8 }}>
               <div>
-                <label style={ss.lbl}>Type</label>
-                <select style={ss.inp} value={p.type} onChange={(e) => patchPoint(p.id, { type: e.target.value })}>
+                <label style={ss.lbl} htmlFor={`loto-type-${p.id}`}>Type</label>
+                <select style={ss.inp} value={p.type} onChange={(e) => patchPoint(p.id, { type: e.target.value })} id={`loto-type-${p.id}`}>
                   {ISOLATION_TYPES.map((t) => (
                     <option key={t} value={t}>
                       {t}
@@ -257,23 +248,23 @@ function DetailModal({ item, projects, onSave, onClose }) {
                 </select>
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={ss.lbl}>Description / location</label>
-                <input style={ss.inp} value={p.description} onChange={(e) => patchPoint(p.id, { description: e.target.value })} />
+                <label style={ss.lbl} htmlFor={`loto-description-${p.id}`}>Description / location</label>
+                <input style={ss.inp} value={p.description} onChange={(e) => patchPoint(p.id, { description: e.target.value })}  id={`loto-description-${p.id}`} />
               </div>
               <div>
-                <label style={ss.lbl}>Lock number</label>
-                <input style={ss.inp} value={p.lockNumber} onChange={(e) => patchPoint(p.id, { lockNumber: e.target.value })} />
+                <label style={ss.lbl} htmlFor={`loto-lock-number-${p.id}`}>Lock number</label>
+                <input style={ss.inp} value={p.lockNumber} onChange={(e) => patchPoint(p.id, { lockNumber: e.target.value })}  id={`loto-lock-number-${p.id}`} />
               </div>
               <div>
-                <label style={ss.lbl}>Tag number</label>
-                <input style={ss.inp} value={p.tagNumber} onChange={(e) => patchPoint(p.id, { tagNumber: e.target.value })} />
+                <label style={ss.lbl} htmlFor={`loto-tag-number-${p.id}`}>Tag number</label>
+                <input style={ss.inp} value={p.tagNumber} onChange={(e) => patchPoint(p.id, { tagNumber: e.target.value })}  id={`loto-tag-number-${p.id}`} />
               </div>
               <div>
-                <label style={ss.lbl}>Locked by</label>
-                <input style={ss.inp} value={p.lockedBy} onChange={(e) => patchPoint(p.id, { lockedBy: e.target.value })} />
+                <label style={ss.lbl} htmlFor={`loto-locked-by-${p.id}`}>Locked by</label>
+                <input style={ss.inp} value={p.lockedBy} onChange={(e) => patchPoint(p.id, { lockedBy: e.target.value })}  id={`loto-locked-by-${p.id}`} />
               </div>
               <div>
-                <label style={ss.lbl}>Locked at</label>
+                <label style={ss.lbl} htmlFor={`loto-locked-at-${p.id}`}>Locked at</label>
                 <input
                   type="datetime-local"
                   style={ss.inp}
@@ -282,14 +273,14 @@ function DetailModal({ item, projects, onSave, onClose }) {
                     const v = e.target.value;
                     patchPoint(p.id, { lockedAt: v ? new Date(v).getTime() : null });
                   }}
-                />
+                 id={`loto-locked-at-${p.id}`} />
               </div>
               <div>
-                <label style={ss.lbl}>Verified by (4-eyes)</label>
-                <input style={ss.inp} value={p.verifiedBy} onChange={(e) => patchPoint(p.id, { verifiedBy: e.target.value })} />
+                <label style={ss.lbl} htmlFor={`loto-verified-by-${p.id}`}>Verified by (4-eyes)</label>
+                <input style={ss.inp} value={p.verifiedBy} onChange={(e) => patchPoint(p.id, { verifiedBy: e.target.value })}  id={`loto-verified-by-${p.id}`} />
               </div>
               <div>
-                <label style={ss.lbl}>Verified at</label>
+                <label style={ss.lbl} htmlFor={`loto-verified-at-${p.id}`}>Verified at</label>
                 <input
                   type="datetime-local"
                   style={ss.inp}
@@ -298,7 +289,7 @@ function DetailModal({ item, projects, onSave, onClose }) {
                     const v = e.target.value;
                     patchPoint(p.id, { verifiedAt: v ? new Date(v).getTime() : null });
                   }}
-                />
+                 id={`loto-verified-at-${p.id}`} />
               </div>
             </div>
           </div>
@@ -310,15 +301,15 @@ function DetailModal({ item, projects, onSave, onClose }) {
             <input type="checkbox" checked={!!form.zeroEnergyVerified} onChange={(e) => set("zeroEnergyVerified", e.target.checked)} />
             Zero energy / stored energy released and proven
           </label>
-          <label style={{ ...ss.lbl, marginTop: 8 }}>Method (how proved)</label>
-          <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.zeroEnergyMethod || ""} onChange={(e) => set("zeroEnergyMethod", e.target.value)} />
-          <label style={{ ...ss.lbl, marginTop: 8 }}>Signed off by</label>
-          <input style={ss.inp} value={form.zeroEnergyVerifiedBy || ""} onChange={(e) => set("zeroEnergyVerifiedBy", e.target.value)} />
+          <label style={{ ...ss.lbl, marginTop: 8 }} htmlFor="loto-zero-energy-method">Method (how proved)</label>
+          <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.zeroEnergyMethod || ""} onChange={(e) => set("zeroEnergyMethod", e.target.value)}  id="loto-zero-energy-method" />
+          <label style={{ ...ss.lbl, marginTop: 8 }} htmlFor="loto-zero-energy-verified-by">Signed off by</label>
+          <input style={ss.inp} value={form.zeroEnergyVerifiedBy || ""} onChange={(e) => set("zeroEnergyVerifiedBy", e.target.value)}  id="loto-zero-energy-verified-by" />
         </div>
 
         {foodPack && (
           <div style={{ marginTop: 14 }}>
-            <label style={ss.lbl}>Linked hot work record IDs (optional refs)</label>
+            <label style={ss.lbl} htmlFor="loto-linked-hot-work-ids">Linked hot work record IDs (optional refs)</label>
             <textarea
               style={{ ...ss.inp, minHeight: 36 }}
               placeholder="Comma-separated hot work register IDs for traceability"
@@ -332,17 +323,17 @@ function DetailModal({ item, projects, onSave, onClose }) {
                     .filter(Boolean)
                 )
               }
-            />
+             id="loto-linked-hot-work-ids" />
           </div>
         )}
 
-        <label style={{ ...ss.lbl, marginTop: 12 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.notes || ""} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 12 }} htmlFor="loto-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.notes || ""} onChange={(e) => set("notes", e.target.value)}  id="loto-notes" />
 
         {form.phase === "removal" && (
           <div style={{ marginTop: 12 }}>
-            <label style={ss.lbl}>Removal signed by (optional batch)</label>
-            <input style={ss.inp} value={form.removalSignedBy || ""} onChange={(e) => set("removalSignedBy", e.target.value)} />
+            <label style={ss.lbl} htmlFor="loto-removal-signed-by">Removal signed by (optional batch)</label>
+            <input style={ss.inp} value={form.removalSignedBy || ""} onChange={(e) => set("removalSignedBy", e.target.value)}  id="loto-removal-signed-by" />
           </div>
         )}
 
@@ -377,7 +368,7 @@ function DetailModal({ item, projects, onSave, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -423,11 +414,13 @@ export default function LOTORegister() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
+  const liveItems = liveOrgArrayRows(items);
+
   const live = useMemo(() => items.filter((r) => r.phase === "live"), [items]);
 
-  const exportCsv = () => {
+  const handleExportCsv = () => {
     const h = ["Equipment", "Tag", "Phase", "Project", "Points", "Zero energy", "Updated"];
-    const rows = items.map((r) => [
+    const rows = liveItems.map((r) => [
       r.equipmentName,
       r.equipmentTag,
       r.phase,
@@ -436,12 +429,7 @@ export default function LOTORegister() {
       r.zeroEnergyVerified ? "yes" : "no",
       r.updatedAt || "",
     ]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `loto_workflow_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(h, rows, `loto_workflow_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -476,8 +464,8 @@ export default function LOTORegister() {
                 {live.length} live
               </span>
             )}
-            {items.length > 0 && (
-              <button type="button" style={ss.btn} onClick={exportCsv}>
+            {liveItems.length > 0 && (
+              <button type="button" style={ss.btn} onClick={handleExportCsv}>
                 Export CSV
               </button>
             )}
@@ -490,12 +478,12 @@ export default function LOTORegister() {
 
       <RegisterModuleShell
         moduleId="loto"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("loto", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("loto", liveItems)}
       >
 
 
-      {items.length === 0 ? (
+      {liveItems.length === 0 ? (
         <EmptyState
           icon="🔒"
           title="No LOTO workflows yet"
@@ -506,7 +494,7 @@ export default function LOTORegister() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 80px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -537,7 +525,7 @@ export default function LOTORegister() {
                             confirmMessage: "Delete this LOTO workflow? It moves to Recycle Bin for 7 days.",
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "loto_workflow_delete", entity: "loto", detail: r.id });
                         }
                       }}
@@ -550,10 +538,10 @@ export default function LOTORegister() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

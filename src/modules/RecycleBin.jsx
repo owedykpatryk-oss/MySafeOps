@@ -10,6 +10,7 @@ import {
   deleteRecycleBinEntry,
   purgeExpiredRecycleBinEntries,
 } from "../utils/recycleBin";
+import { ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
 
 const RECYCLE_LIST_PAGE = 50;
 
@@ -44,8 +45,9 @@ export default function RecycleBin() {
   };
 
   useEffect(() => {
-    const t = setInterval(refresh, 60000);
-    return () => clearInterval(t);
+    refresh();
+    window.addEventListener(ORG_DATA_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(ORG_DATA_CHANGED_EVENT, refresh);
   }, []);
 
   const moduleStats = useMemo(() => {

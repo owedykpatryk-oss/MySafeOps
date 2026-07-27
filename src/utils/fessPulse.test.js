@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { beforeEach, describe, expect, it } from "vitest";
-import { setOrgId, saveOrgScoped as save } from "./orgStorage";
+import { setOrgId } from "./orgStorage";
 import { saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { buildFessWorkspacePulse } from "./fessPulse";
 import { seedFessSitePortals } from "./fessPortalPreset";

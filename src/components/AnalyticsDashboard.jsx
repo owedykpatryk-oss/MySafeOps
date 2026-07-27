@@ -3,7 +3,6 @@ import { useCountUp } from "../hooks/useCountUp";
 import { loadOrgScoped as load, ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT, getOrgId, ORG_ID_KEY } from "../utils/orgStorage";
 import { ORG_SETTINGS_UPDATED_EVENT } from "../utils/orgSettingsStorage";
 import { activeAllergenWindows, orgShowsIndustrialMoreModules } from "../utils/industrialSectors";
-import { getAppliedIndustryPackId } from "../utils/orgIndustryPacks";
 import { getFoodPharmaSetupStatus, isFoodPharmaPackActive } from "../utils/foodPharmaOnboarding";
 import { getFessSetupStatus, isFessSetupActive } from "../utils/fessOnboarding";
 import { canUseFessExclusiveFeatures } from "../utils/fessExclusive";
@@ -52,6 +51,7 @@ import { readAudit, pushAudit } from "../utils/auditLog";
 import { sanitizePdfFileSegment } from "../utils/pdfFileName";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
 
+import { localDateISO, localMonthISO } from "../utils/localDate";
 // Locale-aware (not hardcoded en-GB) so AU/PL organisations see their own date
 // conventions instead of UK formatting on the dashboard they use every day.
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString(getOrgLocale(), { day:"2-digit", month:"short" }); };
@@ -68,7 +68,7 @@ const getWeekLabel = (date) => {
   const wd = d.getDay();
   const diff = d.getDate() - wd + (wd === 0 ? -6 : 1);
   d.setDate(diff);
-  return d.toISOString().slice(0, 10);
+  return localDateISO(d);
 };
 
 const INCIDENT_PERIOD_WEEKS = [4, 8, 12];
@@ -82,28 +82,6 @@ const PDF_PHASE_LABEL = {
   encode: "Encoding image…",
   assemble: "Building PDF…",
   save: "Saving file…",
-};
-
-const ss = {
-  ...ms,
-  card: { ...ms.card, overflow:"visible" },
-  metric: {
-    background: "var(--color-background-primary,#fff)",
-    border: "1px solid var(--color-border-tertiary,#e2e8f0)",
-    borderRadius: "var(--radius-sm, 10px)",
-    padding: "14px 16px",
-    boxShadow: "var(--shadow-sm)",
-  },
-  val: { fontSize: 26, fontWeight: 600, color: "var(--color-text-primary)", letterSpacing: "-0.02em" },
-  sub: { fontSize: 11, color: "var(--color-text-tertiary,#94a3b8)", marginTop: 4, fontWeight: 500 },
-  metricBtn: {
-    textAlign: "left",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    width: "100%",
-    boxSizing: "border-box",
-    transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-  },
 };
 
 // mini bar chart — SVG with value labels and hover titles
@@ -289,7 +267,7 @@ function ExpiryRow({ name, role, certType, expiryDate }) {
 const ROLE_LABEL = { admin: "Organisation admin", supervisor: "Supervisor", operative: "Operative" };
 
 /** Overview metric tile with a smooth count-up when its value changes. */
-function DashboardMetricTile({ label, value, sub, viewId, tone, onOpen }) {
+function DashboardMetricTile({ label, value, sub, viewId: _viewId, tone, onOpen }) {
   const display = useCountUp(value);
   return (
     <button
@@ -513,7 +491,7 @@ export default function AnalyticsDashboard() {
   }, [inductions]);
 
   const monthHours = useMemo(() => {
-    const thisMonth = new Date().toISOString().slice(0, 7);
+    const thisMonth = localMonthISO();
     return tsEntries
       .filter((e) => e.weekKey?.startsWith(thisMonth))
       .reduce((s, e) => s + Object.values(e.days || {}).reduce((a, v) => a + (parseFloat(v) || 0), 0), 0);

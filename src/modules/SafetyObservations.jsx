@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `obs_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -38,18 +43,18 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit observation" : "Safety observation"}</h2>
-        <label style={ss.lbl}>Type</label>
-        <select style={ss.inp} value={form.polarity} onChange={(e) => set("polarity", e.target.value)}>
+        <label style={ss.lbl} htmlFor="safety-observations-polarity">Type</label>
+        <select style={ss.inp} value={form.polarity} onChange={(e) => set("polarity", e.target.value)} id="safety-observations-polarity">
           <option value="positive">Positive (good practice)</option>
           <option value="at_risk">At-risk behaviour / condition</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date</label>
-        <input type="date" style={ss.inp} value={form.obsDate} onChange={(e) => set("obsDate", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-obs-date">Date</label>
+        <input type="date" style={ss.inp} value={form.obsDate} onChange={(e) => set("obsDate", e.target.value)}  id="safety-observations-obs-date" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="safety-observations-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -57,24 +62,29 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Location / activity</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>What was observed</label>
-        <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.detail} onChange={(e) => set("detail", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Observer</label>
-        <input style={ss.inp} value={form.observer} onChange={(e) => set("observer", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Discussion / action (optional)</label>
-        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.actionTaken} onChange={(e) => set("actionTaken", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-location">Location / activity</label>
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="safety-observations-location" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-detail">What was observed</label>
+        <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.detail} onChange={(e) => set("detail", e.target.value)}  id="safety-observations-detail" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-observer">Observer</label>
+        <input style={ss.inp} value={form.observer} onChange={(e) => set("observer", e.target.value)}  id="safety-observations-observer" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-action-taken">Discussion / action (optional)</label>
+        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.actionTaken} onChange={(e) => set("actionTaken", e.target.value)}  id="safety-observations-action-taken" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["detail","obsDate"], { detail: "Observation detail", obsDate: "Date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -104,15 +114,12 @@ export default function SafetyObservations() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Date", "Type", "Project", "Location", "Detail", "Observer", "Action"];
-    const rows = items.map((r) => [r.obsDate, r.polarity === "positive" ? "positive" : "at_risk", r.projectName || "", r.location, r.detail, r.observer, r.actionTaken]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `safety_observations_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.obsDate, r.polarity === "positive" ? "positive" : "at_risk", r.projectName || "", r.location, r.detail, r.observer, r.actionTaken]);
+    exportCsv(h, rows, `safety_observations_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -138,8 +145,8 @@ export default function SafetyObservations() {
         title="Safety observations"
         lead="Positive interventions and unsafe act observations (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -151,11 +158,11 @@ export default function SafetyObservations() {
 
       <RegisterModuleShell
         moduleId="observations"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("observations", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("observations", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="👁️"
           title="No observations yet"
@@ -166,7 +173,7 @@ export default function SafetyObservations() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div
               key={r.id}
               style={{
@@ -202,7 +209,7 @@ export default function SafetyObservations() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "observation_delete", entity: "observation", detail: r.id });
                         }
                       }}
@@ -215,10 +222,10 @@ export default function SafetyObservations() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

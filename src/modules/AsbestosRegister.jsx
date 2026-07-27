@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `asb_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -41,16 +46,16 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 560, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit asbestos item" : "Asbestos register entry"}</h2>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>Supports HSG264-style location records on site. Keep aligned with your survey and management plan.</p>
-        <label style={ss.lbl}>Location / room / level</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Building / zone</label>
-        <input style={ss.inp} value={form.buildingArea} onChange={(e) => set("buildingArea", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="asbestos-location">Location / room / level</label>
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="asbestos-location" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="asbestos-building-area">Building / zone</label>
+        <input style={ss.inp} value={form.buildingArea} onChange={(e) => set("buildingArea", e.target.value)}  id="asbestos-building-area" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="asbestos-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="asbestos-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -58,41 +63,46 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Survey / re-inspection ref</label>
-        <input style={ss.inp} value={form.surveyRef} onChange={(e) => set("surveyRef", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Material / product description</label>
-        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.materialDescription} onChange={(e) => set("materialDescription", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Classification</label>
-        <select style={ss.inp} value={form.asbestosType} onChange={(e) => set("asbestosType", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="asbestos-survey-ref">Survey / re-inspection ref</label>
+        <input style={ss.inp} value={form.surveyRef} onChange={(e) => set("surveyRef", e.target.value)}  id="asbestos-survey-ref" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="asbestos-material-description">Material / product description</label>
+        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.materialDescription} onChange={(e) => set("materialDescription", e.target.value)}  id="asbestos-material-description" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="asbestos-asbestos-type">Classification</label>
+        <select style={ss.inp} value={form.asbestosType} onChange={(e) => set("asbestosType", e.target.value)} id="asbestos-asbestos-type">
           <option value="Presumed">Presumed ACM</option>
           <option value="Confirmed">Confirmed ACM</option>
           <option value="Not ACM">Not ACM (negative result)</option>
           <option value="Strong presumption">Strong presumption</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Risk assessment / AMP ref</label>
-        <input style={ss.inp} value={form.riskAssessmentRef} onChange={(e) => set("riskAssessmentRef", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="asbestos-risk-assessment-ref">Risk assessment / AMP ref</label>
+        <input style={ss.inp} value={form.riskAssessmentRef} onChange={(e) => set("riskAssessmentRef", e.target.value)}  id="asbestos-risk-assessment-ref" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Last review</label>
-            <input type="date" style={ss.inp} value={form.lastReviewDate} onChange={(e) => set("lastReviewDate", e.target.value)} />
+            <label style={ss.lbl} htmlFor="asbestos-last-review-date">Last review</label>
+            <input type="date" style={ss.inp} value={form.lastReviewDate} onChange={(e) => set("lastReviewDate", e.target.value)}  id="asbestos-last-review-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Next review due</label>
-            <input type="date" style={ss.inp} value={form.nextReviewDate || ""} onChange={(e) => set("nextReviewDate", e.target.value)} />
+            <label style={ss.lbl} htmlFor="asbestos-next-review-date">Next review due</label>
+            <input type="date" style={ss.inp} value={form.nextReviewDate || ""} onChange={(e) => set("nextReviewDate", e.target.value)}  id="asbestos-next-review-date" />
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="asbestos-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="asbestos-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["location","materialDescription"], { location: "Location", materialDescription: "Material description" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -122,15 +132,12 @@ export default function AsbestosRegister() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Location", "Building", "Project", "Survey ref", "Material", "Type", "RA ref", "Last review", "Next review"];
-    const rows = items.map((r) => [r.location, r.buildingArea, r.projectName || "", r.surveyRef, r.materialDescription, r.asbestosType, r.riskAssessmentRef, r.lastReviewDate, r.nextReviewDate]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `asbestos_register_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.location, r.buildingArea, r.projectName || "", r.surveyRef, r.materialDescription, r.asbestosType, r.riskAssessmentRef, r.lastReviewDate, r.nextReviewDate]);
+    exportCsv(h, rows, `asbestos_register_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -156,8 +163,8 @@ export default function AsbestosRegister() {
         title="Asbestos register"
         lead="ACM locations, surveys, and management plan refs (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -169,11 +176,11 @@ export default function AsbestosRegister() {
 
       <RegisterModuleShell
         moduleId="asbestos"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("asbestos", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("asbestos", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="⚠️"
           title="No asbestos register items yet"
@@ -184,7 +191,7 @@ export default function AsbestosRegister() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -212,7 +219,7 @@ export default function AsbestosRegister() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "asbestos_delete", entity: "asbestos", detail: r.id });
                         }
                       }}
@@ -225,10 +232,10 @@ export default function AsbestosRegister() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

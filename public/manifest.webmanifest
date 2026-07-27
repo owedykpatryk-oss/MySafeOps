@@ -2,7 +2,7 @@
   "name": "MySafeOps",
   "short_name": "MySafeOps",
   "description": "UK construction safety and compliance workspace",
-  "start_url": "/",
+  "start_url": "/app?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -12,28 +12,45 @@
   "categories": ["business", "productivity"],
   "icons": [
     {
-      "src": "/vite.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/vite.svg",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/vite.svg",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/vite.svg",
+      "src": "/icons/maskable-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Permits",
+      "short_name": "Permits",
+      "description": "Open permit to work",
+      "url": "/app?view=permits&source=pwa",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "RAMS",
+      "short_name": "RAMS",
+      "description": "Open risk assessments / method statements",
+      "url": "/app?view=rams&source=pwa",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Daily briefing",
+      "short_name": "Briefing",
+      "description": "Open daily briefing",
+      "url": "/app?view=daily-briefing&source=pwa",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -37,16 +39,16 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit changeover window" : "Allergen changeover window"}</h2>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>While the window is active, a banner appears in the app for all users. Use for line changeovers (e.g. milk → nut-free).</p>
-        <label style={ss.lbl}>Short label</label>
-        <input style={ss.inp} value={form.label} onChange={(e) => set("label", e.target.value)} placeholder="e.g. Line 3 allergen changeover" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Site / area label</label>
-        <input style={ss.inp} value={form.siteLabel} onChange={(e) => set("siteLabel", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project (optional)</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="allergen-changeover-label">Short label</label>
+        <input style={ss.inp} value={form.label} onChange={(e) => set("label", e.target.value)} placeholder="e.g. Line 3 allergen changeover"  id="allergen-changeover-label" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="allergen-changeover-site-label">Site / area label</label>
+        <input style={ss.inp} value={form.siteLabel} onChange={(e) => set("siteLabel", e.target.value)}  id="allergen-changeover-site-label" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="allergen-changeover-project-id">Project (optional)</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="allergen-changeover-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -54,16 +56,16 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>From (allergen / recipe)</label>
-        <input style={ss.inp} value={form.fromAllergen} onChange={(e) => set("fromAllergen", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>To</label>
-        <input style={ss.inp} value={form.toAllergen} onChange={(e) => set("toAllergen", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Window start</label>
-        <input type="datetime-local" style={ss.inp} value={form.startAt} onChange={(e) => set("startAt", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Window end</label>
-        <input type="datetime-local" style={ss.inp} value={form.endAt} onChange={(e) => set("endAt", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Extra controls / PPE hint (shown in banner)</label>
-        <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.extraPpeHint} onChange={(e) => set("extraPpeHint", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="allergen-changeover-from-allergen">From (allergen / recipe)</label>
+        <input style={ss.inp} value={form.fromAllergen} onChange={(e) => set("fromAllergen", e.target.value)}  id="allergen-changeover-from-allergen" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="allergen-changeover-to-allergen">To</label>
+        <input style={ss.inp} value={form.toAllergen} onChange={(e) => set("toAllergen", e.target.value)}  id="allergen-changeover-to-allergen" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="allergen-changeover-start-at">Window start</label>
+        <input type="datetime-local" style={ss.inp} value={form.startAt} onChange={(e) => set("startAt", e.target.value)}  id="allergen-changeover-start-at" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="allergen-changeover-end-at">Window end</label>
+        <input type="datetime-local" style={ss.inp} value={form.endAt} onChange={(e) => set("endAt", e.target.value)}  id="allergen-changeover-end-at" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="allergen-changeover-extra-ppe-hint">Extra controls / PPE hint (shown in banner)</label>
+        <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.extraPpeHint} onChange={(e) => set("extraPpeHint", e.target.value)}  id="allergen-changeover-extra-ppe-hint" />
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
@@ -74,7 +76,7 @@ function Form({ item, projects, onSave, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -103,6 +105,8 @@ export default function AllergenChangeoverRegister() {
   });
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
+
+  const liveItems = liveOrgArrayRows(items);
 
   const persist = (f, isNew) => {
     setItems((p) => {
@@ -135,11 +139,11 @@ export default function AllergenChangeoverRegister() {
 
       <RegisterModuleShell
         moduleId="allergen-changeovers"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("allergen-changeovers", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("allergen-changeovers", liveItems)}
       >
 
-      {items.length === 0 ? (
+      {liveItems.length === 0 ? (
         <EmptyState
           icon="🥜"
           title="No windows defined yet"
@@ -150,7 +154,7 @@ export default function AllergenChangeoverRegister() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card }}>
               <strong>{r.label || "Changeover"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
@@ -178,7 +182,7 @@ export default function AllergenChangeoverRegister() {
                           payload: r,
                         })
                       ) {
-                        setItems((p) => p.filter((x) => x.id !== r.id));
+                        setItems((p) => replaceWithTombstone(p, r.id));
                       }
                     }}
                   >
@@ -189,10 +193,10 @@ export default function AllergenChangeoverRegister() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

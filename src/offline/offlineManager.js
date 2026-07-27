@@ -45,14 +45,6 @@ export async function registerServiceWorker() {
       });
     });
 
-    // Listen for messages from SW
-    navigator.serviceWorker.addEventListener("message", (event) => {
-      const { type } = event.data || {};
-      if (type === "SYNC_COMPLETE") {
-        window.dispatchEvent(new CustomEvent("mysafeops-synced"));
-      }
-    });
-
     return reg;
   } catch (err) {
     console.warn("[MySafeOps SW] Registration failed:", err);
@@ -63,9 +55,8 @@ export async function registerServiceWorker() {
 // ─── Offline detection ────────────────────────────────────────────────────────
 export function initOnlineStatusWatcher(onOnline, onOffline) {
   const handleOnline = () => {
-    if (import.meta.env.DEV) console.log("[MySafeOps] Back online — triggering sync");
+    if (import.meta.env.DEV) console.log("[MySafeOps] Back online");
     onOnline?.();
-    triggerBackgroundSync();
   };
   const handleOffline = () => {
     if (import.meta.env.DEV) console.log("[MySafeOps] Gone offline");
@@ -80,83 +71,22 @@ export function initOnlineStatusWatcher(onOnline, onOffline) {
   };
 }
 
-// ─── Background sync trigger ──────────────────────────────────────────────────
-export async function triggerBackgroundSync() {
-  const reg = await navigator.serviceWorker?.ready;
-  if (!reg) return;
-  try {
-    await reg.sync?.register("mysafeops-sync");
-    if (import.meta.env.DEV) console.log("[MySafeOps] Background sync registered");
-  } catch {
-    // Background Sync API not available (e.g. iOS Safari) — just proceed
-    if (import.meta.env.DEV) console.warn("[MySafeOps] Background Sync not available, syncing inline");
+// ─── Skip waiting — activate waiting SW, then reload on controllerchange ──────
+export async function activateNewServiceWorker() {
+  const reg = await navigator.serviceWorker?.getRegistration();
+  const waiting = reg?.waiting;
+  if (!waiting) {
+    window.location.reload();
+    return;
   }
-}
-
-// ─── Skip waiting — activate new SW immediately ───────────────────────────────
-export function activateNewServiceWorker() {
-  navigator.serviceWorker?.controller?.postMessage({ type: "SKIP_WAITING" });
-  window.location.reload();
-}
-
-// ─── IndexedDB helpers for offline queue ─────────────────────────────────────
-const DB_NAME = "mysafeops_offline";
-const DB_VERSION = 1;
-const STORE_NAME = "sync_queue";
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });
-      }
-    };
-    req.onsuccess = (e) => resolve(e.target.result);
-    req.onerror = (e) => reject(e.target.error);
-  });
-}
-
-// Queue an action to sync when back online (legacy — prefer D1 outbox in useD1OrgArraySync)
-/** @deprecated Unused; pending cloud writes use `d1SyncOutbox`. Kept for service-worker compatibility. */
-export async function queueOfflineAction(action) {
-  try {
-    const db = await openDB();
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).add({
-      ...action,
-      queuedAt: new Date().toISOString(),
-      orgId: localStorage.getItem("mysafeops_orgId") || "default",
-    });
-    return new Promise((res, rej) => {
-      tx.oncomplete = res;
-      tx.onerror = rej;
-    });
-  } catch (err) {
-    console.warn("[MySafeOps] Could not queue offline action:", err);
-  }
-}
-
-// Get pending queue count
-export async function getOfflineQueueCount() {
-  try {
-    const db = await openDB();
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const req = tx.objectStore(STORE_NAME).count();
-    return new Promise(res => { req.onsuccess = () => res(req.result); req.onerror = () => res(0); });
-  } catch { return 0; }
-}
-
-// Clear queue after successful sync
-export async function clearOfflineQueue() {
-  try {
-    const db = await openDB();
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).clear();
-  } catch (err) {
-    console.warn("[MySafeOps] Could not clear offline queue:", err);
-  }
+  navigator.serviceWorker.addEventListener(
+    "controllerchange",
+    () => {
+      window.location.reload();
+    },
+    { once: true }
+  );
+  waiting.postMessage({ type: "SKIP_WAITING" });
 }
 
 // ─── Main init function — call this once in App.jsx ──────────────────────────

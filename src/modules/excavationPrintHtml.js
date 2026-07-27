@@ -1,5 +1,6 @@
 import { escapeHtml, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape";
 
+import { todayLocalISO } from "../utils/localDate";
 const STATUS_LABEL = {
   open: "Open",
   backfilled: "Backfilled / closed",
@@ -75,7 +76,7 @@ export function buildExcavationPrintHtml(r, opts = {}) {
 
   ${r.notes ? `<div class="section">Notes</div><div class="notes">${escapeHtml(r.notes)}</div>` : ""}
 
-  <div class="foot">Generated ${escapeHtml(new Date().toISOString().slice(0, 10))} · MySafeOps excavation log — verify live permit-to-dig before intrusive works.</div>
+  <div class="foot">Generated ${escapeHtml(todayLocalISO())} · MySafeOps excavation log — verify live permit-to-dig before intrusive works.</div>
 </body>
 </html>`;
 }
