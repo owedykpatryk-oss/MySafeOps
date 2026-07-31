@@ -22,6 +22,9 @@ import {
 const MEMBERSHIP_ROLES = new Set(["admin", "supervisor", "operative"]);
 import { clearPendingInvite, peekPendingInvite } from "../lib/inviteToken";
 
+let orgContextClient = null;
+let orgContextPromise = null;
+
 export function persistOrgRow(row) {
   const slug = getOrgId();
   const r = String(row?.role || "").trim().toLowerCase();
@@ -206,7 +209,22 @@ export async function refreshMembershipRoleFromSupabase(supabase) {
   return r;
 }
 
-export async function ensureUserOrgContext(supabase) {
+export function ensureUserOrgContext(supabase) {
+  if (!supabase) return Promise.resolve(null);
+  if (orgContextPromise && orgContextClient === supabase) return orgContextPromise;
+
+  const sharedPromise = ensureUserOrgContextOnce(supabase).finally(() => {
+    if (orgContextPromise === sharedPromise) {
+      orgContextPromise = null;
+      orgContextClient = null;
+    }
+  });
+  orgContextClient = supabase;
+  orgContextPromise = sharedPromise;
+  return sharedPromise;
+}
+
+async function ensureUserOrgContextOnce(supabase) {
   if (!supabase) return null;
   const { data, error } = await supabase.rpc("ensure_my_org", ensureMyOrgArgs());
   if (error) throw error;

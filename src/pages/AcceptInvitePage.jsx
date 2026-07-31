@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
-import { setPendingInviteToken } from "../lib/inviteToken";
+import { buildInviteLoginPath, setPendingInviteToken } from "../lib/inviteToken";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
 import { getSupportEmail } from "../config/supportContact";
@@ -54,12 +54,16 @@ export default function AcceptInvitePage() {
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error) {
-          setErr(error.message || "Invite not found or expired.");
+          setErr(
+            "Invite could not be verified. It may be expired or replaced; ask your organisation admin to resend it."
+          );
           return;
         }
         const row = Array.isArray(data) ? data[0] : data;
         if (!row?.org_name) {
-          setErr("Invite not found or expired.");
+          setErr(
+            "Invite not found, expired, or replaced. Ask your organisation admin to resend it."
+          );
           return;
         }
         setPreview(row);
@@ -76,7 +80,7 @@ export default function AcceptInvitePage() {
   }, [invite, email]);
 
   const loginEmail = (preview?.email || preview?.invite_email || email || "").trim().toLowerCase();
-  const loginHref = `/login?invite=${encodeURIComponent(invite)}${loginEmail ? `&email=${encodeURIComponent(loginEmail)}` : ""}`;
+  const loginHref = buildInviteLoginPath({ token: invite, email: loginEmail });
   const canContinue = Boolean(preview && understoodSwitch && invite && !err);
   const primary = preview?.primary_color || teal;
   const accent = preview?.accent_color || "#E1F5EE";

@@ -22,7 +22,7 @@ import { useAuthCaptcha } from "../hooks/useAuthCaptcha";
 import TurnstileWidget from "../components/TurnstileWidget";
 import { isAuthCaptchaInfrastructureError } from "../lib/authCaptcha";
 import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
-import { setPendingInviteToken } from "../lib/inviteToken";
+import { buildInviteLoginPath, setPendingInviteToken } from "../lib/inviteToken";
 import { ensureUserOrgContext } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
@@ -123,6 +123,10 @@ export default function LoginPage() {
   const oauthError = searchParams.get("error_description") || searchParams.get("error") || "";
   const nextParam = searchParams.get("next") || "/app";
   const safeNextPath = useMemo(() => safeInternalPath(nextParam, "/app"), [nextParam]);
+  const inviteLoginPath = useMemo(
+    () => buildInviteLoginPath({ token: inviteToken, email: inviteEmail, next: safeNextPath }),
+    [inviteToken, inviteEmail, safeNextPath],
+  );
   const signupMarket = useMemo(() => getMarket(resolvePreferredMarketId(searchParams.toString())), [searchParams]);
   const normalizedEmail = email.trim().toLowerCase();
   const lockout = getAuthLockoutState(normalizedEmail, Date.now());
@@ -308,9 +312,8 @@ export default function LoginPage() {
     setBusy(true);
     trackAuthEvent("google_sign_in_start");
     try {
-      const loginRedirectPath = `/login${safeNextPath !== "/app" ? `?next=${encodeURIComponent(safeNextPath)}` : ""}`;
       const before = window.location.href;
-      const { data, error } = await signInWithGoogleOAuth(client, loginRedirectPath);
+      const { data, error } = await signInWithGoogleOAuth(client, inviteLoginPath);
       if (error) throw error;
       // Fallback: if auto-redirect didn't kick in, force navigation.
       if (data?.url && window.location.href === before) {
@@ -366,7 +369,7 @@ export default function LoginPage() {
     recordSignUpAttempt(Date.now());
     trackAuthEvent("sign_up_attempt", { email: normalizedEmail });
     try {
-      const emailRedirectTo = new URL("/login", window.location.origin).href;
+      const emailRedirectTo = new URL(inviteLoginPath, window.location.origin).href;
       const { data, error } = await client.auth.signUp({
         email: email.trim(),
         password,
@@ -455,7 +458,7 @@ export default function LoginPage() {
     setBusy(true);
     trackAuthEvent("resend_confirmation_attempt", { email: targetEmail });
     try {
-      const emailRedirectTo = new URL("/login", window.location.origin).href;
+      const emailRedirectTo = new URL(inviteLoginPath, window.location.origin).href;
       const { error } = await client.auth.resend({
         type: "signup",
         email: targetEmail,
