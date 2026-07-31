@@ -12,6 +12,13 @@ const teal = "#0d9488";
 const navy = "#0f172a";
 const SUPPORT_EMAIL = getSupportEmail();
 
+function safeBrandLogo(value) {
+  const url = String(value || "").trim();
+  if (url.startsWith("/")) return url;
+  if (url.startsWith("https://")) return url;
+  return "";
+}
+
 export default function AcceptInvitePage() {
   const [searchParams] = useSearchParams();
   const invite = searchParams.get("invite") || "";
@@ -23,11 +30,13 @@ export default function AcceptInvitePage() {
 
   useEffect(() => {
     const prev = document.title;
-    document.title = "Accept invite — MySafeOps";
+    document.title = preview?.org_name
+      ? `Join ${preview.org_name} — MySafeOps`
+      : "Accept invite — MySafeOps";
     return () => {
       document.title = prev;
     };
-  }, []);
+  }, [preview?.org_name]);
 
   useEffect(() => {
     if (!invite) {
@@ -69,9 +78,12 @@ export default function AcceptInvitePage() {
   const loginEmail = (preview?.email || preview?.invite_email || email || "").trim().toLowerCase();
   const loginHref = `/login?invite=${encodeURIComponent(invite)}${loginEmail ? `&email=${encodeURIComponent(loginEmail)}` : ""}`;
   const canContinue = Boolean(preview && understoodSwitch && invite && !err);
+  const primary = preview?.primary_color || teal;
+  const accent = preview?.accent_color || "#E1F5EE";
+  const companyLogo = safeBrandLogo(preview?.logo_url);
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #E1F5EE 0%, #f8fafc 38%)", fontFamily: "DM Sans, system-ui, sans-serif", padding: "1.5rem 1rem 2rem" }}>
+    <div style={{ minHeight: "100vh", background: `linear-gradient(180deg, ${accent}22 0%, #f8fafc 38%)`, fontFamily: "DM Sans, system-ui, sans-serif", padding: "1.5rem 1rem 2rem" }}>
       <div style={{ maxWidth: 480, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 10, color: navy }}>
@@ -88,6 +100,23 @@ export default function AcceptInvitePage() {
             <InlineAlert type="error" text={err} style={{ marginTop: 0 }} />
           ) : preview ? (
             <>
+              {companyLogo ? (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "center",
+                    padding: "12px 16px 18px",
+                    marginBottom: 16,
+                    borderBottom: `1px solid ${accent}55`,
+                  }}
+                >
+                  <img
+                    src={companyLogo}
+                    alt={`${preview.org_name} logo`}
+                    style={{ display: "block", maxWidth: "100%", width: 300, maxHeight: 110, objectFit: "contain" }}
+                  />
+                </div>
+              ) : null}
               <p style={{ margin: "0 0 12px", fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.55 }}>
                 <strong>{preview.org_name}</strong> invited you to join their MySafeOps workspace
                 {loginEmail ? (
@@ -99,7 +128,10 @@ export default function AcceptInvitePage() {
                 .
               </p>
               <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                Sign in or create an account with the same email to accept. Invite expires:{" "}
+                {preview.allowed_email_domain
+                  ? `Sign in or create an account with a verified @${preview.allowed_email_domain} email to accept.`
+                  : "Sign in or create an account with the same email to accept."}{" "}
+                Link expires:{" "}
                 {new Date(preview.expires_at).toLocaleString()}.
               </p>
               <InlineAlert
@@ -147,13 +179,13 @@ export default function AcceptInvitePage() {
                   justifyContent: "center",
                   padding: "12px 20px",
                   borderRadius: 8,
-                  background: teal,
+                  background: primary,
                   color: "#f0fdfa",
                   textDecoration: "none",
                   fontSize: 15,
                   fontWeight: 600,
                   minHeight: 48,
-                  border: "1px solid #085041",
+                  border: `1px solid ${primary}`,
                 }}
               >
                 Continue to sign in
