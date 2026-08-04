@@ -35,7 +35,6 @@ import {
 
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
-import { liveOrgArrayRows } from "../utils/d1ArrayMerge";
 import { collectProjectDashboard } from "../utils/projectDashboard";
 import { loadOrgScoped, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
 import { isSuperAdminEmail } from "../utils/superAdmin";
@@ -73,6 +72,10 @@ const shortMonthLabel = new Intl.DateTimeFormat("en-GB", { month: "short" });
 
 function id(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function liveOrgArrayRows(rows = []) {
+  return (Array.isArray(rows) ? rows : []).filter((row) => row?.id && !row.deletedAt);
 }
 
 function dateLabel(value) {
