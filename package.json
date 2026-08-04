@@ -37,6 +37,7 @@
     "d1:deploy:backup": "npx wrangler@3 deploy --config cloudflare/workers/d1-backup/wrangler.toml",
     "d1:smoke": "node scripts/d1-smoke.mjs",
     "d1:backup:test-restore": "node scripts/d1-backup-restore-test.mjs",
+    "audit:high": "node scripts/npm-audit-high.mjs",
     "security:doctor": "node scripts/security-doctor.mjs",
     "security:doctor:prod": "node scripts/security-doctor.mjs --prod",
     "security:deploy": "node scripts/security-deploy.mjs",
@@ -52,6 +53,7 @@
     "blog:links": "node scripts/blog-link-report.mjs",
     "blog:distribution": "node scripts/generate-distribution-pack.mjs",
     "lint": "eslint \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\" --max-warnings 200",
+    "lint-staged": "lint-staged",
     "check:survey-docs": "node scripts/check-survey-docs-guard.mjs",
     "lint:fix": "eslint \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\" --fix --max-warnings 200",
     "format": "prettier --write \"src/**/*.{js,jsx}\" \"tests/**/*.{js,jsx}\" \"scripts/**/*.{js,mjs}\"",
@@ -74,7 +76,7 @@
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "@sentry/react": "^9.47.1",
     "@supabase/supabase-js": "^2.102.1",
-    "dompurify": "3.4.11",
+    "dompurify": "3.4.13",
     "dxf-parser": "^1.1.2",
     "fflate": "^0.8.3",
     "html2canvas": "^1.4.1",
@@ -86,11 +88,15 @@
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.18.0",
+    "react-router-dom": "^7.18.2",
     "web-vitals": "^4.2.4"
   },
   "overrides": {
-    "dompurify": "3.4.11"
+    "brace-expansion@1": "1.1.18",
+    "brace-expansion@2": "2.1.4",
+    "dompurify": "3.4.13",
+    "postcss": "8.5.25",
+    "react-router": "7.18.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
