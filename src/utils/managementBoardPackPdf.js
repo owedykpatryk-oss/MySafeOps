@@ -7,10 +7,8 @@ import {
   drawPremiumPdfFooter,
   drawPremiumPdfHeader,
   drawWatermark,
-  ensurePdfUnicodeFont,
   getPdfTheme,
   hexToRgb,
-  setPdfFont,
 } from "./pdfBranding.js";
 
 const M = PDF_PAGE.MARGIN;
@@ -23,6 +21,14 @@ function todayLocalISO() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
+}
+
+function setPdfFont(pdf, style = "normal") {
+  pdf.setFont("helvetica", style === "bold" ? "bold" : "normal");
+}
+
+async function ensurePdfUnicodeFont(pdf) {
+  setPdfFont(pdf, "normal");
 }
 
 function safe(value, fallback = "-") {
