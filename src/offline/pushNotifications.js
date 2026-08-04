@@ -10,6 +10,7 @@ import { normalizeWorkerCertifications, getWorkerCertAlerts } from "../utils/cer
 import { collectEquipmentInspectionDueItems } from "../utils/equipmentInspectionDue";
 import { collectVehicleDueItems } from "../utils/vehicleComplianceDue";
 
+import { todayLocalISO } from "../utils/localDate";
 const VAPID_PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "").trim();
 const NOTIF_PREFS_KEY = "mysafeops_notif_prefs";
 const LEGACY_NOTIF_PREFS_KEY = NOTIF_PREFS_KEY;
@@ -571,7 +572,7 @@ export function checkExpiryNotifications(opts = {}) {
   if (isAutomationEnabled("weeklyDigest") && isNotificationTypeEnabled("weekly_digest")) {
     const day = new Date().getDay();
     if (day === 1) {
-      const weekKey = new Date().toISOString().slice(0, 10);
+      const weekKey = todayLocalISO();
       const id = `weekly_digest_${weekKey}`;
       if (!wasRecentlySeen(id)) {
         const surveys = loadJSON("survey_reports", []);

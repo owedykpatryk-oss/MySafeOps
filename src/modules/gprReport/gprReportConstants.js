@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../../utils/localDate";
 /** GPR equipment presets — manufacturer-agnostic; user can customise per mobilisation. */
 export const GPR_EQUIPMENT_PRESETS = [
   {
@@ -379,7 +380,7 @@ export function blankGprReport(overrides = {}) {
     siteAddress: "",
     siteContextKey: "",
     siteContextLabel: "",
-    surveyDate: new Date().toISOString().slice(0, 10),
+    surveyDate: todayLocalISO(),
     surveyor: "",
     equipment: [blankGprEquipment()],
     acquisition: {

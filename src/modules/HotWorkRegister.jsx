@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
-import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -15,9 +17,12 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { orgHasFoodIndustrialPack } from "../utils/industrialSectors";
 import { getAuthorisedLiveLotoList } from "./LOTORegister";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `hw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -94,6 +99,15 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   const handleSubmit = () => {
+    const check = validateRequiredFields(
+      form,
+      ["location", "workDescription"],
+      { location: "Location", workDescription: "Work description" }
+    );
+    if (!check.ok) {
+      window.alert(check.message);
+      return;
+    }
     if (food) {
       if (form.status === "completed" && form.qcSignoffRequired && !form.qcSignedOffAt) {
         alert("QC sign-off is required before closing this hot work record. Enter who signed off and mark the time.");
@@ -117,33 +131,20 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "rgba(0,0,0,0.45)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "1.5rem 1rem",
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        overflow: "auto",
-      }}
-    >
-      <div style={{ ...ss.card, width: "100%", maxWidth: 560, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit hot work" : "Hot work record"}</h2>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>
           Align with your fire plan and PTW. Food-sector controls appear when your organisation includes food-related sectors in Settings → Sectors.
         </p>
-        <label style={ss.lbl}>Permit / reference</label>
-        <input style={ss.inp} value={form.permitRef} onChange={(e) => set("permitRef", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Work description</label>
-        <textarea style={{ ...ss.inp, minHeight: 52, resize: "vertical" }} value={form.workDescription} onChange={(e) => set("workDescription", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Location</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="hot-work-permit-ref">Permit / reference</label>
+        <input style={ss.inp} value={form.permitRef} onChange={(e) => set("permitRef", e.target.value)}  id="hot-work-permit-ref" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-work-description">Work description</label>
+        <textarea style={{ ...ss.inp, minHeight: 52, resize: "vertical" }} value={form.workDescription} onChange={(e) => set("workDescription", e.target.value)}  id="hot-work-work-description" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-location">Location</label>
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="hot-work-location" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="hot-work-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -151,20 +152,20 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date</label>
-        <input type="date" style={ss.inp} value={form.workDate} onChange={(e) => set("workDate", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-work-date">Date</label>
+        <input type="date" style={ss.inp} value={form.workDate} onChange={(e) => set("workDate", e.target.value)}  id="hot-work-work-date" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>From</label>
-            <input type="time" style={ss.inp} value={form.timeFrom} onChange={(e) => set("timeFrom", e.target.value)} />
+            <label style={ss.lbl} htmlFor="hot-work-time-from">From</label>
+            <input type="time" style={ss.inp} value={form.timeFrom} onChange={(e) => set("timeFrom", e.target.value)}  id="hot-work-time-from" />
           </div>
           <div>
-            <label style={ss.lbl}>To</label>
-            <input type="time" style={ss.inp} value={form.timeTo} onChange={(e) => set("timeTo", e.target.value)} />
+            <label style={ss.lbl} htmlFor="hot-work-time-to">To</label>
+            <input type="time" style={ss.inp} value={form.timeTo} onChange={(e) => set("timeTo", e.target.value)}  id="hot-work-time-to" />
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Fire watch (name)</label>
-        <input style={ss.inp} value={form.fireWatchName} onChange={(e) => set("fireWatchName", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-fire-watch-name">Fire watch (name)</label>
+        <input style={ss.inp} value={form.fireWatchName} onChange={(e) => set("fireWatchName", e.target.value)}  id="hot-work-fire-watch-name" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={form.extinguishersChecked} onChange={(e) => set("extinguishersChecked", e.target.checked)} />
           Suitable extinguishers checked / available
@@ -173,12 +174,12 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
           <input type="checkbox" checked={form.combustiblesRemoved} onChange={(e) => set("combustiblesRemoved", e.target.checked)} />
           Combustibles removed or protected (where applicable)
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Atmosphere / gas test ref (if required)</label>
-        <input style={ss.inp} value={form.gasTestRef} onChange={(e) => set("gasTestRef", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Issued by</label>
-        <input style={ss.inp} value={form.issuedBy} onChange={(e) => set("issuedBy", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Status</label>
-        <select style={ss.inp} value={form.status} onChange={(e) => set("status", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-gas-test-ref">Atmosphere / gas test ref (if required)</label>
+        <input style={ss.inp} value={form.gasTestRef} onChange={(e) => set("gasTestRef", e.target.value)}  id="hot-work-gas-test-ref" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-issued-by">Issued by</label>
+        <input style={ss.inp} value={form.issuedBy} onChange={(e) => set("issuedBy", e.target.value)}  id="hot-work-issued-by" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-status">Status</label>
+        <select style={ss.inp} value={form.status} onChange={(e) => set("status", e.target.value)} id="hot-work-status">
           <option value="active">Active</option>
           <option value="completed">Completed / cooled</option>
           <option value="cancelled">Cancelled</option>
@@ -187,16 +188,16 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
         {food && (
           <div style={{ marginTop: 16, padding: 12, borderRadius: 8, border: "1px solid #BFDBFE", background: "#F0F9FF" }}>
             <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 13 }}>Food environment controls</div>
-            <label style={ss.lbl}>Food zone class</label>
-            <select style={ss.inp} value={form.foodZoneClass || "high_care"} onChange={(e) => set("foodZoneClass", e.target.value)}>
+            <label style={ss.lbl} htmlFor="hot-work-food-zone-class">Food zone class</label>
+            <select style={ss.inp} value={form.foodZoneClass || "high_care"} onChange={(e) => set("foodZoneClass", e.target.value)} id="hot-work-food-zone-class">
               {FOOD_ZONES.map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.label}
                 </option>
               ))}
             </select>
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Production status</label>
-            <select style={ss.inp} value={form.productionStatus || "down"} onChange={(e) => set("productionStatus", e.target.value)}>
+            <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-production-status">Production status</label>
+            <select style={ss.inp} value={form.productionStatus || "down"} onChange={(e) => set("productionStatus", e.target.value)} id="hot-work-production-status">
               {PROD_STATUS.map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.label}
@@ -221,27 +222,27 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
               <input type="checkbox" checked={!!form.foreignBodyControls?.postWorkMetalDetector} onChange={(e) => setNested("foreignBodyControls", "postWorkMetalDetector", e.target.checked)} />
               Post-work metal detector check required
             </label>
-            <label style={{ ...ss.lbl, marginTop: 8 }}>Spark containment (e.g. welding blanket)</label>
+            <label style={{ ...ss.lbl, marginTop: 8 }} htmlFor="hot-work-foreign-body-controls">Spark containment (e.g. welding blanket)</label>
             <input
               style={ss.inp}
               value={form.foreignBodyControls?.sparkContainment || ""}
               onChange={(e) => setNested("foreignBodyControls", "sparkContainment", e.target.value)}
-            />
+             id="hot-work-foreign-body-controls" />
 
             <div style={{ fontWeight: 600, marginTop: 12, fontSize: 12 }}>Allergen controls</div>
-            <label style={ss.lbl}>Allergens present in area (comma-separated)</label>
+            <label style={ss.lbl} htmlFor="hot-work-allergen-controls">Allergens present in area (comma-separated)</label>
             <input
               style={ss.inp}
               value={form.allergenControls?.allergensInArea || ""}
               onChange={(e) => setNested("allergenControls", "allergensInArea", e.target.value)}
               placeholder="e.g. milk, gluten"
-            />
-            <label style={{ ...ss.lbl, marginTop: 8 }}>Additional PPE / gowning</label>
+             id="hot-work-allergen-controls" />
+            <label style={{ ...ss.lbl, marginTop: 8 }} htmlFor="hot-work-allergen-controls-2">Additional PPE / gowning</label>
             <input
               style={ss.inp}
               value={form.allergenControls?.additionalPpe || ""}
               onChange={(e) => setNested("allergenControls", "additionalPpe", e.target.value)}
-            />
+             id="hot-work-allergen-controls-2" />
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 13 }}>
               <input type="checkbox" checked={!!form.allergenControls?.cleaningBefore} onChange={(e) => setNested("allergenControls", "cleaningBefore", e.target.checked)} />
               Area cleaning before work
@@ -251,8 +252,8 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
               Cleaning after required before line release
             </label>
 
-            <label style={{ ...ss.lbl, marginTop: 12 }}>Link live LOTO (interlock)</label>
-            <select style={ss.inp} value={form.linkedLotoId || ""} onChange={(e) => set("linkedLotoId", e.target.value)}>
+            <label style={{ ...ss.lbl, marginTop: 12 }} htmlFor="hot-work-linked-loto-id">Link live LOTO (interlock)</label>
+            <select style={ss.inp} value={form.linkedLotoId || ""} onChange={(e) => set("linkedLotoId", e.target.value)} id="hot-work-linked-loto-id">
               <option value="">— None selected —</option>
               {liveLotos.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -260,8 +261,8 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
                 </option>
               ))}
             </select>
-            <label style={{ ...ss.lbl, marginTop: 10 }}>If no LOTO — brief justification</label>
-            <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.noLotoJustification || ""} onChange={(e) => set("noLotoJustification", e.target.value)} />
+            <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-no-loto-justification">If no LOTO — brief justification</label>
+            <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.noLotoJustification || ""} onChange={(e) => set("noLotoJustification", e.target.value)}  id="hot-work-no-loto-justification" />
 
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
               <input type="checkbox" checked={!!form.qcSignoffRequired} onChange={(e) => set("qcSignoffRequired", e.target.checked)} />
@@ -272,21 +273,21 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
                 ? `Signed off by ${form.qcSignedOffBy} at ${new Date(form.qcSignedOffAt).toLocaleString()}`
                 : "Not signed off yet."}
             </div>
-            <label style={{ ...ss.lbl, marginTop: 8 }}>QC / production sign-off by</label>
+            <label style={{ ...ss.lbl, marginTop: 8 }} htmlFor="hot-work-qc-signed-off-by">QC / production sign-off by</label>
             <input
               style={ss.inp}
               value={form.qcSignedOffBy || ""}
               onChange={(e) => set("qcSignedOffBy", e.target.value)}
               placeholder="Name or initials"
-            />
+             id="hot-work-qc-signed-off-by" />
             <button type="button" style={{ ...ss.btn, marginTop: 8 }} onClick={stampQcSignoff}>
               Stamp sign-off time
             </button>
           </div>
         )}
 
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="hot-work-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
@@ -296,7 +297,7 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -327,16 +328,23 @@ export default function HotWorkRegister() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
+  const liveItems = liveOrgArrayRows(items);
+
   useEffect(() => {
-    const t = setInterval(() => setLotoSnap(load("loto_register", [])), 4000);
-    return () => clearInterval(t);
+    const refresh = () => setLotoSnap(load("loto_register", []));
+    refresh();
+    const onData = (e) => {
+      if (!e?.detail?.baseKey || e.detail.baseKey === "loto_register") refresh();
+    };
+    window.addEventListener(ORG_DATA_CHANGED_EVENT, onData);
+    return () => window.removeEventListener(ORG_DATA_CHANGED_EVENT, onData);
   }, []);
 
   const liveLotos = useMemo(() => getAuthorisedLiveLotoList(lotoSnap), [lotoSnap]);
 
   const activeCount = items.filter((r) => r.status === "active").length;
 
-  const exportCsv = () => {
+  const handleExportCsv = () => {
     const h = [
       "Permit",
       "Date",
@@ -350,7 +358,7 @@ export default function HotWorkRegister() {
       "LOTO",
       "QC",
     ];
-    const rows = items.map((r) => [
+    const rows = liveItems.map((r) => [
       r.permitRef,
       r.workDate,
       r.location,
@@ -363,12 +371,7 @@ export default function HotWorkRegister() {
       r.linkedLotoId || "",
       r.qcSignedOffAt ? "yes" : "",
     ]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `hot_work_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(h, rows, `hot_work_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -402,8 +405,8 @@ export default function HotWorkRegister() {
                 {activeCount} active
               </span>
             )}
-            {items.length > 0 && (
-              <button type="button" style={ss.btn} onClick={exportCsv}>
+            {liveItems.length > 0 && (
+              <button type="button" style={ss.btn} onClick={handleExportCsv}>
                 Export CSV
               </button>
             )}
@@ -416,11 +419,11 @@ export default function HotWorkRegister() {
 
       <RegisterModuleShell
         moduleId="hot-work"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("hot-work", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("hot-work", liveItems)}
       >
 
-      {items.length === 0 ? (
+      {liveItems.length === 0 ? (
         <EmptyState
           icon="🔥"
           title="No hot work records yet"
@@ -431,7 +434,7 @@ export default function HotWorkRegister() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -462,7 +465,7 @@ export default function HotWorkRegister() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "hot_work_delete", entity: "hot_work", detail: r.id });
                         }
                       }}
@@ -475,10 +478,10 @@ export default function HotWorkRegister() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

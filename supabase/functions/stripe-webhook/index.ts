@@ -12,6 +12,13 @@ import {
 } from "../_shared/stripeConfig.ts";
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
+import {
+  isCustomerOrgBindingMismatch,
+  mapLegacyOrgStatus,
+  mapStripeStatus,
+  resolveWorkspaceStripeCustomerId,
+  stripeUnixToIso,
+} from "../_shared/stripeWebhookMapping.ts";
 
 type Diagnostics = {
   function: string;
@@ -35,42 +42,44 @@ type Diagnostics = {
   requestId: string;
 };
 
-function mapStripeStatus(status: string): "none" | "active" | "trialing" | "past_due" | "canceled" | "unpaid" {
-  switch (status) {
-    case "active":
-      return "active";
-    case "trialing":
-      return "trialing";
-    case "past_due":
-      return "past_due";
-    case "canceled":
-    case "unpaid":
-      return status;
-    default:
-      return "none";
-  }
-}
-
 async function applySubscription(
   supabase: ReturnType<typeof createClient>,
   sub: Stripe.Subscription,
   livemode: boolean,
 ) {
-  const orgId = sub.metadata?.org_id;
-  if (!orgId) {
-    console.warn("stripe-webhook: subscription without org_id metadata", sub.id);
+  const metadataOrgId = sub.metadata?.org_id;
+  const metadataWorkspaceId = sub.metadata?.workspace_id;
+  let workspaceQuery = supabase
+    .from("org_country_workspaces")
+    .select("id, org_id, market_id, is_primary");
+  workspaceQuery = metadataWorkspaceId
+    ? workspaceQuery.eq("id", metadataWorkspaceId)
+    : workspaceQuery.eq("org_id", metadataOrgId || "").eq("is_primary", true);
+  const { data: workspace, error: workspaceErr } = await workspaceQuery.limit(1).maybeSingle();
+  if (workspaceErr || !workspace?.id || (metadataOrgId && workspace.org_id !== metadataOrgId)) {
+    console.warn("stripe-webhook: subscription without a valid country workspace", sub.id, workspaceErr);
     return;
   }
+  const orgId = workspace.org_id;
 
   const priceId = sub.items.data[0]?.price?.id;
   const mapped = priceId ? planFromPriceId(priceId) : null;
-  const plan = mapped?.plan ?? null;
+  if (!mapped || mapped.market !== workspace.market_id) {
+    console.error("stripe-webhook: unknown price or market/workspace mismatch — refusing entitlement", {
+      subscriptionId: sub.id,
+      workspaceId: workspace.id,
+      workspaceMarket: workspace.market_id,
+      priceMarket: mapped?.market ?? null,
+    });
+    return;
+  }
+  const plan = mapped.plan;
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
 
-  // Defend against a subscription whose `metadata.org_id` doesn't actually belong to the
-  // Stripe customer that owns it (metadata can be edited via the Stripe dashboard/API).
-  // Once an org has a bound customer id for this mode, any mismatch is rejected instead
-  // of silently repointing billing state at another org.
+  // Defend against a subscription whose `metadata` doesn't actually belong to the Stripe
+  // customer that owns it (metadata can be edited via the Stripe dashboard/API). The
+  // binding is per country workspace, because each country bills its own customer — only
+  // the primary workspace falls back to the legacy organisation-level customer.
   const { data: existingOrg, error: existingOrgErr } = await supabase
     .from("organizations")
     .select("id, stripe_customer_id, stripe_test_customer_id")
@@ -80,33 +89,87 @@ async function applySubscription(
     console.error("stripe-webhook: org not found for subscription", sub.id, orgId, existingOrgErr);
     return;
   }
-  const boundCustomerId = livemode ? existingOrg.stripe_customer_id : existingOrg.stripe_test_customer_id;
-  if (boundCustomerId && customerId && boundCustomerId !== customerId) {
+
+  const stripeMode = livemode ? "live" : "test";
+  const { data: existingBilling } = await supabase
+    .from("org_country_workspace_subscriptions")
+    .select("subscription_status, past_due_since, stripe_customer_id")
+    .eq("workspace_id", workspace.id)
+    .eq("stripe_mode", stripeMode)
+    .maybeSingle();
+
+  const boundCustomerId = resolveWorkspaceStripeCustomerId({
+    workspaceCustomerId: existingBilling?.stripe_customer_id as string | null | undefined,
+    orgCustomerId: livemode ? existingOrg.stripe_customer_id : existingOrg.stripe_test_customer_id,
+    isPrimary: workspace.is_primary,
+  });
+  if (isCustomerOrgBindingMismatch(boundCustomerId, customerId)) {
     console.error(
-      "stripe-webhook: customer/org binding mismatch — refusing to apply subscription",
-      { subscriptionId: sub.id, orgId, boundCustomerId, customerId, livemode },
+      "stripe-webhook: customer/workspace binding mismatch — refusing to apply subscription",
+      { subscriptionId: sub.id, orgId, workspaceId: workspace.id, boundCustomerId, customerId, livemode },
     );
     return;
   }
 
+  const mappedStatus = mapStripeStatus(sub.status);
+  const periodEnd = stripeUnixToIso(sub.current_period_end);
+  const trialEnd = stripeUnixToIso(sub.trial_end);
+
   const row: Record<string, unknown> = {
+    workspace_id: workspace.id,
+    stripe_mode: stripeMode,
+    market_id: workspace.market_id,
+    currency: workspace.market_id === "pl" ? "PLN" : workspace.market_id === "au" ? "AUD" : "GBP",
+    stripe_customer_id: customerId ?? null,
     stripe_subscription_id: sub.id,
-    subscription_status: mapStripeStatus(sub.status),
+    subscription_status: mappedStatus,
     billing_plan: plan,
+    stripe_price_id: priceId ?? null,
+    current_period_end: periodEnd,
+    cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+    stripe_trial_end: trialEnd,
   };
 
-  if (livemode) {
-    row.stripe_customer_id = customerId ?? null;
+  if (mappedStatus === "past_due") {
+    if (
+      existingBilling?.subscription_status !== "past_due" ||
+      !existingBilling?.past_due_since
+    ) {
+      row.past_due_since = new Date().toISOString();
+    }
   } else {
-    row.stripe_test_customer_id = customerId ?? null;
+    row.past_due_since = null;
   }
 
   if (sub.status === "canceled" || sub.status === "unpaid") {
     row.billing_plan = null;
   }
 
-  const { error } = await supabase.from("organizations").update(row).eq("id", orgId);
-  if (error) console.error("applySubscription update error", error);
+  const { error } = await supabase
+    .from("org_country_workspace_subscriptions")
+    .upsert(row, { onConflict: "workspace_id,stripe_mode" });
+  if (error) {
+    console.error("applySubscription workspace update error", error);
+    return;
+  }
+
+  // Keep legacy organisation billing fields in sync for the primary workspace only.
+  // A secondary country must never touch them: its customer id would overwrite the
+  // primary binding, and its plan would leak into the organisation-wide entitlement.
+  if (!workspace.is_primary) return;
+
+  const legacyRow: Record<string, unknown> = {
+    stripe_subscription_id: sub.id,
+    subscription_status: mapLegacyOrgStatus(mappedStatus),
+    billing_plan: row.billing_plan,
+    stripe_current_period_end: periodEnd,
+    stripe_cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+    stripe_trial_end: trialEnd,
+    subscription_past_due_since: row.past_due_since,
+    [livemode ? "stripe_customer_id" : "stripe_test_customer_id"]: customerId ?? null,
+  };
+  const { error: legacyErr } = await supabase.from("organizations").update(legacyRow).eq("id", orgId);
+  if (legacyErr) console.error("applySubscription legacy mirror error", legacyErr);
 }
 
 async function findOrgIdByCustomerId(
@@ -126,19 +189,68 @@ async function findOrgIdByCustomerId(
   return data?.id ?? null;
 }
 
+/**
+ * Secondary-country customers are never written to `organizations`, so a subscription
+ * without workspace metadata is resolved from the workspace billing rows first.
+ */
+async function findWorkspaceIdByCustomerId(
+  supabase: ReturnType<typeof createClient>,
+  customerId: string | null | undefined,
+  stripeMode: "live" | "test",
+): Promise<string | null> {
+  if (!customerId) return null;
+  const { data, error } = await supabase
+    .from("org_country_workspace_subscriptions")
+    .select("workspace_id")
+    .eq("stripe_customer_id", customerId)
+    .eq("stripe_mode", stripeMode)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("findWorkspaceIdByCustomerId error", error);
+    return null;
+  }
+  return data?.workspace_id ?? null;
+}
+
 async function recordWebhookEvent(
   supabase: ReturnType<typeof createClient>,
   event: Stripe.Event,
-): Promise<"inserted" | "duplicate" | "failed"> {
+): Promise<"inserted" | "duplicate" | "pending_retry" | "failed"> {
   const { error } = await supabase.from("stripe_webhook_events").insert({
     event_id: event.id,
     event_type: event.type,
     livemode: event.livemode ?? false,
+    processed_at: null,
   });
   if (!error) return "inserted";
-  if (error.code === "23505") return "duplicate";
+  if (error.code === "23505") {
+    const { data: existing, error: selErr } = await supabase
+      .from("stripe_webhook_events")
+      .select("processed_at")
+      .eq("event_id", event.id)
+      .maybeSingle();
+    if (selErr) {
+      console.error("recordWebhookEvent duplicate lookup error", selErr);
+      return "failed";
+    }
+    // Prior attempt inserted the id then failed before stamping processed_at — allow retry.
+    if (!existing?.processed_at) return "pending_retry";
+    return "duplicate";
+  }
   console.error("recordWebhookEvent error", error);
   return "failed";
+}
+
+async function markWebhookEventProcessed(
+  supabase: ReturnType<typeof createClient>,
+  eventId: string,
+) {
+  const { error } = await supabase
+    .from("stripe_webhook_events")
+    .update({ processed_at: new Date().toISOString() })
+    .eq("event_id", eventId);
+  if (error) console.error("markWebhookEventProcessed error", error);
 }
 
 async function recordWebhookFailure(
@@ -240,17 +352,81 @@ async function buildDiagnostics(
 
 async function clearSubscription(
   supabase: ReturnType<typeof createClient>,
-  orgId: string,
+  workspaceId: string,
+  opts: { customerId?: string | null; livemode?: boolean } = {},
 ) {
+  const stripeMode = opts.livemode === false ? "test" : "live";
+  const { data: workspace, error: workspaceErr } = await supabase
+    .from("org_country_workspaces")
+    .select("id, org_id, is_primary")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  if (workspaceErr || !workspace?.id) {
+    console.error("stripe-webhook: workspace not found for clearSubscription", workspaceId, workspaceErr);
+    return;
+  }
+
+  if (opts.customerId) {
+    const { data: existingBilling, error: existingBillingErr } = await supabase
+      .from("org_country_workspace_subscriptions")
+      .select("stripe_customer_id")
+      .eq("workspace_id", workspaceId)
+      .eq("stripe_mode", stripeMode)
+      .maybeSingle();
+    if (existingBillingErr) {
+      console.error("stripe-webhook: billing not found for clearSubscription", workspaceId, existingBillingErr);
+      return;
+    }
+    const { data: existingOrg } = await supabase
+      .from("organizations")
+      .select("stripe_customer_id, stripe_test_customer_id")
+      .eq("id", workspace.org_id)
+      .maybeSingle();
+    const boundCustomerId = resolveWorkspaceStripeCustomerId({
+      workspaceCustomerId: existingBilling?.stripe_customer_id as string | null | undefined,
+      orgCustomerId: stripeMode === "live" ? existingOrg?.stripe_customer_id : existingOrg?.stripe_test_customer_id,
+      isPrimary: workspace.is_primary,
+    });
+    if (isCustomerOrgBindingMismatch(boundCustomerId, opts.customerId)) {
+      console.error(
+        "stripe-webhook: customer/workspace binding mismatch — refusing to clear subscription",
+        { workspaceId, boundCustomerId, customerId: opts.customerId, stripeMode },
+      );
+      return;
+    }
+  }
+
   const { error } = await supabase
-    .from("organizations")
+    .from("org_country_workspace_subscriptions")
     .update({
       stripe_subscription_id: null,
       subscription_status: "canceled",
       billing_plan: null,
+      stripe_price_id: null,
+      current_period_end: null,
+      cancel_at_period_end: false,
+      stripe_trial_end: null,
+      past_due_since: null,
     })
-    .eq("id", orgId);
+    .eq("workspace_id", workspaceId)
+    .eq("stripe_mode", stripeMode);
   if (error) console.error("clearSubscription error", error);
+
+  if (workspace.is_primary) {
+    const { error: legacyErr } = await supabase
+      .from("organizations")
+      .update({
+        stripe_subscription_id: null,
+        subscription_status: "canceled",
+        billing_plan: null,
+        stripe_current_period_end: null,
+        stripe_cancel_at_period_end: false,
+        stripe_trial_end: null,
+        subscription_past_due_since: null,
+      })
+      .eq("id", workspace.org_id);
+    if (legacyErr) console.error("clearSubscription legacy mirror error", legacyErr);
+  }
 }
 
 function constructStripeEvent(
@@ -261,11 +437,12 @@ function constructStripeEvent(
   let lastError: unknown = null;
 
   for (const mode of attempts) {
-    const config = resolveStripeConfig(mode);
-    if (!config?.webhookSecret) continue;
-    const stripe = new Stripe(config.secretKey, { apiVersion: "2023-10-16" });
+    const secretKey = Deno.env.get(mode === "test" ? "STRIPE_SECRET_KEY_TEST" : "STRIPE_SECRET_KEY")?.trim() ?? "";
+    const webhookSecret = Deno.env.get(mode === "test" ? "STRIPE_WEBHOOK_SECRET_TEST" : "STRIPE_WEBHOOK_SECRET")?.trim() ?? "";
+    if (!isValidStripeSecret(secretKey) || !isValidWebhookSecret(webhookSecret)) continue;
+    const stripe = new Stripe(secretKey, { apiVersion: "2023-10-16" });
     try {
-      const event = stripe.webhooks.constructEvent(body, sig, config.webhookSecret);
+      const event = stripe.webhooks.constructEvent(body, sig, webhookSecret);
       return { event, mode, stripe };
     } catch (error) {
       lastError = error;
@@ -391,6 +568,7 @@ Deno.serve(async (req) => {
       eventId: event.id,
       eventType: event.type,
       livemode: event.livemode ?? false,
+      retry: eventStore === "pending_retry",
     });
 
     switch (event.type) {
@@ -412,13 +590,38 @@ Deno.serve(async (req) => {
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
         const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
-        const orgId = sub.metadata?.org_id ?? (await findOrgIdByCustomerId(supabase, customerId));
-        if (orgId) await clearSubscription(supabase, orgId);
+        let workspaceId = sub.metadata?.workspace_id ?? null;
+        if (!workspaceId) {
+          workspaceId = await findWorkspaceIdByCustomerId(
+            supabase,
+            customerId,
+            event.livemode ? "live" : "test",
+          );
+        }
+        if (!workspaceId) {
+          const orgId = sub.metadata?.org_id ?? (await findOrgIdByCustomerId(supabase, customerId));
+          if (orgId) {
+            const { data: primaryWorkspace } = await supabase
+              .from("org_country_workspaces")
+              .select("id")
+              .eq("org_id", orgId)
+              .eq("is_primary", true)
+              .maybeSingle();
+            workspaceId = primaryWorkspace?.id ?? null;
+          }
+        }
+        if (workspaceId) {
+          await clearSubscription(supabase, workspaceId, {
+            customerId,
+            livemode: event.livemode ?? false,
+          });
+        }
         break;
       }
       default:
         break;
     }
+    await markWebhookEventProcessed(supabase, event.id);
     await markWebhookFailureResolved(supabase, event.id);
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);

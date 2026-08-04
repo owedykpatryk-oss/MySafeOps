@@ -28,7 +28,6 @@ export default function LandingPage({ marketId = "uk" }) {
   const cloud = isSupabaseConfigured();
   const { user, ready } = useSupabaseAuth();
   const [navScrolled, setNavScrolled] = useState(false);
-  const [featureForm, setFeatureForm] = useState({ email: "", name: "", desc: "" });
   const [ctaEmail, setCtaEmail] = useState("");
 
   useEffect(() => {
@@ -130,11 +129,21 @@ export default function LandingPage({ marketId = "uk" }) {
 
   const alternateLocales = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return getAlternateMarkets(market.id).map((alt) => ({
+    const self = {
+      hreflang: market.locale,
+      href: `${origin}${market.homePath === "/" ? "/" : market.homePath}`,
+    };
+    const alts = getAlternateMarkets(market.id).map((alt) => ({
       hreflang: alt.locale,
-      href: `${origin}${alt.homePath}`,
+      href: `${origin}${alt.homePath === "/" ? "/" : alt.homePath}`,
     }));
-  }, [market.id]);
+    // Complete reciprocal cluster + x-default (UK home). Never use alternateMarketId alone.
+    return [
+      { hreflang: "x-default", href: `${origin}/` },
+      self,
+      ...alts,
+    ];
+  }, [market.id, market.locale, market.homePath]);
 
   const landingJsonLd = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -212,19 +221,6 @@ export default function LandingPage({ marketId = "uk" }) {
     alternateLocales,
   });
 
-  const submitFeature = () => {
-    const email = featureForm.email.trim();
-    const name = featureForm.name.trim();
-    const desc = featureForm.desc.trim();
-    if (!email || !desc) {
-      window.alert("Please enter your email and describe the feature you need.");
-      return;
-    }
-    const subject = encodeURIComponent(`MySafeOps feature request (${market.label})`);
-    const body = encodeURIComponent(`Name / company: ${name || "(not provided)"}\nEmail: ${email}\nMarket: ${market.label}\n\n${desc}`);
-    window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
-  };
-
   const ctaGo = () => {
     const params = new URLSearchParams();
     if (ctaEmail.trim()) params.set("email", ctaEmail.trim());
@@ -248,14 +244,11 @@ export default function LandingPage({ marketId = "uk" }) {
         {navUi.skipToMain}
       </a>
       <main id="landing-main" tabIndex={-1}>
-        <LandingTopSection navScrolled={navScrolled} cloud={cloud} market={market} copy={copy} />
+        <LandingTopSection navScrolled={navScrolled} market={market} copy={copy} />
         <LandingContentSections
           market={market}
           copy={copy}
           supportEmail={SUPPORT_EMAIL}
-          featureForm={featureForm}
-          onChangeFeature={(k, v) => setFeatureForm((f) => ({ ...f, [k]: v }))}
-          onSubmitFeature={submitFeature}
           ctaEmail={ctaEmail}
           onCtaEmailChange={setCtaEmail}
           onCtaGo={ctaGo}

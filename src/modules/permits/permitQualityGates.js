@@ -1,5 +1,5 @@
 import { permitHasSiteEvidence } from "../../utils/geoPhotoFields";
-import { isDigPermitType, mechanicalDigAssessment } from "./permitDigGuidance";
+import { mechanicalDigAssessment } from "./permitDigGuidance";
 import { hotWorkAssessment } from "./permitGuidance/hotWorkGuidance";
 import { confinedSpaceAssessment } from "./permitGuidance/confinedSpaceGuidance";
 

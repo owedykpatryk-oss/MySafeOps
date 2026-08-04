@@ -410,6 +410,7 @@ const RAW_LANDING_BLOG_POSTS = [
     publishedIso: "2026-07-12",
     readTime: "7 min read",
     image: "/blog/images/permit-to-work-app-uk-hero.png",
+    marketId: "pl",
   },
 ];
 

@@ -7,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
@@ -45,9 +46,9 @@ import {
   isGiGeoPhotoType,
   buildStructuredGeoPhotoNotes,
   CAPTURE_PHASE_OPTIONS,
-  suggestedGeoPhotoPresetForPlaybook,
 } from "../utils/geoPhotoFields";
 
+import { todayLocalISO } from "../utils/localDate";
 const STORAGE_KEY = "geo_photos";
 const LIST_PAGE = 48;
 
@@ -165,7 +166,7 @@ function exportCsv(rows) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `geo-photos-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `geo-photos-${todayLocalISO()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -400,7 +401,7 @@ export default function GeoPhotos() {
     }
   }, [photos]);
 
-  const safePhotos = useMemo(() => asPhotoArray(photos), [photos]);
+  const safePhotos = useMemo(() => liveOrgArrayRows(asPhotoArray(photos)), [photos]);
   const activeProjects = useMemo(() => asPhotoArray(projects).filter((p) => !p.closed), [projects]);
   const selectedProject = useMemo(
     () => activeProjects.find((p) => p.id === filterProject) || null,
@@ -554,7 +555,7 @@ export default function GeoPhotos() {
       return;
     }
     clearPermitEvidenceForGeoPhoto(victim, { load, save });
-    setPhotos((prev) => asPhotoArray(prev).filter((p) => p.id !== id));
+    setPhotos((prev) => replaceWithTombstone(asPhotoArray(prev), id));
     setDetail(null);
     pushAudit({ action: "geo_photo_delete", detail: id, module: "geo-photos" });
   };
@@ -597,7 +598,7 @@ export default function GeoPhotos() {
     if (!filtered.length) return;
     const prepared = prepareGeoPhotoExport(filtered);
     if (!prepared) return;
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = todayLocalISO();
     const projectName = selectedProject?.name || "";
     const opts = { projectName, name: projectName || "Geo-photos", projectId: filterProject || "" };
     setExportBusy(kind);

@@ -1,9 +1,10 @@
+import { todayLocalISO } from "./localDate";
 /**
  * Build site presence updates from today's daily briefing (B1).
  * Only workers marked present **with signature** are included; guests (external ids) are skipped.
  */
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = todayLocalISO;
 
 /**
  * @param {object[]} briefings `daily_briefings` entries

@@ -3,7 +3,6 @@ import PageHero from "../components/PageHero";
 import { ms } from "../utils/moduleStyles";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useApp } from "../context/AppContext";
-import { isSuperAdminEmail } from "../utils/superAdmin";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { isR2StorageConfigured } from "../lib/r2Storage";
 import {
@@ -13,7 +12,9 @@ import {
   getViteMode,
 } from "../utils/appBuildInfo";
 import { isAnthropicConfigured } from "../utils/anthropicClient";
+import { downloadBlob } from "../utils/downloadBlob.js";
 
+import { todayLocalISO } from "../utils/localDate";
 const ss = ms;
 /** SQL files that define owner-only RPCs used by this page (copy into Supabase / CLI). */
 const SUPERADMIN_DB_MIGRATIONS = [
@@ -61,12 +62,7 @@ function extractOrgIdFromKey(storageKey) {
 }
 
 function downloadFile(name, content, type) {
-  const blob = new Blob([content], { type });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  downloadBlob(new Blob([content], { type }), name);
 }
 
 function toCsvLine(cols) {
@@ -224,7 +220,7 @@ const EMPTY_LOCAL_ORG_USAGE = {
 };
 
 /**
- * Cross-tenant metrics via SECURITY DEFINER RPC (JWT email must match DB owner allow-list; sync with `VITE_PLATFORM_OWNER_EMAIL` + migrations).
+ * Cross-tenant metrics via SECURITY DEFINER RPC (JWT email must match DB owner allow-list).
  * Apply migration: supabase/migrations/20260420160000_superadmin_platform_stats.sql
  */
 async function readCloudSummary(supabase) {
@@ -394,7 +390,7 @@ function RecentOrgSortTh({ colKey, label, sort, onSort }) {
 
 export default function SuperAdminPanel() {
   const { user, supabase } = useSupabaseAuth();
-  const { billing, trialStatus } = useApp();
+  const { billing, trialStatus, isPlatformOwner } = useApp();
   const [cloud, setCloud] = useState({ ok: false, message: "Loading..." });
   const [recentOrgs, setRecentOrgs] = useState({
     ok: false,
@@ -415,7 +411,7 @@ export default function SuperAdminPanel() {
   const [copyHint, setCopyHint] = useState("");
   const copyTimerRef = useRef(null);
   const cloudFetchSeq = useRef(0);
-  const allowed = isSuperAdminEmail(user?.email);
+  const allowed = Boolean(isPlatformOwner);
 
   recentOrgsRef.current = recentOrgs;
 
@@ -542,7 +538,7 @@ export default function SuperAdminPanel() {
             }
           : null,
     };
-    downloadFile(`mysafeops-superadmin-snapshot-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2), "application/json");
+    downloadFile(`mysafeops-superadmin-snapshot-${todayLocalISO()}.json`, JSON.stringify(payload, null, 2), "application/json");
   };
 
   /** Cloud + recent orgs only (no device/localStorage metrics) — for sharing with ops without local browser data. */
@@ -594,7 +590,7 @@ export default function SuperAdminPanel() {
       lines.push(toCsvLine(["recent_org", "status", recentOrgs.ok ? "empty" : "unavailable"]));
       if (!recentOrgs.ok && recentOrgs.message) lines.push(toCsvLine(["recent_org", "message", recentOrgs.message]));
     }
-    downloadFile(`mysafeops-superadmin-cloud-${new Date().toISOString().slice(0, 10)}.csv`, `${lines.join("\n")}\n`, "text/csv");
+    downloadFile(`mysafeops-superadmin-cloud-${todayLocalISO()}.csv`, `\uFEFF${lines.join("\r\n")}\n`, "text/csv;charset=utf-8");
   };
 
   const exportSnapshotCsv = () => {
@@ -645,7 +641,7 @@ export default function SuperAdminPanel() {
     }
     localSummary.topModules.forEach((m) => lines.push(toCsvLine(["top_module", m.module, m.count])));
     localSummary.topActions.forEach((a) => lines.push(toCsvLine(["top_action", a.action, a.count])));
-    downloadFile(`mysafeops-superadmin-snapshot-${new Date().toISOString().slice(0, 10)}.csv`, `${lines.join("\n")}\n`, "text/csv");
+    downloadFile(`mysafeops-superadmin-snapshot-${todayLocalISO()}.csv`, `\uFEFF${lines.join("\r\n")}\n`, "text/csv;charset=utf-8");
   };
 
   if (!allowed) {

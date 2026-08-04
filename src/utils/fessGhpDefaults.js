@@ -5,9 +5,10 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "./orgStorage";
 import { isFessOrg } from "./fessOrg";
 import { ensureFessSiteProject } from "./fessClientSites";
 
+import { todayLocalISO } from "./localDate";
 const KEY = "ghp_register";
 const genId = () => `ghp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 /** @type {Record<string, Array<{ itemDescription: string, zone: string, broughtBy: string }>>} */
 export const FESS_SITE_GHP_STARTERS = {

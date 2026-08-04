@@ -79,7 +79,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 60,
+        zIndex: "var(--z-palette, 70)",
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",

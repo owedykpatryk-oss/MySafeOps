@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `vis_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -41,19 +46,19 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 540, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 540 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit visitor" : "Visitor sign-in"}</h2>
-        <label style={ss.lbl}>Visitor name</label>
-        <input style={ss.inp} value={form.visitorName} onChange={(e) => set("visitorName", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Company</label>
-        <input style={ss.inp} value={form.company} onChange={(e) => set("company", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Vehicle registration</label>
-        <input style={ss.inp} value={form.vehicleReg} onChange={(e) => set("vehicleReg", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Host / escort</label>
-        <input style={ss.inp} value={form.hostName} onChange={(e) => set("hostName", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project / site</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="visitor-visitor-name">Visitor name</label>
+        <input style={ss.inp} value={form.visitorName} onChange={(e) => set("visitorName", e.target.value)}  id="visitor-visitor-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="visitor-company">Company</label>
+        <input style={ss.inp} value={form.company} onChange={(e) => set("company", e.target.value)}  id="visitor-company" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="visitor-vehicle-reg">Vehicle registration</label>
+        <input style={ss.inp} value={form.vehicleReg} onChange={(e) => set("vehicleReg", e.target.value)}  id="visitor-vehicle-reg" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="visitor-host-name">Host / escort</label>
+        <input style={ss.inp} value={form.hostName} onChange={(e) => set("hostName", e.target.value)}  id="visitor-host-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="visitor-project-id">Project / site</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="visitor-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -61,34 +66,39 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Visit date</label>
-        <input type="date" style={ss.inp} value={form.visitDate} onChange={(e) => set("visitDate", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="visitor-visit-date">Visit date</label>
+        <input type="date" style={ss.inp} value={form.visitDate} onChange={(e) => set("visitDate", e.target.value)}  id="visitor-visit-date" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Time in</label>
-            <input type="time" style={ss.inp} value={form.timeIn} onChange={(e) => set("timeIn", e.target.value)} />
+            <label style={ss.lbl} htmlFor="visitor-time-in">Time in</label>
+            <input type="time" style={ss.inp} value={form.timeIn} onChange={(e) => set("timeIn", e.target.value)}  id="visitor-time-in" />
           </div>
           <div>
-            <label style={ss.lbl}>Time out</label>
-            <input type="time" style={ss.inp} value={form.timeOut || ""} onChange={(e) => set("timeOut", e.target.value)} />
+            <label style={ss.lbl} htmlFor="visitor-time-out">Time out</label>
+            <input type="time" style={ss.inp} value={form.timeOut || ""} onChange={(e) => set("timeOut", e.target.value)}  id="visitor-time-out" />
           </div>
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={form.inductionBriefed} onChange={(e) => set("inductionBriefed", e.target.checked)} />
           Site rules / induction briefed
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="visitor-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="visitor-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["visitorName","visitDate"], { visitorName: "Visitor name", visitDate: "Visit date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -118,15 +128,12 @@ export default function VisitorLog() {
   const d1Hydrating = d1VisH || d1ProjH;
   const d1OutboxPending = d1VisO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Date", "Visitor", "Company", "Vehicle", "Host", "Project", "In", "Out", "Induction", "Notes"];
-    const rows = items.map((r) => [r.visitDate, r.visitorName, r.company, r.vehicleReg, r.hostName, r.projectName || "", r.timeIn, r.timeOut, r.inductionBriefed ? "yes" : "no", r.notes]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `visitor_log_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.visitDate, r.visitorName, r.company, r.vehicleReg, r.hostName, r.projectName || "", r.timeIn, r.timeOut, r.inductionBriefed ? "yes" : "no", r.notes]);
+    exportCsv(h, rows, `visitor_log_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -152,8 +159,8 @@ export default function VisitorLog() {
         title="Visitor log"
         lead="Site visitors, induction status, and host details (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -165,11 +172,11 @@ export default function VisitorLog() {
 
       <RegisterModuleShell
         moduleId="visitors"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("visitors", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("visitors", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="👤"
           title="No visitors recorded"
@@ -180,7 +187,7 @@ export default function VisitorLog() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 80px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -211,7 +218,7 @@ export default function VisitorLog() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "visitor_delete", entity: "visitor", detail: r.id });
                         }
                       }}
@@ -224,10 +231,10 @@ export default function VisitorLog() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
             itemLabel="entries"

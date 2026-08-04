@@ -2,6 +2,7 @@
  * Capture a DOM element as PNG blob (html2canvas).
  * Includes Leaflet transform freeze so map panes/tiles don't shift in the bitmap.
  */
+import { downloadBlob } from "./downloadBlob.js";
 
 /**
  * html2canvas misreads Leaflet's CSS transforms — freeze panes/tiles to left/top for capture.
@@ -111,9 +112,5 @@ export async function captureElementPngBlob(el, opts = {}) {
 
 export function downloadPngBlob(blob, filename) {
   if (!blob) return;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  downloadBlob(blob, filename || "capture.png");
 }

@@ -9,6 +9,8 @@ import { CAPTURE_PHASE_OPTIONS, resolvedGiDepth, resolvedGiLocationId } from "./
 import { loadDrawingEditorPrefs } from "../modules/permits/projectDrawingEditorPrefs";
 import { latLngToPlanPercentAffine } from "../modules/permits/projectDrawingAffine";
 
+import { todayLocalISO } from "./localDate";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 const EARTH_RADIUS_M = 6371000;
 
 /** Local site grid metres from WGS84 relative to origin. */
@@ -86,7 +88,7 @@ function photoMetadataRows(photo) {
     phase ? ["Phase", phase] : null,
     bearing != null ? ["View bearing", `${bearing}°`] : null,
     photo.capturedBy ? ["Captured by", photo.capturedBy] : null,
-    photo.timestampUtc ? ["Captured", new Date(photo.timestampUtc).toLocaleString("en-GB")] : null,
+    photo.timestampUtc ? ["Captured", new Date(photo.timestampUtc).toLocaleString(getActiveDocumentLocale())] : null,
   ].filter(Boolean);
   return rows;
 }
@@ -324,13 +326,6 @@ function crc32(bytes) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
-function dosTime(date = new Date()) {
-  const d = date;
-  const time = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xffff;
-  const day = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xffff;
-  return { time, day };
-}
-
 /**
  * Minimal ZIP (store only, no compression) for KMZ / CAD bundles.
  * @param {{ name: string, data: Uint8Array }[]} files
@@ -343,7 +338,6 @@ export function buildZipStore(files) {
 
   files.forEach(({ name, data }) => {
     const nameBytes = enc.encode(name.replace(/\\/g, "/"));
-    const { time, day } = dosTime();
     const crc = crc32(data);
     const local = new Uint8Array(30 + nameBytes.length + data.length);
     const lv = new DataView(local.buffer);
@@ -527,7 +521,6 @@ export function buildGeoPhotosDxf(photos, opts = {}) {
     if (!m || !Number.isFinite(m.x) || !Number.isFinite(m.y)) return;
     const { x, y } = m;
     track(x, y);
-    const preset = geoPhotoPreset(p.type);
     const layer = `GP_${String(p.type || "other").replace(/[^a-z0-9_]/gi, "_").slice(0, 24)}`;
     const rot = bearingToCadRotation(p.bearing);
     const label = photoLabel(p);
@@ -713,7 +706,7 @@ function buildGeoPhotosViewerHtml(photos, origin, opts = {}) {
   const data = JSON.stringify(rows);
   const originJson = JSON.stringify(origin);
   return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${title} — viewer</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
@@ -868,27 +861,27 @@ function triggerDownload(blob, fileName) {
 
 export function downloadGeoPhotosKml(photos, fileName, opts = {}) {
   const kml = buildGeoPhotosKml(photos, opts);
-  triggerDownload(new Blob([kml], { type: "application/vnd.google-earth.kml+xml" }), fileName || `geo-photos-${new Date().toISOString().slice(0, 10)}.kml`);
+  triggerDownload(new Blob([kml], { type: "application/vnd.google-earth.kml+xml" }), fileName || `geo-photos-${todayLocalISO()}.kml`);
 }
 
 export async function downloadGeoPhotosKmz(photos, fileName, opts = {}) {
   const blob = await buildGeoPhotosKmzBlob(photos, opts);
-  triggerDownload(blob, fileName || `geo-photos-${new Date().toISOString().slice(0, 10)}.kmz`);
+  triggerDownload(blob, fileName || `geo-photos-${todayLocalISO()}.kmz`);
 }
 
 export function downloadGeoPhotosDxf(photos, fileName, opts = {}) {
   const dxf = buildGeoPhotosDxf(photos, opts);
-  triggerDownload(new Blob([dxf], { type: "application/dxf" }), fileName || `geo-photos-${new Date().toISOString().slice(0, 10)}.dxf`);
+  triggerDownload(new Blob([dxf], { type: "application/dxf" }), fileName || `geo-photos-${todayLocalISO()}.dxf`);
 }
 
 export async function downloadGeoPhotosCadBundle(photos, fileName, opts = {}) {
   const blob = await buildGeoPhotosCadBundleBlob(photos, opts);
-  triggerDownload(blob, fileName || `geo-photos-cad-${new Date().toISOString().slice(0, 10)}.zip`);
+  triggerDownload(blob, fileName || `geo-photos-cad-${todayLocalISO()}.zip`);
 }
 
 export function downloadGeoPhotosGpx(photos, fileName, opts = {}) {
   const gpx = buildGeoPhotosGpx(photos, opts);
-  triggerDownload(new Blob([gpx], { type: "application/gpx+xml" }), fileName || `geo-photos-${new Date().toISOString().slice(0, 10)}.gpx`);
+  triggerDownload(new Blob([gpx], { type: "application/gpx+xml" }), fileName || `geo-photos-${todayLocalISO()}.gpx`);
 }
 
 /** Resolve export set and optionally warn when photos lack GPS. */

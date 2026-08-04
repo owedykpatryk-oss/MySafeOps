@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { isR2StorageConfigured, uploadFileToR2Storage, pickR2ViewUrl } from "../lib/r2Storage";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
@@ -365,19 +365,19 @@ export default function DocumentLibrary() {
           {!selectedPath && <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>Select a file.</div>}
           {selectedPath && (
             <>
-              <label style={ss.lbl}>Tags (comma-separated)</label>
+              <label style={ss.lbl} htmlFor="document-library-tags-comma-separated">Tags (comma-separated)</label>
               <input
                 style={ss.inp}
                 value={(meta.tags && meta.tags[selectedPath]) || ""}
                 onChange={(e) => setTags(selectedPath, e.target.value)}
                 placeholder="e.g. RAMS, handover"
-              />
-              <label style={{ ...ss.lbl, marginTop: 12 }}>Notes</label>
+               id="document-library-tags-comma-separated" />
+              <label style={{ ...ss.lbl, marginTop: 12 }} htmlFor="document-library-notes">Notes</label>
               <textarea
                 style={{ ...ss.inp, minHeight: 80, resize: "vertical" }}
                 value={(meta.notes && meta.notes[selectedPath]) || ""}
                 onChange={(e) => setNote(selectedPath, e.target.value)}
-              />
+               id="document-library-notes" />
               {previewUrl && (selectedPath.toLowerCase().endsWith(".pdf") ? (
                 <iframe title="preview" src={previewUrl} style={{ width: "100%", height: 280, border: "0.5px solid #ccc", borderRadius: 6, marginTop: 12 }} />
               ) : (

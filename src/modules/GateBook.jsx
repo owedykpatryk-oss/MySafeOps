@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
@@ -13,9 +15,12 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `gate_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -41,39 +46,39 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 540, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 540 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit gate entry" : "Gate / vehicle book"}</h2>
-        <label style={ss.lbl}>Date</label>
-        <input type="date" style={ss.inp} value={form.visitDate} onChange={(e) => set("visitDate", e.target.value)} />
+        <label style={ss.lbl} htmlFor="gate-book-visit-date">Date</label>
+        <input type="date" style={ss.inp} value={form.visitDate} onChange={(e) => set("visitDate", e.target.value)}  id="gate-book-visit-date" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Time in</label>
-            <input type="time" style={ss.inp} value={form.timeIn} onChange={(e) => set("timeIn", e.target.value)} />
+            <label style={ss.lbl} htmlFor="gate-book-time-in">Time in</label>
+            <input type="time" style={ss.inp} value={form.timeIn} onChange={(e) => set("timeIn", e.target.value)}  id="gate-book-time-in" />
           </div>
           <div>
-            <label style={ss.lbl}>Time out</label>
-            <input type="time" style={ss.inp} value={form.timeOut || ""} onChange={(e) => set("timeOut", e.target.value)} />
+            <label style={ss.lbl} htmlFor="gate-book-time-out">Time out</label>
+            <input type="time" style={ss.inp} value={form.timeOut || ""} onChange={(e) => set("timeOut", e.target.value)}  id="gate-book-time-out" />
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Vehicle registration</label>
-        <input style={ss.inp} value={form.vehicleReg} onChange={(e) => set("vehicleReg", e.target.value.toUpperCase())} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Company / haulier</label>
-        <input style={ss.inp} value={form.company} onChange={(e) => set("company", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Driver</label>
-        <input style={ss.inp} value={form.driverName} onChange={(e) => set("driverName", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Purpose</label>
-        <select style={ss.inp} value={form.purpose} onChange={(e) => set("purpose", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-vehicle-reg">Vehicle registration</label>
+        <input style={ss.inp} value={form.vehicleReg} onChange={(e) => set("vehicleReg", e.target.value.toUpperCase())}  id="gate-book-vehicle-reg" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-company">Company / haulier</label>
+        <input style={ss.inp} value={form.company} onChange={(e) => set("company", e.target.value)}  id="gate-book-company" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-driver-name">Driver</label>
+        <input style={ss.inp} value={form.driverName} onChange={(e) => set("driverName", e.target.value)}  id="gate-book-driver-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-purpose">Purpose</label>
+        <select style={ss.inp} value={form.purpose} onChange={(e) => set("purpose", e.target.value)} id="gate-book-purpose">
           <option value="Delivery">Delivery</option>
           <option value="Collection">Collection</option>
           <option value="Waste">Waste</option>
           <option value="Visitor vehicle">Visitor vehicle</option>
           <option value="Other">Other</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Delivery note / ref</label>
-        <input style={ss.inp} value={form.deliveryRef} onChange={(e) => set("deliveryRef", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project / gate</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-delivery-ref">Delivery note / ref</label>
+        <input style={ss.inp} value={form.deliveryRef} onChange={(e) => set("deliveryRef", e.target.value)}  id="gate-book-delivery-ref" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-project-id">Project / gate</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="gate-book-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -81,18 +86,23 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gate-book-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="gate-book-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["company","driverName"], { company: "Company", driverName: "Driver" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -122,15 +132,12 @@ export default function GateBook() {
   const d1Hydrating = d1GateH || d1ProjH;
   const d1OutboxPending = d1GateO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Date", "In", "Out", "Reg", "Company", "Driver", "Purpose", "DN ref", "Project", "Notes"];
-    const rows = items.map((r) => [r.visitDate, r.timeIn, r.timeOut, r.vehicleReg, r.company, r.driverName, r.purpose, r.deliveryRef, r.projectName || "", r.notes]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `gate_book_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.visitDate, r.timeIn, r.timeOut, r.vehicleReg, r.company, r.driverName, r.purpose, r.deliveryRef, r.projectName || "", r.notes]);
+    exportCsv(h, rows, `gate_book_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -156,8 +163,8 @@ export default function GateBook() {
         title="Gate book"
         lead="Site gate movements and deliveries (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -169,11 +176,11 @@ export default function GateBook() {
 
       <RegisterModuleShell
         moduleId="gate"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("gate", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("gate", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="🚪"
           title="No gate entries yet"
@@ -184,7 +191,7 @@ export default function GateBook() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -212,7 +219,7 @@ export default function GateBook() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "gate_delete", entity: "gate", detail: r.id });
                         }
                       }}
@@ -225,10 +232,10 @@ export default function GateBook() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

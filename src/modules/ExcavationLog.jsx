@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -7,6 +8,7 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -15,9 +17,12 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import StatusChip from "../components/StatusChip";
 import { printExcavationRecord } from "./excavationPrintHtml";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `exc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -61,27 +66,12 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "rgba(15,23,42,0.5)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "1.5rem 1rem",
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        overflow: "auto",
-        backdropFilter: "blur(2px)",
-      }}
-    >
+    <ModuleOverlay onClose={onClose}>
       <div
+        className="app-module-overlay__panel"
         style={{
           ...ss.card,
-          width: "100%",
           maxWidth: 640,
-          marginTop: 24,
           border: "1px solid var(--color-border-tertiary, #e2e8f0)",
           boxShadow: "0 20px 50px rgba(15,23,42,0.18)",
         }}
@@ -208,12 +198,17 @@ function Form({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["location","workDate"], { location: "Location", workDate: "Work date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save record
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -269,8 +264,10 @@ export default function ExcavationLog() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
+  const liveItems = liveOrgArrayRows(items);
+
   const filtered = useMemo(() => {
-    let rows = items;
+    let rows = liveItems;
     if (statusFilter !== "all") rows = rows.filter((r) => r.status === statusFilter);
     const q = search.trim().toLowerCase();
     if (q) {
@@ -281,11 +278,11 @@ export default function ExcavationLog() {
       );
     }
     return rows;
-  }, [items, statusFilter, search]);
+  }, [liveItems, statusFilter, search]);
 
-  const exportCsv = () => {
+  const handleExportCsv = () => {
     const h = ["Permit", "Date", "Depth", "Location", "Project", "Utilities OK", "Status", "Banksman"];
-    const rows = items.map((r) => [
+    const rows = liveItems.map((r) => [
       r.permitRef,
       r.workDate,
       r.maxDepth,
@@ -295,12 +292,7 @@ export default function ExcavationLog() {
       r.status,
       r.banksmanName || "",
     ]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `excavation_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(h, rows, `excavation_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -319,8 +311,7 @@ export default function ExcavationLog() {
 
   const runPrint = (r) => {
     const org = getOrgSettings() || {};
-    const ok = printExcavationRecord(r, { orgName: org.name || "MySafeOps" });
-    if (!ok) window.alert("Allow pop-ups to export this record as PDF (print → Save as PDF).");
+    printExcavationRecord(r, { orgName: org.name || "MySafeOps" });
   };
 
   return (
@@ -336,8 +327,8 @@ export default function ExcavationLog() {
         lead="Permit-to-dig style records — depth, support, utilities confirmation, and banksman. Export the register or print a single A4 record."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {items.length > 0 && (
-              <button type="button" style={ss.btn} onClick={exportCsv}>
+            {liveItems.length > 0 && (
+              <button type="button" style={ss.btn} onClick={handleExportCsv}>
                 Export CSV
               </button>
             )}
@@ -348,7 +339,7 @@ export default function ExcavationLog() {
         }
       />
 
-      <RegisterModuleShell moduleId="excavation" smartContext={{ items }} stats={buildRegisterModuleStats("excavation", items)}>
+      <RegisterModuleShell moduleId="excavation" smartContext={{ items: liveItems }} stats={buildRegisterModuleStats("excavation", liveItems)}>
         <div
           className="app-register-filters"
           style={{
@@ -372,11 +363,11 @@ export default function ExcavationLog() {
             <option value="backfilled">Backfilled</option>
           </select>
           <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-            {filtered.length} of {items.length} shown
+            {filtered.length} of {liveItems.length} shown
           </span>
         </div>
 
-        {items.length === 0 ? (
+        {liveItems.length === 0 ? (
           <EmptyState
             icon="⛏️"
             title="No excavation records yet"
@@ -450,7 +441,7 @@ export default function ExcavationLog() {
                                 payload: r,
                               })
                             ) {
-                              setItems((p) => p.filter((x) => x.id !== r.id));
+                              setItems((p) => replaceWithTombstone(p, r.id));
                               pushAudit({ action: "excavation_delete", entity: "excavation", detail: r.id });
                             }
                           }}

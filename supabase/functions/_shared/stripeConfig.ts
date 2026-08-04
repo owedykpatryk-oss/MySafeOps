@@ -15,7 +15,7 @@ export interface StripeEnvConfig {
   secretKey: string;
   prices: Record<StripePricePlanId, string>;
   webhookSecret?: string;
-  /** Price IDs actually used (may be UK when AUD secrets are missing). */
+  /** Market whose exact Price IDs are used. */
   billingMarket?: StripeMarketId;
 }
 
@@ -76,14 +76,10 @@ export function resolveStripeConfig(mode: StripeMode, market: StripeMarketId = "
     enterprise: envTrim(priceKeys.enterprise),
   };
 
-  // Fall back to GBP price IDs when market-specific prices are not configured yet.
-  if (market !== "uk" && !Object.values(prices).every(isValidPriceId)) {
-    const uk = resolveStripeConfig(mode, "uk");
-    if (!uk) return null;
-    return { ...uk, billingMarket: "uk" };
-  }
-
-  if (!Object.values(prices).every(isValidPriceId)) return null;
+  // Country workspaces are independently billed. Never substitute another
+  // country's currency or price: checkout must fail closed until the exact
+  // market catalogue is configured.
+  if (!Object.values(prices).some(isValidPriceId)) return null;
 
   const webhookSecret =
     mode === "test" ? envTrim("STRIPE_WEBHOOK_SECRET_TEST") : envTrim("STRIPE_WEBHOOK_SECRET");
@@ -113,7 +109,7 @@ export function planFromPriceId(priceId: string): { plan: StripePricePlanId; mod
 /** Whether all four plan price IDs are configured for the requested market (no GBP fallback). */
 export function stripeMarketReady(mode: StripeMode, market: StripeMarketId): boolean {
   const config = resolveStripeConfig(mode, market);
-  return config !== null && (config.billingMarket ?? market) === market;
+  return config !== null && Object.values(config.prices).every(isValidPriceId);
 }
 
 export function stripeDiagnostics(mode: StripeMode) {

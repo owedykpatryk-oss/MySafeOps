@@ -20,8 +20,9 @@ import {
 import { isDisposableSignupEmail } from "../lib/disposableEmail";
 import { useAuthCaptcha } from "../hooks/useAuthCaptcha";
 import TurnstileWidget from "../components/TurnstileWidget";
+import { isAuthCaptchaInfrastructureError } from "../lib/authCaptcha";
 import { trackAuthError, trackAuthEvent } from "../lib/authTelemetry";
-import { setPendingInviteToken } from "../lib/inviteToken";
+import { buildInviteLoginPath, setPendingInviteToken } from "../lib/inviteToken";
 import { ensureUserOrgContext } from "../utils/orgMembership";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
@@ -91,8 +92,8 @@ function mapAuthErrorMessage(error, fallback = "Authentication request failed") 
   if (m.includes("rate limit") || m.includes("too many requests")) {
     return "Too many attempts right now. Please wait a moment and try again.";
   }
-  if (m.includes("captcha") || m.includes("turnstile")) {
-    return "Security check failed or expired. Complete the check and try again.";
+  if (m.includes("captcha") || m.includes("turnstile") || m.includes("captcha_token") || (m.includes("request disallowed") && m.includes("token"))) {
+    return "Security check failed or could not load. Disable ad blockers for this site, complete the check, and try again.";
   }
   if (m.includes("password")) {
     return raw;
@@ -122,6 +123,10 @@ export default function LoginPage() {
   const oauthError = searchParams.get("error_description") || searchParams.get("error") || "";
   const nextParam = searchParams.get("next") || "/app";
   const safeNextPath = useMemo(() => safeInternalPath(nextParam, "/app"), [nextParam]);
+  const inviteLoginPath = useMemo(
+    () => buildInviteLoginPath({ token: inviteToken, email: inviteEmail, next: safeNextPath }),
+    [inviteToken, inviteEmail, safeNextPath],
+  );
   const signupMarket = useMemo(() => getMarket(resolvePreferredMarketId(searchParams.toString())), [searchParams]);
   const normalizedEmail = email.trim().toLowerCase();
   const lockout = getAuthLockoutState(normalizedEmail, Date.now());
@@ -131,6 +136,8 @@ export default function LoginPage() {
   const passwordStrength = useMemo(() => getPasswordStrengthMeta(password, MIN_PASSWORD_LENGTH), [password]);
   const {
     turnstileConfigured,
+    captchaToken,
+    captchaBlocksSubmit,
     setCaptchaToken,
     setCaptchaUnavailable,
     turnstileNonce,
@@ -280,12 +287,18 @@ export default function LoginPage() {
         setMsg("Email not confirmed yet. Use 'Resend confirmation email', then open the link from your inbox and sign in again.");
         return;
       }
+      if (isAuthCaptchaInfrastructureError(e)) {
+        trackAuthError("sign_in_captcha_blocked", e, { email: normalizedEmail });
+        setMsg(mapAuthErrorMessage(e, "Security check failed"));
+        resetCaptcha();
+        return;
+      }
       const state = recordAuthFailure(normalizedEmail, Date.now());
       trackAuthError("sign_in_failed", e, { email: normalizedEmail, failures: state.failures });
       if (state.isLocked) {
         setMsg(`Too many failed attempts. Try again in ${formatLockoutRemaining(state.remainingMs)}.`);
       } else {
-        setMsg(`${e.message || "Sign-in failed"} (${state.attemptsLeft} attempts left before temporary lockout).`);
+        setMsg(`${mapAuthErrorMessage(e, "Sign-in failed")} (${state.attemptsLeft} attempts left before temporary lockout).`);
       }
       resetCaptcha();
     } finally {
@@ -299,9 +312,8 @@ export default function LoginPage() {
     setBusy(true);
     trackAuthEvent("google_sign_in_start");
     try {
-      const loginRedirectPath = `/login${safeNextPath !== "/app" ? `?next=${encodeURIComponent(safeNextPath)}` : ""}`;
       const before = window.location.href;
-      const { data, error } = await signInWithGoogleOAuth(client, loginRedirectPath);
+      const { data, error } = await signInWithGoogleOAuth(client, inviteLoginPath);
       if (error) throw error;
       // Fallback: if auto-redirect didn't kick in, force navigation.
       if (data?.url && window.location.href === before) {
@@ -357,7 +369,7 @@ export default function LoginPage() {
     recordSignUpAttempt(Date.now());
     trackAuthEvent("sign_up_attempt", { email: normalizedEmail });
     try {
-      const emailRedirectTo = new URL("/login", window.location.origin).href;
+      const emailRedirectTo = new URL(inviteLoginPath, window.location.origin).href;
       const { data, error } = await client.auth.signUp({
         email: email.trim(),
         password,
@@ -446,7 +458,7 @@ export default function LoginPage() {
     setBusy(true);
     trackAuthEvent("resend_confirmation_attempt", { email: targetEmail });
     try {
-      const emailRedirectTo = new URL("/login", window.location.origin).href;
+      const emailRedirectTo = new URL(inviteLoginPath, window.location.origin).href;
       const { error } = await client.auth.resend({
         type: "signup",
         email: targetEmail,
@@ -797,13 +809,23 @@ export default function LoginPage() {
                 />
               )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 14 }}>
-                <button type="submit" className="login-btn-primary" style={{ ...ss.btnP, width: "100%" }} disabled={busy || lockout.isLocked}>
+                <button
+                  type="submit"
+                  className="login-btn-primary"
+                  style={{ ...ss.btnP, width: "100%" }}
+                  disabled={busy || lockout.isLocked || captchaBlocksSubmit}
+                  title={
+                    turnstileConfigured && !captchaToken
+                      ? "Complete the security check before signing in"
+                      : undefined
+                  }
+                >
                   Sign in
                 </button>
                 <button
                   type="button"
                   style={{ ...ss.btn, width: "100%" }}
-                  disabled={busy || !acceptLegalTerms || signUpThrottle.isThrottled}
+                  disabled={busy || !acceptLegalTerms || signUpThrottle.isThrottled || captchaBlocksSubmit}
                   onClick={signUp}
                 >
                   Create account
@@ -848,7 +870,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   style={{ ...ss.btn, padding: "10px 0", minHeight: 44, border: "none", background: "transparent", color: teal, fontWeight: 600, fontSize: 14 }}
-                  disabled={busy || passwordResetThrottle.isThrottled}
+                  disabled={busy || passwordResetThrottle.isThrottled || captchaBlocksSubmit}
                   onClick={sendPasswordReset}
                 >
                   Forgot password
@@ -857,7 +879,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   style={{ ...ss.btn, padding: "10px 0", minHeight: 44, border: "none", background: "transparent", color: teal, fontWeight: 600, fontSize: 14 }}
-                  disabled={busy || resendCooldown > 0}
+                  disabled={busy || resendCooldown > 0 || captchaBlocksSubmit}
                   onClick={resendConfirmationEmail}
                 >
                   {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend confirmation email"}

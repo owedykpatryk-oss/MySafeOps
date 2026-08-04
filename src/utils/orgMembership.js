@@ -3,6 +3,10 @@ import { syncOrgMarketFromAuth } from "./orgMarket";
 import { getOrgId, setOrgId } from "./orgId";
 import {
   ORG_BILLING_PLAN_KEY,
+  ORG_CANCEL_AT_PERIOD_END_KEY,
+  ORG_CURRENT_PERIOD_END_KEY,
+  ORG_PAST_DUE_SINCE_KEY,
+  ORG_STRIPE_TRIAL_END_KEY,
   ORG_SUBSCRIPTION_STATUS_KEY,
   ORG_TRIAL_ENDS_AT_KEY,
   ORG_TRIAL_EXTENSION_COUNT_KEY,
@@ -10,14 +14,19 @@ import {
   getTrialExtensionCount,
   getTrialStatus,
   isTrialUnlockActive,
+  readScopedBilling,
   removeScopedBilling,
   writeScopedBilling,
 } from "./billingState";
 
 const MEMBERSHIP_ROLES = new Set(["admin", "supervisor", "operative"]);
 import { clearPendingInvite, peekPendingInvite } from "../lib/inviteToken";
+import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 
-export function persistOrgRow(row) {
+let orgContextClient = null;
+let orgContextPromise = null;
+
+export function persistOrgRow(row, { billingScope = "organization" } = {}) {
   const slug = getOrgId();
   const r = String(row?.role || "").trim().toLowerCase();
   if (slug && MEMBERSHIP_ROLES.has(r)) {
@@ -33,6 +42,13 @@ export function persistOrgRow(row) {
   if (row.trial_extension_count != null && row.trial_extension_count !== "") {
     writeScopedBilling(ORG_TRIAL_EXTENSION_COUNT_KEY, row.trial_extension_count, slug);
   }
+  const activeCountry = getCachedActiveCountryWorkspace(slug);
+  const shouldPersistBilling =
+    billingScope === "workspace" || !activeCountry?.id || Boolean(activeCountry.is_primary);
+  if (!shouldPersistBilling) {
+    window.dispatchEvent(new CustomEvent("mysafeops-org-updated"));
+    return;
+  }
   if (row.billing_plan != null && row.billing_plan !== "") {
     writeScopedBilling(ORG_BILLING_PLAN_KEY, row.billing_plan, slug);
   } else {
@@ -40,6 +56,30 @@ export function persistOrgRow(row) {
   }
   if (row.subscription_status) {
     writeScopedBilling(ORG_SUBSCRIPTION_STATUS_KEY, row.subscription_status, slug);
+  }
+  if (row.subscription_status === "past_due") {
+    const since =
+      row.subscription_past_due_since ||
+      readScopedBilling(ORG_PAST_DUE_SINCE_KEY, slug) ||
+      new Date().toISOString();
+    writeScopedBilling(ORG_PAST_DUE_SINCE_KEY, since, slug);
+  } else {
+    removeScopedBilling(ORG_PAST_DUE_SINCE_KEY, slug);
+  }
+  if (row.stripe_current_period_end) {
+    writeScopedBilling(ORG_CURRENT_PERIOD_END_KEY, row.stripe_current_period_end, slug);
+  } else {
+    removeScopedBilling(ORG_CURRENT_PERIOD_END_KEY, slug);
+  }
+  if (row.stripe_cancel_at_period_end != null && row.stripe_cancel_at_period_end !== "") {
+    writeScopedBilling(ORG_CANCEL_AT_PERIOD_END_KEY, row.stripe_cancel_at_period_end ? "true" : "false", slug);
+  } else {
+    removeScopedBilling(ORG_CANCEL_AT_PERIOD_END_KEY, slug);
+  }
+  if (row.stripe_trial_end) {
+    writeScopedBilling(ORG_STRIPE_TRIAL_END_KEY, row.stripe_trial_end, slug);
+  } else {
+    removeScopedBilling(ORG_STRIPE_TRIAL_END_KEY, slug);
   }
   window.dispatchEvent(new CustomEvent("mysafeops-org-updated"));
 }
@@ -78,6 +118,24 @@ export async function refreshOrgFromSupabase(supabase) {
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.org_slug) throw new Error("No organisation returned by ensure_my_org.");
   setOrgId(row.org_slug);
+
+  // Enrich with Stripe renewal / past_due metadata (not yet on ensure_my_org return set).
+  try {
+    const { data: orgMeta } = await supabase
+      .from("organizations")
+      .select(
+        "stripe_current_period_end, stripe_cancel_at_period_end, stripe_trial_end, subscription_past_due_since, billing_plan, subscription_status"
+      )
+      .eq("slug", row.org_slug)
+      .limit(1)
+      .maybeSingle();
+    if (orgMeta) {
+      Object.assign(row, orgMeta);
+    }
+  } catch {
+    /* non-fatal — columns may not exist until migration applied */
+  }
+
   persistOrgRow(row);
   try {
     const { loadOrgSettingsRaw, saveOrgSettingsRaw } = await import("./orgSettingsStorage");
@@ -159,7 +217,22 @@ export async function refreshMembershipRoleFromSupabase(supabase) {
   return r;
 }
 
-export async function ensureUserOrgContext(supabase) {
+export function ensureUserOrgContext(supabase) {
+  if (!supabase) return Promise.resolve(null);
+  if (orgContextPromise && orgContextClient === supabase) return orgContextPromise;
+
+  const sharedPromise = ensureUserOrgContextOnce(supabase).finally(() => {
+    if (orgContextPromise === sharedPromise) {
+      orgContextPromise = null;
+      orgContextClient = null;
+    }
+  });
+  orgContextClient = supabase;
+  orgContextPromise = sharedPromise;
+  return sharedPromise;
+}
+
+async function ensureUserOrgContextOnce(supabase) {
   if (!supabase) return null;
   const { data, error } = await supabase.rpc("ensure_my_org", ensureMyOrgArgs());
   if (error) throw error;

@@ -40,6 +40,7 @@ import {
   getSiteContextOverlay,
 } from "../modules/rams/ramsSiteContextOverlays.js";
 
+import { todayLocalISO } from "./localDate";
 export { projectHasRams, docsForProject };
 
 import { nextUtilityMappingRamsDocNo } from "./utilityMappingDocRefs";
@@ -56,7 +57,7 @@ function generateRamsDocNo(seed = {}) {
   return `RAMS-${year}-${tail}`;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 /** @type {Array<{ id: string, label: string, description: string, industryStarter?: string, surveyType?: string, pas128Ql?: string, permitTypes: string[], msTemplate?: string, ramsSurveyKey?: string, checklistExtras?: string[] }>} */
 export const PROJECT_PLAYBOOKS = [

@@ -6,6 +6,7 @@ import { getMarket, resolveMarketId } from "../config/markets";
 import { getOrgMarketId } from "./orgMarket.js";
 import { lookupSitePostcode, resolveSitePostcodeInput } from "./siteAddressLookup.js";
 
+import { todayLocalISO } from "./localDate";
 const WEATHER_PROXY_PATH = "/api/weather";
 
 function openWeatherDescription(code = "", fallback = "") {
@@ -233,7 +234,7 @@ export async function fetchWeatherForDate(lat, lng, isoDate, opts = {}) {
   const date = String(isoDate || "").trim().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Invalid date");
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalISO();
   if (date === today) {
     const cur = await fetchWeatherSummary(la, lo, opts);
     return { ...cur, targetDate: date, isForecast: false };

@@ -1,7 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { blankSurveyReport } from "./surveyReportConstants.js";
 import {
-  applyPas128BoilerplateToReport,
   buildPas128Foreword,
   DEFAULT_SURVEY_REPORT_DISCLAIMER,
   defaultDeliverablesForPas128Method,

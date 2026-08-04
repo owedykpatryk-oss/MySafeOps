@@ -152,19 +152,51 @@ export function openPrintWindow() {
   return openFn("", "_blank", "noopener,noreferrer");
 }
 
+/** Same event ToastProvider listens for (`OPS_TOAST_EVENT_NAME`). */
+const APP_TOAST_EVENT = "mysafeops-ops-toast";
+
 const PRINT_POPUP_BLOCKED_MSG =
   "Pop-up blocked — allow pop-ups for MySafeOps to print / save PDF.";
 
 /**
- * Open a print window or alert when the browser blocks it.
+ * In-app toast without importing React (works from print/PDF helpers).
+ * @param {{ type?: string; title?: string; message?: string; durationMs?: number }} detail
+ */
+export function notifyAppToast(detail = {}) {
+  if (typeof globalThis.window === "undefined") return;
+  const message = String(detail.message || "").trim();
+  if (!message && !detail.title) return;
+  try {
+    globalThis.window.dispatchEvent(
+      new CustomEvent(APP_TOAST_EVENT, {
+        detail: {
+          type: detail.type || "warning",
+          title: detail.title || "",
+          message,
+          durationMs: detail.durationMs ?? 6000,
+        },
+      }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Open a print window, or notify via in-app toast when the browser blocks it.
+ * Avoids `window.alert` (blocked/silent in many embedded webviews).
  * @param {{ message?: string; silent?: boolean }} [opts]
  * @returns {Window | null}
  */
 export function openPrintWindowOrWarn(opts = {}) {
   const win = openPrintWindow();
   if (!win && !opts.silent) {
-    const alertFn = globalThis.window?.alert || globalThis.alert;
-    if (typeof alertFn === "function") alertFn(opts.message || PRINT_POPUP_BLOCKED_MSG);
+    notifyAppToast({
+      type: "warning",
+      title: "Print blocked",
+      message: opts.message || PRINT_POPUP_BLOCKED_MSG,
+      durationMs: 6000,
+    });
   }
   return win;
 }

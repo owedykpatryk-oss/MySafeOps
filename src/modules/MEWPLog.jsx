@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `mewp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -40,27 +45,27 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 540, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 540 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit MEWP record" : "MEWP / powered access"}</h2>
-        <label style={ss.lbl}>Equipment ref / fleet no.</label>
-        <input style={ss.inp} value={form.equipmentRef} onChange={(e) => set("equipmentRef", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Type</label>
-        <select style={ss.inp} value={form.mewpType} onChange={(e) => set("mewpType", e.target.value)}>
+        <label style={ss.lbl} htmlFor="mewp-equipment-ref">Equipment ref / fleet no.</label>
+        <input style={ss.inp} value={form.equipmentRef} onChange={(e) => set("equipmentRef", e.target.value)}  id="mewp-equipment-ref" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-mewp-type">Type</label>
+        <select style={ss.inp} value={form.mewpType} onChange={(e) => set("mewpType", e.target.value)} id="mewp-mewp-type">
           <option value="Scissor lift">Scissor lift</option>
           <option value="Boom / cherry picker">Boom / cherry picker</option>
           <option value="Spider / tracked">Spider / tracked</option>
           <option value="Vehicle-mounted">Vehicle-mounted</option>
           <option value="Other">Other</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Operator name</label>
-        <input style={ss.inp} value={form.operatorName} onChange={(e) => set("operatorName", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>IPAF / licence / CPCS ref</label>
-        <input style={ss.inp} value={form.licenceRef} onChange={(e) => set("licenceRef", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date of check / use</label>
-        <input type="date" style={ss.inp} value={form.checkDate} onChange={(e) => set("checkDate", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-operator-name">Operator name</label>
+        <input style={ss.inp} value={form.operatorName} onChange={(e) => set("operatorName", e.target.value)}  id="mewp-operator-name" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-licence-ref">IPAF / licence / CPCS ref</label>
+        <input style={ss.inp} value={form.licenceRef} onChange={(e) => set("licenceRef", e.target.value)}  id="mewp-licence-ref" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-check-date">Date of check / use</label>
+        <input type="date" style={ss.inp} value={form.checkDate} onChange={(e) => set("checkDate", e.target.value)}  id="mewp-check-date" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="mewp-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -76,18 +81,23 @@ function Form({ item, projects, onSave, onClose }) {
           <input type="checkbox" checked={form.groundConditionsOk} onChange={(e) => set("groundConditionsOk", e.target.checked)} />
           Ground / exclusion zone acceptable
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="mewp-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="mewp-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["equipmentRef","checkDate"], { equipmentRef: "Equipment ref", checkDate: "Check date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -117,15 +127,12 @@ export default function MEWPLog() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Date", "Ref", "Type", "Operator", "Licence ref", "Project", "Pre-use OK", "Ground OK", "Notes"];
-    const rows = items.map((r) => [r.checkDate, r.equipmentRef, r.mewpType, r.operatorName, r.licenceRef, r.projectName || "", r.preUseOk ? "yes" : "no", r.groundConditionsOk ? "yes" : "no", r.notes]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `mewp_log_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.checkDate, r.equipmentRef, r.mewpType, r.operatorName, r.licenceRef, r.projectName || "", r.preUseOk ? "yes" : "no", r.groundConditionsOk ? "yes" : "no", r.notes]);
+    exportCsv(h, rows, `mewp_log_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -151,8 +158,8 @@ export default function MEWPLog() {
         title="MEWP log"
         lead="MEWP pre-use checks and defects (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -164,11 +171,11 @@ export default function MEWPLog() {
 
       <RegisterModuleShell
         moduleId="mewp"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("mewp", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("mewp", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="⬆️"
           title="No MEWP records yet"
@@ -179,7 +186,7 @@ export default function MEWPLog() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -209,7 +216,7 @@ export default function MEWPLog() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "mewp_delete", entity: "mewp", detail: r.id });
                         }
                       }}
@@ -222,10 +229,10 @@ export default function MEWPLog() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

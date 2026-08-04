@@ -18,6 +18,7 @@ import { UTILITY_MAPPING_BRAND } from "./utilityMappingBranding";
 import { downloadBlob } from "./downloadBlob.js";
 import { sanitizePdfFileSegment } from "./pdfFileName";
 import { buildA3BoardPackHtml } from "../modules/surveyReport/surveyEvidencePack.js";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 import { computeUtilityMappingDigRisk } from "./utilityMappingPremiumPages.js";
 
 function buildQrSrc(text, size = 120) {
@@ -80,12 +81,12 @@ export function buildUtilityMappingClientPackHtml(report, extras = {}) {
       ["Report ref", report.ref || "—"],
       ["Client", report.client || "—"],
       ["Site", report.siteAddress || report.projectName || "—"],
-      ["Survey date", report.surveyDate ? new Date(report.surveyDate).toLocaleDateString("en-GB") : "—"],
+      ["Survey date", report.surveyDate ? new Date(report.surveyDate).toLocaleDateString(getActiveDocumentLocale()) : "—"],
     ],
     footerNote: "Client pack — executive brief, dig readiness and drawing register.",
   });
 
-  return `<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"/>
+  return `<!DOCTYPE html><html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/>
 <title>${escapeHtml(report.ref || "Client pack")}</title>
 <style>
   @page { size: A4; margin: 14mm 12mm 20mm; }

@@ -3,6 +3,7 @@ import { ms } from "../utils/moduleStyles";
 import { getFeatureFlags, saveFeatureFlags } from "../utils/featureFlags";
 import { clearTelemetryEvents, getTelemetryEvents } from "../utils/telemetry";
 
+import { todayLocalISO } from "../utils/localDate";
 const ss = {
   ...ms,
   card: { ...ms.card, marginBottom: 16, padding: 14 },
@@ -25,7 +26,7 @@ export default function DeveloperTools() {
     const blob = new Blob([JSON.stringify(events, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `mysafeops-telemetry-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `mysafeops-telemetry-${todayLocalISO()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   };

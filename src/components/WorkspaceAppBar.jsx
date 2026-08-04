@@ -7,6 +7,8 @@ import { getWorkspaceTitle } from "../navigation/appModules";
 import { useOrgBranding } from "../hooks/useOrgBranding";
 import { clearCloudBackupDek } from "../lib/backupCrypto";
 import { safeImageSrc } from "../utils/htmlEscape.js";
+import CountryWorkspaceSwitcher from "./CountryWorkspaceSwitcher";
+import "../styles/country-workspaces.css";
 
 /**
  * Sticky top bar: org branding, current module title, quick actions (compact menu on mobile).
@@ -133,6 +135,7 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
         </div>
 
         <div className="app-workspace-header__actions">
+          {cloud && user ? <CountryWorkspaceSwitcher supabase={supabase} /> : null}
           {user?.email && cloud ? (
             <span className="app-workspace-header__email" title={user.email}>
               {user.email}

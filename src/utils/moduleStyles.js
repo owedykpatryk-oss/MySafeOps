@@ -141,7 +141,7 @@ export const ms = {
     padding: "1.5rem 1rem calc(1.5rem + env(safe-area-inset-bottom, 0px))",
     position: "fixed",
     inset: 0,
-    zIndex: 50,
+    zIndex: "var(--z-overlay, 50)",
     overflow: "auto",
     WebkitOverflowScrolling: "touch",
   },

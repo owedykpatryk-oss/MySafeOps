@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
-import { escapeHtml, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";

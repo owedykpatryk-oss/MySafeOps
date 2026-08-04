@@ -1,12 +1,25 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
 import { queryBlogPosts } from "../../lib/blog/getPosts";
 import BlogArticleCard from "../blog/BlogArticleCard";
 
 /**
- * @param {{ variant?: "landing" | "page", className?: string, featuredOnly?: boolean, limit?: number, tag?: string }} props
+ * @param {{
+ *   variant?: "landing" | "page";
+ *   className?: string;
+ *   featuredOnly?: boolean;
+ *   limit?: number;
+ *   tag?: string;
+ *   marketId?: import("../../config/markets").MarketId;
+ * }} props
  */
-export default function BlogPostsGrid({ variant = "landing", className = "", featuredOnly = false, limit, tag }) {
+export default function BlogPostsGrid({
+  variant = "landing",
+  className = "",
+  featuredOnly = false,
+  limit,
+  tag,
+  marketId = "uk",
+}) {
   const isPage = variant === "page";
 
   const posts = useMemo(() => {
@@ -31,7 +44,14 @@ export default function BlogPostsGrid({ variant = "landing", className = "", fea
     <div className={`landing-blog-grid-wrap ${className}`.trim()}>
       <ul className="landing-blog-grid">
         {posts.map((post, index) => (
-          <BlogArticleCard key={post.slug} post={post} index={index} eager={index < 2} className="fu" />
+          <BlogArticleCard
+            key={post.slug}
+            post={post}
+            index={index}
+            eager={index < 2}
+            className="fu"
+            marketId={marketId}
+          />
         ))}
       </ul>
     </div>

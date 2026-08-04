@@ -39,7 +39,6 @@ import { resetOnboardingWizard } from "../utils/workspaceOnboarding";
 import { openWorkspaceView } from "../utils/workspaceNavContext";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { getRamsShortLabel, localizeIndustryTerminology } from "../utils/marketLabels";
-import { ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { ms } from "../utils/moduleStyles";
 
 const ss = ms;

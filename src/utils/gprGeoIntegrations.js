@@ -2,7 +2,6 @@
  * Geo-photo → GPR report (radargram lines, scan setup photos).
  */
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
-import { projectGeoPhotosForReport } from "./geoPhotoIntegrations";
 
 const GPR_GEO_TYPES = new Set(["gpr_setup", "utility", "trial_pit", "chamber"]);
 

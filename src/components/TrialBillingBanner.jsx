@@ -1,10 +1,8 @@
 import { useMemo, useState } from "react";
 import { Clock, Lock, Sparkles } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-import { isSuperAdminEmail } from "../utils/superAdmin";
 import {
   billingWriteBlockedMessage,
   canExtendOrgTrial,
@@ -16,11 +14,9 @@ import { extendOrgTrial, getTrialExtensionCount } from "../utils/orgMembership";
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
 
 export default function TrialBillingBanner() {
-  const { trialStatus, billing, role } = useApp();
-  const { user } = useSupabaseAuth();
+  const { trialStatus, billing, role, isPlatformOwner } = useApp();
   const { pushToast } = useToast();
   const [extending, setExtending] = useState(false);
-  const isPlatformOwner = isSuperAdminEmail(user?.email);
   const trialExtensionCount = getTrialExtensionCount();
 
   const state = useMemo(

@@ -1,9 +1,14 @@
 import { getOrgId } from "./orgId";
+import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 
 export const ORG_TRIAL_ENDS_AT_KEY = "mysafeops_trial_ends_at";
 export const ORG_BILLING_PLAN_KEY = "mysafeops_billing_plan";
 export const ORG_SUBSCRIPTION_STATUS_KEY = "mysafeops_subscription_status";
 export const ORG_TRIAL_EXTENSION_COUNT_KEY = "mysafeops_trial_extension_count";
+export const ORG_PAST_DUE_SINCE_KEY = "mysafeops_subscription_past_due_since";
+export const ORG_CURRENT_PERIOD_END_KEY = "mysafeops_stripe_current_period_end";
+export const ORG_CANCEL_AT_PERIOD_END_KEY = "mysafeops_stripe_cancel_at_period_end";
+export const ORG_STRIPE_TRIAL_END_KEY = "mysafeops_stripe_trial_end";
 
 export function scopedBillingKey(baseKey, slug = getOrgId()) {
   return slug && slug !== "default" ? `${baseKey}_${slug}` : baseKey;
@@ -47,6 +52,15 @@ export function getTrialStatus(now = Date.now()) {
   const endsAt = new Date(raw).getTime();
   if (!Number.isFinite(endsAt)) return null;
   const remainingMs = endsAt - now;
+  const activeWorkspace = getCachedActiveCountryWorkspace();
+  if (activeWorkspace && !activeWorkspace.is_primary) {
+    return {
+      endsAtIso: new Date(endsAt).toISOString(),
+      isActive: false,
+      remainingDays: 0,
+      countryWorkspaceRequiresSubscription: true,
+    };
+  }
   const remainingDays = Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
   return {
     endsAtIso: new Date(endsAt).toISOString(),
@@ -64,5 +78,16 @@ export function getBillingEntitlements() {
   const paid = readScopedBilling(ORG_BILLING_PLAN_KEY);
   const paidPlanId =
     paid && ["starter", "team", "business", "enterprise", "enterprise_plus"].includes(paid) ? paid : null;
-  return { subscriptionStatus: sub, paidPlanId };
+  const pastDueSince = readScopedBilling(ORG_PAST_DUE_SINCE_KEY) || null;
+  const currentPeriodEnd = readScopedBilling(ORG_CURRENT_PERIOD_END_KEY) || null;
+  const cancelAtPeriodEnd = readScopedBilling(ORG_CANCEL_AT_PERIOD_END_KEY) === "true";
+  const stripeTrialEnd = readScopedBilling(ORG_STRIPE_TRIAL_END_KEY) || null;
+  return {
+    subscriptionStatus: sub,
+    paidPlanId,
+    pastDueSince,
+    currentPeriodEnd,
+    cancelAtPeriodEnd,
+    stripeTrialEnd,
+  };
 }

@@ -9,6 +9,7 @@ import D1WriteForbiddenBanner from "../components/D1WriteForbiddenBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import TrialBillingBanner from "../components/TrialBillingBanner";
 import PastDueBillingBanner from "../components/PastDueBillingBanner";
+import PlEnglishUiBanner from "../components/PlEnglishUiBanner";
 import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
 import BillingUsageWarning from "../components/BillingUsageWarning";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
@@ -49,9 +50,7 @@ import { getPinnedModuleIds, togglePinnedModule } from "../utils/pinnedModules";
 import { getSectionTone, getModuleIcon, canExportModulePdf, preloadModuleIcons } from "../navigation/moduleCatalogMeta";
 import { recordRecentModule } from "../utils/recentModules";
 import { workspaceViewLoaders, workspaceViewComponents, DEFAULT_WORKSPACE_VIEW_ID } from "../navigation/workspaceViews";
-import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useApp } from "../context/AppContext";
-import { isSuperAdminEmail } from "../utils/superAdmin";
 import { useOrgBranding } from "../hooks/useOrgBranding";
 import {
   filterVisibleModuleIds,
@@ -393,11 +392,11 @@ function buildNavTabs(marketId = getOrgMarketId(), mode = "default") {
 }
 
 export default function MainAppLayout() {
-  const { user } = useSupabaseAuth();
-  const { caps } = useApp();
+  const { caps, role, isPlatformOwner } = useApp();
   const { pushToast } = useToast();
   const orgBranding = useOrgBranding();
-  const isSuperadmin = isSuperAdminEmail(user?.email);
+  const isSuperadmin = Boolean(isPlatformOwner);
+  const canViewManagement = role === "admin" || isSuperadmin;
   const [hiddenRev, setHiddenRev] = useState(0);
   const [orgMarketRev, setOrgMarketRev] = useState(0);
   const orgMarketId = useMemo(() => {
@@ -527,9 +526,11 @@ export default function MainAppLayout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => getPinnedModuleIds());
   const allowedModuleIds = useMemo(() => {
-    const base = isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin");
+    const base = MORE_TABS.filter(
+      (tab) => (tab.id !== "superadmin" || isSuperadmin) && (tab.id !== "management-overview" || canViewManagement)
+    );
     return new Set(filterVisibleModuleTabs(base, visibilityOpts).map((t) => t.id));
-  }, [isSuperadmin, visibilityOpts]);
+  }, [isSuperadmin, canViewManagement, visibilityOpts]);
 
   useEffect(() => {
     if (view === "settings" || view === "help") return;
@@ -640,6 +641,12 @@ export default function MainAppLayout() {
     setView("dashboard");
     setNavTab("dashboard");
   }, [view, isSuperadmin]);
+
+  useEffect(() => {
+    if (view !== "management-overview" || canViewManagement) return;
+    setView("dashboard");
+    setNavTab("dashboard");
+  }, [view, canViewManagement]);
 
   /** Bottom bar highlights "Owner" when URL / session restored superadmin with nav still on "more". */
   useLayoutEffect(() => {
@@ -912,18 +919,23 @@ export default function MainAppLayout() {
   const MainComponent = workspaceViewComponents[view] || workspaceViewComponents[DEFAULT_WORKSPACE_VIEW_ID];
 
   const visibleMoreTabs = useMemo(() => {
-    const base = isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin");
+    const base = MORE_TABS.filter(
+      (tab) => (tab.id !== "superadmin" || isSuperadmin) && (tab.id !== "management-overview" || canViewManagement)
+    );
     return filterVisibleModuleTabs(base, visibilityOpts);
-  }, [isSuperadmin, visibilityOpts]);
+  }, [isSuperadmin, canViewManagement, visibilityOpts]);
   const visibleMoreSections = useMemo(
     () =>
       MORE_SECTIONS.map((section) => ({
         ...section,
         ids: section.ids.filter(
-          (id) => (id !== "superadmin" || isSuperadmin) && isModuleVisible(id, visibilityOpts)
+          (id) =>
+            (id !== "superadmin" || isSuperadmin) &&
+            (id !== "management-overview" || canViewManagement) &&
+            isModuleVisible(id, visibilityOpts)
         ),
       })),
-    [isSuperadmin, visibilityOpts]
+    [isSuperadmin, canViewManagement, visibilityOpts]
   );
   const q = moreFilter.trim().toLowerCase();
   const pinnedTabsOrdered = pinnedIds.map((id) => visibleMoreTabs.find((t) => t.id === id)).filter(Boolean);
@@ -955,6 +967,7 @@ export default function MainAppLayout() {
       <D1WriteForbiddenBanner />
       <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
         <PastDueBillingBanner />
+        <PlEnglishUiBanner />
         <TrialBillingBanner />
         <BillingReadOnlyBanner />
         <BillingUsageWarning />
@@ -1202,7 +1215,7 @@ export default function MainAppLayout() {
           justifyContent: "space-around",
           alignItems: "center",
           padding: "8px 6px calc(8px + var(--safe-bottom, 0px))",
-          zIndex: 40,
+          zIndex: "var(--z-nav, 40)",
         }}
       >
         {bottomNavTabs.map((t) => {

@@ -24,8 +24,6 @@ export default function PlanOverlaySvg({
   selected = null,
   onItemPointerDown,
 }) {
-  const pointerEvents = interactive ? "auto" : "none";
-
   const isSelected = (type, id) => selected?.type === type && selected?.id === id;
 
   return (

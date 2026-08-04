@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -14,9 +16,12 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { getVehicleDueAlerts } from "../utils/vehicleComplianceDue";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `veh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -58,17 +63,17 @@ function Form({ item, projects, workers, onSave, onClose }) {
   const wm = Object.fromEntries(workers.map((w) => [w.id, w.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 560, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit vehicle" : "Fleet vehicle"}</h2>
-        <label style={ss.lbl}>Registration</label>
-        <input style={ss.inp} value={form.registration} onChange={(e) => set("registration", e.target.value)} placeholder="e.g. AB12 CDE" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Make / model</label>
-        <input style={ss.inp} value={form.makeModel} onChange={(e) => set("makeModel", e.target.value)} placeholder="e.g. Ford Transit" />
+        <label style={ss.lbl} htmlFor="vehicle-fleet-registration">Registration</label>
+        <input style={ss.inp} value={form.registration} onChange={(e) => set("registration", e.target.value)} placeholder="e.g. AB12 CDE"  id="vehicle-fleet-registration" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="vehicle-fleet-make-model">Make / model</label>
+        <input style={ss.inp} value={form.makeModel} onChange={(e) => set("makeModel", e.target.value)} placeholder="e.g. Ford Transit"  id="vehicle-fleet-make-model" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Type</label>
-            <select style={ss.inp} value={form.vehicleType} onChange={(e) => set("vehicleType", e.target.value)}>
+            <label style={ss.lbl} htmlFor="vehicle-fleet-vehicle-type">Type</label>
+            <select style={ss.inp} value={form.vehicleType} onChange={(e) => set("vehicleType", e.target.value)} id="vehicle-fleet-vehicle-type">
               <option value="van">Van</option>
               <option value="car">Car</option>
               <option value="hgv">HGV</option>
@@ -77,16 +82,16 @@ function Form({ item, projects, workers, onSave, onClose }) {
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Status</label>
-            <select style={ss.inp} value={form.status} onChange={(e) => set("status", e.target.value)}>
+            <label style={ss.lbl} htmlFor="vehicle-fleet-status">Status</label>
+            <select style={ss.inp} value={form.status} onChange={(e) => set("status", e.target.value)} id="vehicle-fleet-status">
               <option value="active">Active</option>
               <option value="off_road">Off road</option>
               <option value="disposed">Disposed</option>
             </select>
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project / site</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="vehicle-fleet-project-id">Project / site</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="vehicle-fleet-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -94,8 +99,8 @@ function Form({ item, projects, workers, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Assigned driver / operative</label>
-        <select style={ss.inp} value={form.assignedWorkerId} onChange={(e) => set("assignedWorkerId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="vehicle-fleet-assigned-worker-id">Assigned driver / operative</label>
+        <select style={ss.inp} value={form.assignedWorkerId} onChange={(e) => set("assignedWorkerId", e.target.value)} id="vehicle-fleet-assigned-worker-id">
           <option value="">—</option>
           {workers.map((w) => (
             <option key={w.id} value={w.id}>
@@ -106,26 +111,26 @@ function Form({ item, projects, workers, onSave, onClose }) {
         <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 12, marginBottom: 4 }}>Compliance dates</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(140px, 100%), 1fr))", gap: 10 }}>
           <div>
-            <label style={ss.lbl}>MOT due</label>
-            <input type="date" style={ss.inp} value={form.motDue || ""} onChange={(e) => set("motDue", e.target.value)} />
+            <label style={ss.lbl} htmlFor="vehicle-fleet-mot-due">MOT due</label>
+            <input type="date" style={ss.inp} value={form.motDue || ""} onChange={(e) => set("motDue", e.target.value)}  id="vehicle-fleet-mot-due" />
           </div>
           <div>
-            <label style={ss.lbl}>Insurance expiry</label>
-            <input type="date" style={ss.inp} value={form.insuranceExpiry || ""} onChange={(e) => set("insuranceExpiry", e.target.value)} />
+            <label style={ss.lbl} htmlFor="vehicle-fleet-insurance-expiry">Insurance expiry</label>
+            <input type="date" style={ss.inp} value={form.insuranceExpiry || ""} onChange={(e) => set("insuranceExpiry", e.target.value)}  id="vehicle-fleet-insurance-expiry" />
           </div>
           <div>
-            <label style={ss.lbl}>Next service</label>
-            <input type="date" style={ss.inp} value={form.nextServiceDue || ""} onChange={(e) => set("nextServiceDue", e.target.value)} />
+            <label style={ss.lbl} htmlFor="vehicle-fleet-next-service-due">Next service</label>
+            <input type="date" style={ss.inp} value={form.nextServiceDue || ""} onChange={(e) => set("nextServiceDue", e.target.value)}  id="vehicle-fleet-next-service-due" />
           </div>
           <div>
-            <label style={ss.lbl}>Road tax due</label>
-            <input type="date" style={ss.inp} value={form.taxDue || ""} onChange={(e) => set("taxDue", e.target.value)} />
+            <label style={ss.lbl} htmlFor="vehicle-fleet-tax-due">Road tax due</label>
+            <input type="date" style={ss.inp} value={form.taxDue || ""} onChange={(e) => set("taxDue", e.target.value)}  id="vehicle-fleet-tax-due" />
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Last daily check</label>
-        <input type="date" style={ss.inp} value={form.lastDailyCheckDate || ""} onChange={(e) => set("lastDailyCheckDate", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="vehicle-fleet-last-daily-check-date">Last daily check</label>
+        <input type="date" style={ss.inp} value={form.lastDailyCheckDate || ""} onChange={(e) => set("lastDailyCheckDate", e.target.value)}  id="vehicle-fleet-last-daily-check-date" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="vehicle-fleet-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="vehicle-fleet-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
@@ -133,19 +138,22 @@ function Form({ item, projects, workers, onSave, onClose }) {
           <button
             type="button"
             style={ss.btnP}
-            onClick={() =>
-              onSave({
+            onClick={() => {
+              const payload = {
                 ...form,
                 projectName: pm[form.projectId] || "",
                 assignedWorkerName: wm[form.assignedWorkerId] || "",
-              })
-            }
+              };
+              const check = validateRequiredFields(payload, ["registration"], { registration: "Registration" });
+              if (!check.ok) { window.alert(check.message); return; }
+              onSave(payload);
+            }}
           >
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -184,12 +192,14 @@ export default function VehicleFleetRegister() {
   const d1Hydrating = d1ItemsH || d1ProjH || d1WorkersH;
   const d1OutboxPending = d1ItemsO || d1ProjO || d1WorkersO;
 
-  const dueAlerts = getVehicleDueAlerts();
-  const activeCount = useMemo(() => items.filter((i) => String(i.status || "active") !== "disposed").length, [items]);
+  const liveItems = liveOrgArrayRows(items);
 
-  const exportCsv = () => {
+  const dueAlerts = getVehicleDueAlerts();
+  const activeCount = useMemo(() => liveItems.filter((i) => String(i.status || "active") !== "disposed").length, [liveItems]);
+
+  const handleExportCsv = () => {
     const h = ["Registration", "Make/model", "Type", "Project", "Driver", "MOT", "Insurance", "Service", "Tax", "Status"];
-    const rows = items.map((r) => [
+    const rows = liveItems.map((r) => [
       r.registration,
       r.makeModel,
       r.vehicleType,
@@ -201,12 +211,7 @@ export default function VehicleFleetRegister() {
       r.taxDue || "",
       r.status,
     ]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `vehicle_register_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(h, rows, `vehicle_register_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -255,8 +260,8 @@ export default function VehicleFleetRegister() {
         lead="MOT, insurance, service and tax dates — surfaced on the People compliance calendar."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {items.length > 0 && (
-              <button type="button" style={ss.btn} onClick={exportCsv}>
+            {liveItems.length > 0 && (
+              <button type="button" style={ss.btn} onClick={handleExportCsv}>
                 Export CSV
               </button>
             )}
@@ -267,7 +272,7 @@ export default function VehicleFleetRegister() {
         }
       />
 
-      <RegisterModuleShell moduleId="vehicles" smartContext={{ items }} stats={buildRegisterModuleStats("vehicles", items)}>
+      <RegisterModuleShell moduleId="vehicles" smartContext={{ items: liveItems }} stats={buildRegisterModuleStats("vehicles", liveItems)}>
         {dueAlerts.length > 0 ? (
           <div style={{ ...ss.card, marginBottom: 12, background: dueAlerts.some((a) => a.severity === "expired") ? "#fef2f2" : "#fffbeb", fontSize: 13 }}>
             {dueAlerts.filter((a) => a.severity === "expired").length > 0 ? (
@@ -279,7 +284,7 @@ export default function VehicleFleetRegister() {
           </div>
         ) : null}
 
-        {items.length === 0 ? (
+        {liveItems.length === 0 ? (
           <EmptyState
             icon="🚐"
             title="No vehicles on the register"
@@ -290,7 +295,7 @@ export default function VehicleFleetRegister() {
           />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {listPg.visible(items).map((r) => (
+            {listPg.visible(liveItems).map((r) => (
               <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 88px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <div style={{ minWidth: 0 }}>
@@ -343,7 +348,7 @@ export default function VehicleFleetRegister() {
                               payload: r,
                             })
                           ) {
-                            setItems((p) => p.filter((x) => x.id !== r.id));
+                            setItems((p) => replaceWithTombstone(p, r.id));
                             pushAudit({ action: "vehicle_delete", entity: "vehicles", detail: r.id });
                           }
                         }}
@@ -356,10 +361,10 @@ export default function VehicleFleetRegister() {
               </div>
             ))}
             <RegisterListPagingFooter
-              hasMore={listPg.hasMore(items)}
-              remaining={listPg.remaining(items)}
-              showing={Math.min(listPg.cap, items.length)}
-              total={items.length}
+              hasMore={listPg.hasMore(liveItems)}
+              remaining={listPg.remaining(liveItems)}
+              showing={Math.min(listPg.cap, liveItems.length)}
+              total={liveItems.length}
               onShowMore={listPg.showMore}
               buttonStyle={ss.btn}
               itemLabel="vehicles"

@@ -2,6 +2,12 @@ import { supabase } from "../lib/supabase";
 import { getOrgId } from "./orgStorage";
 import { describePermitAuditEvent, permitAuditDetailSnapshot } from "../modules/permits/permitAuditLog";
 
+import { todayLocalISO } from "./localDate";
+import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
+
+function activeWorkspaceId(orgSlug) {
+  return getCachedActiveCountryWorkspace(orgSlug)?.id || null;
+}
 /**
  * @param {object | undefined} prevPermit
  * @param {object} nextPermit
@@ -17,10 +23,13 @@ export async function logPermitAuditToSupabase(prevPermit, nextPermit, orgSlug) 
 
   const { action, fromStatus, toStatus } = describePermitAuditEvent(prevPermit, nextPermit);
   const slug = String(orgSlug || getOrgId() || "default").slice(0, 200);
+  const workspaceId = activeWorkspaceId(slug);
+  if (!workspaceId) return;
 
   const { error } = await supabase.from("org_permit_audit").insert({
     user_id: user.id,
     org_slug: slug,
+    workspace_id: workspaceId,
     permit_id: String(nextPermit.id),
     action,
     from_status: fromStatus || null,
@@ -45,10 +54,13 @@ export async function logPermitDeletedToSupabase(permit, orgSlug) {
   if (userErr || !user) return;
 
   const slug = String(orgSlug || getOrgId() || "default").slice(0, 200);
+  const workspaceId = activeWorkspaceId(slug);
+  if (!workspaceId) return;
 
   const { error } = await supabase.from("org_permit_audit").insert({
     user_id: user.id,
     org_slug: slug,
+    workspace_id: workspaceId,
     permit_id: String(permit.id),
     action: "deleted",
     from_status: permit.status != null ? String(permit.status) : null,
@@ -78,12 +90,15 @@ export async function fetchPermitAuditPage(opts = {}) {
   const from = (page - 1) * pageSize;
   const to = from + pageSize;
   const slug = String(opts.orgSlug || getOrgId() || "default").slice(0, 200);
+  const workspaceId = activeWorkspaceId(slug);
+  if (!workspaceId) return { rows: [], hasMore: false };
 
   let q = supabase
     .from("org_permit_audit")
     .select("id, permit_id, action, from_status, to_status, detail, occurred_at")
     .eq("user_id", user.id)
     .eq("org_slug", slug)
+    .eq("workspace_id", workspaceId)
     .order("occurred_at", { ascending: false })
     .range(from, to);
 
@@ -138,9 +153,13 @@ export async function fetchAllPermitAuditRows(opts = {}) {
  */
 export async function exportPermitAuditCsvViaServer(opts = {}) {
   if (!supabase) throw new Error("Supabase is not configured.");
+  const orgSlug = String(opts.orgSlug || getOrgId() || "default").slice(0, 200);
+  const workspaceId = activeWorkspaceId(orgSlug);
+  if (!workspaceId) throw new Error("Select a country workspace before exporting the permit audit.");
   const { data, error } = await supabase.functions.invoke("permit-audit-export", {
     body: {
-      orgSlug: String(opts.orgSlug || getOrgId() || "default").slice(0, 200),
+      orgSlug,
+      workspaceId,
       permitId: opts.permitId || undefined,
       fromDate: opts.fromDate || undefined,
       toDate: opts.toDate || undefined,
@@ -154,7 +173,7 @@ export async function exportPermitAuditCsvViaServer(opts = {}) {
   if (!csv) throw new Error("Server export returned no CSV payload.");
   return {
     csv,
-    fileName: String(data?.fileName || `permit-audit-${new Date().toISOString().slice(0, 10)}.csv`),
+    fileName: String(data?.fileName || `permit-audit-${todayLocalISO()}.csv`),
     rowCount: Number(data?.rowCount || 0),
     truncated: Boolean(data?.truncated),
     maxRows: Number(data?.maxRows || 10000),

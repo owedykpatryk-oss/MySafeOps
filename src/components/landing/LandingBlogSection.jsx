@@ -27,7 +27,7 @@ export default function LandingBlogSection({ marketId = "uk" }) {
             .
           </p>
         </div>
-        <BlogPostsGrid variant="landing" tag={tag} limit={4} />
+        <BlogPostsGrid variant="landing" tag={tag} limit={4} marketId={marketId} />
         <p className="landing-blog-more fu">
           <Link to="/blog" className="landing-blog-more-link">
             {copy.blog.seeAll}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `nv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -42,20 +47,20 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit record" : "Noise / vibration"}</h2>
-        <label style={ss.lbl}>Type</label>
-        <select style={ss.inp} value={form.recordType} onChange={(e) => set("recordType", e.target.value)}>
+        <label style={ss.lbl} htmlFor="noise-vibration-record-type">Type</label>
+        <select style={ss.inp} value={form.recordType} onChange={(e) => set("recordType", e.target.value)} id="noise-vibration-record-type">
           <option value="noise">Noise exposure / monitoring</option>
           <option value="hav">Hand-arm vibration (tool time)</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Activity / equipment</label>
-        <input style={ss.inp} value={form.activityOrTool} onChange={(e) => set("activityOrTool", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Location</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-activity-or-tool">Activity / equipment</label>
+        <input style={ss.inp} value={form.activityOrTool} onChange={(e) => set("activityOrTool", e.target.value)}  id="noise-vibration-activity-or-tool" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-location">Location</label>
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="noise-vibration-location" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="noise-vibration-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -63,14 +68,14 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date</label>
-        <input type="date" style={ss.inp} value={form.logDate} onChange={(e) => set("logDate", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-log-date">Date</label>
+        <input type="date" style={ss.inp} value={form.logDate} onChange={(e) => set("logDate", e.target.value)}  id="noise-vibration-log-date" />
         {form.recordType === "noise" ? (
           <>
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Duration (minutes)</label>
-            <input style={ss.inp} inputMode="numeric" value={form.durationMinutes} onChange={(e) => set("durationMinutes", e.target.value)} />
-            <label style={{ ...ss.lbl, marginTop: 10 }}>LAeq / reading note (optional)</label>
-            <input style={ss.inp} value={form.laeqOrReading} onChange={(e) => set("laeqOrReading", e.target.value)} />
+            <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-duration-minutes">Duration (minutes)</label>
+            <input style={ss.inp} inputMode="numeric" value={form.durationMinutes} onChange={(e) => set("durationMinutes", e.target.value)}  id="noise-vibration-duration-minutes" />
+            <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-laeq-or-reading">LAeq / reading note (optional)</label>
+            <input style={ss.inp} value={form.laeqOrReading} onChange={(e) => set("laeqOrReading", e.target.value)}  id="noise-vibration-laeq-or-reading" />
             <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
               <input type="checkbox" checked={form.hearingProtection} onChange={(e) => set("hearingProtection", e.target.checked)} />
               Hearing protection used / required
@@ -78,24 +83,29 @@ function Form({ item, projects, onSave, onClose }) {
           </>
         ) : (
           <>
-            <label style={{ ...ss.lbl, marginTop: 10 }}>Trigger time (minutes)</label>
-            <input style={ss.inp} inputMode="numeric" value={form.havTriggerTime} onChange={(e) => set("havTriggerTime", e.target.value)} />
+            <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-hav-trigger-time">Trigger time (minutes)</label>
+            <input style={ss.inp} inputMode="numeric" value={form.havTriggerTime} onChange={(e) => set("havTriggerTime", e.target.value)}  id="noise-vibration-hav-trigger-time" />
           </>
         )}
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Recorded by</label>
-        <input style={ss.inp} value={form.assessedBy} onChange={(e) => set("assessedBy", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-assessed-by">Recorded by</label>
+        <input style={ss.inp} value={form.assessedBy} onChange={(e) => set("assessedBy", e.target.value)}  id="noise-vibration-assessed-by" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="noise-vibration-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["activityOrTool","logDate"], { activityOrTool: "Activity / equipment", logDate: "Date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -125,9 +135,11 @@ export default function NoiseVibrationLog() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Type", "Date", "Activity", "Location", "Project", "Detail", "By"];
-    const rows = items.map((r) => [
+    const rows = liveItems.map((r) => [
       r.recordType,
       r.logDate,
       r.activityOrTool,
@@ -136,12 +148,7 @@ export default function NoiseVibrationLog() {
       r.recordType === "noise" ? `${r.durationMinutes} min` : `${r.havTriggerTime} min HAV`,
       r.assessedBy,
     ]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `noise_vibration_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(h, rows, `noise_vibration_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -167,8 +174,8 @@ export default function NoiseVibrationLog() {
         title="Noise & vibration"
         lead="Noise and HAV exposure records (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -180,11 +187,11 @@ export default function NoiseVibrationLog() {
 
       <RegisterModuleShell
         moduleId="noise"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("noise", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("noise", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="🔊"
           title="No noise or vibration records yet"
@@ -195,7 +202,7 @@ export default function NoiseVibrationLog() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -222,7 +229,7 @@ export default function NoiseVibrationLog() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "noise_vib_delete", entity: "noise", detail: r.id });
                         }
                       }}
@@ -235,10 +242,10 @@ export default function NoiseVibrationLog() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

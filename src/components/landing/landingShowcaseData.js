@@ -221,6 +221,26 @@ const LANDING_RAMS_SECTOR_TABS_PL = [
   { id: "food_pharma", label: "Żywność i pharma", match: (p) => p.sector === "food_pharma" },
 ];
 
+/** PL overlays for pack blurbs shown on /pl landing (app packs stay English for UK RAMS). */
+const LANDING_RAMS_PACK_COPY_PL = {
+  builtin_confined_space: {
+    name: "Przestrzeń zamknięta i zbiorniki",
+    description: "Komory, zbiorniki, kanały — pozwolenie, pomiar gazów, ratownictwo i kontrola top-mana.",
+  },
+  builtin_concrete_piling: {
+    name: "Beton, pale i deskowania",
+    description: "Pale, zalewanie, deskowania, roboty tymczasowe i sprężanie.",
+  },
+  builtin_night_public_works: {
+    name: "Prace nocne i strefa publiczna",
+    description: "Zmiany nocne, oświetlenie, zmęczenie, obiekty użytkowane i zarządzanie pieszymi.",
+  },
+  builtin_insulation_fire_stopping: {
+    name: "Izolacje i zabezpieczenia pożarowe",
+    description: "Piana natryskowa, uszczelnienia biernej ochrony pożarowej i styki z instalacją tryskaczową.",
+  },
+};
+
 /** @param {import("../../config/markets").MarketId} [marketId] */
 export function getLandingWorkspaceProfiles(marketId = "uk") {
   if (marketId !== "pl") return LANDING_WORKSPACE_PROFILES;
@@ -243,10 +263,21 @@ export function getLandingRamsSectorTabs(marketId = "uk") {
   return marketId === "pl" ? LANDING_RAMS_SECTOR_TABS_PL : LANDING_RAMS_SECTOR_TABS;
 }
 
+/** @param {LandingRamsPack} pack @param {import("../../config/markets").MarketId} [marketId] */
+export function localizeLandingRamsPack(pack, marketId = "uk") {
+  if (marketId !== "pl" || !pack) return pack;
+  const pl = LANDING_RAMS_PACK_COPY_PL[pack.id];
+  if (!pl) return pack;
+  return { ...pack, name: pl.name || pack.name, description: pl.description || pack.description };
+}
+
 /** @param {string} tabId @param {LandingRamsPack[]} catalog @param {import("../../config/markets").MarketId} [marketId] */
 export function getLandingRamsPacksForTabMarket(tabId, catalog, marketId = "uk") {
   const tabs = getLandingRamsSectorTabs(marketId);
   const tab = tabs.find((t) => t.id === tabId) || tabs[0];
-  return catalog.filter(tab.match).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
+  return catalog
+    .filter(tab.match)
+    .map((pack) => localizeLandingRamsPack(pack, marketId))
+    .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
 }
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `fire_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -38,39 +43,43 @@ function Form({ item, onSave, onClose }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 500, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 500 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit fire check" : "Fire safety check"}</h2>
-        <label style={ss.lbl}>Check type</label>
-        <select style={ss.inp} value={form.checkType} onChange={(e) => set("checkType", e.target.value)}>
+        <label style={ss.lbl} htmlFor="fire-safety-check-type">Check type</label>
+        <select style={ss.inp} value={form.checkType} onChange={(e) => set("checkType", e.target.value)} id="fire-safety-check-type">
           {TYPES.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Location</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date</label>
-        <input type="date" style={ss.inp} value={form.checkDate} onChange={(e) => set("checkDate", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-location">Location</label>
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="fire-safety-location" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-check-date">Date</label>
+        <input type="date" style={ss.inp} value={form.checkDate} onChange={(e) => set("checkDate", e.target.value)}  id="fire-safety-check-date" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={form.satisfactory} onChange={(e) => set("satisfactory", e.target.checked)} />
           Satisfactory
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Checked by</label>
-        <input style={ss.inp} value={form.checkedBy} onChange={(e) => set("checkedBy", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes / actions</label>
-        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-checked-by">Checked by</label>
+        <input style={ss.inp} value={form.checkedBy} onChange={(e) => set("checkedBy", e.target.value)}  id="fire-safety-checked-by" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-notes">Notes / actions</label>
+        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="fire-safety-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave(form)}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const check = validateRequiredFields(form, ["location","checkDate"], { location: "Location", checkDate: "Check date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(form);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -88,15 +97,12 @@ export default function FireSafetyLog() {
     save,
   });
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Date", "Type", "Location", "OK", "Checked by", "Notes"];
-    const rows = items.map((r) => [r.checkDate, r.checkType, r.location, r.satisfactory ? "yes" : "no", r.checkedBy, r.notes]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `fire_safety_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.checkDate, r.checkType, r.location, r.satisfactory ? "yes" : "no", r.checkedBy, r.notes]);
+    exportCsv(h, rows, `fire_safety_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -121,8 +127,8 @@ export default function FireSafetyLog() {
         title="Fire safety log"
         lead="Drills, extinguishers, alarms, and fire marshal records — synced to your org cloud when D1 is enabled."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -136,11 +142,11 @@ export default function FireSafetyLog() {
 
       <RegisterModuleShell
         moduleId="fire"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("fire", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("fire", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="🔥"
           title="No fire checks recorded"
@@ -151,7 +157,7 @@ export default function FireSafetyLog() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -178,7 +184,7 @@ export default function FireSafetyLog() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "fire_check_delete", entity: "fire", detail: r.id });
                         }
                       }}
@@ -191,10 +197,10 @@ export default function FireSafetyLog() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

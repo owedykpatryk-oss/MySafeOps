@@ -7,6 +7,7 @@ import {
   summarizeTimesheetsForProject,
 } from "./projectDashboard";
 
+import { localDateISO } from "./localDate";
 describe("projectDashboard", () => {
   it("filters and sorts by recent timestamp", () => {
     const rows = [
@@ -42,8 +43,8 @@ describe("projectDashboard", () => {
     weekKey.setHours(0, 0, 0, 0);
     const summary = summarizeTimesheetsForProject(
       [
-        { id: "t1", projectId: "p1", weekKey: weekKey.toISOString().slice(0, 10), days: { Mon: 4, Tue: 4 } },
-        { id: "t2", projectId: "p2", weekKey: weekKey.toISOString().slice(0, 10), days: { Mon: 8 } },
+        { id: "t1", projectId: "p1", weekKey: localDateISO(weekKey), days: { Mon: 4, Tue: 4 } },
+        { id: "t2", projectId: "p2", weekKey: localDateISO(weekKey), days: { Mon: 8 } },
       ],
       "p1"
     );

@@ -30,9 +30,10 @@ export const BANNED_PHRASES = [
   { pattern: /\bmoreover\b/i, label: "moreover" },
 ];
 
-/** @param {string} md */
-export function checkBlogVoice(md) {
+/** @param {string} md @param {{ marketId?: string }} [opts] */
+export function checkBlogVoice(md, opts = {}) {
   const text = String(md);
+  const marketId = String(opts.marketId || "uk").toLowerCase();
   /** @type {{ label: string; count: number }[]} */
   const hits = [];
 
@@ -46,6 +47,35 @@ export function checkBlogVoice(md) {
 
   const exclam = (text.match(/!/g) || []).length;
   if (exclam > 2) hits.push({ label: `exclamation marks (${exclam})`, count: exclam });
+
+  if (marketId === "pl") {
+    const hasScenario =
+      /\b(budow[aey]|kierownik|brygadzista|pracownik|BHP|IOR|pozwolenie|kontrola PIP|wykonawc)/i.test(text);
+    if (!hasScenario && text.length > 2000) {
+      hits.push({ label: "no concrete site scenario (add opening scene)", count: 1 });
+    }
+    const plLaw =
+      /\b(Kodeks pracy|BHP|PIP|IRO|IOR|pozwolenie na prac|prace szczególnie niebezpieczne|rozporządzenie|Dz\.\s*U\.)/i.test(
+        text,
+      );
+    if (!plLaw && text.length > 2500) {
+      hits.push({ label: "no named PL BHP/law reference", count: 1 });
+    }
+    return hits;
+  }
+
+  if (marketId === "au") {
+    const hasScenario =
+      /\b(site shed|smoko|supervisor|foreman|rigger|principal contractor|Safe Work|WHS)/i.test(text);
+    if (!hasScenario && text.length > 2000) {
+      hits.push({ label: "no concrete site scenario (add opening scene)", count: 1 });
+    }
+    const auLaw = /\b(WHS|Work Health and Safety|Safe Work Australia|PCBU|SWMS|AS\/NZS)\b/i.test(text);
+    if (!auLaw && text.length > 2500) {
+      hits.push({ label: "no named AU WHS reference", count: 1 });
+    }
+    return hits;
+  }
 
   const hasScenario =
     /\b(site cabin|site office|07:|7am|rainy|supervisor|foreman|operative|subbie|HSE inspector|principal contractor)\b/i.test(

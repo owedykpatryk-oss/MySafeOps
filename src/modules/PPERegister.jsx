@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `ppe_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -39,11 +44,11 @@ function Form({ item, workers, onSave, onClose }) {
   const wm = Object.fromEntries(workers.map((w) => [w.id, w.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit PPE record" : "Issue / check PPE"}</h2>
-        <label style={ss.lbl}>Worker</label>
-        <select style={ss.inp} value={form.workerId} onChange={(e) => set("workerId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="ppe-worker-id">Worker</label>
+        <select style={ss.inp} value={form.workerId} onChange={(e) => set("workerId", e.target.value)} id="ppe-worker-id">
           <option value="">—</option>
           {workers.map((w) => (
             <option key={w.id} value={w.id}>
@@ -51,32 +56,37 @@ function Form({ item, workers, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>PPE item</label>
-        <select style={ss.inp} value={form.item} onChange={(e) => set("item", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ppe-item">PPE item</label>
+        <select style={ss.inp} value={form.item} onChange={(e) => set("item", e.target.value)} id="ppe-item">
           {PPE_ITEMS.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date</label>
-        <input type="date" style={ss.inp} value={form.issuedDate} onChange={(e) => set("issuedDate", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ppe-issued-date">Date</label>
+        <input type="date" style={ss.inp} value={form.issuedDate} onChange={(e) => set("issuedDate", e.target.value)}  id="ppe-issued-date" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={form.conditionOk} onChange={(e) => set("conditionOk", e.target.checked)} />
           Condition acceptable / fit for use
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes</label>
-        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ppe-notes">Notes</label>
+        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="ppe-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, workerName: wm[form.workerId] || form.workerName || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, workerName: wm[form.workerId] || form.workerName || "" };
+            const check = validateRequiredFields(payload, ["workerId","issuedDate"], { workerId: "Worker", issuedDate: "Date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -106,15 +116,12 @@ export default function PPERegister() {
   const d1Hydrating = d1ItemsH || d1WorkersH;
   const d1OutboxPending = d1ItemsO || d1WorkersO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Date", "Worker", "Item", "OK", "Notes"];
-    const rows = items.map((r) => [r.issuedDate, r.workerName, r.item, r.conditionOk ? "yes" : "no", r.notes]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `ppe_register_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.issuedDate, r.workerName, r.item, r.conditionOk ? "yes" : "no", r.notes]);
+    exportCsv(h, rows, `ppe_register_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -140,8 +147,8 @@ export default function PPERegister() {
         title="PPE register"
         lead="Issue checks and condition records (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -153,11 +160,11 @@ export default function PPERegister() {
 
       <RegisterModuleShell
         moduleId="ppe"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("ppe", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("ppe", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="🦺"
           title="No PPE records yet"
@@ -168,7 +175,7 @@ export default function PPERegister() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -195,7 +202,7 @@ export default function PPERegister() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "ppe_delete", entity: "ppe", detail: r.id });
                         }
                       }}
@@ -208,10 +215,10 @@ export default function PPERegister() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

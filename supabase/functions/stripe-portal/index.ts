@@ -4,12 +4,13 @@ import {
   hasLiveStripeConfig,
   hasTestStripeConfig,
   isValidSiteUrl,
-  resolveStripeConfig,
   stripeDiagnostics,
 } from "../_shared/stripeConfig.ts";
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
 import { enforceEdgeRateLimits, enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
+import { resolveBillingMembership } from "../_shared/resolveBillingMembership.ts";
+import { resolveWorkspaceStripeCustomerId } from "../_shared/stripeWebhookMapping.ts";
 
 Deno.serve(async (req) => {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
@@ -42,17 +43,17 @@ Deno.serve(async (req) => {
       },
       requestId,
     };
-    const liveReady = live.configured;
+    const liveReady = hasLiveStripeConfig();
     const allValid = Object.values(diagnostics.valid).every(Boolean);
     const admin = await getBillingAdminUser(req, supabaseUrl, serviceKey);
     if (!admin) {
-      const publicBody = publicStripeHealthBody("stripe-portal", liveReady && allValid, test.configured, requestId);
+      const publicBody = publicStripeHealthBody("stripe-portal", liveReady && allValid, hasTestStripeConfig(), requestId);
       return new Response(JSON.stringify(publicBody), {
         status: liveReady && allValid ? 200 : 503,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
       });
     }
-    return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady: test.configured }), {
+    return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady: hasTestStripeConfig() }), {
       status: liveReady && allValid ? 200 : 503,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });
@@ -109,9 +110,11 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const testMode = Boolean(body?.testMode);
-
-    const stripeConfig = resolveStripeConfig(testMode ? "test" : "live");
-    if (!stripeConfig) {
+    const orgSlug = typeof body?.orgSlug === "string" ? body.orgSlug : null;
+    const workspaceId = typeof body?.workspaceId === "string" ? body.workspaceId.trim() : "";
+    const stripeMode = testMode ? "test" : "live";
+    const secretKey = Deno.env.get(testMode ? "STRIPE_SECRET_KEY_TEST" : "STRIPE_SECRET_KEY")?.trim() ?? "";
+    if (!(testMode ? hasTestStripeConfig() : hasLiveStripeConfig())) {
       return new Response(
         JSON.stringify({
           error: testMode
@@ -122,13 +125,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: mem, error: memErr } = await supabase
-      .from("org_memberships")
-      .select("org_id, role")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const mem = await resolveBillingMembership(supabase, user.id, orgSlug);
 
-    if (memErr || !mem?.org_id) {
+    if (!mem?.org_id) {
       return new Response(JSON.stringify({ error: "No organisation membership" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
@@ -158,6 +157,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    let workspaceIsPrimary = true;
+    let workspaceCustomerId: string | null = null;
+    if (workspaceId) {
+      const { data: workspace, error: workspaceErr } = await supabase
+        .from("org_country_workspaces")
+        .select("id, is_primary")
+        .eq("id", workspaceId)
+        .eq("org_id", mem.org_id)
+        .maybeSingle();
+      if (workspaceErr || !workspace?.id) {
+        return new Response(JSON.stringify({ error: "Country workspace is not available for this organisation" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+        });
+      }
+      workspaceIsPrimary = Boolean(workspace.is_primary);
+      // Each country bills its own Stripe customer, so the portal must open that
+      // country's customer — not the organisation-wide one.
+      const { data: workspaceBilling } = await supabase
+        .from("org_country_workspace_subscriptions")
+        .select("stripe_customer_id")
+        .eq("workspace_id", workspace.id)
+        .eq("stripe_mode", stripeMode)
+        .maybeSingle();
+      workspaceCustomerId = (workspaceBilling?.stripe_customer_id as string | null) ?? null;
+    }
+
     const customerColumn = testMode ? "stripe_test_customer_id" : "stripe_customer_id";
     const { data: org, error: orgErr } = await supabase
       .from("organizations")
@@ -165,26 +191,30 @@ Deno.serve(async (req) => {
       .eq("id", mem.org_id)
       .single();
 
-    const customerId = org?.[customerColumn] as string | null | undefined;
+    const customerId = resolveWorkspaceStripeCustomerId({
+      workspaceCustomerId,
+      orgCustomerId: org?.[customerColumn] as string | null | undefined,
+      isPrimary: workspaceIsPrimary,
+    });
     if (orgErr || !customerId) {
       return new Response(
         JSON.stringify({
           error: testMode
             ? "No Stripe test customer on file yet. Start a test subscription first."
-            : "No Stripe customer on file yet. Start a subscription first.",
+            : "No Stripe customer on file for this country yet. Start a subscription first.",
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId } },
       );
     }
 
-    const stripe = new Stripe(stripeConfig.secretKey, { apiVersion: "2023-10-16" });
+    const stripe = new Stripe(secretKey, { apiVersion: "2023-10-16" });
 
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${siteUrl}/app?settingsTab=billing${testMode ? "&stripeMode=test" : ""}`,
+      return_url: `${siteUrl}/app?settingsTab=billing${workspaceId ? `&billingWorkspace=${workspaceId}` : ""}${testMode ? "&stripeMode=test" : ""}`,
     });
 
-    return new Response(JSON.stringify({ url: session.url, requestId, stripeMode: stripeConfig.mode }), {
+    return new Response(JSON.stringify({ url: session.url, requestId, stripeMode }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });

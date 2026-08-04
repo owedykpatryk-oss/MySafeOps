@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BILLING_PLANS, STRIPE_SUBSCRIBABLE_PLAN_IDS, ANNUAL_PRICE_INCREASE_PERCENT, PRICE_ADJUSTMENT_SHORT, getEffectivePlanId } from "./billingPlans";
+import { BILLING_PLANS, STRIPE_SUBSCRIBABLE_PLAN_IDS, ANNUAL_PRICE_INCREASE_PERCENT, PRICE_ADJUSTMENT_SHORT, getPriceAdjustmentShort, getEffectivePlanId } from "./billingPlans";
 
 /** Keep in sync with scripts/stripe-seed-prices.mjs PLANS.amountPence */
 const SEED_AMOUNTS_PENCE = {
@@ -47,5 +47,8 @@ describe("billingPlans", () => {
     expect(ANNUAL_PRICE_INCREASE_PERCENT).toBe(10);
     expect(PRICE_ADJUSTMENT_SHORT).toMatch(/10%/);
     expect(PRICE_ADJUSTMENT_SHORT).toMatch(/30 days/);
+    expect(getPriceAdjustmentShort("pl")).toMatch(/10%/);
+    expect(getPriceAdjustmentShort("pl")).toMatch(/30-dniowym/);
+    expect(getPriceAdjustmentShort("pl")).not.toMatch(/Published list prices/);
   });
 });

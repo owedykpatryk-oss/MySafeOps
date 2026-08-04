@@ -5,11 +5,10 @@ import { useToast } from "../context/ToastContext";
 import { copyCapabilityLink } from "../utils/copyCapabilityLink";
 import PageHero from "../components/PageHero";
 
+import { todayLocalISO } from "../utils/localDate";
 // ─── storage ─────────────────────────────────────────────────────────────────
 const genId = () => `${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const fmt = (iso) => { if (!iso) return "—"; const d = new Date(iso); return d.toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }); };
-const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
-
 const ss = { ...ms, btnO: { padding:"10px 14px", borderRadius:6, border:"0.5px solid #f97316", background:"#f97316", color:"#fff", fontSize:13, cursor:"pointer", fontFamily:"DM Sans,sans-serif", minHeight:44, lineHeight:1.3 } };
 
 // ─── QR generator (pure JS, no lib) ─────────────────────────────────────────
@@ -85,13 +84,13 @@ function SigCanvas({ onCapture }) {
 }
 
 // ─── Induction form (shown to worker after QR scan) ──────────────────────────
-function InductionForm({ site, checklist, onComplete, onBack }) {
+function InductionForm({ site, checklist, onComplete, onBack: _onBack }) {
   const [step, setStep] = useState(0); // 0=details, 1=checklist, 2=sign, 3=done
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [role, setRole] = useState("");
   const [checked, setChecked] = useState({});
-  const [sig, setSig] = useState(null);
+  const [, setSig] = useState(null);
   const [gps, setGps] = useState(null);
 
   const allChecked = checklist.length===0 || checklist.every((_,i)=>checked[i]);
@@ -146,16 +145,16 @@ function InductionForm({ site, checklist, onComplete, onBack }) {
       {step===0 && (
         <div>
           <div style={{ marginBottom:12 }}>
-            <label style={ss.lbl}>Full name *</label>
-            <input value={name} onChange={e=>setName(e.target.value)} placeholder="Enter your full name" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="qr-induction-full-name">Full name *</label>
+            <input value={name} onChange={e=>setName(e.target.value)} placeholder="Enter your full name" style={ss.inp}  id="qr-induction-full-name" />
           </div>
           <div style={{ marginBottom:12 }}>
-            <label style={ss.lbl}>Company / employer</label>
-            <input value={company} onChange={e=>setCompany(e.target.value)} placeholder="Your company name" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="qr-induction-company-employer">Company / employer</label>
+            <input value={company} onChange={e=>setCompany(e.target.value)} placeholder="Your company name" style={ss.inp}  id="qr-induction-company-employer" />
           </div>
           <div style={{ marginBottom:20 }}>
-            <label style={ss.lbl}>Role / trade</label>
-            <input value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g. Electrician, Engineer, Welder" style={ss.inp} />
+            <label style={ss.lbl} htmlFor="qr-induction-role-trade">Role / trade</label>
+            <input value={role} onChange={e=>setRole(e.target.value)} placeholder="e.g. Electrician, Engineer, Welder" style={ss.inp}  id="qr-induction-role-trade" />
           </div>
           <button disabled={!name.trim()} onClick={()=>setStep(1)}
             style={{ ...ss.btnP, width:"100%", justifyContent:"center", opacity:name.trim()?1:0.4 }}>
@@ -271,12 +270,12 @@ function SiteManager({ sites, onSave, onClose }) {
         ) : (
           <>
             <div style={{ marginBottom:12 }}>
-              <label style={ss.lbl}>Site name</label>
-              <input value={ed.name} onChange={e=>updateSite(ed.id,"name",e.target.value)} style={ss.inp} />
+              <label style={ss.lbl} htmlFor="qr-induction-name">Site name</label>
+              <input value={ed.name} onChange={e=>updateSite(ed.id,"name",e.target.value)} style={ss.inp}  id="qr-induction-name" />
             </div>
             <div style={{ marginBottom:16 }}>
-              <label style={ss.lbl}>Address / location</label>
-              <input value={ed.address||""} onChange={e=>updateSite(ed.id,"address",e.target.value)} placeholder="e.g. Unit 11 Platinum Park DN9 3RU" style={ss.inp} />
+              <label style={ss.lbl} htmlFor="qr-induction-address">Address / location</label>
+              <input value={ed.address||""} onChange={e=>updateSite(ed.id,"address",e.target.value)} placeholder="e.g. Unit 11 Platinum Park DN9 3RU" style={ss.inp}  id="qr-induction-address" />
             </div>
             <div style={{ marginBottom:16 }}>
               <label style={ss.lbl}>Induction checklist items</label>
@@ -457,7 +456,7 @@ export default function QRInduction() {
     const rows = [["Name","Company","Role","Site","Date/Time","GPS Lat","GPS Lng","GPS Accuracy"]];
     entries.forEach(e=>rows.push([e.name,e.company||"",e.role||"",e.siteName||e.siteId,fmt(e.timestamp),e.gps?.lat||"",e.gps?.lng||"",e.gps?.accuracy||""]));
     const csv = rows.map(r=>r.map(c=>`"${c}"`).join(",")).join("\n");
-    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download=`site_register_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+    const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download=`site_register_${todayLocalISO()}.csv`; a.click();
   };
 
   return (

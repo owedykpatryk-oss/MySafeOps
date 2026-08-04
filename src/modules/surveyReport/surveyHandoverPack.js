@@ -16,6 +16,7 @@ import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
 import { utilityMappingExportBaseName } from "../../utils/utilityMappingDocRefs";
 import { buildCadPreviewSvg } from "../../utils/cadPreviewSvg.js";
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
+import { getActiveDocumentLocale } from "../../utils/countryWorkspaces";
 import {
   buildUtilityMappingClientPackHtml,
   buildUtilityMappingQrSrc,
@@ -25,6 +26,7 @@ import { buildHandoverChecklistHtml } from "./surveyFieldUpgrades";
 import { computeUtilityMappingDigRisk } from "../../utils/utilityMappingPremiumPages";
 import { UTILITY_MAPPING_BRAND } from "../../utils/utilityMappingBranding";
 
+import { todayLocalISO } from "../../utils/localDate";
 function csvCell(value) {
   const s = String(value ?? "").replace(/"/g, '""');
   return /[",\n\r]/.test(s) ? `"${s}"` : s;
@@ -175,7 +177,7 @@ export function buildVerificationSheetHtml(report = {}, opts = {}) {
   const orgName = opts.orgName || (isUtilityMappingOrg() ? UTILITY_MAPPING_BRAND.name : "MySafeOps");
 
   return `<!DOCTYPE html>
-<html lang="en-GB"><head><meta charset="utf-8"/>
+<html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/>
 <title>Verify ${escapeHtml(r.ref || "survey")}</title>
 <style>
   body { font-family: "Segoe UI", Arial, sans-serif; margin: 24px; color: #0f172a; max-width: 720px; }
@@ -220,7 +222,7 @@ export function buildVerificationSheetHtml(report = {}, opts = {}) {
 /** Plain-text README for the handover folder. */
 export function buildHandoverReadme(report, opts = {}) {
   const r = normalizeSurveyReport(report);
-  const issued = r.issueDate || r.documentControl?.issueDate || new Date().toISOString().slice(0, 10);
+  const issued = r.issueDate || r.documentControl?.issueDate || todayLocalISO();
   const method = r.pas128Method ? pas128MethodLabel(r.pas128Method) : "Not specified";
   const ql = r.pas128Ql || "—";
   const utilCount = (r.utilitiesTable || []).length;

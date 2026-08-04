@@ -91,11 +91,11 @@ export default function PermitIncidentReportDialog({ open, permit, projectPlans 
         </>
       }
     >
-      <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }}>Title</label>
-      <input style={{ ...ss.inp, width: "100%", boxSizing: "border-box", marginBottom: 10 }} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }} htmlFor="permit-incident-report-dialog-title">Title</label>
+      <input style={{ ...ss.inp, width: "100%", boxSizing: "border-box", marginBottom: 10 }} value={title} onChange={(e) => setTitle(e.target.value)}  id="permit-incident-report-dialog-title" />
 
-      <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }}>Severity</label>
-      <select style={{ ...ss.inp, width: "100%", boxSizing: "border-box", marginBottom: 10 }} value={severity} onChange={(e) => setSeverity(e.target.value)}>
+      <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }} htmlFor="permit-incident-report-dialog-severity">Severity</label>
+      <select style={{ ...ss.inp, width: "100%", boxSizing: "border-box", marginBottom: 10 }} value={severity} onChange={(e) => setSeverity(e.target.value)} id="permit-incident-report-dialog-severity">
         {SEVERITIES.map((s) => (
           <option key={s.value} value={s.value}>
             {s.label}
@@ -103,21 +103,21 @@ export default function PermitIncidentReportDialog({ open, permit, projectPlans 
         ))}
       </select>
 
-      <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }}>Summary</label>
+      <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }} htmlFor="permit-incident-report-dialog-summary">Summary</label>
       <textarea
         style={{ ...ss.inp, minHeight: 72, resize: "vertical", width: "100%", boxSizing: "border-box", marginBottom: 10 }}
         value={summary}
         onChange={(e) => setSummary(e.target.value)}
         placeholder="What happened, immediate actions taken…"
-      />
+       id="permit-incident-report-dialog-summary" />
 
-      <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }}>Media links (optional)</label>
+      <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }} htmlFor="permit-incident-report-dialog-media-links-optional">Media links (optional)</label>
       <textarea
         style={{ ...ss.inp, minHeight: 48, resize: "vertical", width: "100%", boxSizing: "border-box", marginBottom: 10, fontSize: 12 }}
         value={mediaUrls}
         onChange={(e) => setMediaUrls(e.target.value)}
         placeholder="One URL per line — photo, video, or voice note links"
-      />
+       id="permit-incident-report-dialog-media-links-optional" />
 
       {plansForProject.length > 0 ? (
         <div style={{ marginTop: 4 }}>

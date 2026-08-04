@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
-  COMPETENT_REVIEW_LABEL,
   gateCompetentReview,
   requiresCompetentReviewForPermitAction,
   requiresCompetentReviewForRamsStatus,

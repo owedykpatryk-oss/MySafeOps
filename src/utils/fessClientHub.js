@@ -8,6 +8,7 @@ import { getFessJobStarter } from "./fessJobStarters";
 import { applyAndPersistProjectPlaybook } from "./projectPlaybooks";
 import { openWorkspaceView, setWorkspaceNavTarget } from "./workspaceNavContext";
 import { computeRamsFingerprint } from "../modules/rams/ramsPrintHtml";
+import { todayLocalISO } from "./localDate";
 
 const RAMS_KEY = "rams_builder_docs";
 const PROJECTS_KEY = "mysafeops_projects";
@@ -226,7 +227,7 @@ export function duplicateFessRamsForSite(siteTemplateId) {
     title: source.title || tmpl.name,
     documentNo: jobRef,
     jobRef,
-    issueDate: now.slice(0, 10),
+    issueDate: todayLocalISO(),
     rows,
     status: "draft",
     isFavorite: false,

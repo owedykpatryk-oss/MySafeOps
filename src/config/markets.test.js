@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { getMarket, MARKETS, MARKET_IDS, isValidMarketId, resolveMarketId } from "./markets";
+import {
+  getAlternateMarkets,
+  getMarket,
+  MARKETS,
+  MARKET_IDS,
+  isValidMarketId,
+  resolveMarketId,
+} from "./markets";
 
 describe("markets", () => {
   it("resolves uk by default", () => {
@@ -23,9 +30,11 @@ describe("markets", () => {
     expect(pl.legalBasePath).toBe("/legal/pl");
   });
 
-  it("links alternate markets", () => {
+  it("getAlternateMarkets returns a complete reciprocal cluster (not just alternateMarketId)", () => {
+    expect(getAlternateMarkets("uk").map((m) => m.id).sort()).toEqual(["au", "pl"]);
+    expect(getAlternateMarkets("au").map((m) => m.id).sort()).toEqual(["pl", "uk"]);
+    expect(getAlternateMarkets("pl").map((m) => m.id).sort()).toEqual(["au", "uk"]);
     expect(getMarket("uk").alternateMarketId).toBe("au");
-    expect(getMarket("au").alternateMarketId).toBe("uk");
     expect(MARKET_IDS).toEqual(["uk", "au", "pl"]);
     expect(Object.keys(MARKETS)).toEqual(MARKET_IDS);
   });

@@ -4,7 +4,7 @@
 import { loadOrgScoped as load } from "./orgStorage";
 import { isFessOrg } from "./fessOrg";
 import { canUseFessExclusiveFeatures } from "./fessExclusive";
-import { openPrintWindow, writePrintWindowDocument } from "./htmlEscape";
+import { openPrintWindowOrWarn, writePrintWindowDocument } from "./htmlEscape";
 import {
   buildSitePackSummaryHtml,
   wrapRamsPrintDocument,
@@ -14,11 +14,12 @@ import { buildFessMethodStatementPackHtml } from "./fessMsPrintHtml";
 import { buildFessBriefingOperativeRows } from "./fessBriefingRecord";
 import { buildFessRamsPrintBodyHTML, fessOrgPrintTheme } from "./fessRamsPrintHtml";
 import { escapeHtml as escHtml } from "./htmlEscape";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 
 const fmtDate = (iso) => {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    return new Date(iso).toLocaleDateString(getActiveDocumentLocale(), { day: "2-digit", month: "short", year: "numeric" });
   } catch {
     return "—";
   }
@@ -203,11 +204,10 @@ export async function openFessSitePackWindow(
     ms,
     coshhItems
   );
-  const win = openPrintWindow();
-  if (!win) {
-    window.alert("Could not open print window — allow pop-ups for this site.");
-    return false;
-  }
+  const win = openPrintWindowOrWarn({
+    message: "Could not open print window — allow pop-ups for this site.",
+  });
+  if (!win) return false;
   await writePrintWindowDocument(win, html);
   if (print) win.print();
   return true;

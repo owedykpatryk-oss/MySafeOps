@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { isTurnstileEnabled, isLocalDevHost, isTurnstileTestKeyOnProductionHost, TURNSTILE_SITE_KEY } from "../config/turnstile";
+import { isTurnstileEnabled, isTurnstileTestKeyOnProductionHost, TURNSTILE_SITE_KEY } from "../config/turnstile";
+import { CAPTCHA_LOAD_FAILED_MSG } from "../lib/authCaptcha";
 
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+const LOAD_WATCHDOG_MS = 5000;
 
 let scriptPromise = null;
 
@@ -55,25 +57,23 @@ function loadTurnstileScript() {
 export default function TurnstileWidget({ onTokenChange, onUnavailable, action = "login", resetKey = 0 }) {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
+  const gotTokenRef = useRef(false);
   const onTokenChangeRef = useRef(onTokenChange);
   const onUnavailableRef = useRef(onUnavailable);
   onTokenChangeRef.current = onTokenChange;
   onUnavailableRef.current = onUnavailable;
   const [loadError, setLoadError] = useState("");
+  const [waiting, setWaiting] = useState(true);
+  const [localRetry, setLocalRetry] = useState(0);
 
   const reportUnavailable = (unavailable) => {
     onUnavailableRef.current?.(unavailable);
   };
 
   const handleLoadFailure = (message) => {
-    if (isLocalDevHost()) {
-      reportUnavailable(true);
-      setLoadError(`${message} Login on localhost works without Turnstile.`);
-      onTokenChangeRef.current("");
-      return;
-    }
-    reportUnavailable(false);
-    setLoadError(message);
+    reportUnavailable(true);
+    setWaiting(false);
+    setLoadError(message || CAPTCHA_LOAD_FAILED_MSG);
     onTokenChangeRef.current("");
   };
 
@@ -81,14 +81,24 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
     if (!isTurnstileEnabled()) return undefined;
 
     let cancelled = false;
+    gotTokenRef.current = false;
     setLoadError("");
+    setWaiting(true);
     reportUnavailable(false);
+
+    const watchdogId = window.setTimeout(() => {
+      if (cancelled || gotTokenRef.current) return;
+      const hasIframe = Boolean(containerRef.current?.querySelector("iframe"));
+      if (!hasIframe) {
+        handleLoadFailure(CAPTCHA_LOAD_FAILED_MSG);
+      }
+    }, LOAD_WATCHDOG_MS);
 
     loadTurnstileScript()
       .then((ok) => {
         if (cancelled) return;
         if (!ok || !containerRef.current || !window.turnstile?.render) {
-          handleLoadFailure("Could not load Cloudflare Turnstile. Check ad blockers or network access to challenges.cloudflare.com.");
+          handleLoadFailure(CAPTCHA_LOAD_FAILED_MSG);
           return;
         }
         if (widgetIdRef.current != null) {
@@ -104,22 +114,32 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
           sitekey: TURNSTILE_SITE_KEY,
           action,
           retry: "auto",
-          callback: (token) => onTokenChangeRef.current(token),
-          "expired-callback": () => onTokenChangeRef.current(""),
+          callback: (token) => {
+            gotTokenRef.current = true;
+            setWaiting(false);
+            setLoadError("");
+            reportUnavailable(false);
+            onTokenChangeRef.current(token);
+          },
+          "expired-callback": () => {
+            gotTokenRef.current = false;
+            onTokenChangeRef.current("");
+          },
           "error-callback": () => {
             onTokenChangeRef.current("");
-            handleLoadFailure("Turnstile verification failed. Disable ad blockers for this site or retry.");
+            handleLoadFailure(CAPTCHA_LOAD_FAILED_MSG);
           },
         });
       })
       .catch(() => {
         if (!cancelled) {
-          handleLoadFailure("Could not load Cloudflare Turnstile. Check ad blockers or network access to challenges.cloudflare.com.");
+          handleLoadFailure(CAPTCHA_LOAD_FAILED_MSG);
         }
       });
 
     return () => {
       cancelled = true;
+      window.clearTimeout(watchdogId);
       if (widgetIdRef.current != null && window.turnstile?.remove) {
         try {
           window.turnstile.remove(widgetIdRef.current);
@@ -129,7 +149,7 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
         widgetIdRef.current = null;
       }
     };
-  }, [action, resetKey]);
+  }, [action, resetKey, localRetry]);
 
   if (!isTurnstileEnabled()) return null;
 
@@ -141,18 +161,35 @@ export default function TurnstileWidget({ onTokenChange, onUnavailable, action =
         </p>
       ) : null}
       {loadError ? (
-        <p
-          style={{ margin: "0 0 8px", fontSize: 12, color: isLocalDevHost() ? "#b45309" : "#b91c1c", lineHeight: 1.45 }}
-          role="status"
-        >
-          {loadError}
+        <p style={{ margin: "0 0 8px", fontSize: 12, color: "#b91c1c", lineHeight: 1.45 }} role="alert">
+          {loadError}{" "}
+          <button
+            type="button"
+            onClick={() => setLocalRetry((n) => n + 1)}
+            style={{
+              border: "none",
+              background: "none",
+              padding: 0,
+              color: "#b91c1c",
+              textDecoration: "underline",
+              cursor: "pointer",
+              fontSize: 12,
+            }}
+          >
+            Try again
+          </button>
+        </p>
+      ) : waiting ? (
+        <p style={{ margin: "0 0 8px", fontSize: 12, color: "#64748b", lineHeight: 1.45 }} role="status">
+          Loading security check…
         </p>
       ) : null}
       <div
         ref={containerRef}
-        style={{ minHeight: 65 }}
+        style={{ minHeight: loadError ? 0 : 65 }}
         aria-label="Security verification"
         data-turnstile-widget
+        data-turnstile-state={loadError ? "error" : waiting ? "loading" : "ready"}
       />
     </div>
   );

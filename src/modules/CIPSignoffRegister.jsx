@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -47,15 +49,15 @@ function Form({ item, projects, onSave, onClose }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 560, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit CIP sign-off" : "CIP sign-off"}</h2>
-        <label style={ss.lbl}>Equipment ID</label>
-        <input style={ss.inp} value={form.equipmentId} onChange={(e) => set("equipmentId", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Work order ref</label>
-        <input style={ss.inp} value={form.workOrderRef} onChange={(e) => set("workOrderRef", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="cip-signoff-equipment-id">Equipment ID</label>
+        <input style={ss.inp} value={form.equipmentId} onChange={(e) => set("equipmentId", e.target.value)}  id="cip-signoff-equipment-id" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-work-order-ref">Work order ref</label>
+        <input style={ss.inp} value={form.workOrderRef} onChange={(e) => set("workOrderRef", e.target.value)}  id="cip-signoff-work-order-ref" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="cip-signoff-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -63,14 +65,14 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>CIP program</label>
-        <input style={ss.inp} value={form.cipProgram} onChange={(e) => set("cipProgram", e.target.value)} placeholder="e.g. Standard 4-step caustic" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Peak temperature (°C)</label>
-        <input style={ss.inp} inputMode="decimal" value={form.cipTemperaturePeakC} onChange={(e) => set("cipTemperaturePeakC", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Duration (minutes)</label>
-        <input style={ss.inp} inputMode="numeric" value={form.cipDurationMinutes} onChange={(e) => set("cipDurationMinutes", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>CIP run time</label>
-        <input type="datetime-local" style={ss.inp} value={form.cipRunAt ? new Date(form.cipRunAt).toISOString().slice(0, 16) : ""} onChange={(e) => set("cipRunAt", e.target.value ? new Date(e.target.value).getTime() : null)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-cip-program">CIP program</label>
+        <input style={ss.inp} value={form.cipProgram} onChange={(e) => set("cipProgram", e.target.value)} placeholder="e.g. Standard 4-step caustic"  id="cip-signoff-cip-program" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-cip-temperature-peak-c">Peak temperature (°C)</label>
+        <input style={ss.inp} inputMode="decimal" value={form.cipTemperaturePeakC} onChange={(e) => set("cipTemperaturePeakC", e.target.value)}  id="cip-signoff-cip-temperature-peak-c" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-cip-duration-minutes">Duration (minutes)</label>
+        <input style={ss.inp} inputMode="numeric" value={form.cipDurationMinutes} onChange={(e) => set("cipDurationMinutes", e.target.value)}  id="cip-signoff-cip-duration-minutes" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-cip-run-at">CIP run time</label>
+        <input type="datetime-local" style={ss.inp} value={form.cipRunAt ? new Date(form.cipRunAt).toISOString().slice(0, 16) : ""} onChange={(e) => set("cipRunAt", e.target.value ? new Date(e.target.value).getTime() : null)}  id="cip-signoff-cip-run-at" />
 
         <div style={{ fontWeight: 600, marginTop: 14 }}>ATP / swab results</div>
         <button type="button" style={{ ...ss.btn, marginTop: 6 }} onClick={addSwab}>
@@ -79,12 +81,12 @@ function Form({ item, projects, onSave, onClose }) {
         {(form.swabResults || []).map((s, idx) => (
           <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 80px auto", gap: 6, marginTop: 8, alignItems: "end" }}>
             <div>
-              <label style={ss.lbl}>Location</label>
-              <input style={ss.inp} value={s.location} onChange={(e) => patchSwab(idx, { location: e.target.value })} />
+              <label style={ss.lbl} htmlFor={`cip-signoff-location-${s.id}`}>Location</label>
+              <input style={ss.inp} value={s.location} onChange={(e) => patchSwab(idx, { location: e.target.value })}  id={`cip-signoff-location-${s.id}`} />
             </div>
             <div>
-              <label style={ss.lbl}>ATP RLU</label>
-              <input style={ss.inp} value={s.atpRlu} onChange={(e) => patchSwab(idx, { atpRlu: e.target.value })} />
+              <label style={ss.lbl} htmlFor={`cip-signoff-atp-rlu-${s.id}`}>ATP RLU</label>
+              <input style={ss.inp} value={s.atpRlu} onChange={(e) => patchSwab(idx, { atpRlu: e.target.value })}  id={`cip-signoff-atp-rlu-${s.id}`} />
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, paddingBottom: 8 }}>
               <input type="checkbox" checked={!!s.pass} onChange={(e) => patchSwab(idx, { pass: e.target.checked })} />
@@ -97,15 +99,15 @@ function Form({ item, projects, onSave, onClose }) {
           <input type="checkbox" checked={form.visualInspectionPassed} onChange={(e) => set("visualInspectionPassed", e.target.checked)} />
           Visual inspection passed
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Signed off by</label>
-        <input style={ss.inp} value={form.signedOffBy} onChange={(e) => set("signedOffBy", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Released to production</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-signed-off-by">Signed off by</label>
+        <input style={ss.inp} value={form.signedOffBy} onChange={(e) => set("signedOffBy", e.target.value)}  id="cip-signoff-signed-off-by" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-released-to-production-at">Released to production</label>
         <input
           type="datetime-local"
           style={ss.inp}
           value={form.releasedToProductionAt ? new Date(form.releasedToProductionAt).toISOString().slice(0, 16) : ""}
           onChange={(e) => set("releasedToProductionAt", e.target.value ? new Date(e.target.value).getTime() : null)}
-        />
+         id="cip-signoff-released-to-production-at" />
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
@@ -116,7 +118,7 @@ function Form({ item, projects, onSave, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -145,6 +147,8 @@ export default function CIPSignoffRegister() {
   });
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
+
+  const liveItems = liveOrgArrayRows(items);
 
   const persist = (f, isNew) => {
     setItems((p) => {
@@ -179,11 +183,11 @@ export default function CIPSignoffRegister() {
 
       <RegisterModuleShell
         moduleId="cip-signoff"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("cip-signoff", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("cip-signoff", liveItems)}
       >
 
-      {items.length === 0 ? (
+      {liveItems.length === 0 ? (
         <EmptyState
           icon="🧴"
           title="No CIP records yet"
@@ -194,7 +198,7 @@ export default function CIPSignoffRegister() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card }}>
               <strong>{r.equipmentId || "Equipment"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
@@ -219,7 +223,7 @@ export default function CIPSignoffRegister() {
                           payload: r,
                         })
                       ) {
-                        setItems((p) => p.filter((x) => x.id !== r.id));
+                        setItems((p) => replaceWithTombstone(p, r.id));
                       }
                     }}
                   >
@@ -230,10 +234,10 @@ export default function CIPSignoffRegister() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

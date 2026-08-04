@@ -118,17 +118,20 @@ export function restoreRecycleBinEntry(entryId) {
   if (!Array.isArray(list)) return { ok: false, reason: "Restore target is not a list." };
   const payload = entry.payload;
   const payloadId = payload?.id;
-  let next = list;
+  const restoredAt = new Date().toISOString();
+  const livePayload =
+    payload && typeof payload === "object"
+      ? (() => {
+          const { deletedAt: _deletedAt, ...rest } = payload;
+          return { ...rest, updatedAt: restoredAt };
+        })()
+      : payload;
+  let next;
   if (payloadId) {
-    const idx = list.findIndex((x) => x?.id === payloadId);
-    if (idx >= 0) {
-      next = [...list];
-      next[idx] = payload;
-    } else {
-      next = [payload, ...list];
-    }
+    // Drop any tombstone / prior row with the same id, then re-insert the live payload.
+    next = [livePayload, ...list.filter((x) => x?.id !== payloadId)];
   } else {
-    next = [payload, ...list];
+    next = [livePayload, ...list];
   }
   saveOrgScoped(entry.sourceKey, next);
   writeBin(current.filter((x) => x.id !== entryId));

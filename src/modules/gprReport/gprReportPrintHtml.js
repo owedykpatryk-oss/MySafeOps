@@ -35,7 +35,10 @@ import {
 } from "./gprLineLengthSummary.js";
 import { cadUtilityColor } from "../../utils/cadImportVisuals.js";
 import { formatLengthM } from "../../utils/surveyDxfAnalyzer.js";
-import { formatOrgDate, formatOrgDateTime } from "../../utils/orgLocale.js";
+import {
+  formatDocumentDate as formatOrgDate,
+  formatDocumentDateTime as formatOrgDateTime,
+} from "../../utils/orgLocale.js";
 import { safeHttpUrl } from "../../utils/safeUrl.js";
 import { escapeAttr } from "../../utils/htmlEscape.js";
 

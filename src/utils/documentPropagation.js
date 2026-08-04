@@ -9,6 +9,7 @@ import { mergeRamsWithSurveyReport } from "../modules/surveyReport/surveyRamsSyn
 import { surveyTypeLabel } from "../modules/surveyReport/surveyReportHelpers";
 import { getSurveyPackMeta } from "./surveyContentCatalog";
 
+import { todayLocalISO } from "./localDate";
 export { duplicateRamsToProject, batchDuplicateRamsToProject } from "./ramsDocumentClone";
 
 const genId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -61,7 +62,7 @@ export function appendSurveySummaryToRams(ramsDoc, report) {
   if (existingIdx >= 0) appendices[existingIdx] = entry;
   else appendices.unshift(entry);
 
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = todayLocalISO();
   const marker = `--- Survey appendix (${stamp}: ${report.ref || report.id}) ---`;
   let handoverNotes = String(ramsDoc.handoverNotes || "").trim();
   const refToken = report.ref || report.id;

@@ -1,6 +1,7 @@
 import { normalizeChecklistItems, normalizeChecklistState } from "./permitChecklistUtils";
 import { permitEndIso } from "./permitRules";
 import { PERMIT_TYPES, checklistStringsForType } from "./permitTypes";
+import { getPermitTypesForMarket, checklistStringsForMarket } from "./permitTypesMarket";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { escapeHtml, escapeAttr, safeCssColor, safeImageSrc } from "../../utils/htmlEscape.js";
 import {
@@ -20,13 +21,15 @@ import {
 import { utilityMappingBodyPrintCss } from "../../utils/utilityMappingPrintTheme.js";
 import { buildPermitStatusDeepLink, renderDigGuidancePrintHtml } from "./permitDigGuidance";
 import { renderGuidancePrintHtml } from "./permitGuidance/registry";
-import { formatOrgDateTime } from "../../utils/orgLocale.js";
+import { formatDocumentDateTime } from "../../utils/orgLocale.js";
+import { getOrgMarketId } from "../../utils/orgMarket.js";
+import { documentStatusLabel, documentText, getDocumentCountryPack } from "../../utils/documentCountryPack.js";
 
 export { buildPermitStatusDeepLink };
 
-const fmtDateTime = formatOrgDateTime;
+const fmtDateTime = formatDocumentDateTime;
 
-function permitStatusVisual(status) {
+function permitStatusVisual(status, marketId = getOrgMarketId()) {
   const s = String(status || "draft").toLowerCase();
   const map = {
     active: { bg: "#ecfdf5", fg: "#047857", border: "#6ee7b7", label: "ACTIVE" },
@@ -37,16 +40,18 @@ function permitStatusVisual(status) {
     expired: { bg: "#fef2f2", fg: "#b91c1c", border: "#fca5a5", label: "EXPIRED" },
     suspended: { bg: "#fef2f2", fg: "#991b1b", border: "#fca5a5", label: "SUSPENDED" },
   };
-  return map[s] || map.draft;
+  const visual = map[s] || map.draft;
+  return { ...visual, label: documentStatusLabel(s, marketId) };
 }
 
 function checklistProgressHtml(checkedCount, total, primaryColor) {
+  const tx = (key, fallback = key) => documentText(key, fallback, getOrgMarketId());
   const safeTotal = Math.max(0, Number(total) || 0);
   const pct = safeTotal ? Math.round((checkedCount / safeTotal) * 100) : 0;
   return `<div class="ptw-checklist-progress" style="margin:0 0 12px">
     <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:6px">
-      <strong>Pre-work checklist</strong>
-      <span style="color:#64748b">${checkedCount}/${safeTotal} confirmed (${pct}%)</span>
+      <strong>${escapeHtml(tx("Pre-work checklist"))}</strong>
+      <span style="color:#64748b">${checkedCount}/${safeTotal} ${escapeHtml(tx("confirmed"))} (${pct}%)</span>
     </div>
     <div style="height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden">
       <div style="height:100%;width:${pct}%;background:linear-gradient(90deg, ${escapeHtml(primaryColor)}, #22c55e);border-radius:999px"></div>
@@ -65,7 +70,9 @@ function renderPermitCoverPage({
   qrHtml,
   versionTag,
 }) {
-  const st = permitStatusVisual(permit.status);
+  const marketId = getOrgMarketId();
+  const tx = (key, fallback = key) => documentText(key, fallback, marketId);
+  const st = permitStatusVisual(permit.status, marketId);
   const pct = checklistTotal ? Math.round((checkedCount / checklistTotal) * 100) : 0;
   const logoSrc = resolveUtilityMappingLogoSrc(org) || safeImageSrc(org.logo) || "";
 
@@ -111,7 +118,7 @@ function renderPermitCoverPage({
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:3px solid ${primaryColor};padding-bottom:14px;margin-bottom:18px">
       <div style="min-width:0">
         ${logoSrc ? `<img src="${escapeAttr(logoSrc)}" alt="" style="max-height:52px;margin-bottom:10px"/>` : ""}
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">Permit to work</div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em">${escapeHtml(tx("Permit to work"))}</div>
         <div style="font-size:20pt;font-weight:800;color:${primaryColor};line-height:1.15;margin-top:6px">${escapeHtml(def.label)}</div>
         <div style="font-size:11px;color:#64748b;margin-top:8px">${escapeHtml(org.name || "MySafeOps")}</div>
       </div>
@@ -122,15 +129,15 @@ function renderPermitCoverPage({
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin-bottom:18px;font-size:12px">
-      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">Location</div><strong>${escapeHtml(permit.location || "—")}</strong></div>
-      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">Issued to</div><strong>${escapeHtml(permit.issuedTo || "—")}</strong></div>
-      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">Valid from</div>${escapeHtml(fmtDateTime(permit.startDateTime))}</div>
-      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">Expires</div><strong>${escapeHtml(fmtDateTime(endIso))}</strong></div>
+      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">${escapeHtml(tx("Location"))}</div><strong>${escapeHtml(permit.location || "—")}</strong></div>
+      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">${escapeHtml(tx("Issued to"))}</div><strong>${escapeHtml(permit.issuedTo || "—")}</strong></div>
+      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">${escapeHtml(tx("Valid from"))}</div>${escapeHtml(fmtDateTime(permit.startDateTime))}</div>
+      <div><div style="font-size:9px;text-transform:uppercase;color:#94a3b8">${escapeHtml(tx("Expires"))}</div><strong>${escapeHtml(fmtDateTime(endIso))}</strong></div>
     </div>
     <p style="font-size:12px;line-height:1.55;color:#334155;margin:0 0 16px">${escapeHtml(permit.description || "—")}</p>
     <div style="margin-bottom:18px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc">
       <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:8px">
-        <strong>Checklist readiness</strong>
+        <strong>${escapeHtml(tx("Checklist readiness"))}</strong>
         <span>${checkedCount}/${checklistTotal} · ${pct}%</span>
       </div>
       <div style="height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden">
@@ -181,13 +188,17 @@ function deriveVersionTag(prefix, permit) {
 
 /** Full HTML document for permit print/preview (also composed into RAMS site pack). */
 export function renderPermitDocumentHtml(permit, options = {}) {
-  const def = PERMIT_TYPES[permit.type] || PERMIT_TYPES.general;
+  const marketId = getOrgMarketId();
+  const countryPack = getDocumentCountryPack(marketId);
+  const permitTypes = getPermitTypesForMarket(marketId);
+  const def = permitTypes[permit.type] || permitTypes.general || PERMIT_TYPES.general;
+  const tx = (key, fallback = key) => documentText(key, fallback, marketId);
   const printSettings = loadOrgPrintSettings();
   const { org, primaryColor, accentColor, theme, watermarkText, complianceLine, versionPrefix } = printSettings;
   const checklistItems = normalizeChecklistItems(
     permit.type || "general",
     permit,
-    checklistStringsForType(permit.type || "general")
+    checklistStringsForMarket(permit.type || "general", marketId) || checklistStringsForType(permit.type || "general")
   );
   const checklistState = normalizeChecklistState(permit.checklist, checklistItems);
   const checkedCount = checklistItems.filter((item) => checklistState[item.id]).length;
@@ -218,30 +229,31 @@ export function renderPermitDocumentHtml(permit, options = {}) {
 
   const authHTML = [
     permit.authorisedByRole &&
-      `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Authorising role / competency</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${escapeHtml(permit.authorisedByRole)}</td></tr>`,
+      `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Authorising role / competency"))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${escapeHtml(permit.authorisedByRole)}</td></tr>`,
     permit.briefingConfirmedAt &&
-      `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Briefing confirmed</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${escapeHtml(fmtDateTime(permit.briefingConfirmedAt))}</td></tr>`,
+      `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Briefing confirmed"))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${escapeHtml(fmtDateTime(permit.briefingConfirmedAt))}</td></tr>`,
     permit.evidenceNotes &&
-      `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Evidence notes</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${escapeHtml(permit.evidenceNotes)}</td></tr>`,
+      `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Evidence notes"))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${escapeHtml(permit.evidenceNotes)}</td></tr>`,
     permit.evidencePhotoUrl
       ? (() => {
           const src = safeImageSrc(permit.evidencePhotoUrl);
           const cell = src
             ? `<img src="${escapeAttr(src)}" alt="Evidence photo" style="max-height:120px;max-width:100%;object-fit:contain"/>`
             : escapeHtml(permit.evidencePhotoUrl);
-          return `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Evidence photo</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${cell}</td></tr>`;
+          return `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Evidence photo"))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${cell}</td></tr>`;
         })()
       : permit.evidencePhotoStoragePath
-        ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Evidence photo</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">Stored in workspace (open app for signed access)</td></tr>`
+        ? `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Evidence photo"))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${escapeHtml(tx("Stored in workspace (open app for signed access)"))}</td></tr>`
         : "",
   ]
     .filter(Boolean)
     .join("");
-  const legalRefs = Array.isArray(permit.complianceProfile?.legalReferences)
+  const profileLegalRefs = Array.isArray(permit.complianceProfile?.legalReferences)
     ? permit.complianceProfile.legalReferences.filter(Boolean)
     : [];
+  const legalRefs = marketId === "uk" && profileLegalRefs.length ? profileLegalRefs : countryPack.ramsLegalReferences;
   const legalRefsHtml = legalRefs.length
-    ? `<h2>Legal references (UK)</h2>
+    ? `<h2>${escapeHtml(countryPack.legalReferencesHeading)}</h2>
   <ul style="margin:0 0 10px 18px;padding:0;font-size:11px;line-height:1.5">
     ${legalRefs.map((ref) => `<li>${escapeHtml(ref)}</li>`).join("")}
   </ul>`
@@ -290,15 +302,15 @@ export function renderPermitDocumentHtml(permit, options = {}) {
     ? `<div style="display:flex;gap:14px;align-items:center;margin:14px 0;padding:12px 14px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;break-inside:avoid-page">
     <img src="${escapeAttr(qrImgUrl)}" alt="Live permit status QR" width="96" height="96" style="flex-shrink:0;border-radius:4px"/>
     <div style="font-size:11px;line-height:1.55">
-      <strong style="font-size:12px">Scan for live status</strong><br/>
-      Gate check · site office · supervisor verification<br/>
+      <strong style="font-size:12px">${escapeHtml(tx("Scan for live status"))}</strong><br/>
+      ${escapeHtml(tx("Gate check · site office · supervisor verification"))}<br/>
       <span style="color:#64748b;word-break:break-all">${escapeHtml(statusUrl)}</span>
     </div>
   </div>`
     : "";
   const digGuidanceHtml = renderGuidancePrintHtml(permit, { primaryColor }) || renderDigGuidancePrintHtml(permit, { primaryColor });
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>PTW — ${escapeHtml(def.label)}</title>
+  return `<!DOCTYPE html><html lang="${countryPack.language}"><head><meta charset="utf-8"/><title>${escapeHtml(tx("Permit to work"))} — ${escapeHtml(def.label)}</title>
   <style>
     ${printDocBaseCss(org)}
     ${isUtilityMappingOrg() ? `${utilityMappingCoverSystemCss()}${utilityMappingBodyPrintCss()}` : ""}
@@ -340,7 +352,7 @@ export function renderPermitDocumentHtml(permit, options = {}) {
   })}
   ${renderPrintDocHeader(org, {
     docTitle: def.label,
-    docSubtitle: "Permit to work · controlled site document",
+    docSubtitle: tx("Permit to work · controlled site document"),
     docBadge: `${theme.toUpperCase()} · VER ${versionTag}`,
     docRef: buildDocReference(org, def.label),
   })}
@@ -351,34 +363,34 @@ export function renderPermitDocumentHtml(permit, options = {}) {
     docRef: buildDocReference(org, def.label),
   })}
   <div class="doc-top">
-    <span class="doc-chip" style="background:${permitStatusVisual(permit.status).bg};color:${permitStatusVisual(permit.status).fg};border-color:${permitStatusVisual(permit.status).border}">STATUS ${escapeHtml(String(permit.status || "draft").toUpperCase())}</span>
-    <span class="doc-chip">ISSUED ${escapeHtml(fmtDateTime(permit.startDateTime))}</span>
+    <span class="doc-chip" style="background:${permitStatusVisual(permit.status, marketId).bg};color:${permitStatusVisual(permit.status, marketId).fg};border-color:${permitStatusVisual(permit.status, marketId).border}">${escapeHtml(tx("Status"))} ${escapeHtml(documentStatusLabel(permit.status, marketId))}</span>
+    <span class="doc-chip">${escapeHtml(tx("Issued"))} ${escapeHtml(fmtDateTime(permit.startDateTime))}</span>
   </div>
   <div class="ptw-type-row"><div class="ptw-type">${escapeHtml(def.label)}</div></div>
   <table class="signatures">
-    <tr><td style="padding:4px 8px;border:1px solid #ddd;width:30%;font-size:11px;color:#666">Work description</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${escapeHtml(permit.description || "—")}</td></tr>
-    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Location</td><td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(permit.location || "—")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Issued to</td><td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(permit.issuedTo || "—")}</td></tr>
-    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Start</td><td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(fmtDateTime(permit.startDateTime))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Expiry</td><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold">${escapeHtml(fmtDateTime(endIso))}</td></tr>
-    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Issued by</td><td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(permit.issuedBy || "—")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">Permit No.</td><td style="padding:4px 8px;border:1px solid #ddd;font-family:monospace;font-size:11px">${escapeHtml(permit.id)}</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;width:30%;font-size:11px;color:#666">${escapeHtml(tx("Work description"))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px" colspan="3">${escapeHtml(permit.description || "—")}</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Location"))}</td><td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(permit.location || "—")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Issued to"))}</td><td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(permit.issuedTo || "—")}</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Start"))}</td><td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(fmtDateTime(permit.startDateTime))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Expiry"))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-weight:bold">${escapeHtml(fmtDateTime(endIso))}</td></tr>
+    <tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Issued by"))}</td><td style="padding:4px 8px;border:1px solid #ddd">${escapeHtml(permit.issuedBy || "—")}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">${escapeHtml(tx("Permit No."))}</td><td style="padding:4px 8px;border:1px solid #ddd;font-family:monospace;font-size:11px">${escapeHtml(permit.id)}</td></tr>
     ${extraHTML}
     ${authHTML}
   </table>
-  <h2>Pre-work checklist (${checkedCount}/${checklistItems.length || 0} confirmed)</h2>
+  <h2>${escapeHtml(tx("Pre-work checklist"))} (${checkedCount}/${checklistItems.length || 0} ${escapeHtml(tx("confirmed"))})</h2>
   ${checklistProgressHtml(checkedCount, checklistItems.length, primaryColor)}
   <table><tbody>${checklistHTML}</tbody></table>
   ${digGuidanceHtml}
-  ${permit.notes ? `<h2>Conditions / restrictions</h2><p style="font-size:12px;line-height:1.6;padding:6px 8px;background:#fff8e6;border:0.5px solid #e5c060">${escapeHtml(permit.notes)}</p>` : ""}
+  ${permit.notes ? `<h2>${escapeHtml(tx("Conditions / restrictions"))}</h2><p style="font-size:12px;line-height:1.6;padding:6px 8px;background:#fff8e6;border:0.5px solid #e5c060">${escapeHtml(permit.notes)}</p>` : ""}
   ${legalRefsHtml}
-  <h2>Signatures</h2>
+  <h2>${escapeHtml(tx("Signatures"))}</h2>
   <table>
-    <tr><th>Role</th><th>Name</th><th>Signature</th><th>Date/Time</th></tr>
+    <tr><th>${escapeHtml(tx("Role"))}</th><th>${escapeHtml(tx("Name"))}</th><th>${escapeHtml(tx("Signature"))}</th><th>${escapeHtml(tx("Date/Time"))}</th></tr>
     ${signatureRowsHtml}
   </table>
   ${
     Array.isArray(permit.acknowledgements) && permit.acknowledgements.length > 0
-      ? `<h2>Contractor acknowledgements (read &amp; sign)</h2>
+      ? `<h2>${escapeHtml(tx("Contractor acknowledgements (read & sign)"))}</h2>
   <table>
-    <tr><th>Name</th><th>Note</th><th>Signature</th><th>Date/Time</th></tr>
+    <tr><th>${escapeHtml(tx("Name"))}</th><th>${escapeHtml(tx("Note"))}</th><th>${escapeHtml(tx("Signature"))}</th><th>${escapeHtml(tx("Date/Time"))}</th></tr>
     ${[...permit.acknowledgements]
       .slice(-20)
       .map((row) => {
@@ -399,12 +411,12 @@ export function renderPermitDocumentHtml(permit, options = {}) {
   }
   ${
     statusLc === "closed" && permit.closedAt
-      ? `<h2>Permit closure</h2><p style="font-size:12px;line-height:1.6;padding:8px 10px;background:#f8fafc;border:0.5px solid #e2e8f0;margin:0 0 10px">Closed: ${escapeHtml(fmtDateTime(permit.closedAt))}</p>`
+      ? `<h2>${escapeHtml(tx("Permit closure"))}</h2><p style="font-size:12px;line-height:1.6;padding:8px 10px;background:#f8fafc;border:0.5px solid #e2e8f0;margin:0 0 10px">${escapeHtml(tx("Closed"))}: ${escapeHtml(fmtDateTime(permit.closedAt))}</p>`
       : ""
   }
   ${
     permit.lessonsLearned
-      ? `<h2>Lessons learned</h2><p style="font-size:12px;line-height:1.6;padding:8px 10px;background:#e8f4fc;border:0.5px solid #cfe3f8;color:#0b4f7c;margin:0 0 10px">${escapeHtml(permit.lessonsLearned)}</p>`
+      ? `<h2>${escapeHtml(tx("Lessons learned"))}</h2><p style="font-size:12px;line-height:1.6;padding:8px 10px;background:#e8f4fc;border:0.5px solid #cfe3f8;color:#0b4f7c;margin:0 0 10px">${escapeHtml(permit.lessonsLearned)}</p>`
       : ""
   }
   ${renderPrintDocFooter({ ...org, pdfComplianceLine: complianceLine }, { extra: `${fmtDateTime(permit.createdAt)} · ${docRef}` })}

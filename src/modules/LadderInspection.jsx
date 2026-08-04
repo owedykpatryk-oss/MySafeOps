@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
@@ -6,6 +7,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -13,9 +15,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `lad_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -40,22 +45,22 @@ function Form({ item, projects, onSave, onClose }) {
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit ladder check" : "Ladder inspection"}</h2>
-        <label style={ss.lbl}>Ladder ID / tag</label>
-        <input style={ss.inp} value={form.ladderRef} onChange={(e) => set("ladderRef", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Type</label>
-        <select style={ss.inp} value={form.type} onChange={(e) => set("type", e.target.value)}>
+        <label style={ss.lbl} htmlFor="ladder-inspection-ladder-ref">Ladder ID / tag</label>
+        <input style={ss.inp} value={form.ladderRef} onChange={(e) => set("ladderRef", e.target.value)}  id="ladder-inspection-ladder-ref" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ladder-inspection-type">Type</label>
+        <select style={ss.inp} value={form.type} onChange={(e) => set("type", e.target.value)} id="ladder-inspection-type">
           <option value="Extension">Extension</option>
           <option value="Step">Step</option>
           <option value="Platform">Platform / podium</option>
           <option value="Other">Other</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Location / stored</label>
-        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ladder-inspection-location">Location / stored</label>
+        <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="ladder-inspection-location" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ladder-inspection-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="ladder-inspection-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -65,34 +70,39 @@ function Form({ item, projects, onSave, onClose }) {
         </select>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Inspection date</label>
-            <input type="date" style={ss.inp} value={form.inspectionDate} onChange={(e) => set("inspectionDate", e.target.value)} />
+            <label style={ss.lbl} htmlFor="ladder-inspection-inspection-date">Inspection date</label>
+            <input type="date" style={ss.inp} value={form.inspectionDate} onChange={(e) => set("inspectionDate", e.target.value)}  id="ladder-inspection-inspection-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Next due</label>
-            <input type="date" style={ss.inp} value={form.nextDue || ""} onChange={(e) => set("nextDue", e.target.value)} />
+            <label style={ss.lbl} htmlFor="ladder-inspection-next-due">Next due</label>
+            <input type="date" style={ss.inp} value={form.nextDue || ""} onChange={(e) => set("nextDue", e.target.value)}  id="ladder-inspection-next-due" />
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Result</label>
-        <select style={ss.inp} value={form.result} onChange={(e) => set("result", e.target.value)}>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ladder-inspection-result">Result</label>
+        <select style={ss.inp} value={form.result} onChange={(e) => set("result", e.target.value)} id="ladder-inspection-result">
           <option value="pass">Satisfactory</option>
           <option value="repair">Repair before use</option>
           <option value="withdrawn">Withdrawn / scrap</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Inspector</label>
-        <input style={ss.inp} value={form.inspector} onChange={(e) => set("inspector", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Notes / defects</label>
-        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ladder-inspection-inspector">Inspector</label>
+        <input style={ss.inp} value={form.inspector} onChange={(e) => set("inspector", e.target.value)}  id="ladder-inspection-inspector" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ladder-inspection-notes">Notes / defects</label>
+        <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="ladder-inspection-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["ladderRef","inspectionDate"], { ladderRef: "Ladder ref", inspectionDate: "Inspection date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -122,15 +132,12 @@ export default function LadderInspection() {
   const d1Hydrating = d1ItemsH || d1ProjH;
   const d1OutboxPending = d1ItemsO || d1ProjO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Ladder ref", "Type", "Location", "Project", "Date", "Next due", "Result", "Inspector"];
-    const rows = items.map((r) => [r.ladderRef, r.type, r.location, r.projectName || "", r.inspectionDate, r.nextDue, r.result, r.inspector]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `ladder_inspections_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.ladderRef, r.type, r.location, r.projectName || "", r.inspectionDate, r.nextDue, r.result, r.inspector]);
+    exportCsv(h, rows, `ladder_inspections_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -156,8 +163,8 @@ export default function LadderInspection() {
         title="Ladder inspections"
         lead="Pre-use and formal ladder inspection records (local only)."
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {items.length > 0 && (
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+          {liveItems.length > 0 && (
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
           )}
@@ -169,11 +176,11 @@ export default function LadderInspection() {
 
       <RegisterModuleShell
         moduleId="ladders"
-        smartContext={{ items }}
-        stats={buildRegisterModuleStats("ladders", items)}
+        smartContext={{ items: liveItems }}
+        stats={buildRegisterModuleStats("ladders", liveItems)}
       >
 
-{items.length === 0 ? (
+{liveItems.length === 0 ? (
         <EmptyState
           icon="🪜"
           title="No ladder inspections yet"
@@ -184,7 +191,7 @@ export default function LadderInspection() {
         />
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {listPg.visible(items).map((r) => (
+          {listPg.visible(liveItems).map((r) => (
             <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
@@ -211,7 +218,7 @@ export default function LadderInspection() {
                             payload: r,
                           })
                         ) {
-                          setItems((p) => p.filter((x) => x.id !== r.id));
+                          setItems((p) => replaceWithTombstone(p, r.id));
                           pushAudit({ action: "ladder_delete", entity: "ladder", detail: r.id });
                         }
                       }}
@@ -224,10 +231,10 @@ export default function LadderInspection() {
             </div>
           ))}
           <RegisterListPagingFooter
-            hasMore={listPg.hasMore(items)}
-            remaining={listPg.remaining(items)}
-            showing={Math.min(listPg.cap, items.length)}
-            total={items.length}
+            hasMore={listPg.hasMore(liveItems)}
+            remaining={listPg.remaining(liveItems)}
+            showing={Math.min(listPg.cap, liveItems.length)}
+            total={liveItems.length}
             onShowMore={listPg.showMore}
             buttonStyle={ss.btn}
           />

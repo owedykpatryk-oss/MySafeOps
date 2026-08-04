@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { saveOrgScoped } from "./orgStorage";
 import { collectComplianceDueItems, bucketComplianceDueItems } from "./complianceDueCalendar.js";
 
+import { localDateISO } from "./localDate";
 describe("complianceDueCalendar", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -15,7 +16,7 @@ describe("complianceDueCalendar", () => {
   it("merges worker certs and training expiries", () => {
     const due = new Date();
     due.setDate(due.getDate() + 5);
-    const iso = due.toISOString().slice(0, 10);
+    const iso = localDateISO(due);
     const items = collectComplianceDueItems({
       workers: [{ id: "w1", name: "Bob", certifications: [{ certType: "CSCS", expiryDate: iso }] }],
       trainingRecords: [{ id: "t1", workerName: "Bob", courseName: "IPAF", expiryDate: iso }],

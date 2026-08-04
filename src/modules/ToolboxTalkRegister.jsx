@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -7,6 +8,7 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -14,9 +16,12 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
+import { validateRequiredFields } from "../utils/registerPersistGuard";
 
+import { todayLocalISO } from "../utils/localDate";
 const genId = () => `tt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 
 const ss = ms;
 
@@ -69,15 +74,15 @@ function Form({ item, projects, workers, onSave, onClose }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 520, marginTop: 24 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit toolbox talk" : "Toolbox talk record"}</h2>
-        <label style={ss.lbl}>Topic</label>
-        <input style={ss.inp} value={form.topic} onChange={(e) => set("topic", e.target.value)} placeholder="e.g. Working at height, manual handling" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Date delivered</label>
-        <input type="date" style={ss.inp} value={form.talkDate} onChange={(e) => set("talkDate", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Project</label>
-        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)}>
+        <label style={ss.lbl} htmlFor="toolbox-talk-topic">Topic</label>
+        <input style={ss.inp} value={form.topic} onChange={(e) => set("topic", e.target.value)} placeholder="e.g. Working at height, manual handling"  id="toolbox-talk-topic" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="toolbox-talk-talk-date">Date delivered</label>
+        <input type="date" style={ss.inp} value={form.talkDate} onChange={(e) => set("talkDate", e.target.value)}  id="toolbox-talk-talk-date" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="toolbox-talk-project-id">Project</label>
+        <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="toolbox-talk-project-id">
           <option value="">—</option>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>
@@ -109,20 +114,25 @@ function Form({ item, projects, workers, onSave, onClose }) {
         ) : (
           <input style={ss.inp} value={form.presenter} onChange={(e) => set("presenter", e.target.value)} placeholder="Presenter name" />
         )}
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Approx. attendees</label>
-        <input style={ss.inp} inputMode="numeric" value={form.attendeeCount} onChange={(e) => set("attendeeCount", e.target.value)} />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Summary / key points</label>
-        <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.summary} onChange={(e) => set("summary", e.target.value)} />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="toolbox-talk-attendee-count">Approx. attendees</label>
+        <input style={ss.inp} inputMode="numeric" value={form.attendeeCount} onChange={(e) => set("attendeeCount", e.target.value)}  id="toolbox-talk-attendee-count" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="toolbox-talk-summary">Summary / key points</label>
+        <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.summary} onChange={(e) => set("summary", e.target.value)}  id="toolbox-talk-summary" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
+          <button type="button" style={ss.btnP} onClick={() => {
+            const payload = { ...form, projectName: pm[form.projectId] || "" };
+            const check = validateRequiredFields(payload, ["topic","talkDate"], { topic: "Topic", talkDate: "Date" });
+            if (!check.ok) { window.alert(check.message); return; }
+            onSave(payload);
+          }}>
             Save
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -153,15 +163,12 @@ export default function ToolboxTalkRegister() {
   const d1Hydrating = d1ListH || d1WpH;
   const d1OutboxPending = d1ListO || d1WpO;
 
-  const exportCsv = () => {
+  const liveItems = liveOrgArrayRows(items);
+
+  const handleExportCsv = () => {
     const h = ["Date", "Topic", "Project", "Presenter", "Attendees", "Summary"];
-    const rows = items.map((r) => [r.talkDate, r.topic, r.projectName || "", r.presenter, r.attendeeCount, r.summary]);
-    const csv = [h, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `toolbox_talks_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const rows = liveItems.map((r) => [r.talkDate, r.topic, r.projectName || "", r.presenter, r.attendeeCount, r.summary]);
+    exportCsv(h, rows, `toolbox_talks_${today()}.csv`);
   };
 
   const persist = (f, isNew) => {
@@ -192,22 +199,19 @@ export default function ToolboxTalkRegister() {
         exportModuleLabel="Toolbox talk register"
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {items.length > 0 && (
+            {liveItems.length > 0 && (
               <>
                 <button
                   type="button"
                   style={ss.btn}
                   onClick={() => {
-                    const res = printRegisterFormPack("toolbox-reg", items);
-                    if (!res.ok && res.reason === "popup_blocked") {
-                      window.alert("Allow pop-ups to print the toolbox A4 pack (Print → Save as PDF).");
-                    }
+                    printRegisterFormPack("toolbox-reg", items);
                   }}
                   title="Print branded A4 talk sheets with attendance lines"
                 >
                   Print forms pack
                 </button>
-                <button type="button" style={ss.btn} onClick={exportCsv}>
+                <button type="button" style={ss.btn} onClick={handleExportCsv}>
                   Export CSV
                 </button>
               </>
@@ -220,7 +224,7 @@ export default function ToolboxTalkRegister() {
       />
       <RegisterModuleShell
         moduleId="toolbox-reg"
-        smartContext={{ items }}
+        smartContext={{ items: liveItems }}
         stats={
           items.length > 0
             ? [
@@ -234,7 +238,7 @@ export default function ToolboxTalkRegister() {
             : []
         }
       >
-        {items.length === 0 ? (
+        {liveItems.length === 0 ? (
           <EmptyState
             icon="💬"
             title="No toolbox talks logged yet"
@@ -245,7 +249,7 @@ export default function ToolboxTalkRegister() {
           />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {listPg.visible(items).map((r) => (
+            {listPg.visible(liveItems).map((r) => (
               <div key={r.id} style={{ ...ss.card, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <div style={{ minWidth: 0 }}>
@@ -272,7 +276,7 @@ export default function ToolboxTalkRegister() {
                               payload: r,
                             })
                           ) {
-                            setItems((p) => p.filter((x) => x.id !== r.id));
+                            setItems((p) => replaceWithTombstone(p, r.id));
                             pushAudit({ action: "toolbox_talk_delete", entity: "toolbox", detail: r.id });
                           }
                         }}
@@ -285,10 +289,10 @@ export default function ToolboxTalkRegister() {
               </div>
             ))}
             <RegisterListPagingFooter
-              hasMore={listPg.hasMore(items)}
-              remaining={listPg.remaining(items)}
-              showing={Math.min(listPg.cap, items.length)}
-              total={items.length}
+              hasMore={listPg.hasMore(liveItems)}
+              remaining={listPg.remaining(liveItems)}
+              showing={Math.min(listPg.cap, liveItems.length)}
+              total={liveItems.length}
               onShowMore={listPg.showMore}
               buttonStyle={ss.btn}
             />

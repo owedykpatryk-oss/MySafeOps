@@ -1,8 +1,20 @@
 import { Link } from "react-router-dom";
+import { formatReadingTimeLabel } from "../../lib/blog/estimateReadingTime";
+import { getLandingSectionsCopy } from "../../data/landingSectionsCopy";
 
-/** @param {{ post: import("../../data/landingBlogPosts").BlogPostMeta; index?: number; eager?: boolean; className?: string }} props */
-export default function BlogArticleCard({ post, index = 0, eager = false, className = "" }) {
+/**
+ * @param {{
+ *   post: import("../../data/landingBlogPosts").BlogPostMeta;
+ *   index?: number;
+ *   eager?: boolean;
+ *   className?: string;
+ *   marketId?: import("../../config/markets").MarketId;
+ * }} props
+ */
+export default function BlogArticleCard({ post, index = 0, eager = false, className = "", marketId = "uk" }) {
   const loadEager = eager || index < 3;
+  const copy = getLandingSectionsCopy(marketId).blog;
+  const readTime = formatReadingTimeLabel(post.readTime, marketId);
 
   return (
     <li className={`landing-blog-card blog-article-card${className ? ` ${className}` : ""}`}>
@@ -23,18 +35,18 @@ export default function BlogArticleCard({ post, index = 0, eager = false, classN
           <div className="landing-blog-card-meta">
             <time dateTime={post.publishedIso}>{post.dateLabel}</time>
             <span aria-hidden> · </span>
-            <span>{post.readTime}</span>
+            <span>{readTime}</span>
             {post.featured ? (
               <>
                 <span aria-hidden> · </span>
-                <span className="blog-card-featured">Featured</span>
+                <span className="blog-card-featured">{copy.featured}</span>
               </>
             ) : null}
           </div>
           <h3 className="landing-blog-card-title">{post.title}</h3>
           <p className="landing-blog-card-excerpt">{post.excerpt}</p>
           {post.tags?.length ? (
-            <ul className="blog-card-tags" aria-label="Tags">
+            <ul className="blog-card-tags" aria-label={copy.tagsAria}>
               {post.tags.slice(0, 3).map((t) => (
                 <li key={t}>
                   <span className="blog-tag-pill">{t}</span>
@@ -42,7 +54,7 @@ export default function BlogArticleCard({ post, index = 0, eager = false, classN
               ))}
             </ul>
           ) : null}
-          <span className="landing-blog-card-cta">Read article →</span>
+          <span className="landing-blog-card-cta">{copy.readArticle}</span>
         </div>
       </Link>
     </li>

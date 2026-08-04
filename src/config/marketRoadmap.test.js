@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MARKET_ROADMAP, marketsByRolloutStatus, roadmapEntryFor } from "./marketRoadmap";
+import { marketsByRolloutStatus, roadmapEntryFor } from "./marketRoadmap";
 
 describe("marketRoadmap", () => {
   it("lists Poland as beta with planned IE and NZ", () => {

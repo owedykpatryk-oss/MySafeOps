@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { pushRecycleBinItem } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { exportCsv } from "../utils/exportCsv";
 
+import { todayLocalISO } from "../utils/localDate";
 const ACTIONS_KEY = "incident_actions_v1";
 const INCIDENTS_KEY = "mysafeops_incidents";
 const INSPECTIONS_KEY = "inspection_records";
@@ -18,7 +22,7 @@ const PERMITS_KEY = "permits_v2";
 const PROJECTS_KEY = "mysafeops_projects";
 
 const genId = () => `act_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = todayLocalISO;
 const ss = ms;
 
 const STATUS = [
@@ -69,23 +73,23 @@ function ActionForm({ item, incidents, onSave, onClose }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
-    <div style={{ minHeight: 600, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "1.5rem 1rem", position: "fixed", inset: 0, zIndex: 50, overflow: "auto" }}>
-      <div style={{ ...ss.card, width: "100%", maxWidth: 620 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 620 }}>
         <h2 style={{ marginTop: 0, fontSize: 18, fontWeight: 600 }}>{item ? "Edit incident action" : "New incident action"}</h2>
-        <label style={ss.lbl}>Action title *</label>
-        <input style={ss.inp} value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Install physical barrier at loading bay edge" />
+        <label style={ss.lbl} htmlFor="incident-action-title">Action title *</label>
+        <input style={ss.inp} value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Install physical barrier at loading bay edge"  id="incident-action-title" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginTop: 10 }}>
           <div>
-            <label style={ss.lbl}>Owner *</label>
-            <input style={ss.inp} value={form.owner} onChange={(e) => set("owner", e.target.value)} placeholder="Person or role" />
+            <label style={ss.lbl} htmlFor="incident-action-owner">Owner *</label>
+            <input style={ss.inp} value={form.owner} onChange={(e) => set("owner", e.target.value)} placeholder="Person or role"  id="incident-action-owner" />
           </div>
           <div>
-            <label style={ss.lbl}>Due date</label>
-            <input type="date" style={ss.inp} value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)} />
+            <label style={ss.lbl} htmlFor="incident-action-due-date">Due date</label>
+            <input type="date" style={ss.inp} value={form.dueDate} onChange={(e) => set("dueDate", e.target.value)}  id="incident-action-due-date" />
           </div>
           <div>
-            <label style={ss.lbl}>Priority</label>
-            <select style={ss.inp} value={form.priority} onChange={(e) => set("priority", e.target.value)}>
+            <label style={ss.lbl} htmlFor="incident-action-priority">Priority</label>
+            <select style={ss.inp} value={form.priority} onChange={(e) => set("priority", e.target.value)} id="incident-action-priority">
               {PRIORITY.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.label}
@@ -94,8 +98,8 @@ function ActionForm({ item, incidents, onSave, onClose }) {
             </select>
           </div>
           <div>
-            <label style={ss.lbl}>Status</label>
-            <select style={ss.inp} value={form.status} onChange={(e) => set("status", e.target.value)}>
+            <label style={ss.lbl} htmlFor="incident-action-status">Status</label>
+            <select style={ss.inp} value={form.status} onChange={(e) => set("status", e.target.value)} id="incident-action-status">
               {STATUS.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.label}
@@ -104,7 +108,7 @@ function ActionForm({ item, incidents, onSave, onClose }) {
             </select>
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Linked incident (optional)</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-action-source-id">Linked incident (optional)</label>
         <select
           style={ss.inp}
           value={form.sourceId}
@@ -119,7 +123,7 @@ function ActionForm({ item, incidents, onSave, onClose }) {
               sourceProjectName: ref?.projectName || "",
             }));
           }}
-        >
+         id="incident-action-source-id">
           <option value="">— none —</option>
           {incidents.map((inc) => (
             <option key={inc.id} value={inc.id}>
@@ -127,10 +131,10 @@ function ActionForm({ item, incidents, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Corrective action details</label>
-        <textarea style={{ ...ss.inp, minHeight: 84, resize: "vertical" }} value={form.correctiveAction} onChange={(e) => set("correctiveAction", e.target.value)} placeholder="What exactly should be changed on site/process?" />
-        <label style={{ ...ss.lbl, marginTop: 10 }}>Verification note</label>
-        <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.verificationNote} onChange={(e) => set("verificationNote", e.target.value)} placeholder="How closure will be verified (evidence/photo/inspection)." />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-action-corrective-action">Corrective action details</label>
+        <textarea style={{ ...ss.inp, minHeight: 84, resize: "vertical" }} value={form.correctiveAction} onChange={(e) => set("correctiveAction", e.target.value)} placeholder="What exactly should be changed on site/process?"  id="incident-action-corrective-action" />
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-action-verification-note">Verification note</label>
+        <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.verificationNote} onChange={(e) => set("verificationNote", e.target.value)} placeholder="How closure will be verified (evidence/photo/inspection)."  id="incident-action-verification-note" />
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
           <button type="button" style={ss.btn} onClick={onClose}>
             Cancel
@@ -145,7 +149,7 @@ function ActionForm({ item, incidents, onSave, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -208,11 +212,12 @@ export default function IncidentActionTracker() {
     listPg.reset();
   }, [search, statusFilter, ownerFilter]);
 
-  const owners = useMemo(() => Array.from(new Set(items.map((x) => String(x.owner || "").trim()).filter(Boolean))).sort(), [items]);
+  const liveItems = liveOrgArrayRows(items);
+  const owners = useMemo(() => Array.from(new Set(liveItems.map((x) => String(x.owner || "").trim()).filter(Boolean))).sort(), [liveItems]);
 
   const filtered = useMemo(
     () =>
-      items.filter((x) => {
+      liveItems.filter((x) => {
         if (statusFilter && x.status !== statusFilter) return false;
         if (ownerFilter && x.owner !== ownerFilter) return false;
         if (!search) return true;
@@ -223,11 +228,11 @@ export default function IncidentActionTracker() {
           String(x.sourceLabel || "").toLowerCase().includes(q)
         );
       }),
-    [items, search, statusFilter, ownerFilter]
+    [liveItems, search, statusFilter, ownerFilter]
   );
 
   const stats = useMemo(() => {
-    const openLike = items.filter((x) => x.status !== "closed");
+    const openLike = liveItems.filter((x) => x.status !== "closed");
     const overdue = openLike.filter((x) => {
       const d = daysToDue(x.dueDate);
       return d !== null && d < 0;
@@ -237,13 +242,13 @@ export default function IncidentActionTracker() {
       return d !== null && d >= 0 && d <= 7;
     }).length;
     return {
-      total: items.length,
+      total: liveItems.length,
       open: openLike.length,
       overdue,
       due7,
-      closed: items.filter((x) => x.status === "closed").length,
+      closed: liveItems.filter((x) => x.status === "closed").length,
     };
-  }, [items]);
+  }, [liveItems]);
 
   const reminders = useMemo(
     () =>
@@ -300,11 +305,11 @@ export default function IncidentActionTracker() {
           payload: victim,
         });
       }
-      return prev.filter((x) => x.id !== id);
+      return replaceWithTombstone(prev, id);
     });
   };
 
-  const exportCsv = () => {
+  const handleExportCsv = () => {
     const header = ["Title", "Owner", "Status", "Priority", "Due date", "Days to due", "Linked incident", "Corrective action", "Verification"];
     const rows = filtered.map((r) => [
       r.title || "",
@@ -317,12 +322,7 @@ export default function IncidentActionTracker() {
       r.correctiveAction || "",
       r.verificationNote || "",
     ]);
-    const csv = [header, ...rows].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `incident_actions_${today()}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    exportCsv(header, rows, `incident_actions_${today()}.csv`);
   };
 
   const pullSuggestedActions = () => {
@@ -401,7 +401,7 @@ export default function IncidentActionTracker() {
             <button type="button" style={ss.btn} onClick={pullSuggestedActions}>
               Pull from inspections/permits
             </button>
-            <button type="button" style={ss.btn} onClick={exportCsv}>
+            <button type="button" style={ss.btn} onClick={handleExportCsv}>
               Export CSV
             </button>
             <button type="button" style={ss.btnP} onClick={() => setModal({ item: null })}>

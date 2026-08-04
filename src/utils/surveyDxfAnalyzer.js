@@ -44,8 +44,6 @@ export const CAD_QL_TOKENS = [
   { re: /\bAR\b|\bASRECORDED\b|\bASREC\b/i, key: "AR", label: "AR (as recorded)", pas128Equivalent: "B4" },
 ];
 
-const DWG_MAGIC = ["AC10", "AC10", "AC1."];
-
 /** Only these DXF entity types contribute to length totals. */
 export const CAD_LENGTH_ENTITY_TYPES = ["LINE", "LWPOLYLINE", "POLYLINE"];
 

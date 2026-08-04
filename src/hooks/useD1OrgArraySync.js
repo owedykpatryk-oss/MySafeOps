@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
 import { d1GetKv, d1PutKv, isD1Configured } from "../lib/d1SyncClient";
@@ -15,6 +15,7 @@ import {
 } from "../lib/d1SyncOutbox.js";
 import { D1_OUTBOX_MANUAL_RETRY_EVENT } from "../lib/d1OutboxRetryEvent.js";
 import { mergeOrgArrays } from "../utils/d1ArrayMerge.js";
+import { getCachedActiveCountryWorkspace } from "../utils/countryWorkspaces.js";
 
 const transient = (e) => /^http_(502|503|504|429)$/.test(String(e || ""));
 
@@ -47,14 +48,16 @@ export function useD1OrgArraySync({
   debounceMs = 1500,
   serializeForSync = null,
 }) {
-  const toSyncValue = (arr) => {
+  const activeCountry = getCachedActiveCountryWorkspace();
+  const countryDataKey = activeCountry?.id && !activeCountry.is_primary ? `country:${activeCountry.id}:${d1DataKey}` : d1DataKey;
+  const toSyncValue = useCallback((arr) => {
     if (typeof serializeForSync !== "function") return arr;
     try {
       return serializeForSync(arr);
     } catch {
       return arr;
     }
-  };
+  }, [serializeForSync]);
   const [d1Ready, setD1Ready] = useState(() => !isD1Configured());
   const [d1OrgEpoch, setD1OrgEpoch] = useState(0);
   const [d1OutboxPending, setD1OutboxPending] = useState(false);
@@ -98,13 +101,13 @@ export function useD1OrgArraySync({
         if (!cancelled) setD1OutboxPending(false);
         return;
       }
-      const p = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+      const p = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
       if (!cancelled) setD1OutboxPending(p);
     })();
     return () => {
       cancelled = true;
     };
-  }, [d1OrgEpoch, namespace, d1DataKey]);
+  }, [d1OrgEpoch, namespace, countryDataKey]);
 
   useEffect(() => {
     if (!isD1Configured() || !supabase) {
@@ -121,14 +124,14 @@ export function useD1OrgArraySync({
       supabase,
       orgSlug,
       namespace,
-      d1DataKey,
+      d1DataKey: countryDataKey,
       storageKey,
       setValue,
       save,
       versionRef: d1VersionRef,
     });
     const refreshPending = async () => {
-      const still = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+      const still = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
       if (!cancelled) setD1OutboxPending(still);
     };
     (async () => {
@@ -139,7 +142,7 @@ export function useD1OrgArraySync({
         if (cancelled) return;
         if (delaysMs[i] > 0) await new Promise((res) => setTimeout(res, delaysMs[i]));
         try {
-          r = await d1GetKv(supabase, orgSlug, namespace, d1DataKey);
+          r = await d1GetKv(supabase, orgSlug, namespace, countryDataKey);
         } catch {
           r = { ok: false, error: "fetch_failed" };
         }
@@ -169,12 +172,12 @@ export function useD1OrgArraySync({
       if (local.length > 0) {
         let put;
         try {
-          put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, toSyncValue(local), null);
+          put = await d1PutKv(supabase, orgSlug, namespace, countryDataKey, toSyncValue(local), null);
         } catch {
           put = { ok: false, error: "fetch_failed" };
         }
         if (put.ok) d1VersionRef.current = put.version || 0;
-        else if (isForbiddenD1Write(put.error)) notifyD1WriteForbidden(namespace);
+        else if (isForbiddenD1Write(put.error)) notifyD1WriteForbidden(namespace, put.error);
       }
       await d1OutboxTryFlush(flushCtxBase());
       await refreshPending();
@@ -183,7 +186,7 @@ export function useD1OrgArraySync({
     return () => {
       cancelled = true;
     };
-  }, [d1OrgEpoch, storageKey, namespace, d1DataKey, load, save, setValue]);
+  }, [d1OrgEpoch, storageKey, namespace, countryDataKey, load, save, setValue, toSyncValue]);
 
   useEffect(() => {
     if (!d1Ready) return;
@@ -194,7 +197,7 @@ export function useD1OrgArraySync({
       supabase,
       orgSlug,
       namespace,
-      d1DataKey,
+      d1DataKey: countryDataKey,
       storageKey,
       setValue,
       save,
@@ -202,7 +205,7 @@ export function useD1OrgArraySync({
     });
     const runFlush = async () => {
       await d1OutboxTryFlush(flushCtxBase());
-      const still = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+      const still = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
       setD1OutboxPending(still);
     };
     const onOnline = () => {
@@ -217,7 +220,7 @@ export function useD1OrgArraySync({
       window.removeEventListener("online", onOnline);
       window.removeEventListener(D1_OUTBOX_MANUAL_RETRY_EVENT, onManualRetry);
     };
-  }, [d1Ready, namespace, d1DataKey, storageKey, setValue, save, d1OrgEpoch]);
+  }, [d1Ready, namespace, countryDataKey, storageKey, setValue, save, d1OrgEpoch]);
 
   useEffect(() => {
     if (!d1Ready || !d1OutboxPending) return;
@@ -228,7 +231,7 @@ export function useD1OrgArraySync({
       supabase,
       orgSlug,
       namespace,
-      d1DataKey,
+      d1DataKey: countryDataKey,
       storageKey,
       setValue,
       save,
@@ -236,11 +239,11 @@ export function useD1OrgArraySync({
     });
     const id = window.setInterval(async () => {
       await d1OutboxTryFlush(flushCtxBase());
-      const still = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+      const still = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
       setD1OutboxPending(still);
     }, 45_000);
     return () => window.clearInterval(id);
-  }, [d1Ready, d1OutboxPending, namespace, d1DataKey, storageKey, setValue, save, d1OrgEpoch]);
+  }, [d1Ready, d1OutboxPending, namespace, countryDataKey, storageKey, setValue, save, d1OrgEpoch]);
 
   useEffect(() => {
     if (!d1Ready) return;
@@ -254,14 +257,14 @@ export function useD1OrgArraySync({
       const syncPayload = toSyncValue(value);
       let put;
       try {
-        put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, syncPayload, useVersion);
+        put = await d1PutKv(supabase, orgSlug, namespace, countryDataKey, syncPayload, useVersion);
       } catch {
         put = { ok: false, error: "fetch_failed" };
       }
       if (!put.ok && transient(put.error)) {
         await new Promise((res) => setTimeout(res, 900));
         try {
-          put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, syncPayload, useVersion);
+          put = await d1PutKv(supabase, orgSlug, namespace, countryDataKey, syncPayload, useVersion);
         } catch {
           put = { ok: false, error: "fetch_failed" };
         }
@@ -269,13 +272,13 @@ export function useD1OrgArraySync({
       if (put.ok) {
         d1VersionRef.current = put.version || 0;
         clearD1WriteForbidden();
-        await d1OutboxDelete(orgSlug, namespace, d1DataKey);
-        const still = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+        await d1OutboxDelete(orgSlug, namespace, countryDataKey);
+        const still = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
         setD1OutboxPending(still);
       } else if (put.error === "version_conflict") {
         let r;
         try {
-          r = await d1GetKv(supabase, orgSlug, namespace, d1DataKey);
+          r = await d1GetKv(supabase, orgSlug, namespace, countryDataKey);
         } catch {
           r = { ok: false };
         }
@@ -286,13 +289,13 @@ export function useD1OrgArraySync({
           save(storageKey, merged);
         }
       } else if (isForbiddenD1Write(put.error)) {
-        notifyD1WriteForbidden(namespace);
+        notifyD1WriteForbidden(namespace, put.error);
       } else {
         try {
           await d1OutboxEnqueue({
             orgSlug,
             namespace,
-            d1DataKey,
+            d1DataKey: countryDataKey,
             value: syncPayload,
             clientVersion: d1VersionRef.current || 0,
           });
@@ -308,7 +311,7 @@ export function useD1OrgArraySync({
         d1DebounceRef.current = null;
       }
     };
-  }, [value, d1Ready, storageKey, namespace, d1DataKey, save, setValue, debounceMs]);
+  }, [value, d1Ready, storageKey, namespace, countryDataKey, save, setValue, debounceMs, toSyncValue]);
 
   const d1Hydrating = isD1Configured() && !d1Ready;
   const d1Syncing = d1Hydrating || d1OutboxPending;
