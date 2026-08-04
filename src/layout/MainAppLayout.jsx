@@ -394,10 +394,11 @@ function buildNavTabs(marketId = getOrgMarketId(), mode = "default") {
 
 export default function MainAppLayout() {
   const { user } = useSupabaseAuth();
-  const { caps } = useApp();
+  const { caps, role } = useApp();
   const { pushToast } = useToast();
   const orgBranding = useOrgBranding();
   const isSuperadmin = isSuperAdminEmail(user?.email);
+  const canViewManagement = role === "admin" || isSuperadmin;
   const [hiddenRev, setHiddenRev] = useState(0);
   const [orgMarketRev, setOrgMarketRev] = useState(0);
   const orgMarketId = useMemo(() => {
@@ -527,9 +528,11 @@ export default function MainAppLayout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => getPinnedModuleIds());
   const allowedModuleIds = useMemo(() => {
-    const base = isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin");
+    const base = MORE_TABS.filter(
+      (tab) => (tab.id !== "superadmin" || isSuperadmin) && (tab.id !== "management-overview" || canViewManagement)
+    );
     return new Set(filterVisibleModuleTabs(base, visibilityOpts).map((t) => t.id));
-  }, [isSuperadmin, visibilityOpts]);
+  }, [isSuperadmin, canViewManagement, visibilityOpts]);
 
   useEffect(() => {
     if (view === "settings" || view === "help") return;
@@ -640,6 +643,12 @@ export default function MainAppLayout() {
     setView("dashboard");
     setNavTab("dashboard");
   }, [view, isSuperadmin]);
+
+  useEffect(() => {
+    if (view !== "management-overview" || canViewManagement) return;
+    setView("dashboard");
+    setNavTab("dashboard");
+  }, [view, canViewManagement]);
 
   /** Bottom bar highlights "Owner" when URL / session restored superadmin with nav still on "more". */
   useLayoutEffect(() => {
@@ -912,18 +921,23 @@ export default function MainAppLayout() {
   const MainComponent = workspaceViewComponents[view] || workspaceViewComponents[DEFAULT_WORKSPACE_VIEW_ID];
 
   const visibleMoreTabs = useMemo(() => {
-    const base = isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin");
+    const base = MORE_TABS.filter(
+      (tab) => (tab.id !== "superadmin" || isSuperadmin) && (tab.id !== "management-overview" || canViewManagement)
+    );
     return filterVisibleModuleTabs(base, visibilityOpts);
-  }, [isSuperadmin, visibilityOpts]);
+  }, [isSuperadmin, canViewManagement, visibilityOpts]);
   const visibleMoreSections = useMemo(
     () =>
       MORE_SECTIONS.map((section) => ({
         ...section,
         ids: section.ids.filter(
-          (id) => (id !== "superadmin" || isSuperadmin) && isModuleVisible(id, visibilityOpts)
+          (id) =>
+            (id !== "superadmin" || isSuperadmin) &&
+            (id !== "management-overview" || canViewManagement) &&
+            isModuleVisible(id, visibilityOpts)
         ),
       })),
-    [isSuperadmin, visibilityOpts]
+    [isSuperadmin, canViewManagement, visibilityOpts]
   );
   const q = moreFilter.trim().toLowerCase();
   const pinnedTabsOrdered = pinnedIds.map((id) => visibleMoreTabs.find((t) => t.id === id)).filter(Boolean);
