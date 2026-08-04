@@ -12,13 +12,18 @@ import {
   hexToRgb,
   setPdfFont,
 } from "./pdfBranding.js";
-import { todayLocalISO } from "./localDate.js";
 
 const M = PDF_PAGE.MARGIN;
 const W = PDF_PAGE.W;
 const H = PDF_PAGE.H;
 const CONTENT_W = W - M * 2;
 const CONTENT_BOTTOM = H - PDF_PAGE.FOOTER_H - 5;
+
+function todayLocalISO() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
 
 function safe(value, fallback = "-") {
   const text = String(value ?? "").trim();
