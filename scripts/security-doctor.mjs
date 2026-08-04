@@ -330,14 +330,16 @@ async function main() {
     issues += 1;
   }
 
-  const audit = spawnSync("npm", ["audit", "--audit-level=high", "--json"], {
+  const audit = spawnSync("npm", ["run", "audit:high"], {
     cwd: root,
     encoding: "utf8",
     shell: process.platform === "win32",
   });
-  if (audit.status === 0) ok("npm audit — no high/critical advisories");
+  if (audit.status === 0) ok("npm audit — no actionable high/critical advisories");
   else {
-    fail("npm audit reported high/critical issues — run npm audit");
+    fail("npm audit reported high/critical issues — run npm run audit:high");
+    if (audit.stdout) console.log(audit.stdout);
+    if (audit.stderr) console.log(audit.stderr);
     issues += 1;
   }
 
