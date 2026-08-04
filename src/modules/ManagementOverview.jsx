@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 
 import { useApp } from "../context/AppContext";
+import { useManagementWorkspaceSync } from "../hooks/useManagementWorkspaceSync";
 import { liveOrgArrayRows } from "../utils/d1ArrayMerge";
 import { collectProjectDashboard } from "../utils/projectDashboard";
 import { loadOrgScoped, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
@@ -76,6 +77,17 @@ function id(prefix) {
 function dateLabel(value) {
   const date = dateOnly(value);
   return date ? gbDate.format(date) : "Not set";
+}
+
+function freshnessLabel(value) {
+  if (!value) return "";
+  const updated = new Date(value);
+  if (Number.isNaN(updated.getTime())) return "";
+  const minutes = Math.max(0, Math.floor((Date.now() - updated.getTime()) / 60000));
+  if (minutes < 1) return "updated just now";
+  if (minutes === 1) return "updated 1 minute ago";
+  if (minutes < 60) return `updated ${minutes} minutes ago`;
+  return `updated ${gbDate.format(updated)}`;
 }
 
 const UK_LOCATION_POSITIONS = [
@@ -152,6 +164,7 @@ export default function ManagementOverview() {
   const { role, isPlatformOwner } = useApp();
   const canView = role === "admin" || Boolean(isPlatformOwner);
   const [state, setState] = useState(loadManagementState);
+  const managementSync = useManagementWorkspaceSync({ enabled: canView, state, setState });
   const [projects, setProjects] = useState(() => liveOrgArrayRows(loadOrgScoped(PROJECTS_KEY, [])));
   const [workers, setWorkers] = useState(() => liveOrgArrayRows(loadOrgScoped(WORKERS_KEY, [])));
   const [tab, setTab] = useState("overview");
@@ -466,6 +479,11 @@ export default function ManagementOverview() {
           <div className="mgo-eyebrow"><LockKeyhole size={12} /> Private management workspace</div>
           <h1>Management overview</h1>
           <p>Your next 90 days, team capacity and H&amp;S readiness in one operational view.</p>
+          <div className={`mgo-freshness mgo-freshness--${managementSync.phase}`} role="status">
+            <i aria-hidden="true" />
+            <span>{managementSync.message}</span>
+            {managementSync.updatedAt ? <small>{freshnessLabel(managementSync.updatedAt)} · Supabase + live updates</small> : <small>Local cache</small>}
+          </div>
         </div>
         <div className="mgo-hero__actions">
           <button type="button" className="mgo-btn mgo-btn--ghost" onClick={() => setFocusMode((value) => { if (value) setFocusAutoPlay(false); return !value; })}>{focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />} {focusMode ? "Exit focus" : "Focus mode"}</button>
@@ -569,10 +587,39 @@ export default function ManagementOverview() {
 
             <section className="mgo-panel mgo-map-panel">
               <div className="mgo-panel__head"><div><span className="mgo-eyebrow">Operational footprint</span><h2>UK site activity</h2><p>Regional view based on the project location held in MySafeOps.</p></div><Navigation size={17} /></div>
-              <div className="mgo-uk-map" aria-label={`${mapJobs.length} upcoming sites shown in a regional UK view`}>
-                <span className="mgo-uk-map__region mgo-uk-map__region--scotland">Scotland</span><span className="mgo-uk-map__region mgo-uk-map__region--north">North</span><span className="mgo-uk-map__region mgo-uk-map__region--midlands">Midlands</span><span className="mgo-uk-map__region mgo-uk-map__region--south">London &amp; South</span>
+              <div className={`mgo-uk-map${mapJobs.length ? "" : " mgo-uk-map--empty"}`} aria-label={`${mapJobs.length} upcoming sites shown in a regional UK view`}>
+                <svg className="mgo-uk-map__shape" viewBox="0 0 100 100" role="img" aria-label="Stylised map of the United Kingdom">
+                  <defs>
+                    <linearGradient id="mgo-land-fill" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0" stopColor="#ffffff" />
+                      <stop offset="1" stopColor="#dcece6" />
+                    </linearGradient>
+                    <filter id="mgo-land-shadow" x="-30%" y="-20%" width="170%" height="160%">
+                      <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#163f35" floodOpacity=".16" />
+                    </filter>
+                  </defs>
+                  <g className="mgo-uk-map__land" filter="url(#mgo-land-shadow)">
+                    <path d="M48 5 44 8 39 7 36 11 39 14 34 17 37 20 33 24 37 28 34 31 39 34 37 38 43 41 45 47 42 52 44 57 39 61 34 59 31 64 34 68 31 72 35 75 40 73 45 78 40 83 34 86 25 87 29 90 38 90 45 86 52 89 58 86 65 87 69 84 76 83 72 79 65 77 67 72 73 70 72 66 66 64 65 58 69 54 65 49 67 44 62 41 64 36 60 33 61 28 57 24 59 20 56 17 58 13 53 11 54 8Z" />
+                    <path d="M24 43 19 44 16 48 18 52 15 56 19 59 25 58 28 54 27 49 30 46Z" />
+                    <circle cx="29" cy="13" r="1.4" />
+                    <circle cx="32" cy="9" r=".9" />
+                  </g>
+                  <g className="mgo-uk-map__dividers">
+                    <path d="M35 34C43 36 53 34 61 33" />
+                    <path d="M42 52C49 54 59 51 66 49" />
+                    <path d="M39 69C48 68 58 66 72 66" />
+                  </g>
+                  <g className="mgo-uk-map__labels">
+                    <text x="46" y="25">SCOTLAND</text>
+                    <text x="52" y="44">NORTH</text>
+                    <text x="52" y="61">MIDLANDS</text>
+                    <text x="55" y="77">LONDON &amp; SOUTH</text>
+                    <text x="11" y="54">N. IRELAND</text>
+                  </g>
+                </svg>
+                <span className={`mgo-uk-map__count${mapJobs.length ? "" : " is-empty"}`}><i />{mapJobs.length} plotted</span>
                 {mapJobs.map((job) => { const team = state.teams.find((item) => item.id === job.teamId); return <button type="button" key={job.id} className={`mgo-map-pin mgo-map-pin--${jobTone(job)}`} style={{ left: `${job.position.x}%`, top: `${job.position.y}%`, "--pin-colour": team?.colour || "#0f766e" }} onClick={() => setSelectedJobId(job.id)} aria-label={`Open ${job.name} at ${job.site}`}><MapPin size={18} /><span><strong>{job.name}</strong><small>{job.site}</small></span></button>; })}
-                {!mapJobs.length ? <div className="mgo-uk-map__empty"><MapPin size={25} /><strong>No upcoming sites</strong><span>Scheduled projects will appear here.</span></div> : null}
+                {!mapJobs.length ? <div className="mgo-uk-map__empty"><span className="mgo-uk-map__empty-icon"><MapPin size={17} /></span><span><strong>No scheduled locations yet</strong><small>Add a town, city or postcode to a dated project to plot it here.</small></span></div> : null}
               </div>
               <div className="mgo-map-legend"><span><i className="is-green" />Ready</span><span><i className="is-amber" />Needs information</span><span><i className="is-red" />Blocked</span></div>
             </section>

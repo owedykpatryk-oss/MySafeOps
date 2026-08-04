@@ -13,6 +13,7 @@ import {
   setPdfFont,
 } from "./pdfBranding.js";
 import { todayLocalISO } from "./localDate.js";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 
 const M = PDF_PAGE.MARGIN;
 const W = PDF_PAGE.W;
@@ -29,7 +30,7 @@ function enGbDate(value) {
   if (!value) return "-";
   const date = new Date(`${String(value).slice(0, 10)}T12:00:00`);
   if (Number.isNaN(date.getTime())) return safe(value);
-  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return date.toLocaleDateString(getActiveDocumentLocale(), { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function title(pdf, text, y, rgb, subtitle = "") {
@@ -440,7 +441,7 @@ export async function buildManagementBoardPackPdf(data, options = {}) {
   setPdfFont(pdf, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(100, 116, 139);
-  pdf.text(`Generated ${new Date().toLocaleString("en-GB")}`, M + 6, 141);
+  pdf.text(`Generated ${new Date().toLocaleString(getActiveDocumentLocale())}`, M + 6, 141);
   pdf.setFontSize(7.5);
   pdf.setTextColor(190, 211, 204);
   pdf.text("Prepared in MySafeOps", M, 268);

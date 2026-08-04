@@ -55,4 +55,34 @@ describe("ramsPrintHtml", () => {
     expect(html).toContain("data:image/png;base64,aaa");
     expect(html).toContain("Alex");
   });
+
+  it("renders an IOR with Polish headings and Polish legal references", () => {
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_test-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const html = generatePrintHTML(
+      { title: "IOR — prace instalacyjne", location: "Warszawa", documentStatus: "issued" },
+      [
+        {
+          activity: "Montaż instalacji",
+          hazard: "Kontakt z energią",
+          initialRisk: { L: 4, S: 4 },
+          revisedRisk: { L: 2, S: 2 },
+          controlMeasures: ["Odłączyć i zabezpieczyć źródło energii"],
+          ppeRequired: ["Kask"],
+          regs: ["CDM 2015"],
+        },
+      ],
+      [],
+      {},
+      { hazards: true },
+      "fp",
+      [],
+    );
+    expect(html).toContain('lang="pl-PL"');
+    expect(html).toContain("Ocena ryzyka i środki kontroli");
+    expect(html).toContain("Kodeks pracy");
+    expect(html).not.toContain("CDM 2015");
+  });
 });

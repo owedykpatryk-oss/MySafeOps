@@ -275,7 +275,7 @@ async function verifyOrgAuditRead(env, authHeader, orgSlug) {
 }
 
 /** DELETE /v1/kv — admin + supervisor only (RPC). Falls back to deny if RPC missing. */
-async function verifyOrgKvDelete(env, authHeader, orgSlug) {
+async function verifyOrgKvDelete(env, authHeader, orgSlug, dataKey) {
   const url = (env.SUPABASE_URL || "").replace(/\/+$/, "");
   const anon = env.SUPABASE_ANON_KEY || "";
   if (!url || !anon) {
@@ -285,14 +285,14 @@ async function verifyOrgKvDelete(env, authHeader, orgSlug) {
     return { ok: false, error: "Missing Authorization or X-Org-Slug" };
   }
 
-  const res = await fetch(`${url}/rest/v1/rpc/user_can_delete_org_kv`, {
+  const res = await fetch(`${url}/rest/v1/rpc/user_can_delete_org_country_kv`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       apikey: anon,
       Authorization: authHeader,
     },
-    body: JSON.stringify({ p_org_slug: orgSlug }),
+    body: JSON.stringify({ p_org_slug: orgSlug, p_data_key: dataKey }),
   });
 
   if (res.status === 404) {
@@ -315,7 +315,7 @@ async function verifyOrgKvDelete(env, authHeader, orgSlug) {
 }
 
 /** PUT /v1/kv — namespace-scoped write (RPC). Falls back to membership-only if RPC missing. */
-async function verifyOrgKvWrite(env, authHeader, orgSlug, namespace) {
+async function verifyOrgKvWrite(env, authHeader, orgSlug, namespace, dataKey) {
   const url = (env.SUPABASE_URL || "").replace(/\/+$/, "");
   const anon = env.SUPABASE_ANON_KEY || "";
   if (!url || !anon) {
@@ -328,18 +328,20 @@ async function verifyOrgKvWrite(env, authHeader, orgSlug, namespace) {
     return { ok: false, error: "invalid_namespace" };
   }
 
-  const res = await fetch(`${url}/rest/v1/rpc/user_can_write_org_kv`, {
+  const res = await fetch(`${url}/rest/v1/rpc/user_can_write_org_country_kv`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       apikey: anon,
       Authorization: authHeader,
     },
-    body: JSON.stringify({ p_org_slug: orgSlug, p_namespace: namespace }),
+    body: JSON.stringify({ p_org_slug: orgSlug, p_namespace: namespace, p_data_key: dataKey }),
   });
 
   if (res.status === 404) {
-    return verifyOrgAccess(env, authHeader, orgSlug);
+    return dataKey.startsWith("country:")
+      ? { ok: false, error: "country_workspace_gate_missing" }
+      : verifyOrgAccess(env, authHeader, orgSlug);
   }
   if (res.status === 401 || res.status === 403) {
     return { ok: false, error: "Unauthorized" };
@@ -355,6 +357,26 @@ async function verifyOrgKvWrite(env, authHeader, orgSlug, namespace) {
     return { ok: false, error: "Forbidden: cannot write this namespace for your role" };
   }
   return { ok: true };
+}
+
+async function verifyOrgCountryKvRead(env, authHeader, orgSlug, dataKey) {
+  const url = (env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const anon = env.SUPABASE_ANON_KEY || "";
+  if (!url || !anon || !dataKey) return { ok: false, error: "Server misconfiguration or missing key" };
+  const res = await fetch(`${url}/rest/v1/rpc/user_can_read_org_country_kv`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: anon, Authorization: authHeader },
+    body: JSON.stringify({ p_org_slug: orgSlug, p_data_key: dataKey }),
+  });
+  if (res.status === 404) {
+    // Fail closed for new country keys when the matching database migration is absent.
+    return dataKey.startsWith("country:")
+      ? { ok: false, error: "country_workspace_gate_missing" }
+      : verifyOrgAccess(env, authHeader, orgSlug);
+  }
+  if (!res.ok) return { ok: false, error: res.status === 401 || res.status === 403 ? "Unauthorized" : "country_workspace_gate_failed" };
+  const data = await res.json();
+  return data === true || data === "true" ? { ok: true } : { ok: false, error: "country_workspace_forbidden" };
 }
 
 function handleHealth(c, requestId) {
@@ -392,6 +414,11 @@ async function handleKvGet(request, env, orgSlug, c, authHeader) {
     return json({ error: "missing_key" }, 400, c);
   }
 
+  const countryGate = await verifyOrgCountryKvRead(env, authHeader, orgSlug, key);
+  if (!countryGate.ok) {
+    return json({ error: countryGate.error || "forbidden" }, countryGate.error === "Unauthorized" ? 401 : 403, c);
+  }
+
   const row = await env.DB.prepare(
     `SELECT value_json, version, updated_at FROM org_sync_kv
      WHERE org_slug = ? AND namespace = ? AND data_key = ?`
@@ -427,7 +454,7 @@ async function handleKvPut(request, env, orgSlug, authHeader, c) {
   if (!isValidD1Namespace(namespace)) {
     return json({ error: "invalid_namespace" }, 400, c);
   }
-  const writeGate = await verifyOrgKvWrite(env, authHeader, orgSlug, namespace);
+  const writeGate = await verifyOrgKvWrite(env, authHeader, orgSlug, namespace, dataKey);
   if (!writeGate.ok) {
     const status = writeGate.error === "Unauthorized" ? 401 : writeGate.error === "invalid_namespace" ? 400 : 403;
     return json({ error: writeGate.error || "forbidden" }, status, c);
@@ -713,7 +740,8 @@ export default {
         const status = writeGate.error === "Unauthorized" ? 401 : 403;
         return json({ error: writeGate.error || "forbidden", request_id: requestId }, status, c);
       }
-      const deleteGate = await verifyOrgKvDelete(env, auth, orgSlug);
+      const dataKey = (new URL(request.url).searchParams.get("key") || "").trim();
+      const deleteGate = await verifyOrgKvDelete(env, auth, orgSlug, dataKey);
       if (!deleteGate.ok) {
         const status = deleteGate.error === "Unauthorized" ? 401 : 403;
         return json({ error: deleteGate.error || "forbidden", request_id: requestId }, status, c);

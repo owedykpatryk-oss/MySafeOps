@@ -21,11 +21,12 @@ import {
 
 const MEMBERSHIP_ROLES = new Set(["admin", "supervisor", "operative"]);
 import { clearPendingInvite, peekPendingInvite } from "../lib/inviteToken";
+import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 
 let orgContextClient = null;
 let orgContextPromise = null;
 
-export function persistOrgRow(row) {
+export function persistOrgRow(row, { billingScope = "organization" } = {}) {
   const slug = getOrgId();
   const r = String(row?.role || "").trim().toLowerCase();
   if (slug && MEMBERSHIP_ROLES.has(r)) {
@@ -40,6 +41,13 @@ export function persistOrgRow(row) {
   }
   if (row.trial_extension_count != null && row.trial_extension_count !== "") {
     writeScopedBilling(ORG_TRIAL_EXTENSION_COUNT_KEY, row.trial_extension_count, slug);
+  }
+  const activeCountry = getCachedActiveCountryWorkspace(slug);
+  const shouldPersistBilling =
+    billingScope === "workspace" || !activeCountry?.id || Boolean(activeCountry.is_primary);
+  if (!shouldPersistBilling) {
+    window.dispatchEvent(new CustomEvent("mysafeops-org-updated"));
+    return;
   }
   if (row.billing_plan != null && row.billing_plan !== "") {
     writeScopedBilling(ORG_BILLING_PLAN_KEY, row.billing_plan, slug);

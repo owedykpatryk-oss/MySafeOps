@@ -4,11 +4,31 @@ import { blankSurveyReport } from "./surveyReportConstants.js";
 
 describe("surveyReportPrintHtml security", () => {
   beforeEach(() => {
+    const store = new Map();
     globalThis.localStorage = {
-      getItem: () => null,
-      setItem: () => {},
-      removeItem: () => {},
+      getItem: (key) => store.get(key) ?? null,
+      setItem: (key, value) => store.set(key, String(value)),
+      removeItem: (key) => store.delete(key),
     };
+  });
+
+  it("renders Polish survey headings for a Poland workspace", () => {
+    localStorage.setItem("mysafeops_orgId", "survey-pl");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_survey-pl",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const report = blankSurveyReport({
+      title: "Badanie instalacji podziemnych",
+      ref: "PL-SUR-001",
+      client: "Klient",
+      sections: { scope: "Zakres badania", methodology: "Metodyka terenowa" },
+    });
+    const html = buildSurveyReportHtml(report, {});
+    expect(html).toContain('lang="pl-PL"');
+    expect(html).toContain("Nadzór nad dokumentem");
+    expect(html).toContain("Zakres prac");
+    expect(html).toContain("Spis treści");
   });
 
   it("strips javascript: photo sources from exported HTML", () => {

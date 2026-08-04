@@ -1,22 +1,39 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, FileCheck2, Menu, ShieldCheck, WifiOff, X } from "lucide-react";
 import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
-import { LANDING_RAMS_PACK_COUNT } from "./landingShowcaseData";
-import LandingHeroMockup from "./LandingHeroMockup";
-import LandingHeroLiveStrip from "./LandingHeroLiveStrip";
 import LandingMarketRibbon from "./LandingMarketRibbon";
-import LandingSectorMarquee from "./LandingSectorMarquee";
 import { getLandingNavLinks } from "../../data/landingMarketContent";
-import { getLandingSectionsCopy } from "../../data/landingSectionsCopy";
 
-export default function LandingTopSection({ navScrolled, cloud, market, copy }) {
+export default function LandingTopSection({ navScrolled, market, copy }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const loginTo = market.loginPath;
   const nav = getLandingNavLinks(market.id);
-  const sections = getLandingSectionsCopy(market.id);
   const mobileLinks = nav.mobile;
   const desktopLinks = nav.desktop;
+  const hero = market.id === "pl"
+    ? {
+        title: "Operacje BHP dla ekip, które pracują w terenie.",
+        lead: "Twórz IOR, kontroluj pozwolenia i utrzymuj dowody gotowe do audytu — w jednym środowisku dla biura i budowy.",
+        secondary: "Zobacz produkt",
+        proof: ["Działa offline", "Kontrola dostępu", "Eksporty PDF"],
+        screen: "Prawdziwy widok aplikacji · Management Overview",
+      }
+    : market.id === "au"
+      ? {
+          title: "Safety operations for Australian site teams.",
+          lead: "Create SWMS, control permits and keep site evidence ready for review — in one workspace for office and field teams.",
+          secondary: "See the product",
+          proof: ["Offline capable", "Role-based access", "Audit-ready PDFs"],
+          screen: "Real product view · Management Overview",
+        }
+      : {
+          title: "Safety operations for UK site teams.",
+          lead: "Create RAMS, control permits and keep site evidence ready for audit — in one workspace for management and site teams.",
+          secondary: "See the product",
+          proof: ["Offline capable", "Role-based access", "Audit-ready PDFs"],
+          screen: "Real product view · Management Overview",
+        };
 
   useEffect(() => {
     if (!mobileOpen) return undefined;
@@ -158,75 +175,42 @@ export default function LandingTopSection({ navScrolled, cloud, market, copy }) 
         </div>
       )}
 
-      <section className="hero" aria-labelledby="landing-hero-heading">
+      <section className="hero hero--v2" aria-labelledby="landing-hero-heading">
         <div className="hero-mesh" aria-hidden />
         <div className="hero-orb hero-orb--teal" aria-hidden />
         <div className="hero-orb hero-orb--org" aria-hidden />
         {market.id === "pl" && <div className="hero-orb hero-orb--pl" aria-hidden />}
         <LandingMarketRibbon market={market} />
         <div className="ctn">
-          <div className="hg">
+          <div className="hg landing-v2-hero-grid">
             <div className="hero-copy fu vi">
-              <div className="badge hb landing-badge-pulse">{copy.heroBadge}</div>
-              <h1 id="landing-hero-heading">
-                {sections.hero.titleLine1}
-                <br />
-                <span className="hl landing-hl-shimmer">{sections.hero.titleLine2}</span>
-              </h1>
-              <p className="hero-lead">
-                <span className="hero-lead-full">
-                  {copy.heroLeadFull}
-                  {cloud ? " with cloud sign-in and backup enabled on this deployment." : " with optional cloud backup when Supabase is configured."}
-                </span>
-                <span className="hero-lead-short">
-                  {copy.heroLeadShort}
-                  {cloud ? ", cloud backup enabled." : "."}
-                </span>
-              </p>
+              <div className="badge hb landing-v2-kicker"><ShieldCheck size={14} /> {copy.heroBadge}</div>
+              <h1 id="landing-hero-heading">{hero.title}</h1>
+              <p className="hero-lead">{hero.lead}</p>
               <div className="hbs">
                 <Link to={loginTo} className="btn btn-p landing-btn-glow" {...loginLinkPrefetchProps}>
-                  {nav.heroGetStarted}
+                  {nav.getStarted} <ArrowRight size={17} />
                 </Link>
                 <a href="#profiles" className="btn btn-o hero-btn-secondary">
-                  {nav.heroSeeProfiles}
-                </a>
-                <a href="#readiness" className="btn btn-o hero-btn-tertiary">
-                  {nav.heroQuickCheck}
+                  {hero.secondary}
                 </a>
               </div>
-              <div className="landing-trust-strip landing-trust-pills" role="note">
-                {copy.trustPills.map((pill) => (
-                  <span key={pill} className={pill.includes("backup") ? "landing-trust-pill--hide-sm" : undefined}>
-                    {pill}
-                  </span>
+              <div className="landing-v2-proof" role="note">
+                {[WifiOff, ShieldCheck, FileCheck2].map((Icon, index) => (
+                  <span key={hero.proof[index]}><Icon size={15} />{hero.proof[index]}</span>
                 ))}
               </div>
-              <div className="hs" aria-label="Product highlights">
-                <div>
-                  <strong>40+</strong>
-                  <span>{sections.hero.modulesStat}</span>
-                </div>
-                <div>
-                  <strong>{LANDING_RAMS_PACK_COUNT}+</strong>
-                  <span>{copy.ramsLabel}</span>
-                </div>
-                <div>
-                  <strong>9</strong>
-                  <span>{sections.hero.profilesStat}</span>
-                </div>
-                <div>
-                  <strong>14d</strong>
-                  <span>{sections.hero.trialStat}</span>
-                </div>
-              </div>
-              <LandingHeroLiveStrip marketId={market.id} />
+              <div className="landing-v2-evaluation"><CheckCircle2 size={16} /><span><strong>14-day full evaluation.</strong> No card required to explore the workspace.</span></div>
             </div>
-            <div className="pw fu vi">
-              <LandingHeroMockup marketId={market.id} />
+            <div className="pw landing-v2-hero-product fu vi">
+              <div className="landing-v2-browser">
+                <div className="landing-v2-browser__bar"><i /><i /><i /><span>app.mysafeops.com</span></div>
+                <img src="/product/management-overview.png" alt="MySafeOps Management Overview showing live programme, readiness and team capacity" />
+              </div>
+              <div className="landing-v2-screen-note"><span><i /> Live workspace</span><small>{hero.screen}</small></div>
             </div>
           </div>
         </div>
-        <LandingSectorMarquee marketId={market.id} />
       </section>
     </>
   );

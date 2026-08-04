@@ -22,3 +22,11 @@ build-output.txt
 lint-out.txt
 scripts/_tmp_*
 DOCS/**/_*
+
+# Real client documents and workspace exports — reference material kept locally only.
+# These contain named sites, companies and personal data; committing them would put that
+# in the repository history permanently.
+DOCS/FESS/Rams/**
+DOCS/FESS/Extra/*BACKUP*.json
+DOCS/Survey/**
+!DOCS/Survey/README.local-only.md

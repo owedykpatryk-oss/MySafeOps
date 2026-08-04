@@ -1,12 +1,13 @@
 /**
- * Persist which portal tokens were published to cloud (org-scoped).
+ * Persist which portal tokens were published to cloud. Scoped to the active country
+ * workspace, because the portals these tokens point at are country-scoped too.
  */
-import { orgScopedKey } from "./orgStorage";
+import { countryOperationalStorageKey } from "./orgStorage";
 
 const STORAGE_SUFFIX = "client_portal_published_tokens";
 
 function storageKey() {
-  return orgScopedKey(STORAGE_SUFFIX);
+  return countryOperationalStorageKey(STORAGE_SUFFIX);
 }
 
 export function loadPublishedPortalTokens() {

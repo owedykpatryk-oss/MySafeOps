@@ -330,14 +330,16 @@ async function main() {
     issues += 1;
   }
 
-  const audit = spawnSync("npm", ["audit", "--audit-level=high", "--json"], {
+  // Keep this readiness check aligned with the production-only, documented
+  // allowlist enforced by audit:ci instead of applying a second audit policy.
+  const audit = spawnSync(process.execPath, [resolve(root, "scripts/audit-ci.mjs")], {
     cwd: root,
     encoding: "utf8",
-    shell: process.platform === "win32",
   });
-  if (audit.status === 0) ok("npm audit — no high/critical advisories");
+  if (audit.status === 0) ok("npm audit policy passed (production dependencies)");
   else {
-    fail("npm audit reported high/critical issues — run npm audit");
+    if (audit.stderr) console.error(audit.stderr.trim());
+    fail("npm audit policy reported unallowlisted high/critical issues — run npm run audit:ci");
     issues += 1;
   }
 

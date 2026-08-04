@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPlannerWeeks,
   jobTone,
+  mergeManagementStates,
   monthCapacity,
   normaliseManagementState,
   plannerPosition,
@@ -45,5 +46,25 @@ describe("management overview", () => {
     expect(state.jobs).toEqual({});
     expect(state.calendar.groupName).toBe("MySafeOps");
     expect(state.meeting.title).toBe("Weekly management meeting");
+  });
+
+  it("preserves remote rows while applying concurrent local management edits", () => {
+    const merged = mergeManagementStates(
+      {
+        teams: [{ id: "north", name: "North", capacity: 5 }, { id: "south", name: "South", capacity: 5 }],
+        opportunities: [{ id: "remote", name: "Remote lead" }],
+        meeting: { actions: [{ id: "remote-action", text: "Remote action" }] },
+      },
+      {
+        teams: [{ id: "north", name: "North delivery", capacity: 4 }],
+        opportunities: [{ id: "local", name: "Local lead" }],
+        meeting: { actions: [{ id: "local-action", text: "Local action" }] },
+      }
+    );
+
+    expect(merged.teams.map((team) => team.id)).toEqual(["north", "south"]);
+    expect(merged.teams[0].name).toBe("North delivery");
+    expect(merged.opportunities.map((item) => item.id)).toEqual(["remote", "local"]);
+    expect(merged.meeting.actions.map((item) => item.id)).toEqual(["remote-action", "local-action"]);
   });
 });

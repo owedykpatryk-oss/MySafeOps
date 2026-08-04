@@ -3,6 +3,31 @@ import { describe, it, expect } from "vitest";
 import { renderPermitDocumentHtml, buildPermitStatusDeepLink } from "./permitDocumentHtml";
 
 describe("renderPermitDocumentHtml", () => {
+  it("renders the Polish permit pack for an active Poland workspace", () => {
+    localStorage.setItem("mysafeops_orgId", "pl-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_pl-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const html = renderPermitDocumentHtml({
+      id: "p-pl-1",
+      type: "electrical",
+      status: "pending_review",
+      description: "Odłączenie rozdzielnicy",
+      location: "Warszawa",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: {},
+    });
+    expect(html).toContain('lang="pl-PL"');
+    expect(html).toContain("Pozwolenie na odłączenie elektryczne");
+    expect(html).toContain("Lista kontrolna przed rozpoczęciem pracy");
+    expect(html).toContain("Kodeks pracy");
+    expect(html).not.toContain("Legal references (UK)");
+    localStorage.clear();
+  });
+
   it("includes closure and lessons learned for closed permits", () => {
     const html = renderPermitDocumentHtml({
       id: "p-closed-1",

@@ -142,6 +142,8 @@ declare
   v_email_confirmed_at timestamptz;
   v_token_hash text;
   v_link public.org_join_links%rowtype;
+  v_existing_org_id uuid;
+  v_existing_role text;
   v_inserted_use_count int := 0;
 begin
   if v_uid is null then
@@ -184,11 +186,34 @@ begin
         raise exception 'Use your verified company email address to join this organisation.';
       end if;
 
-      insert into public.org_memberships (user_id, org_id, role)
-      values (v_uid, v_link.org_id, v_link.role)
-      on conflict (user_id) do update
-        set org_id = excluded.org_id,
-            role = excluded.role;
+      -- A user has one membership row. Serialize competing join attempts before
+      -- inspecting it so a reusable link cannot silently move them between tenants.
+      perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text, 0));
+
+      select m.org_id, m.role
+        into v_existing_org_id, v_existing_role
+      from public.org_memberships m
+      where m.user_id = v_uid
+      for update;
+
+      if found and v_existing_org_id <> v_link.org_id then
+        raise exception
+          'Your account already belongs to another organisation. Ask an administrator to transfer it.';
+      end if;
+
+      if v_existing_org_id is null then
+        insert into public.org_memberships (user_id, org_id, role)
+        values (v_uid, v_link.org_id, v_link.role);
+      else
+        -- Reusing a less-privileged link must never downgrade an existing member.
+        update public.org_memberships
+        set role = case
+          when v_existing_role = 'admin' or v_link.role = 'admin' then 'admin'
+          when v_existing_role = 'supervisor' or v_link.role = 'supervisor' then 'supervisor'
+          else 'operative'
+        end
+        where user_id = v_uid;
+      end if;
 
       insert into public.org_join_link_uses (link_id, user_id)
       values (v_link.id, v_uid)

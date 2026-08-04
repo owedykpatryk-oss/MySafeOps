@@ -75,6 +75,36 @@ export function saveManagementState(state) {
   return saveOrgScoped(MANAGEMENT_OVERVIEW_KEY, normaliseManagementState(state));
 }
 
+function mergeRowsById(remoteRows, localRows, limit) {
+  const rows = new Map();
+  for (const row of Array.isArray(remoteRows) ? remoteRows : []) {
+    if (row?.id) rows.set(row.id, row);
+  }
+  for (const row of Array.isArray(localRows) ? localRows : []) {
+    if (row?.id) rows.set(row.id, { ...(rows.get(row.id) || {}), ...row });
+  }
+  return [...rows.values()].slice(0, limit);
+}
+
+/** Merge a concurrently received cloud snapshot with unsaved local management edits. */
+export function mergeManagementStates(remoteState, localState) {
+  const remote = normaliseManagementState(remoteState);
+  const local = normaliseManagementState(localState);
+  return normaliseManagementState({
+    ...remote,
+    ...local,
+    teams: mergeRowsById(remote.teams, local.teams, 30),
+    jobs: { ...remote.jobs, ...local.jobs },
+    opportunities: mergeRowsById(remote.opportunities, local.opportunities, 100),
+    calendar: { ...remote.calendar, ...local.calendar },
+    meeting: {
+      ...remote.meeting,
+      ...local.meeting,
+      actions: mergeRowsById(remote.meeting.actions, local.meeting.actions, 200),
+    },
+  });
+}
+
 export function dateOnly(value) {
   if (!value) return null;
   const date = new Date(`${String(value).slice(0, 10)}T12:00:00`);
