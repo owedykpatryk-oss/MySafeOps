@@ -16,7 +16,7 @@ jobs:
       - name: Install
         run: npm ci
       - name: npm audit
-        run: npm audit --audit-level=high
+        run: npm run audit:high
       - name: Security doctor
         run: npm run security:doctor
 
