@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isReactRouterPatchedForGhsaQwww } from "./npm-audit-high.mjs";
+import { isReactRouterPatchedForGhsaQwww } from "../../scripts/npm-audit-high.mjs";
 
 describe("isReactRouterPatchedForGhsaQwww", () => {
   it("treats upstream v7 patch floor as fixed", () => {
