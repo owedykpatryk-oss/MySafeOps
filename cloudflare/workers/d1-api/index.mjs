@@ -9,7 +9,7 @@
  * GET  /v1/health
  * GET  /v1/kv?namespace=&key=   |  ?namespace=&list=1
  * PUT  /v1/kv  JSON { namespace, key, value, ifVersion? }  (operative: no master-data namespaces)
- * DELETE /v1/kv?namespace=&key=  (admin + supervisor only — RPC user_can_delete_org_kv)
+ * DELETE /v1/kv?namespace=&key=  (admin + supervisor only — RPC user_can_delete_org_country_kv)
  * POST /v1/audit/append  JSON { action, entity, detail?, client_row_id?, extra? }
  * GET  /v1/audit?limit=50&after_seq=0
  * GET  /v1/audit/verify  (recomputes chain; use sparingly on large orgs)

@@ -107,14 +107,20 @@ async function main() {
     ok("canonical CSP omits direct overpass-api.de (use /api/overpass)");
   }
 
-  if (fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_delete_org_kv")) {
+  if (
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_delete_org_country_kv") ||
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_delete_org_kv")
+  ) {
     ok("D1 Worker checks delete permission RPC");
   } else {
     fail("D1 Worker missing delete permission gate");
     issues += 1;
   }
 
-  if (fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_write_org_kv")) {
+  if (
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_write_org_country_kv") ||
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_write_org_kv")
+  ) {
     ok("D1 Worker checks namespace write RPC");
   } else {
     fail("D1 Worker missing namespace write gate");
