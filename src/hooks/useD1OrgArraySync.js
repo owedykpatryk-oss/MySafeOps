@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
-import { d1GetKv, d1PutKv, isD1Configured } from "../lib/d1SyncClient";
+import { d1GetKv, d1PutKv, isD1Configured, isD1RateLimitedError, isD1TransientError } from "../lib/d1SyncClient";
 import {
   clearD1WriteForbidden,
   isForbiddenD1Write,
@@ -17,7 +17,7 @@ import { D1_OUTBOX_MANUAL_RETRY_EVENT } from "../lib/d1OutboxRetryEvent.js";
 import { mergeOrgArrays } from "../utils/d1ArrayMerge.js";
 import { getCachedActiveCountryWorkspace } from "../utils/countryWorkspaces.js";
 
-const transient = (e) => /^http_(502|503|504|429)$/.test(String(e || ""));
+const transient = (e) => isD1TransientError(e);
 
 /**
  * Hydrate an org-scoped JSON array from D1 (when VITE_D1_API_URL + Supabase + org), keep localStorage as cache,
@@ -135,7 +135,7 @@ export function useD1OrgArraySync({
       if (!cancelled) setD1OutboxPending(still);
     };
     (async () => {
-      /** @type {{ ok: boolean; error?: string; request_id?: string }} */
+      /** @type {{ ok: boolean; error?: string; request_id?: string; retry_after_ms?: number }} */
       let r = { ok: false };
       const delaysMs = [0, 1200, 2800];
       for (let i = 0; i < delaysMs.length; i++) {
@@ -147,6 +147,18 @@ export function useD1OrgArraySync({
           r = { ok: false, error: "fetch_failed" };
         }
         if (r.ok) break;
+        // Do not stampede the Worker — one longer wait, one retry, then local cache.
+        if (isD1RateLimitedError(r.error)) {
+          const waitMs = Math.min(Number(r.retry_after_ms) || 20_000, 60_000);
+          if (!cancelled) await new Promise((res) => setTimeout(res, waitMs));
+          if (cancelled) return;
+          try {
+            r = await d1GetKv(supabase, orgSlug, namespace, countryDataKey);
+          } catch {
+            r = { ok: false, error: "fetch_failed" };
+          }
+          break;
+        }
       }
       if (cancelled) return;
       if (!r.ok) {

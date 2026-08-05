@@ -4,12 +4,28 @@
  *
  * Use for incremental migration: read/write JSON blobs that mirror orgStorage keys
  * (e.g. namespace "permits_v2", key "main" → value = array of permits).
+ *
+ * Softens thundering-herd 429s: concurrent GET dedupe, short success cache, global
+ * concurrency gate, and a shared pause when the Worker returns rate_limited.
  */
 
 const NS = (s) => String(s || "").trim();
 
 /** Deduplicate concurrent GETs for the same org/namespace/key (module hops). */
 const d1GetInflight = new Map();
+
+/** Short TTL cache for successful GETs — remounts (Projects ↔ Geo-photos) reuse. */
+const d1GetCache = new Map();
+const GET_CACHE_TTL_MS = 45_000;
+
+/** Max in-flight KV HTTP calls across the whole app. */
+const MAX_CONCURRENT_D1 = 4;
+let d1Active = 0;
+/** @type {Array<() => void>} */
+const d1Waiters = [];
+
+/** Shared pause after Worker 429 so every module does not stampede. */
+let rateLimitedUntil = 0;
 
 /**
  * Correlation id from Worker (`X-Request-Id` header or JSON `request_id` on some bodies).
@@ -25,6 +41,97 @@ function d1Meta(res, body) {
   }
   if (!rid && body && typeof body.request_id === "string") rid = body.request_id;
   return rid ? { request_id: rid } : {};
+}
+
+function parseRetryAfterMs(res) {
+  try {
+    const raw = res.headers?.get?.("Retry-After") || res.headers?.get?.("retry-after");
+    const sec = Number(raw);
+    if (Number.isFinite(sec) && sec > 0) return Math.min(Math.round(sec * 1000), 120_000);
+  } catch {
+    /* ignore */
+  }
+  return 20_000;
+}
+
+function noteRateLimited(res) {
+  const until = Date.now() + parseRetryAfterMs(res);
+  if (until > rateLimitedUntil) rateLimitedUntil = until;
+}
+
+async function respectRateLimitPause() {
+  const wait = rateLimitedUntil - Date.now();
+  if (wait > 0) {
+    await new Promise((r) => setTimeout(r, Math.min(wait, 60_000)));
+  }
+}
+
+async function withD1Slot(fn) {
+  if (d1Active >= MAX_CONCURRENT_D1) {
+    await new Promise((resolve) => {
+      d1Waiters.push(resolve);
+    });
+  }
+  d1Active += 1;
+  try {
+    return await fn();
+  } finally {
+    d1Active -= 1;
+    const next = d1Waiters.shift();
+    if (next) next();
+  }
+}
+
+function cacheKey(org, ns, dataKey) {
+  return `${org}|${ns}|${dataKey}`;
+}
+
+function readGetCache(key) {
+  const hit = d1GetCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > GET_CACHE_TTL_MS) {
+    d1GetCache.delete(key);
+    return null;
+  }
+  return hit.result;
+}
+
+function writeGetCache(key, result) {
+  if (result?.ok) d1GetCache.set(key, { at: Date.now(), result });
+}
+
+function invalidateGetCache(org, ns, dataKey) {
+  d1GetCache.delete(cacheKey(org, ns, dataKey));
+}
+
+/** True for Worker rate limits (body.error or http_429). */
+export function isD1RateLimitedError(error) {
+  const e = String(error || "");
+  return e === "rate_limited" || e === "http_429";
+}
+
+/** Transient network / overload errors that may succeed on retry. */
+export function isD1TransientError(error) {
+  const e = String(error || "");
+  return isD1RateLimitedError(e) || /^http_(502|503|504)$/.test(e) || e === "fetch_failed";
+}
+
+/**
+ * @param {Response} res
+ * @param {object} body
+ */
+function errorFromResponse(res, body) {
+  const meta = d1Meta(res, body);
+  if (res.status === 429 || body?.error === "rate_limited") {
+    noteRateLimited(res);
+    return {
+      ok: false,
+      error: "rate_limited",
+      retry_after_ms: parseRetryAfterMs(res),
+      ...meta,
+    };
+  }
+  return { ok: false, error: body?.error || `http_${res.status}`, ...meta };
 }
 
 function baseUrl() {
@@ -47,7 +154,6 @@ async function authHeaders(supabase) {
  * @param {string} orgSlug from getOrgId()
  * @param {string} namespace e.g. "permits_v2"
  * @param {string} key e.g. "main" or "list"
- * @returns {Promise<{ ok: boolean, value?: *, version?: number, updated_at?: string | null, error?: string, request_id?: string }>}
  */
 export async function d1GetKv(supabase, orgSlug, namespace, key) {
   const base = baseUrl();
@@ -60,32 +166,41 @@ export async function d1GetKv(supabase, orgSlug, namespace, key) {
   const org = NS(orgSlug);
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
-  const inflightKey = `${org}|${ns}|${dataKey}`;
+  const inflightKey = cacheKey(org, ns, dataKey);
+  const cached = readGetCache(inflightKey);
+  if (cached) return cached;
+
   const existing = d1GetInflight.get(inflightKey);
   if (existing) return existing;
 
   const q = new URLSearchParams({ namespace: ns, key: dataKey });
   const pending = (async () => {
-    let res;
-    try {
-      res = await fetch(`${base}/v1/kv?${q}`, {
-        method: "GET",
-        headers: {
-          ...h,
-          "X-Org-Slug": org,
-        },
-      });
-    } catch {
-      return { ok: false, error: "fetch_failed" };
-    }
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
-    return {
-      ok: true,
-      value: body.value,
-      version: body.version,
-      updated_at: body.updated_at,
-    };
+    await respectRateLimitPause();
+    return withD1Slot(async () => {
+      await respectRateLimitPause();
+      let res;
+      try {
+        res = await fetch(`${base}/v1/kv?${q}`, {
+          method: "GET",
+          headers: {
+            ...h,
+            "X-Org-Slug": org,
+          },
+        });
+      } catch {
+        return { ok: false, error: "fetch_failed" };
+      }
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return errorFromResponse(res, body);
+      const okResult = {
+        ok: true,
+        value: body.value,
+        version: body.version,
+        updated_at: body.updated_at,
+      };
+      writeGetCache(inflightKey, okResult);
+      return okResult;
+    });
   })().finally(() => {
     d1GetInflight.delete(inflightKey);
   });
@@ -118,26 +233,32 @@ export async function d1PutKv(supabase, orgSlug, namespace, key, value, ifVersio
     payload.ifVersion = ifVersion;
   }
 
-  let res;
-  try {
-    res = await fetch(`${base}/v1/kv`, {
-      method: "PUT",
-      headers: {
-        ...h,
-        "X-Org-Slug": org,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    return { ok: false, error: "fetch_failed" };
-  }
-  const body = await res.json().catch(() => ({}));
-  if (res.status === 409) {
-    return { ok: false, error: "version_conflict", ...body, ...d1Meta(res, body) };
-  }
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
-  return { ok: true, version: body.version, updated_at: body.updated_at };
+  await respectRateLimitPause();
+  return withD1Slot(async () => {
+    await respectRateLimitPause();
+    let res;
+    try {
+      res = await fetch(`${base}/v1/kv`, {
+        method: "PUT",
+        headers: {
+          ...h,
+          "X-Org-Slug": org,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      return { ok: false, error: "fetch_failed" };
+    }
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 409) {
+      invalidateGetCache(org, ns, dataKey);
+      return { ok: false, error: "version_conflict", ...body, ...d1Meta(res, body) };
+    }
+    if (!res.ok) return errorFromResponse(res, body);
+    invalidateGetCache(org, ns, dataKey);
+    return { ok: true, version: body.version, updated_at: body.updated_at };
+  });
 }
 
 /**
@@ -157,16 +278,20 @@ export async function d1ListKvKeys(supabase, orgSlug, namespace) {
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
   const q = new URLSearchParams({ namespace: ns, list: "1" });
-  const res = await fetch(`${base}/v1/kv?${q}`, {
-    method: "GET",
-    headers: {
-      ...h,
-      "X-Org-Slug": org,
-    },
+  await respectRateLimitPause();
+  return withD1Slot(async () => {
+    await respectRateLimitPause();
+    const res = await fetch(`${base}/v1/kv?${q}`, {
+      method: "GET",
+      headers: {
+        ...h,
+        "X-Org-Slug": org,
+      },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return errorFromResponse(res, body);
+    return { ok: true, items: body.items || [] };
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
-  return { ok: true, items: body.items || [] };
 }
 
 export function isD1Configured() {
@@ -189,16 +314,21 @@ export async function d1DeleteKv(supabase, orgSlug, namespace, key) {
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
   const q = new URLSearchParams({ namespace: ns, key: dataKey });
-  const res = await fetch(`${base}/v1/kv?${q}`, {
-    method: "DELETE",
-    headers: {
-      ...h,
-      "X-Org-Slug": org,
-    },
+  await respectRateLimitPause();
+  return withD1Slot(async () => {
+    await respectRateLimitPause();
+    const res = await fetch(`${base}/v1/kv?${q}`, {
+      method: "DELETE",
+      headers: {
+        ...h,
+        "X-Org-Slug": org,
+      },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return errorFromResponse(res, body);
+    invalidateGetCache(org, ns, dataKey);
+    return { ok: true, deleted: body.deleted };
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
-  return { ok: true, deleted: body.deleted };
 }
 
 /**
@@ -223,18 +353,26 @@ export async function d1AppendServerAudit(supabase, orgSlug, row) {
 
   const maxAttempts = 5;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const res = await fetch(`${base}/v1/audit/append`, {
-      method: "POST",
-      headers: {
-        ...h,
-        "X-Org-Slug": org,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    await respectRateLimitPause();
+    const res = await withD1Slot(() =>
+      fetch(`${base}/v1/audit/append`, {
+        method: "POST",
+        headers: {
+          ...h,
+          "X-Org-Slug": org,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      }),
+    );
     const body = await res.json().catch(() => ({}));
     if (res.status === 503) return { ok: false, error: "audit_not_configured", ...d1Meta(res, body) };
     if (res.ok) return { ok: true, seq: body.seq };
+    if (res.status === 429) {
+      noteRateLimited(res);
+      if (attempt < maxAttempts - 1) continue;
+      return errorFromResponse(res, body);
+    }
     if (res.status === 409 && attempt < maxAttempts - 1) {
       await new Promise((r) => setTimeout(r, 50 * 2 ** attempt));
       continue;
@@ -256,13 +394,16 @@ export async function d1ListServerAudit(supabase, orgSlug, { limit = 50, afterSe
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
   const q = new URLSearchParams({ limit: String(limit), after_seq: String(afterSeq) });
-  const res = await fetch(`${base}/v1/audit?${q}`, {
-    method: "GET",
-    headers: { ...h, "X-Org-Slug": org },
+  await respectRateLimitPause();
+  return withD1Slot(async () => {
+    const res = await fetch(`${base}/v1/audit?${q}`, {
+      method: "GET",
+      headers: { ...h, "X-Org-Slug": org },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) return errorFromResponse(res, body);
+    return { ok: true, items: body.items || [] };
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
-  return { ok: true, items: body.items || [] };
 }
 
 /**
@@ -276,13 +417,25 @@ export async function d1VerifyServerAuditChain(supabase, orgSlug) {
   const org = NS(orgSlug);
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
-  const res = await fetch(`${base}/v1/audit/verify`, {
-    method: "GET",
-    headers: { ...h, "X-Org-Slug": org },
+  await respectRateLimitPause();
+  return withD1Slot(async () => {
+    const res = await fetch(`${base}/v1/audit/verify`, {
+      method: "GET",
+      headers: { ...h, "X-Org-Slug": org },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 503) return { ok: false, error: "audit_not_configured", ...d1Meta(res, body) };
+    if (!res.ok) return errorFromResponse(res, body);
+    if (body.ok === false) return { ok: false, error: body.error, at_seq: body.at_seq, ...d1Meta(res, body) };
+    return { ok: true, entries: body.entries, head: body.head };
   });
-  const body = await res.json().catch(() => ({}));
-  if (res.status === 503) return { ok: false, error: "audit_not_configured", ...d1Meta(res, body) };
-  if (!res.ok) return { ok: false, error: body.error || `http_${res.status}`, ...d1Meta(res, body) };
-  if (body.ok === false) return { ok: false, error: body.error, at_seq: body.at_seq, ...d1Meta(res, body) };
-  return { ok: true, entries: body.entries, head: body.head };
+}
+
+/** Test helper — clears caches / queues between vitest cases. */
+export function __resetD1SyncClientForTests() {
+  d1GetInflight.clear();
+  d1GetCache.clear();
+  rateLimitedUntil = 0;
+  d1Active = 0;
+  d1Waiters.length = 0;
 }

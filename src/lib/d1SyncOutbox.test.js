@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("./d1SyncClient.js", () => ({
   d1PutKv: vi.fn(),
   d1GetKv: vi.fn(),
+  isD1TransientError: (e) =>
+    e === "rate_limited" || e === "http_429" || /^http_(502|503|504)$/.test(String(e || "")) || e === "fetch_failed",
 }));
 
 import { d1GetKv, d1PutKv } from "./d1SyncClient.js";
