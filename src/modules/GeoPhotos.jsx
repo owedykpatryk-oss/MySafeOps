@@ -226,7 +226,7 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
           <p className="geo-photos-card__meta" style={{ margin: "0 0 12px" }}>
             Linked permit:{" "}
             {onOpenPermit ? (
-              <button type="button" style={{ ...ms.btn, padding: "2px 8px", fontSize: 12 }} onClick={() => onOpenPermit(photo.linkedPermitId)}>
+              <button type="button" style={{ ...ms.btn, padding: "10px 12px", minHeight: 44, fontSize: 13, touchAction: "manipulation" }} onClick={() => onOpenPermit(photo.linkedPermitId)}>
                 {photo.linkedPermitId}
               </button>
             ) : (
@@ -793,7 +793,7 @@ export default function GeoPhotos() {
                   </span>
                   <button
                     type="button"
-                    style={{ ...ms.btn, padding: "4px 10px", fontSize: 12 }}
+                    style={{ ...ms.btn, padding: "10px 12px", minHeight: 44, fontSize: 14, touchAction: "manipulation" }}
                     disabled={idx === 0}
                     onClick={() => moveReportPhoto(p.id, "up")}
                   >
@@ -801,7 +801,7 @@ export default function GeoPhotos() {
                   </button>
                   <button
                     type="button"
-                    style={{ ...ms.btn, padding: "4px 10px", fontSize: 12 }}
+                    style={{ ...ms.btn, padding: "10px 12px", minHeight: 44, fontSize: 14, touchAction: "manipulation" }}
                     disabled={idx === reportPack.length - 1}
                     onClick={() => moveReportPhoto(p.id, "down")}
                   >

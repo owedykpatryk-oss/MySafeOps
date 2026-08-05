@@ -57,8 +57,8 @@
   --z-toast: 80;
 }
 
-/* Mobile / touch: darker muted text for outdoor readability (small labels were too pale) */
-@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+/* Mobile / tablet / touch: darker muted text for outdoor readability (small labels were too pale) */
+@media (max-width: 900px), (hover: none) and (pointer: coarse) {
   :root {
     --color-text-secondary: #475569;
     --color-text-muted: #64748b;

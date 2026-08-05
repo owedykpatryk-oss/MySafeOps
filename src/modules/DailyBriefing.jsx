@@ -194,13 +194,14 @@ function SigCanvas({ onCapture, compact }) {
         />
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-        <button onClick={clear} style={{ ...ss.btn, fontSize: 11, padding: "3px 8px" }}>
+        <button type="button" onClick={clear} style={{ ...ss.btn, fontSize: 13, padding: "10px 14px", minHeight: 44, touchAction: "manipulation" }}>
           Clear
         </button>
         <button
+          type="button"
           disabled={!has}
           onClick={() => has && onCapture(ref.current.toDataURL("image/png"))}
-          style={{ ...ss.btnP, fontSize: 11, padding: "3px 10px", opacity: has ? 1 : 0.4 }}
+          style={{ ...ss.btnP, fontSize: 13, padding: "10px 14px", minHeight: 44, opacity: has ? 1 : 0.4, touchAction: "manipulation" }}
         >
           Confirm
         </button>
@@ -603,13 +604,14 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
                     />
                     <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{fmtTime(a.sigTime)}</div>
                     <button
+                      type="button"
                       onClick={() =>
                         set(
                           "attendees",
                           form.attendees.map((x) => (x.id === a.id ? { ...x, sig: null, sigTime: null } : x))
                         )
                       }
-                      style={{ ...ss.btn, padding: "2px 6px", fontSize: 11 }}
+                      style={{ ...ss.btn, padding: "10px 12px", minHeight: 44, fontSize: 14, touchAction: "manipulation" }}
                     >
                       ×
                     </button>
