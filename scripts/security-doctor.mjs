@@ -108,9 +108,10 @@ async function main() {
   }
 
   // Country workspace RPCs wrap the legacy gates (user_can_*_org_kv) for non-country keys.
+  // Match /rpc/… so header comments alone cannot satisfy the gate.
   const d1ApiHasDeleteGate =
-    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_delete_org_country_kv") ||
-    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_delete_org_kv");
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "/rpc/user_can_delete_org_country_kv") ||
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "/rpc/user_can_delete_org_kv");
   if (d1ApiHasDeleteGate) {
     ok("D1 Worker checks delete permission RPC");
   } else {
@@ -119,8 +120,8 @@ async function main() {
   }
 
   const d1ApiHasWriteGate =
-    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_write_org_country_kv") ||
-    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_write_org_kv");
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "/rpc/user_can_write_org_country_kv") ||
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "/rpc/user_can_write_org_kv");
   if (d1ApiHasWriteGate) {
     ok("D1 Worker checks namespace write RPC");
   } else {
