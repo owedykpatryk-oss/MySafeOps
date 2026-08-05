@@ -85,4 +85,13 @@ describe("ramsPrintHtml", () => {
     expect(html).toContain("Kodeks pracy");
     expect(html).not.toContain("CDM 2015");
   });
+
+  it("never prints a CSS page counter in the fixed footer", () => {
+    // Chrome only resolves the page counter inside @page margin boxes, which it does not
+    // implement for HTML content. In this fixed footer it rendered "Page 0" on every page
+    // of every RAMS pack — a wrong page number on a controlled safety document.
+    const html = wrapRamsPrintDocument("Test", "<div>Body</div>", "", "meta", "#0f766e");
+    expect(html).not.toContain("counter(page)");
+    expect(html).not.toMatch(/class="page-num"/);
+  });
 });

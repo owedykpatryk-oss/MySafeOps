@@ -59,6 +59,50 @@ describe("gprReportPrintHtml", () => {
     expect(html).toContain("#abcdef");
   });
 
+  it("embeds acquisition diagram and chainage profile SVG in print HTML", () => {
+    const report = blankGprReport({
+      title: "Visual GPR",
+      acquisition: { scanMode: "grid", lineSpacingM: "0.5", coveragePercent: "100" },
+      chainageSegments: [
+        { id: "c1", lineRef: "L1", chainageStartM: "0", chainageEndM: "10", thicknessOrDepthM: "0.8", conditionBand: "good" },
+        { id: "c2", lineRef: "L1", chainageStartM: "10", chainageEndM: "20", thicknessOrDepthM: "1.2", conditionBand: "fair" },
+      ],
+    });
+    const html = buildGprReportHtml(report, {});
+    expect(html).toContain("gpr-acq-diagram");
+    expect(html).toContain("Grid scan");
+    expect(html).toContain("gpr-chainage-chart");
+    expect(html).toContain("Chainage depth profile");
+  });
+
+  it("renders CAD model-space verification section when gprCadImport is present", () => {
+    const report = blankGprReport({
+      title: "CAD GPR",
+      gprCadImport: {
+        fileName: "site.dxf",
+        units: "metres",
+        paperspaceSkipped: 3,
+        gprLayers: {
+          segmentCount: 4,
+          lengthM: 120,
+          byLayer: [{ layer: "GPR_SCAN", lengthM: 120, segments: 4 }],
+        },
+        umgB1Upgrades: {
+          segmentCount: 2,
+          lengthM: 40,
+          byUtility: [{ utilityKey: "lv_cable", utilityLabel: "LV cable", lengthM: 40, segments: 2 }],
+        },
+        umgAll: { segmentCount: 5, lengthM: 90, byQl: [{ qlKey: "B1", lengthM: 40, segments: 2 }] },
+        anomalies: { count: 3, byType: [{ key: "utility", label: "Utility", count: 3 }] },
+      },
+    });
+    const html = buildGprReportHtml(report, {});
+    expect(html).toContain("CAD model-space verification");
+    expect(html).toContain("Model space only");
+    expect(html).toContain("GPR_SCAN");
+    expect(html).toContain("UMG upgraded to QL-B1");
+  });
+
   it("includes PAS128 line length summary when chainage uses UMG-style refs", () => {
     const report = blankGprReport({
       chainageSegments: [{ lineRef: "UMG_LV_B1", chainageStartM: 0, chainageEndM: 246 }],

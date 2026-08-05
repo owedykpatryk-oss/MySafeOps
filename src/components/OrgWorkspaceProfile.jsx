@@ -36,7 +36,7 @@ import { getSeedModulesPreviewForPack } from "../utils/industryPackSeeds";
 import { getRamsStarterLabel } from "../utils/ramsIndustryStarters";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import { resetOnboardingWizard } from "../utils/workspaceOnboarding";
-import { openWorkspaceView } from "../utils/workspaceNavContext";
+import { openHelpGuide, openWorkspaceView } from "../utils/workspaceNavContext";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { getRamsShortLabel, localizeIndustryTerminology } from "../utils/marketLabels";
 import { ms } from "../utils/moduleStyles";
@@ -146,7 +146,7 @@ export default function OrgWorkspaceProfile() {
     <div className="app-org-profile">
       <p className="app-org-profile__lead">
         Choose a built-in profile or save your own — custom profiles stay private to your organisation and are never shared with other companies. Modules, Project Hub pipeline, playbooks, readiness gates, site pack PDFs, and RAMS hazard starters adjust automatically.
-        Existing records are never deleted when you switch. Open <button type="button" className="app-org-profile__help-link" onClick={() => openWorkspaceView({ viewId: "help" })}>Help → Workspace profiles</button> for the full catalogue.
+        Existing records are never deleted when you switch. Open <button type="button" className="app-org-profile__help-link" onClick={() => openHelpGuide({ section: "help-workspace" })}>Help → Workspace profiles</button> for the full catalogue.
       </p>
 
       {previewActive && previewId ? (
@@ -283,7 +283,7 @@ export default function OrgWorkspaceProfile() {
         <button type="button" style={ss.btn} disabled={!canManage} onClick={rerunOnboarding}>
           Re-run setup wizard
         </button>
-        <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "help" })}>
+        <button type="button" style={ss.btn} onClick={() => openHelpGuide({ section: "help-workspace" })}>
           Full guide in Help
         </button>
       </div>

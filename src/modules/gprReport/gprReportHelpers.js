@@ -51,6 +51,7 @@ export function normalizeGprReport(raw) {
     chainageSegments: Array.isArray(raw.chainageSegments) ? raw.chainageSegments : [],
     deliverables: { ...base.deliverables, ...(raw.deliverables || {}) },
     signOff: { ...base.signOff, ...(raw.signOff || {}) },
+    gprCadImport: raw.gprCadImport && typeof raw.gprCadImport === "object" ? raw.gprCadImport : null,
   };
 }
 
