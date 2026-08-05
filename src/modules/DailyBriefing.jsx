@@ -9,6 +9,7 @@ import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { stampDocumentAuthorship } from "../utils/documentAuthorship.js";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
@@ -963,7 +964,8 @@ export default function DailyBriefing() {
   }, []);
 
   const saveBriefing = (form) => {
-    setBriefings((prev) => [{ ...form, id: genId() }, ...prev]);
+    const stamped = stampDocumentAuthorship({ ...form, id: genId() }, { isCreate: true });
+    setBriefings((prev) => [stamped, ...prev]);
     setShowForm(false);
     setFormInitial(null);
   };

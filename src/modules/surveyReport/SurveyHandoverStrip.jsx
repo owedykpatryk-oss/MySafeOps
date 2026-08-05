@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
+import { openPermitToDigFromSurvey } from "../../utils/surveyPermitLink";
 
 function SurveyHandoverStrip({ form, linkedRams, projectPermits, geoPhotoCount, onGoToTab }) {
   if (!form.projectId) return null;
@@ -23,12 +24,18 @@ function SurveyHandoverStrip({ form, linkedRams, projectPermits, geoPhotoCount, 
       <button
         type="button"
         className={`app-survey-handover-card${linkedPermit ? " app-survey-handover-card--linked" : ""}`}
-        onClick={() => onGoToTab?.("professional")}
+        onClick={() => {
+          if (linkedPermit?.id) {
+            openWorkspaceView({ viewId: "permits", permitId: linkedPermit.id, mode: "view" });
+            return;
+          }
+          if (!openPermitToDigFromSurvey(form)) onGoToTab?.("professional");
+        }}
       >
         <span className="app-survey-handover-card__icon" aria-hidden>⛏</span>
         <span className="app-survey-handover-card__label">Permit to dig</span>
         <span className="app-survey-handover-card__meta">
-          {linkedPermit?.permitNo || linkedPermit?.ref || form.hseRefs?.permitRef || "Link PTW"}
+          {linkedPermit?.permitNo || linkedPermit?.ref || form.hseRefs?.permitRef || "Issue from survey"}
         </span>
       </button>
       <button

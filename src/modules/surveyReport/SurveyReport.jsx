@@ -2253,20 +2253,38 @@ function ReportEditor({
                     </option>
                   ))}
                 </select>
-                {form.hseRefs.linkedPermitId ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                  {form.hseRefs.linkedPermitId ? (
+                    <button
+                      type="button"
+                      style={{ ...ss.btn, fontSize: 11 }}
+                      onClick={() =>
+                        openWorkspaceView({ viewId: "permits", permitId: form.hseRefs.linkedPermitId, mode: "view" })
+                      }
+                    >
+                      Open linked permit
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    style={{ ...ss.btn, fontSize: 11, marginTop: 6 }}
-                    onClick={() =>
-                      openWorkspaceView({ viewId: "permits", permitId: form.hseRefs.linkedPermitId, mode: "view" })
-                    }
+                    style={{ ...ss.btnP, fontSize: 11 }}
+                    onClick={() => {
+                      setWorkspaceNavTarget({
+                        viewId: "permits",
+                        projectId: form.projectId,
+                        action: "issueFromDefaults",
+                        permitType: "excavation",
+                        surveyId: form.id || "",
+                      });
+                      openWorkspaceView({ viewId: "permits" });
+                    }}
                   >
-                    Open linked permit
+                    Issue permit to dig from this survey
                   </button>
-                ) : null}
+                </div>
                 {projectPermits.length === 0 ? (
                   <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "6px 0 0" }}>
-                    No permits on this project — create a permit to dig under Permits, then link here.
+                    No permits on this project yet — use the button above to open an excavation draft with survey dig risk and PAS 128 fields prefilled.
                   </p>
                 ) : null}
               </div>

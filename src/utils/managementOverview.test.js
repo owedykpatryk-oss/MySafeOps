@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildManagementDiary,
   buildPlannerWeeks,
   consolidateManagementStates,
   jobTone,
@@ -39,6 +40,24 @@ describe("management overview", () => {
     );
     expect(result.booked).toBe(5);
     expect(result.percentage).toBeGreaterThan(0);
+  });
+
+  it("builds diary roll-up for scheduled, completed and capacity gaps", () => {
+    const diary = buildManagementDiary(
+      [
+        { id: "j1", name: "North dig", teamId: "a", start: "2026-08-10", end: "2026-08-14", status: "confirmed" },
+        { id: "j2", name: "Done job", teamId: "a", start: "2026-07-20", end: "2026-07-24", status: "completed" },
+        { id: "j3", name: "Cancelled", teamId: "a", start: "2026-08-12", end: "2026-08-13", status: "cancelled" },
+      ],
+      [{ id: "a", name: "Alpha", capacity: 5 }],
+      new Date("2026-08-05T12:00:00")
+    );
+    expect(diary.summary.scheduledCount).toBe(1);
+    expect(diary.scheduled[0].id).toBe("j1");
+    expect(diary.summary.completedCount).toBe(1);
+    expect(diary.completed[0].id).toBe("j2");
+    expect(diary.gapCount).toBeGreaterThan(0);
+    expect(diary.gaps[0].teamName).toBe("Alpha");
   });
 
   it("restores editable default teams for invalid state", () => {

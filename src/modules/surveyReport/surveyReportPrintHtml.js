@@ -407,6 +407,13 @@ function documentControlBlock(report) {
     [tx("Approved by"), dc.approvedBy || "—"],
     [tx("Status"), report.status === "final" ? tx("Final") : tx("Draft")],
   ];
+  if (report.createdBy || report.createdByEmail) {
+    const account = [report.createdBy, report.createdByEmail].filter(Boolean).join(" · ");
+    rows.push([tx("Account author"), account]);
+  }
+  if (report.updatedBy && report.updatedBy !== report.createdBy) {
+    rows.push([tx("Last edited by"), report.updatedBy]);
+  }
   if (report.finalisedAt) {
     rows.push([tx("Finalised"), new Date(report.finalisedAt).toLocaleDateString(documentLocale())]);
   }
