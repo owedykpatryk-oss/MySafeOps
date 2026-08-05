@@ -155,8 +155,18 @@ async function main() {
     issues += 1;
   }
 
+  // config.toml is the local-development config, so the Cloudflare test secret belongs
+  // there. The hazard is `supabase config push` sending it to a live project, where that
+  // secret accepts any token and captcha stops protecting anything. setup-turnstile now
+  // refuses to push without a real TURNSTILE_SECRET_KEY, so check the guard is in place
+  // rather than telling anyone to run the command that used to cause the problem.
   if (fileIncludes("supabase/config.toml", 'secret = "1x0000000000000000000000000000000AA"')) {
-    warn("config.toml still has Turnstile TEST secret — run npm run setup:turnstile:all for production");
+    if (fileIncludes("scripts/setup-turnstile.mjs", "Refusing to push auth config")) {
+      ok("Turnstile test secret is local-only (remote push blocked without a production secret)");
+    } else {
+      fail("config.toml has the Turnstile TEST secret and nothing stops it reaching a live project");
+      issues += 1;
+    }
   } else {
     ok("config.toml Turnstile secret is not the Cloudflare test placeholder");
   }

@@ -1,0 +1,50 @@
+name: Production Smoke
+
+# The public surface can regress without any commit — a CDN cache rule, an edge
+# config change or an upstream outage is enough. The origin-allowlist bypass that
+# warmed-cache responses caused was invisible to every local test, so this suite
+# runs against the deployed site on a schedule as well as on demand.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base URL to smoke (defaults to the production site)"
+        required: false
+        default: "https://www.mysafeops.com"
+  schedule:
+    # Twice a day is enough to catch a silent regression without spamming the log.
+    - cron: "17 6,18 * * *"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      E2E_BASE_URL: ${{ github.event.inputs.base_url || 'https://www.mysafeops.com' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Smoke the deployed site
+        # Auth signup is excluded by the spec itself when E2E_BASE_URL is set: it would
+        # create real accounts and cannot pass the production captcha.
+        run: >
+          npx playwright test
+          tests/e2e/security.spec.js
+          tests/e2e/landing.spec.js
+          tests/e2e/public-pages.spec.js
+          tests/e2e/not-found.spec.js
+          --reporter=line
+      - name: Upload failure artefacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-smoke-results
+          path: test-results/
+          retention-days: 7
