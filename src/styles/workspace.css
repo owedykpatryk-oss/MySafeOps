@@ -227,7 +227,7 @@
   color: transparent;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .app-dashboard-metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -297,7 +297,8 @@
   white-space: nowrap;
 }
 
-@media (max-width: 720px) {
+/* iPad / Samsung Tab portrait (~768–834) — use compact chrome, not desktop overflow */
+@media (max-width: 900px) {
   .workspace-app-bar-actions--desktop {
     display: none !important;
   }
@@ -3975,7 +3976,7 @@
   align-items: start;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .plan-markup-stage {
     grid-template-columns: 1fr;
   }
@@ -3999,11 +4000,13 @@
 .plan-markup-subbar input,
 .plan-markup-subbar select {
   font-family: inherit;
-  font-size: 12px;
-  padding: 6px 8px;
+  font-size: 16px;
+  min-height: 44px;
+  padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid var(--color-border-tertiary, #e2e8f0);
   min-width: 140px;
+  touch-action: manipulation;
 }
 
 .plan-markup-hint {
@@ -4017,8 +4020,9 @@
   border-radius: 10px;
   overflow: hidden;
   background: var(--color-background-secondary, #f7f7f5);
-  max-height: min(520px, 70vh);
+  max-height: min(520px, 70vh, 70dvh);
   user-select: none;
+  touch-action: none;
 }
 
 .plan-markup-surface img {
@@ -5199,7 +5203,7 @@
   gap: 8px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .project-wizard-layout {
     grid-template-columns: 1fr;
   }
@@ -5351,7 +5355,7 @@
   margin-bottom: 12px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .app-command-center__grid {
     grid-template-columns: 1fr;
   }
@@ -6312,7 +6316,7 @@
     display: flex;
     position: fixed;
     right: max(16px, env(safe-area-inset-right));
-    bottom: calc(76px + env(safe-area-inset-bottom));
+    bottom: calc(8px + var(--workspace-bottom-inset, calc(var(--nav-height, 64px) + env(safe-area-inset-bottom, 0px))));
     z-index: 900;
     align-items: center;
     gap: 8px;
@@ -6471,7 +6475,7 @@
   padding: 1rem 1.5rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .app-project-dashboard__hero {
     grid-template-columns: 1fr;
   }
@@ -6629,7 +6633,7 @@
   padding: 0 1.5rem 1.25rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .app-project-dashboard__docs {
     grid-template-columns: 1fr;
   }
@@ -7351,14 +7355,16 @@
 .app-survey-quality-next {
   margin-top: 8px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 6px 10px;
+  min-height: 44px;
+  padding: 10px 14px;
   border-radius: 6px;
   border: 1px solid #99f6e4;
   background: #f0fdfa;
   color: #115e59;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .app-survey-editor-quicklinks {
@@ -8741,7 +8747,7 @@
   align-items: center;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .app-survey-list-stats--visual {
     grid-template-columns: 1fr;
   }
@@ -8970,11 +8976,14 @@
 .app-survey-live-preview-dock {
   position: sticky;
   top: 12px;
+  max-height: calc(100vh - 120px);
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
   border: 1px solid var(--color-border-tertiary, #e2e8f0);
   border-radius: 10px;
   background: #fff;
-  overflow: hidden;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  -webkit-overflow-scrolling: touch;
 }
 
 .app-survey-live-preview-dock__head {
@@ -9004,8 +9013,8 @@
 
 .app-survey-live-preview-fab {
   position: fixed;
-  right: 20px;
-  bottom: 88px;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(8px + var(--workspace-bottom-inset, calc(var(--nav-height, 64px) + env(safe-area-inset-bottom, 0px))));
   z-index: 60;
   font-family: inherit;
   font-size: 13px;
@@ -9210,13 +9219,15 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 13px;
+  min-height: 44px;
+  padding: 10px 14px;
   border-radius: 999px;
   border: 1px solid var(--color-border-tertiary, #e2e8f0);
   background: #fff;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
+  touch-action: manipulation;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -9231,6 +9242,28 @@
   color: #115e59;
   font-weight: 700;
   box-shadow: 0 4px 12px rgba(13, 148, 136, 0.18);
+}
+
+/* Touch tablets (iPad, Samsung Tab, Lenovo): kill hover-lift jank, enlarge list menus */
+@media (hover: none), (pointer: coarse) {
+  .app-survey-list-stats__tile:hover,
+  .app-command-center__stat:hover,
+  .app-survey-list-filter-pill:hover {
+    transform: none;
+  }
+
+  .app-survey-list-more__menu button {
+    min-height: 44px;
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+
+  .geo-photos-card__select,
+  .geo-photos-toolbar button,
+  .geo-photos-toolbar__actions button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
 }
 
 .app-survey-list-filter-pill__count {

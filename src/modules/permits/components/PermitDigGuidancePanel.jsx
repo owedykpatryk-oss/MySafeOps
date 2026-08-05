@@ -39,7 +39,7 @@ export default function PermitDigGuidancePanel({ permitType, extraFields = {}, o
   const surveyMeta = pas128SurveyMeta(extra.pas128SurveyType);
 
   const lbl = ss.lbl || { display: "block", fontSize: 11, fontWeight: 600, marginBottom: 4 };
-  const inp = ss.inp || { width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #ccc", fontSize: 12 };
+  const inp = ss.inp || { width: "100%", padding: "10px 12px", minHeight: 44, borderRadius: 8, border: "1px solid #ccc", fontSize: 16 };
 
   const isExcavation = permitType === "excavation";
 

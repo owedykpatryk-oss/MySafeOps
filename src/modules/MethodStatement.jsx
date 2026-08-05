@@ -161,9 +161,9 @@ function StepEditor({ steps, setSteps }) {
               </div>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:4, flexShrink:0 }}>
-              <button onClick={()=>moveStep(s.id,-1)} disabled={i===0} style={{ ...ss.btn, padding:"3px 7px", fontSize:11, opacity:i===0?0.3:1 }}>↑</button>
-              <button onClick={()=>moveStep(s.id,1)} disabled={i===steps.length-1} style={{ ...ss.btn, padding:"3px 7px", fontSize:11, opacity:i===steps.length-1?0.3:1 }}>↓</button>
-              <button onClick={()=>removeStep(s.id)} style={{ ...ss.btn, padding:"3px 7px", fontSize:11, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
+              <button type="button" onClick={()=>moveStep(s.id,-1)} disabled={i===0} style={{ ...ss.btn, padding:"10px 12px", minHeight:44, fontSize:14, opacity:i===0?0.3:1, touchAction:"manipulation" }}>↑</button>
+              <button type="button" onClick={()=>moveStep(s.id,1)} disabled={i===steps.length-1} style={{ ...ss.btn, padding:"10px 12px", minHeight:44, fontSize:14, opacity:i===steps.length-1?0.3:1, touchAction:"manipulation" }}>↓</button>
+              <button type="button" onClick={()=>removeStep(s.id)} style={{ ...ss.btn, padding:"10px 12px", minHeight:44, fontSize:14, color:"#A32D2D", borderColor:"#F09595", touchAction:"manipulation" }}>×</button>
             </div>
           </div>
         </div>

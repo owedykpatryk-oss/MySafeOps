@@ -212,15 +212,17 @@ const ss = {
     paddingBottom: 10,
   },
   tab: (active) => ({
-    padding: "6px 12px",
+    padding: "10px 14px",
+    minHeight: 44,
     borderRadius: 6,
     border: "none",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
     background: active ? "#ccfbf1" : "transparent",
     color: active ? "#115e59" : "var(--color-text-secondary)",
     fontFamily: "DM Sans,sans-serif",
+    touchAction: "manipulation",
   }),
 };
 
@@ -791,6 +793,19 @@ function ReportEditor({
   const [livePreviewOpen, setLivePreviewOpen] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 1100px)").matches
   );
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const mq = window.matchMedia("(min-width: 1100px)");
+    const onChange = (e) => {
+      if (!e.matches) setLivePreviewOpen(false);
+    };
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
   const autoFillRan = useRef(false);
   const draftPromptRan = useRef(false);
   const lastDraftJsonRef = useRef("");

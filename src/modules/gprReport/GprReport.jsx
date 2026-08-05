@@ -196,6 +196,19 @@ export default function GprReport() {
       return false;
     }
   });
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const mq = window.matchMedia("(min-width: 1100px)");
+    const onChange = (e) => {
+      if (!e.matches) setLivePreviewOpen(false);
+    };
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
   const [depthCalcNs, setDepthCalcNs] = useState("");
   const [lightboxRg, setLightboxRg] = useState(null);
   const [listStatus, setListStatus] = useState("all");
