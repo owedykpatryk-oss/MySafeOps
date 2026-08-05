@@ -6,6 +6,7 @@ import { gprReportQuality, gprStaticMapUrl } from "./gprReportHelpers";
 import { gprEvidenceStats } from "./gprReportPulse";
 import { firstIncompleteGprTab, GPR_EDITOR_TABS, gprOverallTabProgress } from "./gprReportEditorNav";
 import GprWaveBackdrop from "./GprWaveBackdrop";
+import { openHelpGuide } from "../../utils/workspaceNavContext";
 
 function GprEditorHero({ form, project, onClose, onGoToTab, livePreviewOpen, onToggleLivePreview, onMarkFinal }) {
   const quality = useMemo(() => gprReportQuality(form), [form]);
@@ -88,6 +89,14 @@ function GprEditorHero({ form, project, onClose, onGoToTab, livePreviewOpen, onT
             Mark as final
           </button>
         ) : null}
+        <button
+          type="button"
+          className="app-survey-live-preview-toggle"
+          onClick={() => openHelpGuide({ guideId: "gpr-report" })}
+          title="Open GPR help"
+        >
+          Help
+        </button>
       </div>
 
       <button type="button" className="app-survey-editor-hero__close" onClick={onClose} aria-label="Close editor">

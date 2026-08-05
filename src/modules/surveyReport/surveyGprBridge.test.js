@@ -5,6 +5,8 @@ import {
   importGprReportIntoSurvey,
   matchRadargramForAnomaly,
   listGprReportsForSurveyProject,
+  pushGprIntoLinkedSurvey,
+  autoSyncGprIntoSurvey,
 } from "./surveyGprBridge";
 import { blankSurveyReport } from "./surveyReportConstants";
 
@@ -76,5 +78,40 @@ describe("surveyGprBridge", () => {
       "p1"
     );
     expect(list.map((g) => g.id)).toEqual(["2", "1"]);
+  });
+
+  it("pushes GPR anomalies into linked survey on save sync", () => {
+    const survey = blankSurveyReport({
+      id: "s1",
+      projectId: "p1",
+      surveyType: "utility_mapping_survey",
+      linkedGprReportId: "gpr1",
+      gprAnomalyCards: [],
+    });
+    const gpr = {
+      id: "gpr1",
+      projectId: "p1",
+      linkedSurveyReportId: "s1",
+      anomalies: [{ id: "a9", ref: "A9", anomalyType: "void", depthM: "2", interpretation: "Void" }],
+      sections: {},
+      radargrams: [],
+    };
+    const { updated, reports } = pushGprIntoLinkedSurvey(gpr, [survey]);
+    expect(updated?.gprAnomalyCards?.length).toBe(1);
+    expect(reports[0].gprAnomalyCards[0].ref).toBe("A9");
+  });
+
+  it("autoSyncGprIntoSurvey merges missing anomaly sources", () => {
+    const survey = blankSurveyReport({ projectId: "p1", gprAnomalyCards: [] });
+    const next = autoSyncGprIntoSurvey(survey, [
+      {
+        id: "g1",
+        projectId: "p1",
+        anomalies: [{ id: "x1", ref: "X1", anomalyType: "utility", depthM: "1", interpretation: "Cable" }],
+        sections: {},
+        radargrams: [],
+      },
+    ]);
+    expect(next.gprAnomalyCards.length).toBe(1);
   });
 });

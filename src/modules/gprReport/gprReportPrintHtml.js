@@ -35,6 +35,7 @@ import {
 } from "./gprLineLengthSummary.js";
 import { cadUtilityColor } from "../../utils/cadImportVisuals.js";
 import { formatLengthM } from "../../utils/surveyDxfAnalyzer.js";
+import { formatAreaM2 } from "../../utils/dxfHatchAnalyzer.js";
 import {
   formatDocumentDate as formatOrgDate,
   formatDocumentDateTime as formatOrgDateTime,
@@ -151,6 +152,10 @@ function styles(primary, accent) {
     .gpr-bar-track { flex: 1; height: 8px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
     .gpr-bar-fill { height: 100%; background: linear-gradient(90deg, ${primary}, ${accent}); border-radius: 999px; }
     .gpr-bar-count { font-size: 8.5pt; font-weight: 700; color: ${primary}; width: 20px; text-align: right; flex-shrink: 0; }
+    .gpr-acq-diagram { margin: 0 0 14px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: linear-gradient(180deg,#f8fafc,#fff); page-break-inside: avoid; display: inline-block; }
+    .gpr-acq-diagram__label { font-size: 9pt; font-weight: 700; color: ${primary}; margin-bottom: 8px; }
+    .gpr-chainage-chart { margin: 0 0 14px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcff; page-break-inside: avoid; }
+    .gpr-chainage-chart__label { font-size: 9pt; font-weight: 700; color: ${primary}; margin-bottom: 6px; }
     .gpr-watermark { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; font-size: 84px; font-weight: 800; letter-spacing: 0.14em; color: rgba(100,116,139,0.09); transform: rotate(-28deg); z-index: 0; text-transform: uppercase; }
     .gpr-print-footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 8pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding: 6px 12mm; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #fff; z-index: 9998; }
     .gpr-running-header { display: flex; justify-content: space-between; font-size: 8pt; color: #94a3b8; border-bottom: 1px solid #e5e7eb; padding: 4px 0 8px; margin-bottom: 12px; }
@@ -292,9 +297,106 @@ function scanPanelsBlock(panels, radargrams = []) {
     .join("");
 }
 
+const CHAINAGE_BAND_COLOURS = {
+  excellent: "#0d9488",
+  good: "#059669",
+  fair: "#d97706",
+  poor: "#ea580c",
+  spent: "#dc2626",
+};
+
+const ACQ_MODE_SHAPES = {
+  grid: { rows: 4, cols: 4, label: "Grid scan" },
+  longitudinal: { rows: 1, cols: 6, label: "Longitudinal lines" },
+  cross_section: { rows: 6, cols: 1, label: "Cross-section" },
+  route: { rows: 2, cols: 5, label: "Route / corridor" },
+  "3d_array": { rows: 3, cols: 3, label: "3D array" },
+};
+
+/** Print-ready acquisition pattern diagram (mirrors editor GprAcquisitionDiagram). */
+function acquisitionDiagramSvg(scanMode, lineSpacingM) {
+  const shape = ACQ_MODE_SHAPES[scanMode] || ACQ_MODE_SHAPES.grid;
+  const cellW = 28;
+  const cellH = 18;
+  const gap = 4;
+  const pad = 12;
+  const w = pad * 2 + shape.cols * cellW + (shape.cols - 1) * gap;
+  const h = pad * 2 + shape.rows * cellH + (shape.rows - 1) * gap + 18;
+  const cells = [];
+  for (let r = 0; r < shape.rows; r += 1) {
+    for (let c = 0; c < shape.cols; c += 1) {
+      const x = pad + c * (cellW + gap);
+      const y = pad + r * (cellH + gap);
+      cells.push(
+        `<rect x="${x}" y="${y}" width="${cellW}" height="${cellH}" rx="3" fill="#0c447c" fill-opacity="0.12" stroke="#0c447c" stroke-width="1.2"/>`
+      );
+    }
+  }
+  const spacing = lineSpacingM ? ` · line spacing ${esc(String(lineSpacingM))} m` : "";
+  return `<div class="gpr-acq-diagram">
+    <div class="gpr-acq-diagram__label">${esc(shape.label)}${spacing}</div>
+    <svg viewBox="0 0 ${w} ${h}" width="${Math.min(w, 280)}" height="${Math.round((h / w) * Math.min(w, 280))}" role="img" aria-label="${esc(shape.label)}">${cells.join("")}</svg>
+  </div>`;
+}
+
+/** Print-ready chainage depth profile (mirrors editor GprChainageChart). */
+function chainageChartSvg(segments = []) {
+  const points = (segments || [])
+    .map((s, i) => {
+      const start = Number(s.chainageStartM);
+      const end = Number(s.chainageEndM);
+      const depth = Number(s.thicknessOrDepthM);
+      const mid = Number.isFinite(start) && Number.isFinite(end) ? (start + end) / 2 : i;
+      return {
+        x: mid,
+        y: Number.isFinite(depth) ? depth : null,
+        band: s.conditionBand,
+        label: [s.lineRef, s.swathRef].filter(Boolean).join(" · ") || `Seg ${i + 1}`,
+      };
+    })
+    .filter((p) => p.y != null);
+  if (points.length < 2) return "";
+
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys, 0.1);
+  const pad = 28;
+  const w = 520;
+  const h = 150;
+  const spanX = maxX - minX || 1;
+  const coords = points.map((p) => ({
+    ...p,
+    sx: pad + ((p.x - minX) / spanX) * (w - pad * 2),
+    sy: h - pad - (p.y / maxY) * (h - pad * 2),
+  }));
+  const pathD = coords.map((p, i) => `${i ? "L" : "M"}${p.sx.toFixed(1)},${p.sy.toFixed(1)}`).join(" ");
+  const dots = coords
+    .map(
+      (p) =>
+        `<circle cx="${p.sx.toFixed(1)}" cy="${p.sy.toFixed(1)}" r="4.5" fill="${CHAINAGE_BAND_COLOURS[p.band] || "#0c447c"}" stroke="#fff" stroke-width="1.2"><title>${esc(p.label)}: ${p.y} m</title></circle>`
+    )
+    .join("");
+
+  return `<div class="gpr-chainage-chart">
+    <div class="gpr-chainage-chart__label">Chainage depth profile</div>
+    <svg viewBox="0 0 ${w} ${h}" width="100%" style="max-width:520px;height:auto" role="img" aria-label="Chainage depth profile">
+      <line x1="${pad}" y1="${h - pad}" x2="${w - pad}" y2="${h - pad}" stroke="#cbd5e1" stroke-width="1"/>
+      <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h - pad}" stroke="#cbd5e1" stroke-width="1"/>
+      <text x="${pad - 4}" y="${pad + 4}" font-size="9" fill="#64748b" text-anchor="end">${maxY.toFixed(1)} m</text>
+      <text x="${pad - 4}" y="${h - pad}" font-size="9" fill="#64748b" text-anchor="end">0</text>
+      <path d="${pathD}" fill="none" stroke="#0c447c" stroke-width="2" opacity="0.55"/>
+      ${dots}
+      <text x="${w / 2}" y="${h - 6}" font-size="9" fill="#64748b" text-anchor="middle">Chainage (m)</text>
+    </svg>
+  </div>`;
+}
+
 function chainageBlock(segments) {
   if (!segments?.length) return "";
-  return dataTable(
+  const chart = chainageChartSvg(segments);
+  const table = dataTable(
     ["Line / swath", "Chainage (m)", "Thickness / depth", "Condition band", "Notes"],
     segments.map((s) => [
       [s.lineRef, s.swathRef].filter(Boolean).join(" · ") || "—",
@@ -304,6 +406,78 @@ function chainageBlock(segments) {
       s.profileNotes || "—",
     ])
   );
+  return `${chart}${table}`;
+}
+
+/** CAD model-space GPR verification summary for print/PDF. */
+function gprCadVerificationBlock(cad) {
+  if (!cad?.fileName) return "";
+  const g = cad.gprLayers || {};
+  const b1 = cad.umgB1Upgrades || {};
+  const a = cad.anomalies || {};
+  const umg = cad.umgAll || {};
+
+  let html = `<p class="gpr-callout"><strong>Model space only</strong>${
+    cad.paperspaceSkipped
+      ? ` — ${cad.paperspaceSkipped} paper-space / layout entit${cad.paperspaceSkipped === 1 ? "y" : "ies"} ignored`
+      : ""
+  }. File: ${esc(cad.fileName)}${cad.units ? ` · ${esc(cad.units)}` : ""}.</p>`;
+
+  html += metaGrid([
+    ["GPR-named layers", `${g.segmentCount || 0} seg. · ${formatLengthM(g.lengthM || 0)}`],
+    ["UMG → QL-B1 upgrades", `${b1.segmentCount || 0} seg. · ${formatLengthM(b1.lengthM || 0)}`],
+    ["GPR anomalies (report)", String(a.count || 0)],
+    ["All UMG_* linework", `${umg.segmentCount || 0} seg. · ${formatLengthM(umg.lengthM || 0)}`],
+  ]);
+
+  if ((g.byLayer || []).length) {
+    html += `<h3 style="font-size:11pt;margin:14px 0 8px">GPR-named layers</h3>`;
+    html += dataTable(
+      ["Layer", "Length", "Segments"],
+      g.byLayer.slice(0, 12).map((lr) => [lr.layer, formatLengthM(lr.lengthM), String(lr.segments)])
+    );
+  }
+
+  if ((b1.byUtility || []).length) {
+    html += `<h3 style="font-size:11pt;margin:14px 0 8px">UMG upgraded to QL-B1 (GPR-verified)</h3>`;
+    html += dataTable(
+      ["Utility", "Length", "Segments"],
+      b1.byUtility.map((row) => [row.utilityLabel, formatLengthM(row.lengthM), String(row.segments)])
+    );
+  }
+
+  if ((umg.byQl || []).length) {
+    html += `<h3 style="font-size:11pt;margin:14px 0 8px">UMG_* by PAS128 QL</h3>`;
+    html += dataTable(
+      ["QL", "Length", "Segments"],
+      umg.byQl.map((q) => [q.qlKey, formatLengthM(q.lengthM), String(q.segments)])
+    );
+  }
+
+  if ((a.byType || []).length) {
+    html += `<h3 style="font-size:11pt;margin:14px 0 8px">Anomalies by type</h3>`;
+    html += dataTable(
+      ["Type", "Count"],
+      a.byType.map((t) => [t.label, String(t.count)])
+    );
+  }
+
+  const hatches = cad.hatches;
+  if (hatches?.constraintHatchCount) {
+    html += `<h3 style="font-size:11pt;margin:14px 0 8px">Unable to survey / no-access hatches</h3>`;
+    html += `<p class="gpr-callout">Total constraint area <strong>${esc(formatAreaM2(hatches.totalConstraintAreaM2))}</strong> from ${hatches.constraintHatchCount} hatch${hatches.constraintHatchCount === 1 ? "" : "es"} (model space).</p>`;
+    html += dataTable(
+      ["Category", "Hatches", "Area", "Narrative"],
+      (hatches.byCategory || []).map((c) => [
+        c.label,
+        String(c.hatchCount),
+        formatAreaM2(c.areaM2),
+        c.narrative,
+      ])
+    );
+  }
+
+  return html;
 }
 
 /** Horizontal bar chart — same visual language as anomaly type bars and survey CAD charts. */
@@ -554,7 +728,7 @@ export function buildGprReportHtml(report, extras = {}) {
   pushSection("Equipment", equipmentBlock(r.equipment), "equip");
   pushSection(
     "Acquisition parameters",
-    `<p>${esc(buildAcquisitionNarrative({ ...r.acquisition, scanMode: scanLabel }))}</p>`,
+    `${acquisitionDiagramSvg(r.acquisition?.scanMode, r.acquisition?.lineSpacingM)}<p>${esc(buildAcquisitionNarrative({ ...r.acquisition, scanMode: scanLabel }))}</p>`,
     "acq"
   );
   pushSection("Velocity model & calibration", `<p>${esc(buildVelocityNarrative(r.velocityModel))}</p>`, "vel");
@@ -580,6 +754,12 @@ export function buildGprReportHtml(report, extras = {}) {
     "Plan layouts & CAD figures",
     planFiguresBlock(r.planFigures) || "<p><em>No plan layout figures attached.</em></p>",
     "plans"
+  );
+  pushSection(
+    "CAD model-space verification",
+    gprCadVerificationBlock(r.gprCadImport) ||
+      "<p><em>No CAD DXF imported — upload a model-space drawing on Findings to count GPR layers and UMG→B1 upgrades.</em></p>",
+    "cad-verify"
   );
   pushSection(
     "PAS128 line lengths (GPR corridor)",

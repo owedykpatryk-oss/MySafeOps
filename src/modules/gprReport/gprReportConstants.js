@@ -485,6 +485,7 @@ export function blankGprReport(overrides = {}) {
     radargrams: [],
     planFigures: [],
     linkedSurveyReportId: "",
+    gprCadImport: null,
     smartFillAt: null,
     createdAt: now,
     updatedAt: now,

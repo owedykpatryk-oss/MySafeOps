@@ -27,6 +27,9 @@ import GprRadargramLightbox from "./GprRadargramLightbox";
 import GprWaveBackdrop from "./GprWaveBackdrop";
 import GprScanPanelGrid from "./GprScanPanelGrid";
 import GprAcquisitionDiagram from "./GprAcquisitionDiagram";
+import GprBlockersPanel from "./GprBlockersPanel";
+import { applyGprAutofix } from "./gprAutofix";
+import { pushGprIntoLinkedSurvey } from "../surveyReport/surveyGprBridge";
 import { filterGprReports, groupGprReportsByProject, suggestDeliverableFlags, GPR_LIST_STATUS_FILTERS } from "./gprReportListHelpers";
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { countGprGeoPhotos, importGeoPhotosIntoGprReport } from "../../utils/gprGeoIntegrations";
@@ -60,6 +63,8 @@ import {
 import { buildGprReportHtml } from "./gprReportPrintHtml";
 import { useGprPreviewHtml } from "./useGprPreviewHtml";
 import GprLineLengthSummaryCard from "./GprLineLengthSummaryCard.jsx";
+import GprCadImportCard from "./GprCadImportCard.jsx";
+import { importGprCadFile } from "./gprCadImport.js";
 import { downloadGprReportPdf } from "./gprReportPdf";
 import {
   gprReportQuality,
@@ -189,6 +194,7 @@ export default function GprReport() {
   const [listProject, setListProject] = useState("");
   const [groupByProject, setGroupByProject] = useState(true);
   const [confirmFinal, setConfirmFinal] = useState(false);
+  const [cadBusy, setCadBusy] = useState(false);
 
   const { d1Hydrating: d1RepH, d1OutboxPending: d1RepO } = useD1OrgArraySync({
     storageKey: STORAGE_KEY,
@@ -324,8 +330,59 @@ export default function GprReport() {
       ? [...reports, normalized]
       : reports.map((r) => (r.id === normalized.id ? normalized : r));
     persist(next);
+
+    // Bidirectional sync: push anomalies into linked / same-project survey report.
+    try {
+      const surveys = load("survey_reports", []);
+      const { reports: nextSurveys, updated } = pushGprIntoLinkedSurvey(normalized, surveys);
+      if (updated) {
+        save("survey_reports", nextSurveys);
+        pushToast({
+          type: "success",
+          title: "Synced to survey",
+          message: `GPR anomalies merged into ${updated.ref || "linked survey report"}.`,
+          durationMs: 2800,
+        });
+      }
+    } catch {
+      /* survey sync best-effort */
+    }
+
     pushAudit({ action: modal.isNew ? "gpr_report_create" : "gpr_report_update", entity: "gpr_report", detail: normalized.ref });
     setModal(null);
+  };
+
+  const handleGprAutofix = (fixId) => {
+    if (!form) return;
+    const next = applyGprAutofix(fixId, form);
+    if (next) setModal({ ...modal, data: normalizeGprReport(next) });
+  };
+
+  const handleGprCadUpload = async (e) => {
+    const file = e.target?.files?.[0];
+    e.target.value = "";
+    if (!file || !form) return;
+    setCadBusy(true);
+    try {
+      const next = await importGprCadFile(form, file);
+      setModal({ ...modal, data: normalizeGprReport(next) });
+      const cad = next.gprCadImport;
+      pushToast({
+        type: "success",
+        title: "CAD model-space analysed",
+        message: `GPR: ${cad?.gprLayers?.segmentCount || 0} · UMG→B1: ${cad?.umgB1Upgrades?.segmentCount || 0} · No-access hatches: ${cad?.hatches?.constraintHatchCount || 0} · Anomalies: ${cad?.anomalies?.count || 0}`,
+        durationMs: 4200,
+      });
+      pushAudit({ action: "gpr_report_cad_import", entity: "gpr_report", detail: file.name });
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "CAD import failed",
+        message: err?.message || "Could not parse DXF (model space).",
+      });
+    } finally {
+      setCadBusy(false);
+    }
   };
 
   const applyPreset = (presetKey, eqIndex = 0) => {
@@ -1387,6 +1444,15 @@ export default function GprReport() {
           </div>
         ))}
       </div>
+      <GprCadImportCard
+        gprCadImport={form.gprCadImport}
+        anomalies={form.anomalies}
+        cadBusy={cadBusy}
+        onUpload={handleGprCadUpload}
+        onClear={() => patch({ gprCadImport: null })}
+        ss={ss}
+      />
+
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
           <div style={ss.sectionHead}>Chainage / corridor segments</div>
@@ -1877,6 +1943,12 @@ export default function GprReport() {
               ))}
             </div>
           ) : null}
+          <GprBlockersPanel
+            report={form}
+            linkedSurveyReport={linkedSurveyReport}
+            onGoToTab={setTab}
+            onAutofix={handleGprAutofix}
+          />
           <div className="app-survey-report-editor__body app-gpr-report-editor__body">
             <div className="app-survey-report-editor__form">
               <div style={ss.tabRow}>

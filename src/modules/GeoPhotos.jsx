@@ -9,6 +9,7 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
+import { openHelpGuide } from "../utils/workspaceNavContext";
 import EmptyState from "../components/EmptyState";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
@@ -629,6 +630,9 @@ export default function GeoPhotos() {
         lead="Field photos with GPS and direction arrow — export to KML/KMZ (Google Earth), GPX, AutoCAD DXF (camera block + GI attributes) or CAD ZIP with OSM viewer and images."
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" style={ms.btn} onClick={() => openHelpGuide({ guideId: "geo-photos" })}>
+              Help
+            </button>
             {filterProject ? (
               <button type="button" style={ms.btn} onClick={() => pushToSurvey(filterProject)}>
                 Push to survey

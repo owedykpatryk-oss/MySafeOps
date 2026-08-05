@@ -8,6 +8,7 @@ import {
   mergeCadAnalysisIntoReport,
   parseLayerSemantics,
   rebuildCadFromLayerBreakdown,
+  seedUtilitiesTableFromCad,
 } from "./surveyDxfAnalyzer.js";
 import { blankSurveyReport } from "../modules/surveyReport/surveyReportConstants.js";
 
@@ -198,5 +199,73 @@ describe("surveyDxfAnalyzer", () => {
     const diff = compareCadImports(before, after);
     expect(diff.totalDeltaM).toBe(6);
     expect(diff.changes.length).toBeGreaterThan(0);
+  });
+
+  it("re-seeds utilities table from existing cadImport", () => {
+    const a = analyzeSurveyDxf(SAMPLE_DXF, { fileName: "site.dxf" });
+    const withCad = mergeCadAnalysisIntoReport(blankSurveyReport(), a);
+    const cleared = { ...withCad, utilitiesTable: [] };
+    const seeded = seedUtilitiesTableFromCad(cleared, { replaceCadRows: true });
+    expect(seeded?.utilitiesTable?.length).toBeGreaterThan(0);
+    expect(seeded.utilitiesTable[0].notes).toMatch(/CAD layer/);
+  });
+
+  it("skips paper-space / layout entities by default (model space only)", () => {
+    const withLayout = `0
+SECTION
+2
+HEADER
+9
+$INSUNITS
+70
+6
+0
+ENDSEC
+0
+SECTION
+2
+ENTITIES
+0
+LINE
+8
+UMG_LV_B1
+10
+0
+20
+0
+30
+0
+11
+10
+21
+0
+31
+0
+0
+LINE
+8
+SHEET_BORDER
+67
+1
+10
+0
+20
+0
+30
+0
+11
+999
+21
+0
+31
+0
+0
+ENDSEC
+0
+EOF`;
+    const a = analyzeSurveyDxf(withLayout, { fileName: "model.dxf" });
+    expect(a.entityFilter.paperspaceSkipped).toBe(1);
+    expect(a.totals.lengthM).toBe(10);
+    expect(a.layerBreakdown.some((l) => l.layer === "SHEET_BORDER")).toBe(false);
   });
 });

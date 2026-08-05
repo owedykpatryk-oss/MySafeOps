@@ -110,6 +110,8 @@ import SurveyHandoverModal from "./SurveyHandoverModal";
 import { resolveSurveyFixTarget, scheduleSurveyFixScroll } from "./surveyFixNav";
 import SurveyPas128Dashboard from "./SurveyPas128Dashboard";
 import { applySurveyAutofix } from "./surveyAutofix";
+import { runSurveyIssuePackPrep } from "./surveyIssuePack";
+import { autoSyncGprIntoSurvey } from "./surveyGprBridge";
 import { getSpecialistFindingsConfig } from "./surveySpecialistFindings";
 import { applyPas128MethodToReport, pas128MethodAppliesToSurveyType } from "./pas128MethodPresets";
 import { buildPas128Foreword } from "./pas128ReportBoilerplate";
@@ -121,7 +123,7 @@ import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } f
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
 import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable, geoPhotosToGiLocationsTable } from "../../utils/geoPhotoIntegrations";
-import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings } from "../../utils/surveyDxfAnalyzer";
+import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings, seedUtilitiesTableFromCad } from "../../utils/surveyDxfAnalyzer";
 import CadImportPanel from "./CadImportPanel";
 import EmptyState from "../../components/EmptyState";
 import RegisterListPagingFooter from "../../components/RegisterListPagingFooter";
@@ -398,7 +400,7 @@ function CheckboxGrid({ options, selected, onToggle }) {
   );
 }
 
-function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = [], permits = [], onApply, linkedRams, onGoToTab, simpleMode = false }) {
+function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = [], permits = [], gprReports = [], onApply, linkedRams, onGoToTab, simpleMode = false }) {
   const [open, setOpen] = useState(!simpleMode);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState("");
@@ -519,6 +521,45 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
                 }),
               true
             )}
+            <button
+              type="button"
+              style={{
+                ...ss.btn,
+                fontSize: 11,
+                padding: "6px 10px",
+                opacity: busy || (!project && !form.surveyType) ? 0.55 : 1,
+                borderColor: "#0d9488",
+                color: "#0f766e",
+                background: "#ecfdf5",
+                fontWeight: 600,
+              }}
+              disabled={Boolean(busy) || (!project && !form.surveyType)}
+              onClick={() =>
+                run("Prepare issue pack", async () => {
+                  const { report, summary } = await runSurveyIssuePackPrep(form, {
+                    project,
+                    ramsDocs,
+                    projectPlans: plansWithMarkup,
+                    linkedRams,
+                    useAi: useAiOnFill,
+                    geoPhotos,
+                    permits,
+                    gprReports,
+                  });
+                  // Defer so run()'s default "done" message is replaced with pack status.
+                  queueMicrotask(() => {
+                    setMsg(
+                      summary.canMarkFinal
+                        ? `Issue pack ready (${summary.qualityScore}%) — Mark final, then download handover ZIP.`
+                        : `Issue pack prepared (${summary.qualityScore}%) — ${summary.criticalBlockers || summary.blockersRemaining} item(s) still block final.`
+                    );
+                  });
+                  return report;
+                })
+              }
+            >
+              {busy === "Prepare issue pack" ? "…" : "Prepare issue pack"}
+            </button>
             {!simpleMode &&
               assistBtn(
                 "PAS128 complete pack",
@@ -1102,12 +1143,34 @@ function ReportEditor({
     if (findings.includes(marker)) {
       findings = findings.replace(new RegExp(`${marker}[\\s\\S]*?(?=\\n===|$)`, "m"), nextCad.narrative).trim();
     }
-    setForm((f) => ({
-      ...f,
-      cadImport: nextCad,
-      sections: { ...f.sections, findings },
-      updatedAt: new Date().toISOString(),
-    }));
+    setForm((f) => {
+      const withCad = {
+        ...f,
+        cadImport: nextCad,
+        sections: { ...f.sections, findings },
+        updatedAt: new Date().toISOString(),
+      };
+      const seeded = seedUtilitiesTableFromCad(withCad, { replaceCadRows: true });
+      if (!seeded) return withCad;
+      const { _cadSeedMeta, ...clean } = seeded;
+      return clean;
+    });
+  };
+
+  const handleSeedUtilitiesFromCad = () => {
+    const seeded = seedUtilitiesTableFromCad(form, { replaceCadRows: true });
+    if (!seeded) {
+      pushToast({ type: "warn", title: "CAD → utilities", message: "Upload a DXF with classified layers first." });
+      return;
+    }
+    const meta = seeded._cadSeedMeta || {};
+    const { _cadSeedMeta, ...clean } = seeded;
+    setForm(clean);
+    pushToast({
+      type: "success",
+      title: "Utilities seeded from CAD",
+      message: `${meta.added || 0} row(s) refreshed into the schedule.`,
+    });
   };
 
   const linkedRams = ramsDocs.find((d) => d.id === form.linkedRamsId);
@@ -1236,6 +1299,10 @@ function ReportEditor({
     if (payload.parentReportId) {
       const parent = reports.find((r) => r.id === payload.parentReportId);
       if (parent) payload.changesSincePrevious = compareSurveyReports(parent, payload);
+    }
+    // Keep PAS128 anomaly cards in sync with linked / project GPR on every save.
+    if (gprReports?.length) {
+      payload = autoSyncGprIntoSurvey(payload, gprReports);
     }
     return payload;
   };
@@ -1423,6 +1490,7 @@ function ReportEditor({
           projectPlans={projectPlansForForm}
           geoPhotos={geoPhotos}
           permits={permits}
+          gprReports={gprReports}
           linkedRams={linkedRams}
           onGoToTab={goToSurveyFix}
           simpleMode={simpleMode}
@@ -2572,6 +2640,7 @@ function ReportEditor({
               ss={ss}
               onUpload={handleCadUpload}
               onLayerMappingsChange={handleCadLayerMappings}
+              onSeedUtilities={handleSeedUtilitiesFromCad}
               onClear={() => setForm((f) => ({ ...f, cadImport: null, updatedAt: new Date().toISOString() }))}
             />
             </div>
