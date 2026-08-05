@@ -2,6 +2,9 @@
  * Link latest project survey report to excavation / ground disturbance permit fields (PAS 128).
  */
 
+import { computeUtilityMappingDigRisk } from "./utilityMappingPremiumPages.js";
+import { openWorkspaceView, setWorkspaceNavTarget } from "./workspaceNavContext.js";
+
 /** Survey report QL (B4–B0) → permit dig QL (QL-D–QL-A). */
 export const SURVEY_QL_TO_PERMIT_QL = {
   B4: "QL-D",
@@ -67,14 +70,45 @@ export function applySurveyLinkToPermitDraft(draft, survey, { permitType } = {})
   Object.entries(extras).forEach(([k, v]) => {
     if (v != null && String(v).trim()) extraFields[k] = v;
   });
+
+  const digRisk = computeUtilityMappingDigRisk(survey, { ignoreTheme: true });
+  const residualBits = [];
+  if (digRisk?.label) residualBits.push(`Dig readiness: ${digRisk.label} (score ${digRisk.score})`);
+  if (Array.isArray(digRisk?.reasons) && digRisk.reasons.length) {
+    residualBits.push(`Residual risk: ${digRisk.reasons.slice(0, 4).join("; ")}`);
+  }
+  const hatchNote = survey?.gprCadImport?.hatches?.narrative || survey?.hatchConstraints?.narrative || "";
+  if (hatchNote) residualBits.push(`Access / no-survey: ${String(hatchNote).slice(0, 280)}`);
+  const rec = String(survey?.recommendations || survey?.narratives?.recommendations || "").trim();
+  if (rec) residualBits.push(`Survey recommendations: ${rec.slice(0, 320)}`);
+
+  const linkLine = `Linked survey: ${survey.ref || survey.id}`;
+  const residualBlock = residualBits.length ? `\n\n${residualBits.join("\n")}` : "";
+  const notes = draft.notes
+    ? `${draft.notes}\n\n${linkLine}${residualBlock}`
+    : `${linkLine}${residualBlock}`;
+
   return {
     ...draft,
     extraFields,
     linkedSurveyId: survey.id || draft.linkedSurveyId,
-    notes: draft.notes
-      ? `${draft.notes}\n\nLinked survey: ${survey.ref || survey.id}`
-      : `Linked survey: ${survey.ref || survey.id}`,
+    notes,
   };
+}
+
+/** Open Permits with excavation draft prefilled from this survey's project. */
+export function openPermitToDigFromSurvey(survey) {
+  const projectId = String(survey?.projectId || "").trim();
+  if (!projectId || typeof window === "undefined") return false;
+  setWorkspaceNavTarget({
+    viewId: "permits",
+    projectId,
+    action: "issueFromDefaults",
+    permitType: "excavation",
+    surveyId: survey?.id || "",
+  });
+  openWorkspaceView({ viewId: "permits" });
+  return true;
 }
 
 export function enrichPermitDraftFromProjectSurveys(draft, project, surveys = []) {

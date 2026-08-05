@@ -89,6 +89,8 @@ import {
   missingRequiredPermits,
   requiredPermitTypesForProject,
 } from "./permitProjectDefaults";
+import { enrichPermitDraftFromProjectSurveys } from "../../utils/surveyPermitLink";
+import { formatActorLabel } from "../../utils/documentAuthorship.js";
 import PermitQuickIssueHub from "./components/PermitQuickIssueHub";
 import PermitStudioShell, { PermitStudioPanel, PERMIT_FIELD_SECTIONS } from "./components/PermitStudioShell";
 import PermitFirstRunGuide from "./components/PermitFirstRunGuide";
@@ -3744,7 +3746,7 @@ const PermitCard = memo(function PermitCard({
                 {[...permit.auditLog].slice(-12).reverse().map((e, i) => (
                   <li key={`${e.at}-${i}`}>
                     {fmtDateTime(e.at)}
-                    {e.by ? ` · ${e.by}` : ""} —{" "}
+                    {e.by || e.byEmail ? ` · ${formatActorLabel({ name: e.by, email: e.byEmail }) || e.by}` : ""} —{" "}
                     {e.action === "status_changed"
                       ? `Status: ${e.from || "—"} → ${e.to || "—"}`
                       : e.action === "created"
@@ -6324,10 +6326,11 @@ export default function PermitSystem() {
     const tid = String(typeId || "").trim();
     if (!tid || !issuePermitTypes[tid]) return;
     const template = getTemplateForType(tid, issuePermitTypes);
-    const draft = normalizeAdvancedPermit(
+    const projectId = String(extra.projectId || planProjectId || "").trim();
+    let draft = normalizeAdvancedPermit(
       {
         type: tid,
-        projectId: String(extra.projectId || planProjectId || "").trim(),
+        projectId,
         location: String(extra.location || "").trim(),
         linkedRamsId: String(extra.linkedRamsId || "").trim(),
         status: "draft",
@@ -6339,6 +6342,9 @@ export default function PermitSystem() {
       },
       tid
     );
+    if (projectId && (tid === "excavation" || tid === "ground_disturbance")) {
+      draft = enrichPermitDraftFromProjectSurveys(draft, { id: projectId }, load("survey_reports", []));
+    }
     setModal({ type: "form", data: draft });
     trackEvent("permit_quick_issue_type", { type: tid });
   };

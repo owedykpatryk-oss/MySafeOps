@@ -258,3 +258,68 @@ export function monthCapacity(jobs, team, monthDate) {
   const percentage = totalWorkingDays ? Math.round((booked / totalWorkingDays) * 100) : 0;
   return { booked, total: totalWorkingDays, percentage };
 }
+
+/**
+ * Diary roll-up for management: next 90 days scheduled, last 28 days completed, capacity gaps.
+ * @param {object[]} jobs
+ * @param {{ id: string, name: string, capacity?: number }[]} teams
+ * @param {Date|string} [anchor]
+ */
+export function buildManagementDiary(jobs = [], teams = [], anchor = new Date()) {
+  const today = dateOnly(isoDate(anchor)) || dateOnly(isoDate(new Date()));
+  const inNinetyDays = addDays(today, 90);
+  const fourWeeksAgo = addDays(today, -28);
+  const list = Array.isArray(jobs) ? jobs : [];
+
+  const scheduled = list
+    .filter((job) => {
+      const start = dateOnly(job.start);
+      return start && start >= today && start <= inNinetyDays && job.status !== "cancelled";
+    })
+    .sort((a, b) => String(a.start || "").localeCompare(String(b.start || "")));
+
+  const completed = list
+    .filter((job) => {
+      const end = dateOnly(job.end);
+      return job.status === "completed" && end && end >= fourWeeksAgo && end <= today;
+    })
+    .sort((a, b) => String(b.end || "").localeCompare(String(a.end || "")));
+
+  const capacityMonths = [];
+  for (let offset = 0; offset < 3; offset += 1) {
+    capacityMonths.push(new Date(today.getFullYear(), today.getMonth() + offset, 1, 12));
+  }
+
+  const gapSlots = (Array.isArray(teams) ? teams : []).flatMap((team) =>
+    capacityMonths.map((month) => {
+      const value = monthCapacity(list, team, month);
+      return {
+        teamId: team.id,
+        teamName: team.name,
+        month,
+        monthKey: isoDate(month).slice(0, 7),
+        ...value,
+        isGap: value.percentage < 60,
+        isOver: value.percentage > 100,
+      };
+    }),
+  );
+
+  const gaps = gapSlots.filter((slot) => slot.isGap).sort((a, b) => a.percentage - b.percentage);
+
+  return {
+    today,
+    inNinetyDays,
+    fourWeeksAgo,
+    capacityMonths,
+    scheduled,
+    completed,
+    gaps,
+    gapCount: gaps.length,
+    summary: {
+      scheduledCount: scheduled.length,
+      completedCount: completed.length,
+      gapCount: gaps.length,
+    },
+  };
+}

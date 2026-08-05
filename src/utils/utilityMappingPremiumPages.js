@@ -25,8 +25,8 @@ function clip(text, max = 420) {
  * @param {object} report
  * @returns {{ score: number, band: 'low'|'medium'|'high', label: string, reasons: string[] }}
  */
-export function computeUtilityMappingDigRisk(report = {}) {
-  if (!isUtilityMappingPrintTheme()) {
+export function computeUtilityMappingDigRisk(report = {}, { ignoreTheme = false } = {}) {
+  if (!ignoreTheme && !isUtilityMappingPrintTheme()) {
     return { score: 0, band: "low", label: "", reasons: [] };
   }
   let score = 35;

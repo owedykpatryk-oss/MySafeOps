@@ -11,6 +11,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import TouchSignaturePad from "../components/TouchSignaturePad";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { stampDocumentAuthorship } from "../utils/documentAuthorship.js";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
@@ -813,7 +814,8 @@ export default function MethodStatement() {
   }, [search, filterStatus]);
 
   const saveDoc = (doc) => {
-    const saved = sanitizeMsDocForOrg(doc, getOrgId());
+    const stamped = stampDocumentAuthorship(doc, { isCreate: !doc?.createdById });
+    const saved = sanitizeMsDocForOrg(stamped, getOrgId());
     setDocs(prev => prev.find(d=>d.id===saved.id) ? prev.map(d=>d.id===saved.id?saved:d) : [saved,...prev]);
     setModal(null);
   };
