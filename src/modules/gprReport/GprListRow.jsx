@@ -36,6 +36,7 @@ function GprListRow({ enriched, onEdit, onDelete }) {
             </div>
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
               {r.ref} · {r.surveyDate ? new Date(r.surveyDate).toLocaleDateString("en-GB") : "—"}
+              {r.updatedBy ? ` · Edited by ${r.updatedBy}` : r.createdBy ? ` · Created by ${r.createdBy}` : ""}
               {r.siteAddress || r.projectName ? ` · ${r.siteAddress || r.projectName}` : ""}
             </div>
             <div className="app-survey-list-row__meter" aria-hidden>
