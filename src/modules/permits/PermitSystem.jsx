@@ -3743,7 +3743,8 @@ const PermitCard = memo(function PermitCard({
               <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.5 }}>
                 {[...permit.auditLog].slice(-12).reverse().map((e, i) => (
                   <li key={`${e.at}-${i}`}>
-                    {fmtDateTime(e.at)} —{" "}
+                    {fmtDateTime(e.at)}
+                    {e.by ? ` · ${e.by}` : ""} —{" "}
                     {e.action === "status_changed"
                       ? `Status: ${e.from || "—"} → ${e.to || "—"}`
                       : e.action === "created"

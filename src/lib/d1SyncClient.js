@@ -348,7 +348,12 @@ export async function d1AppendServerAudit(supabase, orgSlug, row) {
     entity: String(row.entity || "unknown"),
     detail: row.detail != null ? String(row.detail) : undefined,
     client_row_id: row.id != null ? String(row.id) : undefined,
-    extra: { at: row.at },
+    extra: {
+      at: row.at,
+      ...(row.by ? { by: String(row.by) } : {}),
+      ...(row.byEmail ? { byEmail: String(row.byEmail) } : {}),
+      ...(row.byUserId ? { byUserId: String(row.byUserId) } : {}),
+    },
   };
 
   const maxAttempts = 5;
