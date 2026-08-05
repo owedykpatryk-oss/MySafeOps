@@ -262,7 +262,7 @@ export default function GeoPhotoCaptureModal({
             </h2>
             <p className="geo-photo-capture__hint">Photo → GPS → direction arrow → type &amp; notes.</p>
           </div>
-          <button type="button" onClick={onClose} style={{ ...ms.btn, padding: "8px 12px", minHeight: 36 }}>
+          <button type="button" onClick={onClose} style={{ ...ms.btn, padding: "10px 14px", minHeight: 44, touchAction: "manipulation" }}>
             Close
           </button>
         </div>

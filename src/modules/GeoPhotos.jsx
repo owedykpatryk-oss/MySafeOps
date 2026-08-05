@@ -235,7 +235,7 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
           </p>
         ) : null}
         {showGi ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 10, marginBottom: 12 }}>
             <label className="geo-photos-toolbar__field">
               Location ID
               <input value={locationId} onChange={(e) => setLocationId(e.target.value)} placeholder="BH01, TP02…" style={ms.inp} />

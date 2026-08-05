@@ -281,17 +281,7 @@ function LayerMappingPanel({ unmatchedLayers, layerMappings, onMappingChange }) 
       {unmatchedLayers.slice(0, 6).map((lr) => {
         const mapping = layerMappings?.[lr.layer] || {};
         return (
-          <div
-            key={lr.layer}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(100px,1fr) 120px 100px auto",
-              gap: 8,
-              alignItems: "center",
-              marginBottom: 8,
-              fontSize: 11,
-            }}
-          >
+          <div key={lr.layer} className="app-cad-layer-map-row">
             <span style={{ fontWeight: 600, color: "#7c2d12" }}>
               {lr.layer} <span style={{ fontWeight: 400, color: "#9a3412" }}>({lr.lengthM} m)</span>
             </span>
@@ -300,7 +290,6 @@ function LayerMappingPanel({ unmatchedLayers, layerMappings, onMappingChange }) 
               onChange={(e) =>
                 onMappingChange(lr.layer, { ...mapping, utilityKey: e.target.value, qlKey: mapping.qlKey || "B2" })
               }
-              style={{ fontSize: 11, padding: "4px 6px", borderRadius: 4, border: "1px solid #fdba74" }}
             >
               <option value="">Utility…</option>
               {UTILITY_TYPE_OPTIONS.map((o) => (
@@ -312,7 +301,6 @@ function LayerMappingPanel({ unmatchedLayers, layerMappings, onMappingChange }) 
             <select
               value={mapping.qlKey || ""}
               onChange={(e) => onMappingChange(lr.layer, { ...mapping, qlKey: e.target.value, utilityKey: mapping.utilityKey || "other" })}
-              style={{ fontSize: 11, padding: "4px 6px", borderRadius: 4, border: "1px solid #fdba74" }}
             >
               <option value="">QL…</option>
               {LAYER_QL_OPTIONS.map((o) => (
@@ -363,7 +351,8 @@ export default function CadImportPanel({
         <div style={{ fontSize: 14, fontWeight: 700, color: "#0f766e" }}>CAD utility mapping (DXF)</div>
         <button
           type="button"
-          style={{ ...ss.btn, fontSize: 11, padding: "4px 8px" }}
+          className="app-survey-touch-btn"
+          style={ss.btn}
           onClick={() => openHelpGuide({ guideId: "survey-cad-import" })}
         >
           Help
@@ -374,9 +363,11 @@ export default function CadImportPanel({
         Model space only — layouts ignored. Layers like <code>UMG_LV_B1</code> map to utility + PAS128 QL.
       </p>
       <label
+        className="app-survey-touch-btn"
         style={{
           ...(cadBusy ? ss.btn : ss.btnP),
-          display: "inline-block",
+          display: "inline-flex",
+          alignItems: "center",
           cursor: cadBusy ? "wait" : "pointer",
           opacity: cadBusy ? 0.7 : 1,
         }}
@@ -468,7 +459,8 @@ export default function CadImportPanel({
             {onSeedUtilities ? (
               <button
                 type="button"
-                style={{ ...ss.btnP, fontSize: 11, padding: "6px 12px" }}
+                className="app-survey-touch-btn"
+                style={ss.btnP}
                 onClick={onSeedUtilities}
               >
                 Seed utilities table from CAD

@@ -466,10 +466,9 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
   const assistBtn = (label, disabled, onClick, primary = false) => (
     <button
       type="button"
+      className="app-survey-touch-btn"
       style={{
         ...(primary ? ss.btnP : ss.btn),
-        fontSize: 11,
-        padding: "6px 10px",
         opacity: disabled ? 0.55 : 1,
         borderColor: busy === label ? "#0d9488" : undefined,
       }}
@@ -499,7 +498,7 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
               : "One-click fill, site plan import, weather, templates and optional AI polish."}
           </div>
         </div>
-        <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 8px" }} onClick={() => setOpen((o) => !o)}>
+        <button type="button" className="app-survey-touch-btn" style={ss.btn} onClick={() => setOpen((o) => !o)}>
           {open ? "Hide" : "Show"}
         </button>
       </div>
@@ -691,7 +690,8 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
             {geoReportCount > 0 && (
               <button
                 type="button"
-                style={{ ...ss.btn, fontSize: 11, padding: "6px 10px" }}
+                className="app-survey-touch-btn"
+                style={ss.btn}
                 onClick={() => {
                   setWorkspaceNavTarget({ viewId: "geo-photos", projectId: form.projectId, action: "capture" });
                   openWorkspaceView({ viewId: "geo-photos" });
