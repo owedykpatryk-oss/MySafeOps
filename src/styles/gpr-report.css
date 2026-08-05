@@ -22,7 +22,8 @@
   overflow: auto;
 }
 
-@media (max-width: 960px) {
+/* Align with Survey — stack preview under form on 11" tablet portrait */
+@media (max-width: 900px) {
   .app-survey-report-editor--split .app-gpr-report-editor__body {
     flex-direction: column;
   }
@@ -31,6 +32,18 @@
     width: 100%;
     position: static;
     max-height: none;
+  }
+}
+
+.app-gpr-form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .app-gpr-form-grid-2 {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -240,14 +253,16 @@
 .app-gpr-insight-card__action {
   margin-top: auto;
   align-self: flex-start;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 4px 10px;
+  min-height: 44px;
+  padding: 10px 14px;
   border-radius: 6px;
   border: 1px solid #0c447c;
   background: #fff;
   color: #0c447c;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .app-gpr-insight-metrics {
@@ -768,8 +783,10 @@
 .app-gpr-pipeline__track {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
+  row-gap: 10px;
   padding-top: 8px;
 }
 
@@ -816,6 +833,13 @@
   text-align: center;
   max-width: 48px;
   line-height: 1.2;
+}
+
+@media (max-width: 900px) {
+  .app-gpr-pipeline__label {
+    font-size: 11px;
+    max-width: 72px;
+  }
 }
 
 /* ── Chainage chart ── */

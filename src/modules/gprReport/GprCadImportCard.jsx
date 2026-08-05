@@ -57,7 +57,8 @@ function GprCadImportCard({
         </div>
         <button
           type="button"
-          style={{ ...ss.btn, fontSize: 11, padding: "4px 8px" }}
+          className="app-survey-touch-btn"
+          style={ss.btn}
           onClick={() => openHelpGuide({ guideId: "gpr-cad-import" })}
         >
           Help
@@ -70,9 +71,11 @@ function GprCadImportCard({
       </p>
 
       <label
+        className="app-survey-touch-btn"
         style={{
           ...(cadBusy ? ss.btn : ss.btnP || ss.btn),
-          display: "inline-block",
+          display: "inline-flex",
+          alignItems: "center",
           cursor: cadBusy ? "wait" : "pointer",
           opacity: cadBusy ? 0.7 : 1,
           background: cadBusy ? undefined : "#0d9488",

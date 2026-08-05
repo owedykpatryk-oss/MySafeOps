@@ -139,15 +139,17 @@ const ss = {
     paddingBottom: 10,
   },
   tab: (active) => ({
-    padding: "6px 12px",
+    padding: "10px 14px",
+    minHeight: 44,
     borderRadius: 6,
     border: "none",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
     background: active ? "#ccfbf1" : "transparent",
     color: active ? "#0f766e" : "var(--color-text-secondary)",
     fontFamily: "DM Sans,sans-serif",
+    touchAction: "manipulation",
   }),
   btn: {
     padding: "8px 14px",
@@ -187,7 +189,13 @@ export default function GprReport() {
   const [busy, setBusy] = useState("");
   const [search, setSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [livePreviewOpen, setLivePreviewOpen] = useState(true);
+  const [livePreviewOpen, setLivePreviewOpen] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.matchMedia("(min-width: 1100px)").matches;
+    } catch {
+      return false;
+    }
+  });
   const [depthCalcNs, setDepthCalcNs] = useState("");
   const [lightboxRg, setLightboxRg] = useState(null);
   const [listStatus, setListStatus] = useState("all");
@@ -672,7 +680,7 @@ export default function GprReport() {
           </div>
         ) : null}
       </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
         <Field label="Survey date">
           <input
             type="date"
@@ -725,7 +733,7 @@ export default function GprReport() {
       </div>
       <div style={{ marginTop: 16 }}>
         <div style={ss.sectionHead}>Report sign-off</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
           <Field label="Author">
             <input
               style={ss.input}
@@ -798,7 +806,7 @@ export default function GprReport() {
             ))}
           </select>
         </Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
           <Field label="Manufacturer">
             <input
               style={ss.input}
@@ -862,7 +870,7 @@ export default function GprReport() {
 
         <div style={ss.sectionHead}>Acquisition</div>
         <GprAcquisitionDiagram scanMode={form.acquisition.scanMode} lineSpacingM={form.acquisition.lineSpacingM} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
           <Field label="Scan mode">
             <select
               style={ss.input}
@@ -914,7 +922,7 @@ export default function GprReport() {
         </div>
 
         <div style={ss.sectionHead}>Velocity model</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
           <Field label="Calibration method">
             <select
               style={ss.input}
@@ -1064,7 +1072,7 @@ export default function GprReport() {
       ) : null}
 
       <div style={ss.sectionHead}>Site observations</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
         <Field label="Surface type">
           <select
             style={ss.input}
