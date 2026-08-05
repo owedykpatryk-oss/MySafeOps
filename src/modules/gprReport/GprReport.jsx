@@ -5,6 +5,7 @@ import { stripGeoPhotosForD1, stripGprReportsForD1 } from "../../utils/d1SyncPay
 import { useApp } from "../../context/AppContext";
 import { useToast } from "../../context/ToastContext";
 import { pushAudit } from "../../utils/auditLog";
+import { stampDocumentAuthorship } from "../../utils/documentAuthorship.js";
 import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { downloadBlob } from "../../utils/downloadBlob";
@@ -346,7 +347,9 @@ export default function GprReport() {
 
   const saveReport = () => {
     if (!form) return;
-    const normalized = normalizeGprReport(form);
+    const normalized = stampDocumentAuthorship(normalizeGprReport(form), {
+      isCreate: Boolean(modal.isNew) || !form.createdById,
+    });
     const next = modal.isNew
       ? [...reports, normalized]
       : reports.map((r) => (r.id === normalized.id ? normalized : r));

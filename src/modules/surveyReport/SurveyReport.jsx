@@ -5,6 +5,7 @@ import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { useApp } from "../../context/AppContext";
 import { useToast } from "../../context/ToastContext";
 import { pushAudit } from "../../utils/auditLog";
+import { stampDocumentAuthorship } from "../../utils/documentAuthorship.js";
 import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import PageHero from "../../components/PageHero";
@@ -1319,6 +1320,7 @@ function ReportEditor({
     if (gprReports?.length) {
       payload = autoSyncGprIntoSurvey(payload, gprReports);
     }
+    payload = stampDocumentAuthorship(payload, { isCreate: !form.createdById });
     return payload;
   };
 

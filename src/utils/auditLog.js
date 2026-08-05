@@ -1,6 +1,7 @@
 import { orgScopedKey, getOrgId } from "./orgId";
 import { supabase } from "../lib/supabase";
 import { d1AppendServerAudit, isD1Configured } from "../lib/d1SyncClient";
+import { authorshipAuditFields } from "./documentAuthorship.js";
 
 const MAX = 500;
 
@@ -14,16 +15,28 @@ function mirrorAuditToD1(row) {
 }
 
 export function pushAudit(entry) {
-  const detail =
+  const detailRaw =
     entry?.detail && typeof entry.detail === "string" && entry.detail.includes("@")
       ? entry.detail.replace(/^([^@\s]+)@/, (_, local) => `${local.slice(0, 2)}…@`)
       : entry?.detail;
+
+  const actor = authorshipAuditFields();
+  const by = entry?.by || actor.by || undefined;
+  const byEmail = entry?.byEmail || actor.byEmail || undefined;
+  const byUserId = entry?.byUserId || actor.byUserId || undefined;
+  const detail =
+    detailRaw != null && by && !String(detailRaw).includes(String(by))
+      ? `${detailRaw} · ${by}`
+      : detailRaw;
 
   const row = {
     id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     at: new Date().toISOString(),
     ...entry,
     ...(detail !== undefined ? { detail } : {}),
+    ...(by ? { by } : {}),
+    ...(byEmail ? { byEmail } : {}),
+    ...(byUserId ? { byUserId } : {}),
   };
   let list = [];
   try {
