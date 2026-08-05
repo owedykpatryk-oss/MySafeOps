@@ -653,7 +653,8 @@ export default function LoginPage() {
               </div>
               {inviteToken && (
                 <p style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                  Invite detected{inviteEmail ? ` for ${inviteEmail}` : ""}. Sign in or create account with this email to join your organisation.
+                  Invite detected{inviteEmail ? ` for ${inviteEmail}` : ""}. Sign in or create account{" "}
+                  {inviteEmail ? "with this email" : "with your company email"} to join your organisation.
                 </p>
               )}
               <label htmlFor="login-password" style={{ ...ss.lbl, marginTop: 10 }}>

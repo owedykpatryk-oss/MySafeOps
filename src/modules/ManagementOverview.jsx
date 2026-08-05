@@ -29,12 +29,15 @@ import {
   RefreshCw,
   ShieldCheck,
   Trash2,
+  Globe2,
   Users,
   X,
 } from "lucide-react";
 
 import { useApp } from "../context/AppContext";
 import { useManagementWorkspaceSync } from "../hooks/useManagementWorkspaceSync";
+import { supabase } from "../lib/supabase";
+import { loadManagementRollup } from "../utils/managementRollup";
 import { liveOrgArrayRows } from "../utils/d1ArrayMerge";
 import { collectProjectDashboard } from "../utils/projectDashboard";
 import { loadOrgScoped, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
@@ -165,6 +168,8 @@ export default function ManagementOverview() {
   const canView = role === "admin" || Boolean(isPlatformOwner);
   const [state, setState] = useState(loadManagementState);
   const managementSync = useManagementWorkspaceSync({ enabled: canView, state, setState });
+  const [rollup, setRollup] = useState(null);
+  const [rollupError, setRollupError] = useState("");
   const [projects, setProjects] = useState(() => liveOrgArrayRows(loadOrgScoped(PROJECTS_KEY, [])));
   const [workers, setWorkers] = useState(() => liveOrgArrayRows(loadOrgScoped(WORKERS_KEY, [])));
   const [tab, setTab] = useState("overview");
@@ -196,6 +201,22 @@ export default function ManagementOverview() {
   useEffect(() => {
     if (canView) saveManagementState(state);
   }, [state, canView]);
+
+  useEffect(() => {
+    if (tab !== "group" || !canView) return undefined;
+    let cancelled = false;
+    setRollupError("");
+    loadManagementRollup(supabase)
+      .then((result) => {
+        if (!cancelled) setRollup(result);
+      })
+      .catch((error) => {
+        if (!cancelled) setRollupError(error?.message || "Could not load the consolidated view.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, canView]);
 
   useEffect(() => {
     if (!focusMode) return undefined;
@@ -506,7 +527,7 @@ export default function ManagementOverview() {
       ) : null}
 
       <nav className="mgo-tabs" aria-label="Management overview sections">
-        {[["overview", LayoutDashboard, "Overview"], ["planner", CalendarDays, "90-day planner"], ["scenario", GitCompareArrows, "Scenario planner"], ["teams", Users, "Teams & capacity"], ["calendar", CalendarCheck2, "Calendar sync"], ["meeting", Presentation, "Meeting mode"]].map(([value, Icon, label]) => (
+        {[["overview", LayoutDashboard, "Overview"], ["planner", CalendarDays, "90-day planner"], ["scenario", GitCompareArrows, "Scenario planner"], ["teams", Users, "Teams & capacity"], ["calendar", CalendarCheck2, "Calendar sync"], ["meeting", Presentation, "Meeting mode"], ["group", Globe2, "All countries"]].map(([value, Icon, label]) => (
           <button key={value} type="button" className={tab === value ? "is-active" : ""} onClick={() => { setTab(value); if (value === "scenario" && !scenarioDraft.jobId && jobs.length) selectScenarioJob(scheduledJobs[0]?.id || jobs[0].id); }}><Icon size={15} />{label}</button>
         ))}
       </nav>
@@ -818,6 +839,67 @@ export default function ManagementOverview() {
             <button type="button" className="mgo-btn mgo-btn--primary" onClick={() => setCalendarSetupProvider("")}>Keep this ready for connection</button>
           </aside>
         </div>
+      ) : null}
+
+      {tab === "group" ? (
+        <section className="mgo-group" aria-label="All countries">
+          <div className="mgo-panel__head">
+            <div>
+              <span className="mgo-eyebrow">Group view</span>
+              <h2>All countries</h2>
+            </div>
+          </div>
+          <p className="mgo-group__note">
+            Read-only. Each country keeps its own plan; edit it by switching country in the top bar.
+            Scheduled work is not rolled up here — job registers stay isolated per country.
+          </p>
+          {rollupError ? <div className="mgo-group__error">{rollupError}</div> : null}
+          {!rollup && !rollupError ? <div className="mgo-group__loading">Loading countries…</div> : null}
+          {rollup ? (
+            <>
+              <section className="mgo-metrics" aria-label="Group summary">
+                <MetricCard icon={Globe2} value={rollup.totals.countries} label="countries planning" detail={`${rollup.totals.capacity} total crew capacity`} />
+                <MetricCard icon={Users} value={rollup.totals.teams} label="teams across the group" detail={`${rollup.totals.openActions} open actions`} />
+                <MetricCard icon={BriefcaseBusiness} value={rollup.totals.opportunities} label="pipeline opportunities" detail="across every country you can access" />
+              </section>
+              <div className="mgo-group__grid">
+                {rollup.countries.map((country) => (
+                  <article key={country.workspaceId} className="mgo-group__card">
+                    <h3>{country.countryName}</h3>
+                    <dl>
+                      <div><dt>Teams</dt><dd>{country.teams}</dd></div>
+                      <div><dt>Capacity</dt><dd>{country.capacity}</dd></div>
+                      <div><dt>Pipeline</dt><dd>{country.opportunities}</dd></div>
+                      <div><dt>Open actions</dt><dd>{country.openActions}</dd></div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+              {rollup.countriesWithoutPlan?.length ? (
+                <p className="mgo-group__pending">
+                  No plan started yet in {rollup.countriesWithoutPlan.map((country) => country.countryName).join(", ")}.
+                </p>
+              ) : null}
+              {rollup.opportunities.length ? (
+                <div className="mgo-group__table-wrap">
+                  <table className="mgo-group__table">
+                    <caption>Pipeline across the group</caption>
+                    <thead><tr><th>Opportunity</th><th>Client</th><th>Country</th></tr></thead>
+                    <tbody>
+                      {rollup.opportunities.map((opportunity) => (
+                        <tr key={opportunity.id}>
+                          <td>{opportunity.name || "Untitled"}</td>
+                          <td>{opportunity.client || "—"}</td>
+                          <td>{opportunity.countryName}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </section>
       ) : null}
     </div>
   );
