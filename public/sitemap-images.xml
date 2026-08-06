@@ -297,4 +297,28 @@
       <image:caption>Praktyczny przewodnik po IOR, pozwoleniach na prace szczególnie niebezpieczne i dowodach BHP dla polskich wykonawców budowlanych.</image:caption>
     </image:image>
   </url>
+  <url>
+    <loc>https://mysafeops.com/blog/hand-arm-vibration-havs-construction-uk</loc>
+    <image:image>
+      <image:loc>https://mysafeops.com/blog/images/hand-arm-vibration-havs-construction-uk-hero.png</image:loc>
+      <image:title>Hand-Arm Vibration (HAVS) on UK Construction Sites: Limits and Controls</image:title>
+      <image:caption>Hand-arm vibration UK: Exposure Action Values, tool timers, health surveillance and records HSE expects for HAVS on construction sites.</image:caption>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/blog/manual-handling-construction-uk</loc>
+    <image:image>
+      <image:loc>https://mysafeops.com/blog/images/manual-handling-construction-uk-hero.png</image:loc>
+      <image:title>Manual Handling on UK Construction Sites: Risk Assessment That Works</image:title>
+      <image:caption>Manual handling UK construction: TILE assessment, mechanical aids, RAMS controls and what HSE looks for when lifting on site goes wrong.</image:caption>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/blog/near-miss-reporting-construction-uk</loc>
+    <image:image>
+      <image:loc>https://mysafeops.com/blog/images/near-miss-reporting-construction-uk-hero.png</image:loc>
+      <image:title>Near Miss Reporting on UK Construction Sites: Closing the Loop</image:title>
+      <image:caption>Near miss reporting UK construction: how to capture incidents, investigate without blame, and turn reports into controls before RIDDOR happens.</image:caption>
+    </image:image>
+  </url>
 </urlset>

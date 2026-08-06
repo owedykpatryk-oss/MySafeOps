@@ -5,7 +5,7 @@
     <link>https://mysafeops.com/blog</link>
     <description>Practical articles for site managers and H&amp;S leads: permits, inductions, toolbox talks, COSHH, and compliance.</description>
     <language>en-gb</language>
-    <lastBuildDate>Sun, 26 Jul 2026 02:26:39 GMT</lastBuildDate>
+    <lastBuildDate>Thu, 06 Aug 2026 22:12:41 GMT</lastBuildDate>
     <atom:link href="https://mysafeops.com/blog/rss.xml" rel="self" type="application/rss+xml"/>
     <item>
       <title>Permit to Work App UK: What Good Digital PTW Actually Looks Like</title>
@@ -265,6 +265,27 @@
       <guid isPermaLink="true">https://mysafeops.com/blog/ior-pozwolenie-na-prace-polska</guid>
       <pubDate>Sun, 12 Jul 2026 12:00:00 GMT</pubDate>
       <description>Praktyczny przewodnik po IOR, pozwoleniach na prace szczególnie niebezpieczne i dowodach BHP dla polskich wykonawców budowlanych.</description>
+    </item>
+    <item>
+      <title>Hand-Arm Vibration (HAVS) on UK Construction Sites: Limits and Controls</title>
+      <link>https://mysafeops.com/blog/hand-arm-vibration-havs-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/hand-arm-vibration-havs-construction-uk</guid>
+      <pubDate>Fri, 07 Aug 2026 12:00:00 GMT</pubDate>
+      <description>Hand-arm vibration UK: Exposure Action Values, tool timers, health surveillance and records HSE expects for HAVS on construction sites.</description>
+    </item>
+    <item>
+      <title>Manual Handling on UK Construction Sites: Risk Assessment That Works</title>
+      <link>https://mysafeops.com/blog/manual-handling-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/manual-handling-construction-uk</guid>
+      <pubDate>Fri, 07 Aug 2026 12:00:00 GMT</pubDate>
+      <description>Manual handling UK construction: TILE assessment, mechanical aids, RAMS controls and what HSE looks for when lifting on site goes wrong.</description>
+    </item>
+    <item>
+      <title>Near Miss Reporting on UK Construction Sites: Closing the Loop</title>
+      <link>https://mysafeops.com/blog/near-miss-reporting-construction-uk</link>
+      <guid isPermaLink="true">https://mysafeops.com/blog/near-miss-reporting-construction-uk</guid>
+      <pubDate>Fri, 07 Aug 2026 12:00:00 GMT</pubDate>
+      <description>Near miss reporting UK construction: how to capture incidents, investigate without blame, and turn reports into controls before RIDDOR happens.</description>
     </item>
   </channel>
 </rss>

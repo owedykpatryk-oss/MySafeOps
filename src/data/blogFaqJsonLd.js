@@ -872,6 +872,84 @@ export const FAQ_MAIN_ENTITY_BY_SLUG = {
       text: "Rdzeń MySafeOps działa w przeglądarce offline na wiele zadań. Opcjonalna chmura dodaje logowanie i backup.",
     },
   ],
+  "hand-arm-vibration-havs-construction-uk": [
+    {
+      name: "What is HAVS?",
+      text: "Hand-arm vibration syndrome: damage to nerves, blood vessels and joints from repeated hand-transmitted vibration. Symptoms include finger blanching, numbness and loss of dexterity.",
+    },
+    {
+      name: "Do anti-vibration gloves fix the problem?",
+      text: "No. They may help comfort. Legal duty is to reduce exposure at source and through job design. Gloves alone do not meet the Control of Vibration at Work Regulations 2005.",
+    },
+    {
+      name: "When is health surveillance required?",
+      text: "When workers are likely to be exposed at or above the Exposure Action Value of 2.5 m/s² A(8), or when they report symptoms that may relate to vibration.",
+    },
+    {
+      name: "How do I estimate daily exposure?",
+      text: "Use manufacturer vibration data and measured or logged trigger time. HSE publishes ready-reckoners. Do not rely on \"felt fine today\".",
+    },
+    {
+      name: "Should vibration be in the Construction Phase Plan?",
+      text: "Yes where high-vibration work is planned. Name the controls, who monitors exposure, and how subbies are briefed.",
+    },
+    {
+      name: "How does this link to noise and dust?",
+      text: "Breakers often create vibration, noise and silica together. Control them as one package in the RAMS and permits, not three separate afterthoughts.",
+    },
+  ],
+  "manual-handling-construction-uk": [
+    {
+      name: "Is there a legal maximum weight for manual handling in the UK?",
+      text: "No single limit for all situations. HSE provides guidance figures and assessment tools. Duty is to avoid hazardous handling where reasonably practicable, then assess and reduce remaining risk.",
+    },
+    {
+      name: "What does TILE mean?",
+      text: "Task, Individual, Load, Environment — the four factors in a proper manual handling risk assessment.",
+    },
+    {
+      name: "Do we need a written assessment for every bag of cement?",
+      text: "Proportionate assessment. Routine light tasks can sit in a generic RAMS. Significant, awkward or frequent loads need task-specific controls.",
+    },
+    {
+      name: "When does LOLER apply instead?",
+      text: "When you use lifting equipment (cranes, hoists, etc.). Manual team lifts stay under the Manual Handling Operations Regulations; mechanical lifts need lift plans and LOLER compliance.",
+    },
+    {
+      name: "Should manual handling be in the Construction Phase Plan?",
+      text: "Yes where material movement is a major risk — especially multi-storey work, basement access, or dense deliveries.",
+    },
+    {
+      name: "How do I prove controls to HSE?",
+      text: "Show assessments, RAMS that name aids and routes, induction records, and evidence that plant was available and used. Photos of a poster are not enough.",
+    },
+  ],
+  "near-miss-reporting-construction-uk": [
+    {
+      name: "Is near miss reporting a legal requirement?",
+      text: "There is no single form called \"near miss\" in law. Employers must manage risks and learn from incidents. Clients and principal contractors often require a formal system under CDM arrangements and contracts.",
+    },
+    {
+      name: "What is the difference between a near miss and RIDDOR?",
+      text: "Near misses did not cause reportable harm. RIDDOR covers specified injuries, diseases and dangerous occurrences that meet legal thresholds. Some near misses sit next to dangerous occurrences — get competent advice when unsure.",
+    },
+    {
+      name: "Should reports be anonymous?",
+      text: "Optional anonymity can increase reporting. You still need enough detail to act. Named reports help follow-up when trust exists.",
+    },
+    {
+      name: "How fast should we investigate?",
+      text: "Serious potential: same shift. Lower potential: within a few days. Always close actions and tell people what changed.",
+    },
+    {
+      name: "Do agency workers and visitors report too?",
+      text: "Yes. Include them in induction. Visitor and gate near misses often reveal access failures.",
+    },
+    {
+      name: "How does this link to permits?",
+      text: "Many near misses happen during permitted work. Reference the permit number in the report and update the digital permit board if controls change.",
+    },
+  ],
 };
 
 /** @param {string | undefined} slug */

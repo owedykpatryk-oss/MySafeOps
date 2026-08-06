@@ -188,6 +188,21 @@ export const BLOG_POST_TAXONOMY = {
     tags: ["pl", "ior", "ptw", "bhp", "pip"],
     featured: true,
   },
+  "hand-arm-vibration-havs-construction-uk": {
+    category: "site-operations",
+    tags: ["havs", "vibration", "health-surveillance", "exposure"],
+    featured: false,
+  },
+  "manual-handling-construction-uk": {
+    category: "site-operations",
+    tags: ["manual-handling", "tile", "msd", "rams"],
+    featured: false,
+  },
+  "near-miss-reporting-construction-uk": {
+    category: "site-operations",
+    tags: ["near-miss", "incident", "riddor", "learning"],
+    featured: false,
+  },
 };
 
 /** @param {string} slug */
