@@ -67,8 +67,8 @@ export default function AcceptInvitePage() {
           return;
         }
         setPreview(row);
-        if (row.email || row.invite_email) {
-          setPendingInviteToken(invite, row.email || row.invite_email);
+        if (row.invite_email) {
+          setPendingInviteToken(invite, row.invite_email);
         }
       })
       .catch(() => {
@@ -79,7 +79,7 @@ export default function AcceptInvitePage() {
     };
   }, [invite, email]);
 
-  const loginEmail = (preview?.email || preview?.invite_email || email || "").trim().toLowerCase();
+  const loginEmail = (preview?.invite_email || email || "").trim().toLowerCase();
   const loginHref = buildInviteLoginPath({ token: invite, email: loginEmail });
   // Reusable join links reject users already in another org server-side; only
   // legacy one-time email invites still switch membership.
@@ -144,7 +144,7 @@ export default function AcceptInvitePage() {
               {isReusableJoin ? (
                 <InlineAlert
                   type="info"
-                  text={`This company join link only works for accounts that are not already in another organisation. One login can only belong to one organisation.`}
+                  text={`This organisation join link only works for accounts that are not already in another organisation. One login can only belong to one organisation.`}
                   style={{ marginBottom: 14 }}
                 />
               ) : (
