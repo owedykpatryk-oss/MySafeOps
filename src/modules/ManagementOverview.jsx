@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -15,7 +15,6 @@ import {
   Layers3,
   ListTodo,
   LockKeyhole,
-  MapPin,
   Maximize2,
   Minimize2,
   Navigation,
@@ -29,12 +28,19 @@ import {
   RefreshCw,
   ShieldCheck,
   Trash2,
+  Globe2,
   Users,
   X,
 } from "lucide-react";
 
 import { useApp } from "../context/AppContext";
 import { useManagementWorkspaceSync } from "../hooks/useManagementWorkspaceSync";
+import { supabase } from "../lib/supabase";
+import { loadManagementRollup } from "../utils/managementRollup";
+
+// Leaflet is heavy and only needed on the overview tab; keeping it lazy also keeps it
+// out of the module render smoke test, which has no layout engine to size a map with.
+const LazyFootprintMap = lazy(() => import("../components/ManagementFootprintMap"));
 import { liveOrgArrayRows } from "../utils/d1ArrayMerge";
 import { collectProjectDashboard } from "../utils/projectDashboard";
 import { loadOrgScoped, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
@@ -88,24 +94,6 @@ function freshnessLabel(value) {
   if (minutes === 1) return "updated 1 minute ago";
   if (minutes < 60) return `updated ${minutes} minutes ago`;
   return `updated ${gbDate.format(updated)}`;
-}
-
-const UK_LOCATION_POSITIONS = [
-  { terms: ["glasgow", "edinburgh", "scotland"], x: 48, y: 18 },
-  { terms: ["newcastle", "tyne", "durham"], x: 67, y: 34 },
-  { terms: ["manchester", "liverpool", "leeds", "yorkshire"], x: 47, y: 45 },
-  { terms: ["birmingham", "midlands", "nottingham", "leicester"], x: 53, y: 61 },
-  { terms: ["cardiff", "wales", "bristol"], x: 31, y: 72 },
-  { terms: ["london", "essex", "kent", "surrey"], x: 68, y: 79 },
-  { terms: ["southampton", "portsmouth", "bournemouth"], x: 49, y: 85 },
-];
-
-function regionalPosition(job, index) {
-  const location = `${job.site || ""} ${job.project?.postcode || ""}`.toLowerCase();
-  const match = UK_LOCATION_POSITIONS.find((region) => region.terms.some((term) => location.includes(term)));
-  if (match) return match;
-  const seed = [...location].reduce((sum, character) => sum + character.charCodeAt(0), index * 29);
-  return { x: 30 + (seed % 43), y: 27 + ((seed * 7) % 54) };
 }
 
 function rangesOverlap(firstStart, firstEnd, secondStart, secondEnd) {
@@ -165,6 +153,8 @@ export default function ManagementOverview() {
   const canView = role === "admin" || Boolean(isPlatformOwner);
   const [state, setState] = useState(loadManagementState);
   const managementSync = useManagementWorkspaceSync({ enabled: canView, state, setState });
+  const [rollup, setRollup] = useState(null);
+  const [rollupError, setRollupError] = useState("");
   const [projects, setProjects] = useState(() => liveOrgArrayRows(loadOrgScoped(PROJECTS_KEY, [])));
   const [workers, setWorkers] = useState(() => liveOrgArrayRows(loadOrgScoped(WORKERS_KEY, [])));
   const [tab, setTab] = useState("overview");
@@ -196,6 +186,22 @@ export default function ManagementOverview() {
   useEffect(() => {
     if (canView) saveManagementState(state);
   }, [state, canView]);
+
+  useEffect(() => {
+    if (tab !== "group" || !canView) return undefined;
+    let cancelled = false;
+    setRollupError("");
+    loadManagementRollup(supabase)
+      .then((result) => {
+        if (!cancelled) setRollup(result);
+      })
+      .catch((error) => {
+        if (!cancelled) setRollupError(error?.message || "Could not load the consolidated view.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, canView]);
 
   useEffect(() => {
     if (!focusMode) return undefined;
@@ -287,7 +293,7 @@ export default function ManagementOverview() {
     return choices.sort((a, b) => a.value.percentage - b.value.percentage)[0] || null;
   }, [capacityRows, capacityMonths]);
   const suggestedOpportunity = state.opportunities.find((job) => !job.teamId) || state.opportunities[0] || null;
-  const mapJobs = scheduledJobs.slice(0, 12).map((job, index) => ({ ...job, position: regionalPosition(job, index) }));
+  const mapJobs = scheduledJobs.slice(0, 40);
   const openActions = state.meeting.actions.filter((action) => action.status !== "Done");
   const briefingParts = [
     `${scheduledJobs.length} ${scheduledJobs.length === 1 ? "job is" : "jobs are"} scheduled in the next 90 days.`,
@@ -506,7 +512,7 @@ export default function ManagementOverview() {
       ) : null}
 
       <nav className="mgo-tabs" aria-label="Management overview sections">
-        {[["overview", LayoutDashboard, "Overview"], ["planner", CalendarDays, "90-day planner"], ["scenario", GitCompareArrows, "Scenario planner"], ["teams", Users, "Teams & capacity"], ["calendar", CalendarCheck2, "Calendar sync"], ["meeting", Presentation, "Meeting mode"]].map(([value, Icon, label]) => (
+        {[["overview", LayoutDashboard, "Overview"], ["planner", CalendarDays, "90-day planner"], ["scenario", GitCompareArrows, "Scenario planner"], ["teams", Users, "Teams & capacity"], ["calendar", CalendarCheck2, "Calendar sync"], ["meeting", Presentation, "Meeting mode"], ["group", Globe2, "All countries"]].map(([value, Icon, label]) => (
           <button key={value} type="button" className={tab === value ? "is-active" : ""} onClick={() => { setTab(value); if (value === "scenario" && !scenarioDraft.jobId && jobs.length) selectScenarioJob(scheduledJobs[0]?.id || jobs[0].id); }}><Icon size={15} />{label}</button>
         ))}
       </nav>
@@ -587,41 +593,10 @@ export default function ManagementOverview() {
 
             <section className="mgo-panel mgo-map-panel">
               <div className="mgo-panel__head"><div><span className="mgo-eyebrow">Operational footprint</span><h2>UK site activity</h2><p>Regional view based on the project location held in MySafeOps.</p></div><Navigation size={17} /></div>
-              <div className={`mgo-uk-map${mapJobs.length ? "" : " mgo-uk-map--empty"}`} aria-label={`${mapJobs.length} upcoming sites shown in a regional UK view`}>
-                <svg className="mgo-uk-map__shape" viewBox="0 0 100 100" role="img" aria-label="Stylised map of the United Kingdom">
-                  <defs>
-                    <linearGradient id="mgo-land-fill" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0" stopColor="#ffffff" />
-                      <stop offset="1" stopColor="#dcece6" />
-                    </linearGradient>
-                    <filter id="mgo-land-shadow" x="-30%" y="-20%" width="170%" height="160%">
-                      <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#163f35" floodOpacity=".16" />
-                    </filter>
-                  </defs>
-                  <g className="mgo-uk-map__land" filter="url(#mgo-land-shadow)">
-                    <path d="M48 5 44 8 39 7 36 11 39 14 34 17 37 20 33 24 37 28 34 31 39 34 37 38 43 41 45 47 42 52 44 57 39 61 34 59 31 64 34 68 31 72 35 75 40 73 45 78 40 83 34 86 25 87 29 90 38 90 45 86 52 89 58 86 65 87 69 84 76 83 72 79 65 77 67 72 73 70 72 66 66 64 65 58 69 54 65 49 67 44 62 41 64 36 60 33 61 28 57 24 59 20 56 17 58 13 53 11 54 8Z" />
-                    <path d="M24 43 19 44 16 48 18 52 15 56 19 59 25 58 28 54 27 49 30 46Z" />
-                    <circle cx="29" cy="13" r="1.4" />
-                    <circle cx="32" cy="9" r=".9" />
-                  </g>
-                  <g className="mgo-uk-map__dividers">
-                    <path d="M35 34C43 36 53 34 61 33" />
-                    <path d="M42 52C49 54 59 51 66 49" />
-                    <path d="M39 69C48 68 58 66 72 66" />
-                  </g>
-                  <g className="mgo-uk-map__labels">
-                    <text x="46" y="25">SCOTLAND</text>
-                    <text x="52" y="44">NORTH</text>
-                    <text x="52" y="61">MIDLANDS</text>
-                    <text x="55" y="77">LONDON &amp; SOUTH</text>
-                    <text x="11" y="54">N. IRELAND</text>
-                  </g>
-                </svg>
-                <span className={`mgo-uk-map__count${mapJobs.length ? "" : " is-empty"}`}><i />{mapJobs.length} plotted</span>
-                {mapJobs.map((job) => { const team = state.teams.find((item) => item.id === job.teamId); return <button type="button" key={job.id} className={`mgo-map-pin mgo-map-pin--${jobTone(job)}`} style={{ left: `${job.position.x}%`, top: `${job.position.y}%`, "--pin-colour": team?.colour || "#0f766e" }} onClick={() => setSelectedJobId(job.id)} aria-label={`Open ${job.name} at ${job.site}`}><MapPin size={18} /><span><strong>{job.name}</strong><small>{job.site}</small></span></button>; })}
-                {!mapJobs.length ? <div className="mgo-uk-map__empty"><span className="mgo-uk-map__empty-icon"><MapPin size={17} /></span><span><strong>No scheduled locations yet</strong><small>Add a town, city or postcode to a dated project to plot it here.</small></span></div> : null}
-              </div>
-              <div className="mgo-map-legend"><span><i className="is-green" />Ready</span><span><i className="is-amber" />Needs information</span><span><i className="is-red" />Blocked</span></div>
+              <Suspense fallback={<div className="mgo-footprint__loading">Loading map…</div>}>
+                <LazyFootprintMap jobs={mapJobs} teams={state.teams} onSelectJob={setSelectedJobId} />
+              </Suspense>
+              <div className="mgo-map-legend"><span>Pins are coloured by the team assigned to each job. Click a pin to open the job.</span></div>
             </section>
           </div>
         </>
@@ -818,6 +793,67 @@ export default function ManagementOverview() {
             <button type="button" className="mgo-btn mgo-btn--primary" onClick={() => setCalendarSetupProvider("")}>Keep this ready for connection</button>
           </aside>
         </div>
+      ) : null}
+
+      {tab === "group" ? (
+        <section className="mgo-group" aria-label="All countries">
+          <div className="mgo-panel__head">
+            <div>
+              <span className="mgo-eyebrow">Group view</span>
+              <h2>All countries</h2>
+            </div>
+          </div>
+          <p className="mgo-group__note">
+            Read-only. Each country keeps its own plan; edit it by switching country in the top bar.
+            Scheduled work is not rolled up here — job registers stay isolated per country.
+          </p>
+          {rollupError ? <div className="mgo-group__error">{rollupError}</div> : null}
+          {!rollup && !rollupError ? <div className="mgo-group__loading">Loading countries…</div> : null}
+          {rollup ? (
+            <>
+              <section className="mgo-metrics" aria-label="Group summary">
+                <MetricCard icon={Globe2} value={rollup.totals.countries} label="countries planning" detail={`${rollup.totals.capacity} total crew capacity`} />
+                <MetricCard icon={Users} value={rollup.totals.teams} label="teams across the group" detail={`${rollup.totals.openActions} open actions`} />
+                <MetricCard icon={BriefcaseBusiness} value={rollup.totals.opportunities} label="pipeline opportunities" detail="across every country you can access" />
+              </section>
+              <div className="mgo-group__grid">
+                {rollup.countries.map((country) => (
+                  <article key={country.workspaceId} className="mgo-group__card">
+                    <h3>{country.countryName}</h3>
+                    <dl>
+                      <div><dt>Teams</dt><dd>{country.teams}</dd></div>
+                      <div><dt>Capacity</dt><dd>{country.capacity}</dd></div>
+                      <div><dt>Pipeline</dt><dd>{country.opportunities}</dd></div>
+                      <div><dt>Open actions</dt><dd>{country.openActions}</dd></div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+              {rollup.countriesWithoutPlan?.length ? (
+                <p className="mgo-group__pending">
+                  No plan started yet in {rollup.countriesWithoutPlan.map((country) => country.countryName).join(", ")}.
+                </p>
+              ) : null}
+              {rollup.opportunities.length ? (
+                <div className="mgo-group__table-wrap">
+                  <table className="mgo-group__table">
+                    <caption>Pipeline across the group</caption>
+                    <thead><tr><th>Opportunity</th><th>Client</th><th>Country</th></tr></thead>
+                    <tbody>
+                      {rollup.opportunities.map((opportunity) => (
+                        <tr key={opportunity.id}>
+                          <td>{opportunity.name || "Untitled"}</td>
+                          <td>{opportunity.client || "—"}</td>
+                          <td>{opportunity.countryName}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </section>
       ) : null}
     </div>
   );

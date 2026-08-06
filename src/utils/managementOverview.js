@@ -105,6 +105,64 @@ export function mergeManagementStates(remoteState, localState) {
   });
 }
 
+/**
+ * Roll several countries' management documents into one read-only view.
+ *
+ * Only what the document itself owns can be consolidated: teams, pipeline
+ * opportunities and meeting actions. Scheduled jobs are deliberately excluded —
+ * they are derived from each country's project register, which is isolated per
+ * country on both the device and the server, so a cross-country job roll-up would
+ * require reading data the viewer is not entitled to.
+ *
+ * @param {{workspaceId: string, countryName: string, marketId?: string, state: object}[]} entries
+ */
+export function consolidateManagementStates(entries) {
+  const rows = Array.isArray(entries) ? entries.filter((entry) => entry?.workspaceId) : [];
+  const countries = [];
+  const teams = [];
+  const opportunities = [];
+  const actions = [];
+
+  for (const entry of rows) {
+    const state = normaliseManagementState(entry.state);
+    const country = {
+      workspaceId: entry.workspaceId,
+      countryName: String(entry.countryName || "").slice(0, 60),
+      marketId: entry.marketId || "",
+      teams: state.teams.length,
+      opportunities: state.opportunities.length,
+      openActions: state.meeting.actions.filter((action) => action?.status !== "Done").length,
+      capacity: state.teams.reduce((total, team) => total + (Number(team.capacity) || 0), 0),
+    };
+    countries.push(country);
+
+    const tag = (row, index) => ({
+      ...row,
+      id: `${entry.workspaceId}:${row?.id || index}`,
+      countryName: country.countryName,
+      marketId: country.marketId,
+      workspaceId: entry.workspaceId,
+    });
+    state.teams.forEach((team, index) => teams.push(tag(team, index)));
+    state.opportunities.forEach((opportunity, index) => opportunities.push(tag(opportunity, index)));
+    state.meeting.actions.forEach((action, index) => actions.push(tag(action, index)));
+  }
+
+  return {
+    countries,
+    teams,
+    opportunities,
+    actions,
+    totals: {
+      countries: countries.length,
+      teams: teams.length,
+      opportunities: opportunities.length,
+      openActions: actions.filter((action) => action?.status !== "Done").length,
+      capacity: countries.reduce((total, country) => total + country.capacity, 0),
+    },
+  };
+}
+
 export function dateOnly(value) {
   if (!value) return null;
   const date = new Date(`${String(value).slice(0, 10)}T12:00:00`);

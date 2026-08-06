@@ -407,7 +407,20 @@ async function handleKvGet(request, env, orgSlug, c, authHeader) {
     )
       .bind(orgSlug, namespace)
       .all();
-    return json({ ok: true, items: results || [] }, 200, c);
+    // Country keys carry the workspace id and its payload size. Members without access to
+    // that country must not enumerate them, so each one is checked against the same read
+    // gate as a direct fetch. Non-country keys stay on the organisation-wide gate above.
+    const rows = results || [];
+    const countryKeys = [...new Set(rows.map((row) => row.data_key).filter((k) => String(k).startsWith("country:")))];
+    const readable = new Set();
+    for (const countryKey of countryKeys) {
+      const gate = await verifyOrgCountryKvRead(env, authHeader, orgSlug, countryKey);
+      if (gate.ok) readable.add(countryKey);
+    }
+    const items = rows.filter(
+      (row) => !String(row.data_key).startsWith("country:") || readable.has(row.data_key),
+    );
+    return json({ ok: true, items }, 200, c);
   }
 
   if (!key) {

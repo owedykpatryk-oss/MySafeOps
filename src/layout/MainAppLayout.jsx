@@ -515,6 +515,10 @@ export default function MainAppLayout() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [layoutSeed] = useState(() => getInitialLayoutState());
   const [navTab, setNavTab] = useState(layoutSeed.navTab);
+  // "more" doubles as the nav slot for every module that has no bottom-nav button, so
+  // navTab alone cannot say whether the menu itself is open. Without this the command
+  // centre stayed pinned under Help, Settings and anything opened from More.
+  const [moreOpen, setMoreOpen] = useState(false);
   const [view, setView] = useState(layoutSeed.view);
   const [settingsInitialTab, setSettingsInitialTab] = useState(layoutSeed.settingsInitialTab);
   const [billingCheckoutReturn, setBillingCheckoutReturn] = useState(layoutSeed.checkoutReturn);
@@ -585,6 +589,7 @@ export default function MainAppLayout() {
       const registerFilter = e.detail?.registerFilter || "all";
       setPendingMoreNav({ sectionTitle, registerFilter });
       setNavTab("more");
+      setMoreOpen(true);
     };
     window.addEventListener(OPEN_WORKSPACE_MORE_EVENT, onOpenMore);
     return () => window.removeEventListener(OPEN_WORKSPACE_MORE_EVENT, onOpenMore);
@@ -832,10 +837,14 @@ export default function MainAppLayout() {
 
   const goMainTab = (id) => {
     if (id === "more") {
-      startTransition(() => setNavTab("more"));
+      startTransition(() => {
+        setNavTab("more");
+        setMoreOpen((open) => !open);
+      });
       return;
     }
     startTransition(() => {
+      setMoreOpen(false);
       if (primaryNavIdSet.has(id)) {
         setNavTab(id);
         setView(id);
@@ -851,6 +860,8 @@ export default function MainAppLayout() {
     startTransition(() => {
       setView(id);
       setNavTab("more");
+      // Picking an item dismisses the menu, like any other navigation drawer.
+      setMoreOpen(false);
     });
   };
 
@@ -1017,7 +1028,7 @@ export default function MainAppLayout() {
             </RouteErrorBoundary>
           )}
         </div>
-        {navTab === "more" && (
+        {navTab === "more" && moreOpen && (
           <div className="app-panel-surface app-more-panel" style={{ marginTop: 20, padding: "1.35rem 1.15rem 1.25rem" }}>
             <MorePanelCommandCentre
               siteTabs={commandCentreSiteTabs}

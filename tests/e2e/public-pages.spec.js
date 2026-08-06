@@ -64,8 +64,9 @@ test("domain-restricted join preview shows org branding and omits invitee email"
     "/branding/barnes-fernandez-logo.png"
   );
   await expect(page.getByText(/verified @barnesfernandez.com email/i)).toBeVisible();
-  const acknowledgement = page.getByRole("checkbox", { name: /disconnect this account/i });
-  await acknowledgement.check();
+  // Reusable join links reject existing memberships server-side — no org-switch ack.
+  await expect(page.getByRole("checkbox", { name: /disconnect this account/i })).toHaveCount(0);
+  await expect(page.getByText(/not already in another organisation/i)).toBeVisible();
   await expect(page.getByRole("link", { name: "Continue to sign in" })).toHaveAttribute(
     "href",
     "/login?invite=barnes-worker-join-token"

@@ -81,7 +81,10 @@ export default function AcceptInvitePage() {
 
   const loginEmail = (preview?.email || preview?.invite_email || email || "").trim().toLowerCase();
   const loginHref = buildInviteLoginPath({ token: invite, email: loginEmail });
-  const canContinue = Boolean(preview && understoodSwitch && invite && !err);
+  // Reusable join links reject users already in another org server-side; only
+  // legacy one-time email invites still switch membership.
+  const isReusableJoin = Boolean(preview?.reusable);
+  const canContinue = Boolean(preview && invite && !err && (isReusableJoin || understoodSwitch));
   const primary = preview?.primary_color || teal;
   const accent = preview?.accent_color || "#E1F5EE";
   const companyLogo = safeBrandLogo(preview?.logo_url);
@@ -138,27 +141,37 @@ export default function AcceptInvitePage() {
                 Link expires:{" "}
                 {new Date(preview.expires_at).toLocaleString()}.
               </p>
-              <InlineAlert
-                type="warn"
-                text={`Joining ${preview.org_name} switches this login to that organisation. If you already have your own MySafeOps workspace, you will lose access to it from this account (data stays on that org; you need a new invite to return). One login can only belong to one organisation.`}
-                style={{ marginBottom: 14 }}
-              />
-              <label
-                htmlFor="invite-org-switch-ack"
-                style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, lineHeight: 1.45, marginBottom: 16, cursor: "pointer" }}
-              >
-                <input
-                  id="invite-org-switch-ack"
-                  type="checkbox"
-                  checked={understoodSwitch}
-                  onChange={(e) => setUnderstoodSwitch(e.target.checked)}
-                  style={{ marginTop: 3, flexShrink: 0 }}
+              {isReusableJoin ? (
+                <InlineAlert
+                  type="info"
+                  text={`This company join link only works for accounts that are not already in another organisation. One login can only belong to one organisation.`}
+                  style={{ marginBottom: 14 }}
                 />
-                <span>
-                  I understand that accepting this invite will disconnect this account from any existing organisation I
-                  own or belong to.
-                </span>
-              </label>
+              ) : (
+                <>
+                  <InlineAlert
+                    type="warn"
+                    text={`Joining ${preview.org_name} switches this login to that organisation. If you already have your own MySafeOps workspace, you will lose access to it from this account (data stays on that org; you need a new invite to return). One login can only belong to one organisation.`}
+                    style={{ marginBottom: 14 }}
+                  />
+                  <label
+                    htmlFor="invite-org-switch-ack"
+                    style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, lineHeight: 1.45, marginBottom: 16, cursor: "pointer" }}
+                  >
+                    <input
+                      id="invite-org-switch-ack"
+                      type="checkbox"
+                      checked={understoodSwitch}
+                      onChange={(e) => setUnderstoodSwitch(e.target.checked)}
+                      style={{ marginTop: 3, flexShrink: 0 }}
+                    />
+                    <span>
+                      I understand that accepting this invite will disconnect this account from any existing organisation I
+                      own or belong to.
+                    </span>
+                  </label>
+                </>
+              )}
             </>
           ) : (
             <div
