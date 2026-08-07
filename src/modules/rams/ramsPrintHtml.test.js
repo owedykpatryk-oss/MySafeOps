@@ -85,4 +85,57 @@ describe("ramsPrintHtml", () => {
     expect(html).toContain("Kodeks pracy");
     expect(html).not.toContain("CDM 2015");
   });
+
+  it("keeps UK hazard regs on print and falls back to HSE pack when empty", () => {
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_test-org",
+      JSON.stringify({ id: "ws-uk", market_id: "uk", default_document_locale: "en-GB", is_primary: true }),
+    );
+    const withRegs = generatePrintHTML(
+      { title: "RAMS — UK site", location: "Bristol", documentStatus: "issued" },
+      [
+        {
+          activity: "Excavation",
+          hazard: "Buried services",
+          initialRisk: { L: 4, S: 4 },
+          revisedRisk: { L: 2, S: 2 },
+          controlMeasures: ["CAT and Genny before dig"],
+          ppeRequired: ["Hard hat"],
+          regs: ["CDM 2015", "HSG47"],
+        },
+      ],
+      [],
+      {},
+      { hazards: true },
+      "fp",
+      [],
+    );
+    expect(withRegs).toContain('lang="en-GB"');
+    expect(withRegs).toContain("Risk assessment and controls");
+    expect(withRegs).toContain("CDM 2015");
+    expect(withRegs).toContain("HSG47");
+    expect(withRegs).not.toContain("Kodeks pracy");
+
+    const emptyRegs = generatePrintHTML(
+      { title: "RAMS — UK defaults", location: "Bristol", documentStatus: "issued" },
+      [
+        {
+          activity: "General site work",
+          hazard: "Slips and trips",
+          initialRisk: { L: 3, S: 3 },
+          revisedRisk: { L: 2, S: 2 },
+          controlMeasures: ["Housekeeping"],
+          ppeRequired: ["Safety boots"],
+          regs: [],
+        },
+      ],
+      [],
+      {},
+      { hazards: true },
+      "fp",
+      [],
+    );
+    expect(emptyRegs).toContain("Construction (Design and Management) Regulations 2015");
+    expect(emptyRegs).toContain("Health and Safety at Work etc. Act 1974");
+  });
 });
