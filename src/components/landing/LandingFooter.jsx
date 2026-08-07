@@ -40,17 +40,14 @@ export default function LandingFooter({ supportEmail, market = getMarket("uk"), 
           <div>
             <h4>{labels.product}</h4>
             <ul>
+              <li><a href="#workflow">{market.id === "pl" ? "Proces" : "Workflow"}</a></li>
+              <li><a href="#profiles">{market.id === "pl" ? "Produkt" : "Product"}</a></li>
               <li><a href="#features">{market.id === "pl" ? "Funkcje" : "Features"}</a></li>
-              <li><a href="#modules">{market.id === "pl" ? "Moduły" : "Modules"}</a></li>
-              <li><a href="#readiness">{market.id === "pl" ? "Test gotowości" : "Readiness check"}</a></li>
-              <li><a href="#roi">{market.id === "pl" ? "Korzyści" : "Value"}</a></li>
-              <li><a href="#roles">{market.id === "pl" ? "Jak to działa" : "How it works"}</a></li>
               <li><a href="#pricing">{market.id === "pl" ? "Cennik" : "Pricing"}</a></li>
               <li>
                 <Link to="/blog">Blog</Link>
               </li>
               <li><a href="#faq">FAQ</a></li>
-              <li><a href="#missing">{market.id === "pl" ? "Zgłoś funkcję" : "Request feature"}</a></li>
               <li><a href="#cta">{market.id === "pl" ? "Wypróbuj" : "Get started"}</a></li>
             </ul>
           </div>

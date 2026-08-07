@@ -3,6 +3,73 @@ import { describe, it, expect } from "vitest";
 import { renderPermitDocumentHtml, buildPermitStatusDeepLink } from "./permitDocumentHtml";
 
 describe("renderPermitDocumentHtml", () => {
+  it("renders the Polish permit pack for an active Poland workspace", () => {
+    localStorage.setItem("mysafeops_orgId", "pl-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_pl-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const html = renderPermitDocumentHtml({
+      id: "p-pl-1",
+      type: "electrical",
+      status: "pending_review",
+      description: "Odłączenie rozdzielnicy",
+      location: "Warszawa",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: {},
+    });
+    expect(html).toContain('lang="pl-PL"');
+    expect(html).toContain("Pozwolenie na odłączenie elektryczne");
+    expect(html).toContain("Lista kontrolna przed rozpoczęciem pracy");
+    expect(html).toContain("Kodeks pracy");
+    expect(html).not.toContain("Legal references (UK)");
+    localStorage.clear();
+  });
+
+  it("keeps UK en-GB pack and prefers profile legal references over country defaults", () => {
+    localStorage.setItem("mysafeops_orgId", "uk-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_uk-org",
+      JSON.stringify({ id: "ws-uk", market_id: "uk", default_document_locale: "en-GB", is_primary: true }),
+    );
+    const withProfile = renderPermitDocumentHtml({
+      id: "p-uk-1",
+      type: "hot_work",
+      status: "active",
+      description: "Hot work on plant",
+      location: "Plant room",
+      issuedBy: "A",
+      issuedTo: "B",
+      checklist: {},
+      extraFields: {},
+      complianceProfile: {
+        legalReferences: ["Dangerous Substances and Explosive Atmospheres Regulations 2002"],
+      },
+    });
+    expect(withProfile).toContain('lang="en-GB"');
+    expect(withProfile).toContain("Permit to work");
+    expect(withProfile).toContain("Dangerous Substances and Explosive Atmospheres Regulations 2002");
+    expect(withProfile).not.toContain("Kodeks pracy");
+
+    const withoutProfile = renderPermitDocumentHtml({
+      id: "p-uk-2",
+      type: "general",
+      status: "draft",
+      description: "General works",
+      location: "Site compound",
+      issuedBy: "A",
+      issuedTo: "B",
+      checklist: {},
+      extraFields: {},
+    });
+    expect(withoutProfile).toContain('lang="en-GB"');
+    expect(withoutProfile).toContain("Legal and regulatory references (UK)");
+    expect(withoutProfile).toContain("Construction (Design and Management) Regulations 2015");
+    localStorage.clear();
+  });
+
   it("includes closure and lessons learned for closed permits", () => {
     const html = renderPermitDocumentHtml({
       id: "p-closed-1",

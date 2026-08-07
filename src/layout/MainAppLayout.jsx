@@ -392,10 +392,11 @@ function buildNavTabs(marketId = getOrgMarketId(), mode = "default") {
 }
 
 export default function MainAppLayout() {
-  const { caps, isPlatformOwner } = useApp();
+  const { caps, role, isPlatformOwner } = useApp();
   const { pushToast } = useToast();
   const orgBranding = useOrgBranding();
   const isSuperadmin = Boolean(isPlatformOwner);
+  const canViewManagement = role === "admin" || isSuperadmin;
   const [hiddenRev, setHiddenRev] = useState(0);
   const [orgMarketRev, setOrgMarketRev] = useState(0);
   const orgMarketId = useMemo(() => {
@@ -514,6 +515,10 @@ export default function MainAppLayout() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [layoutSeed] = useState(() => getInitialLayoutState());
   const [navTab, setNavTab] = useState(layoutSeed.navTab);
+  // "more" doubles as the nav slot for every module that has no bottom-nav button, so
+  // navTab alone cannot say whether the menu itself is open. Without this the command
+  // centre stayed pinned under Help, Settings and anything opened from More.
+  const [moreOpen, setMoreOpen] = useState(false);
   const [view, setView] = useState(layoutSeed.view);
   const [settingsInitialTab, setSettingsInitialTab] = useState(layoutSeed.settingsInitialTab);
   const [billingCheckoutReturn, setBillingCheckoutReturn] = useState(layoutSeed.checkoutReturn);
@@ -525,9 +530,11 @@ export default function MainAppLayout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [pinnedIds, setPinnedIds] = useState(() => getPinnedModuleIds());
   const allowedModuleIds = useMemo(() => {
-    const base = isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin");
+    const base = MORE_TABS.filter(
+      (tab) => (tab.id !== "superadmin" || isSuperadmin) && (tab.id !== "management-overview" || canViewManagement)
+    );
     return new Set(filterVisibleModuleTabs(base, visibilityOpts).map((t) => t.id));
-  }, [isSuperadmin, visibilityOpts]);
+  }, [isSuperadmin, canViewManagement, visibilityOpts]);
 
   useEffect(() => {
     if (view === "settings" || view === "help") return;
@@ -582,6 +589,7 @@ export default function MainAppLayout() {
       const registerFilter = e.detail?.registerFilter || "all";
       setPendingMoreNav({ sectionTitle, registerFilter });
       setNavTab("more");
+      setMoreOpen(true);
     };
     window.addEventListener(OPEN_WORKSPACE_MORE_EVENT, onOpenMore);
     return () => window.removeEventListener(OPEN_WORKSPACE_MORE_EVENT, onOpenMore);
@@ -638,6 +646,12 @@ export default function MainAppLayout() {
     setView("dashboard");
     setNavTab("dashboard");
   }, [view, isSuperadmin]);
+
+  useEffect(() => {
+    if (view !== "management-overview" || canViewManagement) return;
+    setView("dashboard");
+    setNavTab("dashboard");
+  }, [view, canViewManagement]);
 
   /** Bottom bar highlights "Owner" when URL / session restored superadmin with nav still on "more". */
   useLayoutEffect(() => {
@@ -823,10 +837,14 @@ export default function MainAppLayout() {
 
   const goMainTab = (id) => {
     if (id === "more") {
-      startTransition(() => setNavTab("more"));
+      startTransition(() => {
+        setNavTab("more");
+        setMoreOpen((open) => !open);
+      });
       return;
     }
     startTransition(() => {
+      setMoreOpen(false);
       if (primaryNavIdSet.has(id)) {
         setNavTab(id);
         setView(id);
@@ -842,6 +860,8 @@ export default function MainAppLayout() {
     startTransition(() => {
       setView(id);
       setNavTab("more");
+      // Picking an item dismisses the menu, like any other navigation drawer.
+      setMoreOpen(false);
     });
   };
 
@@ -910,18 +930,23 @@ export default function MainAppLayout() {
   const MainComponent = workspaceViewComponents[view] || workspaceViewComponents[DEFAULT_WORKSPACE_VIEW_ID];
 
   const visibleMoreTabs = useMemo(() => {
-    const base = isSuperadmin ? MORE_TABS : MORE_TABS.filter((t) => t.id !== "superadmin");
+    const base = MORE_TABS.filter(
+      (tab) => (tab.id !== "superadmin" || isSuperadmin) && (tab.id !== "management-overview" || canViewManagement)
+    );
     return filterVisibleModuleTabs(base, visibilityOpts);
-  }, [isSuperadmin, visibilityOpts]);
+  }, [isSuperadmin, canViewManagement, visibilityOpts]);
   const visibleMoreSections = useMemo(
     () =>
       MORE_SECTIONS.map((section) => ({
         ...section,
         ids: section.ids.filter(
-          (id) => (id !== "superadmin" || isSuperadmin) && isModuleVisible(id, visibilityOpts)
+          (id) =>
+            (id !== "superadmin" || isSuperadmin) &&
+            (id !== "management-overview" || canViewManagement) &&
+            isModuleVisible(id, visibilityOpts)
         ),
       })),
-    [isSuperadmin, visibilityOpts]
+    [isSuperadmin, canViewManagement, visibilityOpts]
   );
   const q = moreFilter.trim().toLowerCase();
   const pinnedTabsOrdered = pinnedIds.map((id) => visibleMoreTabs.find((t) => t.id === id)).filter(Boolean);
@@ -1003,7 +1028,7 @@ export default function MainAppLayout() {
             </RouteErrorBoundary>
           )}
         </div>
-        {navTab === "more" && (
+        {navTab === "more" && moreOpen && (
           <div className="app-panel-surface app-more-panel" style={{ marginTop: 20, padding: "1.35rem 1.15rem 1.25rem" }}>
             <MorePanelCommandCentre
               siteTabs={commandCentreSiteTabs}

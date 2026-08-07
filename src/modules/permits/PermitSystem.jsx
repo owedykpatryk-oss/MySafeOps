@@ -4,7 +4,7 @@ import { copyTextToClipboard } from "../../utils/copyToClipboard";
 import { ms } from "../../utils/moduleStyles";
 import PageHero from "../../components/PageHero";
 import ConfettiCelebration from "../../components/ConfettiCelebration";
-import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey, ORG_DATA_CHANGED_EVENT, getOrgId } from "../../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, countryOperationalStorageKey, ORG_DATA_CHANGED_EVENT, getOrgId } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { getTemplateForType, saveOrgTemplate } from "./permitTemplateCatalog";
 import { evaluatePermitCompliance } from "./permitComplianceChecks";
@@ -516,7 +516,7 @@ function certificationDisplayLabel(cert) {
 
 function loadSnippetList(baseKey) {
   try {
-    const rows = JSON.parse(localStorage.getItem(orgScopedKey(baseKey)) || "[]");
+    const rows = JSON.parse(localStorage.getItem(countryOperationalStorageKey(baseKey)) || "[]");
     if (!Array.isArray(rows)) return [];
     return rows.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 24);
   } catch {
@@ -527,7 +527,7 @@ function loadSnippetList(baseKey) {
 function saveSnippetToList(baseKey, text) {
   const clean = String(text || "").trim();
   if (!clean) return;
-  const key = orgScopedKey(baseKey);
+  const key = countryOperationalStorageKey(baseKey);
   const next = [clean, ...loadSnippetList(baseKey).filter((x) => x.toLowerCase() !== clean.toLowerCase())].slice(0, 24);
   localStorage.setItem(key, JSON.stringify(next));
 }

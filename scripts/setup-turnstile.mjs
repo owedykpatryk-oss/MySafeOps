@@ -185,7 +185,18 @@ async function main() {
         console.warn(`⚠ Supabase Management API: ${e?.message || e}`);
       }
     }
-    if (!supabaseOk) {
+    // `config push` sends supabase/config.toml verbatim, and that file carries the
+    // Cloudflare *test* captcha secret for local development. Cloudflare's test secret
+    // accepts any token, so pushing it to a live project silently turns production
+    // captcha off. Without a real TURNSTILE_SECRET_KEY there is nothing safe to push.
+    if (!supabaseOk && !useProdSecret) {
+      console.error(
+        `✗ Refusing to push auth config to ${ref}: TURNSTILE_SECRET_KEY is not set, so supabase/config.toml\n` +
+          "  would overwrite the live captcha with Cloudflare's test secret, which accepts any token.\n" +
+          "  Set TURNSTILE_SECRET_KEY in .env.local (or run with --cloudflare to mint one) and retry.",
+      );
+      process.exitCode = 1;
+    } else if (!supabaseOk) {
       try {
         execSync(`npx supabase config push --project-ref ${ref} --yes`, {
           cwd: root,
@@ -206,7 +217,8 @@ async function main() {
         }
       }
     }
-    if (!supabaseOk && token) {
+    // Same rule for the Management API fallback: never write the test secret to a live project.
+    if (!supabaseOk && token && useProdSecret) {
       await patchSupabaseAuth({ ref, token, secret });
       supabaseOk = true;
     }

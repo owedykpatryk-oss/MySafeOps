@@ -18,6 +18,7 @@ import { escapeHtml, escapeAttr, safeImageSrc, openPrintWindowOrWarn, writePrint
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { MS_TEMPLATE_DEFS } from "./msStepTemplates";
+import { getActiveDocumentLocale } from "../utils/countryWorkspaces";
 import { getMsStepTemplate } from "../utils/msOrgTemplates";
 import { isFessOrg } from "../utils/fessOrg";
 import { isUtilityMappingOrg } from "../utils/utilityMappingOrg";
@@ -41,7 +42,7 @@ import { getOrgId } from "../utils/orgStorage";
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = todayLocalISO;
-const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
+const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString(getActiveDocumentLocale(), { day:"2-digit", month:"short", year:"numeric" }); };
 
 const ss = {
   ...ms,
@@ -718,7 +719,7 @@ function printMS(form, workers, _projects) {
     })}`;
     await writePrintWindowDocument(
       win,
-      `<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"/>
+      `<!DOCTYPE html><html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/>
       <title>MS — ${he(form.title || "Method statement")}</title>
       <style>
         @page { size: A4; margin: 14mm 12mm 22mm; }

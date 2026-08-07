@@ -107,14 +107,20 @@ async function main() {
     ok("canonical CSP omits direct overpass-api.de (use /api/overpass)");
   }
 
-  if (fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_delete_org_kv")) {
+  if (
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_delete_org_country_kv") ||
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_delete_org_kv")
+  ) {
     ok("D1 Worker checks delete permission RPC");
   } else {
     fail("D1 Worker missing delete permission gate");
     issues += 1;
   }
 
-  if (fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_write_org_kv")) {
+  if (
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_write_org_country_kv") ||
+    fileIncludes("cloudflare/workers/d1-api/index.mjs", "user_can_write_org_kv")
+  ) {
     ok("D1 Worker checks namespace write RPC");
   } else {
     fail("D1 Worker missing namespace write gate");
@@ -149,8 +155,18 @@ async function main() {
     issues += 1;
   }
 
+  // config.toml is the local-development config, so the Cloudflare test secret belongs
+  // there. The hazard is `supabase config push` sending it to a live project, where that
+  // secret accepts any token and captcha stops protecting anything. setup-turnstile now
+  // refuses to push without a real TURNSTILE_SECRET_KEY, so check the guard is in place
+  // rather than telling anyone to run the command that used to cause the problem.
   if (fileIncludes("supabase/config.toml", 'secret = "1x0000000000000000000000000000000AA"')) {
-    warn("config.toml still has Turnstile TEST secret — run npm run setup:turnstile:all for production");
+    if (fileIncludes("scripts/setup-turnstile.mjs", "Refusing to push auth config")) {
+      ok("Turnstile test secret is local-only (remote push blocked without a production secret)");
+    } else {
+      fail("config.toml has the Turnstile TEST secret and nothing stops it reaching a live project");
+      issues += 1;
+    }
   } else {
     ok("config.toml Turnstile secret is not the Cloudflare test placeholder");
   }
@@ -330,14 +346,16 @@ async function main() {
     issues += 1;
   }
 
-  const audit = spawnSync("npm", ["audit", "--audit-level=high", "--json"], {
+  // Keep this readiness check aligned with the production-only, documented
+  // allowlist enforced by audit:ci instead of applying a second audit policy.
+  const audit = spawnSync(process.execPath, [resolve(root, "scripts/audit-ci.mjs")], {
     cwd: root,
     encoding: "utf8",
-    shell: process.platform === "win32",
   });
-  if (audit.status === 0) ok("npm audit — no high/critical advisories");
+  if (audit.status === 0) ok("npm audit policy passed (production dependencies)");
   else {
-    fail("npm audit reported high/critical issues — run npm audit");
+    if (audit.stderr) console.error(audit.stderr.trim());
+    fail("npm audit policy reported unallowlisted high/critical issues — run npm run audit:ci");
     issues += 1;
   }
 
