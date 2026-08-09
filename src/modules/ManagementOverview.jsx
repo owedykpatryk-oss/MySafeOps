@@ -1359,7 +1359,8 @@ export default function ManagementOverview() {
                 const crew = crewByTeam.get(team.id);
                 return (
                   <article key={team.id} className="mgo-team-card" style={{ "--team-colour": team.colour }}>
-                    <label className="mgo-team-card__colour" title="Team colour"><input type="color" value={team.colour} onChange={(e) => updateTeam(team.id, { colour: e.target.value })} /><span style={{ background: team.colour }} /></label>
+                    {/* The input is visually replaced by the swatch, so it carries its own name. */}
+                    <label className="mgo-team-card__colour" title="Team colour"><input type="color" aria-label={`Colour for ${team.name}`} value={team.colour} onChange={(e) => updateTeam(team.id, { colour: e.target.value })} /><span style={{ background: team.colour }} /></label>
                     <label>Team name<input value={team.name} maxLength={60} onChange={(e) => updateTeam(team.id, { name: e.target.value })} /></label>
                     <label>Region<input value={team.region} maxLength={60} placeholder="e.g. Midlands" onChange={(e) => updateTeam(team.id, { region: e.target.value })} /></label>
                     <label>Working days/week<input type="number" min="1" max="7" value={team.capacity} onChange={(e) => updateTeam(team.id, { capacity: Number(e.target.value) })} /></label>
