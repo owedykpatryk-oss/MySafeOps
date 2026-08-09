@@ -112,6 +112,7 @@ export const MARKET_LABEL_PACKS = {
     moduleLabels: {
       rams: "IOR",
       "bhp-plan": "Plan BHP",
+      "management-overview": "Przegląd zarządczy",
       "notifiable-incidents": "Zdarzenia wymagające zgłoszenia",
       coshh: "Substancje niebezpieczne",
       legislation: "Przepisy BHP",

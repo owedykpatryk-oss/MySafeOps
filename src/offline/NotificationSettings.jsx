@@ -198,6 +198,7 @@ export default function NotificationSettings() {
 
   const NOTIFICATION_TYPES = [
     { key: "master",         label: "Enable all reminder checks",       sub: "Master switch for scheduled notification scans" },
+    { key: "mobilisation",   label: "Mobilisation readiness alerts",   sub: "7, 3 and 1 day before a job starts when RAMS, permits, survey or crew are outstanding · Automation rules" },
     { key: "cert_expiry",    label: "Certificate expiry reminders",    sub: "30, 14, 7 and 1 day before expiry · org toggle in Automation rules" },
     { key: "permit_expiry",  label: "Permit expiry reminders",         sub: "14, 7 and 1 day before expiry · org toggle in Automation rules" },
     { key: "permit_briefing",label: "Permit briefing pending alerts",   sub: "High-risk active permits missing briefing · Automation rules" },

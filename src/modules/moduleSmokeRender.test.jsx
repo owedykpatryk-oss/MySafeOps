@@ -135,7 +135,10 @@ describe("workspace module smoke", () => {
     async (_id, loader) => {
       await expect(mountDefaultExport(loader)).resolves.toBeUndefined();
     },
-    15_000,
+    // The dashboard alone takes ~8s to transform and mount; alongside the rest of the suite
+    // it has repeatedly crossed 15s. This is a load ceiling, not a slow assertion — the case
+    // passes comfortably when the file runs on its own.
+    30_000,
   );
 
   it.each([...IMPORT_ONLY_IDS].filter((id) => workspaceViewLoaders[id]))(

@@ -354,6 +354,91 @@ function actionTable(pdf, actions, y, meta) {
   return y + 3;
 }
 
+/** Jobs about to mobilise with something still outstanding — the on-screen watch, on paper. */
+function mobilisationTable(pdf, rows, y, meta) {
+  const cols = [64, 22, 30, 72];
+  const headings = ["Job", "Starts in", "Team", "Outstanding"];
+  const drawHeadings = (startY) => {
+    pdf.setFillColor(...meta.rgb);
+    pdf.roundedRect(M, startY, CONTENT_W, 8, 1.5, 1.5, "F");
+    let headingX = M;
+    headings.forEach((heading, index) => {
+      setPdfFont(pdf, "bold");
+      pdf.setFontSize(6.2);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text(heading.toUpperCase(), headingX + 2, startY + 5.1);
+      headingX += cols[index];
+    });
+    return startY + 9;
+  };
+  y = drawHeadings(y);
+  (rows || []).forEach((row, index) => {
+    if (y + 13 > CONTENT_BOTTOM) {
+      pdf.addPage();
+      y = pageHeader(pdf, meta, "Mobilisation watch - continued");
+      y = drawHeadings(y);
+    }
+    if (index % 2 === 0) {
+      pdf.setFillColor(248, 250, 252);
+      pdf.rect(M, y - 1, CONTENT_W, 12, "F");
+    }
+    let x = M;
+    setPdfFont(pdf, "bold");
+    pdf.setFontSize(6.4);
+    pdf.setTextColor(30, 41, 59);
+    pdf.text(pdf.splitTextToSize(safe(row.name), cols[0] - 4).slice(0, 2), x + 2, y + 3.5);
+    x += cols[0];
+    setPdfFont(pdf, "normal");
+    const [r, g, b] = row.days <= 3 ? [185, 28, 28] : [71, 85, 105];
+    pdf.setTextColor(r, g, b);
+    pdf.text(row.days <= 0 ? "On site" : `${row.days} day${row.days === 1 ? "" : "s"}`, x + 2, y + 3.5);
+    x += cols[1];
+    pdf.setTextColor(71, 85, 105);
+    pdf.text(pdf.splitTextToSize(safe(row.teamName, "Unassigned"), cols[2] - 4).slice(0, 2), x + 2, y + 3.5);
+    x += cols[2];
+    pdf.text(pdf.splitTextToSize(safe(row.outstanding, "Ready"), cols[3] - 4).slice(0, 2), x + 2, y + 3.5);
+    y += 12;
+  });
+  if (!rows?.length) {
+    setPdfFont(pdf, "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 116, 139);
+    pdf.text("Everything mobilising in this window is documented and crewed.", M + 3, y + 7);
+    y += 13;
+  }
+  return y + 3;
+}
+
+/** Same team, overlapping dates — the exception a board pack must not hide. */
+function conflictTable(pdf, conflicts, y, meta) {
+  if (!conflicts?.length) {
+    setPdfFont(pdf, "normal");
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 116, 139);
+    pdf.text("No team is double-booked in this window.", M + 3, y + 7);
+    return y + 13;
+  }
+  conflicts.slice(0, 8).forEach((conflict) => {
+    if (y + 15 > CONTENT_BOTTOM) {
+      pdf.addPage();
+      y = pageHeader(pdf, meta, "Scheduling conflicts - continued");
+    }
+    pdf.setFillColor(254, 242, 242);
+    pdf.setDrawColor(252, 205, 205);
+    pdf.roundedRect(M, y, CONTENT_W, 13, 2, 2, "FD");
+    setPdfFont(pdf, "bold");
+    pdf.setFontSize(6.6);
+    pdf.setTextColor(153, 27, 27);
+    pdf.text(safe(conflict.teamName, "Unassigned team"), M + 3, y + 5);
+    setPdfFont(pdf, "normal");
+    pdf.setFontSize(6.3);
+    pdf.setTextColor(71, 85, 105);
+    pdf.text(pdf.splitTextToSize(safe(conflict.detail), CONTENT_W - 8).slice(0, 1), M + 3, y + 10);
+    y += 15;
+  });
+  return y + 2;
+}
+
 function managementNotes(pdf, text, y, meta) {
   let lines = pdf.splitTextToSize(safe(text, "No additional management notes recorded."), CONTENT_W - 12);
   while (lines.length) {
@@ -461,6 +546,21 @@ export async function buildManagementBoardPackPdf(data, options = {}) {
   metric(pdf, M + (metricW + gap) * 2, y, metricW, "Capacity", `${metrics.capacity || 0}%`, "Three-month average", rgb);
   metric(pdf, M + (metricW + gap) * 3, y, metricW, "Diary gaps", metrics.gaps, "Months below 60%", rgb);
   y += 34;
+  if (data.valueSummary) {
+    // Money only appears when the organisation actually records contract values.
+    pdf.setFillColor(247, 251, 249);
+    pdf.setDrawColor(214, 232, 226);
+    pdf.roundedRect(M, y - 4, CONTENT_W, 14, 2, 2, "FD");
+    setPdfFont(pdf, "bold");
+    pdf.setFontSize(6.4);
+    pdf.setTextColor(...rgb);
+    pdf.text("CONTRACT VALUE", M + 4, y + 1.5);
+    setPdfFont(pdf, "normal");
+    pdf.setFontSize(7.6);
+    pdf.setTextColor(30, 41, 59);
+    pdf.text(safe(data.valueSummary), M + 4, y + 7);
+    y += 16;
+  }
   y = title(pdf, "Management briefing", y, rgb);
   pdf.setFillColor(242, 249, 247);
   pdf.setDrawColor(203, 225, 218);
@@ -498,6 +598,24 @@ export async function buildManagementBoardPackPdf(data, options = {}) {
   y = ensurePage(pdf, y + 2, 35, meta, "90-day programme - continued");
   y = title(pdf, "Programme detail", y, rgb);
   y = jobTable(pdf, data.jobs || [], y, meta);
+
+  pdf.addPage();
+  y = pageHeader(pdf, meta, "Mobilisation and exceptions");
+  y = title(pdf, "Mobilisation watch", y, rgb, "Work leaving the yard shortly, and what is still outstanding on it.");
+  y = mobilisationTable(pdf, data.mobilisation || [], y, meta);
+  y = ensurePage(pdf, y + 5, 50, meta, "Mobilisation and exceptions - continued");
+  y = title(pdf, "Scheduling conflicts", y, rgb, "A team committed to two jobs at once has to be resolved before mobilisation.");
+  y = conflictTable(pdf, data.conflicts || [], y, meta);
+  if (data.crewWarnings?.length) {
+    y = ensurePage(pdf, y + 5, 30, meta, "Mobilisation and exceptions - continued");
+    y = title(pdf, "Crew warnings", y, rgb);
+    setPdfFont(pdf, "normal");
+    pdf.setFontSize(7.4);
+    pdf.setTextColor(71, 85, 105);
+    const crewLines = pdf.splitTextToSize(data.crewWarnings.join("  •  "), CONTENT_W - 6);
+    pdf.text(crewLines, M + 3, y + 4);
+    y += crewLines.length * 4 + 8;
+  }
 
   pdf.addPage();
   y = pageHeader(pdf, meta, "Capacity and readiness");

@@ -61,6 +61,13 @@ export const REMINDER_RULE_DEFS = [
     default: true,
   },
   {
+    id: "mobilisationReminder",
+    label: "Mobilisation readiness reminders",
+    hint: "Alert when a job starts within 7, 3 or 1 day and RAMS, permits, survey or crew are still outstanding.",
+    impact: "notify",
+    default: true,
+  },
+  {
     id: "certExpiryReminder",
     label: "Certificate expiry reminders",
     hint: "Alert when worker CSCS, IPAF and other certs approach expiry (30, 14, 7 and 1 day).",
@@ -133,6 +140,7 @@ export const DEFAULT_ORG_AUTOMATION_RULES = {
   autoApplyPlaybookOnCreate: true,
   dailyBriefingReminder: true,
   monthlyReportReminder: true,
+  mobilisationReminder: true,
   certExpiryReminder: true,
   permitExpiryReminder: true,
   permitBriefingReminder: true,

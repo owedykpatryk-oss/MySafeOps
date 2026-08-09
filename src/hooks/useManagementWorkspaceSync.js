@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
@@ -11,6 +11,10 @@ import {
   normaliseManagementState,
   saveManagementState,
 } from "../utils/managementOverview";
+
+const RETRY_BASE_MS = 2000;
+const MAX_RETRY_MS = 60000;
+const MAX_RETRY_STEP = 6;
 
 const initialStatus = {
   phase: "local",
@@ -26,6 +30,8 @@ export function useManagementWorkspaceSync({ enabled, state, setState }) {
   const [orgEpoch, setOrgEpoch] = useState(0);
   const stateRef = useRef(state);
   const syncRef = useRef({ ready: false, orgId: "", workspaceId: "", version: 0, serialised: "" });
+  /** Consecutive failed writes — drives the retry backoff and the "unsaved" wording. */
+  const retryRef = useRef(0);
 
   useEffect(() => {
     stateRef.current = state;
@@ -144,11 +150,36 @@ export function useManagementWorkspaceSync({ enabled, state, setState }) {
 
   useEffect(() => {
     if (!enabled || !syncRef.current.ready || !supabase || !userId) return undefined;
-    const next = normaliseManagementState(state);
-    const serialised = JSON.stringify(next);
-    if (serialised === syncRef.current.serialised) return undefined;
 
-    const timer = window.setTimeout(async () => {
+    let cancelled = false;
+    let timer = 0;
+    /**
+     * Normalising and serialising the whole document is O(document), and the document now
+     * carries archived meetings and a change log. Doing it per keystroke made typing in the
+     * meeting notes progressively heavier, so it happens once the typing has settled.
+     */
+    let next = null;
+
+    const scheduleRetry = () => {
+      if (cancelled) return;
+      // Back off 2s, 4s, 8s… capped at a minute. Without this a single failed write left the
+      // change stranded in localStorage until the manager happened to edit something else.
+      retryRef.current = Math.min(retryRef.current + 1, MAX_RETRY_STEP);
+      const delay = Math.min(RETRY_BASE_MS * 2 ** (retryRef.current - 1), MAX_RETRY_MS);
+      timer = window.setTimeout(save, delay);
+    };
+
+    const save = async () => {
+      if (cancelled) return;
+      if (!next) {
+        next = normaliseManagementState(state);
+        if (JSON.stringify(next) === syncRef.current.serialised) return;
+      }
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setStatus((current) => ({ ...current, phase: "error", message: "Offline — unsaved changes will retry" }));
+        scheduleRetry();
+        return;
+      }
       const { orgId, workspaceId, version } = syncRef.current;
       setStatus((current) => ({ ...current, phase: "saving", message: "Saving shared changes…" }));
       const { data, error } = await supabase
@@ -158,11 +189,19 @@ export function useManagementWorkspaceSync({ enabled, state, setState }) {
         .eq("version", version)
         .select("org_id,workspace_id,state,version,updated_at,updated_by")
         .maybeSingle();
+      if (cancelled) return;
 
       if (error) {
-        setStatus((current) => ({ ...current, phase: "error", message: error.message || "Shared save failed" }));
+        const attempt = retryRef.current + 1;
+        setStatus((current) => ({
+          ...current,
+          phase: "error",
+          message: `${error.message || "Shared save failed"} — unsaved, retrying (${attempt})`,
+        }));
+        scheduleRetry();
         return;
       }
+      retryRef.current = 0;
       if (!data) {
         const { data: latest, error: latestError } = await supabase
           .from("management_workspaces")
@@ -189,10 +228,27 @@ export function useManagementWorkspaceSync({ enabled, state, setState }) {
         serialised: JSON.stringify(normaliseManagementState(data.state)),
       };
       setStatus({ phase: "synced", updatedAt: data.updated_at || "", updatedBy: data.updated_by || "", message: "Shared workspace up to date" });
-    }, 900);
+    };
 
-    return () => window.clearTimeout(timer);
+    timer = window.setTimeout(save, 900);
+
+    // Coming back online, or back to the tab, is the moment a stranded write can land.
+    const retryNow = () => {
+      if (cancelled || !retryRef.current) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(save, 200);
+    };
+    window.addEventListener("online", retryNow);
+    document.addEventListener("visibilitychange", retryNow);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("online", retryNow);
+      document.removeEventListener("visibilitychange", retryNow);
+    };
   }, [enabled, state, setState, supabase, userId]);
 
-  return status;
+  // `currentUserId` lets the UI say "last edit by you" instead of showing a raw user id.
+  return useMemo(() => ({ ...status, currentUserId: userId }), [status, userId]);
 }

@@ -9,6 +9,7 @@ import {
   summarizeAutomationRules,
   staleSurveyReminderDays,
   DEFAULT_ORG_AUTOMATION_RULES,
+  REMINDER_RULE_DEFS,
   AUTOMATION_PRESETS,
 } from "./orgAutomationRules";
 import { saveOrgSettingsRaw } from "./orgSettingsStorage";
@@ -61,7 +62,8 @@ describe("orgAutomationRules", () => {
       certExpiryReminder: false,
     });
     expect(summary.gatesOn).toBe(4);
-    expect(summary.remindersOn).toBe(10);
+    // Reminder rules: every default minus the one switched off above.
+    expect(summary.remindersOn).toBe(REMINDER_RULE_DEFS.length - 1);
   });
 
   it("presets are defined for all profiles", () => {

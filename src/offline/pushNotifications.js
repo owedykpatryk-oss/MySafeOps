@@ -9,6 +9,9 @@ import { todayIsoDate } from "../utils/projectDashboard";
 import { normalizeWorkerCertifications, getWorkerCertAlerts } from "../utils/certifications";
 import { collectEquipmentInspectionDueItems } from "../utils/equipmentInspectionDue";
 import { collectVehicleDueItems } from "../utils/vehicleComplianceDue";
+import { buildMobilisationWatch, MANAGEMENT_OVERVIEW_KEY, normaliseManagementState } from "../utils/managementOverview";
+import { buildManagementJobs } from "../utils/managementJobs";
+import { buildCrewByTeam } from "../utils/managementCrew";
 
 import { todayLocalISO } from "../utils/localDate";
 const VAPID_PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "").trim();
@@ -322,6 +325,8 @@ const saveJSON = (k, v) => saveOrgScoped(k, v);
 
 const NOTIF_SEEN_KEY = "mysafeops_notif_seen";
 const THRESHOLDS_DAYS = [30, 14, 7, 1, 0]; // days before expiry to notify
+/** Days before a job starts at which an unresolved readiness gap is worth an alert. */
+const MOBILISATION_THRESHOLDS = [1, 3, 7];
 const permitEndIso = (permit) => permit?.endDateTime || permit?.expiryDate || "";
 
 function daysUntil(iso) {
@@ -669,6 +674,36 @@ export function checkExpiryNotifications(opts = {}) {
       markSeen(id);
     }
   });
+
+  // ── Mobilisation readiness ──
+  // The management overview already works this out on screen; this is the same calculation
+  // reaching the manager who has not opened it today.
+  if (isAutomationEnabled("mobilisationReminder") && isNotificationTypeEnabled("mobilisation")) {
+    const management = loadJSON(MANAGEMENT_OVERVIEW_KEY, null);
+    if (management) {
+      const mobilisationNow = new Date();
+      const state = normaliseManagementState(management);
+      const jobs = buildManagementJobs(loadJSON("mysafeops_projects", []), workers, state);
+      const crewByTeam = buildCrewByTeam(state.teams, workers, mobilisationNow);
+      const watch = buildMobilisationWatch(jobs, { today: mobilisationNow, horizonDays: 7, crewByTeam });
+
+      watch.filter((row) => row.issues.length).forEach((row) => {
+        const threshold = MOBILISATION_THRESHOLDS.find((limit) => row.daysToStart <= limit);
+        if (threshold === undefined) return;
+        const id = `mobilisation_${row.job.id}_${threshold}`;
+        if (wasRecentlySeen(id)) return;
+
+        const when = row.daysToStart <= 0 ? "is on site now" : row.daysToStart === 1 ? "starts tomorrow" : `starts in ${row.daysToStart} days`;
+        showLocalNotification(row.daysToStart <= 1 ? "URGENT: Mobilisation not ready" : "Mobilisation readiness", {
+          body: `${row.job.name} ${when} — outstanding: ${row.issues.join(", ")}.`,
+          tag: id,
+          requireInteraction: row.daysToStart <= 1,
+          data: { url: workspaceDeepLink("management-overview") },
+        });
+        markSeen(id);
+      });
+    }
+  }
 }
 
 // ─── Auto-check scheduler ─────────────────────────────────────────────────────
