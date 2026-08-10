@@ -24,7 +24,10 @@ export async function logPermitAuditToSupabase(prevPermit, nextPermit, orgSlug) 
   const { action, fromStatus, toStatus } = describePermitAuditEvent(prevPermit, nextPermit);
   const slug = String(orgSlug || getOrgId() || "default").slice(0, 200);
   const workspaceId = activeWorkspaceId(slug);
-  if (!workspaceId) return;
+  if (!workspaceId) {
+    console.warn("[permits] cloud audit skipped: no active country workspace.");
+    return;
+  }
 
   const { error } = await supabase.from("org_permit_audit").insert({
     user_id: user.id,
@@ -55,7 +58,10 @@ export async function logPermitDeletedToSupabase(permit, orgSlug) {
 
   const slug = String(orgSlug || getOrgId() || "default").slice(0, 200);
   const workspaceId = activeWorkspaceId(slug);
-  if (!workspaceId) return;
+  if (!workspaceId) {
+    console.warn("[permits] cloud audit (delete) skipped: no active country workspace.");
+    return;
+  }
 
   const { error } = await supabase.from("org_permit_audit").insert({
     user_id: user.id,
