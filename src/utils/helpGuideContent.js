@@ -66,6 +66,34 @@ export const GUIDED_HELP_TASKS = [
     ],
   },
   {
+    id: "workspace-profile-trades",
+    category: "Set up",
+    icon: "workflow",
+    title: "Profile, your trades and playbooks",
+    summary: "Understand Modules & RAMS vs Your trades, then unlock the right project playbooks for construction or surveying firms.",
+    time: "3–5 min",
+    roles: "Admin",
+    target: { settingsTab: "organisation", label: "Open Organisation" },
+    steps: [
+      {
+        title: "Pick a workspace profile (Modules & RAMS)",
+        body: "Settings → Organisation → Modules & RAMS. This decides which modules and project playbooks you see. Surveying firms choose Surveying & geodesy; builders stay on General construction.",
+      },
+      {
+        title: "Tick Your trades",
+        body: "Organisation → Your trades. Mark food, ATEX, PAS128, topo, etc. Trades drive banners and register emphasis — they do not replace the workspace profile.",
+      },
+      {
+        title: "Surveying company path",
+        body: "Tick Surveying & geospatial trades, then Apply Surveying & geodesy (or select that profile under Modules & RAMS). New projects then offer Utility mapping, Topographical survey, Topo + utility and GI playbooks.",
+      },
+      {
+        title: "Create a project with a playbook",
+        body: "Projects → Add project → choose a playbook on the last step. On save, MySafeOps drafts RAMS, survey (when applicable), PTW and method statement for that site type.",
+      },
+    ],
+  },
+  {
     id: "daily-site",
     category: "Run the site",
     icon: "hard-hat",
@@ -266,6 +294,11 @@ export const HELP_TOC = [
 /** Longer explainers rendered under Help → Workflows, roles & portals. */
 export const HELP_DETAIL_SECTIONS = [
   {
+    id: "profile-vs-trades",
+    title: "Workspace profile vs Your trades vs playbooks",
+    body: "Three layers: (1) Workspace profile under Modules & RAMS — which modules and RAMS starters you see (e.g. Surveying & geodesy unlocks survey report, GPR and PAS128 playbooks). (2) Your trades — optional ticks for food, petrochem, surveying cues; banners and register emphasis only. (3) Project playbook — chosen per job on create/save to draft RAMS, survey, PTW and method statement. Surveying firms: profile first, then tick surveying trades, then use Utility mapping / Topo playbooks on each project.",
+  },
+  {
     id: "project-hub",
     title: "Project Hub & readiness",
     body: "Open any project card to see the readiness ring, suggested next action, playbooks and trade checklist for that site. Completing Hub items (RAMS, permits, drawings, survey) raises readiness and clears management overview alerts. Survey / GPR completion feeds dig-readiness cues on utility-mapping profiles.",
@@ -332,7 +365,7 @@ export const FIRST_WEEK_STEPS = [
   },
   {
     title: "Pick workspace profile",
-    body: "Settings → Organisation → Workspace profile. This tunes which modules appear and which RAMS starter you get (contractor, electrical, survey, food, etc.).",
+    body: "Settings → Organisation → Modules & RAMS → workspace profile. This tunes which modules and project playbooks you get (contractor, surveying, food, etc.). Then open Your trades and tick the environments you work in.",
   },
   {
     title: "Company branding",
@@ -366,7 +399,7 @@ export const SETTINGS_TAB_HELP = {
   invites: "Email invites for new users — they join your organisation workspace.",
   members: "Change roles: admin (full control), supervisor (operations), operative (registers & permits).",
   organisation:
-    "Logo, company details, workspace profile, industry sectors (food/pharma packs), module visibility, PDF defaults, custom fields.",
+    "Logo, company details, Modules & RAMS (workspace profile), Your trades (banners/registers), module visibility, PDF defaults, custom fields.",
   automation:
     "Rules that nudge completeness — survey QA gates, PTW conflict checks, stale RAMS reminders, presets like Survey firm.",
   notifications: "Browser reminders for expiring certs, permits, RAMS review dates (enable when prompted).",
@@ -395,8 +428,10 @@ export const GLOSSARY = [
   { term: "COSHH", def: "Control of Substances Hazardous to Health — substance register and assessments." },
   { term: "LOTO", def: "Lock-out tag-out — isolation before maintenance on plant or electrical systems." },
   { term: "SIMOPS", def: "Simultaneous operations — permits checked against each other for clashes on the same site." },
-  { term: "Workspace profile", def: "Trade preset (e.g. general contractor, surveying) — changes visible modules and RAMS starters." },
-  { term: "Industry sectors", def: "Optional ticks (construction, food, pharma…) — unlock sector banners and packs; separate from workspace profile." },
+  { term: "Workspace profile", def: "Trade preset under Modules & RAMS (e.g. general contractor, surveying) — changes visible modules, RAMS starters and which project playbooks appear." },
+  { term: "Your trades", def: "Optional ticks (construction, food, pharma, PAS128, topo…) — banners and register emphasis only; separate from workspace profile. Formerly called industry sectors." },
+  { term: "Industry sectors", def: "Legacy name for Your trades — optional ticks for banners and packs; separate from workspace profile." },
+  { term: "Project playbook", def: "Per-project recipe on create/save — drafts RAMS, survey (when profile allows), PTW and method statement for a site type (e.g. Electrical, Utility mapping, Topo)." },
   { term: "Project Hub", def: "Per-project dashboard card with readiness score and suggested next step." },
   { term: "Competent review", def: "Checkbox or confirm step before issuing RAMS or activating permits — records that a competent person reviewed." },
   { term: "PAS 128", def: "BSI specification for underground utility detection, verification and location — quality levels and detection methods used in UK utility surveys." },
@@ -421,8 +456,12 @@ export const HELP_FAQ = [
     a: "Trial may have ended without subscription, or your role is read-only. Admins: Settings → Billing to subscribe. Organisation settings stay editable.",
   },
   {
-    q: "What's the difference between workspace profile and industry sectors?",
-    a: "Profile = which modules and starters you see day to day. Sectors = optional packs (e.g. pharma hygiene registers) and banners — tick only what you actually work in.",
+    q: "What's the difference between workspace profile and Your trades?",
+    a: "Profile (Modules & RAMS) = which modules and project playbooks you see day to day. Your trades = optional banners and register emphasis (food, ATEX, surveying cues) — tick only what you actually work in. They are independent.",
+  },
+  {
+    q: "We're a surveying company — why no topo / PAS128 playbooks?",
+    a: "Those playbooks appear only with a surveying workspace profile. Settings → Organisation → Modules & RAMS → Surveying & geodesy (or Contractor + surveying). Optionally tick Surveying & geospatial under Your trades and use Apply Surveying & geodesy. Then new projects offer Utility mapping, Topographical survey, Topo + utility and related packs.",
   },
   {
     q: "How do I hide modules we don't use?",

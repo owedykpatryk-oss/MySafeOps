@@ -23,6 +23,37 @@ export const INDUSTRY_SECTOR_GROUPS = [
     ],
   },
   {
+    id: "surveying",
+    label: "Surveying & geospatial",
+    description: "PAS128, topo, utility mapping and GPR — enable modules via Modules & RAMS → Surveying & geodesy.",
+    options: [
+      {
+        id: "surveying_pas128",
+        label: "Utility mapping (PAS128)",
+        hint: "EML / GPR detection, QL schedule, safe-dig deliverables",
+        tags: ["PAS128", "EML"],
+      },
+      {
+        id: "surveying_topo",
+        label: "Topographical survey",
+        hint: "Land survey, control networks, levels and feature capture",
+        tags: ["Topo", "GNSS"],
+      },
+      {
+        id: "surveying_geospatial",
+        label: "Laser / aerial / rail",
+        hint: "Laser scan, LiDAR, aerial and corridor geospatial jobs",
+        tags: ["LiDAR", "Scan"],
+      },
+      {
+        id: "surveying_gpr",
+        label: "GPR & geophysics",
+        hint: "Ground penetrating radar reports, anomalies and radargrams",
+        tags: ["GPR", "QA"],
+      },
+    ],
+  },
+  {
     id: "manufacturing",
     label: "Manufacturing & hygiene-critical",
     description: "Food, pharma, allergen and GMP-controlled environments.",
@@ -68,6 +99,13 @@ export const INDUSTRY_SECTOR_OPTIONS = INDUSTRY_SECTOR_GROUPS.flatMap((g) =>
 const FOODISH = new Set(["food_beverage", "pet_food", "dairy", "brewing", "cosmetics"]);
 const PHARMAISH = new Set(["pharma", "medical_devices"]);
 const PROCESS_HEAVY = new Set(["petrochem", "power_energy", "renewables", "mining", "steel_process"]);
+/** Surveying / geospatial trade ticks — pair with Surveying & geodesy workspace profile. */
+export const SURVEYING_SECTOR_IDS = new Set([
+  "surveying_pas128",
+  "surveying_topo",
+  "surveying_geospatial",
+  "surveying_gpr",
+]);
 
 const OPTION_BY_ID = Object.fromEntries(INDUSTRY_SECTOR_OPTIONS.map((o) => [o.id, o]));
 
@@ -128,6 +166,11 @@ export function orgProcessSectorBannerActive() {
   return s.some((id) => PROCESS_HEAVY.has(id));
 }
 
+/** @param {string[]} [sectorIds] */
+export function orgHasSurveyingSectorSelected(sectorIds = getSelectedIndustrySectors()) {
+  return sectorIds.some((id) => SURVEYING_SECTOR_IDS.has(id));
+}
+
 export function orgShowsIndustrialMoreModules() {
   const s = getSelectedIndustrySectors();
   return s.some((id) => id !== "construction");
@@ -148,6 +191,10 @@ const SECTOR_REGISTER_HINTS = {
   demolition: ["Asbestos register", "Excavation log", "Temp works"],
   infrastructure: ["NRSWA / streetworks", "Traffic management"],
   utilities: ["Permit-to-dig", "Utility mapping surveys"],
+  surveying_pas128: ["Survey reports", "PAS128 playbooks", "GPR report"],
+  surveying_topo: ["Survey reports", "Topo playbook", "Geo-photos"],
+  surveying_geospatial: ["Survey reports", "Geospatial RAMS packs", "Drawings"],
+  surveying_gpr: ["GPR report", "Survey reports", "Geo-photos"],
   facilities: ["PPM inspections", "Plant register"],
   warehousing: ["FLT / traffic routes", "Gate book"],
   data_centres: ["Live services PTW", "Access control"],

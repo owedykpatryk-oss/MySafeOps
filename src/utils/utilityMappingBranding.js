@@ -24,7 +24,13 @@ export const UTILITY_MAPPING_BRAND = {
   logoUrl: "/branding/utility-mapping-logo.png",
   coverHeroUrl: "/branding/utility-mapping/cover-hero.jpg",
   letterheadUrl: "/branding/utility-mapping/letterhead.jpg",
-  industrySectors: ["construction"],
+  industrySectors: [
+    "construction",
+    "surveying_pas128",
+    "surveying_topo",
+    "surveying_geospatial",
+    "surveying_gpr",
+  ],
 };
 
 const PLACEHOLDER_PRIMARIES = new Set(["#0d9488", "#0c447c", "#0D9488", "#0C447C"]);

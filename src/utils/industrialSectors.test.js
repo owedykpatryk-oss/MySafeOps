@@ -2,9 +2,11 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import {
   getSelectedIndustrySectors,
   orgHasPharmaPack,
+  orgHasSurveyingSectorSelected,
   orgPharmaSectorBannerActive,
   orgSectorSelected,
   INDUSTRY_SECTOR_OPTIONS,
+  SURVEYING_SECTOR_IDS,
 } from "./industrialSectors.js";
 
 vi.mock("./orgMembership.js", () => ({
@@ -24,8 +26,16 @@ describe("industrialSectors", () => {
     vi.mocked(getOrgSettings).mockReturnValue({ industrySectors: ["construction"] });
   });
 
-  it("exposes expanded sector list", () => {
-    expect(INDUSTRY_SECTOR_OPTIONS.length).toBeGreaterThanOrEqual(18);
+  it("exposes expanded sector list including surveying", () => {
+    expect(INDUSTRY_SECTOR_OPTIONS.length).toBeGreaterThanOrEqual(22);
+    expect([...SURVEYING_SECTOR_IDS]).toEqual(
+      expect.arrayContaining(["surveying_pas128", "surveying_topo", "surveying_geospatial", "surveying_gpr"])
+    );
+  });
+
+  it("detects surveying trade ticks", () => {
+    expect(orgHasSurveyingSectorSelected(["construction"])).toBe(false);
+    expect(orgHasSurveyingSectorSelected(["construction", "surveying_topo"])).toBe(true);
   });
 
   it("pharma banner only when pharma selected", () => {

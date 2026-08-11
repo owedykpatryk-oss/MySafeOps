@@ -48,6 +48,7 @@ describe("helpGuideContent", () => {
     expect(ids).toContain("gpr-cad-import");
     expect(ids).toContain("geo-photos");
     expect(ids).toContain("survey-gpr-dig");
+    expect(ids).toContain("workspace-profile-trades");
     expect(GUIDED_HELP_TASKS.length).toBeGreaterThan(12);
     for (const task of GUIDED_HELP_TASKS) {
       expect(task.title).toBeTruthy();
@@ -65,5 +66,13 @@ describe("helpGuideContent", () => {
     expect(titles).toMatch(/CAD|DXF/i);
     expect(titles).toMatch(/Roles/i);
     expect(titles).toMatch(/portal/i);
+    expect(titles).toMatch(/profile vs Your trades/i);
+  });
+
+  it("FAQ explains surveying playbook unlock path", () => {
+    const faq = HELP_FAQ.map((f) => `${f.q} ${f.a}`).join(" ").toLowerCase();
+    expect(faq).toMatch(/surveying company/);
+    expect(faq).toMatch(/your trades/);
+    expect(faq).toMatch(/topographical|topo/);
   });
 });

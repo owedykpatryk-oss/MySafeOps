@@ -81,6 +81,22 @@ export const PROJECT_PLAYBOOKS = [
     ],
   },
   {
+    id: "topo",
+    label: "Topographical survey",
+    description: "Topo RAMS + survey draft + general PTW + mobilisation MS",
+    industryStarter: "infrastructure",
+    surveyType: "topographical_survey",
+    ramsSurveyKey: "topographical_survey",
+    permitTypes: ["general", "visitor_access"],
+    msTemplate: "mobilisation",
+    checklistExtras: [
+      "Agree survey extent, detail level and control datum",
+      "Control network / benchmarks verified before capture",
+      "Public and plant interface routes briefed",
+      "Capture site entrance and control geo-photos before mobilisation",
+    ],
+  },
+  {
     id: "topo_plus_utility",
     label: "Topo + utility (combined PAS128)",
     description: "Combined topo and PAS128 RAMS + survey draft + excavation PTW",

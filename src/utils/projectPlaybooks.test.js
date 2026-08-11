@@ -41,6 +41,22 @@ describe("projectPlaybooks", () => {
     expect(pb.permitTypes).toContain("ground_disturbance");
   });
 
+  it("topo playbook drafts topographical survey without PAS128 QL", () => {
+    const pb = getPlaybook("topo");
+    expect(pb.surveyType).toBe("topographical_survey");
+    const result = applyProjectPlaybook(project, pb.id, {
+      rams: [],
+      surveys: [],
+      gprReports: [],
+      permits: [],
+      methodStatements: [],
+    });
+    expect(result.applied).toBe(true);
+    expect(result.created.surveys[0].surveyType).toBe("topographical_survey");
+    expect(result.created.surveys[0].pas128Ql || "").toBe("");
+    expect(result.created.gprReports).toHaveLength(0);
+  });
+
   it("applyProjectPlaybook creates RAMS, survey, permits and MS when empty", () => {
     const pb = getPlaybook("utility_mapping");
     const result = applyProjectPlaybook(project, pb.id, {

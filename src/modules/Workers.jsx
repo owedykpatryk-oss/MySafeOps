@@ -11,6 +11,7 @@ import {
   getPlaybook,
 } from "../utils/projectPlaybooks";
 import { getPlaybooksForOrg } from "../utils/projectHubIndustry";
+import { openWorkspaceSettings } from "../utils/workspaceNavContext";
 import { billingLimitMessage, checkBillingLimit } from "../utils/billingLimits";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { ms } from "../utils/moduleStyles";
@@ -1424,6 +1425,10 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const health = projectHealthScore(form, { soloMode });
   const starterMeta = PROJECT_STARTERS.find((p) => p.id === form.industryStarter) || PROJECT_STARTERS[0];
   const playbooks = useMemo(() => getPlaybooksForOrg(), []);
+  const surveyPlaybooksHidden = useMemo(
+    () => !playbooks.some((pb) => Boolean(pb.surveyType)),
+    [playbooks]
+  );
   const boundaryRing = parseProjectBoundaryRing(form);
   const stepMeta = PROJECT_WIZARD_STEPS[step - 1] || PROJECT_WIZARD_STEPS[0];
   const stepBlockers = wizardStepBlockers(step, form, soloMode);
@@ -2433,6 +2438,38 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                   <div className="project-wizard-section">
                     <label style={{ ...ss.lbl, marginTop: 4 }}>Project playbook</label>
                     <p className="project-wizard-hint">On save: creates RAMS, survey, PTW and method statement drafts for this site type.</p>
+                    {surveyPlaybooksHidden ? (
+                      <div
+                        className="project-wizard-hint"
+                        style={{
+                          marginBottom: 10,
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          background: "#EFF6FF",
+                          border: "1px solid #BFDBFE",
+                          color: "#1E3A8A",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        <strong>Survey / PAS128 playbooks are hidden</strong> for this workspace (topo, utility mapping, GI).
+                        Switch to <strong>Surveying &amp; geodesy</strong> under Settings → Organisation → Modules &amp; RAMS.
+                        <button
+                          type="button"
+                          style={{
+                            ...ss.btn,
+                            display: "inline-flex",
+                            marginTop: 8,
+                            fontSize: 12,
+                            background: "#fff",
+                            border: "1px solid #93C5FD",
+                            color: "#1E3A8A",
+                          }}
+                          onClick={() => openWorkspaceSettings({ tab: "organisation" })}
+                        >
+                          Open Organisation settings
+                        </button>
+                      </div>
+                    ) : null}
                     <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
                       {playbooks.map((pb) => (
                         <label

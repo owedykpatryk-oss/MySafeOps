@@ -39,7 +39,15 @@ describe("projectHubIndustry", () => {
     applyIndustryPack("contractorPlusSurveying");
     expect(isSurveyWorkflowEnabled()).toBe(true);
     expect(getPlaybooksForOrg().some((p) => p.id === "utility_mapping")).toBe(true);
+    expect(getPlaybooksForOrg().some((p) => p.id === "topo")).toBe(true);
     expect(getHiddenModuleIds()).not.toContain("survey-report");
+  });
+
+  it("geodesy featured playbooks prefer utility mapping and topo", () => {
+    applyIndustryPack("surveyingGeodesy");
+    const featured = getFeaturedPlaybooksForOrg(3).map((p) => p.id);
+    expect(featured[0]).toBe("utility_mapping");
+    expect(featured).toContain("topo");
   });
 
   it("never exposes FESS playbooks to non-FESS orgs", () => {

@@ -8,7 +8,12 @@ import { pushOrgBrandingToCloud } from "../utils/orgBrandingCloudSync";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
-import { INDUSTRY_SECTOR_GROUPS, getIndustrySectorLabel, getSectorRegisterHints } from "../utils/industrialSectors";
+import {
+  INDUSTRY_SECTOR_GROUPS,
+  getIndustrySectorLabel,
+  getSectorRegisterHints,
+  orgHasSurveyingSectorSelected,
+} from "../utils/industrialSectors";
 import { CUSTOM_FIELD_PRESETS } from "../utils/orgCustomFields";
 import { resetSectorBannerDismiss } from "../utils/sectorBannerDismiss";
 import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
@@ -18,6 +23,7 @@ import { MARKET_PACK_HINTS } from "../config/marketModules";
 import { MARKET_IDS, getMarket, isValidMarketId, resolveMarketId } from "../config/markets";
 import { syncOrgBrandingFromCloud } from "../utils/orgBrandingCloudSync";
 import { safeImageSrc } from "../utils/htmlEscape.js";
+import { applyIndustryPack, getAppliedIndustryPackId, getWorkspacePack } from "../utils/orgIndustryPacks";
 import OrgModuleVisibility from "./OrgModuleVisibility";
 import OrgWorkspaceProfile from "./OrgWorkspaceProfile";
 import OrgPermitSettings from "./OrgPermitSettings";
@@ -147,7 +153,27 @@ export default function OrgSettings() {
     set("customFields", (form.customFields||[]).filter(f=>f.id!==id));
   };
 
-  const TABS = [["brand","Branding & logo"],["company","Company info"],["sectors","Sectors"],["modules","Modules & RAMS"],["pdf","PDF defaults"],["custom","Custom fields"],["access","Access"],["preview","Preview"]];
+  const TABS = [["brand","Branding & logo"],["company","Company info"],["sectors","Your trades"],["modules","Modules & RAMS"],["pdf","PDF defaults"],["custom","Custom fields"],["access","Access"],["preview","Preview"]];
+
+  const applySurveyingWorkspaceProfile = () => {
+    if (!caps.orgSettings) {
+      alert("Only administrators can change organisation settings.");
+      return;
+    }
+    const priorTrades = Array.isArray(form.industrySectors) ? form.industrySectors : [];
+    applyIndustryPack("surveyingGeodesy", { seedTemplates: true });
+    const applied = loadOrgSettingsRaw();
+    const next = {
+      ...applied,
+      industrySectors: [...new Set([...(applied.industrySectors || []), ...priorTrades])],
+    };
+    saveOrgSettingsRaw(next);
+    setForm(next);
+    pushAudit({ action: "org_apply_surveying_profile", entity: "mysafeops_org_settings", detail: next.name || "" });
+    pushToast("Applied Surveying & geodesy — PAS128 playbooks and survey modules are now available.", "success");
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
 
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
@@ -262,9 +288,9 @@ export default function OrgSettings() {
       )}
 
       {tab==="sectors" && (
-        <Section title="Industry sectors">
+        <Section title="Your trades">
           <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 14, lineHeight: 1.55 }}>
-            Select the environments your teams work in. Tick every sector that matches your sites — banners, allergen notices and sector-specific registers follow your selection. Core construction tools stay available regardless.
+            Tick every trade environment your teams work in. Banners, allergen notices and register emphasis follow your selection. Core construction tools stay available regardless. This does <strong>not</strong> replace the workspace profile under <strong>Modules &amp; RAMS</strong>.
           </div>
           {isTrialUnlockActive() && (
             <div
@@ -294,40 +320,72 @@ export default function OrgSettings() {
               lineHeight: 1.5,
             }}
           >
-            <strong>Workspace profile vs sectors:</strong> the profile under <strong>Modules &amp; RAMS</strong> controls which modules and RAMS packs appear (e.g. survey + construction). Sector ticks here control industrial banners, register emphasis and food/pharma RAMS sections — they are independent.
+            <strong>Your trades vs Modules &amp; RAMS:</strong> trades here emphasise banners and registers (food, ATEX, surveying cues). The <strong>workspace profile</strong> under Modules &amp; RAMS decides which modules and project playbooks you see day to day (e.g. Surveying &amp; geodesy unlocks PAS128 / topo packs).
           </div>
           {(() => {
             const selected = form.industrySectors || ["construction"];
             const hints = getSectorRegisterHints(selected);
+            const surveyingTicks = orgHasSurveyingSectorSelected(selected);
+            const surveyingProfileOn = Boolean(getWorkspacePack(getAppliedIndustryPackId())?.surveyWorkflow);
             return (
-              <div style={{ marginBottom: 18 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: "var(--color-text-tertiary,#888)", marginBottom: 8 }}>
-                  ACTIVE ({selected.length})
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: hints.length ? 10 : 0 }}>
-                  {selected.map((id) => (
-                    <span
-                      key={id}
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: 999,
-                        background: "#ECFDF5",
-                        border: "1px solid #A7F3D0",
-                        color: "#065F46",
-                        fontSize: 12,
-                        fontWeight: 500,
-                      }}
-                    >
-                      {getIndustrySectorLabel(id)}
-                    </span>
-                  ))}
-                </div>
-                {hints.length ? (
-                  <div style={{ fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
-                    <strong>Registers emphasised:</strong> {hints.join(" · ")} — enable in <strong>Modules & RAMS</strong> if hidden.
+              <>
+                {surveyingTicks && !surveyingProfileOn ? (
+                  <div
+                    style={{
+                      marginBottom: 16,
+                      padding: "12px 14px",
+                      borderRadius: 10,
+                      background: "#ECFDF5",
+                      border: "1px solid #A7F3D0",
+                      color: "#065F46",
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    <strong>Surveying trades selected</strong> — apply the <strong>Surveying &amp; geodesy</strong> workspace profile to unlock survey modules and PAS128 / topo playbooks.
+                    <div style={{ marginTop: 10 }}>
+                      <button type="button" style={ss.btnP} onClick={applySurveyingWorkspaceProfile}>
+                        Apply Surveying &amp; geodesy profile
+                      </button>
+                      <button
+                        type="button"
+                        style={{ ...ss.btn, marginLeft: 8 }}
+                        onClick={() => setTab("modules")}
+                      >
+                        Open Modules &amp; RAMS
+                      </button>
+                    </div>
                   </div>
                 ) : null}
-              </div>
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em", color: "var(--color-text-tertiary,#888)", marginBottom: 8 }}>
+                    ACTIVE ({selected.length})
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: hints.length ? 10 : 0 }}>
+                    {selected.map((id) => (
+                      <span
+                        key={id}
+                        style={{
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          background: "#ECFDF5",
+                          border: "1px solid #A7F3D0",
+                          color: "#065F46",
+                          fontSize: 12,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {getIndustrySectorLabel(id)}
+                      </span>
+                    ))}
+                  </div>
+                  {hints.length ? (
+                    <div style={{ fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.5 }}>
+                      <strong>Registers emphasised:</strong> {hints.join(" · ")} — enable in <strong>Modules &amp; RAMS</strong> if hidden.
+                    </div>
+                  ) : null}
+                </div>
+              </>
             );
           })()}
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -419,7 +477,7 @@ export default function OrgSettings() {
       {tab==="modules" && (
         <>
           <TabIntro>
-            <strong>Workflow:</strong> pick a <strong>workspace profile</strong> (playbooks + RAMS starters), then trim modules. Pair with <strong>Sectors</strong> for food/pharma registers and <strong>Settings → Automation</strong> for gates and survey/MS templates.
+            <strong>Workflow:</strong> pick a <strong>workspace profile</strong> (modules + project playbooks + RAMS starters), then trim modules. Pair with <strong>Your trades</strong> for food/pharma/surveying register emphasis and <strong>Settings → Automation</strong> for gates and survey/MS templates.
           </TabIntro>
           <Section title="Workspace profile">
             <OrgWorkspaceProfile />
