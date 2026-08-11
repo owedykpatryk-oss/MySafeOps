@@ -8,6 +8,7 @@ import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 function activeWorkspaceId(orgSlug) {
   return getCachedActiveCountryWorkspace(orgSlug)?.id || null;
 }
+
 /**
  * @param {object | undefined} prevPermit
  * @param {object} nextPermit
