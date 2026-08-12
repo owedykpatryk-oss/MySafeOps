@@ -6,7 +6,7 @@ import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
-import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { pushRecycleBinItem, softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import { openHelpGuide } from "../utils/workspaceNavContext";
@@ -657,6 +657,38 @@ export default function GeoPhotos() {
     pushAudit({ action: "geo_photo_delete", detail: id, module: "geo-photos" });
   };
 
+  const handleBulkDelete = () => {
+    const victims = safePhotos.filter((p) => selectedIds.has(p.id));
+    if (!victims.length) return;
+    const count = victims.length;
+    if (
+      !window.confirm(
+        `Delete ${count} geo-photo${count === 1 ? "" : "s"}? They move to Recycle Bin for 7 days.`
+      )
+    ) {
+      return;
+    }
+    for (const victim of victims) {
+      pushRecycleBinItem({
+        moduleId: "geo-photos",
+        moduleLabel: "Geo-photos",
+        itemType: "geo_photo",
+        itemLabel: geoPhotoPresetLabel(victim.type),
+        sourceKey: STORAGE_KEY,
+        payload: victim,
+      });
+      clearPermitEvidenceForGeoPhoto(victim, { load, save });
+    }
+    setPhotos((prev) => victims.reduce((acc, v) => replaceWithTombstone(acc, v.id), asPhotoArray(prev)));
+    setSelectedIds(new Set());
+    setDetail(null);
+    pushAudit({ action: "geo_photo_bulk_delete", detail: `${count} photo(s)`, module: "geo-photos" });
+    pushToast({
+      type: "success",
+      message: `${count} photo${count === 1 ? "" : "s"} moved to Recycle Bin — restore within 7 days.`,
+    });
+  };
+
   const openLinkedPermit = (permitId) => {
     setDetail(null);
     setWorkspaceNavTarget({ viewId: "permits", permitId, action: "edit" });
@@ -930,6 +962,9 @@ export default function GeoPhotos() {
           <button type="button" style={ms.btn} onClick={() => bulkSetReport(false)}>
             Exclude from report
           </button>
+          <button type="button" style={ms.btnDanger} onClick={handleBulkDelete}>
+            Delete selected
+          </button>
           <button type="button" style={ms.btn} onClick={() => setSelectedIds(new Set())}>
             Clear
           </button>
@@ -1027,6 +1062,19 @@ export default function GeoPhotos() {
                 </div>
                 {photo.notes ? <p className="geo-photos-card__notes">{photo.notes}</p> : null}
                 <div className="geo-photos-card__meta">{fmtWhen(photo.timestampUtc)}</div>
+                <div className="geo-photos-card__actions">
+                  <button type="button" style={{ ...ms.btn, padding: "8px 12px" }} onClick={() => setDetail(photo)}>
+                    Open
+                  </button>
+                  <button
+                    type="button"
+                    style={{ ...ms.btnDanger, padding: "8px 12px" }}
+                    onClick={() => handleDelete(photo.id)}
+                    aria-label={`Delete ${preset.label} photo`}
+                  >
+                    Delete
+                  </button>
+                </div>
                 <div className="geo-photos-card__map">
                   <GeoPhotoDirectionMap
                     latitude={photo.latitude}
