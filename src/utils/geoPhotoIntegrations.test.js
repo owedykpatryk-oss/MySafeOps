@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGeoPhotosFindingsBlock,
+  exportGeoPhotosGeoJson,
   findNearestProject,
   GEO_PHOTOS_FINDINGS_MARKER,
   importGeoPhotosIntoReport,
@@ -202,5 +203,26 @@ describe("geoPhotoIntegrations", () => {
     });
     expect(ok).toBe(true);
     expect(store.permits[0].evidenceGeoPhotoId).toBe("gp_ev1");
+  });
+
+  it("exports GeoJSON with National Grid, accuracy and elevation", () => {
+    const geo = exportGeoPhotosGeoJson([
+      { ...photos[0], gpsAccuracyMeters: 6.4, altitudeMeters: 18.2, locationSource: "device_gps" },
+    ]);
+    const [feature] = geo.features;
+    expect(feature.geometry.coordinates).toEqual([-0.101, 51.501, 18.2]);
+    expect(feature.properties.gridRef.startsWith("TQ")).toBe(true);
+    expect(feature.properties.easting).toBeGreaterThan(500000);
+    expect(feature.properties.northing).toBeGreaterThan(100000);
+    expect(feature.properties.gpsAccuracyMeters).toBe(6);
+    expect(feature.properties.locationSource).toBe("device_gps");
+  });
+
+  it("leaves survey fields null when nothing was captured", () => {
+    const [feature] = exportGeoPhotosGeoJson([photos[0]]).features;
+    expect(feature.geometry.coordinates).toHaveLength(2);
+    expect(feature.properties.gpsAccuracyMeters).toBeNull();
+    expect(feature.properties.altitudeMeters).toBeNull();
+    expect(feature.properties.locationSource).toBeNull();
   });
 });

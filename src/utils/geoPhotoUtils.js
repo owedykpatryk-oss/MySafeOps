@@ -100,6 +100,7 @@ export function requestDeviceLocation() {
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
+          altitude: Number.isFinite(pos.coords.altitude) ? pos.coords.altitude : null,
         }),
       (err) => reject(new Error(err.message || "Could not get GPS position")),
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
@@ -244,6 +245,7 @@ export function watchBetterLocation({
           latitude: pos.coords.latitude,
           longitude: pos.coords.longitude,
           accuracy: pos.coords.accuracy,
+          altitude: Number.isFinite(pos.coords.altitude) ? pos.coords.altitude : null,
         };
         const better = !best || !Number.isFinite(best.accuracy) || fix.accuracy < best.accuracy;
         if (better) {
@@ -277,6 +279,8 @@ export function blankGeoPhoto(overrides = {}) {
     latitude: null,
     longitude: null,
     gpsAccuracyMeters: null,
+    altitudeMeters: null,
+    locationSource: "",
     bearing: null,
     notes: "",
     locationId: "",

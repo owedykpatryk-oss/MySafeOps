@@ -84,6 +84,39 @@ describe("geoPhotoExport", () => {
     expect(gpx).not.toContain("gp_3");
   });
 
+  it("carries National Grid coordinates into KML for UK sites", () => {
+    const kml = buildGeoPhotosKml(samplePhotos);
+    expect(kml).toContain('<Data name="gridRef"><value>TQ ');
+    expect(kml).toContain('<Data name="easting">');
+    expect(kml).toContain('<Data name="northing">');
+    expect(kml).toContain("OSGB36 / British National Grid (EPSG:27700)");
+    expect(kml).toContain("OS grid ref");
+  });
+
+  it("omits National Grid data for photos outside Great Britain", () => {
+    const kml = buildGeoPhotosKml([{ ...samplePhotos[0], latitude: 48.8584, longitude: 2.2945 }]);
+    expect(kml).not.toContain("gridRef");
+    expect(kml).not.toContain("EPSG:27700");
+  });
+
+  it("records survey provenance and elevation in KML", () => {
+    const kml = buildGeoPhotosKml([
+      { ...samplePhotos[0], gpsAccuracyMeters: 42, altitudeMeters: 31.4, locationSource: "photo_exif" },
+    ]);
+    expect(kml).toContain('<Data name="gpsAccuracyMeters"><value>42</value></Data>');
+    expect(kml).toContain('<Data name="locationSource"><value>photo_exif</value></Data>');
+    expect(kml).toContain("±42 m (approximate)");
+    expect(kml).toContain("Photo metadata (EXIF)");
+    expect(kml).toContain("<altitudeMode>absolute</altitudeMode>");
+    expect(kml).toContain(",31.4</coordinates>");
+  });
+
+  it("keeps a plain sea-level point when no elevation was captured", () => {
+    const kml = buildGeoPhotosKml([samplePhotos[0]]);
+    expect(kml).not.toContain("altitudeMode");
+    expect(kml).toContain(",0</coordinates>");
+  });
+
   it("filters photos with and without GPS", () => {
     const { withCoords, withoutCoords } = filterGeoPhotosWithCoords(samplePhotos);
     expect(withCoords).toHaveLength(2);
