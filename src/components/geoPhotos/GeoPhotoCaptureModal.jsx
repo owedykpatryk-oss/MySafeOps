@@ -7,9 +7,13 @@ import {
   compassNeedsUserGesture,
   compressImageFile,
   flipBearing180,
+  GPS_GOOD_ACCURACY_M,
+  isCoarseGpsAccuracy,
   normalizeBearing,
+  readPhotoExifLocation,
   requestCompassPermission,
   requestDeviceLocation,
+  watchBetterLocation,
   watchCompassBearing,
 } from "../../utils/geoPhotoUtils";
 import { uploadGeoPhotoToR2 } from "../../utils/geoPhotoMedia";
@@ -87,6 +91,9 @@ export default function GeoPhotoCaptureModal({
   const [gpsAccuracyMeters, setGpsAccuracyMeters] = useState(null);
   const [gpsError, setGpsError] = useState("");
   const [gpsBusy, setGpsBusy] = useState(false);
+  const [gpsWaiting, setGpsWaiting] = useState(false);
+  const [locationSource, setLocationSource] = useState("");
+  const [exifLocation, setExifLocation] = useState(null);
   const [compassBearing, setCompassBearing] = useState(null);
   const [manualBearing, setManualBearing] = useState(null);
   const [type, setType] = useState(() => {
@@ -131,6 +138,9 @@ export default function GeoPhotoCaptureModal({
     setLongitude(null);
     setGpsAccuracyMeters(null);
     setGpsError("");
+    setGpsWaiting(false);
+    setLocationSource("");
+    setExifLocation(null);
     setCompassBearing(null);
     setManualBearing(null);
     setNotes("");
@@ -173,6 +183,9 @@ export default function GeoPhotoCaptureModal({
         setLongitude(draft.longitude ?? null);
         setGpsAccuracyMeters(draft.gpsAccuracyMeters ?? null);
         setGpsError(draft.gpsError || "");
+        setGpsWaiting(false);
+        setLocationSource(draft.locationSource || "");
+        setExifLocation(draft.exifLocation ?? null);
         setCompassBearing(draft.compassBearing ?? null);
         setManualBearing(draft.manualBearing ?? null);
         setType(draft.type || "general_site_condition");
@@ -235,6 +248,8 @@ export default function GeoPhotoCaptureModal({
       longitude,
       gpsAccuracyMeters,
       gpsError,
+      locationSource,
+      exifLocation,
       compassBearing,
       manualBearing,
       type,
@@ -257,6 +272,8 @@ export default function GeoPhotoCaptureModal({
     longitude,
     gpsAccuracyMeters,
     gpsError,
+    locationSource,
+    exifLocation,
     compassBearing,
     manualBearing,
     type,
@@ -271,6 +288,14 @@ export default function GeoPhotoCaptureModal({
     autoProjectHint,
   ]);
 
+  const autoSelectNearestProject = (lat, lng) => {
+    const near = findNearestProject(lat, lng, projects);
+    if (near && !projectId && !initialProjectId) {
+      setProjectId(near.project.id);
+      setAutoProjectHint(`Auto-selected ${near.project.name || "project"} (~${near.distanceMeters} m away)`);
+    }
+  };
+
   const acquireGps = async () => {
     setGpsBusy(true);
     setGpsError("");
@@ -279,23 +304,63 @@ export default function GeoPhotoCaptureModal({
       setLatitude(pos.latitude);
       setLongitude(pos.longitude);
       setGpsAccuracyMeters(pos.accuracy ?? null);
-      const near = findNearestProject(pos.latitude, pos.longitude, projects);
-      if (near && !projectId && !initialProjectId) {
-        setProjectId(near.project.id);
-        setAutoProjectHint(`Auto-selected ${near.project.name || "project"} (~${near.distanceMeters} m away)`);
-      }
+      setLocationSource("device_gps");
+      autoSelectNearestProject(pos.latitude, pos.longitude);
     } catch (e) {
       setGpsError(e.message || "Could not get GPS");
+      if (exifLocation) {
+        setLatitude(exifLocation.latitude);
+        setLongitude(exifLocation.longitude);
+        setGpsAccuracyMeters(null);
+        setLocationSource("photo_exif");
+        setGpsError("Using the location saved in the photo (GPS unavailable).");
+        autoSelectNearestProject(exifLocation.latitude, exifLocation.longitude);
+        return;
+      }
       const proj = projects.find((p) => p.id === projectId);
       if (proj?.lat != null && proj?.lng != null) {
         setLatitude(Number(proj.lat));
         setLongitude(Number(proj.lng));
         setGpsAccuracyMeters(null);
+        setLocationSource("project_site");
         setGpsError("Using project site coordinates (GPS unavailable).");
       }
     } finally {
       setGpsBusy(false);
     }
+  };
+
+  const waitForBetterGps = async () => {
+    setGpsWaiting(true);
+    setGpsError("");
+    try {
+      const fix = await watchBetterLocation({
+        onUpdate: (f) => {
+          setLatitude(f.latitude);
+          setLongitude(f.longitude);
+          setGpsAccuracyMeters(f.accuracy ?? null);
+          setLocationSource("device_gps");
+        },
+      });
+      autoSelectNearestProject(fix.latitude, fix.longitude);
+      if (isCoarseGpsAccuracy(fix.accuracy)) {
+        setGpsError(`Best fix was ±${Math.round(fix.accuracy)} m — move into the open or drop the pin by hand.`);
+      }
+    } catch (e) {
+      setGpsError(e.message || "Could not improve the GPS fix");
+    } finally {
+      setGpsWaiting(false);
+    }
+  };
+
+  const useExifLocation = () => {
+    if (!exifLocation) return;
+    setLatitude(exifLocation.latitude);
+    setLongitude(exifLocation.longitude);
+    setGpsAccuracyMeters(null);
+    setLocationSource("photo_exif");
+    setGpsError("");
+    autoSelectNearestProject(exifLocation.latitude, exifLocation.longitude);
   };
 
   useEffect(() => {
@@ -310,9 +375,11 @@ export default function GeoPhotoCaptureModal({
     setPhotoBusy(true);
     setPhotoError("");
     try {
-      const dataUrl = await compressImageFile(file);
+      // EXIF must come from the original file — compression re-encodes and drops metadata.
+      const [dataUrl, exif] = await Promise.all([compressImageFile(file), readPhotoExifLocation(file)]);
       setPhotoDataUrl(dataUrl);
       setPhotoName(file.name);
+      setExifLocation(exif);
       writeCaptureDraft({
         step: "location",
         photoDataUrl: dataUrl,
@@ -321,6 +388,8 @@ export default function GeoPhotoCaptureModal({
         longitude,
         gpsAccuracyMeters,
         gpsError,
+        locationSource,
+        exifLocation: exif,
         compassBearing,
         manualBearing,
         type,
@@ -386,6 +455,7 @@ export default function GeoPhotoCaptureModal({
       latitude,
       longitude,
       gpsAccuracyMeters,
+      locationSource,
       bearing: effectiveBearing,
       notes: mergedNotes,
       locationId: locationId.trim().toUpperCase(),
@@ -542,6 +612,7 @@ export default function GeoPhotoCaptureModal({
                   setLatitude(lat);
                   setLongitude(lng);
                   setGpsAccuracyMeters(null);
+                  setLocationSource("manual_pin");
                   setGpsError("");
                 }}
               />
@@ -554,16 +625,34 @@ export default function GeoPhotoCaptureModal({
                 <>
                   {latitude.toFixed(6)}, {longitude.toFixed(6)}
                   {gpsAccuracyMeters != null ? ` · ±${Math.round(gpsAccuracyMeters)} m` : ""}
+                  {locationSource === "photo_exif" ? " · from photo metadata" : ""}
+                  {locationSource === "project_site" ? " · project site" : ""}
                 </>
               ) : (
                 "Waiting for GPS…"
               )}
             </p>
+            {isCoarseGpsAccuracy(gpsAccuracyMeters) ? (
+              <p className="geo-photo-capture__hint geo-photo-capture__hint--warn">
+                Approximate location — anything over ±{GPS_GOOD_ACCURACY_M} m is too coarse for survey evidence. Wait
+                for a better fix, or tap the map to place the pin yourself.
+              </p>
+            ) : null}
             {gpsError ? <p className="geo-photo-capture__hint geo-photo-capture__hint--warn">{gpsError}</p> : null}
             <div className="geo-photo-capture__actions">
-              <button type="button" style={ms.btn} onClick={acquireGps} disabled={gpsBusy}>
+              <button type="button" style={ms.btn} onClick={acquireGps} disabled={gpsBusy || gpsWaiting}>
                 {gpsBusy ? "Getting GPS…" : "Refresh GPS"}
               </button>
+              {isCoarseGpsAccuracy(gpsAccuracyMeters) || latitude == null ? (
+                <button type="button" style={ms.btn} onClick={waitForBetterGps} disabled={gpsBusy || gpsWaiting}>
+                  {gpsWaiting ? "Waiting for better fix…" : "Wait for better GPS"}
+                </button>
+              ) : null}
+              {exifLocation && locationSource !== "photo_exif" ? (
+                <button type="button" style={ms.btn} onClick={useExifLocation} disabled={gpsWaiting}>
+                  Use photo location
+                </button>
+              ) : null}
               <button type="button" style={ms.btn} onClick={() => setStep("photo")}>
                 Back
               </button>
