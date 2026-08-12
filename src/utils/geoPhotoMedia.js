@@ -26,6 +26,24 @@ export function geoPhotoDisplayUrl(photo) {
   );
 }
 
+/**
+ * Keep a locally embedded image when the synced row comes back without one
+ * (older rows were pushed to D1 with the base64 stripped and no R2 key).
+ */
+export function preserveGeoPhotoMedia(localRows, incomingRows) {
+  const incoming = Array.isArray(incomingRows) ? incomingRows : [];
+  const embedded = new Map();
+  for (const row of Array.isArray(localRows) ? localRows : []) {
+    if (row?.id && row.photoDataUrl) embedded.set(row.id, row.photoDataUrl);
+  }
+  if (!embedded.size) return incoming;
+  return incoming.map((row) => {
+    if (!row?.id || row.photoDataUrl || row.photoStorageKey) return row;
+    const dataUrl = embedded.get(row.id);
+    return dataUrl ? { ...row, photoDataUrl: dataUrl } : row;
+  });
+}
+
 /** True when the photo can be shown now or via authenticated R2 fetch. */
 export function geoPhotoHasRenderableMedia(photo) {
   if (!photo) return false;

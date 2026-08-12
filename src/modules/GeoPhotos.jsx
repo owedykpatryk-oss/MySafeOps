@@ -28,7 +28,7 @@ import { isSurveyWorkflowEnabled } from "../utils/projectHubIndustry";
 import { buildGeoPhotoMobilisationChecklist, geoPhotoGroupCoverage } from "../utils/geoPhotoMobilisation";
 import { useRegisterPdfExportOverride } from "../context/RegisterPdfExportContext";
 import { stripGeoPhotosForD1 } from "../utils/d1SyncPayload";
-import { geoPhotoHasRenderableMedia } from "../utils/geoPhotoMedia";
+import { geoPhotoHasRenderableMedia, preserveGeoPhotoMedia, uploadGeoPhotoToR2 } from "../utils/geoPhotoMedia";
 import {
   downloadGeoJson,
   nextGeoPhotoReportOrder,
@@ -367,22 +367,30 @@ export default function GeoPhotos() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const photoPresets = useMemo(() => listGeoPhotoPresetsForOrg(isUtilityMappingOrg()), [orgName]);
 
+  // Stable identities — inline closures re-triggered D1 hydration on every render (flicker + refetch loop).
+  const loadArray = useCallback((key, fallback) => asPhotoArray(load(key, fallback)), []);
+  const setPhotosFromSync = useCallback((next) => {
+    setPhotos((prev) => preserveGeoPhotoMedia(asPhotoArray(prev), asPhotoArray(next)));
+  }, []);
+  const setWorkersFromSync = useCallback((next) => setWorkers(asPhotoArray(next)), []);
+  const setProjectsFromSync = useCallback((next) => setProjects(asPhotoArray(next)), []);
+
   const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
     storageKey: STORAGE_KEY,
     namespace: "geo_photos",
     value: photos,
-    setValue: (next) => setPhotos(asPhotoArray(next)),
-    load: (key, fallback) => asPhotoArray(load(key, fallback)),
+    setValue: setPhotosFromSync,
+    load: loadArray,
     save,
     serializeForSync: stripGeoPhotosForD1,
   });
 
   useD1WorkersProjectsSync({
     workers,
-    setWorkers: (next) => setWorkers(asPhotoArray(next)),
+    setWorkers: setWorkersFromSync,
     projects,
-    setProjects: (next) => setProjects(asPhotoArray(next)),
-    load: (key, fallback) => asPhotoArray(load(key, fallback)),
+    setProjects: setProjectsFromSync,
+    load: loadArray,
     save,
   });
 
@@ -513,6 +521,55 @@ export default function GeoPhotos() {
     });
     setSelectedIds(new Set());
   };
+
+  /**
+   * Photos captured while the R2 upload was failing exist only as base64 in localStorage —
+   * one quota error and they are gone. Move them to R2 in small batches once hydration settles.
+   */
+  const backfillBusyRef = useRef(false);
+  useEffect(() => {
+    if (d1Hydrating || backfillBusyRef.current) return;
+    const orphans = safePhotos.filter((p) => p.photoDataUrl && !p.photoStorageKey).slice(0, 5);
+    if (!orphans.length) return;
+
+    backfillBusyRef.current = true;
+    let cancelled = false;
+    (async () => {
+      for (const photo of orphans) {
+        if (cancelled) break;
+        let uploaded;
+        try {
+          uploaded = await uploadGeoPhotoToR2(photo.photoDataUrl, {
+            projectId: photo.projectId,
+            photoId: photo.id,
+          });
+        } catch {
+          break; // offline or auth problem — try again on the next visit
+        }
+        if (!uploaded?.photoStorageKey) break; // storage not configured for this org
+        if (cancelled) break;
+        setPhotos((prev) =>
+          asPhotoArray(prev).map((p) =>
+            p.id === photo.id
+              ? {
+                  ...p,
+                  photoStorageKey: uploaded.photoStorageKey,
+                  photoPublicUrl: uploaded.photoPublicUrl || null,
+                  photoSignedUrl: uploaded.photoSignedUrl || null,
+                  photoSignedExpiresAt: uploaded.photoSignedExpiresAt || null,
+                  photoDataUrl: "",
+                  updatedAt: new Date().toISOString(),
+                }
+              : p
+          )
+        );
+      }
+      backfillBusyRef.current = false;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [d1Hydrating, safePhotos]);
 
   /** Field users can start a site with just a name; the office completes it later in Projects. */
   const handleQuickProject = useCallback(
