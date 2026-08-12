@@ -64,30 +64,40 @@ export function useD1OrgArraySync({
   const d1VersionRef = useRef(0);
   const d1DebounceRef = useRef(null);
 
+  // Callers may pass inline closures; hydration must not re-run (and re-fetch) on every render.
+  const loadRef = useRef(load);
+  const saveRef = useRef(save);
+  const setValueRef = useRef(setValue);
+  const toSyncRef = useRef(toSyncValue);
+  loadRef.current = load;
+  saveRef.current = save;
+  setValueRef.current = setValue;
+  toSyncRef.current = toSyncValue;
+
   useEffect(() => {
     const cacheMs = Math.min(debounceMs, 500);
     let timer = null;
     const key = storageKey;
     const val = value;
-    timer = window.setTimeout(() => save(key, val), cacheMs);
+    timer = window.setTimeout(() => saveRef.current(key, val), cacheMs);
     return () => {
       if (timer != null) {
         window.clearTimeout(timer);
-        save(key, val);
+        saveRef.current(key, val);
       }
     };
-  }, [storageKey, value, save, debounceMs]);
+  }, [storageKey, value, debounceMs]);
 
   useEffect(() => {
     const onOrgChange = () => {
-      setValue(load(storageKey, []));
+      setValueRef.current(loadRef.current(storageKey, []));
       setD1Ready(!isD1Configured());
       setD1OutboxPending(false);
       setD1OrgEpoch((n) => n + 1);
     };
     window.addEventListener(ORG_CHANGED_EVENT, onOrgChange);
     return () => window.removeEventListener(ORG_CHANGED_EVENT, onOrgChange);
-  }, [storageKey, load, setValue]);
+  }, [storageKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,8 +136,8 @@ export function useD1OrgArraySync({
       namespace,
       d1DataKey: countryDataKey,
       storageKey,
-      setValue,
-      save,
+      setValue: setValueRef.current,
+      save: saveRef.current,
       versionRef: d1VersionRef,
     });
     const refreshPending = async () => {
@@ -170,21 +180,21 @@ export function useD1OrgArraySync({
       }
       d1VersionRef.current = r.version || 0;
       if (Array.isArray(r.value)) {
-        const local = load(storageKey, []);
+        const local = loadRef.current(storageKey, []);
         const merged = mergeOrgArrays(local, r.value);
-        setValue(merged);
-        save(storageKey, merged);
+        setValueRef.current(merged);
+        saveRef.current(storageKey, merged);
         await d1OutboxTryFlush(flushCtxBase());
         await refreshPending();
         setD1Ready(true);
         return;
       }
-      const local = load(storageKey, []);
-      setValue(local);
+      const local = loadRef.current(storageKey, []);
+      setValueRef.current(local);
       if (local.length > 0) {
         let put;
         try {
-          put = await d1PutKv(supabase, orgSlug, namespace, countryDataKey, toSyncValue(local), null);
+          put = await d1PutKv(supabase, orgSlug, namespace, countryDataKey, toSyncRef.current(local), null);
         } catch {
           put = { ok: false, error: "fetch_failed" };
         }
@@ -198,7 +208,7 @@ export function useD1OrgArraySync({
     return () => {
       cancelled = true;
     };
-  }, [d1OrgEpoch, storageKey, namespace, countryDataKey, load, save, setValue, toSyncValue]);
+  }, [d1OrgEpoch, storageKey, namespace, countryDataKey]);
 
   useEffect(() => {
     if (!d1Ready) return;
@@ -211,8 +221,8 @@ export function useD1OrgArraySync({
       namespace,
       d1DataKey: countryDataKey,
       storageKey,
-      setValue,
-      save,
+      setValue: setValueRef.current,
+      save: saveRef.current,
       versionRef: d1VersionRef,
     });
     const runFlush = async () => {
@@ -232,7 +242,7 @@ export function useD1OrgArraySync({
       window.removeEventListener("online", onOnline);
       window.removeEventListener(D1_OUTBOX_MANUAL_RETRY_EVENT, onManualRetry);
     };
-  }, [d1Ready, namespace, countryDataKey, storageKey, setValue, save, d1OrgEpoch]);
+  }, [d1Ready, namespace, countryDataKey, storageKey, d1OrgEpoch]);
 
   useEffect(() => {
     if (!d1Ready || !d1OutboxPending) return;
@@ -245,8 +255,8 @@ export function useD1OrgArraySync({
       namespace,
       d1DataKey: countryDataKey,
       storageKey,
-      setValue,
-      save,
+      setValue: setValueRef.current,
+      save: saveRef.current,
       versionRef: d1VersionRef,
     });
     const id = window.setInterval(async () => {
@@ -255,7 +265,7 @@ export function useD1OrgArraySync({
       setD1OutboxPending(still);
     }, 45_000);
     return () => window.clearInterval(id);
-  }, [d1Ready, d1OutboxPending, namespace, countryDataKey, storageKey, setValue, save, d1OrgEpoch]);
+  }, [d1Ready, d1OutboxPending, namespace, countryDataKey, storageKey, d1OrgEpoch]);
 
   useEffect(() => {
     if (!d1Ready) return;
@@ -266,7 +276,7 @@ export function useD1OrgArraySync({
     d1DebounceRef.current = setTimeout(async () => {
       const v = d1VersionRef.current;
       const useVersion = v > 0 ? v : undefined;
-      const syncPayload = toSyncValue(value);
+      const syncPayload = toSyncRef.current(value);
       let put;
       try {
         put = await d1PutKv(supabase, orgSlug, namespace, countryDataKey, syncPayload, useVersion);
@@ -297,8 +307,8 @@ export function useD1OrgArraySync({
         if (r.ok && Array.isArray(r.value)) {
           d1VersionRef.current = r.version || 0;
           const merged = mergeOrgArrays(value, r.value);
-          setValue(merged);
-          save(storageKey, merged);
+          setValueRef.current(merged);
+          saveRef.current(storageKey, merged);
         }
       } else if (isForbiddenD1Write(put.error)) {
         notifyD1WriteForbidden(namespace, put.error);
@@ -323,7 +333,7 @@ export function useD1OrgArraySync({
         d1DebounceRef.current = null;
       }
     };
-  }, [value, d1Ready, storageKey, namespace, countryDataKey, save, setValue, debounceMs, toSyncValue]);
+  }, [value, d1Ready, storageKey, namespace, countryDataKey, debounceMs]);
 
   const d1Hydrating = isD1Configured() && !d1Ready;
   const d1Syncing = d1Hydrating || d1OutboxPending;

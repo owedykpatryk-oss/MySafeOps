@@ -26,11 +26,52 @@ export function stripSurveyReportsForD1(reports) {
   });
 }
 
-/** @param {unknown} photos */
+/** Embedded images kept in the synced payload when R2 has no copy (keeps the KV value sane). */
+const GEO_PHOTO_EMBED_BUDGET_BYTES = 3 * 1024 * 1024;
+
+function isHttpUrl(value) {
+  return typeof value === "string" && /^https?:\/\//i.test(value.trim());
+}
+
+function geoPhotoHasRemoteCopy(ph) {
+  if (String(ph?.photoStorageKey || "").trim()) return true;
+  return isHttpUrl(ph?.photoSignedUrl) || isHttpUrl(ph?.photoPublicUrl);
+}
+
+function geoPhotoTime(ph) {
+  const t = Date.parse(String(ph?.timestampUtc || ph?.updatedAt || ph?.createdAt || ""));
+  return Number.isFinite(t) ? t : 0;
+}
+
+/**
+ * @param {unknown} photos
+ * Rows whose only copy is the embedded base64 keep it: a stripped row renders as a
+ * blank photo on every other device, and the bytes are then gone for good.
+ */
 export function stripGeoPhotosForD1(photos) {
   if (!Array.isArray(photos)) return photos;
+
+  const keepEmbedded = new Set();
+  let budget = GEO_PHOTO_EMBED_BUDGET_BYTES;
+  const orphans = photos
+    .filter(
+      (ph) =>
+        ph?.id &&
+        typeof ph.photoDataUrl === "string" &&
+        ph.photoDataUrl.startsWith("data:") &&
+        !geoPhotoHasRemoteCopy(ph)
+    )
+    .sort((a, b) => geoPhotoTime(b) - geoPhotoTime(a));
+  for (const ph of orphans) {
+    const size = ph.photoDataUrl.length;
+    if (size > budget) continue;
+    budget -= size;
+    keepEmbedded.add(ph.id);
+  }
+
   return photos.map((ph) => {
     if (!ph || typeof ph !== "object") return ph;
+    if (ph.id && keepEmbedded.has(ph.id)) return ph;
     // Geo-photos use photoDataUrl; keep legacy dataUrl strip for older rows.
     return stripDataUrlField(stripDataUrlField(ph, "photoDataUrl"), "dataUrl");
   });
