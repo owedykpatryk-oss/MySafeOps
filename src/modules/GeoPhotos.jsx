@@ -29,6 +29,7 @@ import { buildGeoPhotoMobilisationChecklist, geoPhotoGroupCoverage } from "../ut
 import { useRegisterPdfExportOverride } from "../context/RegisterPdfExportContext";
 import { stripGeoPhotosForD1 } from "../utils/d1SyncPayload";
 import { geoPhotoHasRenderableMedia, preserveGeoPhotoMedia, uploadGeoPhotoToR2 } from "../utils/geoPhotoMedia";
+import { isCoarseGpsAccuracy } from "../utils/geoPhotoUtils";
 import {
   downloadGeoJson,
   nextGeoPhotoReportOrder,
@@ -224,6 +225,11 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
         <p className="geo-photos-card__meta" style={{ margin: "0 0 12px" }}>
           {photo.projectName || "No project"} · {fmtWhen(photo.timestampUtc)}
           {photo.capturedBy ? ` · ${photo.capturedBy}` : ""}
+          {photo.gpsAccuracyMeters != null ? ` · ±${Math.round(Number(photo.gpsAccuracyMeters))} m` : ""}
+          {isCoarseGpsAccuracy(photo.gpsAccuracyMeters) ? " (approximate)" : ""}
+          {photo.locationSource === "photo_exif" ? " · location from photo metadata" : ""}
+          {photo.locationSource === "manual_pin" ? " · pin placed by hand" : ""}
+          {photo.locationSource === "project_site" ? " · project site coordinates" : ""}
         </p>
         {photo.linkedPermitId ? (
           <p className="geo-photos-card__meta" style={{ margin: "0 0 12px" }}>

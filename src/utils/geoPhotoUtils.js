@@ -154,6 +154,119 @@ export function watchCompassBearing(onBearing, { autoRequestPermission = true } 
   return () => window.removeEventListener("deviceorientation", handler, true);
 }
 
+/** Survey-grade fix on a phone; above this the location is only indicative. */
+export const GPS_GOOD_ACCURACY_M = 15;
+/** Stop waiting early once the fix is this tight. */
+export const GPS_TARGET_ACCURACY_M = 10;
+
+export function isCoarseGpsAccuracy(accuracyMeters) {
+  const n = Number(accuracyMeters);
+  return Number.isFinite(n) && n > GPS_GOOD_ACCURACY_M;
+}
+
+/** Cameras write coordinates either as decimals or as raw [deg, min, sec] triples. */
+function exifCoordToDecimal(value, ref) {
+  const dms = Array.isArray(value)
+    ? Number(value[0] || 0) + Number(value[1] || 0) / 60 + Number(value[2] || 0) / 3600
+    : Number(value);
+  if (!Number.isFinite(dms)) return NaN;
+  const hemisphere = String(ref || "").trim().toUpperCase();
+  return hemisphere === "S" || hemisphere === "W" ? -Math.abs(dms) : dms;
+}
+
+export function normalisePhotoExifLocation(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const lat = Number.isFinite(Number(raw.latitude))
+    ? Number(raw.latitude)
+    : exifCoordToDecimal(raw.GPSLatitude, raw.GPSLatitudeRef);
+  const lng = Number.isFinite(Number(raw.longitude))
+    ? Number(raw.longitude)
+    : exifCoordToDecimal(raw.GPSLongitude, raw.GPSLongitudeRef);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  // Cameras with no fix commonly write a literal 0,0.
+  if (lat === 0 && lng === 0) return null;
+  const alt = Number(raw.GPSAltitude ?? raw.altitude);
+  return {
+    latitude: Math.round(lat * 1e6) / 1e6,
+    longitude: Math.round(lng * 1e6) / 1e6,
+    altitude: Number.isFinite(alt) ? Math.round(alt * 10) / 10 : null,
+  };
+}
+
+/**
+ * Read the location the camera embedded in the photo. Matters for images picked from
+ * the gallery, where the device has no live fix for where the shot was taken.
+ * @param {File|Blob} file
+ */
+export async function readPhotoExifLocation(file) {
+  if (!file) return null;
+  try {
+    const exifr = await import("exifr");
+    const parse = exifr.parse || exifr.default?.parse;
+    if (typeof parse !== "function") return null;
+    return normalisePhotoExifLocation(await parse(file, { gps: true }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Keep sampling until the fix is good enough (or time runs out), reporting each improvement.
+ * @param {{ targetAccuracyM?: number, timeoutMs?: number, onUpdate?: (fix: object) => void }} [opts]
+ */
+export function watchBetterLocation({
+  targetAccuracyM = GPS_TARGET_ACCURACY_M,
+  timeoutMs = 30000,
+  onUpdate,
+} = {}) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not available on this device."));
+      return;
+    }
+    let best = null;
+    let watchId = null;
+    let timer = null;
+
+    const settle = () => {
+      if (watchId != null) navigator.geolocation.clearWatch(watchId);
+      if (timer != null) window.clearTimeout(timer);
+      watchId = null;
+      timer = null;
+      if (best) resolve(best);
+      else reject(new Error("Could not get a better GPS fix"));
+    };
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const fix = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        };
+        const better = !best || !Number.isFinite(best.accuracy) || fix.accuracy < best.accuracy;
+        if (better) {
+          best = fix;
+          onUpdate?.(fix);
+        }
+        if (Number.isFinite(fix.accuracy) && fix.accuracy <= targetAccuracyM) settle();
+      },
+      (err) => {
+        if (best) settle();
+        else {
+          if (watchId != null) navigator.geolocation.clearWatch(watchId);
+          if (timer != null) window.clearTimeout(timer);
+          reject(new Error(err?.message || "Could not get GPS position"));
+        }
+      },
+      { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 }
+    );
+
+    timer = window.setTimeout(settle, timeoutMs);
+  });
+}
+
 export function blankGeoPhoto(overrides = {}) {
   const now = new Date().toISOString();
   return {
