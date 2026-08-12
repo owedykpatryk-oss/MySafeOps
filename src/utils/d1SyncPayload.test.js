@@ -23,8 +23,15 @@ describe("d1SyncPayload", () => {
   });
 
   it("strips geo photo data urls", () => {
-    const out = stripGeoPhotosForD1([{ id: "g1", dataUrl: "data:image/jpeg;base64,xx" }]);
+    const out = stripGeoPhotosForD1([
+      { id: "g1", dataUrl: "data:image/jpeg;base64,xx" },
+      { id: "g2", photoDataUrl: "data:image/jpeg;base64,yy", photoStorageKey: "k1" },
+    ]);
     expect(out[0].dataUrl).toBe("");
+    expect(out[0].hasLocalMedia).toBe(true);
+    expect(out[1].photoDataUrl).toBe("");
+    expect(out[1].hasLocalMedia).toBe(true);
+    expect(out[1].photoStorageKey).toBe("k1");
   });
 
   it("strips briefing signature data urls", () => {

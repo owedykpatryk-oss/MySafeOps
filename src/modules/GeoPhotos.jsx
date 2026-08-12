@@ -16,14 +16,16 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import GeoPhotosMap from "../components/geoPhotos/GeoPhotosMap";
 import GeoPhotoCaptureModal from "../components/geoPhotos/GeoPhotoCaptureModal";
 import GeoPhotoDirectionMap from "../components/geoPhotos/GeoPhotoDirectionMap";
+import GeoPhotoImg from "../components/geoPhotos/GeoPhotoImg";
 import { geoPhotoPreset, geoPhotoPresetLabel, listGeoPhotoPresetsForOrg } from "../utils/geoPhotoPresets";
 import { isUtilityMappingOrg } from "../utils/utilityMappingOrg";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
 import { isSurveyWorkflowEnabled } from "../utils/projectHubIndustry";
 import { buildGeoPhotoMobilisationChecklist, geoPhotoGroupCoverage } from "../utils/geoPhotoMobilisation";
-import { geoPhotoDisplayUrl } from "../utils/geoPhotoMedia";
 import { useRegisterPdfExportOverride } from "../context/RegisterPdfExportContext";
+import { stripGeoPhotosForD1 } from "../utils/d1SyncPayload";
+import { geoPhotoHasRenderableMedia } from "../utils/geoPhotoMedia";
 import {
   downloadGeoJson,
   nextGeoPhotoReportOrder,
@@ -204,9 +206,7 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
             Close
           </button>
         </div>
-        {geoPhotoDisplayUrl(photo) ? (
-          <img src={geoPhotoDisplayUrl(photo)} alt="" className="geo-photo-modal__preview" />
-        ) : null}
+        <GeoPhotoImg photo={photo} className="geo-photo-modal__preview" />
         <div className="geo-photos-card__map" style={{ marginBottom: 12 }}>
           <GeoPhotoDirectionMap
             latitude={photo.latitude}
@@ -370,6 +370,7 @@ export default function GeoPhotos() {
     setValue: (next) => setPhotos(asPhotoArray(next)),
     load: (key, fallback) => asPhotoArray(load(key, fallback)),
     save,
+    serializeForSync: stripGeoPhotosForD1,
   });
 
   useD1WorkersProjectsSync({
@@ -782,8 +783,8 @@ export default function GeoPhotos() {
               return (
                 <li key={p.id} className="geo-photos-report-pack__row">
                   <span className="geo-photos-report-pack__order">#{p.reportOrder ?? idx + 1}</span>
-                  {geoPhotoDisplayUrl(p) ? (
-                    <img src={geoPhotoDisplayUrl(p)} alt="" className="geo-photos-report-pack__thumb" />
+                  {geoPhotoHasRenderableMedia(p) ? (
+                    <GeoPhotoImg photo={p} className="geo-photos-report-pack__thumb" />
                   ) : (
                     <span style={{ fontSize: 22 }}>{preset.icon}</span>
                   )}
@@ -880,8 +881,8 @@ export default function GeoPhotos() {
                 role="button"
                 tabIndex={0}
               >
-                {geoPhotoDisplayUrl(photo) ? (
-                  <img src={geoPhotoDisplayUrl(photo)} alt="" loading="lazy" />
+                {geoPhotoHasRenderableMedia(photo) ? (
+                  <GeoPhotoImg photo={photo} loading="lazy" />
                 ) : (
                   <div className="geo-photos-card__placeholder">{preset.icon}</div>
                 )}

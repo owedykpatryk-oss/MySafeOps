@@ -90,8 +90,11 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   }
 
   const returnedKey = json.key || key;
+  // Only build a "public CDN" URL when the base is a real public host — not the upload Worker itself.
+  // Mis-setting VITE_R2_PUBLIC_BASE_URL to the Worker origin produces /{key} links that 405 and break <img>.
   const pub = getR2PublicBaseUrl();
-  const publicUrl = pub ? `${pub}/${returnedKey}` : null;
+  const apiBase = getStorageApiBase();
+  const publicUrl = pub && pub !== apiBase ? `${pub}/${returnedKey}` : null;
   const signedUrl = typeof json.signedUrl === "string" ? json.signedUrl : null;
   const signedExpiresAt =
     typeof json.signedExpiresAt === "number" ? json.signedExpiresAt : null;
@@ -132,11 +135,23 @@ export async function fetchR2ObjectBlob(key) {
  * Prefer Worker signed URL when present and not expired; else public CDN; else null.
  * @param {{ signedUrl?: string | null, signedExpiresAt?: number | null, publicUrl?: string | null, key?: string }} meta
  */
+/**
+ * True when `url` is a real public object URL (not the upload Worker /{key} path).
+ * Worker serves objects only via /signed and /object.
+ */
+export function isUsableR2PublicUrl(url) {
+  const u = String(url || "").trim();
+  if (!/^https?:\/\//i.test(u)) return false;
+  const api = getStorageApiBase();
+  if (api && u.startsWith(`${api}/`) && !u.includes("/signed?")) return false;
+  return true;
+}
+
 export function pickR2ViewUrl(meta = {}) {
   const exp = Number(meta.signedExpiresAt);
   if (meta.signedUrl && Number.isFinite(exp) && exp * 1000 > Date.now() + 30_000) {
     return meta.signedUrl;
   }
-  if (meta.publicUrl) return meta.publicUrl;
+  if (isUsableR2PublicUrl(meta.publicUrl)) return meta.publicUrl;
   return null;
 }

@@ -29,7 +29,11 @@ export function stripSurveyReportsForD1(reports) {
 /** @param {unknown} photos */
 export function stripGeoPhotosForD1(photos) {
   if (!Array.isArray(photos)) return photos;
-  return photos.map((ph) => stripDataUrlField(ph));
+  return photos.map((ph) => {
+    if (!ph || typeof ph !== "object") return ph;
+    // Geo-photos use photoDataUrl; keep legacy dataUrl strip for older rows.
+    return stripDataUrlField(stripDataUrlField(ph, "photoDataUrl"), "dataUrl");
+  });
 }
 
 /** Daily briefing / toolbox — strip attendee signature data URLs */
