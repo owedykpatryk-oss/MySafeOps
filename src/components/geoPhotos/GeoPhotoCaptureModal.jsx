@@ -69,6 +69,7 @@ export default function GeoPhotoCaptureModal({
   open,
   onClose,
   onSave,
+  onCreateProject,
   projects = [],
   initialProjectId = "",
   initialPreset = "",
@@ -106,6 +107,11 @@ export default function GeoPhotoCaptureModal({
   const [projectId, setProjectId] = useState(initialProjectId || "");
   const [capturedBy, setCapturedBy] = useState("");
   const [autoProjectHint, setAutoProjectHint] = useState("");
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickName, setQuickName] = useState("");
+  const [quickAddress, setQuickAddress] = useState("");
+  const [quickError, setQuickError] = useState("");
+  const [saveError, setSaveError] = useState("");
   const fileRef = useRef(null);
   const compassCleanupRef = useRef(null);
   const wasOpenRef = useRef(false);
@@ -136,6 +142,11 @@ export default function GeoPhotoCaptureModal({
     setProjectId(initialProjectId || "");
     setCapturedBy("");
     setAutoProjectHint("");
+    setQuickOpen(false);
+    setQuickName("");
+    setQuickAddress("");
+    setQuickError("");
+    setSaveError("");
     const presetId =
       initialPreset ||
       (() => {
@@ -174,6 +185,11 @@ export default function GeoPhotoCaptureModal({
         setProjectId(draft.projectId || initialProjectId || "");
         setCapturedBy(draft.capturedBy || "");
         setAutoProjectHint(draft.autoProjectHint || "");
+        setQuickOpen(false);
+        setQuickName("");
+        setQuickAddress("");
+        setQuickError("");
+        setSaveError("");
       } else {
         reset();
       }
@@ -326,7 +342,29 @@ export default function GeoPhotoCaptureModal({
     }
   };
 
+  const submitQuickProject = () => {
+    if (!onCreateProject) return;
+    const name = quickName.trim();
+    if (!name) {
+      setQuickError("Enter a site or project name.");
+      return;
+    }
+    const created = onCreateProject({ name, address: quickAddress.trim(), latitude, longitude });
+    if (!created?.id) {
+      setQuickError("Could not create the project — check your plan limits in Settings → Billing.");
+      return;
+    }
+    setProjectId(created.id);
+    setQuickOpen(false);
+    setQuickName("");
+    setQuickAddress("");
+    setQuickError("");
+    setSaveError("");
+    setAutoProjectHint(`Linked to ${created.name} — add client, dates and risks in Projects later.`);
+  };
+
   const handleSave = async (takeAnother = false) => {
+    setSaveError("");
     if (!photoDataUrl) {
       setPhotoError("Add a photo before saving.");
       setStep("photo");
@@ -384,8 +422,14 @@ export default function GeoPhotoCaptureModal({
     } catch {
       /* ignore */
     }
+    const saved = await onSave(row, { takeAnother });
+    if (saved === false) {
+      // Keep the draft (and the photo) so a blocked save never loses field work.
+      setSaveError("This photo needs a project. Pick one below or create a quick project.");
+      setStep("details");
+      return;
+    }
     clearCaptureDraft();
-    onSave(row, { takeAnother });
     if (takeAnother) {
       setStep("photo");
       setPhotoDataUrl("");
@@ -597,9 +641,17 @@ export default function GeoPhotoCaptureModal({
             {autoProjectHint ? (
               <p className="geo-photo-capture__hint geo-photo-capture__hint--ok">{autoProjectHint}</p>
             ) : null}
+            {saveError ? <p className="geo-photo-capture__hint geo-photo-capture__hint--warn">{saveError}</p> : null}
             <label className="geo-photos-toolbar__field">
               Project
-              <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={ms.inp}>
+              <select
+                value={projectId}
+                onChange={(e) => {
+                  setProjectId(e.target.value);
+                  setSaveError("");
+                }}
+                style={ms.inp}
+              >
                 <option value="">— No project —</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -608,6 +660,71 @@ export default function GeoPhotoCaptureModal({
                 ))}
               </select>
             </label>
+            {onCreateProject ? (
+              <div style={{ marginBottom: 12 }}>
+                {quickOpen ? (
+                  <div className="geo-photo-capture__panel">
+                    <div className="geo-photo-capture__panel-title">Quick project</div>
+                    <label className="geo-photos-toolbar__field">
+                      Site / project name
+                      <input
+                        value={quickName}
+                        onChange={(e) => {
+                          setQuickName(e.target.value);
+                          setQuickError("");
+                        }}
+                        placeholder="Elm Road footway"
+                        autoFocus
+                        style={ms.inp}
+                      />
+                    </label>
+                    <label className="geo-photos-toolbar__field">
+                      Address (optional)
+                      <input
+                        value={quickAddress}
+                        onChange={(e) => setQuickAddress(e.target.value)}
+                        placeholder="12 Elm Road, Leeds LS1 1BA"
+                        style={ms.inp}
+                      />
+                    </label>
+                    <p className="geo-photo-capture__hint">
+                      Name is enough on site
+                      {latitude != null && longitude != null ? " — current GPS is saved as the site location" : ""}. Add
+                      client, dates and risks back in the office.
+                    </p>
+                    {quickError ? (
+                      <p className="geo-photo-capture__hint geo-photo-capture__hint--warn">{quickError}</p>
+                    ) : null}
+                    <div className="geo-photo-capture__actions">
+                      <button type="button" style={ms.btnP} onClick={submitQuickProject}>
+                        Create &amp; link
+                      </button>
+                      <button
+                        type="button"
+                        style={ms.btn}
+                        onClick={() => {
+                          setQuickOpen(false);
+                          setQuickError("");
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    style={{ ...ms.btn, minHeight: 44, touchAction: "manipulation" }}
+                    onClick={() => {
+                      setQuickOpen(true);
+                      setQuickError("");
+                    }}
+                  >
+                    + Quick project (name only)
+                  </button>
+                )}
+              </div>
+            ) : null}
             <label className="geo-photos-toolbar__field">
               Type
               <select value={type} onChange={(e) => setType(e.target.value)} style={ms.inp}>

@@ -21,6 +21,9 @@ import { geoPhotoPreset, geoPhotoPresetLabel, listGeoPhotoPresetsForOrg } from "
 import { isUtilityMappingOrg } from "../utils/utilityMappingOrg";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
+import { buildQuickProject, findProjectByName } from "../utils/quickProject";
+import { billingLimitMessage, checkBillingLimit } from "../utils/billingLimits";
+import { useToast } from "../context/ToastContext";
 import { isSurveyWorkflowEnabled } from "../utils/projectHubIndustry";
 import { buildGeoPhotoMobilisationChecklist, geoPhotoGroupCoverage } from "../utils/geoPhotoMobilisation";
 import { useRegisterPdfExportOverride } from "../context/RegisterPdfExportContext";
@@ -345,7 +348,8 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
 }
 
 export default function GeoPhotos() {
-  const { orgName } = useApp();
+  const { orgName, trialStatus, billing, isPlatformOwner } = useApp();
+  const { pushToast } = useToast();
   const pendingGeoPhotoIdRef = useRef(null);
   const [photos, setPhotos] = useState(() => asPhotoArray(load(STORAGE_KEY, [])));
   const [workers, setWorkers] = useState(() => asPhotoArray(load("mysafeops_workers", [])));
@@ -510,10 +514,43 @@ export default function GeoPhotos() {
     setSelectedIds(new Set());
   };
 
+  /** Field users can start a site with just a name; the office completes it later in Projects. */
+  const handleQuickProject = useCallback(
+    ({ name, address = "", latitude = null, longitude = null }) => {
+      const existing = findProjectByName(name, activeProjects);
+      if (existing) return existing;
+
+      const gate = checkBillingLimit("projects", { trialStatus, billing, isPlatformOwner });
+      if (!gate.ok) {
+        pushToast({ type: "warn", message: billingLimitMessage(gate) });
+        return null;
+      }
+      const project = buildQuickProject({ name, address, latitude, longitude });
+      if (!project) return null;
+
+      setProjects((prev) => [project, ...asPhotoArray(prev)]);
+      pushAudit({
+        action: "project_quick_create",
+        detail: `${project.name} — created from geo-photo capture`,
+        module: "geo-photos",
+      });
+      pushToast({ type: "success", message: `Project "${project.name}" created — add details in Projects later.` });
+      return project;
+    },
+    [activeProjects, trialStatus, billing, isPlatformOwner, pushToast]
+  );
+
   const handleSaveNew = useCallback(
     (row) => {
-      if (!ensureProjectLinked({ projectId: row.projectId, projects: activeProjects, moduleLabel: "geo-photo" }))
-        return;
+      if (
+        !ensureProjectLinked({
+          projectId: row.projectId,
+          projects: activeProjects,
+          moduleLabel: "geo-photo",
+          allowInlineCreate: true,
+        })
+      )
+        return false;
       const enriched = { ...row };
       if (enriched.includeInReport && enriched.projectId) {
         enriched.reportOrder = nextGeoPhotoReportOrder(safePhotos, enriched.projectId);
@@ -527,6 +564,7 @@ export default function GeoPhotos() {
         detail: `${geoPhotoPresetLabel(enriched.type)} — ${enriched.projectName || "no project"}`,
         module: "geo-photos",
       });
+      return true;
     },
     [safePhotos, activeProjects]
   );
@@ -970,6 +1008,7 @@ export default function GeoPhotos() {
           setCaptureLinkedPermitId("");
         }}
         onSave={handleSaveNew}
+        onCreateProject={handleQuickProject}
         projects={activeProjects}
         initialProjectId={filterProject}
         initialPreset={capturePreset}
