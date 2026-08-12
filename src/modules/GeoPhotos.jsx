@@ -53,8 +53,14 @@ import {
 import {
   isGiGeoPhotoType,
   buildStructuredGeoPhotoNotes,
+  stripStructuredGeoPhotoNotes,
   CAPTURE_PHASE_OPTIONS,
 } from "../utils/geoPhotoFields";
+import GeoPhotoTypeFieldInputs from "../components/geoPhotos/GeoPhotoTypeFieldInputs";
+import {
+  geoPhotoDetailSummary,
+  normaliseGeoPhotoDetails,
+} from "../utils/geoPhotoTypeFields";
 
 import { todayLocalISO } from "../utils/localDate";
 const STORAGE_KEY = "geo_photos";
@@ -144,6 +150,7 @@ function exportCsv(rows) {
     "locationId",
     "depthM",
     "linkedPermitId",
+    "observations",
     "notes",
     "capturedBy",
     "timestampUtc",
@@ -162,6 +169,7 @@ function exportCsv(rows) {
         r.locationId || "",
         r.depthM ?? "",
         r.linkedPermitId || "",
+        geoPhotoDetailSummary(r),
         r.notes,
         r.capturedBy,
         r.timestampUtc,
@@ -179,29 +187,41 @@ function exportCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
+/** The prose the user typed, without the structured tokens merged into `notes` at save. */
+function baseNotesOf(photo) {
+  return stripStructuredGeoPhotoNotes(photo?.notes, {
+    locationId: photo?.locationId,
+    depthM: photo?.depthM,
+    sampleRef: photo?.sampleRef,
+    capturePhase: photo?.capturePhase,
+  });
+}
+
 function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOpenSurvey, onOpenPermit }) {
   const preset = geoPhotoPreset(photo.type);
   const showGi = isGiGeoPhotoType(photo.type);
-  const [notes, setNotes] = useState(photo.notes || "");
+  const [notes, setNotes] = useState(() => baseNotesOf(photo));
   const [includeInReport, setIncludeInReport] = useState(!!photo.includeInReport);
   const [bearing, setBearing] = useState(photo.bearing);
   const [locationId, setLocationId] = useState(photo.locationId || "");
   const [depthM, setDepthM] = useState(photo.depthM ?? "");
   const [sampleRef, setSampleRef] = useState(photo.sampleRef || "");
   const [capturePhase, setCapturePhase] = useState(photo.capturePhase || "");
+  const [details, setDetails] = useState(() => photo.details || {});
   const nationalGrid = useMemo(
     () => wgs84ToBritishNationalGrid(photo.latitude, photo.longitude),
     [photo.latitude, photo.longitude]
   );
 
   useEffect(() => {
-    setNotes(photo.notes || "");
+    setNotes(baseNotesOf(photo));
     setIncludeInReport(!!photo.includeInReport);
     setBearing(photo.bearing);
     setLocationId(photo.locationId || "");
     setDepthM(photo.depthM ?? "");
     setSampleRef(photo.sampleRef || "");
     setCapturePhase(photo.capturePhase || "");
+    setDetails(photo.details || {});
   }, [photo]);
 
   return (
@@ -283,6 +303,7 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
             </label>
           </div>
         ) : null}
+        <GeoPhotoTypeFieldInputs type={photo.type} value={details} onChange={setDetails} showPrompt={false} />
         <label className="geo-photos-toolbar__field" style={{ marginBottom: 12 }}>
           Notes
           <textarea
@@ -332,6 +353,7 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
                 depthM: Number.isFinite(depthVal) ? depthVal : null,
                 sampleRef: sampleRef.trim(),
                 capturePhase,
+                details: normaliseGeoPhotoDetails(photo.type, details),
                 includeInReport,
                 bearing,
                 updatedAt: new Date().toISOString(),
@@ -453,7 +475,17 @@ export default function GeoPhotos() {
         if (filterReport === "exclude" && p.includeInReport) return false;
         if (filterType && p.type !== filterType) return false;
         if (!q) return true;
-        const hay = [p.notes, p.projectName, geoPhotoPresetLabel(p.type), p.capturedBy].join(" ").toLowerCase();
+        const hay = [
+          p.notes,
+          p.projectName,
+          geoPhotoPresetLabel(p.type),
+          p.capturedBy,
+          p.locationId,
+          p.sampleRef,
+          geoPhotoDetailSummary(p),
+        ]
+          .join(" ")
+          .toLowerCase();
         return hay.includes(q);
       })
       .sort(
@@ -1079,6 +1111,9 @@ export default function GeoPhotos() {
                   </label>
                 </div>
                 {photo.notes ? <p className="geo-photos-card__notes">{photo.notes}</p> : null}
+                {geoPhotoDetailSummary(photo) ? (
+                  <p className="geo-photos-card__observations">{geoPhotoDetailSummary(photo)}</p>
+                ) : null}
                 <div className="geo-photos-card__meta">{fmtWhen(photo.timestampUtc)}</div>
                 <div className="geo-photos-card__actions">
                   <button type="button" style={{ ...ms.btn, padding: "8px 12px" }} onClick={() => setDetail(photo)}>

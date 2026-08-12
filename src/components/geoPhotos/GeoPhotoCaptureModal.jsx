@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ms } from "../../utils/moduleStyles";
 import GeoPhotoDirectionMap from "./GeoPhotoDirectionMap";
+import GeoPhotoTypeFieldInputs from "./GeoPhotoTypeFieldInputs";
 import { presetsByGroup, geoPhotoPreset, geoPhotoPresetLabel } from "../../utils/geoPhotoPresets";
 import {
   blankGeoPhoto,
@@ -20,6 +21,7 @@ import {
 import { wgs84ToBritishNationalGrid } from "../../utils/britishNationalGrid";
 import { uploadGeoPhotoToR2 } from "../../utils/geoPhotoMedia";
 import { findNearestProject, findRecentDuplicateGeoPhoto } from "../../utils/geoPhotoIntegrations";
+import { normaliseGeoPhotoDetails } from "../../utils/geoPhotoTypeFields";
 import {
   isGiGeoPhotoType,
   buildStructuredGeoPhotoNotes,
@@ -113,6 +115,7 @@ export default function GeoPhotoCaptureModal({
   const [depthM, setDepthM] = useState("");
   const [sampleRef, setSampleRef] = useState("");
   const [capturePhase, setCapturePhase] = useState("");
+  const [details, setDetails] = useState({});
   const [includeInReport, setIncludeInReport] = useState(true);
   const [projectId, setProjectId] = useState(initialProjectId || "");
   const [capturedBy, setCapturedBy] = useState("");
@@ -158,6 +161,7 @@ export default function GeoPhotoCaptureModal({
     setDepthM("");
     setSampleRef("");
     setCapturePhase("");
+    setDetails({});
     setIncludeInReport(true);
     setProjectId(initialProjectId || "");
     setCapturedBy("");
@@ -209,6 +213,7 @@ export default function GeoPhotoCaptureModal({
         setDepthM(draft.depthM || "");
         setSampleRef(draft.sampleRef || "");
         setCapturePhase(draft.capturePhase || "");
+        setDetails(draft.details && typeof draft.details === "object" ? draft.details : {});
         setIncludeInReport(draft.includeInReport ?? true);
         setProjectId(draft.projectId || initialProjectId || "");
         setCapturedBy(draft.capturedBy || "");
@@ -275,6 +280,7 @@ export default function GeoPhotoCaptureModal({
       depthM,
       sampleRef,
       capturePhase,
+      details,
       includeInReport,
       projectId,
       capturedBy,
@@ -300,6 +306,7 @@ export default function GeoPhotoCaptureModal({
     depthM,
     sampleRef,
     capturePhase,
+    details,
     includeInReport,
     projectId,
     capturedBy,
@@ -489,6 +496,7 @@ export default function GeoPhotoCaptureModal({
       depthM: Number.isFinite(depthVal) ? depthVal : null,
       sampleRef: sampleRef.trim(),
       capturePhase,
+      details: normaliseGeoPhotoDetails(type, details),
       linkedPermitId: linkedPermitId || "",
       includeInReport,
       photoDataUrl,
@@ -560,6 +568,7 @@ export default function GeoPhotoCaptureModal({
       setLocationId("");
       setDepthM("");
       setSampleRef("");
+      setDetails({});
       acquireGps();
     } else {
       onClose();
@@ -928,6 +937,7 @@ export default function GeoPhotoCaptureModal({
                 </div>
               </div>
             ) : null}
+            <GeoPhotoTypeFieldInputs type={type} value={details} onChange={setDetails} />
             <label className="geo-photos-toolbar__field">
               Notes
               <textarea

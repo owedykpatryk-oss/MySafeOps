@@ -11,6 +11,7 @@ import {
 } from "./geoPhotoFields";
 import { buildStaticMapUrl } from "./staticMapUrl.js";
 import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
+import { geoPhotoDetailRows, geoPhotoDetailSummary } from "./geoPhotoTypeFields";
 
 import { todayLocalISO } from "./localDate";
 export const GEO_PHOTOS_FINDINGS_MARKER = "=== Geo-photos (field capture) ===";
@@ -108,6 +109,8 @@ export function geoPhotoCaption(photo) {
   const sample = String(photo.sampleRef || "").trim();
   if (sample) parts.push(`sample ${sample}`);
   if (photo.notes?.trim()) parts.push(photo.notes.trim());
+  const observations = geoPhotoDetailSummary(photo);
+  if (observations) parts.push(observations);
   const lat = Number(photo.latitude);
   const lng = Number(photo.longitude);
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -157,8 +160,10 @@ export function buildGeoPhotosFindingsBlock(geoPhotoList) {
           ")"
         : "";
     const note = p.notes?.trim() ? `: ${p.notes.trim()}` : "";
+    const observations = geoPhotoDetailSummary(p);
+    const observed = observations ? ` — ${observations}` : "";
     const prefix = giBits ? `${preset.label} [${giBits}]` : preset.label;
-    return `${i + 1}. ${prefix}${note}${coords}`;
+    return `${i + 1}. ${prefix}${note}${observed}${coords}`;
   });
 
   return `${GEO_PHOTOS_FINDINGS_MARKER}\n${lines.join("\n")}`;
@@ -274,6 +279,15 @@ export function normalizeGeoPhotoReportOrders(photos, projectId) {
   );
 }
 
+/** Type-specific answers as flat GIS attributes, prefixed so they never clash with core fields. */
+function observationProperties(photo) {
+  const out = {};
+  for (const [label, value] of geoPhotoDetailRows(photo)) {
+    out[`obs_${label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`] = value;
+  }
+  return out;
+}
+
 export function exportGeoPhotosGeoJson(photos, name = "geo-photos") {
   const features = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)))
@@ -292,6 +306,7 @@ export function exportGeoPhotosGeoJson(photos, name = "geo-photos") {
           label: geoPhotoPresetLabel(p.type),
           bearing: p.bearing,
           notes: p.notes,
+          ...observationProperties(p),
           includeInReport: Boolean(p.includeInReport),
           projectId: p.projectId,
           projectName: p.projectName,

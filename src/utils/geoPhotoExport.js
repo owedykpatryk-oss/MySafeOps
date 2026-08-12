@@ -7,6 +7,7 @@ import { bearingArrowHead, bearingToEnd, isCoarseGpsAccuracy, normalizeBearing }
 import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
 import { escapeXml } from "./xmlEscape";
 import { CAPTURE_PHASE_OPTIONS, resolvedGiDepth, resolvedGiLocationId } from "./geoPhotoFields";
+import { geoPhotoDetailRows, geoPhotoDetailSummary } from "./geoPhotoTypeFields";
 import { loadDrawingEditorPrefs } from "../modules/permits/projectDrawingEditorPrefs";
 import { latLngToPlanPercentAffine } from "../modules/permits/projectDrawingAffine";
 
@@ -107,6 +108,7 @@ function photoMetadataRows(photo) {
     depth ? ["Depth", depth] : null,
     sample ? ["Sample ref", sample] : null,
     phase ? ["Phase", phase] : null,
+    ...geoPhotoDetailRows(photo),
     bearing != null ? ["View bearing", `${bearing}°`] : null,
     grid ? ["OS grid ref", grid.gridRef] : null,
     grid ? ["Easting / Northing", `${grid.easting.toFixed(2)} E, ${grid.northing.toFixed(2)} N (OSGB36)`] : null,
@@ -868,7 +870,7 @@ export async function buildGeoPhotosCadBundleBlob(photos, opts = {}) {
 
 function buildCadManifestCsv(photos, origin) {
   const header =
-    "id,label,type,location_id,depth,sample_ref,latitude,longitude,easting,northing,grid_ref,elevation_m,gps_accuracy_m,location_source,x_metres,y_metres,bearing,image_file,notes";
+    "id,label,type,location_id,depth,sample_ref,latitude,longitude,easting,northing,grid_ref,elevation_m,gps_accuracy_m,location_source,x_metres,y_metres,bearing,image_file,observations,notes";
   const lines = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)))
     .map((p) => {
@@ -896,6 +898,7 @@ function buildCadManifestCsv(photos, origin) {
         m ? m.y.toFixed(3) : "",
         normalizeBearing(p.bearing) ?? "",
         `images/${p.id}.jpg`,
+        geoPhotoDetailSummary(p),
         p.notes || "",
       ].map(esc).join(",");
     });

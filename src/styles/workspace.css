@@ -6097,6 +6097,17 @@
   overflow: hidden;
 }
 
+.geo-photos-card__observations {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #0f766e;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .geo-photos-card__map {
   margin-top: auto;
   border-radius: 8px;
@@ -6285,6 +6296,27 @@
 
 .geo-photo-capture__hint--warn {
   color: #b45309;
+}
+
+.geo-photo-capture__tickboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* Chip-sized so they can be ticked with a thumb in gloves on site. */
+.geo-photo-capture__tickboxes .geo-photos-card__report {
+  padding: 8px 10px;
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: #fff;
+}
+
+.geo-photo-capture__tickboxes .geo-photos-card__report--on {
+  border-color: #0d9488;
+  background: rgba(13, 148, 136, 0.1);
 }
 
 .geo-photo-capture__actions {

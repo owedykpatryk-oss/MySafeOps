@@ -69,6 +69,29 @@ describe("geoPhotoIntegrations", () => {
     expect(block).toContain("Trip hazard");
   });
 
+  it("carries type-specific observations into findings and captions", () => {
+    const observed = [
+      {
+        ...photos[1],
+        details: { severity: "High", hazardCategory: "Excavation", controlInPlace: true, actionRequired: true },
+      },
+    ];
+    const block = buildGeoPhotosFindingsBlock(observed);
+    expect(block).toContain("High · Excavation · Control in place · Action required");
+
+    const report = { projectId: "p1", sections: { findings: "" }, photos: [] };
+    const next = importGeoPhotosIntoReport(report, observed);
+    expect(next.photos[0].caption).toContain("Excavation");
+  });
+
+  it("exports observations as flat GIS attributes", () => {
+    const geojson = exportGeoPhotosGeoJson([
+      { ...photos[1], details: { severity: "High", controlInPlace: true } },
+    ]);
+    expect(geojson.features[0].properties.obs_severity).toBe("High");
+    expect(geojson.features[0].properties.obs_control_in_place).toBe("Yes");
+  });
+
   it("imports geo-photos into survey report", () => {
     const report = { projectId: "p1", sections: { findings: "Existing." }, photos: [], accessLimitationsNotes: "" };
     const next = importGeoPhotosIntoReport(report, photos);

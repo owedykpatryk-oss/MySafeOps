@@ -1,7 +1,7 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.3.8";
+const SW_VERSION = "mysafeops-v1.3.9";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
