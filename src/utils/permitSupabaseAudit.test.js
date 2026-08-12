@@ -2,6 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const insert = vi.fn(async () => ({ error: null }));
 const from = vi.fn(() => ({ insert }));
+const invoke = vi.fn(async () => ({
+  data: {
+    csv: "occurred_at,permit_id\n",
+    fileName: "permit-audit-2026-08-12.csv",
+    rowCount: 0,
+    truncated: false,
+    maxRows: 10000,
+  },
+  error: null,
+}));
 
 vi.mock("../lib/supabase", () => ({
   supabase: {
@@ -12,6 +22,9 @@ vi.mock("../lib/supabase", () => ({
       })),
     },
     from: (...args) => from(...args),
+    functions: {
+      invoke: (...args) => invoke(...args),
+    },
   },
 }));
 
@@ -34,6 +47,7 @@ describe("permitSupabaseAudit workspace gating", () => {
   beforeEach(() => {
     insert.mockClear();
     from.mockClear();
+    invoke.mockClear();
     vi.mocked(getCachedActiveCountryWorkspace).mockReset();
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
@@ -81,5 +95,30 @@ describe("permitSupabaseAudit workspace gating", () => {
     await expect(exportPermitAuditCsvViaServer({ orgSlug: "uk-org" })).rejects.toThrow(
       /Select a country workspace/,
     );
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("sends workspaceId to permit-audit-export for the active country", async () => {
+    vi.mocked(getCachedActiveCountryWorkspace).mockReturnValue({
+      id: "11111111-1111-4111-8111-111111111111",
+      market_id: "uk",
+    });
+
+    const result = await exportPermitAuditCsvViaServer({
+      orgSlug: "uk-org",
+      permitId: "p-uk-1",
+      maxRows: 500,
+    });
+
+    expect(invoke).toHaveBeenCalledWith("permit-audit-export", {
+      body: expect.objectContaining({
+        orgSlug: "uk-org",
+        workspaceId: "11111111-1111-4111-8111-111111111111",
+        permitId: "p-uk-1",
+        maxRows: 500,
+      }),
+    });
+    expect(result.fileName).toBe("permit-audit-2026-08-12.csv");
+    expect(result.csv).toContain("occurred_at");
   });
 });
