@@ -216,10 +216,16 @@ export default function GeoPhotoCaptureModal({
     });
     if (photoDataUrl) {
       const uploaded = await uploadGeoPhotoToR2(photoDataUrl, { projectId, photoId: row.id });
-      if (uploaded?.photoPublicUrl) {
-        row.photoStorageKey = uploaded.photoStorageKey;
-        row.photoPublicUrl = uploaded.photoPublicUrl;
-        row.photoDataUrl = "";
+      if (uploaded?.photoStorageKey || uploaded?.photoSignedUrl || uploaded?.photoPublicUrl) {
+        row.photoStorageKey = uploaded.photoStorageKey || "";
+        row.photoPublicUrl = uploaded.photoPublicUrl || null;
+        row.photoSignedUrl = uploaded.photoSignedUrl || null;
+        row.photoSignedExpiresAt = uploaded.photoSignedExpiresAt || null;
+        // Drop embedded bytes only when a real remote view URL exists (signed or public CDN).
+        // Never clear solely for a misconfigured Worker "/{key}" public base — that breaks display.
+        if (uploaded.photoSignedUrl || uploaded.photoPublicUrl) {
+          row.photoDataUrl = "";
+        }
       }
     }
     try {

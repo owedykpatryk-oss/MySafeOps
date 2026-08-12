@@ -1,7 +1,13 @@
 /**
  * Geo-photo image storage — prefer R2 when configured; keep JPEG data URL as offline fallback.
  */
-import { uploadFileToR2Storage, isR2StorageConfigured, pickR2ViewUrl } from "../lib/r2Storage";
+import {
+  uploadFileToR2Storage,
+  isR2StorageConfigured,
+  pickR2ViewUrl,
+  fetchR2ObjectBlob,
+  isUsableR2PublicUrl,
+} from "../lib/r2Storage";
 import { dataUrlToBlob } from "./dataUrlBlob";
 import { getOrgId } from "./orgStorage";
 
@@ -15,9 +21,34 @@ export function geoPhotoDisplayUrl(photo) {
       signedExpiresAt: photo.photoSignedExpiresAt,
       publicUrl: photo.photoPublicUrl,
     }) ||
-    photo.photoPublicUrl ||
+    (isUsableR2PublicUrl(photo.photoPublicUrl) ? photo.photoPublicUrl : "") ||
     ""
   );
+}
+
+/** True when the photo can be shown now or via authenticated R2 fetch. */
+export function geoPhotoHasRenderableMedia(photo) {
+  if (!photo) return false;
+  if (photo.photoDataUrl || photo.photoStorageKey) return true;
+  if (photo.photoSignedUrl) return true;
+  return isUsableR2PublicUrl(photo.photoPublicUrl);
+}
+
+/**
+ * Load image bytes from R2 via authenticated Worker GET /object (for photos that only have a storage key).
+ * @param {string} storageKey
+ * @returns {Promise<string|null>} object URL (caller should revoke)
+ */
+export async function resolveGeoPhotoObjectUrl(storageKey) {
+  const key = String(storageKey || "").trim();
+  if (!key || !isR2StorageConfigured()) return null;
+  try {
+    const blob = await fetchR2ObjectBlob(key);
+    if (!blob || !blob.size) return null;
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
 }
 
 /**
