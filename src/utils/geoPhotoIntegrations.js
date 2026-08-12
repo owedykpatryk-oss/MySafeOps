@@ -26,6 +26,36 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(x)));
 }
 
+/**
+ * Find an existing photo of the same type taken from nearly the same spot moments ago.
+ * Field users often tap Save twice or re-shoot the same feature, and near-identical photos
+ * are hard to spot later in a report.
+ * @param {object[]} photos
+ * @param {{ id?: string, type?: string, latitude?: number, longitude?: number, timestampUtc?: string }} candidate
+ * @param {{ radiusM?: number, windowMs?: number }} [opts]
+ */
+export function findRecentDuplicateGeoPhoto(photos, candidate, { radiusM = 10, windowMs = 5 * 60 * 1000 } = {}) {
+  const lat = Number(candidate?.latitude);
+  const lng = Number(candidate?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const at = Date.parse(candidate?.timestampUtc || "") || Date.now();
+
+  for (const photo of Array.isArray(photos) ? photos : []) {
+    if (!photo?.id || photo.id === candidate?.id || photo.deletedAt) continue;
+    if (candidate?.type && photo.type !== candidate.type) continue;
+    const pLat = Number(photo.latitude);
+    const pLng = Number(photo.longitude);
+    if (!Number.isFinite(pLat) || !Number.isFinite(pLng)) continue;
+    const age = Math.abs(at - (Date.parse(photo.timestampUtc || photo.createdAt || "") || 0));
+    if (age > windowMs) continue;
+    const distance = haversineMeters(lat, lng, pLat, pLng);
+    if (distance <= radiusM) {
+      return { photo, distanceMeters: Math.round(distance), ageMs: age };
+    }
+  }
+  return null;
+}
+
 /** Pick closest active project with coordinates within maxDistanceM (default 3 km). */
 export function findNearestProject(latitude, longitude, projects, maxDistanceM = 3000) {
   const lat = Number(latitude);

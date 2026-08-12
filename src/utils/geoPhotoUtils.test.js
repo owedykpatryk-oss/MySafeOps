@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  bearingArrowHead,
   bearingToEnd,
+  destinationPoint,
+  DIRECTION_LENGTH_M,
   flipBearing180,
   GPS_GOOD_ACCURACY_M,
   isCoarseGpsAccuracy,
@@ -30,6 +33,35 @@ describe("geoPhotoUtils", () => {
     expect(end).not.toBeNull();
     expect(end[0]).toBeGreaterThan(51.5);
     expect(Math.abs(end[1] - -0.1)).toBeLessThan(0.00001);
+  });
+
+  it("keeps arrow length in metres regardless of direction", () => {
+    // 30 m due north and 30 m due east must cover the same ground distance at UK latitudes.
+    const north = destinationPoint(53.8, -1.55, 0, 30);
+    const east = destinationPoint(53.8, -1.55, 90, 30);
+    const metresNorth = (north[0] - 53.8) * 111320;
+    const metresEast = (east[1] - -1.55) * 111320 * Math.cos((53.8 * Math.PI) / 180);
+    expect(metresNorth).toBeCloseTo(30, 0);
+    expect(metresEast).toBeCloseTo(30, 0);
+    expect(east[0]).toBeCloseTo(53.8, 6);
+  });
+
+  it("builds an arrow head that points along the bearing", () => {
+    const head = bearingArrowHead(53.8, -1.55, 90);
+    const tip = bearingToEnd(53.8, -1.55, 90);
+    expect(head.tip).toEqual(tip);
+    // Barbs sit behind the tip (west of it) and straddle the centre line.
+    expect(head.left[1]).toBeLessThan(head.tip[1]);
+    expect(head.right[1]).toBeLessThan(head.tip[1]);
+    expect(head.left[0]).toBeGreaterThan(head.tip[0]);
+    expect(head.right[0]).toBeLessThan(head.tip[0]);
+    expect(head.tip[0] - head.left[0]).toBeCloseTo(head.right[0] - head.tip[0], 6);
+  });
+
+  it("has no direction geometry without a bearing", () => {
+    expect(bearingArrowHead(53.8, -1.55, null)).toBeNull();
+    expect(bearingToEnd(53.8, -1.55, null)).toBeNull();
+    expect(destinationPoint(null, null, 90, DIRECTION_LENGTH_M)).toBeNull();
   });
 
   it("flags GPS fixes too coarse for survey evidence", () => {

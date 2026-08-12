@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { bearingToEnd } from "../../utils/geoPhotoUtils";
+import { bearingArrowHead, bearingToEnd } from "../../utils/geoPhotoUtils";
 
 /**
  * Mini map with photo point, optional accuracy circle, and bearing arrow polyline.
@@ -97,6 +97,16 @@ function GeoPhotoDirectionMap({
         ],
         { color: arrowColor, weight: 4, opacity: 0.95 }
       ).addTo(layer);
+      const head = bearingArrowHead(lat, lng, bearing);
+      if (head) {
+        L.polygon([head.tip, head.left, head.right], {
+          color: arrowColor,
+          weight: 1,
+          opacity: 0.95,
+          fillColor: arrowColor,
+          fillOpacity: 0.95,
+        }).addTo(layer);
+      }
     }
 
     map.setView([lat, lng], end ? 18 : 17, { animate: false });

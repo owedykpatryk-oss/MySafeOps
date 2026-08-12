@@ -3,6 +3,7 @@ import {
   buildGeoPhotosFindingsBlock,
   exportGeoPhotosGeoJson,
   findNearestProject,
+  findRecentDuplicateGeoPhoto,
   GEO_PHOTOS_FINDINGS_MARKER,
   importGeoPhotosIntoReport,
   projectGeoPhotosForReport,
@@ -203,6 +204,46 @@ describe("geoPhotoIntegrations", () => {
     });
     expect(ok).toBe(true);
     expect(store.permits[0].evidenceGeoPhotoId).toBe("gp_ev1");
+  });
+
+  describe("findRecentDuplicateGeoPhoto", () => {
+    const existing = [
+      {
+        id: "old",
+        type: "hazard",
+        latitude: 51.5,
+        longitude: -0.1,
+        timestampUtc: "2026-06-01T10:00:00Z",
+      },
+    ];
+    const candidate = {
+      id: "new",
+      type: "hazard",
+      latitude: 51.50002,
+      longitude: -0.1,
+      timestampUtc: "2026-06-01T10:02:00Z",
+    };
+
+    it("flags the same feature shot again moments later", () => {
+      const hit = findRecentDuplicateGeoPhoto(existing, candidate);
+      expect(hit?.photo.id).toBe("old");
+      expect(hit.distanceMeters).toBeLessThanOrEqual(10);
+      expect(hit.ageMs).toBe(120000);
+    });
+
+    it("ignores photos that are far away, old, of another type or deleted", () => {
+      expect(findRecentDuplicateGeoPhoto(existing, { ...candidate, latitude: 51.503 })).toBeNull();
+      expect(
+        findRecentDuplicateGeoPhoto(existing, { ...candidate, timestampUtc: "2026-06-01T11:00:00Z" })
+      ).toBeNull();
+      expect(findRecentDuplicateGeoPhoto(existing, { ...candidate, type: "access_route" })).toBeNull();
+      expect(findRecentDuplicateGeoPhoto([{ ...existing[0], deletedAt: "2026-06-01T10:01:00Z" }], candidate)).toBeNull();
+    });
+
+    it("never flags a photo against itself or without coordinates", () => {
+      expect(findRecentDuplicateGeoPhoto(existing, { ...candidate, id: "old" })).toBeNull();
+      expect(findRecentDuplicateGeoPhoto(existing, { ...candidate, latitude: null })).toBeNull();
+    });
   });
 
   it("exports GeoJSON with National Grid, accuracy and elevation", () => {

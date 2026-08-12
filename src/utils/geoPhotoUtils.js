@@ -1,6 +1,8 @@
 /** Bearing / map helpers for geo-photos. */
 
-const DIRECTION_LENGTH_DEG = 0.0002;
+const EARTH_RADIUS_M = 6371000;
+/** Visible length of a view-direction arrow on site-scale maps. */
+export const DIRECTION_LENGTH_M = 25;
 
 export function normalizeBearing(deg) {
   if (deg == null || Number.isNaN(Number(deg))) return null;
@@ -8,12 +10,46 @@ export function normalizeBearing(deg) {
   return n < 0 ? n + 360 : n;
 }
 
-/** End point for direction arrow polyline (~30 m at mid-latitudes). */
-export function bearingToEnd(lat, lng, bearingDeg) {
+/**
+ * Point `distanceM` from a position along a bearing. Longitude is scaled by latitude, so the
+ * drawn angle matches the compass bearing instead of leaning east–west.
+ * @returns {[number, number] | null} [lat, lng]
+ */
+export function destinationPoint(lat, lng, bearingDeg, distanceM = DIRECTION_LENGTH_M) {
   const b = normalizeBearing(bearingDeg);
-  if (b == null || lat == null || lng == null) return null;
+  if (lat == null || lng == null || lat === "" || lng === "") return null;
+  const la = Number(lat);
+  const ln = Number(lng);
+  const d = Number(distanceM);
+  if (b == null || !Number.isFinite(la) || !Number.isFinite(ln) || !Number.isFinite(d)) return null;
   const rad = (b * Math.PI) / 180;
-  return [lat + DIRECTION_LENGTH_DEG * Math.cos(rad), lng + DIRECTION_LENGTH_DEG * Math.sin(rad)];
+  const dLat = ((d * Math.cos(rad)) / EARTH_RADIUS_M) * (180 / Math.PI);
+  const cosLat = Math.max(Math.cos((la * Math.PI) / 180), 1e-6);
+  const dLng = ((d * Math.sin(rad)) / (EARTH_RADIUS_M * cosLat)) * (180 / Math.PI);
+  return [la + dLat, ln + dLng];
+}
+
+/** End point for direction arrow polyline. */
+export function bearingToEnd(lat, lng, bearingDeg, distanceM = DIRECTION_LENGTH_M) {
+  return destinationPoint(lat, lng, bearingDeg, distanceM);
+}
+
+/**
+ * Triangle for the head of a view-direction arrow, so the map shows which way the camera
+ * faced rather than an ambiguous line.
+ * @returns {{ tip: [number, number], left: [number, number], right: [number, number] } | null}
+ */
+export function bearingArrowHead(lat, lng, bearingDeg, { lengthM = DIRECTION_LENGTH_M, headM = 9, spreadDeg = 26 } = {}) {
+  const b = normalizeBearing(bearingDeg);
+  if (b == null) return null;
+  const tip = destinationPoint(lat, lng, b, lengthM);
+  if (!tip) return null;
+  // Barbs run back from the tip, splayed either side of the centre line.
+  const barb = (side) => destinationPoint(tip[0], tip[1], normalizeBearing(b + 180 + side * spreadDeg), headM);
+  const left = barb(1);
+  const right = barb(-1);
+  if (!left || !right) return null;
+  return { tip, left, right };
 }
 
 /** Compass alpha (device) → bearing clockwise from north. */
@@ -269,10 +305,14 @@ export function watchBetterLocation({
   });
 }
 
+export function newGeoPhotoId() {
+  return `gp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
 export function blankGeoPhoto(overrides = {}) {
   const now = new Date().toISOString();
   return {
-    id: `gp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    id: newGeoPhotoId(),
     projectId: "",
     projectName: "",
     type: "general_site_condition",

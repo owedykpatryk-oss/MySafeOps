@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ms } from "../../utils/moduleStyles";
 import GeoPhotoDirectionMap from "./GeoPhotoDirectionMap";
-import { presetsByGroup, geoPhotoPreset } from "../../utils/geoPhotoPresets";
+import { presetsByGroup, geoPhotoPreset, geoPhotoPresetLabel } from "../../utils/geoPhotoPresets";
 import {
   blankGeoPhoto,
   compassNeedsUserGesture,
@@ -9,6 +9,7 @@ import {
   flipBearing180,
   GPS_GOOD_ACCURACY_M,
   isCoarseGpsAccuracy,
+  newGeoPhotoId,
   normalizeBearing,
   readPhotoExifLocation,
   requestCompassPermission,
@@ -18,7 +19,7 @@ import {
 } from "../../utils/geoPhotoUtils";
 import { wgs84ToBritishNationalGrid } from "../../utils/britishNationalGrid";
 import { uploadGeoPhotoToR2 } from "../../utils/geoPhotoMedia";
-import { findNearestProject } from "../../utils/geoPhotoIntegrations";
+import { findNearestProject, findRecentDuplicateGeoPhoto } from "../../utils/geoPhotoIntegrations";
 import {
   isGiGeoPhotoType,
   buildStructuredGeoPhotoNotes,
@@ -76,10 +77,10 @@ export default function GeoPhotoCaptureModal({
   onSave,
   onCreateProject,
   projects = [],
+  photos = [],
   initialProjectId = "",
   initialPreset = "",
   linkedPermitId = "",
-  saving = false,
 }) {
   const { pushToast } = useToast();
   const [step, setStep] = useState("photo");
@@ -121,9 +122,14 @@ export default function GeoPhotoCaptureModal({
   const [quickAddress, setQuickAddress] = useState("");
   const [quickError, setQuickError] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
   const compassCleanupRef = useRef(null);
   const wasOpenRef = useRef(false);
+  const savingRef = useRef(false);
+  // One id per capture, so a double tap or a restored draft updates the same row
+  // instead of creating a second copy of the same photo.
+  const captureIdRef = useRef(newGeoPhotoId());
 
   const effectiveBearing = manualBearing ?? compassBearing;
   const nationalGrid = useMemo(() => wgs84ToBritishNationalGrid(latitude, longitude), [latitude, longitude]);
@@ -161,6 +167,9 @@ export default function GeoPhotoCaptureModal({
     setQuickAddress("");
     setQuickError("");
     setSaveError("");
+    setSaving(false);
+    savingRef.current = false;
+    captureIdRef.current = newGeoPhotoId();
     const presetId =
       initialPreset ||
       (() => {
@@ -178,6 +187,7 @@ export default function GeoPhotoCaptureModal({
     if (open && !wasOpen) {
       const draft = readCaptureDraft();
       if (draft?.photoDataUrl) {
+        captureIdRef.current = draft.captureId || newGeoPhotoId();
         setStep(draft.step || "location");
         setPhotoDataUrl(draft.photoDataUrl);
         setPhotoName(draft.photoName || "");
@@ -246,6 +256,7 @@ export default function GeoPhotoCaptureModal({
   useEffect(() => {
     if (!open || !photoDataUrl) return;
     writeCaptureDraft({
+      captureId: captureIdRef.current,
       step,
       photoDataUrl,
       photoName,
@@ -392,6 +403,7 @@ export default function GeoPhotoCaptureModal({
       setPhotoName(file.name);
       setExifLocation(exif);
       writeCaptureDraft({
+        captureId: captureIdRef.current,
         step: "location",
         photoDataUrl: dataUrl,
         photoName: file.name,
@@ -445,6 +457,7 @@ export default function GeoPhotoCaptureModal({
   };
 
   const handleSave = async (takeAnother = false) => {
+    if (savingRef.current) return; // Cloud upload can take seconds; a second tap must not add a copy.
     setSaveError("");
     if (!photoDataUrl) {
       setPhotoError("Add a photo before saving.");
@@ -461,6 +474,7 @@ export default function GeoPhotoCaptureModal({
       capturePhase,
     });
     const row = blankGeoPhoto({
+      id: captureIdRef.current,
       projectId: projectId || "",
       projectName: proj?.name || "",
       type,
@@ -481,9 +495,32 @@ export default function GeoPhotoCaptureModal({
       capturedBy: capturedBy.trim(),
       timestampUtc: new Date().toISOString(),
     });
-    if (photoDataUrl) {
+
+    const duplicate = findRecentDuplicateGeoPhoto(photos, row);
+    if (duplicate) {
+      const minutes = Math.max(1, Math.round(duplicate.ageMs / 60000));
+      const ok = window.confirm(
+        `A ${geoPhotoPresetLabel(row.type)} photo was already saved ${duplicate.distanceMeters} m away about ${minutes} minute${
+          minutes === 1 ? "" : "s"
+        } ago. Save this one as well?`
+      );
+      if (!ok) return;
+    }
+
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await persistRow(row, takeAnother);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const persistRow = async (row, takeAnother) => {
+    if (row.photoDataUrl) {
       try {
-        const uploaded = await uploadGeoPhotoToR2(photoDataUrl, { projectId, photoId: row.id });
+        const uploaded = await uploadGeoPhotoToR2(row.photoDataUrl, { projectId, photoId: row.id });
         if (uploaded?.photoStorageKey || uploaded?.photoSignedUrl || uploaded?.photoPublicUrl) {
           row.photoStorageKey = uploaded.photoStorageKey || "";
           row.photoPublicUrl = uploaded.photoPublicUrl || null;
@@ -513,6 +550,7 @@ export default function GeoPhotoCaptureModal({
       return;
     }
     clearCaptureDraft();
+    captureIdRef.current = newGeoPhotoId();
     if (takeAnother) {
       setStep("photo");
       setPhotoDataUrl("");

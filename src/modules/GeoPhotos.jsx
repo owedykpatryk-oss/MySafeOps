@@ -624,7 +624,13 @@ export default function GeoPhotos() {
       if (enriched.includeInReport && enriched.projectId) {
         enriched.reportOrder = nextGeoPhotoReportOrder(safePhotos, enriched.projectId);
       }
-      setPhotos((prev) => [enriched, ...asPhotoArray(prev)]);
+      setPhotos((prev) => {
+        const list = asPhotoArray(prev);
+        // Same capture saved twice (retry, restored draft) updates its row rather than adding a copy.
+        return list.some((p) => p?.id === enriched.id)
+          ? list.map((p) => (p?.id === enriched.id ? { ...p, ...enriched } : p))
+          : [enriched, ...list];
+      });
       if (enriched.linkedPermitId) {
         persistPermitEvidenceFromGeoPhoto(enriched, { load, save });
       }
@@ -1127,6 +1133,7 @@ export default function GeoPhotos() {
         onSave={handleSaveNew}
         onCreateProject={handleQuickProject}
         projects={activeProjects}
+        photos={safePhotos}
         initialProjectId={filterProject}
         initialPreset={capturePreset}
         linkedPermitId={captureLinkedPermitId}

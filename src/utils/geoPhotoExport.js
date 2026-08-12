@@ -3,7 +3,7 @@
  */
 import { geoPhotoPreset } from "./geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
-import { bearingToEnd, isCoarseGpsAccuracy, normalizeBearing } from "./geoPhotoUtils";
+import { bearingArrowHead, bearingToEnd, isCoarseGpsAccuracy, normalizeBearing } from "./geoPhotoUtils";
 import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
 import { escapeXml } from "./xmlEscape";
 import { CAPTURE_PHASE_OPTIONS, resolvedGiDepth, resolvedGiLocationId } from "./geoPhotoFields";
@@ -158,15 +158,31 @@ function arrowLineKml(photo) {
   if (!end) return "";
   const [lat2, lng2] = end;
   const name = escapeXml(`${photoLabel(photo)} — view direction`);
+  // A bare line reads both ways, so the head shows which way the camera actually faced.
+  const head = bearingArrowHead(lat, lng, b);
+  const headGeometry = head
+    ? `
+        <Polygon>
+          <tessellate>1</tessellate>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>${head.tip[1]},${head.tip[0]},0 ${head.left[1]},${head.left[0]},0 ${head.right[1]},${head.right[0]},0 ${head.tip[1]},${head.tip[0]},0</coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>`
+    : "";
   return `    <Placemark>
       <name>${name}</name>
       <Style>
         <LineStyle><color>ff0000ff</color><width>3</width></LineStyle>
+        <PolyStyle><color>ff0000ff</color><fill>1</fill><outline>0</outline></PolyStyle>
       </Style>
-      <LineString>
-        <tessellate>1</tessellate>
-        <coordinates>${lng},${lat},0 ${lng2},${lat2},0</coordinates>
-      </LineString>
+      <MultiGeometry>
+        <LineString>
+          <tessellate>1</tessellate>
+          <coordinates>${lng},${lat},0 ${lng2},${lat2},0</coordinates>
+        </LineString>${headGeometry}
+      </MultiGeometry>
     </Placemark>`;
 }
 
