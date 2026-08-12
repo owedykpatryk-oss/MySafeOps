@@ -17,6 +17,15 @@ describe("geoPhotoTypeFields", () => {
     expect(keys[keys.length - 1]).toBe("actionRequired");
   });
 
+  it("asks a trial pit about both the service it exposed and the ground it sits in", () => {
+    const keys = geoPhotoTypeFields("trial_pit").map((f) => f.key);
+    expect(keys).toContain("serviceFound"); // utility side
+    expect(keys).toContain("serviceMaterial");
+    expect(keys).toContain("groundType"); // ground investigation side
+    expect(keys).toContain("waterStrikeDepthM");
+    expect(keys.filter((k) => k === "reinstatement")).toHaveLength(1);
+  });
+
   it("lets a type override a group question without duplicating it", () => {
     const keys = geoPhotoTypeFields("gpr_setup").map((f) => f.key);
     expect(keys.filter((k) => k === "surface")).toHaveLength(1);

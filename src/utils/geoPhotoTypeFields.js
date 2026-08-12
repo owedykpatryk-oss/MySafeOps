@@ -10,9 +10,12 @@
  * with no lookup table to keep in step. Tickboxes store `true` and are omitted when unticked.
  */
 import { geoPhotoPreset } from "./geoPhotoPresets";
+import { isGiGeoPhotoType } from "./geoPhotoFields";
 
+/** Split by voltage, because the report's utility schedule distinguishes HV from LV cable. */
 const SERVICES = [
-  "Electricity",
+  "Electricity (HV)",
+  "Electricity (LV)",
   "Gas",
   "Water",
   "Foul sewer",
@@ -22,6 +25,20 @@ const SERVICES = [
   "Traffic signals",
   "Fuel",
   "District heating",
+  "Unknown",
+];
+
+const SERVICE_MATERIALS = [
+  "PE / MDPE",
+  "uPVC",
+  "Clay",
+  "Concrete",
+  "Cast iron",
+  "Ductile iron",
+  "Steel",
+  "Copper",
+  "Pitch fibre",
+  "Ducted",
   "Unknown",
 ];
 
@@ -61,8 +78,13 @@ const GROUP_FIELDS = {
       options: ["Made ground", "Clay", "Silt", "Sand", "Gravel", "Chalk", "Rock", "Peat", "Mixed"],
     },
     { key: "waterStrikeDepthM", label: "Water strike", kind: "number", unit: "m bgl", step: 0.1 },
+    {
+      key: "reinstatement",
+      label: "Reinstatement",
+      kind: "select",
+      options: ["Permanent", "Temporary", "Backfilled as dug", "Not reinstated"],
+    },
     { key: "sampleTaken", label: "Sample taken", kind: "toggle" },
-    { key: "reinstated", label: "Reinstated", kind: "toggle" },
     { key: "arisingsRemoved", label: "Arisings removed", kind: "toggle" },
   ],
   "Site conditions": [
@@ -234,12 +256,8 @@ const TYPE_DEFS = {
         options: ["Hand dig", "Vacuum excavation", "Machine", "Hand dig then machine"],
       },
       { key: "serviceFound", label: "Service found", kind: "select", options: SERVICES },
-      {
-        key: "reinstatement",
-        label: "Reinstatement",
-        kind: "select",
-        options: ["Permanent", "Temporary", "Backfilled as dug", "Not reinstated"],
-      },
+      { key: "serviceMaterial", label: "Material", kind: "select", options: SERVICE_MATERIALS },
+      { key: "serviceDiameterMm", label: "Diameter", kind: "number", unit: "mm", step: 1 },
     ],
   },
   manhole_chamber: {
@@ -259,6 +277,8 @@ const TYPE_DEFS = {
         options: ["Good", "Fair", "Cracked", "Corroded", "Rocking", "Missing", "Buried"],
       },
       { key: "depthToInvertM", label: "Depth to invert", kind: "number", unit: "m", step: 0.1 },
+      { key: "serviceMaterial", label: "Pipe material", kind: "select", options: SERVICE_MATERIALS },
+      { key: "serviceDiameterMm", label: "Pipe diameter", kind: "number", unit: "mm", step: 1 },
       { key: "connectionsSeen", label: "Connections seen", kind: "number", step: 1 },
       { key: "coverLifted", label: "Cover lifted", kind: "toggle" },
       { key: "waterPresent", label: "Water present", kind: "toggle" },
@@ -398,7 +418,12 @@ export function geoPhotoTypeFields(type) {
   const group = geoPhotoPreset(key).group;
   const own = TYPE_DEFS[key]?.fields || [];
   const ownKeys = new Set(own.map((f) => f.key));
-  const groupFields = (GROUP_FIELDS[group] || []).filter((f) => !ownKeys.has(f.key));
+  // A trial pit sits in the survey group but is also an intrusive GI point, so it needs both
+  // sets of questions.
+  const groupNames = isGiGeoPhotoType(key) ? [group, "Ground investigation"] : [group];
+  const groupFields = groupNames
+    .flatMap((name) => GROUP_FIELDS[name] || [])
+    .filter((f) => !ownKeys.has(f.key));
   const seen = new Set();
   const merged = [...groupFields, ...own, ...UNIVERSAL_FIELDS].filter((f) =>
     seen.has(f.key) ? false : seen.add(f.key)

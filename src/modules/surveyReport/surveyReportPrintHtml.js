@@ -649,11 +649,18 @@ function utilitiesTableBlock(rows, photoIndexByGeoId = {}) {
 
 function giLocationsTableBlock(rows, photoIndexByGeoId = {}) {
   if (!rows?.length) return "";
+  // Only widen the table when the field actually recorded ground, water or reinstatement.
+  const rich = rows.some((r) => r.ground || r.waterStrike || r.reinstatement);
+  const head = rich
+    ? ["Location ID", "Method", "Depth", "Ground", "Water strike", "Reinstatement", "Figure", "Notes"]
+    : ["Location ID", "Method", "Depth", "Figure", "Notes"];
   return dataTable(
-    ["Location ID", "Method", "Depth", "Figure", "Notes"],
+    head,
     rows.map((r) => {
       const fig = r.geoPhotoId && photoIndexByGeoId[r.geoPhotoId] ? `Fig. ${photoIndexByGeoId[r.geoPhotoId]}` : "";
-      return [r.locationId || "", r.method || "", r.depth || "", fig, r.notes || ""];
+      const base = [r.locationId || "", r.method || "", r.depth || ""];
+      const tail = [fig, r.notes || ""];
+      return rich ? [...base, r.ground || "", r.waterStrike || "", r.reinstatement || "", ...tail] : [...base, ...tail];
     })
   );
 }
@@ -1158,6 +1165,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
   if (
     r.sections?.findings?.trim() ||
     r.utilitiesTable?.length ||
+    r.giLocationsTable?.length ||
     r.cctvRunsTable?.length ||
     r.uavFlightsTable?.length ||
     r.laserScansTable?.length ||

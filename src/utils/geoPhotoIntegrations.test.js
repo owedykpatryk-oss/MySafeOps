@@ -3,6 +3,8 @@ import {
   buildGeoPhotosFindingsBlock,
   exportGeoPhotosGeoJson,
   findNearestProject,
+  geoPhotoToGiLocationRow,
+  geoPhotoToUtilityRow,
   findRecentDuplicateGeoPhoto,
   GEO_PHOTOS_FINDINGS_MARKER,
   importGeoPhotosIntoReport,
@@ -130,6 +132,81 @@ describe("geoPhotoIntegrations", () => {
     expect(table.some((r) => r.geoPhotoId === "g4")).toBe(true);
   });
 
+  describe("field answers driving the utility schedule", () => {
+    const base = {
+      id: "g9",
+      projectId: "p1",
+      type: "utility_locator",
+      includeInReport: true,
+      notes: "Traced along frontage",
+      latitude: 51.503,
+      longitude: -0.103,
+    };
+
+    it("fills utility, source, status, quality level and confidence from what was recorded", () => {
+      const row = geoPhotoToUtilityRow(
+        {
+          ...base,
+          details: {
+            service: "Electricity (HV)",
+            detectionMethod: "EML / CAT and Genny",
+            pas128Ql: "QL-B1",
+            indicativeDepthM: 0.9,
+            signalConfident: true,
+          },
+        },
+        { pas128Ql: "QL-D" }
+      );
+
+      expect(row.utilityType).toBe("hv_cable");
+      expect(row.source).toBe("eml");
+      expect(row.detectStatus).toBe("detected");
+      expect(row.method).toBe("EML / CAT and Genny");
+      expect(row.depth).toBe("0.9 m");
+      expect(row.confidence).toBe("high");
+      expect(row.pas128Ql).toBe("QL-B1"); // the field answer beats the report-level default
+    });
+
+    it("treats a records-only trace as indicative", () => {
+      const row = geoPhotoToUtilityRow({ ...base, details: { service: "Gas", detectionMethod: "Records only" } });
+      expect(row.utilityType).toBe("gas");
+      expect(row.source).toBe("records");
+      expect(row.detectStatus).toBe("tfr");
+      expect(row.confidence).toBe("indicative");
+    });
+
+    it("reads material and diameter off an exposed service in a trial pit", () => {
+      const row = geoPhotoToUtilityRow({
+        ...base,
+        type: "trial_pit",
+        details: { serviceFound: "Water", serviceMaterial: "PE / MDPE", serviceDiameterMm: 125 },
+      });
+      expect(row.utilityType).toBe("water");
+      expect(row.material).toBe("PE / MDPE");
+      expect(row.diameter).toBe("125 mm");
+      expect(row.detectStatus).toBe("detected");
+    });
+
+    it("says not located when a trial pit found nothing", () => {
+      const row = geoPhotoToUtilityRow({ ...base, type: "trial_pit", details: { excavationMethod: "Hand dig" } });
+      expect(row.detectStatus).toBe("not_located");
+    });
+
+    it("keeps the old per-type defaults when nothing was recorded", () => {
+      const row = geoPhotoToUtilityRow(base, { pas128Ql: "QL-B2" });
+      expect(row.utilityType).toBe("other");
+      expect(row.method).toContain("EML");
+      expect(row.source).toBe("");
+      expect(row.detectStatus).toBe("");
+      expect(row.pas128Ql).toBe("QL-B2");
+    });
+
+    it("leaves an unknown material out of the schedule rather than printing Unknown", () => {
+      const row = geoPhotoToUtilityRow({ ...base, type: "trial_pit", details: { serviceMaterial: "Unknown" } });
+      expect(row.material).toBe("");
+    });
+  });
+
   it("merges utilities table when importing geo-photos", () => {
     const utilityPhoto = {
       id: "g4",
@@ -203,6 +280,47 @@ describe("geoPhotoIntegrations", () => {
 
     const table = geoPhotosToGiLocationsTable([bhPhoto], "p1");
     expect(table.length).toBe(1);
+  });
+
+  it("gives the GI schedule its own ground, water strike and reinstatement columns", () => {
+    const row = geoPhotoToGiLocationRow({
+      id: "g6",
+      projectId: "p1",
+      type: "trial_pit",
+      includeInReport: true,
+      locationId: "TP03",
+      depthM: 2.4,
+      details: {
+        groundType: "Made ground",
+        waterStrikeDepthM: 1.8,
+        reinstatement: "Permanent",
+        excavationMethod: "Hand dig",
+        sampleTaken: true,
+      },
+    });
+
+    expect(row.ground).toBe("Made ground");
+    expect(row.waterStrike).toBe("1.8 m bgl");
+    expect(row.reinstatement).toBe("Permanent");
+    expect(row.notes).toContain("Sample taken");
+  });
+
+  it("takes the drilling technique as the GI method when the field recorded one", () => {
+    const row = geoPhotoToGiLocationRow({
+      id: "g7",
+      type: "borehole_location",
+      includeInReport: true,
+      details: { technique: "Cable percussion" },
+    });
+    expect(row.method).toBe("Cable percussion");
+  });
+
+  it("leaves the GI columns empty when nothing was recorded", () => {
+    const row = geoPhotoToGiLocationRow({ id: "g8", type: "borehole_location", includeInReport: true });
+    expect(row.ground).toBe("");
+    expect(row.waterStrike).toBe("");
+    expect(row.reinstatement).toBe("");
+    expect(row.method).toBe("Borehole");
   });
 
   it("links geo-photo to permit evidence", async () => {

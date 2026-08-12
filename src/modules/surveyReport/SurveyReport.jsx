@@ -2694,6 +2694,9 @@ function ReportEditor({
                     { key: "locationId", label: "Location ID", placeholder: "BH01" },
                     { key: "method", label: "Method", options: GI_METHOD_OPTIONS },
                     { key: "depth", label: "Depth", placeholder: "12.5 m" },
+                    { key: "ground", label: "Ground", placeholder: "Made ground" },
+                    { key: "waterStrike", label: "Water strike", placeholder: "3.5 m bgl" },
+                    { key: "reinstatement", label: "Reinstatement", placeholder: "Permanent" },
                     { key: "notes", label: "Notes", placeholder: "Made ground to 1.2 m" },
                   ]}
                 />

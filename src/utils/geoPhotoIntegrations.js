@@ -11,7 +11,7 @@ import {
 } from "./geoPhotoFields";
 import { buildStaticMapUrl } from "./staticMapUrl.js";
 import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
-import { geoPhotoDetailRows, geoPhotoDetailSummary } from "./geoPhotoTypeFields";
+import { geoPhotoDetailRows, geoPhotoDetailSummary, normaliseGeoPhotoDetails } from "./geoPhotoTypeFields";
 
 import { todayLocalISO } from "./localDate";
 export const GEO_PHOTOS_FINDINGS_MARKER = "=== Geo-photos (field capture) ===";
@@ -400,6 +400,58 @@ const GEO_PHOTO_UTILITY_DEFAULTS = {
   gpr_setup: { utilityType: "other", method: "GPR", confidence: "medium" },
 };
 
+/** Field answer → utility schedule vocabulary (see UTILITY_TYPE_OPTIONS). */
+const SERVICE_TO_UTILITY_TYPE = {
+  "Electricity (HV)": "hv_cable",
+  "Electricity (LV)": "lv_cable",
+  "Street lighting": "lv_cable",
+  "Traffic signals": "lv_cable",
+  Gas: "gas",
+  Water: "water",
+  "Foul sewer": "foul",
+  "Surface water": "surface",
+  Telecoms: "telecom",
+};
+
+/** Field answer → UTILITY_SOURCE_OPTIONS. */
+const DETECTION_TO_SOURCE = {
+  "EML / CAT and Genny": "eml",
+  GPR: "gpr",
+  "Records only": "records",
+  "Trial hole": "visual",
+  "Visual / surface features": "visual",
+};
+
+/**
+ * How sure we are the line is where we say it is. Records alone are indicative; a confirmed
+ * signal or a physically exposed service is not.
+ */
+function utilityConfidenceFromAnswers(photo, answers, fallback) {
+  if (answers.detectionMethod === "Records only") return "indicative";
+  if (photo.type === "trial_pit" && answers.serviceFound) return "high";
+  if (answers.signalConfident === true) return "high";
+  if (answers.detectionMethod && answers.signalConfident === undefined) return fallback;
+  return fallback;
+}
+
+/** Only claim a detect status the field answers actually support. */
+function utilityDetectStatusFromAnswers(photo, answers) {
+  if (answers.detectionMethod === "Records only") return "tfr";
+  if (photo.type === "trial_pit") return answers.serviceFound ? "detected" : "not_located";
+  if (photo.type === "manhole_chamber" && answers.coverLifted) return "detected";
+  if (answers.signalConfident === true) return "detected";
+  if (answers.detectionMethod) return "partial";
+  return "";
+}
+
+function firstDepthAnswer(answers) {
+  for (const key of ["indicativeDepthM", "depthToInvertM"]) {
+    const n = Number(answers[key]);
+    if (Number.isFinite(n)) return `${n} m`;
+  }
+  return "";
+}
+
 /** Try to pull depth from geo-photo notes (e.g. "0.8m", "depth 1.2 m"). */
 export function parseDepthFromNotes(notes) {
   const t = String(notes || "");
@@ -418,7 +470,10 @@ export function geoPhotoToUtilityRow(photo, opts = {}) {
   if (!photo?.type || !GEO_PHOTO_UTILITY_TYPES.has(photo.type)) return null;
   const defaults = GEO_PHOTO_UTILITY_DEFAULTS[photo.type] || {};
   const preset = geoPhotoPreset(photo.type);
-  const depth = resolvedGiDepth(photo) || parseDepthFromNotes(photo.notes);
+  const answers = normaliseGeoPhotoDetails(photo.type, photo.details);
+  const service = answers.service || answers.serviceFound || "";
+  const diameter = Number(answers.serviceDiameterMm);
+  const depth = resolvedGiDepth(photo) || firstDepthAnswer(answers) || parseDepthFromNotes(photo.notes);
   const loc = resolvedGiLocationId(photo);
   const coords =
     Number.isFinite(Number(photo.latitude)) && Number.isFinite(Number(photo.longitude))
@@ -428,12 +483,22 @@ export function geoPhotoToUtilityRow(photo, opts = {}) {
   return {
     id: `ut_gp_${photo.id}`,
     geoPhotoId: photo.id,
-    utilityType: defaults.utilityType || "other",
+    utilityType: SERVICE_TO_UTILITY_TYPE[service] || defaults.utilityType || "other",
+    diameter: Number.isFinite(diameter) ? `${diameter} mm` : "",
+    material: answers.serviceMaterial === "Unknown" ? "" : answers.serviceMaterial || "",
     depth,
-    method: defaults.method || preset.label,
-    pas128Ql: opts.pas128Ql || "",
-    confidence: defaults.confidence || "medium",
-    notes: [loc ? `ID: ${loc}` : "", photo.notes?.trim(), coords ? `Location: ${coords}` : "", `Source: geo-photo (${preset.label})`]
+    source: DETECTION_TO_SOURCE[answers.detectionMethod] || "",
+    detectStatus: utilityDetectStatusFromAnswers(photo, answers),
+    method: answers.detectionMethod || defaults.method || preset.label,
+    pas128Ql: answers.pas128Ql || opts.pas128Ql || "",
+    confidence: utilityConfidenceFromAnswers(photo, answers, defaults.confidence || "medium"),
+    notes: [
+      loc ? `ID: ${loc}` : "",
+      photo.notes?.trim(),
+      geoPhotoDetailSummary(photo),
+      coords ? `Location: ${coords}` : "",
+      `Source: geo-photo (${preset.label})`,
+    ]
       .filter(Boolean)
       .join(" · "),
   };
@@ -478,7 +543,9 @@ export function geoPhotoToGiLocationRow(photo) {
   if (!photo?.type || !GEO_PHOTO_GI_TYPES.has(photo.type)) return null;
   const defaults = GEO_PHOTO_GI_DEFAULTS[photo.type] || {};
   const preset = geoPhotoPreset(photo.type);
+  const answers = normaliseGeoPhotoDetails(photo.type, photo.details);
   const depth = resolvedGiDepth(photo);
+  const waterStrike = Number(answers.waterStrikeDepthM);
   const locationId =
     resolvedGiLocationId(photo) ||
     `${defaults.locationIdPrefix || "GI"}-${String(photo.id || "").slice(-4).toUpperCase()}`;
@@ -491,9 +558,17 @@ export function geoPhotoToGiLocationRow(photo) {
     id: `gi_gp_${photo.id}`,
     geoPhotoId: photo.id,
     locationId,
-    method: defaults.method || preset.label,
+    method: answers.technique || defaults.method || preset.label,
     depth,
-    notes: [photo.notes?.trim(), coords ? `Location: ${coords}` : "", `Source: geo-photo (${preset.label})`]
+    ground: answers.groundType || "",
+    waterStrike: Number.isFinite(waterStrike) ? `${waterStrike} m bgl` : "",
+    reinstatement: answers.reinstatement || "",
+    notes: [
+      photo.notes?.trim(),
+      geoPhotoDetailSummary(photo),
+      coords ? `Location: ${coords}` : "",
+      `Source: geo-photo (${preset.label})`,
+    ]
       .filter(Boolean)
       .join(" · "),
   };
