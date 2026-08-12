@@ -10,6 +10,7 @@ import {
   permitHasSiteEvidence,
 } from "./geoPhotoFields";
 import { buildStaticMapUrl } from "./staticMapUrl.js";
+import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
 
 import { todayLocalISO } from "./localDate";
 export const GEO_PHOTOS_FINDINGS_MARKER = "=== Geo-photos (field capture) ===";
@@ -246,25 +247,36 @@ export function normalizeGeoPhotoReportOrders(photos, projectId) {
 export function exportGeoPhotosGeoJson(photos, name = "geo-photos") {
   const features = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)))
-    .map((p) => ({
-      type: "Feature",
-      geometry: {
-        type: "Point",
-        coordinates: [Number(p.longitude), Number(p.latitude)],
-      },
-      properties: {
-        id: p.id,
-        type: p.type,
-        label: geoPhotoPresetLabel(p.type),
-        bearing: p.bearing,
-        notes: p.notes,
-        includeInReport: Boolean(p.includeInReport),
-        projectId: p.projectId,
-        projectName: p.projectName,
-        capturedBy: p.capturedBy,
-        timestampUtc: p.timestampUtc,
-      },
-    }));
+    .map((p) => {
+      const grid = wgs84ToBritishNationalGrid(p.latitude, p.longitude);
+      const elevation = Number(p.altitudeMeters);
+      const accuracy = Number(p.gpsAccuracyMeters);
+      const coordinates = [Number(p.longitude), Number(p.latitude)];
+      if (Number.isFinite(elevation)) coordinates.push(elevation);
+      return {
+        type: "Feature",
+        geometry: { type: "Point", coordinates },
+        properties: {
+          id: p.id,
+          type: p.type,
+          label: geoPhotoPresetLabel(p.type),
+          bearing: p.bearing,
+          notes: p.notes,
+          includeInReport: Boolean(p.includeInReport),
+          projectId: p.projectId,
+          projectName: p.projectName,
+          capturedBy: p.capturedBy,
+          timestampUtc: p.timestampUtc,
+          gpsAccuracyMeters: Number.isFinite(accuracy) ? Math.round(accuracy) : null,
+          altitudeMeters: Number.isFinite(elevation) ? elevation : null,
+          locationSource: p.locationSource || null,
+          easting: grid ? grid.easting : null,
+          northing: grid ? grid.northing : null,
+          gridRef: grid ? grid.gridRef : null,
+          coordinateSystem: grid ? "OSGB36 / British National Grid (EPSG:27700)" : null,
+        },
+      };
+    });
 
   return {
     type: "FeatureCollection",

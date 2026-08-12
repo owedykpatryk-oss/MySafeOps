@@ -30,6 +30,7 @@ import { useRegisterPdfExportOverride } from "../context/RegisterPdfExportContex
 import { stripGeoPhotosForD1 } from "../utils/d1SyncPayload";
 import { geoPhotoHasRenderableMedia, preserveGeoPhotoMedia, uploadGeoPhotoToR2 } from "../utils/geoPhotoMedia";
 import { isCoarseGpsAccuracy } from "../utils/geoPhotoUtils";
+import { wgs84ToBritishNationalGrid } from "../utils/britishNationalGrid";
 import {
   downloadGeoJson,
   nextGeoPhotoReportOrder,
@@ -188,6 +189,10 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
   const [depthM, setDepthM] = useState(photo.depthM ?? "");
   const [sampleRef, setSampleRef] = useState(photo.sampleRef || "");
   const [capturePhase, setCapturePhase] = useState(photo.capturePhase || "");
+  const nationalGrid = useMemo(
+    () => wgs84ToBritishNationalGrid(photo.latitude, photo.longitude),
+    [photo.latitude, photo.longitude]
+  );
 
   useEffect(() => {
     setNotes(photo.notes || "");
@@ -227,6 +232,7 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
           {photo.capturedBy ? ` · ${photo.capturedBy}` : ""}
           {photo.gpsAccuracyMeters != null ? ` · ±${Math.round(Number(photo.gpsAccuracyMeters))} m` : ""}
           {isCoarseGpsAccuracy(photo.gpsAccuracyMeters) ? " (approximate)" : ""}
+          {nationalGrid ? ` · ${nationalGrid.gridRef}` : ""}
           {photo.locationSource === "photo_exif" ? " · location from photo metadata" : ""}
           {photo.locationSource === "manual_pin" ? " · pin placed by hand" : ""}
           {photo.locationSource === "project_site" ? " · project site coordinates" : ""}

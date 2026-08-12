@@ -16,6 +16,7 @@ import {
   watchBetterLocation,
   watchCompassBearing,
 } from "../../utils/geoPhotoUtils";
+import { wgs84ToBritishNationalGrid } from "../../utils/britishNationalGrid";
 import { uploadGeoPhotoToR2 } from "../../utils/geoPhotoMedia";
 import { findNearestProject } from "../../utils/geoPhotoIntegrations";
 import {
@@ -89,6 +90,7 @@ export default function GeoPhotoCaptureModal({
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
   const [gpsAccuracyMeters, setGpsAccuracyMeters] = useState(null);
+  const [altitudeMeters, setAltitudeMeters] = useState(null);
   const [gpsError, setGpsError] = useState("");
   const [gpsBusy, setGpsBusy] = useState(false);
   const [gpsWaiting, setGpsWaiting] = useState(false);
@@ -124,6 +126,7 @@ export default function GeoPhotoCaptureModal({
   const wasOpenRef = useRef(false);
 
   const effectiveBearing = manualBearing ?? compassBearing;
+  const nationalGrid = useMemo(() => wgs84ToBritishNationalGrid(latitude, longitude), [latitude, longitude]);
   const preset = geoPhotoPreset(type);
   const groupedPresets = useMemo(() => presetsByGroup(), []);
   const showGiFields = isGiGeoPhotoType(type);
@@ -137,6 +140,7 @@ export default function GeoPhotoCaptureModal({
     setLatitude(null);
     setLongitude(null);
     setGpsAccuracyMeters(null);
+    setAltitudeMeters(null);
     setGpsError("");
     setGpsWaiting(false);
     setLocationSource("");
@@ -182,6 +186,7 @@ export default function GeoPhotoCaptureModal({
         setLatitude(draft.latitude ?? null);
         setLongitude(draft.longitude ?? null);
         setGpsAccuracyMeters(draft.gpsAccuracyMeters ?? null);
+        setAltitudeMeters(draft.altitudeMeters ?? null);
         setGpsError(draft.gpsError || "");
         setGpsWaiting(false);
         setLocationSource(draft.locationSource || "");
@@ -247,6 +252,7 @@ export default function GeoPhotoCaptureModal({
       latitude,
       longitude,
       gpsAccuracyMeters,
+      altitudeMeters,
       gpsError,
       locationSource,
       exifLocation,
@@ -271,6 +277,7 @@ export default function GeoPhotoCaptureModal({
     latitude,
     longitude,
     gpsAccuracyMeters,
+    altitudeMeters,
     gpsError,
     locationSource,
     exifLocation,
@@ -304,6 +311,7 @@ export default function GeoPhotoCaptureModal({
       setLatitude(pos.latitude);
       setLongitude(pos.longitude);
       setGpsAccuracyMeters(pos.accuracy ?? null);
+      setAltitudeMeters(pos.altitude ?? null);
       setLocationSource("device_gps");
       autoSelectNearestProject(pos.latitude, pos.longitude);
     } catch (e) {
@@ -312,6 +320,7 @@ export default function GeoPhotoCaptureModal({
         setLatitude(exifLocation.latitude);
         setLongitude(exifLocation.longitude);
         setGpsAccuracyMeters(null);
+        setAltitudeMeters(exifLocation.altitude ?? null);
         setLocationSource("photo_exif");
         setGpsError("Using the location saved in the photo (GPS unavailable).");
         autoSelectNearestProject(exifLocation.latitude, exifLocation.longitude);
@@ -339,6 +348,7 @@ export default function GeoPhotoCaptureModal({
           setLatitude(f.latitude);
           setLongitude(f.longitude);
           setGpsAccuracyMeters(f.accuracy ?? null);
+          setAltitudeMeters(f.altitude ?? null);
           setLocationSource("device_gps");
         },
       });
@@ -358,6 +368,7 @@ export default function GeoPhotoCaptureModal({
     setLatitude(exifLocation.latitude);
     setLongitude(exifLocation.longitude);
     setGpsAccuracyMeters(null);
+    setAltitudeMeters(exifLocation.altitude ?? null);
     setLocationSource("photo_exif");
     setGpsError("");
     autoSelectNearestProject(exifLocation.latitude, exifLocation.longitude);
@@ -387,6 +398,7 @@ export default function GeoPhotoCaptureModal({
         latitude,
         longitude,
         gpsAccuracyMeters,
+        altitudeMeters,
         gpsError,
         locationSource,
         exifLocation: exif,
@@ -455,6 +467,7 @@ export default function GeoPhotoCaptureModal({
       latitude,
       longitude,
       gpsAccuracyMeters,
+      altitudeMeters,
       locationSource,
       bearing: effectiveBearing,
       notes: mergedNotes,
@@ -612,6 +625,7 @@ export default function GeoPhotoCaptureModal({
                   setLatitude(lat);
                   setLongitude(lng);
                   setGpsAccuracyMeters(null);
+                  setAltitudeMeters(null);
                   setLocationSource("manual_pin");
                   setGpsError("");
                 }}
@@ -627,6 +641,7 @@ export default function GeoPhotoCaptureModal({
                   {gpsAccuracyMeters != null ? ` · ±${Math.round(gpsAccuracyMeters)} m` : ""}
                   {locationSource === "photo_exif" ? " · from photo metadata" : ""}
                   {locationSource === "project_site" ? " · project site" : ""}
+                  {nationalGrid ? ` · ${nationalGrid.gridRef}` : ""}
                 </>
               ) : (
                 "Waiting for GPS…"

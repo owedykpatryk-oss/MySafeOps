@@ -3,7 +3,8 @@
  */
 import { geoPhotoPreset } from "./geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
-import { bearingToEnd, normalizeBearing } from "./geoPhotoUtils";
+import { bearingToEnd, isCoarseGpsAccuracy, normalizeBearing } from "./geoPhotoUtils";
+import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
 import { escapeXml } from "./xmlEscape";
 import { CAPTURE_PHASE_OPTIONS, resolvedGiDepth, resolvedGiLocationId } from "./geoPhotoFields";
 import { loadDrawingEditorPrefs } from "../modules/permits/projectDrawingEditorPrefs";
@@ -73,6 +74,23 @@ function photoLabel(photo) {
   return loc ? `${preset.label} (${loc})` : preset.label;
 }
 
+const LOCATION_SOURCE_LABELS = {
+  device_gps: "Device GPS",
+  photo_exif: "Photo metadata (EXIF)",
+  manual_pin: "Pin placed by hand",
+  project_site: "Project site coordinates",
+};
+
+/** National Grid position, or null outside Great Britain. */
+export function photoNationalGrid(photo) {
+  return wgs84ToBritishNationalGrid(photo?.latitude, photo?.longitude);
+}
+
+function photoElevationM(photo) {
+  const n = Number(photo?.altitudeMeters);
+  return Number.isFinite(n) ? n : null;
+}
+
 function photoMetadataRows(photo) {
   const preset = geoPhotoPreset(photo.type);
   const loc = resolvedGiLocationId(photo);
@@ -80,6 +98,9 @@ function photoMetadataRows(photo) {
   const sample = String(photo.sampleRef || "").trim();
   const phase = capturePhaseLabel(photo.capturePhase);
   const bearing = normalizeBearing(photo.bearing);
+  const accuracy = Number(photo.gpsAccuracyMeters);
+  const grid = photoNationalGrid(photo);
+  const elevation = photoElevationM(photo);
   const rows = [
     ["Type", preset.label],
     loc ? ["Location ID", loc] : null,
@@ -87,6 +108,13 @@ function photoMetadataRows(photo) {
     sample ? ["Sample ref", sample] : null,
     phase ? ["Phase", phase] : null,
     bearing != null ? ["View bearing", `${bearing}°`] : null,
+    grid ? ["OS grid ref", grid.gridRef] : null,
+    grid ? ["Easting / Northing", `${grid.easting.toFixed(2)} E, ${grid.northing.toFixed(2)} N (OSGB36)`] : null,
+    elevation != null ? ["Elevation", `${elevation.toFixed(1)} m`] : null,
+    Number.isFinite(accuracy)
+      ? ["GPS accuracy", `±${Math.round(accuracy)} m${isCoarseGpsAccuracy(accuracy) ? " (approximate)" : ""}`]
+      : null,
+    LOCATION_SOURCE_LABELS[photo.locationSource] ? ["Location source", LOCATION_SOURCE_LABELS[photo.locationSource]] : null,
     photo.capturedBy ? ["Captured by", photo.capturedBy] : null,
     photo.timestampUtc ? ["Captured", new Date(photo.timestampUtc).toLocaleString(getActiveDocumentLocale())] : null,
   ].filter(Boolean);
@@ -170,6 +198,32 @@ function kmlPlacemarkForPhoto(p) {
     .map(([k, v]) => `        <Data name="${escapeXml(k)}"><value>${escapeXml(v)}</value></Data>`)
     .join("\n");
 
+  // Machine-readable copies for GIS: UK deliverables are worked in National Grid, not lat/long.
+  const grid = photoNationalGrid(p);
+  const gridData = grid
+    ? `
+        <Data name="easting"><value>${grid.easting.toFixed(2)}</value></Data>
+        <Data name="northing"><value>${grid.northing.toFixed(2)}</value></Data>
+        <Data name="gridRef"><value>${escapeXml(grid.gridRef)}</value></Data>
+        <Data name="coordinateSystem"><value>OSGB36 / British National Grid (EPSG:27700)</value></Data>`
+    : "";
+  const elevation = photoElevationM(p);
+  const accuracy = Number(p.gpsAccuracyMeters);
+  const qualityData = `${
+    Number.isFinite(accuracy) ? `\n        <Data name="gpsAccuracyMeters"><value>${Math.round(accuracy)}</value></Data>` : ""
+  }${elevation != null ? `\n        <Data name="altitudeMeters"><value>${elevation.toFixed(1)}</value></Data>` : ""}${
+    p.locationSource ? `\n        <Data name="locationSource"><value>${escapeXml(p.locationSource)}</value></Data>` : ""
+  }`;
+  const point =
+    elevation != null
+      ? `      <Point>
+        <altitudeMode>absolute</altitudeMode>
+        <coordinates>${lng},${lat},${elevation.toFixed(1)}</coordinates>
+      </Point>`
+      : `      <Point>
+        <coordinates>${lng},${lat},0</coordinates>
+      </Point>`;
+
   return `    <Placemark>
       <name>${label}</name>
       <description><![CDATA[${photoDescriptionHtml(p)}]]></description>
@@ -179,12 +233,10 @@ ${iconStyle}
         <Data name="type"><value>${escapeXml(p.type)}</value></Data>
         <Data name="bearing"><value>${bearing ?? ""}</value></Data>
         <Data name="locationId"><value>${escapeXml(resolvedGiLocationId(p))}</value></Data>
-        <Data name="projectId"><value>${escapeXml(p.projectId || "")}</value></Data>
+        <Data name="projectId"><value>${escapeXml(p.projectId || "")}</value></Data>${gridData}${qualityData}
 ${ext}
       </ExtendedData>
-      <Point>
-        <coordinates>${lng},${lat},0</coordinates>
-      </Point>
+${point}
     </Placemark>
 ${arrowLineKml(p)}`;
 }
@@ -799,11 +851,15 @@ export async function buildGeoPhotosCadBundleBlob(photos, opts = {}) {
 }
 
 function buildCadManifestCsv(photos, origin) {
-  const header = "id,label,type,location_id,depth,sample_ref,latitude,longitude,x_metres,y_metres,bearing,image_file,notes";
+  const header =
+    "id,label,type,location_id,depth,sample_ref,latitude,longitude,easting,northing,grid_ref,elevation_m,gps_accuracy_m,location_source,x_metres,y_metres,bearing,image_file,notes";
   const lines = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)))
     .map((p) => {
       const m = latLngToSiteMetres(p.latitude, p.longitude, origin.lat, origin.lng);
+      const grid = photoNationalGrid(p);
+      const elevation = photoElevationM(p);
+      const accuracy = Number(p.gpsAccuracyMeters);
       const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
       return [
         p.id,
@@ -814,6 +870,12 @@ function buildCadManifestCsv(photos, origin) {
         p.sampleRef || "",
         Number(p.latitude).toFixed(8),
         Number(p.longitude).toFixed(8),
+        grid ? grid.easting.toFixed(2) : "",
+        grid ? grid.northing.toFixed(2) : "",
+        grid ? grid.gridRef : "",
+        elevation != null ? elevation.toFixed(1) : "",
+        Number.isFinite(accuracy) ? Math.round(accuracy) : "",
+        p.locationSource || "",
         m ? m.x.toFixed(3) : "",
         m ? m.y.toFixed(3) : "",
         normalizeBearing(p.bearing) ?? "",
@@ -836,7 +898,10 @@ export function buildGeoPhotosGpx(photos, opts = {}) {
       const desc = photoMetadataRows(p)
         .map(([k, v]) => `${k}: ${v}`)
         .join(" · ");
-      return `  <wpt lat="${lat.toFixed(8)}" lon="${lng.toFixed(8)}">
+      const elevation = photoElevationM(p);
+      return `  <wpt lat="${lat.toFixed(8)}" lon="${lng.toFixed(8)}">${
+        elevation != null ? `\n    <ele>${elevation.toFixed(1)}</ele>` : ""
+      }
     <name>${escapeXml(photoLabel(p))}</name>
     <desc>${escapeXml(desc)}${p.notes ? ` — ${escapeXml(p.notes)}` : ""}</desc>
     <type>${escapeXml(p.type)}</type>${bearing != null ? `\n    <cmt>View bearing ${bearing}°</cmt>` : ""}
