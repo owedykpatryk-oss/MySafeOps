@@ -6080,6 +6080,12 @@
   color: var(--color-text-secondary);
 }
 
+.geo-photos-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .geo-photos-card__notes {
   margin: 0;
   font-size: 13px;
