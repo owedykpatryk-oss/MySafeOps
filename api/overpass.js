@@ -146,6 +146,7 @@ export default async function handler(req, res) {
     res.writeHead(200, {
       ...API_JSON_HEADERS,
       "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=7200",
+      "Vary": "Origin",
       "X-Hospital-Source": "overpass",
     });
     return res.end(JSON.stringify(result.value));
@@ -156,6 +157,7 @@ export default async function handler(req, res) {
     res.writeHead(200, {
       ...API_JSON_HEADERS,
       "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600",
+      "Vary": "Origin",
       "X-Hospital-Source": "nominatim",
     });
     return res.end(JSON.stringify(fallback));

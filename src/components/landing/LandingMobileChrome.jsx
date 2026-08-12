@@ -10,22 +10,22 @@ import { getLandingNavLinks } from "../../data/landingMarketContent";
 const JUMP_HREFS = {
   uk: [
     { href: "#workflow", label: "Flow" },
-    { href: "#profiles", label: "Profiles" },
-    { href: "#readiness", label: "Check" },
+    { href: "#product", label: "Product" },
+    { href: "#features", label: "Features" },
     { href: "#pricing", label: "Pricing" },
     { href: "#faq", label: "FAQ" },
   ],
   au: [
     { href: "#workflow", label: "Flow" },
-    { href: "#profiles", label: "Profiles" },
-    { href: "#readiness", label: "Check" },
+    { href: "#product", label: "Product" },
+    { href: "#features", label: "Features" },
     { href: "#pricing", label: "Pricing" },
     { href: "#faq", label: "FAQ" },
   ],
   pl: [
     { href: "#workflow", label: "Proces" },
-    { href: "#profiles", label: "Profile" },
-    { href: "#readiness", label: "Gotowość" },
+    { href: "#product", label: "Produkt" },
+    { href: "#features", label: "Funkcje" },
     { href: "#pricing", label: "Cennik" },
     { href: "#faq", label: "FAQ" },
   ],

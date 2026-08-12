@@ -1,4 +1,5 @@
 import { getOrgId } from "./orgId";
+import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 
 export const ORG_TRIAL_ENDS_AT_KEY = "mysafeops_trial_ends_at";
 export const ORG_BILLING_PLAN_KEY = "mysafeops_billing_plan";
@@ -51,6 +52,15 @@ export function getTrialStatus(now = Date.now()) {
   const endsAt = new Date(raw).getTime();
   if (!Number.isFinite(endsAt)) return null;
   const remainingMs = endsAt - now;
+  const activeWorkspace = getCachedActiveCountryWorkspace();
+  if (activeWorkspace && !activeWorkspace.is_primary) {
+    return {
+      endsAtIso: new Date(endsAt).toISOString(),
+      isActive: false,
+      remainingDays: 0,
+      countryWorkspaceRequiresSubscription: true,
+    };
+  }
   const remainingDays = Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
   return {
     endsAtIso: new Date(endsAt).toISOString(),

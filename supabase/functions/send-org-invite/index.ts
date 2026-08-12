@@ -7,6 +7,11 @@ import {
   buildOrgInviteEmailText,
   resolveEmailLogoUrl,
 } from "../_shared/inviteEmailHtml.ts";
+import {
+  hashInviteToken,
+  renewedInviteExpiry,
+  shouldRotateInviteToken,
+} from "../_shared/inviteTokenHash.ts";
 
 function makeInviteToken() {
   const bytes = new Uint8Array(32);
@@ -72,7 +77,7 @@ Deno.serve(async (req) => {
 
     const { data: inv, error: invErr } = await supabase
       .from("org_invites")
-      .select("id, email, invite_token, org_id, status")
+      .select("id, email, invite_token, org_id, status, expires_at, email_delivery_sent_at")
       .eq("id", inviteId)
       .maybeSingle();
 
@@ -157,13 +162,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Rotate token when plaintext was cleared after a previous send (hash-only storage).
+    // A resend replaces the old capability link. Expired invites are renewed
+    // for another 14 days instead of sending a link the preview RPC rejects.
     let liveToken = String(inv.invite_token || "").trim();
-    if (!liveToken) {
+    const rotateToken = shouldRotateInviteToken({
+      token: liveToken,
+      expiresAt: inv.expires_at,
+      sentAt: inv.email_delivery_sent_at,
+    });
+    if (rotateToken) {
       liveToken = makeInviteToken();
+      const renewedExpiresAt = renewedInviteExpiry();
       const { error: rotErr } = await supabase
         .from("org_invites")
-        .update({ invite_token: liveToken })
+        .update({ invite_token: liveToken, expires_at: renewedExpiresAt })
         .eq("id", inv.id);
       if (rotErr) {
         return new Response(JSON.stringify({ error: "Could not rotate invite token" }), {
@@ -171,6 +183,20 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+    }
+
+    // Make the lookup durable before handing the link to the email provider.
+    // If this write fails, no unusable email is sent.
+    const liveTokenHash = await hashInviteToken(liveToken);
+    const { error: hashErr } = await supabase
+      .from("org_invites")
+      .update({ invite_token_hash: liveTokenHash })
+      .eq("id", inv.id);
+    if (hashErr) {
+      return new Response(JSON.stringify({ error: "Could not secure invite token" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const orgName =
@@ -244,16 +270,17 @@ Deno.serve(async (req) => {
       email_delivery_sent_at: new Date().toISOString(),
     });
 
-    // Clear plaintext after successful send — accept continues via invite_token_hash.
+    // Persist the hash explicitly before clearing plaintext. This keeps the
+    // emailed link valid even if the database trigger is missing or stale.
     const { error: clearErr } = await supabase
       .from("org_invites")
-      .update({ invite_token: null })
+      .update({ invite_token: null, invite_token_hash: liveTokenHash })
       .eq("id", inv.id);
     if (clearErr) {
       console.warn("invite_token clear skipped", clearErr.message);
     }
 
-    return new Response(JSON.stringify({ ok: true, sent: true }), {
+    return new Response(JSON.stringify({ ok: true, sent: true, renewed: rotateToken }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

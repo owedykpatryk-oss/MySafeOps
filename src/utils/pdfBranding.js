@@ -7,6 +7,8 @@ import { escapeHtml, escapeAttr, safeCssColor, safeImageSrc } from "./htmlEscape
 import { setPdfFont } from "./pdfUnicodeFont.js";
 
 import { todayLocalISO } from "./localDate";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
+import { documentText } from "./documentCountryPack";
 export { setPdfFont, ensurePdfUnicodeFont, PDF_FONT_FAMILY } from "./pdfUnicodeFont.js";
 
 export const PDF_PAGE = {
@@ -89,7 +91,7 @@ export function drawMySafeOpsBadgeJsPdf(pdf, rightX, topY, rgb, accentRgb) {
 }
 
 export function formatPdfTimestamp(date = new Date()) {
-  return date.toLocaleString("en-GB", {
+  return date.toLocaleString(getActiveDocumentLocale(), {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -225,15 +227,15 @@ export function drawPdfMetaStrip(pdf, org, docMeta, rgb, yStart) {
   const colW = w / 3;
   const rows = [
     {
-      label: "Organisation",
+      label: documentText("Organisation"),
       value: [org?.address, org?.email, org?.phone].filter(Boolean).join(" · ") || org?.name || "—",
     },
     {
-      label: "Document",
-      value: [docMeta?.moduleLabel, docMeta?.recordNote].filter(Boolean).join(" · ") || "Controlled register export",
+      label: documentText("Document"),
+      value: [docMeta?.moduleLabel, docMeta?.recordNote].filter(Boolean).join(" · ") || documentText("Controlled register export"),
     },
     {
-      label: "Generated",
+      label: documentText("Generated"),
       value: `${formatPdfTimestamp()} · ${docMeta?.docRef || buildDocReference(org, docMeta?.moduleLabel)}`,
     },
   ];
@@ -400,7 +402,7 @@ export function drawPremiumPdfFooter(pdf, org, pageNum, pageTotal, theme, rgb, a
   setPdfFont(pdf, "bold");
   pdf.setFontSize(7.5);
   pdf.setTextColor(r, g, b);
-  pdf.text(`Page ${pageNum} of ${pageTotal}`, PDF_PAGE.W - margin, y + 10.5, { align: "right" });
+  pdf.text(`${documentText("Page")} ${pageNum} / ${pageTotal}`, PDF_PAGE.W - margin, y + 10.5, { align: "right" });
 }
 
 /** @param {import("jspdf").jsPDF} pdf */
@@ -648,9 +650,9 @@ export function renderPrintMetaStrip(org, fields = {}) {
     .join(" · ");
   const docRef = escapeHtml(fields.docRef || buildDocReference(org, fields.moduleLabel));
   return `<div class="print-meta-strip">
-    <div><div class="print-meta-strip__label">Organisation</div><div class="print-meta-strip__value">${orgBits || escapeHtml(org?.name || "—")}</div></div>
-    <div><div class="print-meta-strip__label">Document</div><div class="print-meta-strip__value">${docBits || "Controlled site document"}</div></div>
-    <div><div class="print-meta-strip__label">Reference</div><div class="print-meta-strip__value">${escapeHtml(formatPdfTimestamp())} · ${docRef}</div></div>
+    <div><div class="print-meta-strip__label">${escapeHtml(documentText("Organisation"))}</div><div class="print-meta-strip__value">${orgBits || escapeHtml(org?.name || "—")}</div></div>
+    <div><div class="print-meta-strip__label">${escapeHtml(documentText("Document"))}</div><div class="print-meta-strip__value">${docBits || escapeHtml(documentText("Controlled site document"))}</div></div>
+    <div><div class="print-meta-strip__label">${escapeHtml(documentText("Reference"))}</div><div class="print-meta-strip__value">${escapeHtml(formatPdfTimestamp())} · ${docRef}</div></div>
   </div>`;
 }
 
@@ -663,13 +665,13 @@ export function renderPrintDocFooter(org, opts = {}) {
       <div>${footer}${extra ? ` · ${extra}` : ""}</div>
       ${compliance ? `<div class="print-doc-footer__compliance">${compliance}</div>` : ""}
     </div>
-    <div class="print-doc-header__badge">${renderMySafeOpsMarkSvg(20)}<div><strong>MySafeOps</strong><span>Powered export</span></div></div>
+    <div class="print-doc-header__badge">${renderMySafeOpsMarkSvg(20)}<div><strong>MySafeOps</strong><span>${escapeHtml(documentText("Powered export"))}</span></div></div>
   </footer>`;
 }
 
 export function wrapPrintHtmlDocument(org, { pageTitle, bodyHtml, extraCss = "", headerOpts = {}, metaFields = {}, footerExtra = "" }) {
   const title = escapeHtml(pageTitle || "MySafeOps document");
-  return `<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"/>
+  return `<!DOCTYPE html><html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/>
   <title>${title}</title>
   <style>${printDocBaseCss(org)}${extraCss || ""}</style></head><body>
   ${renderPrintDocHeader(org, headerOpts)}

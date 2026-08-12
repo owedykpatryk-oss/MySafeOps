@@ -2,6 +2,7 @@ import { FileText } from "lucide-react";
 
 /** Visual tone per More section (CSS modifier). */
 export const SECTION_TONE_BY_TITLE = {
+  "Management & planning": "insights",
   "Site operations": "site",
   "Health, safety & environment": "hse",
   "Insights & reports": "insights",

@@ -1,6 +1,7 @@
 /** Org-scoped localStorage helpers — keys are `${baseKey}_${orgId}` (mysafeops_orgId). */
 import { isBillingWriteBlocked, notifyBillingWriteBlocked } from "./billingAccess";
 import { orgScopedKey } from "./orgId";
+import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 
 export { ORG_ID_KEY, ORG_CHANGED_EVENT, getOrgId, setOrgId, orgScopedKey } from "./orgId";
 
@@ -10,14 +11,28 @@ export const ORG_DATA_CHANGED_EVENT = "mysafeops-org-data-changed";
 /** Fired when localStorage quota / private mode blocks a write. */
 export const STORAGE_QUOTA_EVENT = "mysafeops-storage-quota";
 
+const ORG_SHARED_STORAGE_KEYS = new Set(["mysafeops_org_settings"]);
+
 /** Coerce localStorage JSON to an array when the caller expects a list register. */
 export function asStorageArray(value, fallback = []) {
   return Array.isArray(value) ? value : fallback;
 }
 
+/**
+ * Preserve every legacy key for the primary country. Secondary paid countries
+ * receive an isolated operational data key, so existing customers migrate with
+ * no copy step and UK/PL/AU records cannot bleed into one another.
+ */
+export function countryOperationalStorageKey(baseKey) {
+  const workspace = getCachedActiveCountryWorkspace();
+  const base = orgScopedKey(baseKey);
+  if (ORG_SHARED_STORAGE_KEYS.has(baseKey) || !workspace?.id || workspace.is_primary) return base;
+  return `${base}__country_${workspace.id}`;
+}
+
 export function loadOrgScoped(baseKey, fallback) {
   try {
-    const raw = localStorage.getItem(orgScopedKey(baseKey));
+    const raw = localStorage.getItem(countryOperationalStorageKey(baseKey));
     if (raw == null || raw === "") {
       return fallback;
     }
@@ -50,7 +65,7 @@ export function saveOrgScoped(baseKey, value, options = {}) {
     return false;
   }
   try {
-    localStorage.setItem(orgScopedKey(baseKey), JSON.stringify(value));
+    localStorage.setItem(countryOperationalStorageKey(baseKey), JSON.stringify(value));
   } catch (err) {
     if (isQuotaError(err)) {
       notifyStorageQuota({ baseKey, error: err?.name || "QuotaExceededError" });

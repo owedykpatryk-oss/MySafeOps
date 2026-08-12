@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { useToast } from "../context/ToastContext";
@@ -38,6 +38,8 @@ import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "./InlineAlert";
 import PageHero from "./PageHero";
+import CountryWorkspaceBilling from "./CountryWorkspaceBilling";
+import { countryOperationalStorageKey } from "../utils/orgStorage";
 
 const ss = ms;
 const SUPPORT_EMAIL = getSupportEmail();
@@ -74,8 +76,8 @@ function readArrayCount(storageKey) {
   }
 }
 
-function estimateOrgStorageBytes(orgId) {
-  const suffix = `_${orgId}`;
+function estimateWorkspaceStorageBytes(orgId, workspace) {
+  const suffix = workspace?.id && !workspace.is_primary ? `__country_${workspace.id}` : `_${orgId}`;
   let total = 0;
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
@@ -98,9 +100,35 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const { pushToast } = useToast();
   const isPlatformOwner = Boolean(platformOwner);
   const showDevHints = showAdminLoginHints() || isPlatformOwner;
-  const plan = getEffectivePlan(trialStatus, billing, { isPlatformOwner });
   const orgMarketId = getOrgMarketId(orgId);
-  const planPriceLabel = getPlanDisplayPriceLabel(plan.id, orgMarketId) || plan.priceLabel;
+  // Stripe checkout/portal return URLs carry the mode back. Country entitlements must be
+  // read from the same mode, or a test subscription looks unpaid against live billing rows.
+  const activeStripeMode = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("stripeMode") === "test" ? "test" : "live";
+    } catch {
+      return "live";
+    }
+  }, []);
+  const [selectedWorkspace, setSelectedWorkspace] = useState(null);
+  const activeMarketId = selectedWorkspace?.market_id || orgMarketId;
+  const workspaceBilling = selectedWorkspace
+    ? selectedWorkspace.billing
+      ? {
+        paidPlanId: selectedWorkspace.billing.billing_plan,
+        subscriptionStatus: selectedWorkspace.billing.subscription_status,
+        pastDueSince: selectedWorkspace.billing.past_due_since,
+        currentPeriodEnd: selectedWorkspace.billing.current_period_end,
+        cancelAtPeriodEnd: selectedWorkspace.billing.cancel_at_period_end,
+        stripeTrialEnd: selectedWorkspace.billing.stripe_trial_end,
+      }
+      : { paidPlanId: null, subscriptionStatus: "none" }
+    : billing;
+  const workspaceTrialStatus = selectedWorkspace && !selectedWorkspace.is_primary
+    ? { ...trialStatus, isActive: false, isExpired: true, remainingDays: 0 }
+    : trialStatus;
+  const plan = getEffectivePlan(workspaceTrialStatus, workspaceBilling, { isPlatformOwner });
+  const planPriceLabel = getPlanDisplayPriceLabel(plan.id, activeMarketId) || plan.priceLabel;
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [actionError, setActionError] = useState(null);
@@ -112,11 +140,16 @@ export default function BillingLimits({ checkoutReturn = null }) {
   const [lastActionRequestId, setLastActionRequestId] = useState(null);
   const [extendLoading, setExtendLoading] = useState(false);
 
+  const handleCountryWorkspaceChange = useCallback((workspace) => {
+    setSelectedWorkspace(workspace);
+  }, []);
+
   const isAdmin = role === "admin";
   const cloudOk = isSupabaseConfigured() && supabase;
   const portalReady = stripeFnHealth["stripe-portal"] === "ready";
   const checkoutBlocked = stripeFnStatus === "missing" || stripeFnStatus === "misconfigured";
-  const stripeCheckoutEnabled = cloudOk && isAdmin && !checkoutBlocked;
+  const selectedMarketReady = stripeFnDiagnostics["stripe-checkout"]?.marketBilling?.[activeMarketId];
+  const stripeCheckoutEnabled = cloudOk && isAdmin && !checkoutBlocked && selectedMarketReady !== false && Boolean(selectedWorkspace?.id);
   const stripePortalEnabled = cloudOk && isAdmin && portalReady;
   const stripeTestReady = Boolean(stripeFnDiagnostics["stripe-checkout"]?.testReady);
   const allowTestCheckout =
@@ -144,7 +177,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
     return () => {
       cancelled = true;
     };
-  }, [checkoutReturn, supabase, pushToast]);
+  }, [checkoutReturn, pushToast]);
 
   useEffect(() => {
     if (checkoutReturn === "canceled") {
@@ -250,11 +283,11 @@ export default function BillingLimits({ checkoutReturn = null }) {
   }, [cloudOk, isAdmin]);
 
   const usage = useMemo(() => {
-    const workers = readArrayCount(`mysafeops_workers_${orgId}`);
-    const projects = readArrayCount(`mysafeops_projects_${orgId}`);
-    const cloudBytesEstimate = estimateOrgStorageBytes(orgId);
+    const workers = readArrayCount(countryOperationalStorageKey("mysafeops_workers"));
+    const projects = readArrayCount(countryOperationalStorageKey("mysafeops_projects"));
+    const cloudBytesEstimate = estimateWorkspaceStorageBytes(orgId, selectedWorkspace);
     return { workers, projects, cloudBytesEstimate };
-  }, [orgId]);
+  }, [orgId, selectedWorkspace]);
 
   const limits = plan.limits;
   const workersPct =
@@ -302,6 +335,10 @@ export default function BillingLimits({ checkoutReturn = null }) {
       setActionError("Stripe test checkout is not available in this environment.");
       return;
     }
+    if (!selectedWorkspace?.id) {
+      setActionError("Select a country workspace before starting checkout.");
+      return;
+    }
     if (!testMode && stripeFnStatus === "missing") {
       const msg = showDevHints
         ? "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-checkout)."
@@ -323,21 +360,12 @@ export default function BillingLimits({ checkoutReturn = null }) {
       const { data, error } = await invokeStripeFunctionWithRecovery("stripe-checkout", {
         planId,
         testMode,
-        market: orgMarketId,
+        workspaceId: selectedWorkspace.id,
         orgSlug: orgId,
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.requestId) setLastActionRequestId(String(data.requestId));
-      if ((orgMarketId === "au" || orgMarketId === "pl") && data?.priceMarket === "uk") {
-        pushToast({
-          type: "warn",
-          message:
-            orgMarketId === "pl"
-              ? "Ceny PLN nie są skonfigurowane na serwerze — checkout może pokazać GBP. Dodaj STRIPE_PRICE_*_PLN do Supabase Edge secrets."
-              : "AUD Stripe prices are not configured on the server — checkout may show GBP. Add STRIPE_PRICE_*_AUD to Supabase Edge secrets.",
-        });
-      }
       if (data?.url) {
         trackBillingEvent("stripe_checkout_redirect", { planId });
         window.location.href = data.url;
@@ -396,6 +424,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
       const { data, error } = await invokeStripeFunctionWithRecovery("stripe-portal", {
         testMode,
         orgSlug: orgId,
+        workspaceId: selectedWorkspace?.id || undefined,
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -427,13 +456,13 @@ export default function BillingLimits({ checkoutReturn = null }) {
   };
 
   const paidActive =
-    (billing?.subscriptionStatus === "active" || billing?.subscriptionStatus === "trialing") &&
-    billing?.paidPlanId;
-  const pastDueOrUnpaid = isSubscriptionPastDueOrUnpaid(billing);
+    (workspaceBilling?.subscriptionStatus === "active" || workspaceBilling?.subscriptionStatus === "trialing") &&
+    workspaceBilling?.paidPlanId;
+  const pastDueOrUnpaid = isSubscriptionPastDueOrUnpaid(workspaceBilling);
   const trialExtensionCount = getTrialExtensionCount();
-  const expiredReadOnly = isTrialExpiredWithoutPaid({ trialStatus, billing, isPlatformOwner });
-  const canExtend = canExtendOrgTrial({ billing, isPlatformOwner, trialExtensionCount });
-  const showExtendOffer = shouldShowTrialExtensionOffer({ trialStatus, billing, isPlatformOwner, trialExtensionCount });
+  const expiredReadOnly = isTrialExpiredWithoutPaid({ trialStatus: workspaceTrialStatus, billing: workspaceBilling, isPlatformOwner });
+  const canExtend = Boolean(selectedWorkspace?.is_primary) && canExtendOrgTrial({ billing: workspaceBilling, isPlatformOwner, trialExtensionCount });
+  const showExtendOffer = Boolean(selectedWorkspace?.is_primary) && shouldShowTrialExtensionOffer({ trialStatus: workspaceTrialStatus, billing: workspaceBilling, isPlatformOwner, trialExtensionCount });
 
   const handleExtendTrial = async () => {
     if (!supabase || !canExtend) return;
@@ -467,9 +496,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
   return (
     <>
       <PageHero
-        badgeText={getMarketCurrencySymbol(orgMarketId)}
+        badgeText={getMarketCurrencySymbol(activeMarketId)}
         title="Billing & limits"
-        lead="Transparent plan, usage, and limits per organisation. Subscribe with Stripe when you are ready."
+        lead="One organisation, independently billed country workspaces, and transparent limits."
       />
 
       {isPlatformOwner && (
@@ -495,6 +524,25 @@ export default function BillingLimits({ checkoutReturn = null }) {
           />
         </div>
       )}
+
+      <CountryWorkspaceBilling
+        key={`${orgId}:${activeStripeMode}:${checkoutReturn || "idle"}`}
+        supabase={cloudOk ? supabase : null}
+        orgSlug={orgId}
+        initialMarketId={orgMarketId}
+        isAdmin={isAdmin}
+        stripeMode={activeStripeMode}
+        onWorkspaceChange={handleCountryWorkspaceChange}
+      />
+
+      {selectedMarketReady === false && selectedWorkspace ? (
+        <div style={{ marginBottom: 12 }}>
+          <InlineAlert
+            type="warn"
+            text={`${selectedWorkspace.display_name} checkout is blocked because its local-currency Stripe prices are not configured. No fallback currency will be used.`}
+          />
+        </div>
+      ) : null}
       {cloudOk && isAdmin && stripeFnStatus === "checking" && (
         <div style={{ marginBottom: 12 }}>
           <InlineAlert type="info" text="Checking Stripe Edge Function availability…" />
@@ -565,36 +613,38 @@ export default function BillingLimits({ checkoutReturn = null }) {
         </div>
       )}
 
-      <div style={{ ...ss.card, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Current plan</div>
+      <div id="billing-plan-panel" style={{ ...ss.card, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>
+          {selectedWorkspace ? `${selectedWorkspace.display_name} plan` : "Current plan"}
+        </div>
         <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--color-text-secondary)" }}>
           <strong>{plan.name}</strong> — {planPriceLabel} / {plan.interval}
-          {trialStatus?.isActive && !paidActive
-            ? ` · ${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left in trial`
+          {workspaceTrialStatus?.isActive && !paidActive
+            ? ` · ${workspaceTrialStatus.remainingDays} day${workspaceTrialStatus.remainingDays === 1 ? "" : "s"} left in trial`
             : ""}
-          {paidActive || pastDueOrUnpaid ? ` · Stripe: ${billing.subscriptionStatus}` : ""}
+          {paidActive || pastDueOrUnpaid ? ` · Stripe: ${workspaceBilling.subscriptionStatus}` : ""}
         </p>
         {pastDueOrUnpaid ? (
           <InlineAlert
             type="error"
-            text={`${pastDueBillingMessage(billing?.subscriptionStatus)} Use Manage billing below to open the Stripe portal and pay.`}
+            text={`${pastDueBillingMessage(workspaceBilling?.subscriptionStatus)} Use Manage billing below to open the Stripe portal and pay.`}
             style={{ marginBottom: 10, fontSize: 12 }}
           />
         ) : null}
-        {orgMarketId === "au" && (
+        {activeMarketId === "au" && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{AU_PRICING_FOOTNOTE}</p>
         )}
-        {orgMarketId === "pl" && (
+        {activeMarketId === "pl" && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{PL_PRICING_FOOTNOTE}</p>
         )}
-        {!trialStatus?.isActive && !paidActive && trialStatus && (
+        {!workspaceTrialStatus?.isActive && !paidActive && workspaceTrialStatus && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>
             {expiredReadOnly
               ? "Evaluation ended — read-only mode. View and export existing records, or subscribe to resume editing."
-              : "Sign in with cloud billing to start your organisation evaluation."}
+              : "Choose a plan for this country workspace."}
           </p>
         )}
-        {trialStatus?.isActive && !paidActive && (
+        {workspaceTrialStatus?.isActive && !paidActive && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>
             Full module access during evaluation. One free +{TRIAL_EXTENSION_DAYS}-day extension per organisation if you need more site time.
           </p>
@@ -621,7 +671,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
                 <button
                   type="button"
                   disabled={!stripePortalEnabled || portalLoading || Boolean(checkoutLoading)}
-                  onClick={() => openPortal()}
+                  onClick={() => openPortal({ testMode: activeStripeMode === "test" && allowTestCheckout })}
                   style={{ ...ss.btnP, fontSize: 13, alignSelf: "flex-start", opacity: stripePortalEnabled ? 1 : 0.6 }}
                 >
                   {portalLoading ? "Opening…" : "Change plan"}
@@ -650,7 +700,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
                           opacity: (!stripeCheckoutEnabled || (checkoutLoading && !loading)) ? 0.6 : 1,
                         }}
                       >
-                        {loading ? "Redirecting…" : `${p.name} (${getPlanDisplayPriceLabel(id, orgMarketId) || p.priceLabel}/mo)`}
+                        {loading ? "Redirecting…" : `${p.name} (${getPlanDisplayPriceLabel(id, activeMarketId) || p.priceLabel}/mo)`}
                       </button>
                     );
                   })}
@@ -743,9 +793,9 @@ export default function BillingLimits({ checkoutReturn = null }) {
           </a>
         </p>
         <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
-          {getPriceAdjustmentShort(orgMarketId)}{" "}
+          {getPriceAdjustmentShort(activeMarketId)}{" "}
           <Link to="/terms" style={{ color: "inherit", textDecoration: "underline" }}>
-            {orgMarketId === "pl" ? "Regulamin §7.5" : "Terms §7.5"}
+            {activeMarketId === "pl" ? "Regulamin §7.5" : "Terms §7.5"}
           </Link>
           .
         </p>
@@ -834,7 +884,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
                   <tr key={p.id}>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>{p.name}</td>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>
-                      {(getPlanDisplayPriceLabel(p.id, orgMarketId) || p.priceLabel)}/{p.interval}
+                      {(getPlanDisplayPriceLabel(p.id, activeMarketId) || p.priceLabel)}/{p.interval}
                     </td>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f1f5f9" }}>
                       {formatLimitCount(p.limits.workers)}
