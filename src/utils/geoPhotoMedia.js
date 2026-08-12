@@ -52,7 +52,9 @@ export async function resolveGeoPhotoObjectUrl(storageKey) {
 }
 
 /**
- * Upload compressed JPEG data URL to R2. Returns null when storage unavailable or upload fails.
+ * Upload compressed JPEG data URL to R2.
+ * Returns null when storage unavailable / no org. Throws on auth or network upload failure
+ * so the capture UI can keep the local photo and show a message.
  * @param {string} dataUrl
  * @param {{ projectId?: string, photoId?: string }} [opts]
  */
@@ -61,23 +63,19 @@ export async function uploadGeoPhotoToR2(dataUrl, opts = {}) {
   const orgId = getOrgId();
   if (!orgId || orgId === "default") return null;
 
-  try {
-    const blob = dataUrlToBlob(dataUrl);
-    const safeProject = String(opts.projectId || "unassigned")
-      .replace(/[^a-zA-Z0-9_-]/g, "_")
-      .slice(0, 48);
-    const file = new File([blob], `${opts.photoId || "geo"}.jpg`, { type: blob.type || "image/jpeg" });
-    const uploaded = await uploadFileToR2Storage(file, {
-      orgId,
-      subPath: `geo-photos/${safeProject}`,
-    });
-    return {
-      photoStorageKey: uploaded.key,
-      photoPublicUrl: uploaded.publicUrl || null,
-      photoSignedUrl: uploaded.signedUrl || null,
-      photoSignedExpiresAt: uploaded.signedExpiresAt || null,
-    };
-  } catch {
-    return null;
-  }
+  const blob = dataUrlToBlob(dataUrl);
+  const safeProject = String(opts.projectId || "unassigned")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .slice(0, 48);
+  const file = new File([blob], `${opts.photoId || "geo"}.jpg`, { type: blob.type || "image/jpeg" });
+  const uploaded = await uploadFileToR2Storage(file, {
+    orgId,
+    subPath: `geo-photos/${safeProject}`,
+  });
+  return {
+    photoStorageKey: uploaded.key,
+    photoPublicUrl: uploaded.publicUrl || null,
+    photoSignedUrl: uploaded.signedUrl || null,
+    photoSignedExpiresAt: uploaded.signedExpiresAt || null,
+  };
 }

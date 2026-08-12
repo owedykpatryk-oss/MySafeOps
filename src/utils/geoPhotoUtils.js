@@ -27,32 +27,64 @@ export function flipBearing180(bearing) {
   return b == null ? null : normalizeBearing(b + 180);
 }
 
-/** Resize image file to JPEG data URL for local storage. */
+/** Resize image file to JPEG data URL for local storage (PWA camera-safe). */
 export function compressImageFile(file, { maxWidth = 1280, quality = 0.82 } = {}) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxWidth / img.width);
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(String(reader.result || ""));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = () => reject(new Error("Could not read image"));
-      img.src = String(reader.result || "");
+    if (!file) {
+      reject(new Error("No photo file"));
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    let settled = false;
+
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(objectUrl);
+      fn(value);
     };
-    reader.onerror = () => reject(new Error("Could not read file"));
-    reader.readAsDataURL(file);
+
+    const drawToJpeg = (source, width, height) => {
+      const scale = Math.min(1, maxWidth / Math.max(1, width));
+      const w = Math.max(1, Math.round(width * scale));
+      const h = Math.max(1, Math.round(height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(source, 0, 0, w, h);
+      try {
+        return canvas.toDataURL("image/jpeg", quality);
+      } catch {
+        return null;
+      }
+    };
+
+    img.onload = () => {
+      const jpeg = drawToJpeg(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
+      if (jpeg) {
+        finish(resolve, jpeg);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => finish(resolve, String(reader.result || ""));
+      reader.onerror = () => finish(reject, new Error("Could not read photo"));
+      reader.readAsDataURL(file);
+    };
+    img.onerror = () => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const raw = String(reader.result || "");
+        if (raw.startsWith("data:image")) finish(resolve, raw);
+        else finish(reject, new Error("Could not read photo from camera"));
+      };
+      reader.onerror = () => finish(reject, new Error("Could not read photo from camera"));
+      reader.readAsDataURL(file);
+    };
+    img.src = objectUrl;
   });
 }
 
