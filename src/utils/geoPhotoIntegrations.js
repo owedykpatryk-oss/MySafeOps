@@ -12,11 +12,23 @@ import {
 import { buildStaticMapUrl } from "./staticMapUrl.js";
 import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
 import { geoPhotoDetailRows, geoPhotoDetailSummary, normaliseGeoPhotoDetails } from "./geoPhotoTypeFields";
+import { buildGeoPhotoActionsBlock, GEO_PHOTO_ACTIONS_MARKER } from "./geoPhotoActions";
 
 import { todayLocalISO } from "./localDate";
 export const GEO_PHOTOS_FINDINGS_MARKER = "=== Geo-photos (field capture) ===";
 
 const EARTH_RADIUS_M = 6371000;
+
+/**
+ * Matches a marker and everything under it, up to the next `===` section or the end.
+ * The marker is escaped because its brackets would otherwise read as a regex group, and there
+ * is no `m` flag on purpose: with it, `$` would stop at the end of the marker line and leave
+ * the stale block behind.
+ */
+function markerBlockPattern(marker) {
+  const literal = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`${literal}[\\s\\S]*?(?=\\n===|$)`);
+}
 
 export function haversineMeters(lat1, lng1, lat2, lng2) {
   const a1 = (Number(lat1) * Math.PI) / 180;
@@ -199,7 +211,7 @@ export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
   let findings = String(report.sections?.findings || "");
   if (findings.includes(GEO_PHOTOS_FINDINGS_MARKER)) {
     if (opts.replaceFindingsBlock) {
-      findings = findings.replace(new RegExp(`${GEO_PHOTOS_FINDINGS_MARKER}[\\s\\S]*?(?=\\n===|$)`, "m"), block).trim();
+      findings = findings.replace(markerBlockPattern(GEO_PHOTOS_FINDINGS_MARKER), block).trim();
       if (!findings.includes(GEO_PHOTOS_FINDINGS_MARKER)) findings = findings ? `${findings}\n\n${block}` : block;
     }
   } else {
@@ -216,6 +228,21 @@ export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
     accessLimitationsNotes = accessLimitationsNotes.trim()
       ? `${accessLimitationsNotes.trim()}\n\nGeo-photo access notes: ${summary}`
       : `Geo-photo access notes: ${summary}`;
+  }
+
+  // Actions come from every photo on the project, not only those marked for the report — an
+  // open action still needs chasing if nobody chose to print the photo.
+  const projectPhotos = (Array.isArray(allGeoPhotos) ? allGeoPhotos : []).filter(
+    (p) => p?.projectId === projectId && !p.deletedAt
+  );
+  const actionsBlock = buildGeoPhotoActionsBlock(projectPhotos, {
+    gridRefFor: (photo) => wgs84ToBritishNationalGrid(photo.latitude, photo.longitude)?.gridRef || "",
+  });
+  let recommendations = String(report.sections?.recommendations || "");
+  if (recommendations.includes(GEO_PHOTO_ACTIONS_MARKER)) {
+    recommendations = recommendations.replace(markerBlockPattern(GEO_PHOTO_ACTIONS_MARKER), actionsBlock).trim();
+  } else if (actionsBlock) {
+    recommendations = recommendations.trim() ? `${recommendations.trim()}\n\n${actionsBlock}` : actionsBlock;
   }
 
   let utilitiesTable = report.utilitiesTable || [];
@@ -239,7 +266,7 @@ export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
     utilitiesTable,
     giLocationsTable,
     accessLimitationsNotes,
-    sections: { ...report.sections, findings },
+    sections: { ...report.sections, findings, recommendations },
     geoPhotoImportAt: new Date().toISOString(),
     geoPhotoImportCount: forReport.length,
   };

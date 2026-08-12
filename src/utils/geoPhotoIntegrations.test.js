@@ -103,6 +103,67 @@ describe("geoPhotoIntegrations", () => {
     expect(next.geoPhotoImportCount).toBe(2);
   });
 
+  describe("outstanding actions in the report", () => {
+    const flagged = {
+      id: "ga1",
+      projectId: "p1",
+      type: "hazard",
+      includeInReport: false,
+      notes: "Open chamber by gate",
+      latitude: 51.502,
+      longitude: -0.102,
+      details: { severity: "High", actionRequired: true },
+    };
+
+    it("lists open actions under recommendations, with a grid reference", () => {
+      const report = { projectId: "p1", sections: { findings: "", recommendations: "Reinstate as agreed." }, photos: [] };
+      const next = importGeoPhotosIntoReport(report, [...photos, flagged]);
+
+      expect(next.sections.recommendations).toContain("Reinstate as agreed.");
+      expect(next.sections.recommendations).toContain("Outstanding actions (field capture)");
+      expect(next.sections.recommendations).toContain("High — Hazard: Open chamber by gate");
+      expect(next.sections.recommendations).toMatch(/T[QRV] \d{5} \d{5}/);
+    });
+
+    it("chases an action even when the photo was not marked for the report", () => {
+      const report = { projectId: "p1", sections: { findings: "" }, photos: [] };
+      const next = importGeoPhotosIntoReport(report, [...photos, flagged]);
+      expect(next.sections.recommendations).toContain("Open chamber by gate");
+    });
+
+    it("drops the list once the action is closed off, and re-importing does not stack blocks", () => {
+      const report = { projectId: "p1", sections: { findings: "", recommendations: "" }, photos: [] };
+      const withAction = importGeoPhotosIntoReport(report, [...photos, flagged]);
+
+      const closed = { ...flagged, actionResolvedAt: "2026-06-02T09:00:00Z" };
+      const after = importGeoPhotosIntoReport(withAction, [...photos, closed]);
+      expect(after.sections.recommendations).not.toContain("Open chamber by gate");
+
+      const again = importGeoPhotosIntoReport(after, [...photos, flagged]);
+      expect(again.sections.recommendations.match(/Outstanding actions/g)).toHaveLength(1);
+    });
+
+    it("leaves recommendations alone when nothing is outstanding", () => {
+      const report = { projectId: "p1", sections: { findings: "", recommendations: "As agreed." }, photos: [] };
+      const next = importGeoPhotosIntoReport(report, photos);
+      expect(next.sections.recommendations).toBe("As agreed.");
+    });
+  });
+
+  it("refreshes the findings block on re-import instead of leaving stale text", () => {
+    const report = { projectId: "p1", sections: { findings: "Existing." }, photos: [] };
+    const first = importGeoPhotosIntoReport(report, photos, { replaceFindingsBlock: true });
+    expect(first.sections.findings).toContain("Trip hazard");
+
+    const revised = photos.map((p) => (p.id === "g2" ? { ...p, notes: "Trip hazard made safe" } : p));
+    const second = importGeoPhotosIntoReport(first, revised, { replaceFindingsBlock: true });
+    expect(second.sections.findings).toContain("Trip hazard made safe");
+    expect(second.sections.findings).not.toContain("Trip hazard ("); // the superseded line is gone
+    expect(second.sections.findings.match(/=== Geo-photos/g)).toHaveLength(1);
+    expect(second.sections.findings.match(/1\. /g)).toHaveLength(1);
+    expect(second.sections.findings).toContain("Existing.");
+  });
+
   it("creates snag draft from hazard geo-photo", () => {
     const snag = snagDraftFromGeoPhoto(photos[1]);
     expect(snag.priority).toBe("high");

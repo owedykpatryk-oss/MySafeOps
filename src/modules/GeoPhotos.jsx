@@ -57,6 +57,15 @@ import {
   CAPTURE_PHASE_OPTIONS,
 } from "../utils/geoPhotoFields";
 import GeoPhotoTypeFieldInputs from "../components/geoPhotos/GeoPhotoTypeFieldInputs";
+import { authorshipAuditFields } from "../utils/documentAuthorship";
+import {
+  geoPhotoActionOutstanding,
+  geoPhotoActionResolved,
+  geoPhotoActionSeverity,
+  geoPhotoRaisesAction,
+  outstandingGeoPhotoActions,
+  setGeoPhotoActionResolved,
+} from "../utils/geoPhotoActions";
 import {
   geoPhotoDetailSummary,
   normaliseGeoPhotoDetails,
@@ -197,7 +206,16 @@ function baseNotesOf(photo) {
   });
 }
 
-function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOpenSurvey, onOpenPermit }) {
+function GeoPhotoDetail({
+  photo,
+  onClose,
+  onUpdate,
+  onDelete,
+  onCreateSnag,
+  onOpenSurvey,
+  onOpenPermit,
+  onResolveAction,
+}) {
   const preset = geoPhotoPreset(photo.type);
   const showGi = isGiGeoPhotoType(photo.type);
   const [notes, setNotes] = useState(() => baseNotesOf(photo));
@@ -367,6 +385,15 @@ function GeoPhotoDetail({ photo, onClose, onUpdate, onDelete, onCreateSnag, onOp
               Open survey report
             </button>
           ) : null}
+          {geoPhotoRaisesAction(photo) && onResolveAction ? (
+            <button
+              type="button"
+              style={geoPhotoActionResolved(photo) ? ms.btn : ms.btnP}
+              onClick={() => onResolveAction(photo.id, !geoPhotoActionResolved(photo))}
+            >
+              {geoPhotoActionResolved(photo) ? "Reopen action" : "Mark action done"}
+            </button>
+          ) : null}
           {onCreateSnag ? (
             <button type="button" style={ms.btn} onClick={() => onCreateSnag(photo)}>
               Create snag
@@ -390,6 +417,7 @@ export default function GeoPhotos() {
   const [projects, setProjects] = useState(() => asPhotoArray(load("mysafeops_projects", [])));
   const [filterProject, setFilterProject] = useState("");
   const [filterReport, setFilterReport] = useState("all");
+  const [filterAction, setFilterAction] = useState("all");
   const [filterType, setFilterType] = useState("");
   const [query, setQuery] = useState("");
   const [satellite, setSatellite] = useState(false);
@@ -457,14 +485,19 @@ export default function GeoPhotos() {
   );
   const surveyPack = isSurveyWorkflowEnabled();
 
-  const hasActiveFilters = Boolean(filterProject || filterReport !== "all" || filterType || query.trim());
+  const hasActiveFilters = Boolean(
+    filterProject || filterReport !== "all" || filterAction !== "all" || filterType || query.trim()
+  );
 
   const clearFilters = () => {
     setFilterProject("");
     setFilterReport("all");
+    setFilterAction("all");
     setFilterType("");
     setQuery("");
   };
+
+  const openActions = useMemo(() => outstandingGeoPhotoActions(safePhotos, filterProject), [safePhotos, filterProject]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -473,6 +506,8 @@ export default function GeoPhotos() {
         if (filterProject && p.projectId !== filterProject) return false;
         if (filterReport === "report" && !p.includeInReport) return false;
         if (filterReport === "exclude" && p.includeInReport) return false;
+        if (filterAction === "open" && !geoPhotoActionOutstanding(p)) return false;
+        if (filterAction === "raised" && !geoPhotoRaisesAction(p)) return false;
         if (filterType && p.type !== filterType) return false;
         if (!q) return true;
         const hay = [
@@ -491,7 +526,7 @@ export default function GeoPhotos() {
       .sort(
         (a, b) => new Date(b.timestampUtc || b.createdAt).getTime() - new Date(a.timestampUtc || a.createdAt).getTime()
       );
-  }, [safePhotos, filterProject, filterReport, filterType, query]);
+  }, [safePhotos, filterProject, filterReport, filterAction, filterType, query]);
 
   const exportGpsStats = useMemo(() => filterGeoPhotosWithCoords(filtered), [filtered]);
 
@@ -685,6 +720,17 @@ export default function GeoPhotos() {
     pushAudit({ action: "geo_photo_update", detail: row.id, module: "geo-photos" });
   };
 
+  const handleResolveAction = useCallback((id, resolved) => {
+    const by = authorshipAuditFields().by || "";
+    setPhotos((prev) => asPhotoArray(prev).map((p) => (p.id === id ? setGeoPhotoActionResolved(p, resolved, { by }) : p)));
+    setDetail((d) => (d?.id === id ? setGeoPhotoActionResolved(d, resolved, { by }) : d));
+    pushAudit({
+      action: resolved ? "geo_photo_action_resolved" : "geo_photo_action_reopened",
+      detail: id,
+      module: "geo-photos",
+    });
+  }, []);
+
   const handleDelete = (id) => {
     const victim = safePhotos.find((p) => p.id === id);
     if (!victim) return;
@@ -851,6 +897,14 @@ export default function GeoPhotos() {
           </select>
         </label>
         <label className="geo-photos-toolbar__field">
+          Actions
+          <select value={filterAction} onChange={(e) => setFilterAction(e.target.value)} style={ms.inp}>
+            <option value="all">All</option>
+            <option value="open">Outstanding only</option>
+            <option value="raised">Raised (open or closed)</option>
+          </select>
+        </label>
+        <label className="geo-photos-toolbar__field">
           Type
           <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={ms.inp}>
             <option value="">All types</option>
@@ -908,6 +962,36 @@ export default function GeoPhotos() {
           ) : null}
         </div>
       </div>
+
+      {openActions.length > 0 ? (
+        <div className="geo-photos-actions-banner">
+          <span className="geo-photos-actions-banner__count">{openActions.length}</span>
+          <span className="geo-photos-actions-banner__text">
+            outstanding action{openActions.length === 1 ? "" : "s"} raised on site
+            {selectedProject?.name ? ` · ${selectedProject.name}` : ""}
+            {openActions.some((p) => geoPhotoActionSeverity(p) === "High")
+              ? ` · ${openActions.filter((p) => geoPhotoActionSeverity(p) === "High").length} high severity`
+              : ""}
+          </span>
+          {filterAction === "open" ? (
+            <button
+              type="button"
+              style={{ ...ms.btn, fontSize: 12, padding: "6px 14px" }}
+              onClick={() => setFilterAction("all")}
+            >
+              Show all photos
+            </button>
+          ) : (
+            <button
+              type="button"
+              style={{ ...ms.btnP, fontSize: 12, padding: "6px 14px" }}
+              onClick={() => setFilterAction("open")}
+            >
+              Work through them
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {filterProject && mobilisation ? (
         <GeoPhotoMobilisationPanel
@@ -1114,11 +1198,36 @@ export default function GeoPhotos() {
                 {geoPhotoDetailSummary(photo) ? (
                   <p className="geo-photos-card__observations">{geoPhotoDetailSummary(photo)}</p>
                 ) : null}
+                {geoPhotoRaisesAction(photo) ? (
+                  <p
+                    className={`geo-photos-card__action ${
+                      geoPhotoActionResolved(photo) ? "geo-photos-card__action--done" : ""
+                    }`}
+                  >
+                    {geoPhotoActionResolved(photo)
+                      ? `Action closed ${fmtWhen(photo.actionResolvedAt)}${
+                          photo.actionResolvedBy ? ` · ${photo.actionResolvedBy}` : ""
+                        }`
+                      : `Action outstanding${geoPhotoActionSeverity(photo) ? ` · ${geoPhotoActionSeverity(photo)}` : ""}`}
+                  </p>
+                ) : null}
                 <div className="geo-photos-card__meta">{fmtWhen(photo.timestampUtc)}</div>
                 <div className="geo-photos-card__actions">
                   <button type="button" style={{ ...ms.btn, padding: "8px 12px" }} onClick={() => setDetail(photo)}>
                     Open
                   </button>
+                  {geoPhotoRaisesAction(photo) ? (
+                    <button
+                      type="button"
+                      style={{
+                        ...(geoPhotoActionResolved(photo) ? ms.btn : ms.btnP),
+                        padding: "8px 12px",
+                      }}
+                      onClick={() => handleResolveAction(photo.id, !geoPhotoActionResolved(photo))}
+                    >
+                      {geoPhotoActionResolved(photo) ? "Reopen action" : "Mark action done"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     style={{ ...ms.btnDanger, padding: "8px 12px" }}
@@ -1183,6 +1292,7 @@ export default function GeoPhotos() {
           onCreateSnag={createSnagFromPhoto}
           onOpenSurvey={pushToSurvey}
           onOpenPermit={openLinkedPermit}
+          onResolveAction={handleResolveAction}
         />
       ) : null}
     </div>

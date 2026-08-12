@@ -457,13 +457,17 @@ export function normaliseGeoPhotoDetails(type, details) {
 
 /**
  * Answered fields as label/value pairs for report tables, exports and balloons.
+ * @param {object} photo
+ * @param {{ exclude?: string[] }} [opts] keys to leave out, for callers that already say them
  * @returns {Array<[string, string]>}
  */
-export function geoPhotoDetailRows(photo) {
+export function geoPhotoDetailRows(photo, opts = {}) {
   const details = photo?.details;
   if (!details || typeof details !== "object") return [];
+  const skip = new Set(opts.exclude || []);
   const rows = [];
   for (const field of geoPhotoTypeFields(photo?.type)) {
+    if (skip.has(field.key)) continue;
     const value = details[field.key];
     if (value == null || value === "" || value === false) continue;
     if (field.kind === "toggle") {
@@ -476,8 +480,8 @@ export function geoPhotoDetailRows(photo) {
 }
 
 /** One-line summary for cards, captions and search, e.g. "Cast iron · Cracked · Action required". */
-export function geoPhotoDetailSummary(photo) {
-  return geoPhotoDetailRows(photo)
+export function geoPhotoDetailSummary(photo, opts = {}) {
+  return geoPhotoDetailRows(photo, opts)
     .map(([label, value]) => (value === "Yes" ? label : value))
     .join(" · ");
 }
