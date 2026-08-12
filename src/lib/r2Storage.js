@@ -23,19 +23,39 @@ export function getStorageUploadToken() {
   return String(import.meta.env.VITE_STORAGE_UPLOAD_TOKEN || "").trim();
 }
 
-async function buildAuthHeaders() {
-  const headers = {};
-  if (supabase) {
-    try {
-      const { data } = await supabase.auth.getSession();
-      const jwt = data?.session?.access_token;
-      if (jwt) {
-        headers.Authorization = `Bearer ${jwt}`;
-        return { headers, ok: true };
-      }
-    } catch {
-      /* session optional */
+/**
+ * Resolve a fresh-enough Supabase access token for Worker auth.
+ * PWA + camera often returns with an expired access_token still in getSession().
+ */
+async function resolveUploadAccessToken({ forceRefresh = false } = {}) {
+  if (!supabase) return null;
+  try {
+    if (forceRefresh) {
+      const refreshed = await supabase.auth.refreshSession();
+      const tok = refreshed.data?.session?.access_token;
+      if (tok) return tok;
     }
+    const { data } = await supabase.auth.getSession();
+    let session = data?.session;
+    const expSec = Number(session?.expires_at);
+    const stale =
+      !session?.access_token || (Number.isFinite(expSec) && expSec * 1000 < Date.now() + 60_000);
+    if (stale) {
+      const refreshed = await supabase.auth.refreshSession();
+      session = refreshed.data?.session || session;
+    }
+    return session?.access_token || null;
+  } catch {
+    return null;
+  }
+}
+
+async function buildAuthHeaders({ forceRefresh = false } = {}) {
+  const headers = {};
+  const jwt = await resolveUploadAccessToken({ forceRefresh });
+  if (jwt) {
+    headers.Authorization = `Bearer ${jwt}`;
+    return { headers, ok: true };
   }
   if (import.meta.env.PROD) {
     return { headers: {}, ok: false, error: "no_upload_auth" };
@@ -65,20 +85,33 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   const safeName = (file.name || "file").replace(/[^\w.-]+/g, "_").slice(0, 180);
   const key = `${subPath.replace(/^\/+|\/+$/g, "")}/org_${orgId}/${Date.now()}_${safeName}`;
 
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("key", key);
+  const makeForm = () => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("key", key);
+    return fd;
+  };
 
-  const auth = await buildAuthHeaders();
+  let auth = await buildAuthHeaders();
   if (!auth.ok) {
     throw new Error("Sign in to upload to cloud storage.");
   }
 
-  const res = await fetch(`${base}/upload`, {
-    method: "POST",
-    headers: auth.headers,
-    body: fd,
-  });
+  const postUpload = (headers) =>
+    fetch(`${base}/upload`, {
+      method: "POST",
+      headers,
+      body: makeForm(),
+    });
+
+  let res = await postUpload(auth.headers);
+  // Stale JWT after PWA camera / backgrounding — refresh once and retry.
+  if (res.status === 401 || res.status === 403) {
+    auth = await buildAuthHeaders({ forceRefresh: true });
+    if (auth.ok) {
+      res = await postUpload(auth.headers);
+    }
+  }
 
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -91,7 +124,6 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
 
   const returnedKey = json.key || key;
   // Only build a "public CDN" URL when the base is a real public host — not the upload Worker itself.
-  // Mis-setting VITE_R2_PUBLIC_BASE_URL to the Worker origin produces /{key} links that 405 and break <img>.
   const pub = getR2PublicBaseUrl();
   const apiBase = getStorageApiBase();
   const publicUrl = pub && pub !== apiBase ? `${pub}/${returnedKey}` : null;
@@ -116,14 +148,23 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
 export async function fetchR2ObjectBlob(key) {
   const base = getStorageApiBase();
   if (!base) throw new Error("Cloud storage is not configured.");
-  const auth = await buildAuthHeaders();
+  let auth = await buildAuthHeaders();
   if (!auth.headers.Authorization) {
     throw new Error("Sign in to download from cloud storage.");
   }
-  const res = await fetch(`${base}/object?key=${encodeURIComponent(key)}`, {
+  let res = await fetch(`${base}/object?key=${encodeURIComponent(key)}`, {
     method: "GET",
     headers: auth.headers,
   });
+  if (res.status === 401 || res.status === 403) {
+    auth = await buildAuthHeaders({ forceRefresh: true });
+    if (auth.headers.Authorization) {
+      res = await fetch(`${base}/object?key=${encodeURIComponent(key)}`, {
+        method: "GET",
+        headers: auth.headers,
+      });
+    }
+  }
   if (!res.ok) {
     const json = await res.json().catch(() => ({}));
     throw new Error(json?.error || `Download failed (${res.status})`);
@@ -131,10 +172,6 @@ export async function fetchR2ObjectBlob(key) {
   return res.blob();
 }
 
-/**
- * Prefer Worker signed URL when present and not expired; else public CDN; else null.
- * @param {{ signedUrl?: string | null, signedExpiresAt?: number | null, publicUrl?: string | null, key?: string }} meta
- */
 /**
  * True when `url` is a real public object URL (not the upload Worker /{key} path).
  * Worker serves objects only via /signed and /object.
@@ -147,6 +184,10 @@ export function isUsableR2PublicUrl(url) {
   return true;
 }
 
+/**
+ * Prefer Worker signed URL when present and not expired; else public CDN; else null.
+ * @param {{ signedUrl?: string | null, signedExpiresAt?: number | null, publicUrl?: string | null, key?: string }} meta
+ */
 export function pickR2ViewUrl(meta = {}) {
   const exp = Number(meta.signedExpiresAt);
   if (meta.signedUrl && Number.isFinite(exp) && exp * 1000 > Date.now() + 30_000) {
