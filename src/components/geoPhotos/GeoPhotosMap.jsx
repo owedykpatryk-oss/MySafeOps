@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { bearingToEnd } from "../../utils/geoPhotoUtils";
+import { bearingArrowHead, bearingToEnd } from "../../utils/geoPhotoUtils";
 import { geoPhotoPreset } from "../../utils/geoPhotoPresets";
 
 /**
@@ -87,6 +87,16 @@ function GeoPhotosMap({ photos = [], height = 320, satellite = false, onPhotoCli
           ],
           { color, weight: 3, opacity: 0.9 }
         ).addTo(layer);
+        const head = bearingArrowHead(lat, lng, photo.bearing);
+        if (head) {
+          L.polygon([head.tip, head.left, head.right], {
+            color,
+            weight: 1,
+            opacity: 0.9,
+            fillColor: color,
+            fillOpacity: 0.9,
+          }).addTo(layer);
+        }
       }
 
       bounds.extend([lat, lng]);

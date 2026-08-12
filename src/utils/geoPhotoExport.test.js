@@ -57,6 +57,21 @@ describe("geoPhotoExport", () => {
     expect(kml).toContain("Location ID");
   });
 
+  it("draws the view direction as a line with an arrow head", () => {
+    const kml = buildGeoPhotosKml([samplePhotos[0]]);
+    expect(kml).toContain("<MultiGeometry>");
+    expect(kml).toContain("<LineString>");
+    expect(kml).toContain("<outerBoundaryIs>");
+    expect(kml).toContain("<PolyStyle>");
+    expect(kml).toContain("view direction");
+  });
+
+  it("leaves out direction geometry when no bearing was recorded", () => {
+    const kml = buildGeoPhotosKml([{ ...samplePhotos[0], bearing: null }]);
+    expect(kml).not.toContain("view direction");
+    expect(kml).not.toContain("<MultiGeometry>");
+  });
+
   it("builds KMZ-style KML with ground overlays when enabled", () => {
     const kml = buildGeoPhotosKml(samplePhotos, { groundOverlays: true });
     expect(kml).toContain("<GroundOverlay>");

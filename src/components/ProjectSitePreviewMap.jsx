@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-import { bearingToEnd } from "../utils/geoPhotoUtils";
+import { bearingArrowHead, bearingToEnd } from "../utils/geoPhotoUtils";
 import { geoPhotoPreset } from "../utils/geoPhotoPresets";
 import { asStorageArray } from "../utils/orgStorage";
 
@@ -273,6 +273,16 @@ function ProjectSitePreviewMap({
       const end = bearingToEnd(plat, plng, photo.bearing);
       if (end) {
         L.polyline([[plat, plng], end], { color, weight: 2, opacity: 0.85 }).addTo(layer);
+        const head = bearingArrowHead(plat, plng, photo.bearing);
+        if (head) {
+          L.polygon([head.tip, head.left, head.right], {
+            color,
+            weight: 1,
+            opacity: 0.85,
+            fillColor: color,
+            fillOpacity: 0.85,
+          }).addTo(layer);
+        }
         bounds.push(end);
       }
       bounds.push([plat, plng]);
