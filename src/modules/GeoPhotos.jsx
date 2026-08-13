@@ -558,7 +558,7 @@ export default function GeoPhotos() {
 
   useEffect(() => {
     listPg.reset();
-  }, [filterProject, filterReport, filterType, query]);
+  }, [filterProject, filterReport, filterAction, filterType, query]);
 
   const reportCount = useMemo(() => filtered.filter((p) => p.includeInReport).length, [filtered]);
 

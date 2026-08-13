@@ -69,7 +69,9 @@ const GROUP_FIELDS = {
     { key: "workStopped", label: "Work stopped", kind: "toggle" },
     { key: "clientInformed", label: "Client informed", kind: "toggle" },
   ],
-  "Survey & utilities": [{ key: "service", label: "Service", kind: "select", options: SERVICES }],
+  // Service is asked on the utility types themselves — a benchmark or control mark is in this
+  // preset group but is not a buried service.
+  "Survey & utilities": [],
   "Ground investigation": [
     {
       key: "groundType",
@@ -226,6 +228,7 @@ const TYPE_DEFS = {
   gpr_setup: {
     prompt: "Show the antenna on the ground with the survey grid or start line visible.",
     fields: [
+      { key: "service", label: "Service", kind: "select", options: SERVICES },
       {
         key: "antennaMhz",
         label: "Antenna",
@@ -240,6 +243,7 @@ const TYPE_DEFS = {
   utility_locator: {
     prompt: "Show the instrument reading in place over the line being traced.",
     fields: [
+      { key: "service", label: "Service", kind: "select", options: SERVICES },
       { key: "detectionMethod", label: "Detected by", kind: "select", options: DETECTION_METHODS },
       { key: "pas128Ql", label: "PAS 128 quality level", kind: "select", options: PAS128_QL },
       { key: "indicativeDepthM", label: "Indicative depth", kind: "number", unit: "m", step: 0.1 },
@@ -263,6 +267,7 @@ const TYPE_DEFS = {
   manhole_chamber: {
     prompt: "Get the whole cover in frame with a scale, then the chamber with the cover lifted.",
     fields: [
+      { key: "service", label: "Service", kind: "select", options: SERVICES },
       {
         key: "coverType",
         label: "Cover type",

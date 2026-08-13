@@ -248,6 +248,15 @@ describe("geoPhotoIntegrations", () => {
       expect(row.detectStatus).toBe("detected");
     });
 
+    it("uses what the pit found, not a leftover service answer from another type", () => {
+      const row = geoPhotoToUtilityRow({
+        ...base,
+        type: "trial_pit",
+        details: { service: "Gas", serviceFound: "Water" },
+      });
+      expect(row.utilityType).toBe("water");
+    });
+
     it("says not located when a trial pit found nothing", () => {
       const row = geoPhotoToUtilityRow({ ...base, type: "trial_pit", details: { excavationMethod: "Hand dig" } });
       expect(row.detectStatus).toBe("not_located");

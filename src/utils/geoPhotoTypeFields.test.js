@@ -11,7 +11,7 @@ import { GEO_PHOTO_PRESETS } from "./geoPhotoPresets.js";
 describe("geoPhotoTypeFields", () => {
   it("asks group questions, type questions and the universal one", () => {
     const keys = geoPhotoTypeFields("manhole_chamber").map((f) => f.key);
-    expect(keys).toContain("service"); // Survey & utilities group
+    expect(keys).toContain("service"); // asked on the chamber, not on every survey preset
     expect(keys).toContain("coverCondition"); // manhole specific
     expect(keys).toContain("actionRequired"); // universal
     expect(keys[keys.length - 1]).toBe("actionRequired");
@@ -20,10 +20,18 @@ describe("geoPhotoTypeFields", () => {
   it("asks a trial pit about both the service it exposed and the ground it sits in", () => {
     const keys = geoPhotoTypeFields("trial_pit").map((f) => f.key);
     expect(keys).toContain("serviceFound"); // utility side
+    expect(keys).not.toContain("service"); // one service question, labelled as what was found
     expect(keys).toContain("serviceMaterial");
     expect(keys).toContain("groundType"); // ground investigation side
     expect(keys).toContain("waterStrikeDepthM");
     expect(keys.filter((k) => k === "reinstatement")).toHaveLength(1);
+  });
+
+  it("does not ask a survey control mark which buried service it is", () => {
+    const keys = geoPhotoTypeFields("benchmark_control").map((f) => f.key);
+    expect(keys).toContain("controlType");
+    expect(keys).not.toContain("service");
+    expect(keys).not.toContain("serviceFound");
   });
 
   it("lets a type override a group question without duplicating it", () => {
