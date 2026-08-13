@@ -73,6 +73,31 @@ test("domain-restricted join preview shows org branding and omits invitee email"
   );
 });
 
+test("invite preview drops protocol-relative brand logos", async ({ page }) => {
+  await page.route("**/rest/v1/rpc/get_invite_preview", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          org_name: "Barnes Fernández",
+          invite_email: null,
+          expires_at: "2028-07-31T23:59:59.000Z",
+          logo_url: "//evil.test/barnes-fernandez-logo.png",
+          primary_color: "#174F78",
+          accent_color: "#55B8D4",
+          allowed_email_domain: "barnesfernandez.com",
+          reusable: true,
+        },
+      ]),
+    });
+  });
+
+  await page.goto("/accept-invite?invite=barnes-worker-join-token");
+  await expect(page.getByText("Barnes Fernández", { exact: true })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Barnes Fernández logo" })).toHaveCount(0);
+});
+
 test("login pre-fills invite email hint from query params", async ({ page }) => {
   await page.goto("/login?invite=test-token&email=worker@example.com");
   await expect(page.getByText(/Invite detected for worker@example.com/i)).toBeVisible();
