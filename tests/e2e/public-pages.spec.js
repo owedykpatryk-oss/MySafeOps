@@ -73,6 +73,39 @@ test("domain-restricted join preview shows org branding and omits invitee email"
   );
 });
 
+test("admin exact-email join preview carries the administrator address into sign-in", async ({ page }) => {
+  await page.route("**/rest/v1/rpc/get_invite_preview", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        {
+          org_name: "Barnes Fernández",
+          invite_email: "admin@barnesfernandez.com",
+          expires_at: "2026-10-31T23:59:59.000Z",
+          logo_url: "/branding/barnes-fernandez-logo.png",
+          primary_color: "#174F78",
+          accent_color: "#55B8D4",
+          allowed_email_domain: "barnesfernandez.com",
+          reusable: true,
+        },
+      ]),
+    });
+  });
+
+  await page.goto("/accept-invite?invite=barnes-admin-join-token");
+  await expect(page.getByRole("img", { name: "Barnes Fernández logo" })).toHaveAttribute(
+    "src",
+    "/branding/barnes-fernandez-logo.png"
+  );
+  await expect(page.getByText("admin@barnesfernandez.com", { exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: /disconnect this account/i })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Continue to sign in" })).toHaveAttribute(
+    "href",
+    "/login?invite=barnes-admin-join-token&email=admin%40barnesfernandez.com"
+  );
+});
+
 test("invite preview drops protocol-relative brand logos", async ({ page }) => {
   await page.route("**/rest/v1/rpc/get_invite_preview", async (route) => {
     await route.fulfill({

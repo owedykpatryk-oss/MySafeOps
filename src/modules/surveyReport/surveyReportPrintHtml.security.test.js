@@ -31,6 +31,32 @@ describe("surveyReportPrintHtml security", () => {
     expect(html).toContain("Spis treści");
   });
 
+  it("keeps UK en-GB survey pack, PAS 128 headings, and English document control", () => {
+    localStorage.setItem("mysafeops_orgId", "survey-uk");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_survey-uk",
+      JSON.stringify({ id: "ws-uk", market_id: "uk", default_document_locale: "en-GB", is_primary: true }),
+    );
+    const report = blankSurveyReport({
+      title: "PAS 128 utility mapping — Bristol",
+      ref: "UK-SUR-001",
+      client: "Main contractor",
+      surveyType: "utility_mapping_survey",
+      pas128Ql: "B1",
+      finalisedAt: "2026-08-01T12:00:00.000Z",
+      sections: { scope: "Locate buried utilities before excavation.", methodology: "EML and GPR per PAS 128." },
+    });
+    const html = buildSurveyReportHtml(report, {});
+    expect(html).toContain('lang="en-GB"');
+    expect(html).toContain("Document control");
+    expect(html).toContain("Contents");
+    expect(html).toContain("PAS 128 quality levels");
+    expect(html).toContain("Finalised");
+    expect(html).not.toContain("Nadzór nad dokumentem");
+    expect(html).not.toContain("Spis treści");
+    expect(html).not.toContain("Kodeks pracy");
+  });
+
   it("strips javascript: photo sources from exported HTML", () => {
     const report = blankSurveyReport({
       title: "Test",
