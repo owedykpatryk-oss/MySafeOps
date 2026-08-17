@@ -16,9 +16,11 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import GeoPhotosMap from "../components/geoPhotos/GeoPhotosMap";
 import GeoPhotoCaptureModal from "../components/geoPhotos/GeoPhotoCaptureModal";
 import GeoPhotoDirectionMap from "../components/geoPhotos/GeoPhotoDirectionMap";
+import GeoPhotoAreaPanel from "../components/geoPhotos/GeoPhotoAreaPanel";
 import GeoPhotoImg from "../components/geoPhotos/GeoPhotoImg";
 import { geoPhotoPreset, geoPhotoPresetLabel, listGeoPhotoPresetsForOrg } from "../utils/geoPhotoPresets";
 import { isUtilityMappingOrg } from "../utils/utilityMappingOrg";
+import { getOrgIndustryPackId } from "../utils/surveyWorkflowGate";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
 import { buildQuickProject, findProjectByName } from "../utils/quickProject";
@@ -70,6 +72,12 @@ import {
   geoPhotoDetailSummary,
   normaliseGeoPhotoDetails,
 } from "../utils/geoPhotoTypeFields";
+import {
+  formatAreaSqm,
+  geoPhotoAreaOf,
+  normaliseGeoPhotoArea,
+  summariseGeoPhotoExtents,
+} from "../utils/geoPhotoArea";
 
 import { todayLocalISO } from "../utils/localDate";
 const STORAGE_KEY = "geo_photos";
@@ -159,6 +167,8 @@ function exportCsv(rows) {
     "locationId",
     "depthM",
     "linkedPermitId",
+    "areaSqm",
+    "areaPerimeterM",
     "observations",
     "notes",
     "capturedBy",
@@ -178,6 +188,8 @@ function exportCsv(rows) {
         r.locationId || "",
         r.depthM ?? "",
         r.linkedPermitId || "",
+        geoPhotoAreaOf(r)?.sqm ?? "",
+        geoPhotoAreaOf(r)?.perimeterM ?? "",
         geoPhotoDetailSummary(r),
         r.notes,
         r.capturedBy,
@@ -226,6 +238,7 @@ function GeoPhotoDetail({
   const [sampleRef, setSampleRef] = useState(photo.sampleRef || "");
   const [capturePhase, setCapturePhase] = useState(photo.capturePhase || "");
   const [details, setDetails] = useState(() => photo.details || {});
+  const [area, setArea] = useState(() => geoPhotoAreaOf(photo));
   const nationalGrid = useMemo(
     () => wgs84ToBritishNationalGrid(photo.latitude, photo.longitude),
     [photo.latitude, photo.longitude]
@@ -240,6 +253,7 @@ function GeoPhotoDetail({
     setSampleRef(photo.sampleRef || "");
     setCapturePhase(photo.capturePhase || "");
     setDetails(photo.details || {});
+    setArea(geoPhotoAreaOf(photo));
   }, [photo]);
 
   return (
@@ -260,6 +274,7 @@ function GeoPhotoDetail({
             longitude={photo.longitude}
             accuracyMeters={photo.gpsAccuracyMeters}
             bearing={bearing}
+            areaPoints={area?.points}
             arrowColor={preset.color}
             height={160}
             interactive
@@ -322,6 +337,14 @@ function GeoPhotoDetail({
           </div>
         ) : null}
         <GeoPhotoTypeFieldInputs type={photo.type} value={details} onChange={setDetails} showPrompt={false} />
+        <GeoPhotoAreaPanel
+          type={photo.type}
+          latitude={photo.latitude}
+          longitude={photo.longitude}
+          color={preset.color}
+          value={area}
+          onChange={setArea}
+        />
         <label className="geo-photos-toolbar__field" style={{ marginBottom: 12 }}>
           Notes
           <textarea
@@ -372,6 +395,7 @@ function GeoPhotoDetail({
                 sampleRef: sampleRef.trim(),
                 capturePhase,
                 details: normaliseGeoPhotoDetails(photo.type, details),
+                area: normaliseGeoPhotoArea(area),
                 includeInReport,
                 bearing,
                 updatedAt: new Date().toISOString(),
@@ -427,7 +451,10 @@ export default function GeoPhotos() {
   const [exportBusy, setExportBusy] = useState("");
   const [detail, setDetail] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const photoPresets = useMemo(() => listGeoPhotoPresetsForOrg(isUtilityMappingOrg()), [orgName]);
+  const photoPresets = useMemo(
+    () => listGeoPhotoPresetsForOrg(isUtilityMappingOrg(), getOrgIndustryPackId()),
+    [orgName]
+  );
 
   // Stable identities — inline closures re-triggered D1 hydration on every render (flicker + refetch loop).
   const loadArray = useCallback((key, fallback) => asPhotoArray(load(key, fallback)), []);
@@ -529,6 +556,9 @@ export default function GeoPhotos() {
   }, [safePhotos, filterProject, filterReport, filterAction, filterType, query]);
 
   const exportGpsStats = useMemo(() => filterGeoPhotosWithCoords(filtered), [filtered]);
+
+  // Traced ground across whatever is on screen, so clearance can be priced off the register.
+  const extents = useMemo(() => summariseGeoPhotoExtents(filtered), [filtered]);
 
   const pdfExportNote = hasActiveFilters ? `Filtered view · ${filtered.length} photo(s)` : null;
   useRegisterPdfExportOverride("geo-photos", filtered, pdfExportNote);
@@ -993,6 +1023,29 @@ export default function GeoPhotos() {
         </div>
       ) : null}
 
+      {extents.count > 0 ? (
+        <div className="geo-photos-extent-banner">
+          <span className="geo-photos-extent-banner__text">
+            {extents.count} extent{extents.count === 1 ? "" : "s"} traced on site ·{" "}
+            {formatAreaSqm(extents.totalSqm)} of ground
+            {extents.count > 1 && extents.largest
+              ? ` · largest ${geoPhotoPresetLabel(extents.largest.type)} ${formatAreaSqm(
+                  geoPhotoAreaOf(extents.largest).sqm
+                )}`
+              : ""}
+          </span>
+          {extents.largest ? (
+            <button
+              type="button"
+              style={{ ...ms.btn, fontSize: 12, padding: "6px 14px" }}
+              onClick={() => setDetail(extents.largest)}
+            >
+              Open largest
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {filterProject && mobilisation ? (
         <GeoPhotoMobilisationPanel
           checklist={mobilisation}
@@ -1242,6 +1295,7 @@ export default function GeoPhotos() {
                     latitude={photo.latitude}
                     longitude={photo.longitude}
                     bearing={photo.bearing}
+                    areaPoints={photo.area?.points}
                     arrowColor={preset.color}
                     height={72}
                     interactive={false}

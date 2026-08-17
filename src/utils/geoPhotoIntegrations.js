@@ -12,6 +12,8 @@ import {
 import { buildStaticMapUrl } from "./staticMapUrl.js";
 import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
 import { geoPhotoDetailRows, geoPhotoDetailSummary, normaliseGeoPhotoDetails } from "./geoPhotoTypeFields";
+import { formatAreaSqm, formatGeoPhotoArea, geoPhotoAreaOf, summariseGeoPhotoExtents } from "./geoPhotoArea";
+import { geoPhotoSitePlanUrl } from "./geoPhotoSitePlan";
 import { buildGeoPhotoActionsBlock, GEO_PHOTO_ACTIONS_MARKER } from "./geoPhotoActions";
 
 import { todayLocalISO } from "./localDate";
@@ -147,6 +149,8 @@ export function geoPhotosToSurveyPhotos(geoPhotos) {
       longitude: p.longitude,
       bearing: p.bearing,
       geoPhotoType: p.type,
+      // Carried through so the report's site plan can shade the ground each photo covers.
+      area: geoPhotoAreaOf(p),
     }));
 }
 
@@ -315,6 +319,38 @@ function observationProperties(photo) {
   return out;
 }
 
+/**
+ * The extent traced on site as its own polygon feature, so GIS can measure and shade it
+ * rather than reading a size off a point's attributes. Kept as a separate feature because
+ * a photo is a place and an extent is ground — QGIS styles and joins them differently.
+ */
+function extentFeature(photo) {
+  const area = geoPhotoAreaOf(photo);
+  if (!area) return null;
+  const ring = [...area.points, area.points[0]].map(([lat, lng]) => [lng, lat]);
+  return {
+    type: "Feature",
+    geometry: { type: "Polygon", coordinates: [ring] },
+    properties: {
+      id: `${photo.id}_extent`,
+      photoId: photo.id,
+      featureKind: "extent",
+      type: photo.type,
+      label: `${geoPhotoPresetLabel(photo.type)} — extent`,
+      areaSqm: area.sqm,
+      areaHectares: Math.round((area.sqm / 10000) * 10000) / 10000,
+      areaPerimeterM: area.perimeterM,
+      areaVertices: area.points.length,
+      notes: photo.notes,
+      includeInReport: Boolean(photo.includeInReport),
+      projectId: photo.projectId,
+      projectName: photo.projectName,
+      capturedBy: photo.capturedBy,
+      timestampUtc: photo.timestampUtc,
+    },
+  };
+}
+
 export function exportGeoPhotosGeoJson(photos, name = "geo-photos") {
   const features = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)))
@@ -350,10 +386,14 @@ export function exportGeoPhotosGeoJson(photos, name = "geo-photos") {
       };
     });
 
+  // Extents stand on their own geometry, so one traced round a photo that never got a fix
+  // still reaches GIS.
+  const extents = (photos || []).map(extentFeature).filter(Boolean);
+
   return {
     type: "FeatureCollection",
     name,
-    features,
+    features: [...features, ...extents],
   };
 }
 
@@ -385,6 +425,8 @@ export function snagDraftFromGeoPhoto(photo) {
         ? `Location: ${Number(photo.latitude).toFixed(6)}, ${Number(photo.longitude).toFixed(6)}`
         : "",
       photo.bearing != null ? `Camera bearing: ${Math.round(Number(photo.bearing))}°` : "",
+      // Whoever prices the fix needs the quantity, not just the picture.
+      geoPhotoAreaOf(photo) ? `Extent traced on site: ${formatGeoPhotoArea(photo.area)}` : "",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -612,28 +654,67 @@ export function geoPhotosToGiLocationsTable(allGeoPhotos, projectId, { existingR
 }
 
 /** Static map URL for geo-photo GPS cluster (offline SVG — no third-party staticmap host). */
-export function geoPhotosStaticMapUrl(photos, { width = 520, height = 220, maxMarkers = 25 } = {}) {
+/**
+ * Ground traced on site, largest first, as a schedule the report can price against.
+ * Works from either raw geo-photos or the survey photo pack, since the report carries the
+ * latter — both know their type and their extent, which is all a quantity needs.
+ * @returns {{ rows: object[], totalSqm: number }}
+ */
+export function geoPhotoExtentSchedule(photos) {
+  const rows = (photos || [])
+    .map((photo) => {
+      const area = geoPhotoAreaOf(photo);
+      if (!area) return null;
+      const type = photo.type || photo.geoPhotoType;
+      return {
+        geoPhotoId: photo.geoPhotoId || photo.id || "",
+        label: geoPhotoPresetLabel(type),
+        locationId: resolvedGiLocationId(photo) || "",
+        sqm: area.sqm,
+        perimeterM: area.perimeterM,
+        area: formatAreaSqm(area.sqm),
+        perimeter: `${Math.round(area.perimeterM)} m`,
+        notes: geoPhotoDetailSummary(photo, { exclude: ["area"] }) || String(photo.notes || photo.caption || "").trim(),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.sqm - a.sqm);
+
+  return { rows, totalSqm: Math.round(rows.reduce((sum, row) => sum + row.sqm, 0) * 10) / 10 };
+}
+
+/**
+ * Locator for the report. Two or more photos get a sketch plan of where they actually are;
+ * a lone photo keeps the simple pin card, which says everything there is to say about one point.
+ */
+export function geoPhotosStaticMapUrl(photos, { width = 520, height = 260, maxMarkers = 25 } = {}) {
   const pts = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)));
   const capped = pts.slice(0, maxMarkers);
   if (!capped.length) return "";
-  const lat = capped.reduce((s, p) => s + Number(p.latitude), 0) / capped.length;
-  const lng = capped.reduce((s, p) => s + Number(p.longitude), 0) / capped.length;
-  const zoom = capped.length === 1 ? 16 : pts.length > 8 ? 14 : 15;
-  return buildStaticMapUrl(lat, lng, {
-    width,
-    height,
-    zoom,
-    label: capped.length === 1 ? "Geo-photo" : `${capped.length} geo-photos`,
-  });
+  if (capped.length > 1) return geoPhotoSitePlanUrl(capped, { width, height, maxMarkers });
+  const lat = Number(capped[0].latitude);
+  const lng = Number(capped[0].longitude);
+  return buildStaticMapUrl(lat, lng, { width, height, zoom: 16, label: "Geo-photo" });
 }
 
 export function geoPhotosStaticMapCaption(photos, maxMarkers = 25) {
-  const total = (photos || []).filter(
+  const withCoords = (photos || []).filter(
     (p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude))
-  ).length;
-  if (total <= maxMarkers) return "";
-  return `Map shows ${maxMarkers} of ${total} GPS-tagged geo-photos.`;
+  );
+  const notes = [];
+  if (withCoords.length > maxMarkers) {
+    notes.push(`plan shows ${maxMarkers} of ${withCoords.length} GPS-tagged geo-photos`);
+  }
+  const extents = summariseGeoPhotoExtents(withCoords.slice(0, maxMarkers));
+  if (extents.count) {
+    notes.push(
+      `${extents.count} extent${extents.count === 1 ? "" : "s"} shaded, ${formatAreaSqm(extents.totalSqm)} of ground`
+    );
+  }
+  if (!notes.length) return "";
+  // Reads as a sentence under the figure: "Plan shows 25 of 40…, 3 extents shaded…"
+  return `${notes.join(", ").replace(/^./, (c) => c.toUpperCase())}.`;
 }
 
 /** Build permit evidence patch from a geo-photo. */

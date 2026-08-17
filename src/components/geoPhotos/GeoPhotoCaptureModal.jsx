@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ms } from "../../utils/moduleStyles";
 import GeoPhotoDirectionMap from "./GeoPhotoDirectionMap";
 import GeoPhotoTypeFieldInputs from "./GeoPhotoTypeFieldInputs";
+import GeoPhotoAreaPanel from "./GeoPhotoAreaPanel";
 import { presetsByGroup, geoPhotoPreset, geoPhotoPresetLabel } from "../../utils/geoPhotoPresets";
+import { getOrgIndustryPackId } from "../../utils/surveyWorkflowGate";
 import {
   blankGeoPhoto,
   compassNeedsUserGesture,
@@ -22,6 +24,7 @@ import { wgs84ToBritishNationalGrid } from "../../utils/britishNationalGrid";
 import { uploadGeoPhotoToR2 } from "../../utils/geoPhotoMedia";
 import { findNearestProject, findRecentDuplicateGeoPhoto } from "../../utils/geoPhotoIntegrations";
 import { normaliseGeoPhotoDetails } from "../../utils/geoPhotoTypeFields";
+import { normaliseGeoPhotoArea } from "../../utils/geoPhotoArea";
 import {
   isGiGeoPhotoType,
   buildStructuredGeoPhotoNotes,
@@ -116,6 +119,7 @@ export default function GeoPhotoCaptureModal({
   const [sampleRef, setSampleRef] = useState("");
   const [capturePhase, setCapturePhase] = useState("");
   const [details, setDetails] = useState({});
+  const [area, setArea] = useState(null);
   const [includeInReport, setIncludeInReport] = useState(true);
   const [projectId, setProjectId] = useState(initialProjectId || "");
   const [capturedBy, setCapturedBy] = useState("");
@@ -137,7 +141,8 @@ export default function GeoPhotoCaptureModal({
   const effectiveBearing = manualBearing ?? compassBearing;
   const nationalGrid = useMemo(() => wgs84ToBritishNationalGrid(latitude, longitude), [latitude, longitude]);
   const preset = geoPhotoPreset(type);
-  const groupedPresets = useMemo(() => presetsByGroup(), []);
+  // The workspace's trade brings its own capture types to the top of the list; nothing is hidden.
+  const groupedPresets = useMemo(() => presetsByGroup(getOrgIndustryPackId()), []);
   const showGiFields = isGiGeoPhotoType(type);
 
   const reset = useCallback(() => {
@@ -162,6 +167,7 @@ export default function GeoPhotoCaptureModal({
     setSampleRef("");
     setCapturePhase("");
     setDetails({});
+    setArea(null);
     setIncludeInReport(true);
     setProjectId(initialProjectId || "");
     setCapturedBy("");
@@ -214,6 +220,7 @@ export default function GeoPhotoCaptureModal({
         setSampleRef(draft.sampleRef || "");
         setCapturePhase(draft.capturePhase || "");
         setDetails(draft.details && typeof draft.details === "object" ? draft.details : {});
+        setArea(draft.area ?? null);
         setIncludeInReport(draft.includeInReport ?? true);
         setProjectId(draft.projectId || initialProjectId || "");
         setCapturedBy(draft.capturedBy || "");
@@ -281,6 +288,7 @@ export default function GeoPhotoCaptureModal({
       sampleRef,
       capturePhase,
       details,
+      area,
       includeInReport,
       projectId,
       capturedBy,
@@ -307,6 +315,7 @@ export default function GeoPhotoCaptureModal({
     sampleRef,
     capturePhase,
     details,
+    area,
     includeInReport,
     projectId,
     capturedBy,
@@ -497,6 +506,7 @@ export default function GeoPhotoCaptureModal({
       sampleRef: sampleRef.trim(),
       capturePhase,
       details: normaliseGeoPhotoDetails(type, details),
+      area: normaliseGeoPhotoArea(area),
       linkedPermitId: linkedPermitId || "",
       includeInReport,
       photoDataUrl,
@@ -569,6 +579,7 @@ export default function GeoPhotoCaptureModal({
       setDepthM("");
       setSampleRef("");
       setDetails({});
+      setArea(null);
       acquireGps();
     } else {
       onClose();
@@ -938,6 +949,14 @@ export default function GeoPhotoCaptureModal({
               </div>
             ) : null}
             <GeoPhotoTypeFieldInputs type={type} value={details} onChange={setDetails} />
+            <GeoPhotoAreaPanel
+              type={type}
+              latitude={latitude}
+              longitude={longitude}
+              color={preset.color}
+              value={area}
+              onChange={setArea}
+            />
             <label className="geo-photos-toolbar__field">
               Notes
               <textarea

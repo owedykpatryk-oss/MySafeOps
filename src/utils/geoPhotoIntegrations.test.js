@@ -3,6 +3,10 @@ import {
   buildGeoPhotosFindingsBlock,
   exportGeoPhotosGeoJson,
   findNearestProject,
+  geoPhotoExtentSchedule,
+  geoPhotosStaticMapCaption,
+  geoPhotosStaticMapUrl,
+  geoPhotosToSurveyPhotos,
   geoPhotoToGiLocationRow,
   geoPhotoToUtilityRow,
   findRecentDuplicateGeoPhoto,
@@ -468,6 +472,85 @@ describe("geoPhotoIntegrations", () => {
     expect(feature.properties.northing).toBeGreaterThan(100000);
     expect(feature.properties.gpsAccuracyMeters).toBe(6);
     expect(feature.properties.locationSource).toBe("device_gps");
+  });
+
+  describe("extents traced on site", () => {
+    const overgrown = {
+      ...photos[0],
+      type: "vegetation",
+      area: {
+        points: [
+          [51.501, -0.101],
+          [51.5019, -0.101],
+          [51.5019, -0.09955],
+          [51.501, -0.09955],
+        ],
+      },
+    };
+
+    it("exports the boundary as its own polygon feature GIS can measure", () => {
+      const geo = exportGeoPhotosGeoJson([overgrown]);
+      expect(geo.features).toHaveLength(2);
+
+      const extent = geo.features.find((f) => f.properties.featureKind === "extent");
+      expect(extent.geometry.type).toBe("Polygon");
+      // GeoJSON is lng/lat and wants the ring closed explicitly.
+      expect(extent.geometry.coordinates[0]).toHaveLength(5);
+      expect(extent.geometry.coordinates[0][0]).toEqual([-0.101, 51.501]);
+      expect(extent.geometry.coordinates[0][0]).toEqual(extent.geometry.coordinates[0][4]);
+      expect(extent.properties.photoId).toBe(overgrown.id);
+      expect(extent.properties.areaSqm).toBeGreaterThan(9000);
+      expect(extent.properties.areaHectares).toBeCloseTo(1, 1);
+      expect(extent.properties.areaVertices).toBe(4);
+    });
+
+    it("adds no polygon for photos where nobody traced anything", () => {
+      const geo = exportGeoPhotosGeoJson(photos);
+      expect(geo.features.every((f) => f.geometry.type === "Point")).toBe(true);
+    });
+
+    it("schedules the traced ground largest first, with a total to price against", () => {
+      const smaller = {
+        ...photos[1],
+        type: "obstruction",
+        area: {
+          points: [
+            [51.502, -0.1],
+            [51.5023, -0.1],
+            [51.5023, -0.0995],
+            [51.502, -0.0995],
+          ],
+        },
+      };
+      const schedule = geoPhotoExtentSchedule([smaller, overgrown, photos[2]]);
+
+      expect(schedule.rows).toHaveLength(2);
+      expect(schedule.rows[0].label).toBe("Vegetation / overgrowth");
+      expect(schedule.rows[0].sqm).toBeGreaterThan(schedule.rows[1].sqm);
+      expect(schedule.rows[0].area).toBe("1.00 ha");
+      expect(schedule.rows[0].perimeter).toMatch(/^\d+ m$/);
+      expect(schedule.totalSqm).toBeCloseTo(schedule.rows[0].sqm + schedule.rows[1].sqm, 1);
+    });
+
+    it("schedules the survey photo pack too, which is the shape the report holds", () => {
+      const pack = geoPhotosToSurveyPhotos([overgrown]);
+      expect(pack[0].area.sqm).toBeGreaterThan(9000);
+      expect(geoPhotoExtentSchedule(pack).rows[0].label).toBe("Vegetation / overgrowth");
+    });
+
+    it("plots the report locator as a site plan once there are two points", () => {
+      const url = geoPhotosStaticMapUrl([overgrown, photos[1]]);
+      const svg = decodeURIComponent(url.split(",")[1]);
+      expect(svg).toContain("<polygon");
+      expect(svg).toContain(">N</text>");
+      expect(geoPhotosStaticMapCaption([overgrown, photos[1]])).toContain("1 extent shaded");
+    });
+
+    it("gives the snag the quantity, so the clearance can be priced", () => {
+      const snag = snagDraftFromGeoPhoto(overgrown);
+      expect(snag.description).toContain("Extent traced on site:");
+      expect(snag.description).toMatch(/1\.00 ha · \d+ m perimeter/);
+    });
   });
 
   it("leaves survey fields null when nothing was captured", () => {

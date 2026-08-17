@@ -130,7 +130,12 @@ import {
   ACM_MATERIAL_RISK_SCORE,
 } from "./surveySpecialistFindings";
 import { geoPhotoPreset, GEO_PHOTO_GROUP_ORDER } from "../../utils/geoPhotoPresets";
-import { geoPhotosStaticMapUrl, geoPhotosStaticMapCaption } from "../../utils/geoPhotoIntegrations";
+import {
+  geoPhotoExtentSchedule,
+  geoPhotosStaticMapUrl,
+  geoPhotosStaticMapCaption,
+} from "../../utils/geoPhotoIntegrations";
+import { formatAreaSqm } from "../../utils/geoPhotoArea";
 import { formatLengthM } from "../../utils/surveyDxfAnalyzer";
 import {
   buildCadFieldComparison,
@@ -647,6 +652,25 @@ function utilitiesTableBlock(rows, photoIndexByGeoId = {}) {
   );
 }
 
+/**
+ * Ground traced on site as a schedule with a total, so clearance and reinstatement can be
+ * priced off the report instead of measured again off the photographs.
+ */
+function extentScheduleBlock(schedule, photoIndexByGeoId = {}) {
+  if (!schedule?.rows?.length) return "";
+  const body = schedule.rows.map((r) => [
+    r.locationId ? `${r.label} (${r.locationId})` : r.label,
+    r.area,
+    r.perimeter,
+    r.geoPhotoId && photoIndexByGeoId[r.geoPhotoId] ? `Fig. ${photoIndexByGeoId[r.geoPhotoId]}` : "",
+    r.notes || "",
+  ]);
+  if (schedule.rows.length > 1) {
+    body.push([{ __html: "<strong>Total</strong>" }, { __html: `<strong>${esc(formatAreaSqm(schedule.totalSqm))}</strong>` }, "", "", ""]);
+  }
+  return dataTable(["Feature", "Extent", "Perimeter", "Figure", "Notes"], body);
+}
+
 function giLocationsTableBlock(rows, photoIndexByGeoId = {}) {
   if (!rows?.length) return "";
   // Only widen the table when the field actually recorded ground, water or reinstatement.
@@ -894,7 +918,7 @@ function photoGrid(photos) {
   const mapUrl = geoPhotos.length >= 2 ? geoPhotosStaticMapUrl(geoPhotos) : "";
   const mapNote = geoPhotosStaticMapCaption(geoPhotos);
   const mapBlock = mapUrl
-    ? `<figure class="sr-cover-map sr-photo-map"><img src="${mapUrl}" alt="Geo-photo locations"/><figcaption>Geo-photo locations (${geoPhotos.length} points)${mapNote ? ` — ${esc(mapNote)}` : ""}</figcaption></figure>`
+    ? `<figure class="sr-cover-map sr-photo-map"><img src="${mapUrl}" alt="Site plan of geo-photo locations"/><figcaption>Geo-photo locations — numbers match the figures below (${geoPhotos.length} points)${mapNote ? ` — ${esc(mapNote)}` : ""}</figcaption></figure>`
     : "";
 
   const html = `${mapBlock}${groupBlocks}`;
@@ -1153,6 +1177,11 @@ export function buildSurveyReportHtml(report, extras = {}) {
   if (r.trialHolesTable?.length) {
     findingsBody += trialHolesBlock(r.trialHolesTable);
   }
+  const extentSchedule = geoPhotoExtentSchedule(r.photos);
+  if (extentSchedule.rows.length) {
+    findingsBody += `<h3 class="sr-subhead">Ground extents recorded on site</h3>`;
+    findingsBody += extentScheduleBlock(extentSchedule, photoIndexByGeoId);
+  }
   if (r.giLocationsTable?.length) {
     findingsBody += giLocationsTableBlock(r.giLocationsTable, photoIndexByGeoId);
     findingsBody += `<div class="sr-narrative">${nl2p(r.sections?.findings)}</div>`;
@@ -1164,6 +1193,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
   }
   if (
     r.sections?.findings?.trim() ||
+    extentSchedule.rows.length ||
     r.utilitiesTable?.length ||
     r.giLocationsTable?.length ||
     r.cctvRunsTable?.length ||

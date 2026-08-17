@@ -132,6 +132,48 @@ describe("geoPhotoExport", () => {
     expect(kml).toContain(",0</coordinates>");
   });
 
+  describe("extents traced on site", () => {
+    const overgrown = {
+      ...samplePhotos[0],
+      type: "vegetation",
+      area: {
+        points: [
+          [51.501, -0.1],
+          [51.5019, -0.1],
+          [51.5019, -0.09855],
+          [51.501, -0.09855],
+        ],
+      },
+    };
+
+    it("exports the boundary as a closed KML polygon carrying its size", () => {
+      const kml = buildGeoPhotosKml([overgrown]);
+      expect(kml).toContain("— extent 1.00 ha");
+      expect(kml).toContain("<outerBoundaryIs>");
+      expect(kml).toContain('<Data name="areaVertices"><value>4</value></Data>');
+      expect(kml).toMatch(/<Data name="areaSqm"><value>\d/);
+      // Five coordinates for four corners: KML wants the ring closed explicitly. The arrow
+      // head is a polygon too, so read the ring out of the extent placemark itself.
+      const extent = kml.slice(kml.indexOf('<Data name="areaSqm">'));
+      const ring = extent.match(/<LinearRing>\s*<coordinates>([^<]+)<\/coordinates>/)[1].trim().split(/\s+/);
+      expect(ring).toHaveLength(5);
+      expect(ring[0]).toBe(ring[4]);
+    });
+
+    it("leaves photos without an extent as bare placemarks", () => {
+      const kml = buildGeoPhotosKml([samplePhotos[0]]);
+      expect(kml).not.toContain("areaSqm");
+      expect(kml).not.toContain("— extent");
+    });
+
+    it("draws the boundary on its own CAD layer with the size labelled", () => {
+      const dxf = buildGeoPhotosDxf([overgrown]);
+      expect(dxf).toContain("GEO_EXTENTS");
+      expect(dxf).toContain("LWPOLYLINE");
+      expect(dxf).toMatch(/1\.00 ha \(\d+ m perimeter\)/);
+    });
+  });
+
   it("filters photos with and without GPS", () => {
     const { withCoords, withoutCoords } = filterGeoPhotosWithCoords(samplePhotos);
     expect(withCoords).toHaveLength(2);

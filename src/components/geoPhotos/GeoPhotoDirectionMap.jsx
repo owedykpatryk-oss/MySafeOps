@@ -2,6 +2,7 @@ import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { bearingArrowHead, bearingToEnd } from "../../utils/geoPhotoUtils";
+import { normaliseAreaPoints } from "../../utils/geoPhotoArea";
 
 /**
  * Mini map with photo point, optional accuracy circle, and bearing arrow polyline.
@@ -11,6 +12,7 @@ function GeoPhotoDirectionMap({
   longitude,
   accuracyMeters = null,
   bearing = null,
+  areaPoints = null,
   arrowColor = "#2563eb",
   height = 180,
   interactive = false,
@@ -88,6 +90,17 @@ function GeoPhotoDirectionMap({
       fillOpacity: 0.95,
     }).addTo(layer);
 
+    const ring = normaliseAreaPoints(areaPoints);
+    if (ring.length >= 3) {
+      L.polygon(ring, {
+        color: arrowColor,
+        weight: 2,
+        opacity: 0.9,
+        fillColor: arrowColor,
+        fillOpacity: 0.2,
+      }).addTo(layer);
+    }
+
     const end = bearingToEnd(lat, lng, bearing);
     if (end) {
       L.polyline(
@@ -109,8 +122,13 @@ function GeoPhotoDirectionMap({
       }
     }
 
-    map.setView([lat, lng], end ? 18 : 17, { animate: false });
-  }, [latitude, longitude, accuracyMeters, bearing, arrowColor]);
+    // An extent is the widest thing on the map, so frame that rather than the camera point.
+    if (ring.length >= 3) {
+      map.fitBounds(L.latLngBounds([...ring, [lat, lng]]).pad(0.2), { maxZoom: 19, animate: false });
+    } else {
+      map.setView([lat, lng], end ? 18 : 17, { animate: false });
+    }
+  }, [latitude, longitude, accuracyMeters, bearing, areaPoints, arrowColor]);
 
   useEffect(() => {
     const map = mapRef.current;

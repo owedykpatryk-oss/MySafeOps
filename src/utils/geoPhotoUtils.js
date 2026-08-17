@@ -328,6 +328,7 @@ export function blankGeoPhoto(overrides = {}) {
     sampleRef: "",
     capturePhase: "",
     details: {},
+    area: null,
     actionResolvedAt: null,
     actionResolvedBy: "",
     linkedPermitId: "",
