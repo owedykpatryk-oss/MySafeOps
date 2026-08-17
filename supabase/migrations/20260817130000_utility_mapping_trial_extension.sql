@@ -55,7 +55,8 @@ where
     'utility-mapping',
     'u-map',
     'umap',
-    'utility-mapping-group'
+    'utility-mapping-group',
+    'patryk-44bdf196'
   )
   or exists (
     select 1
