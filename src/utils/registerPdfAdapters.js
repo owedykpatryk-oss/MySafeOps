@@ -3,6 +3,7 @@
  */
 import { geoPhotoPresetLabel } from "./geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
+import { formatAreaSqm, formatGeoPhotoArea, geoPhotoAreaOf } from "./geoPhotoArea";
 import {
   PDF_PAGE,
   drawPdfMetaStrip,
@@ -118,6 +119,7 @@ export function flattenGeoPhotoRow(photo) {
     coordinates: formatCoords(photo),
     bearing:
       photo?.bearing != null && !Number.isNaN(Number(photo.bearing)) ? `${Math.round(Number(photo.bearing))}°` : "—",
+    extent: formatAreaSqm(geoPhotoAreaOf(photo)?.sqm) || "—",
     inReport: photo?.includeInReport ? "Yes" : "No",
     notes: String(photo?.notes || "").slice(0, 100) || "—",
   };
@@ -204,6 +206,7 @@ export const REGISTER_PDF_ADAPTERS = {
       { k: "captured", l: "Captured" },
       { k: "coordinates", l: "Coordinates" },
       { k: "bearing", l: "Bearing" },
+      { k: "extent", l: "Extent" },
       { k: "inReport", l: "In report" },
     ],
   },
@@ -502,6 +505,7 @@ export function renderGeoPhotoDetailPages(pdf, photos, helpers) {
       photo.bearing != null && !Number.isNaN(Number(photo.bearing))
         ? `Bearing: ${Math.round(Number(photo.bearing))}°`
         : "",
+      geoPhotoAreaOf(photo) ? `Extent traced on site: ${formatGeoPhotoArea(photo.area)}` : "",
       photo.includeInReport ? "Included in survey report pack" : "",
     ].filter(Boolean);
     meta.forEach((line) => {

@@ -3,6 +3,12 @@ import {
   buildGeoPhotosFindingsBlock,
   exportGeoPhotosGeoJson,
   findNearestProject,
+  geoPhotoExtentSchedule,
+  geoPhotosStaticMapCaption,
+  geoPhotosStaticMapUrl,
+  geoPhotosToSurveyPhotos,
+  geoPhotoToGiLocationRow,
+  geoPhotoToUtilityRow,
   findRecentDuplicateGeoPhoto,
   GEO_PHOTOS_FINDINGS_MARKER,
   importGeoPhotosIntoReport,
@@ -69,6 +75,29 @@ describe("geoPhotoIntegrations", () => {
     expect(block).toContain("Trip hazard");
   });
 
+  it("carries type-specific observations into findings and captions", () => {
+    const observed = [
+      {
+        ...photos[1],
+        details: { severity: "High", hazardCategory: "Excavation", controlInPlace: true, actionRequired: true },
+      },
+    ];
+    const block = buildGeoPhotosFindingsBlock(observed);
+    expect(block).toContain("High · Excavation · Control in place · Action required");
+
+    const report = { projectId: "p1", sections: { findings: "" }, photos: [] };
+    const next = importGeoPhotosIntoReport(report, observed);
+    expect(next.photos[0].caption).toContain("Excavation");
+  });
+
+  it("exports observations as flat GIS attributes", () => {
+    const geojson = exportGeoPhotosGeoJson([
+      { ...photos[1], details: { severity: "High", controlInPlace: true } },
+    ]);
+    expect(geojson.features[0].properties.obs_severity).toBe("High");
+    expect(geojson.features[0].properties.obs_control_in_place).toBe("Yes");
+  });
+
   it("imports geo-photos into survey report", () => {
     const report = { projectId: "p1", sections: { findings: "Existing." }, photos: [], accessLimitationsNotes: "" };
     const next = importGeoPhotosIntoReport(report, photos);
@@ -76,6 +105,67 @@ describe("geoPhotoIntegrations", () => {
     expect(next.sections.findings).toContain(GEO_PHOTOS_FINDINGS_MARKER);
     expect(next.accessLimitationsNotes).toContain("Geo-photo access");
     expect(next.geoPhotoImportCount).toBe(2);
+  });
+
+  describe("outstanding actions in the report", () => {
+    const flagged = {
+      id: "ga1",
+      projectId: "p1",
+      type: "hazard",
+      includeInReport: false,
+      notes: "Open chamber by gate",
+      latitude: 51.502,
+      longitude: -0.102,
+      details: { severity: "High", actionRequired: true },
+    };
+
+    it("lists open actions under recommendations, with a grid reference", () => {
+      const report = { projectId: "p1", sections: { findings: "", recommendations: "Reinstate as agreed." }, photos: [] };
+      const next = importGeoPhotosIntoReport(report, [...photos, flagged]);
+
+      expect(next.sections.recommendations).toContain("Reinstate as agreed.");
+      expect(next.sections.recommendations).toContain("Outstanding actions (field capture)");
+      expect(next.sections.recommendations).toContain("High — Hazard: Open chamber by gate");
+      expect(next.sections.recommendations).toMatch(/T[QRV] \d{5} \d{5}/);
+    });
+
+    it("chases an action even when the photo was not marked for the report", () => {
+      const report = { projectId: "p1", sections: { findings: "" }, photos: [] };
+      const next = importGeoPhotosIntoReport(report, [...photos, flagged]);
+      expect(next.sections.recommendations).toContain("Open chamber by gate");
+    });
+
+    it("drops the list once the action is closed off, and re-importing does not stack blocks", () => {
+      const report = { projectId: "p1", sections: { findings: "", recommendations: "" }, photos: [] };
+      const withAction = importGeoPhotosIntoReport(report, [...photos, flagged]);
+
+      const closed = { ...flagged, actionResolvedAt: "2026-06-02T09:00:00Z" };
+      const after = importGeoPhotosIntoReport(withAction, [...photos, closed]);
+      expect(after.sections.recommendations).not.toContain("Open chamber by gate");
+
+      const again = importGeoPhotosIntoReport(after, [...photos, flagged]);
+      expect(again.sections.recommendations.match(/Outstanding actions/g)).toHaveLength(1);
+    });
+
+    it("leaves recommendations alone when nothing is outstanding", () => {
+      const report = { projectId: "p1", sections: { findings: "", recommendations: "As agreed." }, photos: [] };
+      const next = importGeoPhotosIntoReport(report, photos);
+      expect(next.sections.recommendations).toBe("As agreed.");
+    });
+  });
+
+  it("refreshes the findings block on re-import instead of leaving stale text", () => {
+    const report = { projectId: "p1", sections: { findings: "Existing." }, photos: [] };
+    const first = importGeoPhotosIntoReport(report, photos, { replaceFindingsBlock: true });
+    expect(first.sections.findings).toContain("Trip hazard");
+
+    const revised = photos.map((p) => (p.id === "g2" ? { ...p, notes: "Trip hazard made safe" } : p));
+    const second = importGeoPhotosIntoReport(first, revised, { replaceFindingsBlock: true });
+    expect(second.sections.findings).toContain("Trip hazard made safe");
+    expect(second.sections.findings).not.toContain("Trip hazard ("); // the superseded line is gone
+    expect(second.sections.findings.match(/=== Geo-photos/g)).toHaveLength(1);
+    expect(second.sections.findings.match(/1\. /g)).toHaveLength(1);
+    expect(second.sections.findings).toContain("Existing.");
   });
 
   it("creates snag draft from hazard geo-photo", () => {
@@ -105,6 +195,90 @@ describe("geoPhotoIntegrations", () => {
 
     const table = geoPhotosToUtilitiesTable([...photos, utilityPhoto], "p1", { pas128Ql: "B1" });
     expect(table.some((r) => r.geoPhotoId === "g4")).toBe(true);
+  });
+
+  describe("field answers driving the utility schedule", () => {
+    const base = {
+      id: "g9",
+      projectId: "p1",
+      type: "utility_locator",
+      includeInReport: true,
+      notes: "Traced along frontage",
+      latitude: 51.503,
+      longitude: -0.103,
+    };
+
+    it("fills utility, source, status, quality level and confidence from what was recorded", () => {
+      const row = geoPhotoToUtilityRow(
+        {
+          ...base,
+          details: {
+            service: "Electricity (HV)",
+            detectionMethod: "EML / CAT and Genny",
+            pas128Ql: "QL-B1",
+            indicativeDepthM: 0.9,
+            signalConfident: true,
+          },
+        },
+        { pas128Ql: "QL-D" }
+      );
+
+      expect(row.utilityType).toBe("hv_cable");
+      expect(row.source).toBe("eml");
+      expect(row.detectStatus).toBe("detected");
+      expect(row.method).toBe("EML / CAT and Genny");
+      expect(row.depth).toBe("0.9 m");
+      expect(row.confidence).toBe("high");
+      expect(row.pas128Ql).toBe("QL-B1"); // the field answer beats the report-level default
+    });
+
+    it("treats a records-only trace as indicative", () => {
+      const row = geoPhotoToUtilityRow({ ...base, details: { service: "Gas", detectionMethod: "Records only" } });
+      expect(row.utilityType).toBe("gas");
+      expect(row.source).toBe("records");
+      expect(row.detectStatus).toBe("tfr");
+      expect(row.confidence).toBe("indicative");
+    });
+
+    it("reads material and diameter off an exposed service in a trial pit", () => {
+      const row = geoPhotoToUtilityRow({
+        ...base,
+        type: "trial_pit",
+        details: { serviceFound: "Water", serviceMaterial: "PE / MDPE", serviceDiameterMm: 125 },
+      });
+      expect(row.utilityType).toBe("water");
+      expect(row.material).toBe("PE / MDPE");
+      expect(row.diameter).toBe("125 mm");
+      expect(row.detectStatus).toBe("detected");
+    });
+
+    it("uses what the pit found, not a leftover service answer from another type", () => {
+      const row = geoPhotoToUtilityRow({
+        ...base,
+        type: "trial_pit",
+        details: { service: "Gas", serviceFound: "Water" },
+      });
+      expect(row.utilityType).toBe("water");
+    });
+
+    it("says not located when a trial pit found nothing", () => {
+      const row = geoPhotoToUtilityRow({ ...base, type: "trial_pit", details: { excavationMethod: "Hand dig" } });
+      expect(row.detectStatus).toBe("not_located");
+    });
+
+    it("keeps the old per-type defaults when nothing was recorded", () => {
+      const row = geoPhotoToUtilityRow(base, { pas128Ql: "QL-B2" });
+      expect(row.utilityType).toBe("other");
+      expect(row.method).toContain("EML");
+      expect(row.source).toBe("");
+      expect(row.detectStatus).toBe("");
+      expect(row.pas128Ql).toBe("QL-B2");
+    });
+
+    it("leaves an unknown material out of the schedule rather than printing Unknown", () => {
+      const row = geoPhotoToUtilityRow({ ...base, type: "trial_pit", details: { serviceMaterial: "Unknown" } });
+      expect(row.material).toBe("");
+    });
   });
 
   it("merges utilities table when importing geo-photos", () => {
@@ -182,6 +356,47 @@ describe("geoPhotoIntegrations", () => {
     expect(table.length).toBe(1);
   });
 
+  it("gives the GI schedule its own ground, water strike and reinstatement columns", () => {
+    const row = geoPhotoToGiLocationRow({
+      id: "g6",
+      projectId: "p1",
+      type: "trial_pit",
+      includeInReport: true,
+      locationId: "TP03",
+      depthM: 2.4,
+      details: {
+        groundType: "Made ground",
+        waterStrikeDepthM: 1.8,
+        reinstatement: "Permanent",
+        excavationMethod: "Hand dig",
+        sampleTaken: true,
+      },
+    });
+
+    expect(row.ground).toBe("Made ground");
+    expect(row.waterStrike).toBe("1.8 m bgl");
+    expect(row.reinstatement).toBe("Permanent");
+    expect(row.notes).toContain("Sample taken");
+  });
+
+  it("takes the drilling technique as the GI method when the field recorded one", () => {
+    const row = geoPhotoToGiLocationRow({
+      id: "g7",
+      type: "borehole_location",
+      includeInReport: true,
+      details: { technique: "Cable percussion" },
+    });
+    expect(row.method).toBe("Cable percussion");
+  });
+
+  it("leaves the GI columns empty when nothing was recorded", () => {
+    const row = geoPhotoToGiLocationRow({ id: "g8", type: "borehole_location", includeInReport: true });
+    expect(row.ground).toBe("");
+    expect(row.waterStrike).toBe("");
+    expect(row.reinstatement).toBe("");
+    expect(row.method).toBe("Borehole");
+  });
+
   it("links geo-photo to permit evidence", async () => {
     const { linkGeoPhotoToPermit, persistPermitEvidenceFromGeoPhoto } = await import("./geoPhotoIntegrations.js");
     const photo = {
@@ -257,6 +472,85 @@ describe("geoPhotoIntegrations", () => {
     expect(feature.properties.northing).toBeGreaterThan(100000);
     expect(feature.properties.gpsAccuracyMeters).toBe(6);
     expect(feature.properties.locationSource).toBe("device_gps");
+  });
+
+  describe("extents traced on site", () => {
+    const overgrown = {
+      ...photos[0],
+      type: "vegetation",
+      area: {
+        points: [
+          [51.501, -0.101],
+          [51.5019, -0.101],
+          [51.5019, -0.09955],
+          [51.501, -0.09955],
+        ],
+      },
+    };
+
+    it("exports the boundary as its own polygon feature GIS can measure", () => {
+      const geo = exportGeoPhotosGeoJson([overgrown]);
+      expect(geo.features).toHaveLength(2);
+
+      const extent = geo.features.find((f) => f.properties.featureKind === "extent");
+      expect(extent.geometry.type).toBe("Polygon");
+      // GeoJSON is lng/lat and wants the ring closed explicitly.
+      expect(extent.geometry.coordinates[0]).toHaveLength(5);
+      expect(extent.geometry.coordinates[0][0]).toEqual([-0.101, 51.501]);
+      expect(extent.geometry.coordinates[0][0]).toEqual(extent.geometry.coordinates[0][4]);
+      expect(extent.properties.photoId).toBe(overgrown.id);
+      expect(extent.properties.areaSqm).toBeGreaterThan(9000);
+      expect(extent.properties.areaHectares).toBeCloseTo(1, 1);
+      expect(extent.properties.areaVertices).toBe(4);
+    });
+
+    it("adds no polygon for photos where nobody traced anything", () => {
+      const geo = exportGeoPhotosGeoJson(photos);
+      expect(geo.features.every((f) => f.geometry.type === "Point")).toBe(true);
+    });
+
+    it("schedules the traced ground largest first, with a total to price against", () => {
+      const smaller = {
+        ...photos[1],
+        type: "obstruction",
+        area: {
+          points: [
+            [51.502, -0.1],
+            [51.5023, -0.1],
+            [51.5023, -0.0995],
+            [51.502, -0.0995],
+          ],
+        },
+      };
+      const schedule = geoPhotoExtentSchedule([smaller, overgrown, photos[2]]);
+
+      expect(schedule.rows).toHaveLength(2);
+      expect(schedule.rows[0].label).toBe("Vegetation / overgrowth");
+      expect(schedule.rows[0].sqm).toBeGreaterThan(schedule.rows[1].sqm);
+      expect(schedule.rows[0].area).toBe("1.00 ha");
+      expect(schedule.rows[0].perimeter).toMatch(/^\d+ m$/);
+      expect(schedule.totalSqm).toBeCloseTo(schedule.rows[0].sqm + schedule.rows[1].sqm, 1);
+    });
+
+    it("schedules the survey photo pack too, which is the shape the report holds", () => {
+      const pack = geoPhotosToSurveyPhotos([overgrown]);
+      expect(pack[0].area.sqm).toBeGreaterThan(9000);
+      expect(geoPhotoExtentSchedule(pack).rows[0].label).toBe("Vegetation / overgrowth");
+    });
+
+    it("plots the report locator as a site plan once there are two points", () => {
+      const url = geoPhotosStaticMapUrl([overgrown, photos[1]]);
+      const svg = decodeURIComponent(url.split(",")[1]);
+      expect(svg).toContain("<polygon");
+      expect(svg).toContain(">N</text>");
+      expect(geoPhotosStaticMapCaption([overgrown, photos[1]])).toContain("1 extent shaded");
+    });
+
+    it("gives the snag the quantity, so the clearance can be priced", () => {
+      const snag = snagDraftFromGeoPhoto(overgrown);
+      expect(snag.description).toContain("Extent traced on site:");
+      expect(snag.description).toMatch(/1\.00 ha · \d+ m perimeter/);
+    });
   });
 
   it("leaves survey fields null when nothing was captured", () => {

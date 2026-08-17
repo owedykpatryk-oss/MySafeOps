@@ -120,4 +120,39 @@ describe("surveyPlanRemaining", () => {
     expect(html).toMatch(/125 mm/);
     expect(html).toMatch(/PE/);
   });
+
+  it("prints ground and water strike columns once the field recorded them", () => {
+    const report = normalizeSurveyReport(
+      blankSurveyReport({
+        surveyType: "site_investigation_campaign",
+        giLocationsTable: [
+          {
+            id: "gi1",
+            locationId: "TP03",
+            method: "Hand dig",
+            depth: "2.4 m",
+            ground: "Made ground",
+            waterStrike: "1.8 m bgl",
+            reinstatement: "Permanent",
+          },
+        ],
+      })
+    );
+    const html = buildSurveyReportHtml(report);
+    expect(html).toContain("Water strike");
+    expect(html).toContain("1.8 m bgl");
+    expect(html).toContain("Made ground");
+  });
+
+  it("keeps the narrow GI table when only location, method and depth were recorded", () => {
+    const report = normalizeSurveyReport(
+      blankSurveyReport({
+        surveyType: "site_investigation_campaign",
+        giLocationsTable: [{ id: "gi1", locationId: "BH01", method: "Borehole", depth: "12.5 m" }],
+      })
+    );
+    const html = buildSurveyReportHtml(report);
+    expect(html).toContain("BH01");
+    expect(html).not.toContain("Water strike");
+  });
 });

@@ -7,6 +7,8 @@ import { bearingArrowHead, bearingToEnd, isCoarseGpsAccuracy, normalizeBearing }
 import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
 import { escapeXml } from "./xmlEscape";
 import { CAPTURE_PHASE_OPTIONS, resolvedGiDepth, resolvedGiLocationId } from "./geoPhotoFields";
+import { geoPhotoDetailRows, geoPhotoDetailSummary } from "./geoPhotoTypeFields";
+import { formatAreaSqm, formatLengthM, geoPhotoAreaOf } from "./geoPhotoArea";
 import { loadDrawingEditorPrefs } from "../modules/permits/projectDrawingEditorPrefs";
 import { latLngToPlanPercentAffine } from "../modules/permits/projectDrawingAffine";
 
@@ -107,6 +109,7 @@ function photoMetadataRows(photo) {
     depth ? ["Depth", depth] : null,
     sample ? ["Sample ref", sample] : null,
     phase ? ["Phase", phase] : null,
+    ...geoPhotoDetailRows(photo),
     bearing != null ? ["View bearing", `${bearing}°`] : null,
     grid ? ["OS grid ref", grid.gridRef] : null,
     grid ? ["Easting / Northing", `${grid.easting.toFixed(2)} E, ${grid.northing.toFixed(2)} N (OSGB36)`] : null,
@@ -186,6 +189,39 @@ function arrowLineKml(photo) {
     </Placemark>`;
 }
 
+/**
+ * The extent traced on site, as a polygon Google Earth and QGIS can measure for themselves.
+ * The size we calculated travels alongside it, so a reader never has to trust the drawing
+ * software to agree with the report.
+ */
+function areaPolygonKml(photo) {
+  const area = geoPhotoAreaOf(photo);
+  if (!area) return "";
+  const ring = [...area.points, area.points[0]];
+  const coordinates = ring.map(([lat, lng]) => `${lng},${lat},0`).join(" ");
+  const color = geoPhotoPreset(photo.type).color;
+  return `    <Placemark>
+      <name>${escapeXml(`${photoLabel(photo)} — extent ${formatAreaSqm(area.sqm)}`)}</name>
+      <Style>
+        <LineStyle><color>${kmlColorAbgr(color)}</color><width>2</width></LineStyle>
+        <PolyStyle><color>${kmlColorAbgr(color, "66")}</color><fill>1</fill><outline>1</outline></PolyStyle>
+      </Style>
+      <ExtendedData>
+        <Data name="areaSqm"><value>${area.sqm}</value></Data>
+        <Data name="areaPerimeterM"><value>${area.perimeterM}</value></Data>
+        <Data name="areaVertices"><value>${area.points.length}</value></Data>
+      </ExtendedData>
+      <Polygon>
+        <tessellate>1</tessellate>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>${coordinates}</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>`;
+}
+
 function kmlPlacemarkForPhoto(p) {
   const lat = Number(p.latitude);
   const lng = Number(p.longitude);
@@ -254,13 +290,15 @@ ${ext}
       </ExtendedData>
 ${point}
     </Placemark>
-${arrowLineKml(p)}`;
+${arrowLineKml(p)}
+${areaPolygonKml(p)}`;
 }
 
-function kmlColorAbgr(hex) {
+/** @param {string} [alpha] KML opacity byte — "66" for a fill you can still see the ground through. */
+function kmlColorAbgr(hex, alpha = "ff") {
   const h = String(hex || "#2563eb").replace("#", "");
-  if (h.length !== 6) return "ff2563eb";
-  return `ff${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`;
+  if (h.length !== 6) return `${alpha}eb6325`;
+  return `${alpha}${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`;
 }
 
 function buildKmlLookAt(withCoords) {
@@ -515,7 +553,7 @@ export function buildGeoPhotosDxf(photos, opts = {}) {
   const blockScale = opts.blockScale ?? 1;
   const { withCoords } = filterGeoPhotosWithCoords(photos);
 
-  const layers = new Set(["GEO_PHOTOS", "GEO_VIEW_ARROWS", "GEO_LABELS", "_GEOREF"]);
+  const layers = new Set(["GEO_PHOTOS", "GEO_VIEW_ARROWS", "GEO_EXTENTS", "GEO_LABELS", "_GEOREF"]);
   withCoords.forEach((p) => {
     const layer = `GP_${String(p.type || "other").replace(/[^a-z0-9_]/gi, "_").slice(0, 24)}`;
     layers.add(layer);
@@ -623,6 +661,32 @@ export function buildGeoPhotosDxf(photos, opts = {}) {
       entities += dxfPair(11, x2.toFixed(4));
       entities += dxfPair(21, y2.toFixed(4));
       entities += dxfPair(31, "0");
+    }
+
+    // The extent traced on site, so CAD measures the same boundary the phone drew. Plan-overlay
+    // exports arrive already projected into plan percentages and the ring has not been through
+    // that transform, so it is left out there rather than drawn somewhere it never was.
+    const area = opts.coordinateMode === "plan_percent" ? null : geoPhotoAreaOf(p);
+    const ring = (area?.points || [])
+      .map(([ptLat, ptLng]) => latLngToSiteMetres(ptLat, ptLng, origin.lat, origin.lng))
+      .filter((pt) => pt && Number.isFinite(pt.x) && Number.isFinite(pt.y));
+    if (area && ring.length >= 3) {
+      entities += dxfPair(0, "LWPOLYLINE");
+      entities += dxfPair(8, "GEO_EXTENTS");
+      entities += dxfPair(90, String(ring.length));
+      entities += dxfPair(70, "1");
+      ring.forEach((pt) => {
+        track(pt.x, pt.y);
+        entities += dxfPair(10, pt.x.toFixed(4));
+        entities += dxfPair(20, pt.y.toFixed(4));
+      });
+      entities += dxfPair(0, "TEXT");
+      entities += dxfPair(8, "GEO_EXTENTS");
+      entities += dxfPair(10, (ring.reduce((sum, pt) => sum + pt.x, 0) / ring.length).toFixed(4));
+      entities += dxfPair(20, (ring.reduce((sum, pt) => sum + pt.y, 0) / ring.length).toFixed(4));
+      entities += dxfPair(30, "0");
+      entities += dxfPair(40, "0.9");
+      entities += dxfPair(1, `${formatAreaSqm(area.sqm)} (${formatLengthM(area.perimeterM)} perimeter)`);
     }
 
     const url = geoPhotoDisplayUrl(p);
@@ -868,7 +932,7 @@ export async function buildGeoPhotosCadBundleBlob(photos, opts = {}) {
 
 function buildCadManifestCsv(photos, origin) {
   const header =
-    "id,label,type,location_id,depth,sample_ref,latitude,longitude,easting,northing,grid_ref,elevation_m,gps_accuracy_m,location_source,x_metres,y_metres,bearing,image_file,notes";
+    "id,label,type,location_id,depth,sample_ref,latitude,longitude,easting,northing,grid_ref,elevation_m,gps_accuracy_m,location_source,x_metres,y_metres,bearing,image_file,observations,notes";
   const lines = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)))
     .map((p) => {
@@ -896,6 +960,7 @@ function buildCadManifestCsv(photos, origin) {
         m ? m.y.toFixed(3) : "",
         normalizeBearing(p.bearing) ?? "",
         `images/${p.id}.jpg`,
+        geoPhotoDetailSummary(p),
         p.notes || "",
       ].map(esc).join(",");
     });

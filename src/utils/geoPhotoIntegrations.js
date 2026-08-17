@@ -11,11 +11,26 @@ import {
 } from "./geoPhotoFields";
 import { buildStaticMapUrl } from "./staticMapUrl.js";
 import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
+import { geoPhotoDetailRows, geoPhotoDetailSummary, normaliseGeoPhotoDetails } from "./geoPhotoTypeFields";
+import { formatAreaSqm, formatGeoPhotoArea, geoPhotoAreaOf, summariseGeoPhotoExtents } from "./geoPhotoArea";
+import { geoPhotoSitePlanUrl } from "./geoPhotoSitePlan";
+import { buildGeoPhotoActionsBlock, GEO_PHOTO_ACTIONS_MARKER } from "./geoPhotoActions";
 
 import { todayLocalISO } from "./localDate";
 export const GEO_PHOTOS_FINDINGS_MARKER = "=== Geo-photos (field capture) ===";
 
 const EARTH_RADIUS_M = 6371000;
+
+/**
+ * Matches a marker and everything under it, up to the next `===` section or the end.
+ * The marker is escaped because its brackets would otherwise read as a regex group, and there
+ * is no `m` flag on purpose: with it, `$` would stop at the end of the marker line and leave
+ * the stale block behind.
+ */
+function markerBlockPattern(marker) {
+  const literal = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`${literal}[\\s\\S]*?(?=\\n===|$)`);
+}
 
 export function haversineMeters(lat1, lng1, lat2, lng2) {
   const a1 = (Number(lat1) * Math.PI) / 180;
@@ -108,6 +123,8 @@ export function geoPhotoCaption(photo) {
   const sample = String(photo.sampleRef || "").trim();
   if (sample) parts.push(`sample ${sample}`);
   if (photo.notes?.trim()) parts.push(photo.notes.trim());
+  const observations = geoPhotoDetailSummary(photo);
+  if (observations) parts.push(observations);
   const lat = Number(photo.latitude);
   const lng = Number(photo.longitude);
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -132,6 +149,8 @@ export function geoPhotosToSurveyPhotos(geoPhotos) {
       longitude: p.longitude,
       bearing: p.bearing,
       geoPhotoType: p.type,
+      // Carried through so the report's site plan can shade the ground each photo covers.
+      area: geoPhotoAreaOf(p),
     }));
 }
 
@@ -157,8 +176,10 @@ export function buildGeoPhotosFindingsBlock(geoPhotoList) {
           ")"
         : "";
     const note = p.notes?.trim() ? `: ${p.notes.trim()}` : "";
+    const observations = geoPhotoDetailSummary(p);
+    const observed = observations ? ` — ${observations}` : "";
     const prefix = giBits ? `${preset.label} [${giBits}]` : preset.label;
-    return `${i + 1}. ${prefix}${note}${coords}`;
+    return `${i + 1}. ${prefix}${note}${observed}${coords}`;
   });
 
   return `${GEO_PHOTOS_FINDINGS_MARKER}\n${lines.join("\n")}`;
@@ -194,7 +215,7 @@ export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
   let findings = String(report.sections?.findings || "");
   if (findings.includes(GEO_PHOTOS_FINDINGS_MARKER)) {
     if (opts.replaceFindingsBlock) {
-      findings = findings.replace(new RegExp(`${GEO_PHOTOS_FINDINGS_MARKER}[\\s\\S]*?(?=\\n===|$)`, "m"), block).trim();
+      findings = findings.replace(markerBlockPattern(GEO_PHOTOS_FINDINGS_MARKER), block).trim();
       if (!findings.includes(GEO_PHOTOS_FINDINGS_MARKER)) findings = findings ? `${findings}\n\n${block}` : block;
     }
   } else {
@@ -211,6 +232,21 @@ export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
     accessLimitationsNotes = accessLimitationsNotes.trim()
       ? `${accessLimitationsNotes.trim()}\n\nGeo-photo access notes: ${summary}`
       : `Geo-photo access notes: ${summary}`;
+  }
+
+  // Actions come from every photo on the project, not only those marked for the report — an
+  // open action still needs chasing if nobody chose to print the photo.
+  const projectPhotos = (Array.isArray(allGeoPhotos) ? allGeoPhotos : []).filter(
+    (p) => p?.projectId === projectId && !p.deletedAt
+  );
+  const actionsBlock = buildGeoPhotoActionsBlock(projectPhotos, {
+    gridRefFor: (photo) => wgs84ToBritishNationalGrid(photo.latitude, photo.longitude)?.gridRef || "",
+  });
+  let recommendations = String(report.sections?.recommendations || "");
+  if (recommendations.includes(GEO_PHOTO_ACTIONS_MARKER)) {
+    recommendations = recommendations.replace(markerBlockPattern(GEO_PHOTO_ACTIONS_MARKER), actionsBlock).trim();
+  } else if (actionsBlock) {
+    recommendations = recommendations.trim() ? `${recommendations.trim()}\n\n${actionsBlock}` : actionsBlock;
   }
 
   let utilitiesTable = report.utilitiesTable || [];
@@ -234,7 +270,7 @@ export function importGeoPhotosIntoReport(report, allGeoPhotos, opts = {}) {
     utilitiesTable,
     giLocationsTable,
     accessLimitationsNotes,
-    sections: { ...report.sections, findings },
+    sections: { ...report.sections, findings, recommendations },
     geoPhotoImportAt: new Date().toISOString(),
     geoPhotoImportCount: forReport.length,
   };
@@ -274,6 +310,47 @@ export function normalizeGeoPhotoReportOrders(photos, projectId) {
   );
 }
 
+/** Type-specific answers as flat GIS attributes, prefixed so they never clash with core fields. */
+function observationProperties(photo) {
+  const out = {};
+  for (const [label, value] of geoPhotoDetailRows(photo)) {
+    out[`obs_${label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`] = value;
+  }
+  return out;
+}
+
+/**
+ * The extent traced on site as its own polygon feature, so GIS can measure and shade it
+ * rather than reading a size off a point's attributes. Kept as a separate feature because
+ * a photo is a place and an extent is ground — QGIS styles and joins them differently.
+ */
+function extentFeature(photo) {
+  const area = geoPhotoAreaOf(photo);
+  if (!area) return null;
+  const ring = [...area.points, area.points[0]].map(([lat, lng]) => [lng, lat]);
+  return {
+    type: "Feature",
+    geometry: { type: "Polygon", coordinates: [ring] },
+    properties: {
+      id: `${photo.id}_extent`,
+      photoId: photo.id,
+      featureKind: "extent",
+      type: photo.type,
+      label: `${geoPhotoPresetLabel(photo.type)} — extent`,
+      areaSqm: area.sqm,
+      areaHectares: Math.round((area.sqm / 10000) * 10000) / 10000,
+      areaPerimeterM: area.perimeterM,
+      areaVertices: area.points.length,
+      notes: photo.notes,
+      includeInReport: Boolean(photo.includeInReport),
+      projectId: photo.projectId,
+      projectName: photo.projectName,
+      capturedBy: photo.capturedBy,
+      timestampUtc: photo.timestampUtc,
+    },
+  };
+}
+
 export function exportGeoPhotosGeoJson(photos, name = "geo-photos") {
   const features = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)))
@@ -292,6 +369,7 @@ export function exportGeoPhotosGeoJson(photos, name = "geo-photos") {
           label: geoPhotoPresetLabel(p.type),
           bearing: p.bearing,
           notes: p.notes,
+          ...observationProperties(p),
           includeInReport: Boolean(p.includeInReport),
           projectId: p.projectId,
           projectName: p.projectName,
@@ -308,10 +386,14 @@ export function exportGeoPhotosGeoJson(photos, name = "geo-photos") {
       };
     });
 
+  // Extents stand on their own geometry, so one traced round a photo that never got a fix
+  // still reaches GIS.
+  const extents = (photos || []).map(extentFeature).filter(Boolean);
+
   return {
     type: "FeatureCollection",
     name,
-    features,
+    features: [...features, ...extents],
   };
 }
 
@@ -343,6 +425,8 @@ export function snagDraftFromGeoPhoto(photo) {
         ? `Location: ${Number(photo.latitude).toFixed(6)}, ${Number(photo.longitude).toFixed(6)}`
         : "",
       photo.bearing != null ? `Camera bearing: ${Math.round(Number(photo.bearing))}°` : "",
+      // Whoever prices the fix needs the quantity, not just the picture.
+      geoPhotoAreaOf(photo) ? `Extent traced on site: ${formatGeoPhotoArea(photo.area)}` : "",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -385,6 +469,58 @@ const GEO_PHOTO_UTILITY_DEFAULTS = {
   gpr_setup: { utilityType: "other", method: "GPR", confidence: "medium" },
 };
 
+/** Field answer → utility schedule vocabulary (see UTILITY_TYPE_OPTIONS). */
+const SERVICE_TO_UTILITY_TYPE = {
+  "Electricity (HV)": "hv_cable",
+  "Electricity (LV)": "lv_cable",
+  "Street lighting": "lv_cable",
+  "Traffic signals": "lv_cable",
+  Gas: "gas",
+  Water: "water",
+  "Foul sewer": "foul",
+  "Surface water": "surface",
+  Telecoms: "telecom",
+};
+
+/** Field answer → UTILITY_SOURCE_OPTIONS. */
+const DETECTION_TO_SOURCE = {
+  "EML / CAT and Genny": "eml",
+  GPR: "gpr",
+  "Records only": "records",
+  "Trial hole": "visual",
+  "Visual / surface features": "visual",
+};
+
+/**
+ * How sure we are the line is where we say it is. Records alone are indicative; a confirmed
+ * signal or a physically exposed service is not.
+ */
+function utilityConfidenceFromAnswers(photo, answers, fallback) {
+  if (answers.detectionMethod === "Records only") return "indicative";
+  if (photo.type === "trial_pit" && answers.serviceFound) return "high";
+  if (answers.signalConfident === true) return "high";
+  if (answers.detectionMethod && answers.signalConfident === undefined) return fallback;
+  return fallback;
+}
+
+/** Only claim a detect status the field answers actually support. */
+function utilityDetectStatusFromAnswers(photo, answers) {
+  if (answers.detectionMethod === "Records only") return "tfr";
+  if (photo.type === "trial_pit") return answers.serviceFound ? "detected" : "not_located";
+  if (photo.type === "manhole_chamber" && answers.coverLifted) return "detected";
+  if (answers.signalConfident === true) return "detected";
+  if (answers.detectionMethod) return "partial";
+  return "";
+}
+
+function firstDepthAnswer(answers) {
+  for (const key of ["indicativeDepthM", "depthToInvertM"]) {
+    const n = Number(answers[key]);
+    if (Number.isFinite(n)) return `${n} m`;
+  }
+  return "";
+}
+
 /** Try to pull depth from geo-photo notes (e.g. "0.8m", "depth 1.2 m"). */
 export function parseDepthFromNotes(notes) {
   const t = String(notes || "");
@@ -403,7 +539,10 @@ export function geoPhotoToUtilityRow(photo, opts = {}) {
   if (!photo?.type || !GEO_PHOTO_UTILITY_TYPES.has(photo.type)) return null;
   const defaults = GEO_PHOTO_UTILITY_DEFAULTS[photo.type] || {};
   const preset = geoPhotoPreset(photo.type);
-  const depth = resolvedGiDepth(photo) || parseDepthFromNotes(photo.notes);
+  const answers = normaliseGeoPhotoDetails(photo.type, photo.details);
+  const service = answers.serviceFound || answers.service || "";
+  const diameter = Number(answers.serviceDiameterMm);
+  const depth = resolvedGiDepth(photo) || firstDepthAnswer(answers) || parseDepthFromNotes(photo.notes);
   const loc = resolvedGiLocationId(photo);
   const coords =
     Number.isFinite(Number(photo.latitude)) && Number.isFinite(Number(photo.longitude))
@@ -413,12 +552,22 @@ export function geoPhotoToUtilityRow(photo, opts = {}) {
   return {
     id: `ut_gp_${photo.id}`,
     geoPhotoId: photo.id,
-    utilityType: defaults.utilityType || "other",
+    utilityType: SERVICE_TO_UTILITY_TYPE[service] || defaults.utilityType || "other",
+    diameter: Number.isFinite(diameter) ? `${diameter} mm` : "",
+    material: answers.serviceMaterial === "Unknown" ? "" : answers.serviceMaterial || "",
     depth,
-    method: defaults.method || preset.label,
-    pas128Ql: opts.pas128Ql || "",
-    confidence: defaults.confidence || "medium",
-    notes: [loc ? `ID: ${loc}` : "", photo.notes?.trim(), coords ? `Location: ${coords}` : "", `Source: geo-photo (${preset.label})`]
+    source: DETECTION_TO_SOURCE[answers.detectionMethod] || "",
+    detectStatus: utilityDetectStatusFromAnswers(photo, answers),
+    method: answers.detectionMethod || defaults.method || preset.label,
+    pas128Ql: answers.pas128Ql || opts.pas128Ql || "",
+    confidence: utilityConfidenceFromAnswers(photo, answers, defaults.confidence || "medium"),
+    notes: [
+      loc ? `ID: ${loc}` : "",
+      photo.notes?.trim(),
+      geoPhotoDetailSummary(photo),
+      coords ? `Location: ${coords}` : "",
+      `Source: geo-photo (${preset.label})`,
+    ]
       .filter(Boolean)
       .join(" · "),
   };
@@ -463,7 +612,9 @@ export function geoPhotoToGiLocationRow(photo) {
   if (!photo?.type || !GEO_PHOTO_GI_TYPES.has(photo.type)) return null;
   const defaults = GEO_PHOTO_GI_DEFAULTS[photo.type] || {};
   const preset = geoPhotoPreset(photo.type);
+  const answers = normaliseGeoPhotoDetails(photo.type, photo.details);
   const depth = resolvedGiDepth(photo);
+  const waterStrike = Number(answers.waterStrikeDepthM);
   const locationId =
     resolvedGiLocationId(photo) ||
     `${defaults.locationIdPrefix || "GI"}-${String(photo.id || "").slice(-4).toUpperCase()}`;
@@ -476,9 +627,17 @@ export function geoPhotoToGiLocationRow(photo) {
     id: `gi_gp_${photo.id}`,
     geoPhotoId: photo.id,
     locationId,
-    method: defaults.method || preset.label,
+    method: answers.technique || defaults.method || preset.label,
     depth,
-    notes: [photo.notes?.trim(), coords ? `Location: ${coords}` : "", `Source: geo-photo (${preset.label})`]
+    ground: answers.groundType || "",
+    waterStrike: Number.isFinite(waterStrike) ? `${waterStrike} m bgl` : "",
+    reinstatement: answers.reinstatement || "",
+    notes: [
+      photo.notes?.trim(),
+      geoPhotoDetailSummary(photo),
+      coords ? `Location: ${coords}` : "",
+      `Source: geo-photo (${preset.label})`,
+    ]
       .filter(Boolean)
       .join(" · "),
   };
@@ -495,28 +654,67 @@ export function geoPhotosToGiLocationsTable(allGeoPhotos, projectId, { existingR
 }
 
 /** Static map URL for geo-photo GPS cluster (offline SVG — no third-party staticmap host). */
-export function geoPhotosStaticMapUrl(photos, { width = 520, height = 220, maxMarkers = 25 } = {}) {
+/**
+ * Ground traced on site, largest first, as a schedule the report can price against.
+ * Works from either raw geo-photos or the survey photo pack, since the report carries the
+ * latter — both know their type and their extent, which is all a quantity needs.
+ * @returns {{ rows: object[], totalSqm: number }}
+ */
+export function geoPhotoExtentSchedule(photos) {
+  const rows = (photos || [])
+    .map((photo) => {
+      const area = geoPhotoAreaOf(photo);
+      if (!area) return null;
+      const type = photo.type || photo.geoPhotoType;
+      return {
+        geoPhotoId: photo.geoPhotoId || photo.id || "",
+        label: geoPhotoPresetLabel(type),
+        locationId: resolvedGiLocationId(photo) || "",
+        sqm: area.sqm,
+        perimeterM: area.perimeterM,
+        area: formatAreaSqm(area.sqm),
+        perimeter: `${Math.round(area.perimeterM)} m`,
+        notes: geoPhotoDetailSummary(photo, { exclude: ["area"] }) || String(photo.notes || photo.caption || "").trim(),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.sqm - a.sqm);
+
+  return { rows, totalSqm: Math.round(rows.reduce((sum, row) => sum + row.sqm, 0) * 10) / 10 };
+}
+
+/**
+ * Locator for the report. Two or more photos get a sketch plan of where they actually are;
+ * a lone photo keeps the simple pin card, which says everything there is to say about one point.
+ */
+export function geoPhotosStaticMapUrl(photos, { width = 520, height = 260, maxMarkers = 25 } = {}) {
   const pts = (photos || [])
     .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)));
   const capped = pts.slice(0, maxMarkers);
   if (!capped.length) return "";
-  const lat = capped.reduce((s, p) => s + Number(p.latitude), 0) / capped.length;
-  const lng = capped.reduce((s, p) => s + Number(p.longitude), 0) / capped.length;
-  const zoom = capped.length === 1 ? 16 : pts.length > 8 ? 14 : 15;
-  return buildStaticMapUrl(lat, lng, {
-    width,
-    height,
-    zoom,
-    label: capped.length === 1 ? "Geo-photo" : `${capped.length} geo-photos`,
-  });
+  if (capped.length > 1) return geoPhotoSitePlanUrl(capped, { width, height, maxMarkers });
+  const lat = Number(capped[0].latitude);
+  const lng = Number(capped[0].longitude);
+  return buildStaticMapUrl(lat, lng, { width, height, zoom: 16, label: "Geo-photo" });
 }
 
 export function geoPhotosStaticMapCaption(photos, maxMarkers = 25) {
-  const total = (photos || []).filter(
+  const withCoords = (photos || []).filter(
     (p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude))
-  ).length;
-  if (total <= maxMarkers) return "";
-  return `Map shows ${maxMarkers} of ${total} GPS-tagged geo-photos.`;
+  );
+  const notes = [];
+  if (withCoords.length > maxMarkers) {
+    notes.push(`plan shows ${maxMarkers} of ${withCoords.length} GPS-tagged geo-photos`);
+  }
+  const extents = summariseGeoPhotoExtents(withCoords.slice(0, maxMarkers));
+  if (extents.count) {
+    notes.push(
+      `${extents.count} extent${extents.count === 1 ? "" : "s"} shaded, ${formatAreaSqm(extents.totalSqm)} of ground`
+    );
+  }
+  if (!notes.length) return "";
+  // Reads as a sentence under the figure: "Plan shows 25 of 40…, 3 extents shaded…"
+  return `${notes.join(", ").replace(/^./, (c) => c.toUpperCase())}.`;
 }
 
 /** Build permit evidence patch from a geo-photo. */
