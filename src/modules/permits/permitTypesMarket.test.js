@@ -5,6 +5,9 @@ describe("permitTypesMarket", () => {
   it("returns UK types unchanged", () => {
     const uk = getPermitTypesForMarket("uk");
     expect(uk.electrical.checklist.some((x) => /GS38/i.test(x))).toBe(true);
+    expect(uk.excavation.checklist.some((x) => /PAS 128/i.test(x))).toBe(true);
+    expect(uk.excavation.checklist.some((x) => /CAT scan/i.test(x))).toBe(true);
+    expect(uk.excavation.checklist.join(" ")).not.toMatch(/Dial Before You Dig/i);
   });
 
   it("returns AU electrical checklist with AS/NZS reference", () => {

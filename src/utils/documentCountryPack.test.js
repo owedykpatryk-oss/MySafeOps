@@ -12,6 +12,19 @@ describe("document country packs", () => {
   it("keeps UK wording and selects Australian WHS references", () => {
     expect(documentText("Location", "Location", "uk")).toBe("Location");
     expect(getDocumentCountryPack("uk").safetyAuthority).toBe("HSE");
+    expect(getDocumentCountryPack("uk").ramsLegalReferences.join(" ")).toContain(
+      "Health and Safety at Work etc. Act 1974"
+    );
+    expect(getDocumentCountryPack("uk").ramsLegalReferences.join(" ")).toContain(
+      "Construction (Design and Management) Regulations 2015"
+    );
     expect(getDocumentCountryPack("au").ramsLegalReferences.join(" ")).toContain("Work Health and Safety");
+  });
+
+  it("falls unknown markets back to the UK HSE pack", () => {
+    expect(getDocumentCountryPack("de").marketId).toBe("uk");
+    expect(getDocumentCountryPack("de").safetyAuthority).toBe("HSE");
+    expect(getDocumentCountryPack("de").emergencyNumber).toBe("999");
+    expect(documentText("Permit to work", "Permit to work", "de")).toBe("Permit to work");
   });
 });
