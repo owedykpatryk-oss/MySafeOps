@@ -84,4 +84,17 @@ describe("superAdmin platform owner probe", () => {
     const { superadminExtendOrgTrial } = await import("./superAdmin.js");
     await expect(superadminExtendOrgTrial({ rpc }, "utility-mapping")).rejects.toThrow(/platform owner/i);
   });
+
+  it("superadminExtendOrgTrial throws when the organisation is missing", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: { ok: false, error: "organisation_not_found" }, error: null });
+    const { superadminExtendOrgTrial } = await import("./superAdmin.js");
+    await expect(superadminExtendOrgTrial({ rpc }, "no-such-org")).rejects.toThrow(/not found/i);
+  });
+
+  it("superadminExtendOrgTrial requires a slug before calling RPC", async () => {
+    const rpc = vi.fn();
+    const { superadminExtendOrgTrial } = await import("./superAdmin.js");
+    await expect(superadminExtendOrgTrial({ rpc }, "  ")).rejects.toThrow(/slug is required/i);
+    expect(rpc).not.toHaveBeenCalled();
+  });
 });

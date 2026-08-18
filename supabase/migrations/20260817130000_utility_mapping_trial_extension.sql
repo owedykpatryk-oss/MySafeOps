@@ -63,5 +63,7 @@ where
     from public.org_memberships m
     join auth.users u on u.id = m.user_id
     where m.org_id = o.id
-      and lower(u.email) like '%@u-map.co.uk'
-  );
+      -- Domain equality (not LIKE '%@u-map.co.uk') so foo@u-map.co.uk.evil.com cannot match.
+      and split_part(lower(u.email), '@', 2) = 'u-map.co.uk'
+  )
+returning o.slug, o.trial_ends_at;
