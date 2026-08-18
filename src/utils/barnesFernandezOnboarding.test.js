@@ -44,6 +44,14 @@ function seedBarnesOrg() {
   );
 }
 
+function sliceSqlFunction(sql, name) {
+  const start = sql.indexOf(`create function public.${name}(`);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const end = sql.indexOf(`revoke all on function public.${name}`, start);
+  expect(end).toBeGreaterThan(start);
+  return sql.slice(start, end);
+}
+
 describe("Barnes Fernández onboarding contract", () => {
   it("stores hashed join links, domain restriction, and surveying branding without Utility Mapping copy", () => {
     expect(JOIN_LINKS_SQL).toContain("create table if not exists public.org_join_links");
@@ -66,6 +74,32 @@ describe("Barnes Fernández onboarding contract", () => {
     expect(brandingBlock).toContain("barnesfernandez.com");
     expect(brandingBlock).not.toContain("u-map.co.uk");
     expect(brandingBlock).not.toContain("/branding/utility-mapping");
+  });
+
+  it("rejects unverified email, domain/exact-email mismatch, and cross-org moves", () => {
+    const ensureFn = sliceSqlFunction(JOIN_LINKS_SQL, "ensure_my_org");
+    expect(ensureFn).toContain("v_email_confirmed_at is null");
+    expect(ensureFn).toContain("Verify your email address before joining this organisation.");
+    expect(ensureFn).toContain("This organisation link is restricted to a different email address.");
+    expect(ensureFn).toContain("Use your verified company email address to join this organisation.");
+    expect(ensureFn).toContain("split_part(v_email, '@', 2)");
+    expect(ensureFn).toContain("Your account already belongs to another organisation.");
+    expect(ensureFn).toContain("v_existing_org_id <> v_link.org_id");
+    expect(ensureFn).toContain("pg_advisory_xact_lock");
+  });
+
+  it("never downgrades admin/supervisor and only counts a join link's first use", () => {
+    const ensureFn = sliceSqlFunction(JOIN_LINKS_SQL, "ensure_my_org");
+    expect(ensureFn).toMatch(/must never downgrade an existing member/);
+    expect(ensureFn).toContain("when v_existing_role = 'admin' or v_link.role = 'admin' then 'admin'");
+    expect(ensureFn).toContain(
+      "when v_existing_role = 'supervisor' or v_link.role = 'supervisor' then 'supervisor'"
+    );
+    expect(ensureFn).toContain("on conflict (link_id, user_id) do nothing");
+    expect(ensureFn).toContain("if v_inserted_use_count = 1 then");
+    expect(ensureFn).toContain("j.use_count < j.max_uses");
+    expect(ensureFn).toContain("j.token_hash = v_token_hash");
+    expect(ensureFn).not.toMatch(/from public\.org_join_links[\s\S]*invite_token\s*=/);
   });
 });
 

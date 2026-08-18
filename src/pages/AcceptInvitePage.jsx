@@ -133,7 +133,7 @@ export default function AcceptInvitePage() {
                   ? `Sign in or create an account with a verified @${preview.allowed_email_domain} email to accept.`
                   : "Sign in or create an account with the same email to accept."}{" "}
                 Link expires:{" "}
-                {new Date(preview.expires_at).toLocaleString()}.
+                {new Date(preview.expires_at).toLocaleString("en-GB")}.
               </p>
               {isReusableJoin ? (
                 <InlineAlert
