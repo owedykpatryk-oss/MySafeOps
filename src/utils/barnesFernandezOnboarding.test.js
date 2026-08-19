@@ -81,11 +81,21 @@ describe("Barnes Fernández onboarding contract", () => {
     expect(ensureFn).toContain("v_email_confirmed_at is null");
     expect(ensureFn).toContain("Verify your email address before joining this organisation.");
     expect(ensureFn).toContain("This organisation link is restricted to a different email address.");
-    expect(ensureFn).toContain("Use your verified company email address to join this organisation.");
+    expect(ensureFn).toContain("Use your verified work email address to join this organisation.");
     expect(ensureFn).toContain("split_part(v_email, '@', 2)");
     expect(ensureFn).toContain("Your account already belongs to another organisation.");
     expect(ensureFn).toContain("v_existing_org_id <> v_link.org_id");
     expect(ensureFn).toContain("pg_advisory_xact_lock");
+    expect(ensureFn).toContain("j.status = 'active'");
+    expect(ensureFn).toContain("j.expires_at > now()");
+  });
+
+  it("hides expired or exhausted join links from public preview", () => {
+    const previewFn = sliceSqlFunction(JOIN_LINKS_SQL, "get_invite_preview");
+    expect(previewFn).toContain("j.token_hash = v_hash");
+    expect(previewFn).toContain("j.status = 'active'");
+    expect(previewFn).toContain("j.expires_at > now()");
+    expect(previewFn).toContain("j.use_count < j.max_uses");
   });
 
   it("never downgrades admin/supervisor and only counts a join link's first use", () => {

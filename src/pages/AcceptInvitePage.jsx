@@ -7,6 +7,7 @@ import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
 import { getSupportEmail } from "../config/supportContact";
 import { safeBrandAssetUrl } from "../utils/safeUrl";
+import { formatInviteExpiryEnGb } from "../utils/inviteStatus";
 
 const ss = ms;
 const teal = "#0d9488";
@@ -133,7 +134,7 @@ export default function AcceptInvitePage() {
                   ? `Sign in or create an account with a verified @${preview.allowed_email_domain} email to accept.`
                   : "Sign in or create an account with the same email to accept."}{" "}
                 Link expires:{" "}
-                {new Date(preview.expires_at).toLocaleString("en-GB")}.
+                {formatInviteExpiryEnGb(preview.expires_at)}.
               </p>
               {isReusableJoin ? (
                 <InlineAlert

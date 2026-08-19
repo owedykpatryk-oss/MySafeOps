@@ -64,6 +64,7 @@ test("domain-restricted join preview shows org branding and omits invitee email"
     "/branding/barnes-fernandez-logo.png"
   );
   await expect(page.getByText(/verified @barnesfernandez.com email/i)).toBeVisible();
+  await expect(page.getByText("Link expires: 31/07/2028.")).toBeVisible();
   // Reusable join links reject existing memberships server-side — no org-switch ack.
   await expect(page.getByRole("checkbox", { name: /disconnect this account/i })).toHaveCount(0);
   await expect(page.getByText(/not already in another organisation/i)).toBeVisible();
@@ -99,6 +100,7 @@ test("admin exact-email join preview carries the administrator address into sign
     "/branding/barnes-fernandez-logo.png"
   );
   await expect(page.getByText("admin@barnesfernandez.com", { exact: true })).toBeVisible();
+  await expect(page.getByText("Link expires: 31/10/2026.")).toBeVisible();
   await expect(page.getByRole("checkbox", { name: /disconnect this account/i })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Continue to sign in" })).toHaveAttribute(
     "href",
@@ -134,4 +136,10 @@ test("invite preview drops protocol-relative brand logos", async ({ page }) => {
 test("login pre-fills invite email hint from query params", async ({ page }) => {
   await page.goto("/login?invite=test-token&email=worker@example.com");
   await expect(page.getByText(/Invite detected for worker@example.com/i)).toBeVisible();
+});
+
+test("login without invitee email asks for a work email", async ({ page }) => {
+  await page.goto("/login?invite=barnes-worker-join-token");
+  await expect(page.getByText(/Invite detected/i)).toBeVisible();
+  await expect(page.getByText(/with your work email/i)).toBeVisible();
 });
