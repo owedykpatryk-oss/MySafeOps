@@ -1,0 +1,25 @@
+name: Apply Utility Mapping trial
+
+# One-shot: extend evaluation trial on MySafeOps (burgpzankkqvpcmdkhro).
+# Repo secrets required:
+#   MYSAFEOPS_SUPABASE_URL=https://burgpzankkqvpcmdkhro.supabase.co
+#   MYSAFEOPS_SERVICE_ROLE_KEY=<service_role from MySafeOps API settings>
+
+on:
+  workflow_dispatch:
+
+jobs:
+  extend-trial:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Extend Utility Mapping trial (+14 days)
+        env:
+          SUPABASE_URL: ${{ secrets.MYSAFEOPS_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.MYSAFEOPS_SERVICE_ROLE_KEY }}
+        run: node scripts/apply-utility-mapping-trial.mjs

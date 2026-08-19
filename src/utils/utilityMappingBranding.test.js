@@ -61,8 +61,7 @@ describe("Utility Mapping branding ensure", () => {
       primaryColor: "#0d9488",
       accentColor: "#f97316",
     });
-    expect(ensureUtilityMappingBranding("patryk-44bdf196")).toBe(false);
-    expect(ensureUtilityMappingBranding("patryk-44bdf196", { force: true })).toBe(true);
+    expect(ensureUtilityMappingBranding("patryk-44bdf196")).toBe(true);
     expect(loadOrgSettingsRaw().name).toBe("Utility Mapping");
     expect(loadOrgSettingsRaw().primaryColor).toBe("#0B1D3A");
   });

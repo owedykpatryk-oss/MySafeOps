@@ -17,6 +17,7 @@
     "provision:fess-group": "node scripts/provision-fess-group.mjs",
     "stripe:retry-webhooks": "node scripts/stripe-retry-webhook-failures.mjs",
     "billing:doctor": "node scripts/billing-doctor.mjs",
+    "billing:extend-utility-mapping-trial": "node scripts/apply-utility-mapping-trial.mjs",
     "test:e2e": "playwright test",
     "test:e2e:blog": "playwright test tests/e2e/blog.spec.js",
     "test:e2e:security": "playwright test tests/e2e/security.spec.js",
