@@ -1,7 +1,7 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.4.1";
+const SW_VERSION = "mysafeops-v1.4.2";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -63,10 +63,15 @@ const PRECACHE_ASSETS = [
   "/branding/fess-group-logo.png",
 ];
 
-function isAppShellRequest(request, url) {
-  if (request.mode === "navigate" || request.destination === "document") return true;
+function isAppShellRequest(_request, url) {
   const p = url.pathname;
-  return p === "/" || p === "/index.html" || p === "/app" || p.startsWith("/app/");
+  // Only the SPA (`/app?view=…`). Do not treat marketing/blog navigations as the shell —
+  // those must keep HTTP 401/404 instead of a cached index.html.
+  return p === "/app" || p.startsWith("/app/");
+}
+
+function isDocumentNavigation(request) {
+  return request.mode === "navigate" || request.destination === "document";
 }
 
 async function matchAppShell() {
@@ -125,12 +130,35 @@ self.addEventListener("fetch", (event) => {
   if (isAppShellRequest(request, url)) {
     event.respondWith(
       (async () => {
-        const res = await fetchWithOptionalRetry(request);
-        if (res && res.ok) {
-          scheduleCachePut(request, res);
-          return res;
+        try {
+          const res = await fetchWithOptionalRetry(request);
+          if (res && res.ok) {
+            scheduleCachePut(request, res);
+            return res;
+          }
+          return matchAppShell();
+        } catch {
+          return matchAppShell();
         }
-        return matchAppShell();
+      })()
+    );
+    return;
+  }
+
+  // Other documents — keep HTTP 4xx/5xx; only fall back when the network fails.
+  if (isDocumentNavigation(request)) {
+    event.respondWith(
+      (async () => {
+        try {
+          const res = await fetchWithOptionalRetry(request);
+          if (res) {
+            scheduleCachePut(request, res);
+            return res;
+          }
+          return matchAppShell();
+        } catch {
+          return matchAppShell();
+        }
       })()
     );
     return;
