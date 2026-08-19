@@ -97,4 +97,25 @@ describe("superAdmin platform owner probe", () => {
     await expect(superadminExtendOrgTrial({ rpc }, "  ")).rejects.toThrow(/slug is required/i);
     expect(rpc).not.toHaveBeenCalled();
   });
+
+  it("superadminExtendOrgTrial requires a cloud client", async () => {
+    const { superadminExtendOrgTrial } = await import("./superAdmin.js");
+    await expect(superadminExtendOrgTrial(null, "utility-mapping")).rejects.toThrow(/cloud sign-in/i);
+  });
+
+  it("superadminExtendOrgTrial unwraps a one-row RPC array", async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ ok: true, org_slug: "patryk-44bdf196", trial_ends_at: "2026-09-01T00:00:00.000Z", days: 14 }],
+      error: null,
+    });
+    const { superadminExtendOrgTrial, SUPERADMIN_EXTEND_TRIAL_DAYS } = await import("./superAdmin.js");
+    expect(SUPERADMIN_EXTEND_TRIAL_DAYS).toBe(14);
+    const row = await superadminExtendOrgTrial({ rpc }, "patryk-44bdf196", Number.NaN);
+    expect(rpc).toHaveBeenCalledWith("superadmin_extend_org_trial", {
+      p_org_slug: "patryk-44bdf196",
+      p_days: 14,
+    });
+    expect(row.ok).toBe(true);
+    expect(row.org_slug).toBe("patryk-44bdf196");
+  });
 });
