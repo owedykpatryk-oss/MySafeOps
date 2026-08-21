@@ -30,4 +30,13 @@ describe("Utility Mapping trial extension SQL", () => {
     expect(sql).toContain("least(greatest(coalesce(p_days, 14), 1), 90)");
     expect(sql).toContain("grant execute on function public.superadmin_extend_org_trial(text, int) to authenticated");
   });
+
+  it("does not shorten a trial already beyond now + 14 days", () => {
+    const withoutComments = sql.replace(/--[^\n]*/g, "");
+    expect(withoutComments).toMatch(
+      /and\s*\(\s*o\.trial_ends_at is null or o\.trial_ends_at < now\(\) \+ interval '14 days'\s*\)/i
+    );
+    const updateBlock = withoutComments.slice(withoutComments.lastIndexOf("update public.organizations"));
+    expect(updateBlock).toMatch(/\(\s*lower\(replace\(o\.slug/);
+  });
 });

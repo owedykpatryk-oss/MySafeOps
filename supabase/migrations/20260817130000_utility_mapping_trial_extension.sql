@@ -48,22 +48,26 @@ comment on function public.superadmin_extend_org_trial(text, int) is
   'Platform owner only: set an organisation trial_ends_at to now() + p_days (1–90). Does not consume trial_extension_count.';
 
 -- Courtesy +14 days from apply time for Utility Mapping tenants (canonical slugs or @u-map.co.uk members).
+-- Skip rows already at/after now+14d so a client tenant a UM surveyor joined is not shortened.
 update public.organizations o
 set trial_ends_at = now() + interval '14 days'
 where
-  lower(replace(o.slug, '_', '-')) in (
-    'utility-mapping',
-    'u-map',
-    'umap',
-    'utility-mapping-group',
-    'patryk-44bdf196'
+  (
+    lower(replace(o.slug, '_', '-')) in (
+      'utility-mapping',
+      'u-map',
+      'umap',
+      'utility-mapping-group',
+      'patryk-44bdf196'
+    )
+    or exists (
+      select 1
+      from public.org_memberships m
+      join auth.users u on u.id = m.user_id
+      where m.org_id = o.id
+        -- Domain equality (not LIKE '%@u-map.co.uk') so foo@u-map.co.uk.evil.com cannot match.
+        and split_part(lower(u.email), '@', 2) = 'u-map.co.uk'
+    )
   )
-  or exists (
-    select 1
-    from public.org_memberships m
-    join auth.users u on u.id = m.user_id
-    where m.org_id = o.id
-      -- Domain equality (not LIKE '%@u-map.co.uk') so foo@u-map.co.uk.evil.com cannot match.
-      and split_part(lower(u.email), '@', 2) = 'u-map.co.uk'
-  )
+  and (o.trial_ends_at is null or o.trial_ends_at < now() + interval '14 days')
 returning o.slug, o.trial_ends_at;
