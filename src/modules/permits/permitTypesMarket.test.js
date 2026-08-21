@@ -15,4 +15,11 @@ describe("permitTypesMarket", () => {
     expect(au.electrical.checklist.some((x) => /AS\/NZS 3012/i.test(x))).toBe(true);
     expect(au.excavation.checklist.some((x) => /Dial Before You Dig/i.test(x))).toBe(true);
   });
+
+  it("replaces UK CAT/PAS 128 excavation checks with CPD wording for Poland", () => {
+    const pl = getPermitTypesForMarket("pl");
+    expect(pl.excavation.checklist.join(" ")).toMatch(/CPD|geodeta/i);
+    expect(pl.excavation.checklist.join(" ")).not.toMatch(/CAT scan/i);
+    expect(pl.excavation.checklist.join(" ")).not.toMatch(/PAS 128/i);
+  });
 });

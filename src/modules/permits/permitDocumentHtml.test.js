@@ -175,6 +175,8 @@ describe("excavation dig guidance on PDF", () => {
     });
     expect(html).toContain("Safe dig");
     expect(html).toContain("PAS 128");
+    expect(html).toContain("HSG47");
+    expect(html).toContain("CAT scan");
     expect(html).toContain("B1");
     expect(html).toContain("PAS128-B1-Rev2");
   });

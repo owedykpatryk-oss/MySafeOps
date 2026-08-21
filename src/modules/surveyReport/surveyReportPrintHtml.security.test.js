@@ -52,6 +52,8 @@ describe("surveyReportPrintHtml security", () => {
     expect(html).toContain("Contents");
     expect(html).toContain("PAS 128 quality levels");
     expect(html).toContain("Finalised");
+    expect(html).toContain("01/08/2026");
+    expect(html).not.toMatch(/8\/1\/2026/);
     expect(html).not.toContain("Nadzór nad dokumentem");
     expect(html).not.toContain("Spis treści");
     expect(html).not.toContain("Kodeks pracy");
