@@ -308,7 +308,7 @@ export function renderPermitDocumentHtml(permit, options = {}) {
     </div>
   </div>`
     : "";
-  const digGuidanceHtml = renderGuidancePrintHtml(permit, { primaryColor }) || renderDigGuidancePrintHtml(permit, { primaryColor });
+  const digGuidanceHtml = renderGuidancePrintHtml(permit, { primaryColor, marketId }) || renderDigGuidancePrintHtml(permit, { primaryColor, marketId });
 
   return `<!DOCTYPE html><html lang="${countryPack.language}"><head><meta charset="utf-8"/><title>${escapeHtml(tx("Permit to work"))} — ${escapeHtml(def.label)}</title>
   <style>

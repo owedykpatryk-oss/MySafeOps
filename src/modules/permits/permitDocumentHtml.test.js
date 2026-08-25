@@ -180,6 +180,42 @@ describe("excavation dig guidance on PDF", () => {
     expect(html).toContain("B1");
     expect(html).toContain("PAS128-B1-Rev2");
   });
+
+  it("drops UK CAT/PAS 128 extra-field labels from Poland excavation print", () => {
+    localStorage.setItem("mysafeops_orgId", "pl-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_pl-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const html = renderPermitDocumentHtml({
+      id: "p-pl-dig-1",
+      type: "excavation",
+      status: "active",
+      description: "Wykop próbny",
+      location: "Warszawa",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: {
+        catScanBy: "Geodeta Kowalski",
+        pas128QualityLevel: "QL-B",
+        pas128SurveyType: "B1",
+        surveyDrawingRef: "CPD-12",
+      },
+    });
+    expect(html).toContain("Pozwolenie na wykop");
+    expect(html).toContain("Lokalizacja uzbrojenia wykonana przez");
+    expect(html).toContain("Geodeta Kowalski");
+    expect(html).toContain("Numer mapy uzbrojenia / rysunku");
+    expect(html).toContain("CPD-12");
+    expect(html).not.toContain("CAT scan carried out by");
+    expect(html).not.toContain("PAS 128 quality level");
+    expect(html).not.toContain("PAS 128 survey type");
+    expect(html).not.toContain("Safe dig & PAS 128");
+    expect(html).not.toContain("CAT scan by");
+    expect(html).not.toMatch(/PAS 128/);
+    localStorage.clear();
+  });
 });
 
 describe("hot work guidance on PDF", () => {

@@ -22,4 +22,17 @@ describe("permitTypesMarket", () => {
     expect(pl.excavation.checklist.join(" ")).not.toMatch(/CAT scan/i);
     expect(pl.excavation.checklist.join(" ")).not.toMatch(/PAS 128/i);
   });
+
+  it("drops UK CAT/PAS 128 extra-field labels on Poland excavation and ground disturbance", () => {
+    const pl = getPermitTypesForMarket("pl");
+    const excavationLabels = (pl.excavation.extraFields || []).map((f) => f.label).join(" ");
+    const groundLabels = (pl.ground_disturbance.extraFields || []).map((f) => f.label).join(" ");
+    expect(excavationLabels).toMatch(/uzbrojenia/i);
+    expect(excavationLabels).not.toMatch(/CAT scan/i);
+    expect(excavationLabels).not.toMatch(/PAS 128/i);
+    expect(groundLabels).not.toMatch(/CAT scan/i);
+    expect(groundLabels).not.toMatch(/PAS 128/i);
+    expect((pl.excavation.extraFields || []).some((f) => f.key === "pas128QualityLevel")).toBe(false);
+    expect((pl.excavation.extraFields || []).some((f) => f.key === "pas128SurveyType")).toBe(false);
+  });
 });

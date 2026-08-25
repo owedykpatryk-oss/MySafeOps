@@ -129,7 +129,16 @@ const PL_PERMIT_TYPE_OVERRIDES = {
   valve_isolation: { label: "Pozwolenie na odłączenie armatury" },
   visitor_access: { label: "Pozwolenie na dostęp gości" },
   radiography: { label: "Pozwolenie na badania radiograficzne" },
-  ground_disturbance: { label: "Pozwolenie na naruszenie gruntu" },
+  ground_disturbance: {
+    label: "Pozwolenie na naruszenie gruntu",
+    extraFields: [
+      { key: "groundType", label: "Rodzaj gruntu / geologia", type: "text" },
+      { key: "disturbanceMethod", label: "Metoda naruszenia gruntu", type: "text" },
+      { key: "maxDepth", label: "Maksymalna głębokość naruszenia (m)", type: "number" },
+      { key: "surveyDrawingRef", label: "Numer mapy uzbrojenia / rysunku", type: "text" },
+      { key: "utilityStrikeContacts", label: "Kontakty awaryjne przy uszkodzeniu uzbrojenia", type: "text" },
+    ],
+  },
   line_clearance: { label: "Pozwolenie na pracę w pobliżu linii" },
   rail_corridor_access: { label: "Pozwolenie na dostęp do obszaru kolejowego" },
   marine_hydrographic: { label: "Pozwolenie na pomiary hydrograficzne" },
@@ -145,6 +154,13 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Stabilizacja ścian wykopu / zabezpieczenie krawędzi",
       "Strefa wyłączona nad wykopem",
       "Koordynator BHP poinformowany przed startem",
+    ],
+    extraFields: [
+      { key: "catScanBy", label: "Lokalizacja uzbrojenia wykonana przez", type: "text" },
+      { key: "knownServices", label: "Znane uzbrojenie w rejonie", type: "text" },
+      { key: "excavationDepth", label: "Maksymalna głębokość wykopu (m)", type: "number" },
+      { key: "surveyDrawingRef", label: "Numer mapy uzbrojenia / rysunku", type: "text" },
+      { key: "utilityStrikeContacts", label: "Kontakty awaryjne przy uszkodzeniu uzbrojenia", type: "text" },
     ],
   },
   work_at_height: {

@@ -49,6 +49,21 @@ describe("permitDigGuidance", () => {
     expect(html).toContain("<svg");
   });
 
+  it("omits UK PAS 128 print guidance for Poland and Australia", () => {
+    expect(
+      renderDigGuidancePrintHtml(
+        { type: "excavation", extraFields: { pas128QualityLevel: "QL-B" } },
+        { marketId: "pl" }
+      )
+    ).toBe("");
+    expect(
+      renderDigGuidancePrintHtml(
+        { type: "excavation", extraFields: { pas128QualityLevel: "QL-B" } },
+        { marketId: "au" }
+      )
+    ).toBe("");
+  });
+
   it("highlights selected QL in ladder SVG", () => {
     const svg = renderPas128QlLadderSvg({ highlightId: "QL-A" });
     expect(svg).toContain("QL-A");
