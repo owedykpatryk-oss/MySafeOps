@@ -2,7 +2,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { listWorkspaceProfilesForOrg } from "./customWorkspaceProfiles";
 import { isValidIndustryPackId, applyIndustryPack, getAppliedIndustryPackId } from "./orgIndustryPacks";
-import { UTILITY_MAPPING_PACK_ID } from "./utilityMappingWorkspaceProfile";
+import {
+  UTILITY_MAPPING_PACK_ID,
+  UTILITY_MAPPING_ORG_SLUGS,
+  isUtilityMappingOrgForWorkspaceList,
+} from "./utilityMappingWorkspaceProfile";
 import { isUtilityMappingOrg } from "./utilityMappingOrg";
 import { isUtilityMappingPrintTheme, utilityMappingSurveyCoverCss } from "./utilityMappingPrintTheme";
 import { setOrgId } from "./orgStorage";
@@ -40,6 +44,14 @@ describe("Utility Mapping exclusive workspace profile", () => {
     saveOrgSettingsRaw({ name: "Patryk Workspace", hiddenModules: [] });
     expect(isUtilityMappingOrg()).toBe(true);
     expect(listWorkspaceProfilesForOrg().map((p) => p.id)).toContain(UTILITY_MAPPING_PACK_ID);
+  });
+
+  it("resolves every allowlist slug after hyphen normalisation", () => {
+    expect(UTILITY_MAPPING_ORG_SLUGS.has("patryk-44bdf196")).toBe(true);
+    for (const raw of UTILITY_MAPPING_ORG_SLUGS) {
+      expect(isUtilityMappingOrgForWorkspaceList(raw)).toBe(true);
+      expect(isUtilityMappingOrgForWorkspaceList(String(raw).replace(/_/g, "-"))).toBe(true);
+    }
   });
 
   it("rejects website / email spoof without allowlisted slug", () => {

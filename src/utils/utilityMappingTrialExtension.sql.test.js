@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { UTILITY_MAPPING_ORG_SLUGS } from "./utilityMappingWorkspaceProfile.js";
 
 const SQL_PATH = join(
   process.cwd(),
@@ -8,6 +9,13 @@ const SQL_PATH = join(
   "migrations",
   "20260817130000_utility_mapping_trial_extension.sql"
 );
+
+function hyphenSlug(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+}
 
 describe("Utility Mapping trial extension SQL", () => {
   const sql = readFileSync(SQL_PATH, "utf8");
@@ -17,6 +25,15 @@ describe("Utility Mapping trial extension SQL", () => {
     expect(sql).toContain("utility-mapping");
     expect(sql).toContain("now() + interval '14 days'");
     expect(sql).toMatch(/returning o\.slug, o\.trial_ends_at/i);
+  });
+
+  it("keeps the courtesy IN list in sync with the client allowlist", () => {
+    const inList = sql.slice(sql.lastIndexOf("update public.organizations"));
+    const slugs = [...new Set([...UTILITY_MAPPING_ORG_SLUGS].map(hyphenSlug))];
+    expect(slugs).toContain("patryk-44bdf196");
+    for (const slug of slugs) {
+      expect(inList).toContain(`'${slug}'`);
+    }
   });
 
   it("matches @u-map.co.uk by domain equality, not a suffix LIKE", () => {
