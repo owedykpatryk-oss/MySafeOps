@@ -64,6 +64,7 @@ export const MODULE_PDF_REGISTRY = {
   cdm: { key: "cdm_packs" },
   "whs-plan": { key: "cdm_packs" },
   "bhp-plan": { key: "cdm_packs" },
+  "sige-plan": { key: "cdm_packs" },
   coshh: {
     key: "coshh_items",
     columns: [
@@ -182,6 +183,10 @@ export const MODULE_PDF_REGISTRY = {
     ],
   },
   "toolbox-reg": { key: "toolbox_talks" },
+  orz: { key: "orz_cards" },
+  "pl-druki": { key: "pl_forms_records" },
+  "pl-instrukcje": { key: "pl_instrukcje" },
+  "pl-czynniki": { key: "pl_czynniki_szkodliwe" },
   "first-aid": {
     key: "first_aid_register",
     columns: [

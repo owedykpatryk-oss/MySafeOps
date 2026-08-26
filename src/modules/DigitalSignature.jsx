@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const loadJSON = (k, fallback = []) => loadOrgScoped(k, fallback);
 const saveJSON = (k, v) => saveOrgScoped(k, v);
@@ -29,6 +30,7 @@ function resolveDocSigners(doc, workers) {
 const ss = { ...ms, btnPrimary: ms.btnP, label: ms.lbl, input: ms.inp };
 
 function SignatureCanvas({ onCapture, label = "Draw signature here" }) {
+  const { t } = useWorkspaceT();
   const canvasRef = useRef(null);
   const drawing = useRef(false);
   const lastPos = useRef(null);
@@ -102,7 +104,7 @@ function SignatureCanvas({ onCapture, label = "Draw signature here" }) {
         <div style={{ position:"absolute", bottom:6, left:10, right:10, borderTop:"1px solid #e5e5e5", pointerEvents:"none" }} />
       </div>
       <div style={{ display:"flex", justifyContent:"space-between", marginTop:8, alignItems:"center" }}>
-        <button onClick={clear} style={{ ...ss.btn, fontSize:12 }}>Clear</button>
+        <button onClick={clear} style={{ ...ss.btn, fontSize:12 }}>{t("clear")}</button>
         <button onClick={() => hasContent && onCapture(canvasRef.current.toDataURL("image/png"))}
           disabled={!hasContent}
           style={{ ...ss.btnPrimary, opacity:hasContent?1:0.4, fontSize:12 }}>
@@ -132,6 +134,7 @@ function Row({ label, value }) {
 }
 
 function SignatureBlock({ signer, docId, signatures, onSign, onClear }) {
+  const { t } = useWorkspaceT();
   const [signing, setSigning] = useState(false);
   const [gpsStatus, setGpsStatus] = useState("idle");
   const existing = signatures.find(s => s.signerId === signer.id && s.docId === docId);
@@ -166,10 +169,10 @@ function SignatureBlock({ signer, docId, signatures, onSign, onClear }) {
         {existing ? (
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:500, background:"#EAF3DE", color:"#27500A" }}>Signed</span>
-            <button onClick={()=>onClear(existing.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>Remove</button>
+            <button onClick={()=>onClear(existing.id)} style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }}>{t("delete")}</button>
           </div>
         ) : (
-          <button onClick={()=>setSigning(v=>!v)} style={ss.btnPrimary}>{signing?"Cancel":"Sign"}</button>
+          <button onClick={()=>setSigning(v=>!v)} style={ss.btnPrimary}>{signing?t("cancel"):"Sign"}</button>
         )}
       </div>
 
@@ -178,7 +181,7 @@ function SignatureBlock({ signer, docId, signatures, onSign, onClear }) {
           <img src={existing.dataUrl} alt="signature" style={{ height:56, maxWidth:180, objectFit:"contain", border:"0.5px solid #e5e5e5", borderRadius:4, background:"#fff" }} />
           <div style={{ flex:1, minWidth:160 }}>
             <Row label="Signed at" value={fmtDateTime(existing.timestamp)} />
-            <Row label="Location" value={existing.gps ? `${existing.gps.lat}, ${existing.gps.lng} (±${existing.gps.accuracy}m)` : "GPS not available"} />
+            <Row label={t("location")} value={existing.gps ? `${existing.gps.lat}, ${existing.gps.lng} (±${existing.gps.accuracy}m)` : "GPS not available"} />
             <Row label="Device" value={(existing.device||"—").slice(0,60)} />
           </div>
         </div>
@@ -272,6 +275,7 @@ export function SignaturePanel({ docId, docTitle, docType="RAMS", signers=[], on
 }
 
 export default function SignatureManager() {
+  const { t } = useWorkspaceT();
   const [docs, setDocs] = useState(()=>loadJSON("sig_docs",[]));
   const [workers, setWorkers] = useState(() => loadJSON("mysafeops_workers", []));
   const [activeDoc, setActiveDoc] = useState(null);
@@ -346,7 +350,7 @@ export default function SignatureManager() {
         lead="Collect signatures with GPS and timestamp per document."
         right={
           <button type="button" onClick={() => setShowNew(true)} style={ss.btnPrimary}>
-            + New document
+            {t("addRecord")}
           </button>
         }
       />
@@ -450,7 +454,7 @@ export default function SignatureManager() {
             </p>
           )}
           <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
-            <button onClick={()=>setShowNew(false)} style={ss.btn}>Cancel</button>
+            <button onClick={()=>setShowNew(false)} style={ss.btn}>{t("cancel")}</button>
             <button onClick={addDoc} disabled={!newDoc.title.trim()} style={{ ...ss.btnPrimary, opacity:newDoc.title.trim()?1:0.4 }}>Create & sign</button>
           </div>
         </div>
@@ -459,7 +463,7 @@ export default function SignatureManager() {
       {docs.length===0 && !showNew && (
         <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
           <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No documents awaiting signatures yet.</p>
-          <button onClick={()=>setShowNew(true)} style={ss.btnPrimary}>+ Add first document</button>
+          <button onClick={()=>setShowNew(true)} style={ss.btnPrimary}>{t("addRecord")}</button>
         </div>
       )}
 

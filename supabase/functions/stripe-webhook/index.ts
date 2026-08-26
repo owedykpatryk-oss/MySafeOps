@@ -119,7 +119,16 @@ async function applySubscription(
     workspace_id: workspace.id,
     stripe_mode: stripeMode,
     market_id: workspace.market_id,
-    currency: workspace.market_id === "pl" ? "PLN" : workspace.market_id === "au" ? "AUD" : "GBP",
+    currency:
+      workspace.market_id === "pl"
+        ? "PLN"
+        : workspace.market_id === "au"
+          ? "AUD"
+          : workspace.market_id === "de" || workspace.market_id === "at"
+            ? "EUR"
+            : workspace.market_id === "ch"
+              ? "CHF"
+              : "GBP",
     stripe_customer_id: customerId ?? null,
     stripe_subscription_id: sub.id,
     subscription_status: mappedStatus,

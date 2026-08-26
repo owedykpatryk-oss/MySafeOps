@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `wh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const today = todayLocalISO;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -59,9 +61,9 @@ function Form({ item, projects, onSave, onClose }) {
           <option value="Tank / calorifier note">Tank / calorifier note</option>
           <option value="Other">Other</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="water-hygiene-location">Location</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="water-hygiene-location">{t("location")}</label>
         <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="water-hygiene-location" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="water-hygiene-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="water-hygiene-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="water-hygiene-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -82,11 +84,11 @@ function Form({ item, projects, onSave, onClose }) {
         <input style={ss.inp} value={form.responsible} onChange={(e) => set("responsible", e.target.value)}  id="water-hygiene-responsible" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="water-hygiene-risk-assessment-ref">Written scheme / RA ref</label>
         <input style={ss.inp} value={form.riskAssessmentRef} onChange={(e) => set("riskAssessmentRef", e.target.value)}  id="water-hygiene-risk-assessment-ref" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="water-hygiene-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="water-hygiene-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 40, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="water-hygiene-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -94,7 +96,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -103,6 +105,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function WaterHygieneLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("water_hygiene_log", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -161,11 +164,11 @@ export default function WaterHygieneLog() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add check
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -181,7 +184,7 @@ export default function WaterHygieneLog() {
           icon="💧"
           title="No water hygiene records yet"
           description="Log outlet temperatures and flush checks for Legionella control."
-          actionLabel="+ Add check"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -197,7 +200,7 @@ export default function WaterHygieneLog() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="water-hygiene" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -219,7 +222,7 @@ export default function WaterHygieneLog() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

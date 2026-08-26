@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `env_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -27,6 +28,7 @@ const ss = ms;
 const CATS = ["Spill / leak", "Dust / emissions", "Noise complaint", "Waste non-compliance", "Protected species / ecology", "Other"];
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -57,9 +59,9 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="environmental-event-date">Date</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="environmental-event-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.eventDate} onChange={(e) => set("eventDate", e.target.value)}  id="environmental-event-date" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="environmental-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="environmental-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="environmental-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -68,7 +70,7 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="environmental-description">Description</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="environmental-description">{t("description")}</label>
         <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.description} onChange={(e) => set("description", e.target.value)}  id="environmental-description" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="environmental-immediate-action">Immediate action</label>
         <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.immediateAction} onChange={(e) => set("immediateAction", e.target.value)}  id="environmental-immediate-action" />
@@ -78,11 +80,11 @@ function Form({ item, projects, onSave, onClose }) {
           <input type="checkbox" checked={form.closedOut} onChange={(e) => set("closedOut", e.target.checked)} />
           Closed out
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="environmental-notes">Further notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="environmental-notes">Further {t("notes").toLowerCase()}</label>
         <textarea style={{ ...ss.inp, minHeight: 40, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="environmental-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -90,7 +92,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -99,6 +101,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function EnvironmentalLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("environmental_log", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -157,11 +160,11 @@ export default function EnvironmentalLog() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add event
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -177,7 +180,7 @@ export default function EnvironmentalLog() {
           icon="🌿"
           title="No environmental events logged"
           description="Record spills, bund checks and environmental notes."
-          actionLabel="+ Add event"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -194,7 +197,7 @@ export default function EnvironmentalLog() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="environmental" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -216,7 +219,7 @@ export default function EnvironmentalLog() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

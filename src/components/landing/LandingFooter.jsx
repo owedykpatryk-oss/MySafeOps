@@ -40,15 +40,15 @@ export default function LandingFooter({ supportEmail, market = getMarket("uk"), 
           <div>
             <h4>{labels.product}</h4>
             <ul>
-              <li><a href="#workflow">{market.id === "pl" ? "Proces" : "Workflow"}</a></li>
-              <li><a href="#profiles">{market.id === "pl" ? "Produkt" : "Product"}</a></li>
-              <li><a href="#features">{market.id === "pl" ? "Funkcje" : "Features"}</a></li>
-              <li><a href="#pricing">{market.id === "pl" ? "Cennik" : "Pricing"}</a></li>
+              <li><a href="#workflow">{market.id === "pl" ? "Proces" : market.id === "de" || market.id === "at" || market.id === "ch" ? "Ablauf" : "Workflow"}</a></li>
+              <li><a href="#profiles">{market.id === "pl" ? "Produkt" : market.id === "de" || market.id === "at" || market.id === "ch" ? "Produkt" : "Product"}</a></li>
+              <li><a href="#features">{market.id === "pl" ? "Funkcje" : market.id === "de" || market.id === "at" || market.id === "ch" ? "Funktionen" : "Features"}</a></li>
+              <li><a href="#pricing">{market.id === "pl" ? "Cennik" : market.id === "de" || market.id === "at" || market.id === "ch" ? "Preise" : "Pricing"}</a></li>
               <li>
                 <Link to="/blog">Blog</Link>
               </li>
               <li><a href="#faq">FAQ</a></li>
-              <li><a href="#cta">{market.id === "pl" ? "Wypróbuj" : "Get started"}</a></li>
+              <li><a href="#cta">{market.id === "pl" ? "Wypróbuj" : market.id === "de" || market.id === "at" || market.id === "ch" ? "Loslegen" : "Get started"}</a></li>
             </ul>
           </div>
           <div>
@@ -102,6 +102,11 @@ export default function LandingFooter({ supportEmail, market = getMarket("uk"), 
               <li>
                 <Link to={market.accessibilityPath}>{labels.accessibility}</Link>
               </li>
+              {market.impressumPath ? (
+                <li>
+                  <Link to={market.impressumPath}>{labels.impressum}</Link>
+                </li>
+              ) : null}
             </ul>
           </div>
         </div>

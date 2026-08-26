@@ -27,6 +27,7 @@ export const SEED_MODULES_BY_PACK = {
   facilitiesMaintenance: ["inspections", "electrical-pat", "plant", "daily-briefing"],
   demolitionStripout: ["excavation", "temp-works", "gate", "asbestos", "daily-briefing"],
   civilEarthworks: ["excavation", "temp-works", "daily-briefing", "coshh", "toolbox-reg"],
+  railInfrastructure: ["daily-briefing", "training", "inspections", "toolbox-reg", "geo-photos"],
   contractorPlusSurveying: ["daily-briefing", "inspections", "snags", "coshh"],
   showEverything: ["daily-briefing", "inspections"],
 };

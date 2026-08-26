@@ -15,6 +15,21 @@ export const LEGAL_VERSIONS = {
     privacy: "2026-07-pl",
     cookies: "2026-07-pl",
   },
+  de: {
+    terms: "1.0-de",
+    privacy: "2026-08-de.5",
+    cookies: "2026-08-de",
+  },
+  at: {
+    terms: "1.0-at",
+    privacy: "2026-08-at",
+    cookies: "2026-08-at",
+  },
+  ch: {
+    terms: "1.0-ch",
+    privacy: "2026-08-ch",
+    cookies: "2026-08-ch",
+  },
 };
 
 /** @param {import("./markets").MarketId} marketId */

@@ -73,6 +73,9 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/au" element={<LandingPage marketId="au" />} />
           <Route path="/pl" element={<LandingPage marketId="pl" />} />
+          <Route path="/de" element={<LandingPage marketId="de" />} />
+          <Route path="/at" element={<LandingPage marketId="at" />} />
+          <Route path="/ch" element={<LandingPage marketId="ch" />} />
           <Route path="/blog" element={<BlogIndexPage />} />
           <Route path="/blog/:slug" element={<BlogArticlePage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -93,6 +96,22 @@ export default function App() {
           <Route path="/pl/cookies" element={<LegalPage docKey="cookies" marketId="pl" />} />
           <Route path="/pl/dpa" element={<LegalPage docKey="dpa" marketId="pl" />} />
           <Route path="/pl/accessibility" element={<LegalPage docKey="accessibility" marketId="pl" />} />
+          <Route path="/de/privacy" element={<LegalPage docKey="privacy" marketId="de" />} />
+          <Route path="/de/terms" element={<LegalPage docKey="terms" marketId="de" />} />
+          <Route path="/de/cookies" element={<LegalPage docKey="cookies" marketId="de" />} />
+          <Route path="/de/dpa" element={<LegalPage docKey="dpa" marketId="de" />} />
+          <Route path="/de/accessibility" element={<LegalPage docKey="accessibility" marketId="de" />} />
+          <Route path="/de/impressum" element={<LegalPage docKey="impressum" marketId="de" />} />
+          <Route path="/at/privacy" element={<LegalPage docKey="privacy" marketId="at" />} />
+          <Route path="/at/terms" element={<LegalPage docKey="terms" marketId="at" />} />
+          <Route path="/at/cookies" element={<LegalPage docKey="cookies" marketId="at" />} />
+          <Route path="/at/dpa" element={<LegalPage docKey="dpa" marketId="at" />} />
+          <Route path="/at/accessibility" element={<LegalPage docKey="accessibility" marketId="at" />} />
+          <Route path="/ch/privacy" element={<LegalPage docKey="privacy" marketId="ch" />} />
+          <Route path="/ch/terms" element={<LegalPage docKey="terms" marketId="ch" />} />
+          <Route path="/ch/cookies" element={<LegalPage docKey="cookies" marketId="ch" />} />
+          <Route path="/ch/dpa" element={<LegalPage docKey="dpa" marketId="ch" />} />
+          <Route path="/ch/accessibility" element={<LegalPage docKey="accessibility" marketId="ch" />} />
           <Route path="/docs" element={<DocsHubPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/security" element={<SecurityPosturePage />} />

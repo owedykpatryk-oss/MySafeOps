@@ -58,8 +58,11 @@ import { appendPermitAuditEntry } from "./permitAuditLog";
 import PermitEvidenceImage from "./components/PermitEvidenceImage";
 import { getTypeComplianceMeta } from "./ukComplianceMatrix";
 import { PERMIT_TYPES, checklistStringsForType } from "./permitTypes";
-import { getPermitTypesForMarket } from "./permitTypesMarket";
+import { getPermitTypesForMarket, ANHANG_II_STATUTE_LABEL } from "./permitTypesMarket";
+import { anhangIIItemsForPermit } from "../../config/deAnhangII";
+import { useWorkspaceT } from "../../i18n/useWorkspaceT";
 import { getOrgMarketId } from "../../utils/orgMarket";
+import { getModuleLabelForMarket } from "../../utils/marketLabels";
 import { renderPermitDocumentHtml } from "./permitDocumentHtml";
 import { safeOpaqueToken, openPrintWindowOrWarn, writePrintWindowDocument } from "../../utils/htmlEscape.js";
 import { buildPermitEmailRecipients, parseManualEmails, sendPermitNotificationEmail, sendPermitNotificationWebPush } from "../../utils/permitNotifications";
@@ -846,6 +849,7 @@ function PermitForm({
   supervisorMode = false,
 }) {
   const orgId = getOrgId();
+  const { t } = useWorkspaceT();
   const [formDataRev, setFormDataRev] = useState(0);
   useEffect(() => {
     const bump = () => setFormDataRev((n) => n + 1);
@@ -869,6 +873,11 @@ function PermitForm({
   const defaultType = permit?.type || "hot_work";
   const [type, setType] = useState(defaultType);
   const def = permitTypes[type] || permitTypes.general;
+  const orgMarketId = getOrgMarketId();
+  const anhangIIItems = useMemo(
+    () => (orgMarketId === "de" || orgMarketId === "at" || orgMarketId === "ch" ? anhangIIItemsForPermit(type) : []),
+    [orgMarketId, type]
+  );
   const fieldConfig = useMemo(
     () => resolvePermitFieldConfig(type, permitFieldOverrides),
     [type, permitFieldOverrides]
@@ -878,7 +887,7 @@ function PermitForm({
     [fieldConfig, type]
   );
   const isFieldRequired = useCallback((fieldId) => Boolean(getFieldConfig(fieldId)?.required), [getFieldConfig]);
-  const typeMeta = getTypeComplianceMeta(type);
+  const typeMeta = getTypeComplianceMeta(type, orgMarketId);
   const initChecklist = (items) => Object.fromEntries((items || []).map((item) => [item.id, false]));
   const template = getTemplateForType(defaultType, permitTypes);
   const initialChecklistItems = permit
@@ -2658,8 +2667,8 @@ function PermitForm({
                   <label style={{ ...ss.lbl, display: "block", marginBottom: 4 }} htmlFor="permit-note">Note</label>
                   <textarea style={{ ...ss.inp, minHeight: 72, width: "100%", marginBottom: 12 }} value={fieldCaptureNote} onChange={(e) => setFieldCaptureNote(e.target.value)}  id="permit-note" />
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                    <button type="button" style={ss.btn} onClick={() => setFieldCaptureOpen(false)}>Cancel</button>
-                    <button type="button" style={ss.btnO} onClick={() => void commitFieldCaptureEntry()}>Add entry</button>
+                    <button type="button" style={ss.btn} onClick={() => setFieldCaptureOpen(false)}>{t("cancel")}</button>
+                    <button type="button" style={ss.btnO} onClick={() => void commitFieldCaptureEntry()}>{t("addEntry")}</button>
                   </div>
                 </div>
               </div>
@@ -2682,7 +2691,7 @@ function PermitForm({
                     placeholder="One checklist item per line"
                   />
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                    <button type="button" style={ss.btn} onClick={() => setChecklistImportOpen(false)}>Cancel</button>
+                    <button type="button" style={ss.btn} onClick={() => setChecklistImportOpen(false)}>{t("cancel")}</button>
                     <button type="button" style={ss.btnO} onClick={commitChecklistImport}>Import</button>
                   </div>
                 </div>
@@ -2796,6 +2805,31 @@ function PermitForm({
 
         {wizardStep === 2 && (
         <>
+        {anhangIIItems.length > 0 ? (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: "#fef3c7",
+              border: "1px solid #f59e0b",
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>
+              ⚠ {ANHANG_II_STATUTE_LABEL[orgMarketId] || ANHANG_II_STATUTE_LABEL.de} — besonders gefährliche Arbeiten
+            </div>
+            {anhangIIItems.map((item) => (
+              <div key={item.id} style={{ fontSize: 12, color: "#78350f", marginBottom: 4 }}>
+                <strong>{item.short}:</strong> {item.gbuHint}
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>
+              {orgMarketId === "ch"
+                ? "Diese Freigabe zählt zu den besonders gefährlichen Arbeiten — das SiKo muss benannte Massnahmen für diese Arbeit enthalten."
+                : "Diese Freigabe zählt zu Anhang II — der SiGe-Plan muss benannte Maßnahmen für diese Arbeit enthalten."}
+            </div>
+          </div>
+        ) : null}
         {hasPermitGuidance(type) ? (
           <PermitGuidancePanel
             permitType={type}
@@ -3199,7 +3233,7 @@ function PermitForm({
           </div>
         )}
         <div className="app-sticky-footer app-sticky-footer--split">
-          <button type="button" onClick={tryClose} style={ss.btn}>Cancel</button>
+          <button type="button" onClick={tryClose} style={ss.btn}>{t("cancel")}</button>
           <div className="app-sticky-footer--actions">
             <button
               type="button"
@@ -3307,6 +3341,7 @@ const PermitCard = memo(function PermitCard({
   cardDensity = "comfort",
   onOpenMobileQuickActions,
 }) {
+  const { t } = useWorkspaceT();
   const def = permitTypes[permit.type] || permitTypes.general;
   const [expanded, setExpanded] = useState(false);
   const [cloudAuditRows, setCloudAuditRows] = useState([]);
@@ -3627,18 +3662,18 @@ const PermitCard = memo(function PermitCard({
               {ultraCompact ? "Incident" : "Report incident"}{incidents.length ? ` (${incidents.length})` : ""}
             </button>
           ) : null}
-          <button onClick={()=>onEdit(permit)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>Edit</button>
+          <button onClick={()=>onEdit(permit)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>{t("edit")}</button>
           {onDuplicate ? (
-            <button onClick={()=>onDuplicate(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>Duplicate</button>
+            <button onClick={()=>onDuplicate(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{t("duplicate")}</button>
           ) : null}
           {(permit.status==="pending_review" || permit.status==="ready_for_review") && (
             <>
-              <button type="button" onClick={()=>onApprove?.(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>Approve</button>
-              <button type="button" onClick={()=>onActivate?.(permit.id)} style={{ ...ss.btnO, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{ultraCompact ? "Approve+Go" : "Approve & activate"}</button>
+              <button type="button" onClick={()=>onApprove?.(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{t("approve")}</button>
+              <button type="button" onClick={()=>onActivate?.(permit.id)} style={{ ...ss.btnO, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{ultraCompact ? "Approve+Go" : t("approveAndActivate")}</button>
             </>
           )}
           {permit.status==="approved" && (
-            <button type="button" onClick={()=>onActivate?.(permit.id)} style={{ ...ss.btnO, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>Activate</button>
+            <button type="button" onClick={()=>onActivate?.(permit.id)} style={{ ...ss.btnO, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>{t("activate")}</button>
           )}
           {derived === "active" && (
             <button type="button" onClick={() => onOpenHandover?.(permit)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
@@ -3652,19 +3687,19 @@ const PermitCard = memo(function PermitCard({
           ) : null}
           {derived === "active" && (
             <button type="button" onClick={() => onSuspend?.(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
-              Suspend
+              {t("suspend")}
             </button>
           )}
           {permit.status === "suspended" && (
             <button type="button" onClick={() => onResume?.(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, ...compactActionBtnStyle }}>
-              Resume
+              {t("resume")}
             </button>
           )}
           {derived === "active" && (
-            <button onClick={()=>onClose(permit.id)} style={{ ...ss.btnR, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>Close</button>
+            <button onClick={()=>onClose(permit.id)} style={{ ...ss.btnR, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>{t("close")}</button>
           )}
           {(derived==="closed"||derived==="expired") && (
-            <button onClick={()=>onReopen(permit.id)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>Reopen</button>
+            <button onClick={()=>onReopen(permit.id)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12, ...compactActionBtnStyle }}>{t("reopen")}</button>
           )}
           <button onClick={()=>onDelete(permit.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595", ...compactActionBtnStyle }}>×</button>
         </div>
@@ -3904,6 +3939,7 @@ function exportPermitPdf(permit) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PermitSystem() {
+  const { t, marketId } = useWorkspaceT();
   const { role: appRole = "admin" } = useApp();
   const { pushToast } = useToast();
   const { supabase, session } = useSupabaseAuth() || {};
@@ -7485,9 +7521,9 @@ export default function PermitSystem() {
 
       <PageHero
         badgeText="PTW"
-        title="Permits to work"
-        lead="Fifteen permit types, SIMOPS overlap checks, and change logs. Data stays on device; signed-in users also mirror permits to your cloud workspace when configured."
-        right={<button type="button" onClick={() => { setViewMode("quick"); openIssueWithType(permitQuickFavorites.types[0] || Object.keys(issuePermitTypes)[0] || "hot_work"); }} style={ss.btnO}>+ Issue permit</button>}
+        title={getModuleLabelForMarket("permits", marketId) || t("permitsToWork")}
+        lead={t("permitsLead")}
+        right={<button type="button" onClick={() => { setViewMode("quick"); openIssueWithType(permitQuickFavorites.types[0] || Object.keys(issuePermitTypes)[0] || "hot_work"); }} style={ss.btnO}>{t("issuePermit")}</button>}
       />
 
       {effectiveViewMode === "quick" ? (
@@ -8214,7 +8250,7 @@ export default function PermitSystem() {
             <button type="button" onClick={bulkTagSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Bulk add tag</button>
             <button type="button" onClick={bulkExportSelectedCsv} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Export CSV</button>
             <button type="button" onClick={bulkExportSitePackV2} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Site pack</button>
-            <button type="button" onClick={bulkDeleteSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595", opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">Delete</button>
+            <button type="button" onClick={bulkDeleteSelected} disabled={!hasSelectedPermits} style={{ ...ss.btn, fontSize:12, color:"#A32D2D", borderColor:"#F09595", opacity: hasSelectedPermits ? 1 : 0.45 }} className="ptw-bulk-bar__btn">{t("delete")}</button>
           </div>
         </div>
       </div>
@@ -8989,7 +9025,7 @@ export default function PermitSystem() {
               Example: {`{"approved":["admin","supervisor"],"issued":["admin","supervisor"],"closed":["admin"]}`}
             </div>
             <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
-              <button type="button" onClick={() => setWorkflowRoleEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>Cancel</button>
+              <button type="button" onClick={() => setWorkflowRoleEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>{t("cancel")}</button>
               <button type="button" onClick={applyWorkflowRolePolicyOverrides} style={{ ...ss.btnO, fontSize:12 }}>Apply overrides</button>
             </div>
           </div>
@@ -9081,7 +9117,7 @@ export default function PermitSystem() {
               Example: {`{"confined_space":[{"requiresActiveType":"loto","reason":"Confined space entry requires active LOTOTO isolation permit."}]}`}
             </div>
             <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap", justifyContent:"flex-end" }}>
-              <button type="button" onClick={() => setDependencyEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>Cancel</button>
+              <button type="button" onClick={() => setDependencyEditorOpen(false)} style={{ ...ss.btn, fontSize:12 }}>{t("cancel")}</button>
               <button type="button" onClick={applyDependencyRuleOverrides} style={{ ...ss.btnO, fontSize:12 }}>Apply overrides</button>
             </div>
           </div>
@@ -9152,7 +9188,7 @@ export default function PermitSystem() {
       {effectiveViewMode !== "quick" && (permits.length===0 ? (
         <EmptyState
           icon="📋"
-          title="No permits yet"
+          title={t("noPermitsYet")}
           description="Create your first permit to start review, activation, and compliance workflows."
           actionLabel="+ Issue first permit"
           onAction={() => openIssueWithType(Object.keys(issuePermitTypes)[0] || "hot_work")}
@@ -9168,9 +9204,9 @@ export default function PermitSystem() {
       ) : filtered.length===0 ? (
         <EmptyState
           icon="🔍"
-          title="No results for current filters"
+          title={t("noResultsForFilters")}
           description="Try clearing status/type filters or adjusting search text."
-          actionLabel="Clear filters"
+          actionLabel={t("clearFilters")}
           onAction={() => {
             setSearch("");
             setFilterType("");
@@ -9200,7 +9236,7 @@ export default function PermitSystem() {
           {opsActionItems.length === 0 ? (
             <EmptyState
               icon="✓"
-              title="All clear"
+              title={t("allClear")}
               description="No urgent permit actions. Use List view to browse all permits or TV wall for site office display."
               actionLabel="Open TV wall"
               onAction={() => setViewMode("wall")}
@@ -9283,7 +9319,7 @@ export default function PermitSystem() {
                 ) : null}
                 <span style={{ ...ss.chip, fontSize:11 }}>{derived}</span>
                 <button type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={() => previewPermit(permit)}>Preview</button>
-                <button type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={() => setModal({type:"form",data:permit})}>Edit</button>
+                <button type="button" style={{ ...ss.btn, fontSize:11, padding:"3px 8px" }} onClick={() => setModal({type:"form",data:permit})}>{t("edit")}</button>
               </div>
             </div>
             );

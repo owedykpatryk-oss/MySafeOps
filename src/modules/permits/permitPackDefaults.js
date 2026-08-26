@@ -11,6 +11,7 @@ export const PACK_DEFAULT_PERMIT_TYPES = {
   facilitiesMaintenance: ["cold_work", "electrical", "hot_work", "work_at_height", "visitor_access", "general"],
   demolitionStripout: ["excavation", "hot_work", "ground_disturbance", "confined_space", "general"],
   civilEarthworks: ["excavation", "ground_disturbance", "hot_work", "work_at_height", "lifting", "general"],
+  railInfrastructure: ["rail_corridor_access", "ole_isolation", "on_track_plant", "excavation", "work_at_height", "lifting", "hot_work", "general"],
   surveyingGeodesy: ["excavation", "ground_disturbance", "aerial_survey_coordination", "marine_hydrographic", "visitor_access", "general"],
   contractorPlusSurveying: ["hot_work", "excavation", "electrical", "work_at_height", "aerial_survey_coordination", "general"],
   foodPharma: ["hot_work", "line_clearance", "cold_work", "confined_space", "visitor_access", "general"],

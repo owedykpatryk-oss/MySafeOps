@@ -5,6 +5,7 @@
 
 import { INDUSTRY_PACKS, normalizeIndustryPackId } from "./industryPackCatalog";
 import { loadOrgSettingsRaw } from "./orgSettingsStorage";
+import { getOrgMarketId } from "./orgMarket";
 
 /** @typedef {{ key: string, label: string, scope: string, method: string, hazardTokens: string[], categories?: string[] }} TradeRamsStarter */
 
@@ -224,6 +225,126 @@ export const TRADE_RAMS_STARTERS = {
   },
 };
 
+/**
+ * Polskie odpowiedniki starterów IBWR. Nakładka na TRADE_RAMS_STARTERS — zmienia nazwę,
+ * zakres i metodę, żeby dokument wychodzący na budowę był po polsku. Tokeny zagrożeń
+ * i kategorie zostają wspólne, bo dobierają wiersze z biblioteki.
+ */
+const PL_TRADE_RAMS_STARTERS = {
+  general: {
+    label: "Roboty ogólnobudowlane",
+    scope:
+      "Roboty ogólnobudowlane i utrzymaniowe — koordynacja BHP, zezwolenia na prace szczególnie niebezpieczne i odprawa przed rozpoczęciem zmiany.",
+    method:
+      "1. Odprawa przed rozpoczęciem prac i sprawdzenie zezwoleń.\n\n2. Wyznaczenie stref niebezpiecznych oraz rozdzielenie ruchu pieszych i maszyn.\n\n3. Sprawdzenie narzędzi, ŚOI oraz uprawnień i badań pracowników.\n\n4. Wykonanie robót pod nadzorem, z prawem wstrzymania pracy przy zagrożeniu.\n\n5. Kontrola końcowa, uporządkowanie stanowiska i zapis przekazania.",
+  },
+  electrical: {
+    label: "Instalacje elektryczne i sanitarne",
+    scope:
+      "Wyłączenia, pomiary i prace przy instalacjach elektrycznych — LOTO, sprawdzenie braku napięcia i powiązanie z zezwoleniem na pracę.",
+    method:
+      "1. Ustalenie zakresu wyłączenia i osób z uprawnieniami SEP.\n\n2. Wyłączenie, założenie LOTO i wywieszenie tablic ostrzegawczych.\n\n3. Sprawdzenie braku napięcia przyrządem sprawdzonym przed i po pomiarze.\n\n4. Kontrola prac gorących i zabezpieczenia przeciwpożarowego.\n\n5. Załączenie zasilania wyłącznie przez osobę, która je wyłączyła.",
+  },
+  refurb_build: {
+    label: "Remonty i wykończenia",
+    scope:
+      "Remonty i prace wykończeniowe w obiektach użytkowanych — pylenie, hałas, drogi dojścia, usterki i kontakt z użytkownikiem obiektu.",
+    method:
+      "1. Obchód obiektu i instruktaż przed wejściem na teren.\n\n2. Wygrodzenie strefy, ograniczenie pylenia i hałasu, wyznaczenie dróg chronionych.\n\n3. Prace ingerujące w instalacje wyłącznie po potwierdzeniu odłączenia.\n\n4. Bieżące zapisywanie usterek podczas kontroli postępu.\n\n5. Przekazanie z potwierdzeniem usunięcia usterek.",
+  },
+  groundworks: {
+    label: "Roboty ziemne i fundamentowe",
+    scope:
+      "Wykopy, roboty ziemne i rozbiórkowe — mapa uzbrojenia, zabezpieczenie ścian wykopu i roboty tymczasowe.",
+    method:
+      "1. Pozyskanie mapy uzbrojenia i uzgodnień gestorów przed rozpoczęciem.\n\n2. Trasowanie sieci, oznaczenie stref kolizji i wyznaczenie sygnalisty.\n\n3. Wykop etapami, z zabezpieczeniem ścian i balustradami przy krawędzi.\n\n4. Zapis odkrytych sieci i kontrola zabezpieczeń wykopu.\n\n5. Zasypanie, odtworzenie nawierzchni i zamknięcie zezwolenia.",
+  },
+  utilities: {
+    label: "Sieci: woda, gaz, energetyka, telekomunikacja",
+    scope:
+      "Budowa, naprawa i inwentaryzacja sieci — zezwolenie na roboty ziemne, odcięcia, próby szczelności i zajęcie pasa drogowego.",
+    method:
+      "1. Pozyskanie dokumentacji sieci i uzgodnienie punktów odcięcia.\n\n2. Lokalizacja i oznaczenie sieci przed naruszeniem gruntu.\n\n3. Wykonanie robót na podstawie zezwolenia, przez osoby z uprawnieniami.\n\n4. Próby i odbiory zgodnie z procedurą gestora sieci.\n\n5. Odtworzenie terenu i przekazanie dokumentacji odbiorowej.",
+  },
+  highways: {
+    label: "Roboty drogowe i zajęcie pasa",
+    scope:
+      "Roboty w pasie drogowym — tymczasowa organizacja ruchu, zajęcie pasa i praca przy czynnym ruchu.",
+    method:
+      "1. Zatwierdzony projekt tymczasowej organizacji ruchu i zgoda na zajęcie pasa.\n\n2. Ustawienie oznakowania, oświetlenia i zapór przed rozpoczęciem robót.\n\n3. Utrzymanie oznakowania przez cały czas robót, z kontrolą po ustawieniu i w trakcie zmiany.\n\n4. Koordynacja ruchu maszyn przez wyznaczonego sygnalistę.\n\n5. Zdjęcie oznakowania i przywrócenie przejezdności po uprzątnięciu odcinka.",
+  },
+  rail: {
+    label: "Roboty kolejowe i przytorowe",
+    scope:
+      "Prace w torze i przy torze — zamknięcie toru, dopuszczenie do pracy w obszarze kolejowym, sieć trakcyjna i osłona.",
+    method:
+      "1. Potwierdzenie zamknięcia toru lub regulaminu tymczasowego z zarządcą infrastruktury.\n\n2. Instruktaż o sieci trakcyjnej, skrajni i strefach niebezpiecznych.\n\n3. Roboty pod nadzorem kierującego pracami, z wyznaczonymi sygnalistami.\n\n4. Utrzymanie łączności z dyżurnym ruchu i sygnalizacji ostrzegawczej.\n\n5. Odbiór toru i przekazanie do ruchu przed otwarciem odcinka.",
+  },
+  demolition: {
+    label: "Rozbiórki i demontaże",
+    scope:
+      "Rozbiórki prowadzone w sposób kontrolowany — inwentaryzacja azbestu, odłączenie mediów i demontaż w ustalonej kolejności.",
+    method:
+      "1. Analiza projektu rozbiórki i inwentaryzacji materiałów niebezpiecznych.\n\n2. Odłączenie mediów i wygrodzenie strefy niebezpiecznej.\n\n3. Demontaż od góry, zgodnie z projektem rozbiórki.\n\n4. Ograniczenie pylenia i hałasu, segregacja odpadów według kodów.\n\n5. Kontrola końcowa i zabezpieczenie terenu po rozbiórce.",
+  },
+  interiors_fitout: {
+    label: "Prace wykończeniowe wnętrz",
+    scope:
+      "Zabudowy g-k, sufity, posadzki i instalacje w obiektach użytkowanych lub czynnych.",
+    method:
+      "1. Wygrodzenie strefy oraz ograniczenie pylenia i hałasu.\n\n2. Ustalenie kolejności robót ograniczającej kontakt z użytkownikiem obiektu.\n\n3. Potwierdzenie odłączenia instalacji przed pracami ingerującymi.\n\n4. Kontrola prac na wysokości i ręcznych prac transportowych.\n\n5. Usunięcie usterek, sprzątanie i przekazanie pomieszczeń.",
+  },
+  plant_operation: {
+    label: "Praca maszyn i sygnalista",
+    scope:
+      "Koparki, ładowarki, wozidła i walce na budowie — uprawnienia operatorów, strefy niebezpieczne i sygnalista.",
+    method:
+      "1. Codzienna kontrola maszyn i weryfikacja uprawnień operatorów.\n\n2. Wyznaczenie stref niebezpiecznych i dróg dla pieszych.\n\n3. Sygnalista przy cofaniu i ograniczonej widoczności.\n\n4. Zezwolenie na roboty ziemne przed pracą łyżką w gruncie.\n\n5. Zasady tankowania i zabezpieczenie przed wyciekiem na zapleczu.",
+  },
+  confined_space: {
+    label: "Przestrzenie zamknięte",
+    scope:
+      "Wejścia do studni, zbiorników, kanałów i komór — pomiary atmosfery, asekuracja i ratownictwo.",
+    method:
+      "1. Ocena ryzyka dla przestrzeni i pisemne zezwolenie na wejście.\n\n2. Odcięcie mediów, przewietrzenie i pomiar atmosfery.\n\n3. Asekurujący na zewnątrz oraz gotowy sprzęt ratowniczy.\n\n4. Pomiar ciągły przez cały czas przebywania w przestrzeni.\n\n5. Zamknięcie zezwolenia i zabezpieczenie otworu.",
+  },
+  energy: {
+    label: "Energetyka i OZE",
+    scope:
+      "Instalacje fotowoltaiczne, magazyny energii, farmy wiatrowe i stacje elektroenergetyczne — prace elektryczne i na wysokości.",
+    method:
+      "1. Wyłączenie i LOTO tam, gdzie jest wymagane.\n\n2. Limity wiatru i warunków pogodowych według wytycznych producenta.\n\n3. Plan pracy dźwigu dla modułów i elementów wielkogabarytowych.\n\n4. Strefy niebezpieczne i zabezpieczenie przed upadkiem przedmiotów.\n\n5. Uruchomienie, pomiary i dokumentacja odbiorowa.",
+  },
+  facade_roof: {
+    label: "Elewacje i dachy",
+    scope:
+      "Elewacje, okładziny, przeszklenia i pokrycia dachowe — pokrycia kruche i warunki atmosferyczne.",
+    method:
+      "1. Pierwszeństwo ochron zbiorowych: rusztowanie i podest przed drabiną.\n\n2. Ocena pokrycia dachu i pomosty nad materiałem kruchym.\n\n3. Kontrola prędkości wiatru i kryteria wstrzymania prac.\n\n4. Zabezpieczenie przed upadkiem przedmiotów i wygrodzenie terenu.\n\n5. Kontrola końcowa i sprawdzenie szczelności.",
+  },
+  healthcare_fm: {
+    label: "Obiekty służby zdrowia i utrzymanie ruchu",
+    scope:
+      "Prace w szpitalach, laboratoriach i obiektach czynnych — zapobieganie zakażeniom, pylenie i instalacje krytyczne.",
+    method:
+      "1. Ocena ryzyka zakażeń uzgodniona z użytkownikiem obiektu.\n\n2. Wygrodzenie strefy, podciśnienie i filtracja tam, gdzie wymagane.\n\n3. Schemat odcięcia gazów medycznych i zasilania krytycznego.\n\n4. Uzgodnione godziny prac i zasady kontaktu z pacjentami.\n\n5. Sprzątanie, dezynfekcja i protokolarne przekazanie strefy.",
+  },
+  timber_frame: {
+    label: "Konstrukcje drewniane i ciesielstwo",
+    scope:
+      "Montaż konstrukcji szkieletowych, prace ciesielskie, gwoździarki i cięcie materiałów pylących.",
+    method:
+      "1. Plan podnoszenia paneli i kolejność stężeń tymczasowych.\n\n2. Limity wiatru zgodnie z wytycznymi producenta.\n\n3. Instruktaż obsługi gwoździarek i praca w trybie sekwencyjnym.\n\n4. Ograniczenie pylenia przy cięciu — praca na mokro lub z odciągiem.\n\n5. Dostęp z rusztowania lub podestu przy pracach wykończeniowych.",
+  },
+  industrial_shutdown: {
+    label: "Postoje remontowe i prace dźwigowe",
+    scope:
+      "Postój remontowy zakładu, LOTO, przenośniki i prace dźwigowe w oknie serwisowym.",
+    method:
+      "1. Rejestr odcięć na czas postoju i przegląd prac jednoczesnych.\n\n2. LOTO na wszystkich źródłach energii.\n\n3. Plan pracy dźwigu przy demontażu maszyn.\n\n4. Zezwolenia na przestrzenie zamknięte i prace pożarowo niebezpieczne.\n\n5. Uruchomienie wyłącznie w ustalonej procedurze przez osobę upoważnioną.",
+  },
+};
+
 export const SURVEY_RAMS_STARTER_KEYS = new Set([
   "utility_mapping_survey",
   "site_investigation_campaign",
@@ -241,17 +362,32 @@ export function isValidTradeRamsStarterKey(key) {
 }
 
 /** @param {unknown} key @returns {TradeRamsStarter | null} */
-export function findTradeStarterByKey(key) {
+/**
+ * Starter for the workspace's market — Polish workspaces get the Polish wording, because the
+ * scope and method text is copied straight into the issued document.
+ * @param {unknown} key
+ * @param {import("../config/markets").MarketId} [marketId]
+ */
+export function findTradeStarterByKey(key, marketId = getOrgMarketId()) {
   if (!isValidTradeRamsStarterKey(key)) return null;
-  return TRADE_RAMS_STARTERS[key];
+  const base = TRADE_RAMS_STARTERS[key];
+  if (marketId !== "pl") return base;
+  const pl = PL_TRADE_RAMS_STARTERS[key];
+  return pl ? { ...base, ...pl } : base;
 }
 
 /** @param {unknown} key */
-export function getRamsStarterLabel(key) {
+export function getRamsStarterLabel(key, marketId = getOrgMarketId()) {
+  if (marketId === "pl") {
+    if (key === "geospatial_intelligence") return "Geodezja i pomiary";
+    if (key === "site_investigation_campaign") return "Badania podłoża i geotechnika";
+    if (isSurveyRamsStarterKey(key)) return "Inwentaryzacja uzbrojenia terenu";
+    return findTradeStarterByKey(key, marketId)?.label || "Roboty ogólnobudowlane";
+  }
   if (key === "geospatial_intelligence") return "Geospatial & surveying";
   if (key === "site_investigation_campaign") return "Site investigation & geotechnics";
   if (isSurveyRamsStarterKey(key)) return "PAS128 utility mapping survey";
-  const starter = findTradeStarterByKey(key);
+  const starter = findTradeStarterByKey(key, marketId);
   return starter?.label || "General construction";
 }
 

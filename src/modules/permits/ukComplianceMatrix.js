@@ -141,10 +141,18 @@ export const UK_COMPLIANCE_MATRIX = {
   },
 };
 
-export function getComplianceProfile(permitType) {
+export function getComplianceProfile(permitType, marketId = getOrgMarketId()) {
+  if (marketId !== "uk") return { legalRequiredChecklistIds: [], requiredEvidenceFields: [] };
   return UK_COMPLIANCE_MATRIX[permitType] || { legalRequiredChecklistIds: [], requiredEvidenceFields: [] };
 }
 
-export function getTypeComplianceMeta(permitType) {
+export function getTypeComplianceMeta(permitType, marketId = getOrgMarketId()) {
+  if (marketId !== "uk") {
+    return {
+      hseUrl: "",
+      rationale: "Confirm the permit controls against the selected country's rules, the task risk assessment and site procedures.",
+    };
+  }
   return UK_TYPE_COMPLIANCE_META[permitType] || UK_TYPE_COMPLIANCE_META.general;
 }
+import { getOrgMarketId } from "../../utils/orgMarket";

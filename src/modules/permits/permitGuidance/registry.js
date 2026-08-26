@@ -26,6 +26,7 @@ import {
   renderConfinedPrintHtml,
   CONFINED_EXTRA_FIELD_KEYS,
 } from "./confinedSpaceGuidance";
+import { getOrgMarketId } from "../../../utils/orgMarket";
 
 /** @typedef {{ Panel: import('react').ComponentType<any>, renderPrintHtml: Function, assess?: Function, extraFieldKeys?: string[], wizardHint?: string, theme?: { border: string, bg: string, color: string } }} PermitGuidanceEntry */
 
@@ -87,18 +88,19 @@ const REGISTRY = {
   },
 };
 
-export function getPermitGuidance(type) {
+export function getPermitGuidance(type, marketId = getOrgMarketId()) {
+  if (marketId !== "uk") return null;
   const key = String(type || "").trim();
   return REGISTRY[key] || null;
 }
 
-export function hasPermitGuidance(type) {
-  return Boolean(getPermitGuidance(type));
+export function hasPermitGuidance(type, marketId = getOrgMarketId()) {
+  return Boolean(getPermitGuidance(type, marketId));
 }
 
 /** Unified print section for all guidance-enabled permit types. */
 export function renderGuidancePrintHtml(permit, options = {}) {
-  const entry = getPermitGuidance(permit?.type);
+  const entry = getPermitGuidance(permit?.type, options.marketId);
   if (!entry?.renderPrintHtml) return "";
   return entry.renderPrintHtml(permit, options);
 }

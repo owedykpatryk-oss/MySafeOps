@@ -14,12 +14,14 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const KEY = "dynamic_risk_assessments";
 const genId = () => `dra_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
 const ss = ms;
 
 function Form({ item, projects, ramsDocs, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -44,7 +46,7 @@ function Form({ item, projects, ramsDocs, onSave, onClose }) {
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit dynamic RA" : "Dynamic risk assessment (field)"}</h2>
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Record new hazards found on site that were not in the pre-written RAMS.</p>
-        <label style={ss.lbl} htmlFor="dynamic-risk-assessment-project-id">Project</label>
+        <label style={ss.lbl} htmlFor="dynamic-risk-assessment-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="dynamic-risk-assessment-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -84,6 +86,7 @@ function Form({ item, projects, ramsDocs, onSave, onClose }) {
 }
 
 export default function DynamicRiskAssessmentRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load(KEY, []));
   const [projects] = useState(() => load("mysafeops_projects", []));
@@ -160,7 +163,7 @@ export default function DynamicRiskAssessmentRegister() {
                           }
                         }}
                       >
-                        Delete
+                        {t("delete")}
                       </button>
                     ) : null}
                   </div>

@@ -1,6 +1,9 @@
 import { getBillingEntitlements } from "../utils/orgMembership";
 import { AU_PLAN_PRICE_LABELS } from "../config/auPricing";
 import { PL_PLAN_PRICE_LABELS } from "../config/plPricing";
+import { DE_PLAN_PRICE_LABELS } from "../config/dePricing";
+import { AT_PLAN_PRICE_LABELS } from "../config/atPricing";
+import { CH_PLAN_PRICE_LABELS } from "../config/chPricing";
 
 /** Effectively unlimited limits for the platform owner login — client UX after `user_is_platform_owner` RPC. */
 export const PLATFORM_OWNER_PLAN = {
@@ -36,12 +39,20 @@ const PRICE_ADJUSTMENT_SHORT_PL =
 const PRICE_ADJUSTMENT_DETAIL_PL =
   "Przeglądamy opublikowane ceny katalogowe raz w roku. Podwyżka jest ograniczona do 10% i obowiązuje od kolejnego odnowienia po co najmniej 30 dniach powiadomienia e-mailem — nigdy w trakcie bieżącego okresu. Enterprise Plus ustalane jest osobno na piśmie.";
 
+const PRICE_ADJUSTMENT_SHORT_DE =
+  "Die veröffentlichten Listenpreise werden einmal jährlich geprüft (bis zu 10 % bei Verlängerung, mit mindestens 30 Tagen Vorlauf). Die laufende Abrechnungsperiode wird nie während der Laufzeit neu bepreist.";
+
+const PRICE_ADJUSTMENT_DETAIL_DE =
+  "Wir prüfen die veröffentlichten Listenpreise einmal jährlich. Eine Erhöhung ist auf 10 % begrenzt und gilt ab der nächsten Verlängerung nach mindestens 30 Tagen E-Mail-Vorankündigung — nie mitten in der laufenden Periode. Enterprise Plus wird gesondert schriftlich vereinbart.";
+
 /**
  * @param {import("../config/markets").MarketId | string} [marketId]
  * @returns {string}
  */
 export function getPriceAdjustmentShort(marketId = "uk") {
-  return marketId === "pl" ? PRICE_ADJUSTMENT_SHORT_PL : PRICE_ADJUSTMENT_SHORT;
+  if (marketId === "pl") return PRICE_ADJUSTMENT_SHORT_PL;
+  if (marketId === "de" || marketId === "at" || marketId === "ch") return PRICE_ADJUSTMENT_SHORT_DE;
+  return PRICE_ADJUSTMENT_SHORT;
 }
 
 /**
@@ -49,7 +60,9 @@ export function getPriceAdjustmentShort(marketId = "uk") {
  * @returns {string}
  */
 export function getPriceAdjustmentDetail(marketId = "uk") {
-  return marketId === "pl" ? PRICE_ADJUSTMENT_DETAIL_PL : PRICE_ADJUSTMENT_DETAIL;
+  if (marketId === "pl") return PRICE_ADJUSTMENT_DETAIL_PL;
+  if (marketId === "de" || marketId === "at" || marketId === "ch") return PRICE_ADJUSTMENT_DETAIL_DE;
+  return PRICE_ADJUSTMENT_DETAIL;
 }
 
 /** Row order for the in-app comparison table (includes non-Stripe tiers). */
@@ -98,7 +111,7 @@ export const BILLING_PLANS = {
   team: {
     id: "team",
     name: "Team",
-    priceLabel: "£99",
+    priceLabel: "£109",
     interval: "month",
     limits: {
       workers: 20,
@@ -116,7 +129,7 @@ export const BILLING_PLANS = {
   business: {
     id: "business",
     name: "Business",
-    priceLabel: "£249",
+    priceLabel: "£319",
     interval: "month",
     limits: {
       workers: 75,
@@ -135,7 +148,7 @@ export const BILLING_PLANS = {
   enterprise: {
     id: "enterprise",
     name: "Enterprise",
-    priceLabel: "£499",
+    priceLabel: "£649",
     interval: "month",
     limits: {
       workers: 200,
@@ -284,6 +297,9 @@ export function formatStorageLimit(bytes) {
 export function getPlanDisplayPriceLabel(planId, marketId = "uk") {
   if (marketId === "au" && AU_PLAN_PRICE_LABELS[planId]) return AU_PLAN_PRICE_LABELS[planId];
   if (marketId === "pl" && PL_PLAN_PRICE_LABELS[planId]) return PL_PLAN_PRICE_LABELS[planId];
+  if (marketId === "de" && DE_PLAN_PRICE_LABELS[planId]) return DE_PLAN_PRICE_LABELS[planId];
+  if (marketId === "at" && AT_PLAN_PRICE_LABELS[planId]) return AT_PLAN_PRICE_LABELS[planId];
+  if (marketId === "ch" && CH_PLAN_PRICE_LABELS[planId]) return CH_PLAN_PRICE_LABELS[planId];
   const plan = planId === "trial" ? TRIAL_PLAN : BILLING_PLANS[planId];
   return plan?.priceLabel ?? "—";
 }

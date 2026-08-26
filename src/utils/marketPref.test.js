@@ -6,12 +6,16 @@ describe("marketPref", () => {
     expect(getMarketIdFromSearchParams("?market=au")).toBe("au");
     expect(getMarketIdFromSearchParams("?market=uk")).toBe("uk");
     expect(getMarketIdFromSearchParams("?market=pl")).toBe("pl");
+    expect(getMarketIdFromSearchParams("?market=de")).toBe("de");
+    expect(getMarketIdFromSearchParams("?market=at")).toBe("at");
     expect(getMarketIdFromSearchParams("?email=a@b.com")).toBeNull();
   });
 
   it("prefers URL over default", () => {
     expect(resolvePreferredMarketId("?market=au")).toBe("au");
     expect(resolvePreferredMarketId("?market=pl")).toBe("pl");
+    expect(resolvePreferredMarketId("?market=de")).toBe("de");
+    expect(resolvePreferredMarketId("?market=at")).toBe("at");
     expect(resolvePreferredMarketId("")).toBe("uk");
   });
 });

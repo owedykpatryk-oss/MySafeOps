@@ -41,6 +41,7 @@ import { sanitizeMsDocForOrg } from "../utils/fessExclusive";
 import { getOrgId } from "../utils/orgStorage";
 
 import { todayLocalISO } from "../utils/localDate";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = todayLocalISO;
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString(getActiveDocumentLocale(), { day:"2-digit", month:"short", year:"numeric" }); };
@@ -193,6 +194,7 @@ function StepEditor({ steps, setSteps }) {
 }
 
 function MSForm({ ms, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const workers = load("mysafeops_workers", []);
   const projects = load("mysafeops_projects", []);
 
@@ -291,7 +293,7 @@ function MSForm({ ms, onSave, onClose }) {
                 <input value={form.location} onChange={e=>set("location",e.target.value)} placeholder="Site address" style={ss.inp}  id="method-statement-location" />
               </div>
               <div>
-                <label style={ss.lbl}>Project</label>
+                <label style={ss.lbl}>{t("project")}</label>
                 <select
                   value={form.projectId}
                   onChange={(e) => {
@@ -564,7 +566,7 @@ function MSForm({ ms, onSave, onClose }) {
         )}
 
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"space-between", marginTop:20, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
-          <button onClick={onClose} style={ss.btn}>Cancel</button>
+          <button onClick={onClose} style={ss.btn}>{t("cancel")}</button>
           <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
             {activeTab!=="info" && <button onClick={()=>setActiveTab(tabs[tabs.findIndex(t=>t[0]===activeTab)-1][0])} style={ss.btn}>← Back</button>}
             {activeTab!=="preview" ? (
@@ -758,6 +760,7 @@ function printMS(form, workers, _projects) {
 }
 
 export default function MethodStatement() {
+  const { t } = useWorkspaceT();
   const [docs, setDocs] = useState(()=>load("method_statements",[]));
   const { d1Hydrating: d1MsH, d1OutboxPending: d1MsO } = useD1OrgArraySync({
     storageKey: "method_statements",
@@ -938,7 +941,7 @@ export default function MethodStatement() {
                 </div>
                 <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0 }}>
                   <button onClick={()=>printMS(doc,workers,projects)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print</button>
-                  <button onClick={()=>setModal({type:"form",data:doc})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
+                  <button onClick={()=>setModal({type:"form",data:doc})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>{t("edit")}</button>
                   <button onClick={()=>deleteDoc(doc.id)} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
                 </div>
               </div>

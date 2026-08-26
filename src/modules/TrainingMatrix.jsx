@@ -24,6 +24,7 @@ import PeopleNextSteps from "../components/PeopleNextSteps";
 import { openWorkspaceView } from "../utils/workspaceNavContext";
 import { getOrgId } from "../utils/orgStorage";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { useToast } from "../context/ToastContext";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { syncAllTrainingToWorkers, syncTrainingRecordToWorkers } from "../utils/trainingWorkerCertSync";
@@ -41,6 +42,7 @@ function daysUntil(iso) {
 }
 
 function Form({ item, workers, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -86,7 +88,7 @@ function Form({ item, workers, onSave, onClose }) {
             <input type="date" style={ss.inp} value={form.expiryDate || ""} onChange={(e) => set("expiryDate", e.target.value)}  id="training-expiry-date" />
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="training-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="training-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="training-notes" />
         {form.workerId && form.expiryDate ? (
           <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 12, fontSize: 13 }}>
@@ -101,7 +103,7 @@ function Form({ item, workers, onSave, onClose }) {
         ) : null}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button
             type="button"
@@ -113,7 +115,7 @@ function Form({ item, workers, onSave, onClose }) {
               onSave(payload, { syncToPeople });
             }}
           >
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -122,6 +124,7 @@ function Form({ item, workers, onSave, onClose }) {
 }
 
 export default function TrainingMatrix() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const { pushToast } = useToast();
   const marketId = getOrgMarketId();
@@ -312,12 +315,12 @@ export default function TrainingMatrix() {
                   Print forms pack
                 </button>
                 <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                  Export CSV
+                  {t("exportCsv")}
                 </button>
               </>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add record
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -344,7 +347,7 @@ export default function TrainingMatrix() {
           icon="🎓"
           title="No training records yet"
           description="Add competence and refresher dates per worker. Add workers under the Workers tab first."
-          actionLabel="+ Add record"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -372,7 +375,7 @@ export default function TrainingMatrix() {
                     ) : null}
                     <RegisterFormPrintButton moduleId="training" record={r} />
                     <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                      Edit
+                      {t("edit")}
                     </button>
                     {caps.deleteRecords && (
                       <button
@@ -394,7 +397,7 @@ export default function TrainingMatrix() {
                           }
                         }}
                       >
-                        Delete
+                        {t("delete")}
                       </button>
                     )}
                   </div>

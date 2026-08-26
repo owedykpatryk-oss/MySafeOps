@@ -29,6 +29,20 @@ const JUMP_HREFS = {
     { href: "#pricing", label: "Cennik" },
     { href: "#faq", label: "FAQ" },
   ],
+  de: [
+    { href: "#workflow", label: "Ablauf" },
+    { href: "#product", label: "Produkt" },
+    { href: "#features", label: "Funktionen" },
+    { href: "#pricing", label: "Preise" },
+    { href: "#faq", label: "FAQ" },
+  ],
+  at: [
+    { href: "#workflow", label: "Ablauf" },
+    { href: "#product", label: "Produkt" },
+    { href: "#features", label: "Funktionen" },
+    { href: "#pricing", label: "Preise" },
+    { href: "#faq", label: "FAQ" },
+  ],
 };
 
 /** @type {Record<MarketId, { primary: string; secondary: string; scrollTop: string; jumpNav: string }>} */
@@ -50,6 +64,18 @@ const CHROME_COPY = {
     secondary: "Cennik",
     scrollTop: "Do góry",
     jumpNav: "Skocz do sekcji",
+  },
+  de: {
+    primary: "Evaluation starten →",
+    secondary: "Preise",
+    scrollTop: "Nach oben",
+    jumpNav: "Zur Sektion springen",
+  },
+  at: {
+    primary: "Evaluation starten →",
+    secondary: "Preise",
+    scrollTop: "Nach oben",
+    jumpNav: "Zur Sektion springen",
   },
 };
 

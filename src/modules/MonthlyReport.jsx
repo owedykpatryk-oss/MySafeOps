@@ -6,10 +6,13 @@ import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getMarketComplianceCopy } from "../utils/marketComplianceCopy";
 
 function printMonthlyReport(monthLabel) {
   void (async () => {
   const org = getOrgSettings();
+  const complianceCopy = getMarketComplianceCopy(getOrgMarketId());
   const workers = load("mysafeops_workers", []);
   const projects = load("mysafeops_projects", []);
   const permits = load("permits_v2", []);
@@ -53,7 +56,7 @@ function printMonthlyReport(monthLabel) {
     <tr><td style="border:1px solid #e2e8f0;padding:8px">Expired certificates (action required)</td><td style="border:1px solid #e2e8f0;padding:8px">${expiredCerts.length}</td></tr>
   </table>
   <div class="print-section-title">Notes</div>
-  <p style="font-size:12px;line-height:1.6">This report is generated locally from MySafeOps data. It does not replace legal reporting (e.g. RIDDOR to HSE).</p>`;
+  <p style="font-size:12px;line-height:1.6">This report is generated locally from MySafeOps data. ${complianceCopy.statutoryReportingNote}</p>`;
 
   await writePrintWindowDocument(
     win,

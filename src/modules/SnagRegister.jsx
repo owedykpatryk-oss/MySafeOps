@@ -15,6 +15,7 @@ import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { ensureProjectLinked } from "../utils/projectRequiredGate";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `snag_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -173,6 +174,7 @@ function PhotoCapture({ photos, onChange }) {
 }
 
 function SnagForm({ snag, workers, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const blank = {
     id: genId(),
     title: "",
@@ -234,7 +236,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
             <input value={form.ref} onChange={(e) => set("ref", e.target.value)} placeholder="SN-001" style={ss.inp}  id="snag-ref" />
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="snag-project-id">Project *</label>
+            <label style={ss.lbl} htmlFor="snag-project-id">{t("project")} *</label>
             <select value={form.projectId} onChange={(e) => set("projectId", e.target.value)} style={ss.inp} id="snag-project-id">
               <option value="">— Select project —</option>
               {projects.map((p) => (
@@ -307,7 +309,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
           }}
         >
           <div>
-            <label style={ss.lbl} htmlFor="snag-location">Location on site</label>
+            <label style={ss.lbl} htmlFor="snag-location">{t("location")}</label>
             <input
               value={form.location}
               onChange={(e) => set("location", e.target.value)}
@@ -348,14 +350,14 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
           <button onClick={onClose} style={ss.btn}>
-            Cancel
+            {t("cancel")}
           </button>
           <button
             disabled={!form.title.trim() || !form.projectId}
             onClick={() => onSave(form)}
             style={{ ...ss.btnP, opacity: form.title.trim() && form.projectId ? 1 : 0.4 }}
           >
-            {snag ? "Save changes" : "Add snag"}
+            {t("save")}
           </button>
         </div>
       </div>
@@ -364,6 +366,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
 }
 
 function SnagCard({ snag, workers, onEdit, onDelete, onStatusChange, bulkMode, selected, onToggleSelect, canDelete }) {
+  const { t } = useWorkspaceT();
   const workerMap = Object.fromEntries(workers.map((w) => [w.id, w.name]));
   const overdue = snag.dueDate && snag.status === "open" && new Date(snag.dueDate) < new Date();
 
@@ -491,14 +494,14 @@ function SnagCard({ snag, workers, onEdit, onDelete, onStatusChange, bulkMode, s
           </select>
           <RegisterFormPrintButton moduleId="snags" record={snag} />
           <button type="button" onClick={() => onEdit(snag)} style={{ ...ss.btn, padding: "4px 10px", fontSize: 12 }}>
-            Edit
+            {t("edit")}
           </button>
           {canDelete !== false && (
             <button
               onClick={() => onDelete(snag.id)}
               style={{ ...ss.btn, padding: "4px 10px", fontSize: 12, color: "#A32D2D", borderColor: "#F09595" }}
             >
-              Delete
+              {t("delete")}
             </button>
           )}
         </div>
@@ -508,6 +511,7 @@ function SnagCard({ snag, workers, onEdit, onDelete, onStatusChange, bulkMode, s
 }
 
 export default function SnagRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [snags, setSnags] = useState(() => load("snags", []));
   const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
@@ -544,15 +548,15 @@ export default function SnagRegister() {
   const d1OutboxPending = d1SnagsO || d1WpO;
 
   useEffect(() => {
-    const t = consumeWorkspaceNavTarget();
-    if (t?.viewId !== "snags") return;
-    if (t.projectId) setFilterProject(t.projectId);
-    if (t.snagId) {
-      const snag = load("snags", []).find((s) => s.id === t.snagId);
+    const navTarget = consumeWorkspaceNavTarget();
+    if (navTarget?.viewId !== "snags") return;
+    if (navTarget.projectId) setFilterProject(navTarget.projectId);
+    if (navTarget.snagId) {
+      const snag = load("snags", []).find((s) => s.id === navTarget.snagId);
       if (snag) setModal({ type: "form", data: snag });
       return;
     }
-    if (t.action === "create") {
+    if (navTarget.action === "create") {
       setModal({
         type: "form",
         data: {
@@ -562,7 +566,7 @@ export default function SnagRegister() {
           category: "Electrical",
           priority: "medium",
           status: "open",
-          projectId: t.projectId || "",
+          projectId: navTarget.projectId || "",
           location: "",
           assignedTo: "",
           dueDate: "",
@@ -810,11 +814,11 @@ export default function SnagRegister() {
             )}
             {snags.length > 0 && (
               <button type="button" onClick={exportCSV} style={ss.btn}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>
-              + Add snag
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -913,7 +917,7 @@ export default function SnagRegister() {
               </select>
               {hasFilters ? (
                 <button type="button" onClick={clearFilters} style={{ ...ss.btn, fontSize: 12 }}>
-                  Clear filters
+                  {t("clearFilters")}
                 </button>
               ) : null}
             </div>
@@ -932,7 +936,7 @@ export default function SnagRegister() {
             icon="🔧"
             title="No snag items recorded yet"
             description="Raise defects and snags so site teams can track close-out."
-            actionLabel="+ Add first snag"
+            actionLabel={t("addRecord")}
             onAction={() => setModal({ type: "form" })}
             variant="dashed"
           />
@@ -941,7 +945,7 @@ export default function SnagRegister() {
             icon="🔍"
             title="No items match your filters"
             description="Clear status, priority or search filters to see the full snag list."
-            actionLabel="Clear filters"
+            actionLabel={t("clearFilters")}
             onAction={clearFilters}
             variant="dashed"
             compact

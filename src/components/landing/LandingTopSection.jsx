@@ -14,11 +14,23 @@ export default function LandingTopSection({ navScrolled, market, copy }) {
   const hero = market.id === "pl"
     ? {
         title: "Operacje BHP dla ekip, które pracują w terenie.",
-        lead: "Twórz IOR, kontroluj pozwolenia i utrzymuj dowody gotowe do audytu — w jednym środowisku dla biura i budowy.",
+        lead: "Twórz IBWR, kontroluj pozwolenia i utrzymuj dowody gotowe do audytu — w jednym środowisku dla biura i budowy.",
         secondary: "Zobacz produkt",
         proof: ["Działa offline", "Kontrola dostępu", "Eksporty PDF"],
         screen: "Prawdziwy widok aplikacji · Management Overview",
+        eval: "14 dni pełnej ewaluacji.",
+        evalRest: "Karta nie jest potrzebna, żeby zobaczyć workspace.",
       }
+    : (market.id === "de" || market.id === "at" || market.id === "ch")
+      ? {
+          title: "Arbeitsschutz für Teams, die auf der Baustelle arbeiten.",
+          lead: "GBU erstellen, Erlaubnisscheine steuern und Nachweise auditfähig halten — ein Arbeitsbereich für Büro und Baustelle.",
+          secondary: "Produkt ansehen",
+          proof: ["Offline-fähig", "Rollenbasierter Zugang", "Auditfähige PDFs"],
+          screen: "Echte App-Ansicht · Management Overview",
+          eval: "14 Tage volle Evaluation.",
+          evalRest: "Keine Karte nötig, um den Arbeitsbereich zu erkunden.",
+        }
     : market.id === "au"
       ? {
           title: "Safety operations for Australian site teams.",
@@ -26,6 +38,8 @@ export default function LandingTopSection({ navScrolled, market, copy }) {
           secondary: "See the product",
           proof: ["Offline capable", "Role-based access", "Audit-ready PDFs"],
           screen: "Real product view · Management Overview",
+          eval: "14-day full evaluation.",
+          evalRest: "No card required to explore the workspace.",
         }
       : {
           title: "Safety operations for UK site teams.",
@@ -33,6 +47,8 @@ export default function LandingTopSection({ navScrolled, market, copy }) {
           secondary: "See the product",
           proof: ["Offline capable", "Role-based access", "Audit-ready PDFs"],
           screen: "Real product view · Management Overview",
+          eval: "14-day full evaluation.",
+          evalRest: "No card required to explore the workspace.",
         };
 
   useEffect(() => {
@@ -200,7 +216,7 @@ export default function LandingTopSection({ navScrolled, market, copy }) {
                   <span key={hero.proof[index]}><Icon size={15} />{hero.proof[index]}</span>
                 ))}
               </div>
-              <div className="landing-v2-evaluation"><CheckCircle2 size={16} /><span><strong>14-day full evaluation.</strong> No card required to explore the workspace.</span></div>
+              <div className="landing-v2-evaluation"><CheckCircle2 size={16} /><span><strong>{hero.eval}</strong> {hero.evalRest}</span></div>
             </div>
             <div className="pw landing-v2-hero-product fu vi">
               <div className="landing-v2-browser">

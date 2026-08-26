@@ -14,6 +14,7 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { exportCsv } from "../utils/exportCsv";
 
 const KEY = "gmp_deviation_log";
@@ -21,6 +22,7 @@ const genId = () => `gmp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -47,7 +49,7 @@ function Form({ item, projects, onSave, onClose }) {
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit GMP deviation" : "GMP deviation"}</h2>
         <label style={ss.lbl} htmlFor="gmp-deviation-site-label">Site / area</label>
         <input style={ss.inp} value={form.siteLabel} onChange={(e) => set("siteLabel", e.target.value)}  id="gmp-deviation-site-label" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gmp-deviation-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gmp-deviation-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="gmp-deviation-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -63,7 +65,7 @@ function Form({ item, projects, onSave, onClose }) {
           <option value="planned">Planned (documented)</option>
           <option value="unplanned">Unplanned</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gmp-deviation-description">Description</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gmp-deviation-description">{t("description")}</label>
         <textarea style={{ ...ss.inp, minHeight: 72 }} value={form.description} onChange={(e) => set("description", e.target.value)}  id="gmp-deviation-description" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="gmp-deviation-immediate-action">Immediate action taken</label>
         <textarea style={{ ...ss.inp, minHeight: 52 }} value={form.immediateAction} onChange={(e) => set("immediateAction", e.target.value)}  id="gmp-deviation-immediate-action" />
@@ -88,10 +90,10 @@ function Form({ item, projects, onSave, onClose }) {
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -100,6 +102,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function GMPDeviationLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load(KEY, []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -159,11 +162,11 @@ export default function GMPDeviationLog() {
           <div style={{ display: "flex", gap: 8 }}>
             {liveItems.length > 0 && (
               <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add deviation
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -180,7 +183,7 @@ export default function GMPDeviationLog() {
           icon="📋"
           title="No deviations logged yet"
           description="Log GMP deviations for QA traceability — export to CSV for document control."
-          actionLabel="+ Add deviation"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -192,7 +195,7 @@ export default function GMPDeviationLog() {
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>{(r.description || "").slice(0, 120)}{(r.description || "").length > 120 ? "…" : ""}</div>
               <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
                 <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                  Edit
+                  {t("edit")}
                 </button>
                 {caps.deleteRecords && (
                   <button
@@ -213,7 +216,7 @@ export default function GMPDeviationLog() {
                       }
                     }}
                   >
-                    Delete
+                    {t("delete")}
                   </button>
                 )}
               </div>

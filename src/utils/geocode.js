@@ -16,6 +16,9 @@ const MARKET_COUNTRY_CODES = {
   uk: "gb",
   au: "au",
   pl: "pl",
+  de: "de",
+  at: "at",
+  ch: "ch",
 };
 
 /** @type {Record<string, string>} */
@@ -23,6 +26,9 @@ const MARKET_COUNTRY_LABELS = {
   uk: "United Kingdom",
   au: "Australia",
   pl: "Poland",
+  de: "Germany",
+  at: "Austria",
+  ch: "Switzerland",
 };
 
 function marketCountryCode(marketId) {

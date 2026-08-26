@@ -17,6 +17,9 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getMarketComplianceCopy } from "../utils/marketComplianceCopy";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `fa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -24,13 +27,15 @@ const today = todayLocalISO;
 
 const ss = ms;
 
-function Form({ item, onSave, onClose }) {
+function Form({ item, marketId, onSave, onClose }) {
+  const { t } = useWorkspaceT();
+  const complianceCopy = getMarketComplianceCopy(marketId);
   const [form, setForm] = useState(
     () =>
       item || {
         id: genId(),
         name: "",
-        qualification: "FAW / EFAW",
+        qualification: "",
         certExpiry: "",
         phone: "",
         kitLocation: "",
@@ -44,28 +49,28 @@ function Form({ item, onSave, onClose }) {
     <ModuleOverlay onClose={onClose}>
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 500 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit first aider" : "First aider / kit"}</h2>
-        <label style={ss.lbl} htmlFor="first-aid-name">Name</label>
+        <label style={ss.lbl} htmlFor="first-aid-name">{t("name")}</label>
         <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)}  id="first-aid-name" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="first-aid-qualification">Qualification</label>
-        <input style={ss.inp} value={form.qualification} onChange={(e) => set("qualification", e.target.value)}  id="first-aid-qualification" />
+        <input style={ss.inp} value={form.qualification} onChange={(e) => set("qualification", e.target.value)} placeholder={complianceCopy.firstAidQualificationHint} id="first-aid-qualification" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="first-aid-cert-expiry">Certificate expiry</label>
         <input type="date" style={ss.inp} value={form.certExpiry || ""} onChange={(e) => set("certExpiry", e.target.value)}  id="first-aid-cert-expiry" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="first-aid-phone">Contact</label>
         <input style={ss.inp} inputMode="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)}  id="first-aid-phone" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="first-aid-kit-location">First aid kit location (if this row is for a kit)</label>
         <input style={ss.inp} value={form.kitLocation} onChange={(e) => set("kitLocation", e.target.value)} placeholder="Leave blank if person only"  id="first-aid-kit-location" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="first-aid-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="first-aid-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="first-aid-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const check = validateRequiredFields(form, ["name"], { name: "Name" });
             if (!check.ok) { window.alert(check.message); return; }
             onSave(form);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -74,7 +79,10 @@ function Form({ item, onSave, onClose }) {
 }
 
 export default function FirstAidRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
+  const marketId = getOrgMarketId();
+  const complianceCopy = getMarketComplianceCopy(marketId);
   const [items, setItems] = useState(() => load("first_aid_register", []));
   const [modal, setModal] = useState(null);
   const listPg = useRegisterListPaging(50);
@@ -111,19 +119,19 @@ export default function FirstAidRegister() {
 
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
-      {modal?.type === "form" && <Form item={modal.data} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
+      {modal?.type === "form" && <Form item={modal.data} marketId={marketId} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
             <PageHero exportModuleId="first-aid"
         badgeText="FA"
         title="First aid"
-        lead="Trained personnel and kit locations (HSE-style site cover)."
+        lead={complianceCopy.firstAidLead}
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -141,7 +149,7 @@ export default function FirstAidRegister() {
           icon="🩹"
           title="No first aiders listed yet"
           description="Record trained first aiders and kit locations for site cover."
-          actionLabel="+ Add"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -159,7 +167,7 @@ export default function FirstAidRegister() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="first-aid" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -181,7 +189,7 @@ export default function FirstAidRegister() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

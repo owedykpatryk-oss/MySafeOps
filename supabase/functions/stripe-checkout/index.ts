@@ -38,6 +38,9 @@ Deno.serve(async (req) => {
         uk: stripeMarketReady("live", "uk"),
         au: stripeMarketReady("live", "au"),
         pl: stripeMarketReady("live", "pl"),
+        de: stripeMarketReady("live", "de"),
+        at: stripeMarketReady("live", "at"),
+        ch: stripeMarketReady("live", "ch"),
       },
       configured: {
         stripeSecretKey: hasLiveStripeConfig(),
@@ -60,7 +63,7 @@ Deno.serve(async (req) => {
       requestId,
     };
     const liveReady = hasLiveStripeConfig() && Object.values(diagnostics.marketBilling).some(Boolean);
-    const testReady = hasTestStripeConfig() && (["uk", "pl", "au"] as const).some((market) => stripeMarketReady("test", market));
+    const testReady = hasTestStripeConfig() && (["uk", "pl", "au", "de", "at", "ch"] as const).some((market) => stripeMarketReady("test", market));
     const allValid = Object.values(diagnostics.valid).every(Boolean);
     const admin = await getBillingAdminUser(req, supabaseUrl, serviceKey);
     if (!admin) {
@@ -190,7 +193,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const market = workspace.market_id as "uk" | "pl" | "au";
+    const market = workspace.market_id as "uk" | "pl" | "au" | "de" | "at" | "ch";
     const stripeMode = testMode ? "test" : "live";
     const stripeConfig = resolveStripeConfig(stripeMode, market);
     if (!stripeConfig) {
@@ -242,7 +245,8 @@ Deno.serve(async (req) => {
     const orgId = org.id;
     const stripe = new Stripe(stripeConfig.secretKey, { apiVersion: "2023-10-16" });
     const customerColumn = testMode ? "stripe_test_customer_id" : "stripe_customer_id";
-    const currency = market === "pl" ? "PLN" : market === "au" ? "AUD" : "GBP";
+    const currency =
+      market === "pl" ? "PLN" : market === "au" ? "AUD" : market === "de" || market === "at" ? "EUR" : market === "ch" ? "CHF" : "GBP";
 
     // Stripe locks a customer to the currency of its first subscription, so every country
     // workspace bills its own customer. Only the primary workspace inherits the existing
@@ -322,6 +326,9 @@ Deno.serve(async (req) => {
             automatic_tax: { enabled: true },
             billing_address_collection: "required",
             customer_update: { address: "auto" },
+            // EU/UK B2B reverse charge: without the customer's VAT ID, Stripe Tax
+            // cannot zero-rate cross-border business sales (e.g. UK seller -> DE customer).
+            tax_id_collection: { enabled: true },
           }
         : {}),
     });

@@ -37,6 +37,11 @@ export default function LegalPage({ docKey, marketId = "uk" }) {
       pageTitle: `Accessibility statement — MySafeOps (${market.label})`,
       iframeSrc: legalDocIframeSrc(market.id, "accessibility.html"),
     },
+    impressum: {
+      title: "Impressum",
+      pageTitle: `Impressum — MySafeOps (${market.label})`,
+      iframeSrc: legalDocIframeSrc(market.id, "impressum.html"),
+    },
   };
 
   const meta = DOCS[docKey];
@@ -86,11 +91,11 @@ export default function LegalPage({ docKey, marketId = "uk" }) {
             </div>
           </Link>
           <nav className="blog-index-nav" aria-label="Legal">
-            <Link to="/">Home</Link>
-            <Link to="/privacy">Privacy</Link>
-            <Link to="/terms">Terms</Link>
-            <Link to="/accessibility">Accessibility</Link>
-            <Link to="/login">Sign in</Link>
+            <Link to={market.homePath}>Home</Link>
+            <Link to={market.privacyPath}>Privacy</Link>
+            <Link to={market.termsPath}>Terms</Link>
+            <Link to={market.accessibilityPath}>Accessibility</Link>
+            <Link to={market.loginPath}>Sign in</Link>
           </nav>
         </div>
       </header>

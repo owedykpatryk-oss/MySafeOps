@@ -19,6 +19,7 @@ import { getAuthorisedLiveLotoList } from "./LOTORegister";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `hw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -67,6 +68,7 @@ function defaultFoodFields() {
 }
 
 function Form({ item, projects, liveLotos, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const food = orgHasFoodIndustrialPack();
   const [form, setForm] = useState(() => {
     const base =
@@ -141,9 +143,9 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
         <input style={ss.inp} value={form.permitRef} onChange={(e) => set("permitRef", e.target.value)}  id="hot-work-permit-ref" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-work-description">Work description</label>
         <textarea style={{ ...ss.inp, minHeight: 52, resize: "vertical" }} value={form.workDescription} onChange={(e) => set("workDescription", e.target.value)}  id="hot-work-work-description" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-location">Location</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-location">{t("location")}</label>
         <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="hot-work-location" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="hot-work-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -152,7 +154,7 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-work-date">Date</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-work-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.workDate} onChange={(e) => set("workDate", e.target.value)}  id="hot-work-work-date" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
@@ -286,14 +288,14 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
           </div>
         )}
 
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="hot-work-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="hot-work-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={handleSubmit}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -302,6 +304,7 @@ function Form({ item, projects, liveLotos, onSave, onClose }) {
 }
 
 export default function HotWorkRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("hot_work_register", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -407,11 +410,11 @@ export default function HotWorkRegister() {
             )}
             {liveItems.length > 0 && (
               <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add record
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -428,7 +431,7 @@ export default function HotWorkRegister() {
           icon="🔥"
           title="No hot work records yet"
           description="Log welding, cutting and other hot work permits for this site."
-          actionLabel="+ Add record"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -448,7 +451,7 @@ export default function HotWorkRegister() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="hot-work" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -470,7 +473,7 @@ export default function HotWorkRegister() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

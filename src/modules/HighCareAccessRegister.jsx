@@ -14,6 +14,7 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { exportCsv } from "../utils/exportCsv";
 
 const KEY = "high_care_access_register";
@@ -28,6 +29,7 @@ function parseTools(s) {
 }
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -71,7 +73,7 @@ function Form({ item, projects, onSave, onClose }) {
           <option value="high_risk">High risk</option>
           <option value="high_care">High care</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="high-care-access-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -122,10 +124,10 @@ function Form({ item, projects, onSave, onClose }) {
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "", toolReconciliationOk: toolOk })}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -134,6 +136,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function HighCareAccessRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load(KEY, []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -209,11 +212,11 @@ export default function HighCareAccessRegister() {
             )}
             {liveItems.length > 0 && (
               <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add entry
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -230,7 +233,7 @@ export default function HighCareAccessRegister() {
           icon="🧼"
           title="No entries yet"
           description="Log visitor and contractor access to high-care zones with hygiene checks and tool reconciliation."
-          actionLabel="+ Add entry"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -248,7 +251,7 @@ export default function HighCareAccessRegister() {
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -269,7 +272,7 @@ export default function HighCareAccessRegister() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

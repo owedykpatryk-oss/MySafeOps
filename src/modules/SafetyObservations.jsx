@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `obs_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const today = todayLocalISO;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -51,9 +53,9 @@ function Form({ item, projects, onSave, onClose }) {
           <option value="positive">Positive (good practice)</option>
           <option value="at_risk">At-risk behaviour / condition</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-obs-date">Date</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-obs-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.obsDate} onChange={(e) => set("obsDate", e.target.value)}  id="safety-observations-obs-date" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="safety-observations-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="safety-observations-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -72,7 +74,7 @@ function Form({ item, projects, onSave, onClose }) {
         <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.actionTaken} onChange={(e) => set("actionTaken", e.target.value)}  id="safety-observations-action-taken" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -80,7 +82,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -89,6 +91,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function SafetyObservations() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("safety_observations", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -147,11 +150,11 @@ export default function SafetyObservations() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add observation
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -167,7 +170,7 @@ export default function SafetyObservations() {
           icon="👁️"
           title="No observations yet"
           description="Capture positive behaviours and at-risk findings from site walks."
-          actionLabel="+ Add observation"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -192,7 +195,7 @@ export default function SafetyObservations() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="observations" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -214,7 +217,7 @@ export default function SafetyObservations() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

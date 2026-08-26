@@ -84,7 +84,7 @@ Figures below are **indicative UK market ranges** from public pricing and buyer 
 
 **Per-seat headline rates** often sit between **£8 and £25 per user per month** for construction-focused tools. Enterprise sales-led quotes can be higher with bundles.
 
-**Flat org UK platforms** often cluster **£99–£499 per month** depending on modules (permits, RAMS, registers).
+**Flat org UK platforms** often cluster **£109–£649 per month** depending on modules (permits, RAMS, registers).
 
 **Per-site** quotes commonly **£500–£2,000 per site per month** at tier one; volume discounts apply for national contractors.
 

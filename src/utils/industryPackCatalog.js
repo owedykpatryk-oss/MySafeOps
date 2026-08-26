@@ -76,6 +76,15 @@ export const INDUSTRY_PACKS = {
     industrySectors: ["construction"],
     ramsStarterKey: "groundworks",
   },
+  railInfrastructure: {
+    label: "Rail & trackside",
+    hint: "Possessions, PTS / COSS competence, OLE and RRV permits — trackside HSE without geodesy deliverables.",
+    hidePreset: "hideSurveyingRams",
+    hiddenModules: ["survey-report", "gpr-report"],
+    showModules: ["training", "lifting", "temp-works", "lone-working", "geo-photos", "construction-setup"],
+    industrySectors: ["construction", "rail"],
+    ramsStarterKey: "rail",
+  },
   foodPharma: {
     label: "Food, beverage & pharma",
     hint: "Industrial hygiene registers — hides surveying RAMS packs and survey reports.",

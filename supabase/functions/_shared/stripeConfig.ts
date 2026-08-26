@@ -1,4 +1,4 @@
-export type StripeMarketId = "uk" | "au" | "pl";
+export type StripeMarketId = "uk" | "au" | "pl" | "de" | "at" | "ch";
 
 export type StripeMode = "live" | "test";
 
@@ -8,6 +8,9 @@ const MARKET_PRICE_SUFFIX: Record<StripeMarketId, string> = {
   uk: "",
   au: "_AUD",
   pl: "_PLN",
+  de: "_EUR",
+  at: "_EUR",
+  ch: "_CHF",
 };
 
 export interface StripeEnvConfig {
@@ -95,7 +98,7 @@ export function priceForPlan(config: StripeEnvConfig, planId: StripePricePlanId)
 export function planFromPriceId(priceId: string): { plan: StripePricePlanId; mode: StripeMode; market: StripeMarketId } | null {
   const p = priceId.trim();
   for (const mode of ["live", "test"] as const) {
-    for (const market of ["uk", "au", "pl"] as const) {
+    for (const market of ["uk", "au", "pl", "de", "at", "ch"] as const) {
       const config = resolveStripeConfig(mode, market);
       if (!config) continue;
       for (const plan of ["starter", "team", "business", "enterprise"] as const) {

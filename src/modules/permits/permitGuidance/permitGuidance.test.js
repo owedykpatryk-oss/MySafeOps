@@ -21,6 +21,13 @@ describe("permitGuidance registry", () => {
   it("returns wizard hints for hot work", () => {
     expect(getPermitGuidance("hot_work")?.wizardHint).toMatch(/fire watch/i);
   });
+
+  it("does not expose UK guidance in other markets", () => {
+    for (const marketId of ["au", "pl", "de", "at", "ch"]) {
+      expect(hasPermitGuidance("hot_work", marketId)).toBe(false);
+      expect(getPermitGuidance("excavation", marketId)).toBeNull();
+    }
+  });
 });
 
 describe("hotWorkGuidance", () => {

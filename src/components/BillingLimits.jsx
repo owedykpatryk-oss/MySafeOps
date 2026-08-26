@@ -20,6 +20,9 @@ import { getOrgMarketId } from "../utils/orgMarket";
 import { getMarketCurrencySymbol } from "../utils/marketLabels";
 import { AU_PRICING_FOOTNOTE } from "../config/auPricing";
 import { PL_PRICING_FOOTNOTE } from "../config/plPricing";
+import { DE_PRICING_FOOTNOTE } from "../config/dePricing";
+import { AT_PRICING_FOOTNOTE } from "../config/atPricing";
+import { CH_PRICING_FOOTNOTE } from "../config/chPricing";
 import { trackBillingError, trackBillingEvent } from "../lib/billingTelemetry";
 import {
   extendOrgTrial,
@@ -637,6 +640,15 @@ export default function BillingLimits({ checkoutReturn = null }) {
         {activeMarketId === "pl" && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{PL_PRICING_FOOTNOTE}</p>
         )}
+        {activeMarketId === "de" && (
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{DE_PRICING_FOOTNOTE}</p>
+        )}
+        {activeMarketId === "at" && (
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{AT_PRICING_FOOTNOTE}</p>
+        )}
+        {activeMarketId === "ch" && (
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{CH_PRICING_FOOTNOTE}</p>
+        )}
         {!workspaceTrialStatus?.isActive && !paidActive && workspaceTrialStatus && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>
             {expiredReadOnly
@@ -795,7 +807,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
         <p style={{ margin: "8px 0 0", fontSize: 11, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
           {getPriceAdjustmentShort(activeMarketId)}{" "}
           <Link to="/terms" style={{ color: "inherit", textDecoration: "underline" }}>
-            {activeMarketId === "pl" ? "Regulamin §7.5" : "Terms §7.5"}
+            {activeMarketId === "pl" ? "Regulamin §7.5" : activeMarketId === "de" || activeMarketId === "at" || activeMarketId === "ch" ? "AGB §7.5" : "Terms §7.5"}
           </Link>
           .
         </p>

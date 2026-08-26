@@ -30,17 +30,49 @@ describe("markets", () => {
     expect(pl.legalBasePath).toBe("/legal/pl");
   });
 
+  it("exposes DE landing and legal paths", () => {
+    const de = getMarket("de");
+    expect(de.homePath).toBe("/de");
+    expect(de.currency).toBe("EUR");
+    expect(de.locale).toBe("de-DE");
+    expect(de.legalBasePath).toBe("/legal/de");
+    expect(de.impressumPath).toBe("/de/impressum");
+  });
+
+  it("exposes AT landing and legal paths", () => {
+    const at = getMarket("at");
+    expect(at.homePath).toBe("/at");
+    expect(at.currency).toBe("EUR");
+    expect(at.locale).toBe("de-AT");
+    expect(at.legalBasePath).toBe("/legal/at");
+    expect(at.alternateMarketId).toBe("de");
+  });
+
+  it("exposes CH landing and legal paths", () => {
+    const ch = getMarket("ch");
+    expect(ch.homePath).toBe("/ch");
+    expect(ch.currency).toBe("CHF");
+    expect(ch.locale).toBe("de-CH");
+    expect(ch.legalBasePath).toBe("/legal/ch");
+    expect(ch.alternateMarketId).toBe("de");
+  });
+
   it("getAlternateMarkets returns a complete reciprocal cluster (not just alternateMarketId)", () => {
-    expect(getAlternateMarkets("uk").map((m) => m.id).sort()).toEqual(["au", "pl"]);
-    expect(getAlternateMarkets("au").map((m) => m.id).sort()).toEqual(["pl", "uk"]);
-    expect(getAlternateMarkets("pl").map((m) => m.id).sort()).toEqual(["au", "uk"]);
+    expect(getAlternateMarkets("uk").map((m) => m.id).sort()).toEqual(["at", "au", "ch", "de", "pl"]);
+    expect(getAlternateMarkets("au").map((m) => m.id).sort()).toEqual(["at", "ch", "de", "pl", "uk"]);
+    expect(getAlternateMarkets("pl").map((m) => m.id).sort()).toEqual(["at", "au", "ch", "de", "uk"]);
+    expect(getAlternateMarkets("de").map((m) => m.id).sort()).toEqual(["at", "au", "ch", "pl", "uk"]);
+    expect(getAlternateMarkets("at").map((m) => m.id).sort()).toEqual(["au", "ch", "de", "pl", "uk"]);
+    expect(getAlternateMarkets("ch").map((m) => m.id).sort()).toEqual(["at", "au", "de", "pl", "uk"]);
     expect(getMarket("uk").alternateMarketId).toBe("au");
-    expect(MARKET_IDS).toEqual(["uk", "au", "pl"]);
+    expect(MARKET_IDS).toEqual(["uk", "au", "pl", "de", "at", "ch"]);
     expect(Object.keys(MARKETS)).toEqual(MARKET_IDS);
   });
 
   it("validates market ids via registry", () => {
     expect(isValidMarketId("au")).toBe(true);
+    expect(isValidMarketId("at")).toBe(true);
+    expect(isValidMarketId("ch")).toBe(true);
     expect(isValidMarketId("ie")).toBe(false);
     expect(resolveMarketId("ie")).toBe("uk");
   });

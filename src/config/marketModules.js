@@ -18,7 +18,10 @@ export const UK_ONLY_MODULE_IDS = [
 /** Market-specific compliance modules (reuse CDM/RIDDOR components with regional content). */
 export const REGION_COMPLIANCE_MODULE_IDS = {
   au: ["whs-plan"],
-  pl: ["bhp-plan"],
+  pl: ["bhp-plan", "orz", "pl-druki", "pl-instrukcje", "pl-czynniki"],
+  de: ["sige-plan"],
+  at: ["sige-plan"],
+  ch: ["sige-plan"],
 };
 
 /** Shared across non-UK markets only. */
@@ -30,6 +33,12 @@ export const AU_ONLY_MODULE_IDS = [...REGION_COMPLIANCE_MODULE_IDS.au, ...MULTI_
 /** @deprecated Use REGION_COMPLIANCE_MODULE_IDS.pl + MULTI_REGION_MODULE_IDS */
 export const PL_ONLY_MODULE_IDS = [...REGION_COMPLIANCE_MODULE_IDS.pl, ...MULTI_REGION_MODULE_IDS];
 
+/** @deprecated Use REGION_COMPLIANCE_MODULE_IDS.de + MULTI_REGION_MODULE_IDS */
+export const DE_ONLY_MODULE_IDS = [...REGION_COMPLIANCE_MODULE_IDS.de, ...MULTI_REGION_MODULE_IDS];
+
+/** @deprecated Use REGION_COMPLIANCE_MODULE_IDS.at + MULTI_REGION_MODULE_IDS */
+export const AT_ONLY_MODULE_IDS = [...REGION_COMPLIANCE_MODULE_IDS.at, ...MULTI_REGION_MODULE_IDS];
+
 /** RAMS builder sub-features gated by market. */
 export const UK_ONLY_RAMS_FEATURES = ["rams/surveying"];
 export const AU_ONLY_RAMS_FEATURES = [];
@@ -39,6 +48,9 @@ export const MARKET_DEFAULT_HIDDEN_FEATURES = {
   uk: [],
   au: ["rams/surveying", "rams/allergen"],
   pl: ["rams/surveying", "rams/allergen"],
+  de: ["rams/surveying", "rams/allergen"],
+  at: ["rams/surveying", "rams/allergen"],
+  ch: ["rams/surveying", "rams/allergen"],
 };
 
 /** Extra modules hidden on first bootstrap (slim menu) — market-specific additions. */
@@ -46,6 +58,9 @@ export const MARKET_BOOTSTRAP_EXTRA_HIDDEN = {
   uk: [],
   au: [],
   pl: [],
+  de: [],
+  at: [],
+  ch: [],
 };
 
 /** Slim More menu for typical construction (bootstrap on first load). */
@@ -74,11 +89,12 @@ export function isModuleAllowedForMarket(moduleId, marketId) {
   if (!id) return false;
   if (UK_ONLY_MODULE_IDS.includes(id) && marketId !== "uk") return false;
   if (MULTI_REGION_MODULE_IDS.includes(id)) {
-    return marketId === "au" || marketId === "pl";
+    return marketId === "au" || marketId === "pl" || marketId === "de" || marketId === "at" || marketId === "ch";
   }
-  for (const [region, ids] of Object.entries(REGION_COMPLIANCE_MODULE_IDS)) {
-    if (ids.includes(id) && marketId !== region) return false;
-  }
+  const owningRegions = Object.entries(REGION_COMPLIANCE_MODULE_IDS)
+    .filter(([, ids]) => ids.includes(id))
+    .map(([region]) => region);
+  if (owningRegions.length > 0 && !owningRegions.includes(marketId)) return false;
   return true;
 }
 
@@ -105,5 +121,8 @@ export function getMarketBootstrapExtraHidden(marketId) {
 export const MARKET_PACK_HINTS = {
   uk: "UK pack: CDM, RIDDOR, PAS128 survey, COSHH, LOLER/PAT and HSE-focused modules.",
   au: "Australia pack: WHS plan, notifiable incidents, SWMS, model WHS legislation — UK-only modules (CDM, RIDDOR, PAS128, DSEAR, PAT) are hidden.",
-  pl: "Pakiet PL: plan BHP, zdarzenia do zgłoszenia PIP, IOR, pozwolenia na pracę — moduły UK/AU (CDM, RIDDOR, PAS128, SWMS-only) są ukryte.",
+  pl: "Pakiet PL: plan BIOZ, IBWR, ocena ryzyka zawodowego, instrukcje stanowiskowe, rejestr czynników szkodliwych, druki BHP (skierowania, szkolenia, powypadkowe), zdarzenia do zgłoszenia PIP i pozwolenia na pracę — moduły UK/AU (CDM, RIDDOR, PAS128, SWMS-only) są ukryte.",
+  de: "Deutschland-Paket: SiGe-Plan, Unfallanzeige, GBU/Betriebsanweisung, Erlaubnisscheine — UK/AU-Module (CDM, RIDDOR, PAS128) sind ausgeblendet.",
+  at: "Österreich-Paket: SiGe-Plan (BauKG), Evaluierung, AUVA, Erlaubnisscheine — gleiche deutsche Oberfläche, österreichisches Recht.",
+  ch: "Schweiz-Paket: SiKo (BauAV Art. 4), Gefährdungsermittlung, Suva, Freigaben — gleiche deutsche Oberfläche, Schweizer Recht.",
 };

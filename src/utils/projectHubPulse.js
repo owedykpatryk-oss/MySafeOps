@@ -112,6 +112,8 @@ export function buildProjectPipeline(project, dash, marketId = getOrgMarketId())
           ? "Dodaj pogodę i SOR"
           : marketId === "au"
             ? "Add weather & ED"
+            : marketId === "de" || marketId === "at" || marketId === "ch"
+            ? "Wetter & Krankenhaus hinzufügen"
             : "Add weather & A&E",
       status: project?.weatherSnapshot || project?.nearestHospital ? "done" : "todo",
       viewId: "projects",
@@ -124,9 +126,11 @@ export function buildProjectPipeline(project, dash, marketId = getOrgMarketId())
       hint: dash?.cdmPacks?.length
         ? `${dash.cdmPacks.length} pack(s)`
         : marketId === "pl"
-          ? "Utwórz plan BHP"
+          ? "Utwórz plan BIOZ"
           : marketId === "au"
             ? "Create WHS plan"
+            : marketId === "de" || marketId === "at" || marketId === "ch"
+            ? "GBU erstellen"
             : "Create CPP",
       status: dash?.cdmPacks?.length ? "done" : "todo",
       viewId: pack.moduleId,

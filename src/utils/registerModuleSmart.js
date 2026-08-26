@@ -15,10 +15,11 @@ function isAuMarket() {
 }
 
 /** Three-way market copy — AU/PL branches instead of falling through to UK-only text. */
-function marketText(ukText, auText, plText) {
+function marketText(ukText, auText, plText, deText) {
   const marketId = getOrgMarketId();
   if (marketId === "au") return auText;
   if (marketId === "pl") return plText ?? auText ?? ukText;
+  if (marketId === "de" || marketId === "at" || marketId === "ch") return deText ?? ukText;
   return ukText;
 }
 
@@ -56,6 +57,7 @@ export function getRegisterSmartTips(moduleId, ctx = {}) {
     case "cdm":
     case "whs-plan":
     case "bhp-plan":
+    case "sige-plan":
       return cdmTips(enriched);
     case "inspections":
       return inspectionTips(enriched);
@@ -224,7 +226,7 @@ function cdmTips({ packs = [] }) {
         text: marketText(
           "Create a CDM pack before work starts — Construction Phase Plan and dutyholder checklist for UK sites.",
           "Create a WHS management plan before work starts — site rules, HRCW coordination and emergency arrangements.",
-          "Utwórz plan BHP przed rozpoczęciem prac — zasady placu budowy i procedury awaryjne."
+          "Utwórz plan BIOZ przed rozpoczęciem prac — zasady placu budowy i procedury awaryjne."
         ),
         actionLabel: pack.newPackLabel.replace("+ ", ""),
         viewId,
@@ -465,7 +467,7 @@ function firstAidTips({ items = [] }) {
       text: marketText(
         "List qualified first aiders and cert expiry — site CPP should name who is on duty.",
         "List qualified first aiders and cert expiry — site WHS plan should name who is on duty.",
-        "Wypisz uprawnionych ratowników i terminy ważności certyfikatów — plan BHP powinien wskazać dyżurujących."
+        "Wypisz uprawnionych ratowników i terminy ważności certyfikatów — plan BIOZ powinien wskazać dyżurujących."
       ),
       viewId: "first-aid",
     }];
@@ -549,7 +551,7 @@ function emergencyTips({ items = [] }) {
     text: marketText(
       "Emergency contacts published — display on site boards and CPP.",
       "Emergency contacts published — display on site boards and WHS plan.",
-      "Kontakty alarmowe opublikowane — wyświetl na tablicach budowy i w planie BHP."
+      "Kontakty alarmowe opublikowane — wyświetl na tablicach budowy i w planie BIOZ."
     ),
   }];
 }
@@ -634,7 +636,7 @@ function constructionSetupTips() {
     text: marketText(
       "Complete construction setup — CDM, RAMS, permits, briefing and client portal in one afternoon.",
       "Complete construction setup — WHS legislation, SWMS, permits, briefing and client portal in one afternoon.",
-      "Uzupełnij konfigurację budowy — BHP, IOR, uprawnienia, odprawa i portal klienta w jedno popołudnie."
+      "Uzupełnij konfigurację budowy — BHP, IBWR, uprawnienia, odprawa i portal klienta w jedno popołudnie."
     ),
     viewId: "construction-setup",
     actionLabel: "Open wizard",

@@ -14,6 +14,7 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const KEY = "ghp_register";
@@ -21,6 +22,7 @@ const genId = () => `ghp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}
 const ss = ms;
 
 function Form({ item, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -72,6 +74,7 @@ function Form({ item, onSave, onClose }) {
 }
 
 export default function GlassHardPlasticRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load(KEY, []));
   const [modal, setModal] = useState(null);
@@ -99,7 +102,7 @@ export default function GlassHardPlasticRegister() {
         lead="Register brittle items brought into food production and high-care zones — food safety / BRC requirement."
         right={
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add entry
+            {t("addRecord")}
           </button>
         }
       />
@@ -110,7 +113,7 @@ export default function GlassHardPlasticRegister() {
             icon="🫙"
             title="No G&HP items logged yet"
             description="Log brittle items brought into production and high-care zones for food safety / BRC."
-            actionLabel="+ Add entry"
+            actionLabel={t("addRecord")}
             onAction={() => setModal({ type: "form" })}
             variant="dashed"
           />
@@ -147,7 +150,7 @@ export default function GlassHardPlasticRegister() {
                           }
                         }}
                       >
-                        Delete
+                        {t("delete")}
                       </button>
                     ) : null}
                   </div>

@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `dsear_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const today = todayLocalISO;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -87,11 +89,11 @@ function Form({ item, projects, onSave, onClose }) {
         </div>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dsear-competent-person">Competent person / responsible</label>
         <input style={ss.inp} value={form.competentPerson} onChange={(e) => set("competentPerson", e.target.value)}  id="dsear-competent-person" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dsear-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="dsear-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 40, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="dsear-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -99,7 +101,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -108,6 +110,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function DSEARLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("dsear_register", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -166,11 +169,11 @@ export default function DSEARLog() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add entry
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -186,7 +189,7 @@ export default function DSEARLog() {
           icon="⚠️"
           title="No DSEAR entries yet"
           description="Record dangerous substances, zones and control measures for explosive atmospheres."
-          actionLabel="+ Add entry"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -202,7 +205,7 @@ export default function DSEARLog() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="dsear" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -224,7 +227,7 @@ export default function DSEARLog() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

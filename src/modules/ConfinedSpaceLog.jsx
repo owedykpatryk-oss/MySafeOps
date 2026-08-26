@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `cs_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const today = todayLocalISO;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -55,7 +57,7 @@ function Form({ item, projects, onSave, onClose }) {
         <input style={ss.inp} value={form.permitRef} onChange={(e) => set("permitRef", e.target.value)}  id="confined-space-permit-ref" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-space-description">Space / task description</label>
         <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.spaceDescription} onChange={(e) => set("spaceDescription", e.target.value)}  id="confined-space-space-description" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="confined-space-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -64,7 +66,7 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-entry-date">Date</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-entry-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.entryDate} onChange={(e) => set("entryDate", e.target.value)}  id="confined-space-entry-date" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
@@ -86,11 +88,11 @@ function Form({ item, projects, onSave, onClose }) {
         </label>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-rescue-plan-ref">Rescue plan ref</label>
         <input style={ss.inp} value={form.rescuePlanRef} onChange={(e) => set("rescuePlanRef", e.target.value)}  id="confined-space-rescue-plan-ref" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="confined-space-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="confined-space-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -98,7 +100,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -107,6 +109,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function ConfinedSpaceLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("confined_space_log", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -165,11 +168,11 @@ export default function ConfinedSpaceLog() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add entry
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -185,7 +188,7 @@ export default function ConfinedSpaceLog() {
           icon="🕳️"
           title="No confined space entries"
           description="Log entries, gas checks and standby arrangements."
-          actionLabel="+ Add entry"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -202,7 +205,7 @@ export default function ConfinedSpaceLog() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="confined-space" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -224,7 +227,7 @@ export default function ConfinedSpaceLog() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

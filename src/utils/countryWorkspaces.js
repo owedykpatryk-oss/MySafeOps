@@ -3,18 +3,24 @@ import { getOrgId } from "./orgId";
 
 export const COUNTRY_WORKSPACE_CHANGED_EVENT = "mysafeops-country-workspace-changed";
 
-export const COUNTRY_WORKSPACE_MARKETS = ["uk", "pl", "au"];
+export const COUNTRY_WORKSPACE_MARKETS = ["uk", "pl", "au", "de", "at", "ch"];
 
 const COUNTRY_NAMES = {
   uk: "United Kingdom",
   pl: "Poland",
   au: "Australia",
+  de: "Deutschland",
+  at: "Österreich",
+  ch: "Schweiz",
 };
 
 const CURRENCY_BY_MARKET = {
   uk: "GBP",
   pl: "PLN",
   au: "AUD",
+  de: "EUR",
+  at: "EUR",
+  ch: "CHF",
 };
 
 function activeWorkspaceKey(orgSlug = getOrgId()) {
@@ -214,7 +220,7 @@ export async function setActiveCountryWorkspace(supabase, workspace, orgSlug = g
 
 export async function updateCountryWorkspaceDocumentLocale(supabase, workspace, documentLocale) {
   if (!supabase || !workspace?.id) throw new Error("Country workspace is required.");
-  if (!["en-GB", "pl-PL", "en-AU"].includes(documentLocale)) {
+  if (!["en-GB", "pl-PL", "en-AU", "de-DE", "de-AT", "de-CH"].includes(documentLocale)) {
     throw new Error("Unsupported document language.");
   }
 

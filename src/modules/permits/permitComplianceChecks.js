@@ -1,12 +1,23 @@
 import { getComplianceProfile, UK_COMPLIANCE_MATRIX_VERSION } from "./ukComplianceMatrix";
+import { getOrgMarketId } from "../../utils/orgMarket";
 
 function hasValue(v) {
   if (typeof v === "number") return Number.isFinite(v);
   return !!String(v ?? "").trim();
 }
 
-function regulatoryMatrixForType(type) {
+function regulatoryMatrixForType(type, marketId = "uk") {
   const t = String(type || "general");
+  if (marketId !== "uk") {
+    const shared = [
+      { id: "task_briefing", framework: "SITE", label: "Task briefing, competence and supervision confirmed", critical: true, field: "authorisedByRole" },
+      { id: "emergency_check", framework: "SITE", label: "Start/end controls and emergency arrangements confirmed", critical: true, field: "briefingConfirmedAt" },
+    ];
+    if (t === "lifting") return [...shared, { id: "lifting_plan", framework: "SITE", label: "Lift plan and competent responsible person recorded", critical: true, field: "appointedPerson" }];
+    if (t === "electrical" || t === "cold_work" || t === "line_break") return [...shared, { id: "isolation_authority", framework: "SITE", label: "Authorised person and isolation evidence recorded", critical: true, field: "authorisedPerson" }];
+    if (t === "work_at_height") return [...shared, { id: "height_rescue", framework: "SITE", label: "Rescue arrangement and access method defined", critical: true, field: "rescuePlan" }];
+    return shared;
+  }
   const shared = [
     { id: "cdm_briefing", framework: "CDM", label: "Task briefing, competence and supervision confirmed", critical: true, field: "authorisedByRole" },
     { id: "she_check", framework: "SHE", label: "Start/end controls and emergency arrangements confirmed", critical: true, field: "briefingConfirmedAt" },
@@ -34,10 +45,11 @@ function regulatoryMatrixForType(type) {
 }
 
 export function evaluatePermitCompliance(permit, checklistItems = [], options = {}) {
+  const marketId = options?.marketId || getOrgMarketId();
   const profile =
     options?.profileOverride && typeof options.profileOverride === "object"
       ? options.profileOverride
-      : getComplianceProfile(permit?.type);
+      : getComplianceProfile(permit?.type, marketId);
   const checklistState = permit?.checklist || {};
   const checklistIds = new Set(checklistItems.map((item) => item.id));
 
@@ -55,13 +67,13 @@ export function evaluatePermitCompliance(permit, checklistItems = [], options = 
   if (missingChecklist.length) hardStops.push("Missing mandatory legal checklist controls.");
   if (missingEvidence.length) hardStops.push("Missing mandatory evidence fields.");
   if (invalidTimeRange) hardStops.push("Permit end time must be after start time.");
-  const regulatoryMatrix = regulatoryMatrixForType(permit?.type).map((row) => ({
+  const regulatoryMatrix = regulatoryMatrixForType(permit?.type, marketId).map((row) => ({
     ...row,
     ok: hasValue(permit?.extraFields?.[row.field]) || hasValue(permit?.[row.field]),
   }));
   const missingCriticalRegulatory = regulatoryMatrix.filter((r) => r.critical && !r.ok);
   if (missingCriticalRegulatory.length) {
-    hardStops.push("Regulatory hard-stop failed: missing critical PUWER/LOLER/CDM/SHE evidence.");
+    hardStops.push(marketId === "uk" ? "Regulatory hard-stop failed: missing critical PUWER/LOLER/CDM/SHE evidence." : "Permit hard-stop failed: missing critical task, competence or site-control evidence.");
   }
 
   const readyCount = [
@@ -78,7 +90,7 @@ export function evaluatePermitCompliance(permit, checklistItems = [], options = 
   const legalReady = hardStops.length === 0;
 
   return {
-    matrixVersion: permit?.matrixVersion || UK_COMPLIANCE_MATRIX_VERSION,
+    matrixVersion: permit?.matrixVersion || (marketId === "uk" ? UK_COMPLIANCE_MATRIX_VERSION : `${marketId}-site-v1`),
     profile,
     missingChecklist,
     missingEvidence,
@@ -90,4 +102,3 @@ export function evaluatePermitCompliance(permit, checklistItems = [], options = 
     dataComplete,
   };
 }
-

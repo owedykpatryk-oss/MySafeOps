@@ -70,6 +70,8 @@ export const CONSTRUCTION_ACTIVITY_CATALOG = [
       { id: "trackside", label: "Trackside / possession works", hazardTokens: ["rail", "trackside", "ole", "pts", "electrified"] },
       { id: "platform", label: "Platform & station works", hazardTokens: ["rail", "work at height", "public", "night work"] },
       { id: "cable_route", label: "Cable route / signalling", hazardTokens: ["rail", "cable", "excavation", "electrical"] },
+      { id: "on_track_plant", label: "On-track plant / RRV", hazardTokens: ["rail", "rrv", "on-track plant", "lifting", "slew"] },
+      { id: "level_crossing", label: "Level crossing works", hazardTokens: ["rail", "level crossing", "sighting", "trackside"] },
     ],
   },
   {

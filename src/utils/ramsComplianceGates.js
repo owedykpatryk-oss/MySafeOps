@@ -13,6 +13,7 @@ function gateMarketId() {
 function substanceRegisterLabel(marketId) {
   if (marketId === "pl") return "rejestr substancji niebezpiecznych";
   if (marketId === "au") return "hazardous substances register";
+  if (marketId === "de" || marketId === "at" || marketId === "ch") return "Gefahrstoffverzeichnis";
   return "COSHH register";
 }
 

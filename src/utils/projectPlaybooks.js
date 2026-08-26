@@ -256,6 +256,21 @@ export const PROJECT_PLAYBOOKS = [
     ],
   },
   {
+    id: "rail_trackside",
+    label: "Rail & trackside",
+    description: "Rail RAMS + corridor access, OLE isolation and on-track plant PTW",
+    industryStarter: "rail",
+    permitTypes: ["rail_corridor_access", "ole_isolation", "on_track_plant", "general"],
+    msTemplate: "mobilisation",
+    ramsStarterKey: "rail",
+    checklistExtras: [
+      "PTS / COSS competence and safety-critical medicals verified",
+      "Possession, line blockage or green-zone window confirmed in writing",
+      "Isolation and earthing arranged where the section is electrified",
+      "Handback inspection recorded before trains resume",
+    ],
+  },
+  {
     id: "interiors_fitout",
     label: "Interiors & fit-out",
     description: "Fit-out RAMS + hot work & general PTW in occupied buildings",

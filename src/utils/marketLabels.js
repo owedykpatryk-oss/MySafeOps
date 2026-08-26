@@ -3,6 +3,9 @@
 import { getMarketLabelPack } from "../config/marketLabelPacks";
 import { AU_PLAN_PRICE_LABELS } from "../config/auPricing";
 import { PL_PLAN_PRICE_LABELS } from "../config/plPricing";
+import { DE_PLAN_PRICE_LABELS } from "../config/dePricing";
+import { AT_PLAN_PRICE_LABELS } from "../config/atPricing";
+import { CH_PLAN_PRICE_LABELS } from "../config/chPricing";
 
 /** @param {string} moduleId @param {MarketId} [marketId] */
 export function getModuleLabelForMarket(moduleId, marketId = "uk") {
@@ -116,7 +119,7 @@ export function getRegistersLabel(marketId = "uk") {
   return getMarketLabelPack(marketId).registersLabel || "HSE";
 }
 
-const MARKET_CURRENCY_SYMBOLS = { uk: "£", au: "A$", pl: "zł" };
+const MARKET_CURRENCY_SYMBOLS = { uk: "£", au: "A$", pl: "zł", de: "€", at: "€", ch: "CHF" };
 
 /** Currency symbol for billing UI badges — avoids showing £ to AU/PL orgs. */
 /** @param {MarketId} marketId */
@@ -128,6 +131,9 @@ export function getMarketCurrencySymbol(marketId = "uk") {
 export function getMarketPlanPriceLabel(planId, marketId = "uk") {
   if (marketId === "au" && AU_PLAN_PRICE_LABELS[planId]) return AU_PLAN_PRICE_LABELS[planId];
   if (marketId === "pl" && PL_PLAN_PRICE_LABELS[planId]) return PL_PLAN_PRICE_LABELS[planId];
+  if (marketId === "de" && DE_PLAN_PRICE_LABELS[planId]) return DE_PLAN_PRICE_LABELS[planId];
+  if (marketId === "at" && AT_PLAN_PRICE_LABELS[planId]) return AT_PLAN_PRICE_LABELS[planId];
+  if (marketId === "ch" && CH_PLAN_PRICE_LABELS[planId]) return CH_PLAN_PRICE_LABELS[planId];
   return null;
 }
 
@@ -136,11 +142,16 @@ export function getMarketPlanPriceLabel(planId, marketId = "uk") {
 export function localizeIndustryTerminology(text, marketId = "uk") {
   if (!text || marketId === "uk") return String(text || "");
   const rams = getRamsShortLabel(marketId);
-  const compliance = getMarketLabelPack(marketId).registersLabel === "WHS"
-    ? "WHS"
-    : marketId === "pl"
-    ? "Plan BHP"
-    : "CDM";
+  const compliance =
+    getMarketLabelPack(marketId).registersLabel === "WHS"
+      ? "WHS"
+      : marketId === "pl"
+        ? "Plan BIOZ"
+        : marketId === "ch"
+          ? "SiKo"
+          : marketId === "de" || marketId === "at"
+            ? "SiGe-Plan"
+            : "CDM";
   let out = String(text).replace(/\bRAMS\b/g, rams);
   out = out.replace(/\bCDM pack\b/gi, `${compliance} pack`);
   out = out.replace(/\bCDM packs\b/gi, `${compliance} packs`);

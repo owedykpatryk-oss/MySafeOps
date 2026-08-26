@@ -456,7 +456,8 @@ const MODULE_FORM_META = {
   "method-statement": { title: "Method statement summary", badge: "MS", builder: "generic" },
   "daily-briefing": { title: "Daily briefing form", badge: "DB", builder: "generic", attend: true },
   "whs-plan": { title: "WHS / CDM pack summary", badge: "WHS", builder: "generic" },
-  "bhp-plan": { title: "Plan BHP summary", badge: "BHP", builder: "generic" },
+  "bhp-plan": { title: "Plan BIOZ summary", badge: "BHP", builder: "generic" },
+  "sige-plan": { title: "SiGe-Plan summary", badge: "SiGe", builder: "generic" },
   cdm: { title: "CDM pack summary", badge: "CDM", builder: "generic" },
 };
 

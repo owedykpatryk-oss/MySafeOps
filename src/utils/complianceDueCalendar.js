@@ -1,6 +1,7 @@
 import { normalizeWorkerCertifications } from "./certifications";
 import { collectEquipmentInspectionDueItems } from "./equipmentInspectionDue";
 import { collectVehicleDueItems } from "./vehicleComplianceDue";
+import { collectHarmfulFactorDueItems } from "./plCzynnikiDue";
 
 function daysUntil(iso, now = new Date()) {
   if (!iso) return null;
@@ -92,6 +93,20 @@ export function collectComplianceDueItems({
       subject: veh.registration || "Fleet",
       vehicleId: veh.vehicleId,
       moduleId: "vehicles",
+      severity: severityForDays(days),
+    });
+  });
+
+  collectHarmfulFactorDueItems().forEach((f) => {
+    const days = daysUntil(f.nextDueIso, now);
+    push({
+      id: f.id,
+      kind: "harmful_factor",
+      dueIso: f.nextDueIso,
+      days,
+      label: f.name,
+      subject: f.stanowisko || "Czynniki szkodliwe",
+      moduleId: f.moduleId,
       severity: severityForDays(days),
     });
   });

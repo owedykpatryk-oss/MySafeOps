@@ -23,6 +23,11 @@ export const UK_LEGISLATION_LIBRARY = [
   { id: "electricity", shortName: "EAWR 1989", fullName: "Electricity at Work Regulations 1989", sectors: ["construction", "industrial"], summary: "Systems, work on or near live conductors, competence.", url: "https://www.legislation.gov.uk/uksi/1989/635" },
   { id: "asbestos", shortName: "CAR 2012", fullName: "Control of Asbestos Regulations 2012", sectors: ["construction"], summary: "Survey, management plan, licensed work.", url: "https://www.legislation.gov.uk/uksi/2012/632" },
   { id: "nrswa", shortName: "NRSWA / Streetworks", fullName: "New Roads and Street Works Act 1991", sectors: ["utilities", "highways"], summary: "Street works notices, reinstatement, competence.", url: "https://www.legislation.gov.uk/ukpga/1991/22" },
+  { id: "rogs", shortName: "ROGS 2006", fullName: "Railways and Other Guided Transport Systems (Safety) Regulations 2006", sectors: ["rail"], summary: "Safety management system, safety verification, competence and fitness for safety-critical work including fatigue.", url: "https://www.legislation.gov.uk/uksi/2006/599" },
+  { id: "railway_safety_1999", shortName: "Railway Safety Regs 1999", fullName: "Railway Safety Regulations 1999", sectors: ["rail"], summary: "Train protection and warning systems; duties on infrastructure controllers.", url: "https://www.legislation.gov.uk/uksi/1999/2244" },
+  { id: "level_crossings_act", shortName: "Level Crossings Act 1983", fullName: "Level Crossings Act 1983", sectors: ["rail"], summary: "Level crossing safety arrangements and conditions imposed by order.", url: "https://www.legislation.gov.uk/ukpga/1983/16" },
+  { id: "rgs", shortName: "Railway Group Standards", fullName: "Railway Group Standards (RSSB catalogue)", sectors: ["rail"], summary: "Mandatory standards for work on the mainline — protection, competence, plant and handback.", url: "https://www.rssb.co.uk/standards-catalogue" },
+  { id: "nr_pts", shortName: "NR/L2/OHS/019", fullName: "Network Rail — Safety of People at Work On or Near the Line (PTS)", sectors: ["rail"], summary: "PTS competence, safe systems of work, protection arrangements and lookout working.", url: "" },
 ];
 
 /** @param {string} [sector] */

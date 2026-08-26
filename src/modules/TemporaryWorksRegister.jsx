@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `tw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -27,6 +28,7 @@ const ss = ms;
 const CATEGORIES = ["Propping / needling", "Façade retention", "Formwork / falsework", "Excavation support", "Tower crane base", "Other TW"];
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -55,7 +57,7 @@ function Form({ item, projects, onSave, onClose }) {
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit temporary works" : "Temporary works"}</h2>
         <label style={ss.lbl} htmlFor="temporary-works-tw-ref">TW reference</label>
         <input style={ss.inp} value={form.twRef} onChange={(e) => set("twRef", e.target.value)}  id="temporary-works-tw-ref" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-description">Description</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-description">{t("description")}</label>
         <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.description} onChange={(e) => set("description", e.target.value)}  id="temporary-works-description" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-category">Category</label>
         <select style={ss.inp} value={form.category} onChange={(e) => set("category", e.target.value)} id="temporary-works-category">
@@ -69,9 +71,9 @@ function Form({ item, projects, onSave, onClose }) {
         <input style={ss.inp} value={form.designBriefRef} onChange={(e) => set("designBriefRef", e.target.value)}  id="temporary-works-design-brief-ref" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-checker-cat-ref">TWC / independent check ref</label>
         <input style={ss.inp} value={form.checkerCatRef} onChange={(e) => set("checkerCatRef", e.target.value)}  id="temporary-works-checker-cat-ref" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-location">Location</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-location">{t("location")}</label>
         <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="temporary-works-location" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="temporary-works-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -98,11 +100,11 @@ function Form({ item, projects, onSave, onClose }) {
           <option value="struck">Struck / removed</option>
           <option value="hold">On hold</option>
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="temporary-works-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 40, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="temporary-works-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -110,7 +112,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -119,6 +121,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function TemporaryWorksRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("temporary_works_register", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -177,11 +180,11 @@ export default function TemporaryWorksRegister() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add record
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -197,7 +200,7 @@ export default function TemporaryWorksRegister() {
           icon="🧱"
           title="No temporary works records"
           description="Log TW designs, checks and inspections for the site register."
-          actionLabel="+ Add record"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -213,7 +216,7 @@ export default function TemporaryWorksRegister() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="temp-works" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -235,7 +238,7 @@ export default function TemporaryWorksRegister() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

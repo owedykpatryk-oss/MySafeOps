@@ -166,20 +166,20 @@ const PL_SECTIONS = {
     title: "Od profilu do podpisanych zapisów z budowy",
     intro: "Jeden flow — nie pięć rozłącznych narzędzi. Offline na budowie, opcjonalna chmura pod backup i zaproszenia.",
     steps: [
-      { id: "profile", emoji: "🎯", title: "Wybierz profil roboczy", copy: "Budownictwo, instalacje lub demolka — moduły i biblioteki IOR od pierwszego dnia.", accent: "rgba(139,92,246,.14)", border: "rgba(139,92,246,.35)", span: "wide" },
-      { id: "rams", emoji: "⚠️", title: "IOR jednym kliknięciem", copy: "Pakiety szybkie z zagrożeniami, środkami i powiązaniami PTW — nie puste szablony Word.", accent: "rgba(13,148,136,.12)", border: "rgba(13,148,136,.35)", span: "normal" },
+      { id: "profile", emoji: "🎯", title: "Wybierz profil roboczy", copy: "Budownictwo, instalacje lub demolka — moduły i biblioteki IBWR od pierwszego dnia.", accent: "rgba(139,92,246,.14)", border: "rgba(139,92,246,.35)", span: "wide" },
+      { id: "rams", emoji: "⚠️", title: "IBWR jednym kliknięciem", copy: "Pakiety szybkie z zagrożeniami, środkami i powiązaniami PTW — nie puste szablony Word.", accent: "rgba(13,148,136,.12)", border: "rgba(13,148,136,.35)", span: "normal" },
       { id: "ptw", emoji: "🔥", title: "Wydawaj i śledź pozwolenia", copy: "Prace gorące, na wysokości, w przestrzeni zamkniętej — status i SIMOPS na dashboardzie.", accent: "rgba(249,115,22,.12)", border: "rgba(249,115,22,.35)", span: "normal" },
-      { id: "export", emoji: "🖨️", title: "Eksport PDF pod audyt", copy: "Macierz IOR, raporty, tablica pozwoleń — bez przebudowy arkuszy.", accent: "rgba(59,130,246,.12)", border: "rgba(59,130,246,.35)", span: "wide" },
+      { id: "export", emoji: "🖨️", title: "Eksport PDF pod audyt", copy: "Macierz IBWR, raporty, tablica pozwoleń — bez przebudowy arkuszy.", accent: "rgba(59,130,246,.12)", border: "rgba(59,130,246,.35)", span: "wide" },
     ],
     cta: "Zobacz dopasowanie do Twojej branży",
     startEval: "Rozpocznij 14-dniową ewaluację →",
-    exploreProfiles: "Poznaj profile i IOR",
+    exploreProfiles: "Poznaj profile i IBWR",
   },
-  features: { badge: "Funkcje", title: "Wszystko czego potrzebujesz na budowie", intro: "Od IOR i pozwoleń po kompetencje i sprzęt — jedna aplikacja zamiast porozrzucanej dokumentacji." },
+  features: { badge: "Funkcje", title: "Wszystko czego potrzebujesz na budowie", intro: "Od IBWR i pozwoleń po kompetencje i sprzęt — jedna aplikacja zamiast porozrzucanej dokumentacji." },
   industry: {
     badge: "Więcej niż generyczne BHP",
     title: "Profil roboczy — właściwe moduły od razu",
-    intro: "Dziewięć profili dopasowuje biblioteki IOR, rejestry i dashboardy do Twojej branży — od wykonawców instalacyjnych po demolka.",
+    intro: "Dziewięć profili dopasowuje biblioteki IBWR, rejestry i dashboardy do Twojej branży — od wykonawców instalacyjnych po demolka.",
     profilesStat: "Profile robocze",
     packsStat: "Pakiety szybkie",
     modulesStat: "Moduły",
@@ -212,7 +212,7 @@ const PL_SECTIONS = {
     intro: "Wszyscy w jednym środowisku. Uprawnienia rozdzielają adminów, brygadzistów i pracowników.",
     admin: { title: "👑 Admin", sub: "Kierownictwo i biuro", points: ["Ustawienia org i kopie zapasowe", "Zaproszenia i role", "Zatwierdzanie dokumentów i eksportów", "Pełny dostęp do modułów (wg planu)"] },
     supervisor: { title: "🔧 Brygadzista", sub: "Kierownik budowy", points: ["Pozwolenia, odprawy, inspekcje", "Toolboxy i zapisy z terenu", "Zgłoszenia zdarzeń", "Codzienna kontrola operacyjna"], highlight: true },
-    worker: { title: "👷 Pracownik", sub: "Dostęp operacyjny", points: ["Zapoznanie z IOR tam gdzie wymagane", "Obecność i kroki indukcji", "Zgłaszanie problemów z foto", "Bez billingu i ustawień org"], denyLast: true },
+    worker: { title: "👷 Pracownik", sub: "Dostęp operacyjny", points: ["Zapoznanie z IBWR tam gdzie wymagane", "Obecność i kroki indukcji", "Zgłaszanie problemów z foto", "Bez billingu i ustawień org"], denyLast: true },
   },
   modules: { title: "40+ modułów. Jedna aplikacja.", intro: "Rejestry, checklisty i procesy — bez dokładania pięciu narzędzi." },
   pricing: {
@@ -303,9 +303,161 @@ const PL_SECTIONS = {
   },
 };
 
+const DE_SECTIONS = {
+  hero: {
+    titleLine1: "Arbeitsschutz,",
+    titleLine2: "mit echter Tiefe.",
+    modulesStat: "Module",
+    profilesStat: "Arbeitsbereichsprofile",
+    trialStat: "Volle Evaluation",
+  },
+  workflow: {
+    badge: "So nutzen Teams es wirklich",
+    title: "Vom Profil zu freigegebenen Baustellennachweisen",
+    intro: "Ein Ablauf — nicht fünf getrennte Werkzeuge. Offline auf der Baustelle, optionale Cloud-Synchronisation für Sicherung und Einladungen.",
+    steps: [
+      { id: "profile", emoji: "🎯", title: "Arbeitsbereichsprofil wählen", copy: "Bau, Vermessung, Lebensmittel/Pharma oder Abbruch — Module und GBU-Bibliotheken passen ab Tag eins zu Ihrem Gewerk.", accent: "rgba(139,92,246,.14)", border: "rgba(139,92,246,.35)", span: "wide" },
+      { id: "rams", emoji: "⚠️", title: "GBU mit einem Klick anlegen", copy: "Eingebaute Schnellpakete mit Gefährdungen, Maßnahmen, PSA und Erlaubnisscheinen — keine leeren Word-Vorlagen.", accent: "rgba(13,148,136,.12)", border: "rgba(13,148,136,.35)", span: "normal" },
+      { id: "ptw", emoji: "🔥", title: "Erlaubnisscheine live führen", copy: "Heißarbeiten, Absturz, enge Räume, Elektro — Ablauf, SIMOPS und Qualitätsgates auf dem Dashboard.", accent: "rgba(249,115,22,.12)", border: "rgba(249,115,22,.35)", span: "normal" },
+      { id: "export", emoji: "🖨️", title: "Auditfähige PDFs exportieren", copy: "GBU-Matrix, Berichte, Erlaubnisschein-Boards — drucken oder teilen, ohne Tabellen neu zu bauen.", accent: "rgba(59,130,246,.12)", border: "rgba(59,130,246,.35)", span: "wide" },
+    ],
+    cta: "Passend zu Ihrem Gewerk",
+    startEval: "14-Tage-Evaluation starten →",
+    exploreProfiles: "Profile und GBU ansehen",
+  },
+  features: { badge: "Funktionen", title: "Alles, was Sie auf der Baustelle brauchen", intro: "Von der Gefährdungsbeurteilung bis zum Erlaubnisschein, Qualifikation bis Geräteprüfung — eine App statt verstreuter Papierarbeit." },
+  industry: {
+    badge: "Tiefer als generische HSE-Apps",
+    title: "Profil wählen — die richtigen Module",
+    intro: "Neun Profile passen GBU-Bibliotheken, Register und Dashboards an Ihre Arbeit an — vom Rohbau bis zum Ausbau.",
+    profilesStat: "Arbeitsbereichsprofile",
+    packsStat: "Schnellpakete",
+    modulesStat: "Module",
+  },
+  readiness: {
+    badge: "Kurzcheck",
+    title: "Wie bereit ist Ihre Baustelle heute?",
+    intro: "Markieren Sie, was schon steht, und sehen Sie den Bereitschaftswert. So finden Teams schnell, wo Risiko noch durchsickert.",
+    ringLabel: "Bereitschaft",
+    unlockCta: "Volles Bereitschafts-Dashboard öffnen",
+    noGaps: "Keine offensichtlichen Lücken — solide Basis für den Tag.",
+    gaps: (n) => `${n} zentrale${n > 1 ? " Bereiche brauchen" : "r Bereich braucht"} Aufmerksamkeit. Dort zuerst nachziehen spart Überraschungen.`,
+    tones: [
+      { min: 80, label: "Baustelle bereit", hint: "Starke Basis. Prüfungen über alle Schichten halten." },
+      { min: 60, label: "Gute Basis", hint: "Nah dran. Fehlende Prüfungen nachziehen." },
+      { min: 40, label: "Aufmerksamkeit nötig", hint: "Manche Kontrollen sind ungleich — Risiko auf der Baustelle." },
+      { min: 0, label: "Hohes Risiko", hint: "Kritische Kontrollen sind nicht stabil. Bei den Grundlagen beginnen." },
+    ],
+    signals: [
+      { id: "permits-live", title: "Erlaubnisscheine live", detail: "Aktive, auslaufende und abgelaufene Scheine sofort sichtbar." },
+      { id: "daily-briefing", title: "Unterweisungsnachweis", detail: "Unterweisungen unterschrieben und vorzeigbar." },
+      { id: "competency-watch", title: "Qualifikation im Blick", detail: "Ablaufende Nachweise sichtbar, bevor jemand auf die Baustelle geht." },
+      { id: "incident-speed", title: "Schnelle Meldung", detail: "Ereignisse und Beinaheunfälle mit Foto in Minuten." },
+      { id: "audit-ready", title: "Export für Audits", detail: "Lesbare Zusammenstellungen ohne Tabellenumbau." },
+    ],
+  },
+  roles: {
+    badge: "So funktioniert es",
+    title: "Eine App, drei Rollen",
+    intro: "Alle in einem Arbeitsbereich. Berechtigungen trennen Admins, Aufsicht und Beschäftigte.",
+    admin: { title: "👑 Admin", sub: "Leitung und Büro", points: ["Org-Einstellungen und Sicherung", "Einladungen und Rollen", "Dokumentenfreigabe und Exporte", "Voller Modulzugriff (laut Plan)"] },
+    supervisor: { title: "🔧 Aufsicht", sub: "Bauleitung", points: ["Erlaubnisscheine, Unterweisung, Prüfungen", "Kurzunterweisungen und Baustellennachweise", "Ereignismeldung", "Tägliche Betriebskontrolle"], highlight: true },
+    worker: { title: "👷 Beschäftigte", sub: "Operativer Zugang", points: ["GBU zur Kenntnis nehmen", "Anwesenheit und Einweisung", "Probleme mit Foto melden", "Ohne Billing und Org-Einstellungen"], denyLast: true },
+  },
+  modules: { title: "40+ Module. Eine App.", intro: "Register, Checklisten und Abläufe — ohne fünf Extra-Werkzeuge." },
+  pricing: {
+    badge: "Preise",
+    title: "Klare Pläne",
+    intro: "Fester Preis pro Organisation — nicht pro Arbeitsplatz. Live-Limits unter Einstellungen → Billing.",
+    evaluation: "Evaluation",
+    solo: "Solo",
+    team: "Team",
+    business: "Business",
+    enterprise: "Enterprise",
+    enterprisePlus: "Enterprise Plus",
+    startEval: "Evaluation starten",
+    startTrial: "Trial starten",
+    contactSales: "Vertrieb kontaktieren",
+    enterpriseMailSubject: "MySafeOps Enterprise Plus (DE)",
+  },
+  roi: {
+    badge: "Nutzenschätzung",
+    title: "Was kostet Sie verzögerte Dokumentation?",
+    intro: "Kurzer Rechner — möglicher Zeit- und Kostengewinn in einem Ablauf.",
+    teamLabel: "Personen auf der aktiven Baustelle",
+    docsLabel: "Dokumente / Scheine pro Person und Tag",
+    minutesLabel: "Minuten Ersparnis je Position",
+    rateLabel: "Mittlere Arbeitsstundenkosten",
+    people: (n) => `${n} Personen`,
+    itemsDay: (n) => `${n} Pos./Tag`,
+    min: (n) => `${n} Min.`,
+    hour: (n, fmt) => `${fmt}/Std.`,
+    kicker: "Möglicher Gewinn",
+    week: (h) => `${h} Std. / Woche`,
+    month: (v, fmt) => `ca. ${fmt} / Monat produktiver Zeit`,
+    disclaimer: "Annahme: 5 Arbeitstage. Planung, keine Finanzgarantie.",
+    orgPricing: "Das Abo gilt pro Organisation (Planlimits), nicht pro Arbeitsplatz — vergleichen Sie mit der",
+    pricingLink: "Preistabelle",
+    cta: "Im eigenen Arbeitsbereich prüfen",
+  },
+  blog: {
+    badge: "Wissen",
+    title: "Aus dem Blog",
+    lead: (n) => `Arbeitsschutz und Erlaubnisscheine. ${n} Artikel durchsuchen.`,
+    browseAll: "Alle Artikel",
+    seeAll: "Alle ansehen →",
+    readArticle: "Artikel lesen →",
+    featured: "Hervorgehoben",
+    tagsAria: "Schlagworte",
+  },
+  missing: {
+    title: "🛠️ Was fehlt Ihnen?",
+    intro: "Wir bauen MySafeOps für echte Baustellen — schreiben Sie, welches Register, welche Checkliste oder welchen Ablauf Sie brauchen.",
+    sub: (email) => `Wenn es auf der Baustelle zählt, kommt es auf die Roadmap. Support: ${email}`,
+    emailPh: "Ihre E-Mail",
+    namePh: "Name / Firma",
+    descPh: "Welche Funktion, welches Register oder Dokument brauchen Sie?",
+    emailLabel: "E-Mail-Adresse",
+    nameLabel: "Name oder Firma",
+    descLabel: "Funktionswunsch",
+    cta: "Per E-Mail senden →",
+    footnote: (email) => `Öffnet das E-Mail-Programm an ${email}.`,
+  },
+  cta: {
+    title: "Arbeitsbereich öffnen?",
+    intro: "Anmelden, Trial starten (wenn aktiv) und die Organisation einladen.",
+    emailPh: "Geschäftliche E-Mail (optional)",
+    emailLabel: "Geschäftliche E-Mail (optional)",
+    button: "Zur Anmeldung →",
+    help: "Hilfe:",
+  },
+  footer: {
+    region: "Region:",
+    product: "Produkt",
+    resources: "Ressourcen",
+    company: "Unternehmen",
+    signIn: "Anmelden",
+    docs: "Dokumentation",
+    contact: "Kontakt",
+    status: "Dienststatus",
+    security: "Sicherheit und Vertrauen",
+    emailUs: "Schreiben Sie uns",
+    privacy: "Datenschutz",
+    terms: "Nutzungsbedingungen",
+    cookies: "Cookie-Richtlinie",
+    dpa: "Auftragsverarbeitung (AVV)",
+    accessibility: "Barrierefreiheit",
+    impressum: "Impressum",
+    cookieNotice: "MySafeOps verwendet nur notwendige Cookies für die Anmeldung — keine Werbung und kein Tracking über Websites hinweg.",
+    cookiePolicy: "Cookie-Richtlinie",
+    help: "Hilfe:",
+  },
+};
+
 /** @param {MarketId} marketId */
 export function getLandingSectionsCopy(marketId) {
   if (marketId === "pl") return PL_SECTIONS;
+  if (marketId === "de" || marketId === "at" || marketId === "ch") return DE_SECTIONS;
   return UK_SECTIONS;
 }
 
@@ -317,10 +469,10 @@ export function getReadinessTone(score, marketId = "uk") {
 
 /** @param {MarketId} marketId */
 export function getHeroMockupScreens(marketId) {
-  const rams = marketId === "pl" ? "IOR" : marketId === "au" ? "SWMS" : "RAMS";
-  const permits = marketId === "pl" ? "Pozwolenia" : "Permits";
-  const incidents = marketId === "pl" ? "Zdarzenia" : "Incidents";
-  const workers = marketId === "pl" ? "Pracownicy" : "Workers";
+  const rams = marketId === "pl" ? "IBWR" : marketId === "de" || marketId === "at" || marketId === "ch" ? "GBU" : marketId === "au" ? "SWMS" : "RAMS";
+  const permits = marketId === "pl" ? "Pozwolenia" : marketId === "de" || marketId === "at" || marketId === "ch" ? "Scheine" : "Permits";
+  const incidents = marketId === "pl" ? "Zdarzenia" : marketId === "de" || marketId === "at" || marketId === "ch" ? "Ereignisse" : "Incidents";
+  const workers = marketId === "pl" ? "Pracownicy" : marketId === "de" || marketId === "at" || marketId === "ch" ? "Beschäftigte" : "Workers";
 
   if (marketId === "pl") {
     return [
@@ -335,7 +487,7 @@ export function getHeroMockupScreens(marketId) {
           { v: "24", l: workers, c: "#06b6d4" },
         ],
         cards: [
-          { t: "⚠️ IOR — Spawanie / prace gorące", s: "IOR-003 · Strefa B · Zatwierdzona ✅", p: 95, c: "#f97316" },
+          { t: "⚠️ IBWR — Spawanie / prace gorące", s: "IBWR-003 · Strefa B · Zatwierdzona ✅", p: 95, c: "#f97316" },
           { t: "🏗️ PTW wysokość — Dach", s: "PTW-007 · 6 godz. pozostało", p: 70, c: "#3b82f6" },
           { t: "🚨 Zgłoszenie zdarzenia", s: "ZDN-004 · Do weryfikacji", p: 40, c: "#ef4444" },
         ],
@@ -343,7 +495,7 @@ export function getHeroMockupScreens(marketId) {
       },
       {
         id: "bhp",
-        label: "Plan BHP",
+        label: "Plan BIOZ",
         icon: "🏗️",
         kpis: [
           { v: "Plan", l: "BHP", c: "#2dd4bf" },
@@ -352,7 +504,7 @@ export function getHeroMockupScreens(marketId) {
           { v: "8", l: "Foto geo", c: "#38bdf8" },
         ],
         cards: [
-          { t: "📋 Plan BHP — Etap 2", s: "Koordynacja · 3 podwykonawców", p: 88, c: "#2dd4bf" },
+          { t: "📋 Plan BIOZ — Etap 2", s: "Koordynacja · 3 podwykonawców", p: 88, c: "#2dd4bf" },
           { t: "📸 Dowód geo — brama", s: "GPS · azymut 247°", p: 100, c: "#38bdf8" },
           { t: "✅ Ocena ryzyka", s: "Macierz 5×5 · 2 luki", p: 62, c: "#a78bfa" },
         ],
@@ -374,6 +526,62 @@ export function getHeroMockupScreens(marketId) {
           { t: "⛑️ Przestrzeń zamknięta", s: "Pomiar gazów OK", p: 75, c: "#3b82f6" },
         ],
         nav: ["📊 Start", "📄 Dok.", "👷 Prac.", "🔧 Sprz.", "⚙️ Więcej"],
+      },
+    ];
+  }
+
+  if (marketId === "de") {
+    return [
+      {
+        id: "dashboard",
+        label: "Übersicht",
+        icon: "📊",
+        kpis: [
+          { v: "12", l: rams, c: "#f97316" },
+          { v: "8", l: permits, c: "#a78bfa" },
+          { v: "2", l: incidents, c: "#ef4444" },
+          { v: "24", l: workers, c: "#06b6d4" },
+        ],
+        cards: [
+          { t: "⚠️ GBU — Schweißen / Heißarbeiten", s: "GBU-003 · Zone B · Freigegeben ✅", p: 95, c: "#f97316" },
+          { t: "🏗️ Erlaubnisschein Absturz — Dach", s: "ES-007 · 6 Std. verbleibend", p: 70, c: "#3b82f6" },
+          { t: "🚨 Ereignis gemeldet", s: "ERE-004 · In Prüfung", p: 40, c: "#ef4444" },
+        ],
+        nav: ["📊 Start", "📄 Dok.", "👷 Pers.", "🔧 Geräte", "⚙️ Mehr"],
+      },
+      {
+        id: "sige",
+        label: "SiGe-Plan",
+        icon: "🏗️",
+        kpis: [
+          { v: "Plan", l: "SiGe", c: "#2dd4bf" },
+          { v: "4", l: "Nachunt.", c: "#818cf8" },
+          { v: "92%", l: "Stand", c: "#22c55e" },
+          { v: "8", l: "Geo-Fotos", c: "#38bdf8" },
+        ],
+        cards: [
+          { t: "📋 SiGe-Plan — Bauabschnitt 2", s: "Koordination · 3 Nachunternehmer", p: 88, c: "#2dd4bf" },
+          { t: "📸 Geo-Nachweis — Pforte", s: "GPS · Azimut 247°", p: 100, c: "#38bdf8" },
+          { t: "✅ Gefährdungsbeurteilung", s: "Matrix 5×5 · 2 Lücken", p: 62, c: "#a78bfa" },
+        ],
+        nav: ["📊 Start", "📄 Dok.", "👷 Pers.", "🔧 Geräte", "⚙️ Mehr"],
+      },
+      {
+        id: "ptw",
+        label: "Erlaubnisscheine",
+        icon: "🔥",
+        kpis: [
+          { v: "5", l: "Aktiv", c: "#22c55e" },
+          { v: "2", l: "Laufen ab", c: "#eab308" },
+          { v: "1", l: "Überfällig", c: "#ef4444" },
+          { v: "3", l: "SIMOPS", c: "#f97316" },
+        ],
+        cards: [
+          { t: "🔥 Heißarbeiten — Halle", s: "Brandwache · 2h 14m", p: 55, c: "#f97316" },
+          { t: "⚡ Freischaltung", s: "LOTO · Unterschrift Aussteller", p: 90, c: "#eab308" },
+          { t: "⛑️ Enge Räume", s: "Gasmessung OK", p: 75, c: "#3b82f6" },
+        ],
+        nav: ["📊 Start", "📄 Dok.", "👷 Pers.", "🔧 Geräte", "⚙️ Mehr"],
       },
     ];
   }
@@ -492,6 +700,7 @@ export function getHeroMockupScreens(marketId) {
 /** Blog tag filter for landing strip. */
 export function getLandingBlogTag(marketId) {
   if (marketId === "pl") return "pl";
+  if (marketId === "de" || marketId === "at" || marketId === "ch") return "de";
   if (marketId === "au") return "au";
   return "uk";
 }

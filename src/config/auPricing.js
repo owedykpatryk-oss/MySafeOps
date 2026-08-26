@@ -8,17 +8,17 @@
 /** Monthly amounts in cents (AUD). */
 export const AU_PLAN_AMOUNT_CENTS = {
   starter: 5900,
-  team: 22900,
-  business: 57900,
-  enterprise: 109900,
+  team: 24900,
+  business: 71900,
+  enterprise: 142900,
 };
 
 /** Human-readable monthly labels (ex GST). */
 export const AU_PLAN_PRICE_LABELS = {
   starter: "A$59",
-  team: "A$229",
-  business: "A$579",
-  enterprise: "A$1099",
+  team: "A$249",
+  business: "A$719",
+  enterprise: "A$1429",
   trial: "A$0",
 };
 
@@ -45,6 +45,6 @@ export function stripeEnvKeyForAuPlan(planId, testMode = false) {
     business: "STRIPE_PRICE_BUSINESS",
     enterprise: "STRIPE_PRICE_ENTERPRISE",
   }[planId];
-  const testSuffix = testMode ? "_TEST" : "";
-  return `${base}${AU_STRIPE_PRICE_ENV_SUFFIX}${testSuffix}`;
+  const testInfix = testMode ? "_TEST" : "";
+  return `${base}${testInfix}${AU_STRIPE_PRICE_ENV_SUFFIX}`;
 }

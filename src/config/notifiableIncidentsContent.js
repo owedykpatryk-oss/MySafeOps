@@ -212,7 +212,7 @@ const PL_NOTIFIABLE = /** @type {NotifiableIncidentsContent} */ ({
   viewIds: ["notifiable-incidents", "riddor"],
   badgeText: "PIP",
   title: "Zdarzenia wymagające zgłoszenia",
-  lead: "Poważne wypadki przy pracy i zdarzenia potencjalnie wypadkowe — zgłoś niezwłocznie do PIP. Aplikacja nie składa zgłoszeń ustawowych.",
+  lead: "Wypadek śmiertelny, ciężki lub zbiorowy — pracodawca zawiadamia niezwłocznie okręgowego inspektora pracy i prokuratora. Aplikacja nie składa zgłoszeń ustawowych.",
   exportModuleLabel: "Rejestr zdarzeń PIP",
   newReportLabel: "+ Nowy rekord zdarzenia",
   emptyLabel: "Brak rekordów zdarzeń.",
@@ -224,25 +224,33 @@ const PL_NOTIFIABLE = /** @type {NotifiableIncidentsContent} */ ({
   deadlinePrefix: "Zgłoszenie",
   reportedLabel: "Zgłoszono do PIP",
   notReportedBanner:
-    "Zdarzenie nie zostało oznaczone jako zgłoszone do PIP. W razie wątpliwości skontaktuj się z PIP niezwłocznie.",
+    "Zdarzenie nie zostało oznaczone jako zgłoszone. Przy wypadku śmiertelnym, ciężkim lub zbiorowym zawiadom okręgowego inspektora pracy i prokuratora niezwłocznie.",
   printTitle: "Zdarzenie — arkusz roboczy",
   printBanner:
-    "Lokalny arkusz — przy wypadku śmiertelnym lub ciężkim zgłoś do PIP zgodnie z przepisami. Nie zastępuje zgłoszenia urzędowego.",
+    "Lokalny arkusz roboczy. Zawiadomienie PIP i prokuratora, protokół powypadkowy oraz statystyczna karta wypadku (Z-KW) pozostają obowiązkiem pracodawcy — ten dokument ich nie zastępuje.",
   saveLabel: "Zapisz rekord",
   types: {
     fatality: {
-      label: "Śmierć",
+      label: "Wypadek śmiertelny",
       deadline: 1,
-      form: "Zgłoszenie PIP",
+      form: "Zawiadomienie PIP i prokuratora",
       urgent: true,
-      description: "Śmierć pracownika lub innej osoby w związku z pracą",
+      description: "Śmierć poszkodowanego na miejscu lub w okresie 6 miesięcy od wypadku przy pracy",
     },
     serious_injury: {
-      label: "Ciężki uraz",
+      label: "Wypadek ciężki",
       deadline: 1,
-      form: "Zgłoszenie PIP",
+      form: "Zawiadomienie PIP i prokuratora",
       urgent: true,
-      description: "Uraz powodujący ciężkie naruszenie zdrowia, amputację, utratę wzroku, porażenie prądem itp.",
+      description:
+        "Ciężkie uszkodzenie ciała: utrata wzroku, słuchu, mowy, zdolności rozrodczej, choroba nieuleczalna, trwała choroba psychiczna, znaczne trwałe zeszpecenie lub zniekształcenie ciała",
+    },
+    collective_accident: {
+      label: "Wypadek zbiorowy",
+      deadline: 1,
+      form: "Zawiadomienie PIP i prokuratora",
+      urgent: true,
+      description: "Wypadek, któremu w wyniku tego samego zdarzenia uległy co najmniej dwie osoby",
     },
     dangerous_incident: {
       label: "Zdarzenie potencjalnie wypadkowe",
@@ -252,11 +260,12 @@ const PL_NOTIFIABLE = /** @type {NotifiableIncidentsContent} */ ({
       description: "Zdarzenie mogące spowodować ciężki uraz — zawalenie, wybuch, upadek z wysokości, uwięzienie",
     },
     occupational_disease: {
-      label: "Choroba zawodowa (ocena)",
+      label: "Podejrzenie choroby zawodowej",
       deadline: null,
-      form: "Zgłoszenie PIP",
+      form: "Zgłoszenie do PIS i PIP",
       urgent: false,
-      description: "Choroba zawodowa — potwierdź obowiązek zgłoszenia z lekarzem i PIP",
+      description:
+        "Podejrzenie choroby zawodowej zgłasza się właściwemu państwowemu inspektorowi sanitarnemu i okręgowemu inspektorowi pracy",
     },
     public_injury: {
       label: "Uraz osoby postronnej (ocena)",
@@ -267,30 +276,147 @@ const PL_NOTIFIABLE = /** @type {NotifiableIncidentsContent} */ ({
     },
   },
   specifiedInjuries: [
-    "Ciężkie naruszenie zdrowia wymagające hospitalizacji",
-    "Amputacja",
-    "Poważne oparzenie",
-    "Utrata wzroku lub poważne uszkodzenie oczu",
-    "Porażenie prądem wymagające leczenia",
-    "Wstrząśnienie mózgu / uraz kręgosłupa",
+    "Utrata wzroku, słuchu, mowy lub zdolności rozrodczej",
+    "Amputacja lub trwałe uszkodzenie kończyny",
+    "Uszkodzenie ciała naruszające czynność narządu na okres powyżej 6 miesięcy",
+    "Choroba nieuleczalna lub zagrażająca życiu",
+    "Trwała choroba psychiczna",
+    "Znaczne trwałe zeszpecenie lub zniekształcenie ciała",
+    "Poważne oparzenie wymagające hospitalizacji",
+    "Porażenie prądem wymagające leczenia szpitalnego",
     "Kontakt z substancją niebezpieczną wymagający leczenia",
   ],
   dangerousOccurrences: [
-    "Zawalenie lub groźba zawalenia konstrukcji",
+    "Zawalenie lub groźba zawalenia konstrukcji albo rusztowania",
     "Wybuch lub pożar",
     "Uwolnienie substancji niebezpiecznej",
-    "Upadek przedmiotu z wysokości",
-    "Zapadnięcie wykopu",
-    "Kolizja maszyn budowlanych",
-    "Kontakt z linią energetyczną",
+    "Upadek przedmiotu z wysokości w strefę ruchu ludzi",
+    "Zapadnięcie ścian wykopu",
+    "Kolizja lub wywrócenie maszyny budowlanej",
+    "Kontakt sprzętu lub ładunku z linią energetyczną",
     "Uwięzienie w przestrzeni zamkniętej",
+    "Awaria urządzenia podlegającego dozorowi technicznemu (UDT)",
+    "Uszkodzenie sieci gazowej lub kabla wysokiego napięcia",
   ],
+});
+
+const DE_NOTIFIABLE = /** @type {NotifiableIncidentsContent} */ ({
+  moduleId: "notifiable-incidents",
+  viewIds: ["notifiable-incidents", "riddor"],
+  badgeText: "BG",
+  title: "Meldepflichtige Ereignisse",
+  lead: "Unfälle und schwere Ereignisse — unverzüglich der Berufsgenossenschaft und bei Bedarf der Arbeitsschutzbehörde anzeigen. Die App übermittelt keine gesetzlichen Meldungen.",
+  exportModuleLabel: "Register meldepflichtiger Ereignisse",
+  newReportLabel: "+ Neuer Ereignisdatensatz",
+  emptyLabel: "Keine Ereignisdatensätze.",
+  wizardTitle: "Unfallanzeige — Assistent",
+  wizardSubtitle: "Bewertungsbogen — SGB VII / DGUV, keine behördliche Übermittlung",
+  regulatorName: "BG BAU / Unfallversicherungsträger",
+  regulatorUrl: "https://www.bgbau.de/service/angebote/unfallanzeige/",
+  regulatorLinkText: "Unfallanzeige BG BAU →",
+  deadlinePrefix: "Anzeige",
+  reportedLabel: "Beim UVT angezeigt",
+  notReportedBanner:
+    "Dieses Ereignis ist noch nicht als angezeigt markiert. Tödliche und schwere Unfälle unverzüglich der Berufsgenossenschaft und der zuständigen Arbeitsschutzbehörde mitteilen.",
+  printTitle: "Ereignis — Arbeitsblatt",
+  printBanner:
+    "Lokales Arbeitsblatt — ersetzt nicht die Unfallanzeige nach § 193 SGB VII. Tödliche Unfälle unverzüglich anzeigen.",
+  saveLabel: "Datensatz speichern",
+  types: {
+    fatality: {
+      label: "Tödlicher Unfall",
+      deadline: 1,
+      form: "Unfallanzeige UVT",
+      urgent: true,
+      description: "Tod einer beschäftigten oder anderen Person im Zusammenhang mit der Arbeit",
+    },
+    serious_injury: {
+      label: "Schwerer Unfall",
+      deadline: 3,
+      form: "Unfallanzeige UVT",
+      urgent: true,
+      description: "Unfall mit Arbeitsunfähigkeit von mehr als drei Tagen, Amputation, Verlust des Sehvermögens, Stromunfall u. a.",
+    },
+    dangerous_incident: {
+      label: "Beinaheunfall / gefährliches Ereignis",
+      deadline: 3,
+      form: "Interne Aufnahme",
+      urgent: true,
+      description: "Ereignis mit ernstem Risiko — Einsturz, Explosion, Absturz, Einschluss",
+    },
+    occupational_disease: {
+      label: "Berufskrankheit (prüfen)",
+      deadline: null,
+      form: "Anzeige BK",
+      urgent: false,
+      description: "Verdacht auf Berufskrankheit — Anzeigepflicht mit Betriebsarzt und UVT klären",
+    },
+    public_injury: {
+      label: "Verletzung Dritter (prüfen)",
+      deadline: 1,
+      form: "Anzeige prüfen",
+      urgent: true,
+      description: "Unbeteiligte Person durch die Arbeiten verletzt — Meldepflicht prüfen",
+    },
+  },
+  specifiedInjuries: [
+    "Arbeitsunfähigkeit von mehr als drei Kalendertagen",
+    "Amputation",
+    "Schwere Verbrennung",
+    "Verlust oder schwere Schädigung des Sehvermögens",
+    "Stromunfall mit Behandlungsbedarf",
+    "Schädel-Hirn-Trauma / Wirbelsäulenverletzung",
+    "Kontakt mit Gefahrstoff mit Behandlungsbedarf",
+  ],
+  dangerousOccurrences: [
+    "Einsturz oder drohender Einsturz eines Bauwerks",
+    "Explosion oder Brand",
+    "Freisetzung eines Gefahrstoffs",
+    "Herabfallen von Lasten",
+    "Einsturz einer Baugrube",
+    "Kollision von Baumaschinen",
+    "Kontakt mit Freileitung",
+    "Einschluss in einem engen Raum",
+  ],
+});
+
+const AT_NOTIFIABLE = /** @type {NotifiableIncidentsContent} */ ({
+  ...DE_NOTIFIABLE,
+  badgeText: "AUVA",
+  lead: "Unfälle und schwere Ereignisse — unverzüglich der AUVA und bei Bedarf der zuständigen Behörde anzeigen. Die App übermittelt keine gesetzlichen Meldungen.",
+  wizardSubtitle: "Bewertungsbogen — ASVG / AUVA, keine behördliche Übermittlung",
+  regulatorName: "AUVA",
+  regulatorUrl: "https://www.auva.at/",
+  regulatorLinkText: "AUVA Unfallmeldung →",
+  reportedLabel: "Bei der AUVA angezeigt",
+  notReportedBanner:
+    "Dieses Ereignis ist noch nicht als angezeigt markiert. Tödliche und schwere Unfälle unverzüglich der AUVA und der zuständigen Behörde mitteilen.",
+  printBanner:
+    "Lokales Arbeitsblatt — ersetzt nicht die Unfallanzeige an die AUVA. Tödliche Unfälle unverzüglich anzeigen.",
+});
+
+const CH_NOTIFIABLE = /** @type {NotifiableIncidentsContent} */ ({
+  ...DE_NOTIFIABLE,
+  badgeText: "Suva",
+  lead: "Unfälle und schwere Ereignisse — unverzüglich der Suva (oder dem zuständigen Unfallversicherer) und bei Bedarf dem kantonalen Arbeitsinspektorat melden. Die App übermittelt keine gesetzlichen Meldungen.",
+  wizardSubtitle: "Bewertungsbogen — UVG / Suva, keine behördliche Übermittlung",
+  regulatorName: "Suva",
+  regulatorUrl: "https://www.suva.ch/",
+  regulatorLinkText: "Suva Unfallmeldung →",
+  reportedLabel: "Bei der Suva gemeldet",
+  notReportedBanner:
+    "Dieses Ereignis ist noch nicht als gemeldet markiert. Tödliche und schwere Unfälle unverzüglich der Suva und dem kantonalen Arbeitsinspektorat mitteilen.",
+  printBanner:
+    "Lokales Arbeitsblatt — ersetzt nicht die Unfallmeldung an die Suva. Tödliche Unfälle unverzüglich melden.",
 });
 
 /** @param {MarketId} [marketId] */
 export function getNotifiableIncidentsContent(marketId = "uk") {
   if (marketId === "au") return AU_NOTIFIABLE;
   if (marketId === "pl") return PL_NOTIFIABLE;
+  if (marketId === "de") return DE_NOTIFIABLE;
+  if (marketId === "at") return AT_NOTIFIABLE;
+  if (marketId === "ch") return CH_NOTIFIABLE;
   return UK_RIDDOR;
 }
 
@@ -301,7 +427,7 @@ export function isNotifiableIncidentsView(viewId, marketId = "uk") {
 
 /** Default incident type key for new records. */
 export function defaultIncidentTypeKey(marketId = "uk") {
-  if (marketId === "au" || marketId === "pl") return "serious_injury";
+  if (marketId === "au" || marketId === "pl" || marketId === "de" || marketId === "at" || marketId === "ch") return "serious_injury";
   return "specified";
 }
 

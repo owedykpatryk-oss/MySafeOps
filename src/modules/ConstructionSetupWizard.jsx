@@ -35,7 +35,9 @@ export default function ConstructionSetupWizard() {
     marketId === "au"
       ? `Onboarding for surveying & geodesy teams — AS5488, aerial LiDAR, laser scan, hydrographic and rail corridor ${ramsLabel} packs.`
       : marketId === "pl"
-      ? `Onboarding dla geodezji — PAS128/AS5488, LiDAR, skan laserowy i pakiety IOR geodezyjnych.`
+      ? `Onboarding dla geodezji — PAS128/AS5488, LiDAR, skan laserowy i pakiety IBWR geodezyjnych.`
+      : marketId === "de" || marketId === "at" || marketId === "ch"
+      ? `Onboarding für Vermessung — PAS128/AS5488, LiDAR, Laserscan und ${ramsLabel}-Pakete für Geodäsie.`
       : `Onboarding for surveying & geodesy teams — PAS128/AS5488, aerial LiDAR, laser scan, hydrographic and rail corridor ${ramsLabel} packs.`;
   const umLead =
     "Onboarding for Utility Mapping — PAS128 M-series reports, GPR, geo-photos, exclusive RAMS packs and permit to dig.";

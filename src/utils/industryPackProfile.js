@@ -107,6 +107,17 @@ export const INDUSTRY_SITE_PACKS = {
     title: "Civil & earthworks site pack",
     focus: ["Excavation log", "Temporary works", "Daily briefing", "RAMS", "Permits (PTW)", "Inspections"],
   },
+  railInfrastructure: {
+    title: "Rail & trackside site pack",
+    focus: [
+      "Rail corridor access PTW",
+      "OLE / RRV permits",
+      "PTS / COSS competence",
+      "RAMS (rail)",
+      "Shift briefing",
+      "Handback evidence",
+    ],
+  },
 };
 
 /** Typical workflow copy for Help and Settings. */
@@ -172,6 +183,15 @@ export const PACK_WORKFLOW_HELP = {
       "Log excavation and temp works before start",
       "Gate book for deliveries",
       "Asbestos register before intrusive work",
+    ],
+  },
+  railInfrastructure: {
+    summary: "Access window → rail RAMS → corridor / OLE / RRV permits → shift briefing → handback evidence.",
+    steps: [
+      "Apply the rail site context to the RAMS pack",
+      "Issue rail corridor access, plus OLE isolation or RRV permit where they apply",
+      "Check PTS / COSS and safety-critical medicals in Training before the shift",
+      "Photograph possession limits, plant and the handback before trains resume",
     ],
   },
   civilEarthworks: {
@@ -274,6 +294,11 @@ const PACK_HIGHLIGHTS = {
     "Groundworks playbook featured",
     "Demolition site pack for handover evidence",
   ],
+  railInfrastructure: [
+    "Rail corridor, OLE isolation and RRV permits in the PTW picker",
+    "Rail & trackside geo-photo types — possession limits, OLE, handback",
+    "Rail RAMS starter and trackside quick packs in the builder",
+  ],
   civilEarthworks: [
     "Excavation and temp works registers prioritised",
     "Groundworks RAMS starter in builder",
@@ -357,6 +382,11 @@ export function previewPackSwitch(fromId, toId, marketId = getOrgMarketId()) {
     changes.push("Excavation and temp works registers surfaced in More");
     changes.push("Groundworks RAMS starter suggested in builder");
     changes.push("Readiness emphasises PTW and excavation evidence");
+  }
+  if (toId === "railInfrastructure") {
+    changes.push("Rail corridor, OLE isolation and RRV permits offered in the PTW picker");
+    changes.push("Rail & trackside geo-photo types move to the top of the capture list");
+    changes.push("Training register surfaced for PTS / COSS and safety-critical medicals");
   }
   if (toId === "showEverything") {
     changes.push("All modules and RAMS packs restored to visible");

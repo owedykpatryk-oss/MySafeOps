@@ -21,7 +21,7 @@ describe("renderPermitDocumentHtml", () => {
       extraFields: {},
     });
     expect(html).toContain('lang="pl-PL"');
-    expect(html).toContain("Pozwolenie na odłączenie elektryczne");
+    expect(html).toContain("Zezwolenie na odłączenie i pracę przy instalacji elektrycznej");
     expect(html).toContain("Lista kontrolna przed rozpoczęciem pracy");
     expect(html).toContain("Kodeks pracy");
     expect(html).not.toContain("Legal references (UK)");

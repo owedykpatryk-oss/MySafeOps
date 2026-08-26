@@ -14,12 +14,14 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const KEY = "cip_signoff_register";
 const genId = () => `cip_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -56,7 +58,7 @@ function Form({ item, projects, onSave, onClose }) {
         <input style={ss.inp} value={form.equipmentId} onChange={(e) => set("equipmentId", e.target.value)}  id="cip-signoff-equipment-id" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-work-order-ref">Work order ref</label>
         <input style={ss.inp} value={form.workOrderRef} onChange={(e) => set("workOrderRef", e.target.value)}  id="cip-signoff-work-order-ref" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="cip-signoff-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -81,7 +83,7 @@ function Form({ item, projects, onSave, onClose }) {
         {(form.swabResults || []).map((s, idx) => (
           <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 80px auto", gap: 6, marginTop: 8, alignItems: "end" }}>
             <div>
-              <label style={ss.lbl} htmlFor={`cip-signoff-location-${s.id}`}>Location</label>
+              <label style={ss.lbl} htmlFor={`cip-signoff-location-${s.id}`}>{t("location")}</label>
               <input style={ss.inp} value={s.location} onChange={(e) => patchSwab(idx, { location: e.target.value })}  id={`cip-signoff-location-${s.id}`} />
             </div>
             <div>
@@ -111,10 +113,10 @@ function Form({ item, projects, onSave, onClose }) {
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -123,6 +125,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function CIPSignoffRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load(KEY, []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -175,7 +178,7 @@ export default function CIPSignoffRegister() {
         right={
           <div style={{ display: "flex", gap: 8 }}>
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add record
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -192,7 +195,7 @@ export default function CIPSignoffRegister() {
           icon="🧴"
           title="No CIP records yet"
           description="Record clean-in-place runs with ATP swab results and release-to-production time."
-          actionLabel="+ Add record"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -206,7 +209,7 @@ export default function CIPSignoffRegister() {
               </div>
               <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
                 <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                  Edit
+                  {t("edit")}
                 </button>
                 {caps.deleteRecords && (
                   <button
@@ -227,7 +230,7 @@ export default function CIPSignoffRegister() {
                       }
                     }}
                   >
-                    Delete
+                    {t("delete")}
                   </button>
                 )}
               </div>

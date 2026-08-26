@@ -9,6 +9,7 @@ import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
 import { getOrgId, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import PageHero from "../components/PageHero";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const DOC_META_KEY = "mysafeops_doc_library";
 const R2_UPLOADS_KEY = "mysafeops_r2_uploads";
@@ -44,6 +45,7 @@ async function readDirRecursive(dirHandle, basePath = "") {
 }
 
 export default function DocumentLibrary() {
+  const { t } = useWorkspaceT();
   const { supabase } = useSupabaseAuth();
   const [supported] = useState(() => typeof window !== "undefined" && "showDirectoryPicker" in window);
   const [dirName, setDirName] = useState(() => loadMeta().dirName || "");
@@ -298,7 +300,7 @@ export default function DocumentLibrary() {
                     })()}
                   </div>
                   <button type="button" style={{ ...ss.btn, fontSize: 12 }} onClick={() => removeR2Row(u.id)}>
-                    Remove
+                    {t("delete")}
                   </button>
                 </div>
               ))}
@@ -372,7 +374,7 @@ export default function DocumentLibrary() {
                 onChange={(e) => setTags(selectedPath, e.target.value)}
                 placeholder="e.g. RAMS, handover"
                id="document-library-tags-comma-separated" />
-              <label style={{ ...ss.lbl, marginTop: 12 }} htmlFor="document-library-notes">Notes</label>
+              <label style={{ ...ss.lbl, marginTop: 12 }} htmlFor="document-library-notes">{t("notes")}</label>
               <textarea
                 style={{ ...ss.inp, minHeight: 80, resize: "vertical" }}
                 value={(meta.notes && meta.notes[selectedPath]) || ""}

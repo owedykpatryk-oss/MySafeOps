@@ -5,12 +5,14 @@ import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorag
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const genId = () => `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
 const ss = ms;
 
 export default function DocumentTemplates() {
+  const { t } = useWorkspaceT();
   const [templates, setTemplates] = useState(() => load("document_templates", []));
   const [name, setName] = useState("");
   const [type, setType] = useState("rams");
@@ -116,7 +118,7 @@ export default function DocumentTemplates() {
           ))}
         </select>
         <button type="button" style={{ ...ss.btnP, marginTop: 12 }} onClick={capture}>
-          Save template
+          {t("save")}
         </button>
       </div>
       <div style={ss.card}>
@@ -124,19 +126,19 @@ export default function DocumentTemplates() {
         {liveTemplates.length === 0 ? (
           <div style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>None yet.</div>
         ) : (
-          liveTemplates.map((t) => (
-            <div key={t.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "10px 0", borderBottom: "0.5px solid #eee" }}>
+          liveTemplates.map((tpl) => (
+            <div key={tpl.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "10px 0", borderBottom: "0.5px solid #eee" }}>
               <div style={{ flex: "1 1 200px" }}>
-                <strong>{t.name}</strong>
+                <strong>{tpl.name}</strong>
                 <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                  {t.type.toUpperCase()} · {new Date(t.createdAt).toLocaleDateString("en-GB")}
+                  {tpl.type.toUpperCase()} · {new Date(tpl.createdAt).toLocaleDateString("en-GB")}
                 </div>
               </div>
-              <button type="button" style={ss.btnP} onClick={() => cloneToLive(t)}>
+              <button type="button" style={ss.btnP} onClick={() => cloneToLive(tpl)}>
                 Clone to new draft
               </button>
-              <button type="button" style={ss.btn} onClick={() => deleteTemplate(t.id)}>
-                Delete
+              <button type="button" style={ss.btn} onClick={() => deleteTemplate(tpl.id)}>
+                {t("delete")}
               </button>
             </div>
           ))

@@ -18,6 +18,7 @@ import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `tt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -38,6 +39,7 @@ function initialPresenterPick(item, workers) {
 }
 
 function Form({ item, projects, workers, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -81,7 +83,7 @@ function Form({ item, projects, workers, onSave, onClose }) {
         <input style={ss.inp} value={form.topic} onChange={(e) => set("topic", e.target.value)} placeholder="e.g. Working at height, manual handling"  id="toolbox-talk-topic" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="toolbox-talk-talk-date">Date delivered</label>
         <input type="date" style={ss.inp} value={form.talkDate} onChange={(e) => set("talkDate", e.target.value)}  id="toolbox-talk-talk-date" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="toolbox-talk-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="toolbox-talk-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="toolbox-talk-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -120,7 +122,7 @@ function Form({ item, projects, workers, onSave, onClose }) {
         <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.summary} onChange={(e) => set("summary", e.target.value)}  id="toolbox-talk-summary" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -128,7 +130,7 @@ function Form({ item, projects, workers, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -137,6 +139,7 @@ function Form({ item, projects, workers, onSave, onClose }) {
 }
 
 export default function ToolboxTalkRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("toolbox_talks", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -212,12 +215,12 @@ export default function ToolboxTalkRegister() {
                   Print forms pack
                 </button>
                 <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                  Export CSV
+                  {t("exportCsv")}
                 </button>
               </>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add talk
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -243,7 +246,7 @@ export default function ToolboxTalkRegister() {
             icon="💬"
             title="No toolbox talks logged yet"
             description="Record toolbox talks, topics and attendance for this site."
-            actionLabel="+ Add talk"
+            actionLabel={t("addRecord")}
             onAction={() => setModal({ type: "form" })}
             variant="dashed"
           />
@@ -259,7 +262,7 @@ export default function ToolboxTalkRegister() {
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <RegisterFormPrintButton moduleId="toolbox-reg" record={r} />
                     <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                      Edit
+                      {t("edit")}
                     </button>
                     {caps.deleteRecords && (
                       <button
@@ -281,7 +284,7 @@ export default function ToolboxTalkRegister() {
                           }
                         }}
                       >
-                        Delete
+                        {t("delete")}
                       </button>
                     )}
                   </div>

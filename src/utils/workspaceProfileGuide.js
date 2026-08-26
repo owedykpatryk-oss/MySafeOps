@@ -141,6 +141,17 @@ export const PROFILE_GUIDE_ENTRIES = {
     hubFocus: "Civil & earthworks site pack — excavation, temp works, briefings, RAMS, PTW.",
     ramsNote: "Groundworks starter — buried services, plant, collapse, and permit-to-dig hazards.",
   },
+  railInfrastructure: {
+    tagline: "Trackside, station and lineside works on the rail network.",
+    whoFor: "Rail contractors and lineside teams working under possessions, line blockages or separated green zones.",
+    adjusts: [
+      "Rail corridor, OLE isolation and RRV permits offered in the PTW picker.",
+      "Rail & trackside geo-photo types move to the top of the capture list.",
+      "Training register surfaced for PTS / COSS and safety-critical medicals.",
+    ],
+    hubFocus: "Rail & trackside site pack — corridor access, OLE / RRV permits, competence, RAMS, handback.",
+    ramsNote: "Rail starter — possession working, OLE and conductor rail, on-track plant, level crossings and fatigue.",
+  },
   foodPharma: {
     tagline: "Hygiene-critical manufacturing and contractor access controls.",
     whoFor: "Food, beverage, pharma, and pet food sites with allergen, GMP, and high-care requirements.",

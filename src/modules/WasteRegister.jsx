@@ -15,6 +15,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `waste_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const ss = ms;
 const WASTE_CODES = ["Non-hazardous", "Inert", "Hazardous — EWC code required", "Construction & demolition", "Packaging waste"];
 
 function WasteForm({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -52,7 +54,7 @@ function WasteForm({ item, projects, onSave, onClose }) {
         <h2 style={{ marginTop: 0 }}>{item ? "Edit waste transfer" : "New waste transfer note"}</h2>
         <label style={ss.lbl} htmlFor="waste-wtn-ref">WTN / reference</label>
         <input style={ss.inp} value={form.wtnRef} onChange={(e) => set("wtnRef", e.target.value)} placeholder="e.g. WTN-2026-0042"  id="waste-wtn-ref" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="waste-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="waste-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -102,7 +104,7 @@ function WasteForm({ item, projects, onSave, onClose }) {
         </label>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -110,7 +112,7 @@ function WasteForm({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -119,6 +121,7 @@ function WasteForm({ item, projects, onSave, onClose }) {
 }
 
 export default function WasteRegister() {
+  const { t } = useWorkspaceT();
   const [items, setItems] = useState(() => load("waste_register", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
@@ -192,11 +195,11 @@ export default function WasteRegister() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {liveItems.length > 0 && (
               <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add transfer
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -213,7 +216,7 @@ export default function WasteRegister() {
           icon="♻️"
           title="No waste transfers recorded yet"
           description="Log waste transfer notes, duty of care and EWC codes for this site."
-          actionLabel="+ Add transfer"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -229,7 +232,7 @@ export default function WasteRegister() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="waste" record={w} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: w })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   <button
                     type="button"
@@ -249,7 +252,7 @@ export default function WasteRegister() {
                       }
                     }}
                   >
-                    Delete
+                    {t("delete")}
                   </button>
                 </div>
               </div>

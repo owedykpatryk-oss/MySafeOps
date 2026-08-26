@@ -207,6 +207,142 @@ export default defineConfig(({ mode }) => {
         },
       },
       {
+        name: "dev-de-postcode-api",
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            if (!req.url || (req.method !== "GET" && req.method !== "HEAD")) return next();
+            const pathOnly = req.url.split("?")[0];
+            const legacy = pathOnly.match(/^\/api\/de-postcode\/([^/]+)$/);
+            const isDePostcode = pathOnly === "/api/de-postcode" || legacy;
+            if (!isDePostcode) return next();
+
+            const search = req.url.includes("?") ? req.url.split("?")[1] : "";
+            const params = new URLSearchParams(search);
+            const raw = String(legacy?.[1] || params.get("code") || params.get("postcode") || "");
+            const code = raw.replace(/\D/g, "");
+            if (!/^\d{5}$/.test(code)) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ error: "Invalid German postcode (5 digits)" }));
+              return;
+            }
+
+            try {
+              const url = new URL("https://nominatim.openstreetmap.org/search");
+              url.searchParams.set("postalcode", code);
+              url.searchParams.set("country", "Germany");
+              url.searchParams.set("format", "json");
+              url.searchParams.set("limit", "1");
+              const upstream = await fetch(url.toString(), {
+                headers: {
+                  Accept: "application/json",
+                  "User-Agent": "MySafeOps/1.0 (DE construction safety; support@mysafeops.com)",
+                },
+              });
+              const rows = await upstream.json();
+              const row = Array.isArray(rows) ? rows[0] : null;
+              if (!row?.lat || !row?.lon) {
+                res.statusCode = 404;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Postcode not found" }));
+                return;
+              }
+              const address = row.address || {};
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.setHeader("Cache-Control", "public, max-age=86400");
+              if (req.method === "HEAD") {
+                res.end();
+                return;
+              }
+              res.end(
+                JSON.stringify({
+                  lat: Number(row.lat),
+                  lng: Number(row.lon),
+                  postcode: address.postcode || code,
+                  city: address.city || address.town || address.village || "",
+                  adminDistrict: address.city || address.county || "",
+                  region: address.state || "",
+                  country: address.country || "Germany",
+                })
+              );
+            } catch {
+              res.statusCode = 502;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ error: "Postcode lookup unavailable" }));
+            }
+          });
+        },
+      },
+      {
+        name: "dev-at-postcode-api",
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            if (!req.url || (req.method !== "GET" && req.method !== "HEAD")) return next();
+            const pathOnly = req.url.split("?")[0];
+            const legacy = pathOnly.match(/^\/api\/at-postcode\/([^/]+)$/);
+            const isAtPostcode = pathOnly === "/api/at-postcode" || legacy;
+            if (!isAtPostcode) return next();
+
+            const search = req.url.includes("?") ? req.url.split("?")[1] : "";
+            const params = new URLSearchParams(search);
+            const raw = String(legacy?.[1] || params.get("code") || params.get("postcode") || "");
+            const code = raw.replace(/\D/g, "");
+            if (!/^\d{4}$/.test(code)) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ error: "Invalid Austrian postcode (4 digits)" }));
+              return;
+            }
+
+            try {
+              const url = new URL("https://nominatim.openstreetmap.org/search");
+              url.searchParams.set("postalcode", code);
+              url.searchParams.set("country", "Austria");
+              url.searchParams.set("format", "json");
+              url.searchParams.set("limit", "1");
+              const upstream = await fetch(url.toString(), {
+                headers: {
+                  Accept: "application/json",
+                  "User-Agent": "MySafeOps/1.0 (AT construction safety; support@mysafeops.com)",
+                },
+              });
+              const rows = await upstream.json();
+              const row = Array.isArray(rows) ? rows[0] : null;
+              if (!row?.lat || !row?.lon) {
+                res.statusCode = 404;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Postcode not found" }));
+                return;
+              }
+              const address = row.address || {};
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.setHeader("Cache-Control", "public, max-age=86400");
+              if (req.method === "HEAD") {
+                res.end();
+                return;
+              }
+              res.end(
+                JSON.stringify({
+                  lat: Number(row.lat),
+                  lng: Number(row.lon),
+                  postcode: address.postcode || code,
+                  city: address.city || address.town || address.village || "",
+                  adminDistrict: address.city || address.county || "",
+                  region: address.state || "",
+                  country: address.country || "Austria",
+                })
+              );
+            } catch {
+              res.statusCode = 502;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ error: "Postcode lookup unavailable" }));
+            }
+          });
+        },
+      },
+      {
         name: "dev-health-api",
         configureServer(server) {
           server.middlewares.use("/api/health", (req, res, next) => {

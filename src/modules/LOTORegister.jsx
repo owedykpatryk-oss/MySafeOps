@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { orgHasFoodIndustrialPack } from "../utils/industrialSectors";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const STORAGE_KEY = "loto_register";
@@ -95,6 +96,7 @@ function phaseLabel(phase) {
 }
 
 function DetailModal({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(() => migrateToWorkflow(item) || {});
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
@@ -211,7 +213,7 @@ function DetailModal({ item, projects, onSave, onClose }) {
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="loto-equipment-tag">Equipment tag / ID</label>
         <input style={ss.inp} value={form.equipmentTag || ""} onChange={(e) => set("equipmentTag", e.target.value)} placeholder="e.g. CIP-03"  id="loto-equipment-tag" />
 
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="loto-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="loto-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId || ""} onChange={(e) => set("projectId", e.target.value)} id="loto-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -223,7 +225,7 @@ function DetailModal({ item, projects, onSave, onClose }) {
 
         <div style={{ marginTop: 16, fontWeight: 600, fontSize: 13 }}>Isolation points</div>
         <button type="button" style={{ ...ss.btn, marginTop: 8 }} onClick={addPoint}>
-          + Add isolation point
+          {t("addRecord")}
         </button>
         {(form.isolationPoints || []).map((p) => (
           <div
@@ -327,7 +329,7 @@ function DetailModal({ item, projects, onSave, onClose }) {
           </div>
         )}
 
-        <label style={{ ...ss.lbl, marginTop: 12 }} htmlFor="loto-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 12 }} htmlFor="loto-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 44 }} value={form.notes || ""} onChange={(e) => set("notes", e.target.value)}  id="loto-notes" />
 
         {form.phase === "removal" && (
@@ -339,7 +341,7 @@ function DetailModal({ item, projects, onSave, onClose }) {
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "space-between", marginTop: 18 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {form.phase !== "closed" && (
@@ -363,7 +365,7 @@ function DetailModal({ item, projects, onSave, onClose }) {
                 })
               }
             >
-              Save
+              {t("save")}
             </button>
           </div>
         </div>
@@ -377,6 +379,7 @@ export function getAuthorisedLiveLotoList(items) {
 }
 
 export default function LOTORegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItemsRaw] = useState(() => {
     const raw = load(STORAGE_KEY, []);
@@ -466,11 +469,11 @@ export default function LOTORegister() {
             )}
             {liveItems.length > 0 && (
               <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + New LOTO
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -488,7 +491,7 @@ export default function LOTORegister() {
           icon="🔒"
           title="No LOTO workflows yet"
           description="Create lock-out / tag-out workflows for plant and equipment isolation."
-          actionLabel="+ New LOTO"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -507,7 +510,7 @@ export default function LOTORegister() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="loto" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Open
+                    {t("open")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -530,7 +533,7 @@ export default function LOTORegister() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

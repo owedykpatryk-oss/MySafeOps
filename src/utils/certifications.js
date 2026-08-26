@@ -10,6 +10,14 @@ export const CERT_LIBRARY = [
   { code: "ecs", label: "ECS (electrotechnical)", defaultValidityMonths: 60 },
   { code: "eusr", label: "EUSR (utilities)", defaultValidityMonths: 36 },
   { code: "pts", label: "PTS (Personal Track Safety)", defaultValidityMonths: 24 },
+  { code: "coss", label: "COSS (Controller of Site Safety)", defaultValidityMonths: 24 },
+  { code: "iwa", label: "IWA (Individual Working Alone)", defaultValidityMonths: 24 },
+  { code: "es_rail", label: "ES (Engineering Supervisor)", defaultValidityMonths: 24 },
+  { code: "picop", label: "PICOP (Person in Charge of Possession)", defaultValidityMonths: 24 },
+  { code: "machine_controller", label: "Machine / Crane Controller (MC / CC)", defaultValidityMonths: 24 },
+  { code: "rrv_operator", label: "On-track plant (RRV) operator", defaultValidityMonths: 24 },
+  { code: "ole_competence", label: "OLE / OLEC competence", defaultValidityMonths: 24 },
+  { code: "rail_medical", label: "Rail safety-critical medical & D&A", defaultValidityMonths: 36 },
   { code: "nrswa", label: "NRSWA / Streetworks", defaultValidityMonths: 60 },
   { code: "smsts", label: "SMSTS", defaultValidityMonths: 60 },
   { code: "sssts", label: "SSSTS", defaultValidityMonths: 60 },
@@ -64,49 +72,112 @@ export const AU_CERT_LIBRARY = [
 ];
 
 export const PL_CERT_LIBRARY = [
-  { code: "bhp_wstepne", label: "Szkolenie wstępne BHP", defaultValidityMonths: 0 },
-  { code: "bhp_stanowisko", label: "Szkolenie stanowiskowe BHP", defaultValidityMonths: 36 },
-  { code: "udt", label: "Uprawnienia UDT (UDT/ WU)", defaultValidityMonths: 60 },
-  { code: "sep", label: "Uprawnienia SEP (elektryczne)", defaultValidityMonths: 60 },
-  { code: "budowlane", label: "Uprawnienia budowlane", defaultValidityMonths: 60 },
-  { code: "sep_e", label: "SEP eksploatacja (E)", defaultValidityMonths: 60 },
-  { code: "sep_d", label: "SEP dozór (D)", defaultValidityMonths: 60 },
-  { code: "asbestos_awareness", label: "Azbest — świadomość zagrożeń", defaultValidityMonths: 12 },
-  { code: "first_aid", label: "Pierwsza pomoc", defaultValidityMonths: 36 },
-  { code: "manual_handling", label: "Ręczne przenoszenie", defaultValidityMonths: 24 },
-  { code: "working_at_height", label: "Prace na wysokości", defaultValidityMonths: 24 },
-  { code: "confined_space", label: "Przestrzeń zamknięta", defaultValidityMonths: 12 },
-  { code: "gas_tester", label: "Pomiary atmosfery", defaultValidityMonths: 12 },
+  { code: "bhp_wstepne", label: "Szkolenie wstępne BHP (instruktaż ogólny)", defaultValidityMonths: 0 },
+  { code: "bhp_stanowisko", label: "Instruktaż stanowiskowy BHP", defaultValidityMonths: 0 },
+  { code: "bhp_okresowe", label: "Szkolenie okresowe BHP (robotnicy)", defaultValidityMonths: 36 },
+  { code: "bhp_okresowe_kier", label: "Szkolenie okresowe BHP (kierownicy / inż.-techn.)", defaultValidityMonths: 60 },
+  { code: "badania_profilaktyczne", label: "Badania profilaktyczne — orzeczenie lekarskie", defaultValidityMonths: 24 },
+  { code: "badania_wysokosc", label: "Orzeczenie — praca na wysokości powyżej 3 m", defaultValidityMonths: 24 },
+  { code: "orzeczenie_sanepid", label: "Orzeczenie do celów sanitarno-epidemiologicznych", defaultValidityMonths: 24 },
+  { code: "ghp_gmp", label: "Szkolenie GHP/GMP i HACCP", defaultValidityMonths: 12 },
+  { code: "udt", label: "Uprawnienia UDT (ogólne)", defaultValidityMonths: 60 },
+  { code: "udt_wozki", label: "UDT — wózki jezdniowe podnośnikowe", defaultValidityMonths: 60 },
+  { code: "udt_podesty", label: "UDT — podesty ruchome (I P / II P)", defaultValidityMonths: 60 },
+  { code: "udt_zurawie", label: "UDT — żurawie (I Ż / II Ż)", defaultValidityMonths: 60 },
+  { code: "operator_maszyn", label: "Operator maszyn budowlanych (książka operatora)", defaultValidityMonths: 0 },
+  { code: "rusztowania", label: "Montaż i demontaż rusztowań", defaultValidityMonths: 0 },
+  { code: "spawanie", label: "Uprawnienia spawalnicze", defaultValidityMonths: 36 },
+  { code: "sep", label: "Świadectwo kwalifikacyjne SEP (ogólne)", defaultValidityMonths: 60 },
+  { code: "sep_e", label: "SEP G1 eksploatacja (E) — elektryczne", defaultValidityMonths: 60 },
+  { code: "sep_d", label: "SEP G1 dozór (D) — elektryczne", defaultValidityMonths: 60 },
+  { code: "sep_g2", label: "SEP G2 (E lub D) — cieplne", defaultValidityMonths: 60 },
+  { code: "sep_g3", label: "SEP G3 (E lub D) — gazowe", defaultValidityMonths: 60 },
+  { code: "budowlane", label: "Uprawnienia budowlane", defaultValidityMonths: 0 },
+  { code: "sluzba_bhp", label: "Szkolenie okresowe służby BHP", defaultValidityMonths: 60 },
+  { code: "asbestos_awareness", label: "Azbest — szkolenie przed przystąpieniem do prac", defaultValidityMonths: 12 },
+  { code: "first_aid", label: "Pierwsza pomoc — osoba wyznaczona", defaultValidityMonths: 36 },
+  { code: "ppoz", label: "Ochrona ppoż. — osoba wyznaczona do zwalczania pożarów", defaultValidityMonths: 36 },
+  { code: "manual_handling", label: "Ręczne prace transportowe", defaultValidityMonths: 24 },
+  { code: "working_at_height", label: "Prace na wysokości — szkolenie", defaultValidityMonths: 24 },
+  { code: "confined_space", label: "Przestrzenie zamknięte", defaultValidityMonths: 12 },
+  { code: "gas_tester", label: "Pomiary atmosfery / detekcja gazów", defaultValidityMonths: 12 },
   { code: "electrical_loto", label: "Izolacja energetyczna / LOTO", defaultValidityMonths: 36 },
-  { code: "hot_work_fire_watch", label: "Prace gorące / czujka pożarowa", defaultValidityMonths: 24 },
+  { code: "hot_work_fire_watch", label: "Prace niebezpieczne pożarowo / asekuracja", defaultValidityMonths: 24 },
   { code: "slinger_signaller", label: "Sygnalista / hakowy", defaultValidityMonths: 60 },
+  { code: "kolej_obszar", label: "Dopuszczenie do pracy w obszarze kolejowym", defaultValidityMonths: 24 },
   { code: "iosh_ms", label: "IOSH Managing Safely", defaultValidityMonths: 36 },
   { code: "iosh_ws", label: "IOSH Working Safely", defaultValidityMonths: 36 },
 ];
 
+export const DE_CERT_LIBRARY = [
+  { code: "unterweisung", label: "Unterweisung (ArbSchG)", defaultValidityMonths: 12 },
+  { code: "sifa", label: "Fachkraft für Arbeitssicherheit (Sifa)", defaultValidityMonths: 0 },
+  { code: "sigeko", label: "SiGeKo (RAB 30)", defaultValidityMonths: 36 },
+  { code: "scc", label: "SCC / SCP", defaultValidityMonths: 36 },
+  { code: "ersthelfer", label: "Ersthelfer", defaultValidityMonths: 24 },
+  { code: "brandschutzhelfer", label: "Brandschutzhelfer", defaultValidityMonths: 36 },
+  { code: "psa_absturz", label: "PSA gegen Absturz", defaultValidityMonths: 12 },
+  { code: "hubarbeitsbuehne", label: "Hubarbeitsbühne", defaultValidityMonths: 12 },
+  { code: "stapler", label: "Flurförderzeuge / Stapler", defaultValidityMonths: 12 },
+  { code: "kran", label: "Kranführer / Anschläger", defaultValidityMonths: 12 },
+  { code: "asbest", label: "Asbest — Sachkunde", defaultValidityMonths: 12 },
+  { code: "enge_raeume", label: "Enge Räume", defaultValidityMonths: 12 },
+  { code: "gasmessung", label: "Gasmessung", defaultValidityMonths: 12 },
+  { code: "elektro", label: "Elektrofachkraft / Schalten", defaultValidityMonths: 36 },
+  { code: "heissarbeiten", label: "Heißarbeiten / Brandwache", defaultValidityMonths: 24 },
+  { code: "manual_handling", label: "Lastenhandhabung", defaultValidityMonths: 24 },
+];
+
+const DE_PERMIT_CERT_REQUIREMENTS = {
+  hot_work: ["unterweisung", "heissarbeiten"],
+  electrical: ["elektro"],
+  work_at_height: ["unterweisung", "psa_absturz", "hubarbeitsbuehne"],
+  confined_space: ["unterweisung", "enge_raeume", "gasmessung"],
+  excavation: ["unterweisung", "asbest"],
+  lifting: ["unterweisung", "kran"],
+  cold_work: ["unterweisung", "elektro"],
+  line_break: ["unterweisung", "manual_handling"],
+  roof_access: ["unterweisung", "psa_absturz", "hubarbeitsbuehne"],
+  night_works: ["unterweisung", "ersthelfer"],
+  valve_isolation: ["unterweisung", "elektro"],
+  visitor_access: ["unterweisung"],
+  radiography: ["unterweisung"],
+  ground_disturbance: ["unterweisung", "asbest"],
+  line_clearance: ["unterweisung", "manual_handling"],
+  general: ["unterweisung"],
+};
+
 const PL_PERMIT_CERT_REQUIREMENTS = {
-  hot_work: ["bhp_stanowisko", "hot_work_fire_watch"],
-  electrical: ["sep", "electrical_loto"],
-  work_at_height: ["bhp_stanowisko", "working_at_height", "udt"],
-  confined_space: ["bhp_stanowisko", "confined_space", "gas_tester"],
-  excavation: ["bhp_stanowisko", "asbestos_awareness"],
-  lifting: ["bhp_stanowisko", "slinger_signaller", "udt"],
-  cold_work: ["bhp_stanowisko", "electrical_loto"],
-  line_break: ["bhp_stanowisko", "manual_handling"],
-  roof_access: ["bhp_stanowisko", "working_at_height", "udt"],
-  night_works: ["bhp_stanowisko", "first_aid"],
-  valve_isolation: ["bhp_stanowisko", "electrical_loto"],
+  hot_work: ["bhp_okresowe", "badania_profilaktyczne", "hot_work_fire_watch", "spawanie"],
+  electrical: ["sep_e", "electrical_loto", "badania_profilaktyczne"],
+  work_at_height: ["bhp_okresowe", "badania_wysokosc", "working_at_height"],
+  confined_space: ["bhp_okresowe", "confined_space", "gas_tester", "badania_profilaktyczne"],
+  excavation: ["bhp_okresowe", "operator_maszyn", "badania_profilaktyczne"],
+  lifting: ["bhp_okresowe", "slinger_signaller", "udt_zurawie"],
+  cold_work: ["bhp_okresowe", "electrical_loto"],
+  line_break: ["bhp_okresowe", "manual_handling", "badania_profilaktyczne"],
+  roof_access: ["bhp_okresowe", "badania_wysokosc", "working_at_height"],
+  night_works: ["bhp_okresowe", "first_aid", "badania_profilaktyczne"],
+  valve_isolation: ["bhp_okresowe", "electrical_loto"],
   visitor_access: ["bhp_wstepne"],
-  radiography: ["bhp_stanowisko"],
-  ground_disturbance: ["bhp_stanowisko", "asbestos_awareness"],
-  line_clearance: ["bhp_stanowisko", "manual_handling"],
-  general: ["bhp_stanowisko"],
+  radiography: ["bhp_okresowe", "badania_profilaktyczne"],
+  ground_disturbance: ["bhp_okresowe", "operator_maszyn", "asbestos_awareness"],
+  line_clearance: ["bhp_okresowe", "orzeczenie_sanepid", "ghp_gmp"],
+  rail_corridor_access: ["bhp_okresowe", "kolej_obszar", "badania_profilaktyczne"],
+  ole_isolation: ["kolej_obszar", "sep_e", "electrical_loto"],
+  on_track_plant: ["kolej_obszar", "operator_maszyn", "udt_zurawie"],
+  marine_hydrographic: ["bhp_okresowe", "first_aid"],
+  aerial_survey_coordination: ["bhp_okresowe", "badania_profilaktyczne"],
+  general: ["bhp_wstepne", "bhp_okresowe"],
 };
 
 /** @param {import("../config/markets").MarketId} [marketId] */
 export function getCertLibraryForMarket(marketId = "uk") {
   if (marketId === "au") return AU_CERT_LIBRARY;
   if (marketId === "pl") return PL_CERT_LIBRARY;
+  if (marketId === "de") return DE_CERT_LIBRARY;
+  if (marketId === "at") return DE_CERT_LIBRARY;
+  if (marketId === "ch") return DE_CERT_LIBRARY;
   return CERT_LIBRARY;
 }
 
@@ -159,7 +230,9 @@ export function getPermitCertRequirementsForMarket(permitType, marketId = "uk") 
       ? AU_PERMIT_CERT_REQUIREMENTS
       : marketId === "pl"
         ? PL_PERMIT_CERT_REQUIREMENTS
-        : PERMIT_CERT_REQUIREMENTS;
+        : marketId === "de" || marketId === "at" || marketId === "ch"
+          ? DE_PERMIT_CERT_REQUIREMENTS
+          : PERMIT_CERT_REQUIREMENTS;
   return map[permitType] || map.general;
 }
 

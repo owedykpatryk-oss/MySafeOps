@@ -53,6 +53,7 @@ const FEATURED_BY_PACK = {
   contractorPlusSurveying: ["general", "utility_mapping", "site_investigation", "refurb_build"],
   facilitiesMaintenance: ["general", "electrical", "confined_space"],
   demolitionStripout: ["demolition", "groundworks", "general", "confined_space"],
+  railInfrastructure: ["rail_trackside", "groundworks", "general", "confined_space"],
   foodPharma: ["general", "confined_space"],
   fessGroup: ["fess_dolav_meyn", "fess_machine_install", "fess_pipe_changeover", "general"],
   utilityMapping: ["um_pas128_m2", "um_pas128_m2p", "um_topo_plus_utility", "um_gpr_corridor"],

@@ -15,7 +15,8 @@ import { billingLimitMessage, checkBillingLimit } from "../utils/billingLimits";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { ms } from "../utils/moduleStyles";
 import { geocodeAddressNominatim, geocodeCountryLabel } from "../utils/geocode";
-import { getCompetencyCardHint, getEmergencyServicesLabel, getPostcodeHint } from "../utils/marketLabels";
+import { getCompetencyCardHint, getEmergencyServicesLabel, getPostcodeHint, getRamsShortLabel } from "../utils/marketLabels";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { getOrgMarketId } from "../utils/orgMarket";
 import {
   geoLookupSuccessMsg,
@@ -296,6 +297,8 @@ function certSummaryText(worker) {
 export function WorkersModule({ mode = "all" }) {
   const showPeople = mode === "all" || mode === "people";
   const showProjects = mode === "all" || mode === "projects";
+  const { t, tf, marketId } = useWorkspaceT();
+  const ramsShortLabel = getRamsShortLabel(marketId);
   const { trialStatus, billing, isPlatformOwner } = useApp();
   const { user } = useSupabaseAuth();
   const { pushToast } = useToast();
@@ -419,8 +422,8 @@ export function WorkersModule({ mode = "all" }) {
 
   const removeWorker = (id) => {
     setConfirm({
-      title: "Remove worker?",
-      message: "This worker will be moved to the recycle bin.",
+      title: t("removeWorkerTitle"),
+      message: t("removeWorkerMessage"),
       tone: "danger",
       onConfirm: () => {
         setWorkers((prev) => {
@@ -462,12 +465,12 @@ export function WorkersModule({ mode = "all" }) {
         const result = applyAndPersistProjectPlaybook(form, playbookId);
         saved = result.project;
         if (result.applied && result.summary.length) {
-          pushToast(`Playbook applied: ${result.summary.join(" · ")}`, "success");
+          pushToast(tf("playbookApplied", { summary: result.summary.join(" · ") }), "success");
         } else if (options.reapplyPlaybook && !result.applied) {
-          pushToast("All playbook documents already exist for this project.", "info");
+          pushToast(t("playbookAllDocsExist"), "info");
         }
       } catch (e) {
-        pushToast(e?.message || "Playbook could not be applied.", "warn");
+        pushToast(e?.message || t("playbookCouldNotApply"), "warn");
       }
     }
 
@@ -479,9 +482,9 @@ export function WorkersModule({ mode = "all" }) {
       const next = i >= 0 ? prev.map((row, idx) => (idx === i ? withTs : row)) : [withTs, ...prev];
       const wrote = save(PROJECTS_KEY, next);
       if (!wrote) {
-        pushToast("Project could not be saved on this device — check billing or browser storage.", "warn");
+        pushToast(t("projectCouldNotSave"), "warn");
       } else {
-        pushToast(isNew ? "Project saved." : "Project updated.", "success");
+        pushToast(isNew ? t("projectSaved") : t("projectUpdated"), "success");
       }
       return next;
     });
@@ -492,7 +495,7 @@ export function WorkersModule({ mode = "all" }) {
         const seed = buildSoloWorkerSeed(user, getOrgSettings(), genId);
         if (seed) {
           setWorkers((prev) => (prev.length > 0 ? prev : [seed, ...prev]));
-          pushToast(`Solo profile added: ${seed.name} — use this for briefings, PTW and signatures.`, "success");
+          pushToast(tf("soloProfileAdded", { name: seed.name }), "success");
         }
       }
     }
@@ -509,8 +512,8 @@ export function WorkersModule({ mode = "all" }) {
 
   const removeProject = (id) => {
     setConfirm({
-      title: "Remove project?",
-      message: "Linked documents stay in their modules; the project record goes to the recycle bin.",
+      title: t("removeProjectTitle"),
+      message: t("removeProjectMessage"),
       tone: "danger",
       onConfirm: () => {
         setProjects((prev) => {
@@ -639,12 +642,12 @@ export function WorkersModule({ mode = "all" }) {
       const result = applyAndPersistProjectPlaybook(p, playbookId);
       updateProjectRecord(result.project);
       if (result.applied) {
-        pushToast(`Playbook applied: ${result.summary.join(" · ")}`, "success");
+        pushToast(tf("playbookApplied", { summary: result.summary.join(" · ") }), "success");
       } else {
-        pushToast("All playbook documents already exist.", "info");
+        pushToast(t("playbookAllDocsExist"), "info");
       }
     } catch (e) {
-      pushToast(e?.message || "Playbook failed.", "warn");
+      pushToast(e?.message || t("playbookFailed"), "warn");
     }
   };
 
@@ -682,12 +685,12 @@ export function WorkersModule({ mode = "all" }) {
             .filter(([, n]) => n > 0)
             .map(([k, n]) => `${n} ${labelMap[k] || k}`);
           if (!parts.length) {
-            pushToast("No documents to copy on the source project.", "info");
+            pushToast(t("noDocumentsToCopy"), "info");
             return;
           }
-          pushToast(`Copied ${parts.join(", ")} to target project.`, "success");
+          pushToast(tf("copiedToTarget", { parts: parts.join(", ") }), "success");
         } catch (e) {
-          pushToast(e?.message || "Clone failed.", "warn");
+          pushToast(e?.message || t("cloneFailed"), "warn");
         }
       }}
     />
@@ -742,22 +745,22 @@ export function WorkersModule({ mode = "all" }) {
           <>
             {useInlineHub && hubProject ? (
               <button type="button" style={ss.btn} onClick={() => setHubProject(null)}>
-                ← All projects
+                {t("allProjects")}
               </button>
             ) : null}
             {showPeople && !(useInlineHub && hubProject) ? (
               <button type="button" style={ss.btnP} onClick={tryAddWorker}>
-                Add person
+                {t("addPerson")}
               </button>
             ) : null}
             {showProjects && !(useInlineHub && hubProject) ? (
               <button type="button" style={ss.btnO} onClick={tryAddProject}>
-                Add project
+                {t("addProject")}
               </button>
             ) : null}
             {showPeople && !(useInlineHub && hubProject) ? (
               <button type="button" style={ss.btn} onClick={exportWorkersCsv}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             ) : null}
           </>
@@ -786,11 +789,11 @@ export function WorkersModule({ mode = "all" }) {
 
       <div id="people-cert-alerts" className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-          <div style={{ fontWeight: 600 }}>Certification alerts</div>
-          <span style={ss.chip}>{certAlerts.length} alert(s)</span>
+          <div style={{ fontWeight: 600 }}>{t("certificationAlerts")}</div>
+          <span style={ss.chip}>{certAlerts.length} {t("alerts")}</span>
         </div>
         {certAlerts.length === 0 ? (
-          <div style={{ marginTop: 8, color: "var(--color-text-secondary)", fontSize: 13 }}>No expiring certifications right now.</div>
+          <div style={{ marginTop: 8, color: "var(--color-text-secondary)", fontSize: 13 }}>{t("noExpiringCerts")}</div>
         ) : (
           <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
             {certAlerts.slice(0, 8).map((a) => (
@@ -810,14 +813,14 @@ export function WorkersModule({ mode = "all" }) {
                   color: a.severity === "warning" ? "#633806" : "#791F1F",
                 }}
               >
-                <strong>{a.worker.name || "Unnamed worker"}</strong> · {a.cert.certType} ·{" "}
+                <strong>{a.worker.name || t("unnamedWorker")}</strong> · {a.cert.certType} ·{" "}
                 {a.days < 0 ? `expired ${Math.abs(a.days)} day(s) ago` : `expires in ${a.days} day(s)`}
-                <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.85 }}>— Edit</span>
+                <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.85 }}>— {t("edit")}</span>
               </button>
             ))}
             {criticalAlerts.length > 0 ? (
               <div style={{ fontSize: 11, color: "#791F1F" }}>
-                Critical: {criticalAlerts.length} certificate(s) require immediate action.
+                {tf("criticalCertsAction", { n: criticalAlerts.length })}
               </div>
             ) : null}
           </div>
@@ -827,8 +830,8 @@ export function WorkersModule({ mode = "all" }) {
       {equipmentAlerts.length > 0 ? (
         <div className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ fontWeight: 600 }}>Equipment inspection alerts</div>
-            <span style={ss.chip}>{equipmentAlerts.length} due</span>
+            <div style={{ fontWeight: 600 }}>{t("equipmentInspectionAlerts")}</div>
+            <span style={ss.chip}>{equipmentAlerts.length} {t("due")}</span>
           </div>
           <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
             {equipmentAlerts.slice(0, 6).map((a) => (
@@ -858,14 +861,14 @@ export function WorkersModule({ mode = "all" }) {
 
       <div id="people-register" className="app-surface-card" style={{ ...ss.card, marginBottom: 16 }}>
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
-          People ({liveWorkers.length})
+          {t("people")} ({liveWorkers.length})
         </div>
         {liveWorkers.length === 0 && (
           <EmptyState
             icon="👷"
-            title="No people on the register yet"
-            description="Add operatives so you can assign them to projects, RAMS and permits."
-            actionLabel="+ Add person"
+            title={t("noPeopleYet")}
+            description={t("noPeopleYetHint")}
+            actionLabel={`+ ${t("addPerson")}`}
             onAction={tryAddWorker}
             variant="dashed"
             compact
@@ -892,14 +895,14 @@ export function WorkersModule({ mode = "all" }) {
             }}
           >
             <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-              <strong>{w.name || "Unnamed"}</strong>
+              <strong>{w.name || t("unnamed")}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{w.role || "—"} · {w.phone || w.email || ""}</div>
               {assignedProjects.length > 0 ? (
                 <div style={{ fontSize: 11, color: "#0f766e", marginTop: 4 }}>
-                  Projects: {assignedProjects.join(", ")}
+                  {t("projects")}: {assignedProjects.join(", ")}
                 </div>
               ) : liveProjects.length > 0 ? (
-                <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>No project assigned</div>
+                <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>{t("noProjectAssigned")}</div>
               ) : null}
               {normalizeWorkerCertifications(w).length > 0 ? (
                 <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 4 }}>
@@ -910,14 +913,14 @@ export function WorkersModule({ mode = "all" }) {
                 </div>
               ) : null}
               <div style={{ fontSize: 11, marginTop: 4, color: ptwOk ? "#047857" : "#92400e" }}>
-                PTW hot work: {ptwOk ? "eligible" : "blocked — check certs"}
+                PTW hot work: {ptwOk ? t("ptwHotWorkEligible") : t("ptwHotWorkBlocked")}
               </div>
             </div>
             <button type="button" style={ss.btn} onClick={() => setModal({ type: "worker", data: w })}>
-              Edit
+              {t("edit")}
             </button>
             <button type="button" style={ss.btn} onClick={() => removeWorker(w.id)}>
-              Remove
+              {t("remove")}
             </button>
           </div>
         );})}
@@ -937,21 +940,21 @@ export function WorkersModule({ mode = "all" }) {
       {showProjects && !(useInlineHub && hubProject) ? (
       <div className="app-surface-card" style={ss.card}>
         <div className="app-section-label" style={{ fontWeight: 600, marginBottom: 12, fontSize: 14, textTransform: "none", letterSpacing: "normal", color: "var(--color-text-primary)" }}>
-          Projects ({liveProjects.length})
+          {t("projects")} ({liveProjects.length})
         </div>
         {liveProjects.length === 0 ? (
           <EmptyState
             icon="📍"
-            title="No projects yet"
-            description="Add a site, pick a playbook on save, then open the project hub for RAMS, survey and permit drafts."
-            actionLabel="+ Add first project"
+            title={t("noProjectsYet")}
+            description={t("noProjectsYetHint")}
+            actionLabel={`+ ${t("newProject")}`}
             onAction={tryAddProject}
             variant="dashed"
             compact
           />
         ) : (
           <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>
-            Click a project name to open its hub — documents, checklist and quick actions live there.
+            {t("clickProjectToOpenHub")}
           </p>
         )}
         {projectsPg.visible(liveProjects).map((p) => {
@@ -974,7 +977,7 @@ export function WorkersModule({ mode = "all" }) {
               style={{ flex: "1 1 200px", minWidth: 0, textAlign: "left" }}
               onClick={() => openProjectHub(p)}
             >
-              <strong>{p.name || "Unnamed"}</strong>
+              <strong>{p.name || t("unnamed")}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{p.site || p.address || ""}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
                 <span
@@ -985,11 +988,11 @@ export function WorkersModule({ mode = "all" }) {
                     color: (p.healthScore || 0) >= 80 ? "#27500A" : (p.healthScore || 0) >= 50 ? "#633806" : "#791F1F",
                   }}
                 >
-                  Health {Number(p.healthScore || 0)}%
+                  {tf("healthPercent", { n: Number(p.healthScore || 0) })}
                 </span>
                 {Array.isArray(p.startupChecklist) ? (
                   <span style={{ ...ss.chip, fontSize: 11 }}>
-                    Checklist {p.startupChecklist.filter((x) => x?.status !== "done").length} open
+                    {tf("checklistOpen", { n: p.startupChecklist.filter((x) => x?.status !== "done").length })}
                   </span>
                 ) : null}
                 {nextAction ? (
@@ -1001,7 +1004,7 @@ export function WorkersModule({ mode = "all" }) {
                       color: nextAction.tone === "warn" ? "#633806" : "#1e4976",
                     }}
                   >
-                    Next: {nextAction.label}
+                    {tf("nextLabel", { label: nextAction.label })}
                   </span>
                 ) : null}
               </div>
@@ -1012,10 +1015,10 @@ export function WorkersModule({ mode = "all" }) {
               </button>
             ) : null}
             <button type="button" style={ss.btn} onClick={() => openProjectHub(p)}>
-              Open hub
+              {t("openHub")}
             </button>
             <button type="button" style={ss.btn} onClick={() => setModal({ type: "project", data: p })}>
-              Edit
+              {t("edit")}
             </button>
             {mode === "all" ? (
             <>
@@ -1027,7 +1030,7 @@ export function WorkersModule({ mode = "all" }) {
                 openWorkspaceView({ viewId: "rams" });
               }}
             >
-              RAMS
+              {ramsShortLabel}
             </button>
             <button
               type="button"
@@ -1037,7 +1040,7 @@ export function WorkersModule({ mode = "all" }) {
                 openWorkspaceView({ viewId: "permits" });
               }}
             >
-              Permit
+              {t("permit")}
             </button>
             {isModuleVisible("survey-report") ? (
             <button
@@ -1048,7 +1051,7 @@ export function WorkersModule({ mode = "all" }) {
                 openWorkspaceView({ viewId: "survey-report" });
               }}
             >
-              Survey
+              {t("survey")}
             </button>
             ) : null}
             {isModuleVisible("geo-photos") ? (
@@ -1060,13 +1063,13 @@ export function WorkersModule({ mode = "all" }) {
                 openWorkspaceView({ viewId: "geo-photos" });
               }}
             >
-              Geo
+              {t("geo")}
             </button>
             ) : null}
             </>
             ) : null}
             <button type="button" style={ss.btn} onClick={() => removeProject(p.id)}>
-              Remove
+              {t("remove")}
             </button>
           </div>
           );
@@ -1138,6 +1141,7 @@ function workerFormShape(w) {
 
 function WorkerForm({ item, projects = [], onSave, onClose }) {
   const orgMarketId = getOrgMarketId();
+  const { t, tf } = useWorkspaceT(orgMarketId);
   const certLibrary = getCertLibraryForMarket(orgMarketId);
   const [form, setForm] = useState(() => workerFormShape(item));
   const [certFilter, setCertFilter] = useState("");
@@ -1222,20 +1226,20 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
   return (
     <ModuleOverlay onClose={onClose}>
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
-        <h2 style={{ marginTop: 0 }}>{item ? "Edit worker" : "New worker"}</h2>
-        <label style={ss.lbl} htmlFor="workers-name">Name</label>
+        <h2 style={{ marginTop: 0 }}>{item ? t("editWorker") : t("newWorker")}</h2>
+        <label style={ss.lbl} htmlFor="workers-name">{t("name")}</label>
         <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)}  id="workers-name" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-role">Role</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-role">{t("role")}</label>
         <input style={ss.inp} value={form.role} onChange={(e) => set("role", e.target.value)}  id="workers-role" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-phone">Phone</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-phone">{t("phone")}</label>
         <input style={ss.inp} value={form.phone} onChange={(e) => set("phone", e.target.value)}  id="workers-phone" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-email">Email</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-email">{t("email")}</label>
         <input style={ss.inp} value={form.email} onChange={(e) => set("email", e.target.value)}  id="workers-email" />
         {projects.length > 0 ? (
           <div style={{ marginTop: 12 }}>
-            <label style={ss.lbl}>Assigned projects</label>
+            <label style={ss.lbl}>{t("assignedProjects")}</label>
             <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginBottom: 6 }}>
-              Link this person to sites for RAMS, PTW, client portal and briefings.
+              {t("linkPersonHint")}
             </div>
             <div style={{ display: "grid", gap: 6, maxHeight: 140, overflow: "auto" }}>
               {projects.map((p) => {
@@ -1250,17 +1254,17 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
             </div>
           </div>
         ) : null}
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-cert-type">Primary certificate (for dashboard expiry)</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-cert-type">{t("primaryCertificate")}</label>
         <input style={ss.inp} value={form.certType || ""} onChange={(e) => set("certType", e.target.value)} placeholder={getCompetencyCardHint(getOrgMarketId())}  id="workers-cert-type" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-cert-expiry">Certificate expiry</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-cert-expiry">{t("certificateExpiry")}</label>
         <input type="date" style={ss.inp} value={form.certExpiry || ""} onChange={(e) => set("certExpiry", e.target.value)}  id="workers-cert-expiry" />
         <div style={{ marginTop: 12, border: "1px solid var(--color-border-tertiary,#e5e5e5)", borderRadius: 8, padding: "10px 10px 8px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-            <strong style={{ fontSize: 13 }}>Ready-made certifications</strong>
+            <strong style={{ fontSize: 13 }}>{t("readyMadeCertifications")}</strong>
             <input
               value={certFilter}
               onChange={(e) => setCertFilter(e.target.value)}
-              placeholder="Filter certs..."
+              placeholder={t("filterCerts")}
               style={{ ...ss.inp, width: "auto", minWidth: 160, fontSize: 12, padding: "6px 8px" }}
             />
           </div>
@@ -1273,7 +1277,7 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
                     <input type="checkbox" checked={row.enabled === true} onChange={(e) => toggleCert(c.code, e.target.checked)} />
                     {c.label}
                     <span style={{ fontSize: 11, color: "var(--color-text-secondary)", marginLeft: "auto" }}>
-                      default {c.defaultValidityMonths}m
+                      {tf("defaultMonthsValidity", { n: c.defaultValidityMonths })}
                     </span>
                   </label>
                   {row.enabled ? (
@@ -1288,13 +1292,13 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
                         style={{ ...ss.inp, margin: 0, padding: "6px 8px", fontSize: 12 }}
                         value={row.certNumber || ""}
                         onChange={(e) => setCert(c.code, "certNumber", e.target.value)}
-                        placeholder="Certificate no."
+                        placeholder={t("certificateNo")}
                       />
                       <input
                         style={{ ...ss.inp, margin: 0, padding: "6px 8px", fontSize: 12 }}
                         value={row.provider || ""}
                         onChange={(e) => setCert(c.code, "provider", e.target.value)}
-                        placeholder="Provider"
+                        placeholder={t("provider")}
                       />
                     </div>
                   ) : null}
@@ -1303,14 +1307,14 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
             })}
           </div>
         </div>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-certs">Certificates / notes (free text)</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-certs">{t("certificatesNotes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 72, resize: "vertical" }} value={form.certs} onChange={(e) => set("certs", e.target.value)}  id="workers-certs" />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={persist}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -1400,6 +1404,7 @@ function projectFormShape(p, { workers = [], user, orgSettings } = {}) {
 function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const orgSettings = useMemo(() => getOrgSettings(), []);
   const orgMarketId = getOrgMarketId();
+  const { t, tf } = useWorkspaceT(orgMarketId);
   const initialDraft = useMemo(() => (!item?.id ? loadProjectWizardDraft() : null), [item?.id]);
   const [form, setForm] = useState(() =>
     projectFormShape(initialDraft?.form || item, { workers, user, orgSettings })
@@ -1853,6 +1858,8 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
             ? "No coordinates found — try an Australian postcode (e.g. 2000) or fuller address."
             : orgMarketId === "pl"
             ? "No coordinates found — try a Polish postcode (e.g. 00-001) or fuller address."
+            : orgMarketId === "de" || orgMarketId === "at" || orgMarketId === "ch"
+            ? "No coordinates found — try a postal code (e.g. 10115) or fuller address."
             : "No coordinates found — try a UK postcode (e.g. KT22 7SH) or fuller address."
         );
         return;
@@ -1983,14 +1990,14 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         <div className="project-wizard-header">
           <div>
             <h2 id="project-wizard-title" className="project-wizard-header__title">
-              {item ? "Edit project" : "New project"}
+              {item ? t("editProject") : t("newProject")}
             </h2>
             <p className="project-wizard-header__subtitle">
-              Step {step} of {totalSteps} · {stepMeta.short}
+              {tf("stepOf", { step, total: totalSteps, label: stepMeta.short })}
             </p>
           </div>
           <button type="button" className="project-wizard-header__auto" style={ss.btn} onClick={applyAutoSuggest}>
-            Auto-suggest
+            {t("autoSuggest")}
           </button>
         </div>
 
@@ -2015,7 +2022,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
 
         <div className="project-wizard-health">
           <div className="project-wizard-health__meta">
-            <span className="project-wizard-health__label">Readiness</span>
+            <span className="project-wizard-health__label">{t("readiness")}</span>
             <span className={`project-wizard-health__score project-wizard-health__score--${health >= 80 ? "good" : health >= 50 ? "mid" : "low"}`}>
               {health}%
             </span>
@@ -2033,17 +2040,17 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         {!item?.id && draftRestored ? (
           <div className="project-wizard-draft-banner" role="status">
             <span>
-              Restored unsaved draft ({formatWizardDraftAge(initialDraft?.savedAt)}). Check the postcode — weather and nearest A&E follow the current site, not the last job.
+              {tf("restoredDraft", { age: formatWizardDraftAge(initialDraft?.savedAt) })}
             </span>
             <button type="button" className="project-wizard-link-btn" onClick={discardDraft}>
-              Start blank
+              {t("startBlank")}
             </button>
           </div>
         ) : null}
 
         {stepBlockers.length > 0 ? (
           <div className="project-wizard-alert" role="status">
-            Complete before continuing: {stepBlockers.join(", ")}
+            {tf("completeBeforeContinuing", { items: stepBlockers.join(", ") })}
           </div>
         ) : null}
 
@@ -2051,20 +2058,20 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
           <div className="project-wizard-body">
             {step === 1 ? (
               <div className="project-wizard-section">
-                <label style={ss.lbl} htmlFor="workers-name-2">Project name</label>
+                <label style={ss.lbl} htmlFor="workers-name-2">{t("projectName")}</label>
                 <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus  id="workers-name-2" />
-                <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-site">Site / client</label>
+                <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-site">{t("siteClient")}</label>
                 <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)}  id="workers-site" />
                 {isUtilityMappingOrg() ? (
                   <>
-                    <label style={{ ...ss.lbl, marginTop: 14 }} htmlFor="workers-um-job-number">UM job number</label>
+                    <label style={{ ...ss.lbl, marginTop: 14 }} htmlFor="workers-um-job-number">{t("umJobNumber")}</label>
                     <input
                       style={ss.inp}
                       value={form.umJobNumber || ""}
                       onChange={(e) => set("umJobNumber", e.target.value.replace(/\D/g, ""))}
                       placeholder="1234"
                      id="workers-um-job-number" />
-                    <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-um-client-code">Client code</label>
+                    <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-um-client-code">{t("clientCode")}</label>
                     <select
                       style={ss.inp}
                       value={form.umClientCode || ""}
@@ -2118,7 +2125,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
             {step === 2 ? (
               <>
                 <div className="project-wizard-section">
-                  <div style={ss.lbl}>Industry starter</div>
+                  <div style={ss.lbl}>{t("industryStarter")}</div>
                   <div className="project-wizard-industry-grid">
                     {PROJECT_STARTERS.map((preset) => (
                       <button
@@ -2156,15 +2163,15 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                       }}
                     />
                     <span>
-                      <strong>Solo site — just me on this job</strong>
+                      <strong>{t("soloSiteTitle")}</strong>
                       <span className="project-wizard-solo-toggle__hint">
-                        One person can be project owner, HSE lead and permit approver.
+                        {t("onePersonHint")}
                       </span>
                     </span>
                   </label>
                   {soloMode ? (
                     <>
-                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-solo-lead-name">Your name and role</label>
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-solo-lead-name">{t("yourNameAndRole")}</label>
                       <input
                         style={ss.inp}
                         value={form.soloLeadName || ""}
@@ -2177,13 +2184,13 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                     </>
                   ) : (
                     <>
-                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-owner">Project owner</label>
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-owner">{t("projectOwner")}</label>
                       <input style={ss.inp} value={form.owner || ""} onChange={(e) => set("owner", e.target.value)} placeholder="e.g. PM / contract manager"  id="workers-owner" />
-                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-hse-lead">HSE lead</label>
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-hse-lead">{t("hseLead")}</label>
                       <input style={ss.inp} value={form.hseLead || ""} onChange={(e) => set("hseLead", e.target.value)}  id="workers-hse-lead" />
-                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-site-manager">Site manager</label>
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-site-manager">{t("siteManager")}</label>
                       <input style={ss.inp} value={form.siteManager || ""} onChange={(e) => set("siteManager", e.target.value)}  id="workers-site-manager" />
-                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-contractor-lead">Main contractor lead</label>
+                      <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-contractor-lead">{t("mainContractorLead")}</label>
                       <input style={ss.inp} value={form.contractorLead || ""} onChange={(e) => set("contractorLead", e.target.value)}  id="workers-contractor-lead" />
                     </>
                   )}
@@ -2198,16 +2205,16 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                 <>
                   <div className="project-wizard-section">
                     <div className="project-wizard-section__head">
-                      <h4 className="project-wizard-section__title">Address and postcode</h4>
+                      <h4 className="project-wizard-section__title">{t("addressPostcode")}</h4>
                       {siteLocationReady ? (
-                        <span className="project-wizard-status project-wizard-status--ok">Site located</span>
+                        <span className="project-wizard-status project-wizard-status--ok">{t("siteLocated")}</span>
                       ) : (
-                        <span className="project-wizard-status">Awaiting location</span>
+                        <span className="project-wizard-status">{t("awaitingLocation")}</span>
                       )}
                     </div>
-                    <label style={ss.lbl} htmlFor="workers-address">Address</label>
+                    <label style={ss.lbl} htmlFor="workers-address">{t("address")}</label>
                     <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.address} onChange={(e) => set("address", e.target.value)}  id="workers-address" />
-                    <label style={{ ...ss.lbl, marginTop: 10 }}>Postcode</label>
+                    <label style={{ ...ss.lbl, marginTop: 10 }}>{t("postcode")}</label>
                     <input
                       style={ss.inp}
                       value={form.postcode || ""}
@@ -2256,16 +2263,16 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                     {siteLocationReady ? (
                       <p className="project-wizard-location-resolved">
                         <span className="project-wizard-location-resolved__pin" aria-hidden>📍</span>
-                        {siteLocationLabel || "Site location set"}
+                        {siteLocationLabel || t("siteLocationSet")}
                       </p>
                     ) : null}
                     <p className="project-wizard-hint">
-                      {getPostcodeHint(orgMarketId)} Tap <strong>Fetch site data</strong> after the pin updates — weather and nearest{" "}
+                      {getPostcodeHint(orgMarketId)} Tap <strong>{t("fetchSiteData")}</strong> after the pin updates — weather and nearest{" "}
                       {getEmergencyServicesLabel(orgMarketId)} always follow the current postcode, not a previous draft.
                     </p>
                     <div className="project-wizard-actions">
                       <button type="button" style={ss.btnP} disabled={enrichBusy || geoBusy} onClick={fetchSiteData}>
-                        {enrichBusy || geoBusy ? "Fetching site data…" : "Fetch site data"}
+                        {enrichBusy || geoBusy ? t("fetchingSiteData") : t("fetchSiteData")}
                       </button>
                       <button
                         type="button"
@@ -2273,7 +2280,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                         onClick={() => setShowAdvancedCoords((v) => !v)}
                         aria-expanded={showAdvancedCoords}
                       >
-                        {showAdvancedCoords ? "Hide advanced" : "Advanced coordinates"}
+                        {showAdvancedCoords ? t("hideAdvanced") : t("advancedCoordinates")}
                       </button>
                     </div>
                     {geoMsg ? <p className="project-wizard-msg">{geoMsg}</p> : null}
@@ -2281,17 +2288,17 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                       <div className="project-wizard-advanced">
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <div>
-                            <label style={ss.lbl} htmlFor="workers-lat">Latitude</label>
+                            <label style={ss.lbl} htmlFor="workers-lat">{t("latitude")}</label>
                             <input style={ss.inp} inputMode="decimal" value={form.lat ?? ""} onChange={(e) => set("lat", e.target.value)} placeholder="e.g. 51.5"  id="workers-lat" />
                           </div>
                           <div>
-                            <label style={ss.lbl} htmlFor="workers-lng">Longitude</label>
+                            <label style={ss.lbl} htmlFor="workers-lng">{t("longitude")}</label>
                             <input style={ss.inp} inputMode="decimal" value={form.lng ?? ""} onChange={(e) => set("lng", e.target.value)} placeholder="e.g. -0.12"  id="workers-lng" />
                           </div>
                         </div>
                         <div className="project-wizard-actions" style={{ marginTop: 8 }}>
                           <button type="button" style={ss.btn} disabled={geoBusy} onClick={geocode}>
-                            {geoBusy ? "Looking up…" : "Lookup coordinates only"}
+                            {geoBusy ? t("lookingUp") : t("lookupCoordinatesOnly")}
                           </button>
                           <button type="button" style={ss.btn} disabled={enrichBusy} onClick={enrichSite}>
                             {enrichBusy ? "Fetching…" : "Weather + A&E only"}
@@ -2317,7 +2324,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                                 <>
                                   {" "}
                                   <a href={safeHttpUrl(form.hospitalDirectionsUrl)} target="_blank" rel="noopener noreferrer">
-                                    Directions
+                                    {t("directions")}
                                   </a>
                                 </>
                               ) : null}
@@ -2349,7 +2356,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                             {" "}({boundaryRing.length} pts)
                           </span>
                           <button type="button" className="project-wizard-link-btn" onClick={clearBoundary}>
-                            Clear boundary
+                            {t("clearBoundary")}
                           </button>
                         </div>
                       ) : null}
@@ -2372,14 +2379,14 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
               {step === 4 ? (
                 <>
                   <div className="project-wizard-section">
-                    <h4 className="project-wizard-section__title">Target dates</h4>
+                    <h4 className="project-wizard-section__title">{t("targetDates")}</h4>
                     <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
                       <div>
-                        <label style={ss.lbl} htmlFor="workers-timeline-start">Target start</label>
+                        <label style={ss.lbl} htmlFor="workers-timeline-start">{t("targetStart")}</label>
                         <input type="date" style={ss.inp} value={form.timelineStart || ""} onChange={(e) => set("timelineStart", e.target.value)}  id="workers-timeline-start" />
                       </div>
                       <div>
-                        <label style={ss.lbl} htmlFor="workers-timeline-end">Target end</label>
+                        <label style={ss.lbl} htmlFor="workers-timeline-end">{t("targetEnd")}</label>
                         <input type="date" style={ss.inp} value={form.timelineEnd || ""} onChange={(e) => set("timelineEnd", e.target.value)}  id="workers-timeline-end" />
                       </div>
                     </div>
@@ -2396,7 +2403,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                     ) : null}
                   </div>
                   <div className="project-wizard-section">
-                    <label style={ss.lbl} htmlFor="workers-risk-register">Risk hints (editable)</label>
+                    <label style={ss.lbl} htmlFor="workers-risk-register">{t("riskHints")}</label>
                     <textarea
                       style={{ ...ss.inp, minHeight: 84, resize: "vertical" }}
                       value={(form.riskRegister || []).join("\n")}
@@ -2410,7 +2417,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                             .slice(0, 12)
                         )
                       }
-                      placeholder="One risk per line"
+                      placeholder={t("riskHintsPlaceholder")}
                      id="workers-risk-register" />
                   </div>
                 </>
@@ -2419,20 +2426,20 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
               {step === 5 ? (
                 <>
                   <div className="project-wizard-summary">
-                    <h4 className="project-wizard-summary__title">Project summary</h4>
+                    <h4 className="project-wizard-summary__title">{t("projectSummary")}</h4>
                     <dl className="project-wizard-summary__grid">
-                      <div><dt>Project</dt><dd>{form.name || "—"}</dd></div>
-                      <div><dt>Site / client</dt><dd>{form.site || "—"}</dd></div>
-                      <div><dt>Location</dt><dd>{siteLocationLabel || "—"}</dd></div>
+                      <div><dt>{t("project")}</dt><dd>{form.name || "—"}</dd></div>
+                      <div><dt>{t("siteClient")}</dt><dd>{form.site || "—"}</dd></div>
+                      <div><dt>{t("location")}</dt><dd>{siteLocationLabel || "—"}</dd></div>
                       <div><dt>Industry</dt><dd>{starterMeta.label}</dd></div>
-                      <div><dt>Timeline</dt><dd>{form.timelineStart && form.timelineEnd ? `${form.timelineStart} → ${form.timelineEnd}` : "—"}</dd></div>
-                      <div><dt>Team</dt><dd>{soloMode ? (form.soloLeadName || "Solo mode") : [form.owner, form.hseLead].filter(Boolean).join(" · ") || "—"}</dd></div>
+                      <div><dt>{t("timeline")}</dt><dd>{form.timelineStart && form.timelineEnd ? `${form.timelineStart} → ${form.timelineEnd}` : "—"}</dd></div>
+                      <div><dt>{t("team")}</dt><dd>{soloMode ? (form.soloLeadName || t("soloModeLabel")) : [form.owner, form.hseLead].filter(Boolean).join(" · ") || "—"}</dd></div>
                     </dl>
                   </div>
 
                   <div className="project-wizard-section">
-                    <label style={{ ...ss.lbl, marginTop: 4 }}>Project playbook</label>
-                    <p className="project-wizard-hint">On save: creates RAMS, survey, PTW and method statement drafts for this site type.</p>
+                    <label style={{ ...ss.lbl, marginTop: 4 }}>{t("projectPlaybook")}</label>
+                    <p className="project-wizard-hint">{t("onSaveCreatesDrafts")}</p>
                     <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
                       {playbooks.map((pb) => (
                         <label
@@ -2463,7 +2470,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                         </label>
                       ))}
                     </div>
-                    <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-required-permit-types-one-per-line">Required permit types (one per line)</label>
+                    <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-required-permit-types-one-per-line">{t("requiredPermitTypesLabel")}</label>
                     <textarea
                       style={{ ...ss.inp, minHeight: 72, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
                       value={(form.permitDefaults?.requiredPermitTypes || starterMeta.defaultPermitFlow || []).join("\n")}
@@ -2483,9 +2490,9 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
                       placeholder="hot_work&#10;excavation&#10;electrical"
                      id="workers-required-permit-types-one-per-line" />
                     <div className="project-wizard-readiness">
-                      <strong>Missing before go-live:</strong>{" "}
+                      <strong>{t("missingBeforeGoLive")}</strong>{" "}
                       {missing.length === 0 ? (
-                        <span className="project-wizard-readiness--ok">none{soloMode ? " · solo mode" : ""}</span>
+                        <span className="project-wizard-readiness--ok">{t("none")}{soloMode ? ` · ${t("soloModeLabel").toLowerCase()}` : ""}</span>
                       ) : (
                         <span className="project-wizard-readiness--warn">{missing.join(", ")}</span>
                       )}
@@ -2513,7 +2520,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
 
             <aside className="project-wizard-map-col">
               <div className="project-wizard-section project-wizard-section--map">
-                <h4 className="project-wizard-section__title">Site map</h4>
+                <h4 className="project-wizard-section__title">{t("siteMap")}</h4>
                 {wizardMap}
               </div>
             </aside>
@@ -2523,7 +2530,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
         <div className="project-wizard-footer">
           <div className="project-wizard-footer__nav">
             <button type="button" style={ss.btn} onClick={() => setStep((s) => Math.max(1, s - 1))} disabled={step <= 1}>
-              Back
+              {t("back")}
             </button>
             <button
               type="button"
@@ -2531,18 +2538,18 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
               onClick={goNext}
               disabled={step >= totalSteps || geoBusy || stepBlockers.length > 0}
             >
-              {geoBusy && step === 3 ? "Resolving site…" : "Next"}
+              {geoBusy && step === 3 ? t("resolvingSite") : t("next")}
             </button>
           </div>
           <div className="project-wizard-footer__save">
             <button type="button" style={ss.btn} onClick={handleClose}>
-              {item?.id ? "Cancel" : "Close"}
+              {item?.id ? t("cancel") : t("close")}
             </button>
             {!item?.id ? (
-              <span className="project-wizard-footer__draft-hint">Draft only — click Save to add the project</span>
+              <span className="project-wizard-footer__draft-hint">{t("draftOnlyHint")}</span>
             ) : null}
-            <button type="button" style={ss.btnO} onClick={() => persist({ openDrawingEditor: true })}>Save + drawing editor</button>
-            <button type="button" style={ss.btnP} onClick={persist}>Save</button>
+            <button type="button" style={ss.btnO} onClick={() => persist({ openDrawingEditor: true })}>{t("saveAndDrawingEditor")}</button>
+            <button type="button" style={ss.btnP} onClick={persist}>{t("save")}</button>
           </div>
         </div>
       </div>

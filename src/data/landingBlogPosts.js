@@ -403,9 +403,9 @@ const RAW_LANDING_BLOG_POSTS = [
   },
   {
     slug: "ior-pozwolenie-na-prace-polska",
-    title: "IOR i pozwolenie na pracę na budowie — co musi być w systemie",
+    title: "IBWR i pozwolenie na pracę na budowie — co musi być w systemie",
     excerpt:
-      "Praktyczny przewodnik po IOR, pozwoleniach na prace szczególnie niebezpieczne i dowodach BHP dla polskich wykonawców budowlanych.",
+      "Praktyczny przewodnik po IBWR, pozwoleniach na prace szczególnie niebezpieczne i dowodach BHP dla polskich wykonawców budowlanych.",
     dateLabel: "Lip 2026",
     publishedIso: "2026-07-12",
     readTime: "7 min read",

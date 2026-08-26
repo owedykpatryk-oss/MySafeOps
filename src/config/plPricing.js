@@ -8,17 +8,17 @@
 /** Monthly amounts in grosze (PLN × 100). */
 export const PL_PLAN_AMOUNT_GROSZE = {
   starter: 7900,
-  team: 39900,
-  business: 99900,
-  enterprise: 189900,
+  team: 43900,
+  business: 124900,
+  enterprise: 246900,
 };
 
 /** Human-readable monthly labels (net). */
 export const PL_PLAN_PRICE_LABELS = {
   starter: "79 zł",
-  team: "399 zł",
-  business: "999 zł",
-  enterprise: "1899 zł",
+  team: "439 zł",
+  business: "1249 zł",
+  enterprise: "2469 zł",
   trial: "0 zł",
 };
 
@@ -44,6 +44,6 @@ export function stripeEnvKeyForPlPlan(planId, testMode = false) {
     business: "STRIPE_PRICE_BUSINESS",
     enterprise: "STRIPE_PRICE_ENTERPRISE",
   }[planId];
-  const testSuffix = testMode ? "_TEST" : "";
-  return `${base}${PL_STRIPE_PRICE_ENV_SUFFIX}${testSuffix}`;
+  const testInfix = testMode ? "_TEST" : "";
+  return `${base}${testInfix}${PL_STRIPE_PRICE_ENV_SUFFIX}`;
 }

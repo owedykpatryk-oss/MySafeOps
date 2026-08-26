@@ -16,6 +16,7 @@ import {
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const genRowId = () => `ec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
@@ -35,6 +36,7 @@ const DEFAULT_SITE_EXTRAS = {
 };
 
 export default function EmergencyContacts() {
+  const { t } = useWorkspaceT();
   const [siteExtras, setSiteExtras] = useState(() => ({ ...DEFAULT_SITE_EXTRAS, ...loadEmergencySiteExtras() }));
 
   const [rows, setRows] = useState(() => {
@@ -194,7 +196,7 @@ export default function EmergencyContacts() {
             >
               <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
                 <button type="button" style={{ ...ss.btn, fontSize: 12, color: "#A32D2D" }} onClick={() => removeRow(row.id)}>
-                  Remove
+                  {t("delete")}
                 </button>
               </div>
               <div>
@@ -211,7 +213,7 @@ export default function EmergencyContacts() {
                 )}
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <label style={ss.lbl} htmlFor={`emergency-contacts-notes-${row.id}`}>Notes</label>
+                <label style={ss.lbl} htmlFor={`emergency-contacts-notes-${row.id}`}>{t("notes")}</label>
                 <input style={ss.inp} value={row.notes || ""} onChange={(e) => update(row.id, "notes", e.target.value)} placeholder="Optional"  id={`emergency-contacts-notes-${row.id}`} />
               </div>
             </div>
@@ -227,7 +229,7 @@ export default function EmergencyContacts() {
           />
         </div>
         <button type="button" style={{ ...ss.btnP, marginTop: 8 }} onClick={addRow}>
-          + Add contact
+          {t("addRecord")}
         </button>
       </div>
 

@@ -7,6 +7,7 @@ import { loadOrgScoped as load, saveOrgScoped as save, countryOperationalStorage
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
 import { genOpaqueToken } from "../utils/opaqueToken";
 import PageHero from "../components/PageHero";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const genId = () => genOpaqueToken("sub");
 
@@ -106,6 +107,7 @@ export function PublicSubcontractorView({ token }) {
 }
 
 export default function SubcontractorPortal() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const { pushToast } = useToast();
   const [portals, setPortals] = useState(() => load("subcontractor_portals", []));
@@ -163,7 +165,7 @@ export default function SubcontractorPortal() {
         right={
           caps.subcontractorManage ? (
             <button type="button" style={ss.btnP} onClick={() => setShow(true)}>
-              + New link
+              {t("addRecord")}
             </button>
           ) : null
         }
@@ -174,10 +176,10 @@ export default function SubcontractorPortal() {
           <textarea style={{ ...ss.inp, minHeight: 72 }} value={instr} onChange={(e) => setInstr(e.target.value)} placeholder="Site rules, what to upload, deadline…" />
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             <button type="button" style={ss.btn} onClick={() => setShow(false)}>
-              Cancel
+              {t("cancel")}
             </button>
             <button type="button" style={ss.btnP} onClick={create}>
-              Create
+              {t("create")}
             </button>
           </div>
         </div>
@@ -190,10 +192,10 @@ export default function SubcontractorPortal() {
             <div style={{ fontSize: 12, wordBreak: "break-all", marginBottom: 8 }}>{url}</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button type="button" style={ss.btnP} onClick={() => void copyLink(url)}>
-                Copy
+                {t("copy")}
               </button>
               <button type="button" style={ss.btn} onClick={() => setPortals((x) => x.map((y) => (y.id === p.id ? { ...y, active: !y.active } : y)))}>
-                {p.active ? "Deactivate" : "Activate"}
+                {p.active ? t("deactivate") : t("activate")}
               </button>
             </div>
           </div>

@@ -8,6 +8,7 @@ const PROFILE_ICONS = {
   contractorPlusSurveying: "🏗️📐",
   facilitiesMaintenance: "🔧",
   demolitionStripout: "🧱",
+  railInfrastructure: "🛤️",
   foodPharma: "🧪",
   showEverything: "✨",
 };
@@ -72,6 +73,14 @@ export const LANDING_WORKSPACE_PROFILES = [
     food: false,
   },
   {
+    id: "railInfrastructure",
+    icon: PROFILE_ICONS.railInfrastructure,
+    label: "Rail & trackside",
+    hint: "Possessions, PTS / COSS competence, OLE and RRV permits — trackside HSE without geodesy deliverables.",
+    survey: false,
+    food: false,
+  },
+  {
     id: "foodPharma",
     icon: PROFILE_ICONS.foodPharma,
     label: "Food, beverage & pharma",
@@ -107,15 +116,24 @@ export const LANDING_PROFILE_SITE_FOCUS = {
   contractorPlusSurveying: ["Daily briefing", "RAMS", "Survey reports", "PAS128 deliverables", "Inspections or survey", "PTW"],
   facilitiesMaintenance: ["Inspections", "PAT / electrical", "Plant register", "Daily briefing", "RAMS", "PTW"],
   demolitionStripout: ["Excavation log", "Temporary works", "Gate book", "Asbestos register", "RAMS", "PTW"],
+  railInfrastructure: [
+    "Rail corridor access PTW",
+    "OLE / RRV permits",
+    "PTS / COSS competence",
+    "RAMS (rail)",
+    "Shift briefing",
+    "Handback evidence",
+  ],
 };
 
 /** Total built-in quick packs — keep in sync with constructionQuickPacks.js exports. */
-export const LANDING_RAMS_PACK_COUNT = 39;
+export const LANDING_RAMS_PACK_COUNT = 40;
 
 /** Sector tabs for interactive RAMS pack browser on landing. */
 export const LANDING_RAMS_SECTOR_TABS = [
   { id: "construction", label: "Construction & civils", match: (p) => p.sector === "construction" },
-  { id: "utilities", label: "Utilities", match: (p) => p.sector === "utilities" || p.sector === "highways" || p.sector === "rail" },
+  { id: "utilities", label: "Utilities & highways", match: (p) => p.sector === "utilities" || p.sector === "highways" },
+  { id: "rail", label: "Rail & trackside", match: (p) => p.sector === "rail" },
   { id: "surveying", label: "Survey & geospatial", match: (p) => p.sector === "surveying" },
   {
     id: "industrial",
@@ -161,11 +179,11 @@ export function getLandingRamsPacksForTab(tabId, catalog) {
 const LANDING_PROFILES_PL = {
   generalContractor: {
     label: "Budownictwo ogólne",
-    hint: "Wykonawcy, podwykonawcy, roboty ziemne — IOR, PTW, Plan BHP, odprawy. Bez modułu geodezji.",
+    hint: "Wykonawcy, podwykonawcy, roboty ziemne — IBWR, PTW, Plan BIOZ, odprawy. Bez modułu geodezji.",
   },
   electricalContractor: {
     label: "Elektryka i instalacje",
-    hint: "PTW elektryczne, prace gorące, IOR i kontrole — bez raportów geodezyjnych.",
+    hint: "PTW elektryczne, prace gorące, IBWR i kontrole — bez raportów geodezyjnych.",
   },
   buildingTrades: {
     label: "Budowa i remonty",
@@ -173,7 +191,7 @@ const LANDING_PROFILES_PL = {
   },
   surveyingGeodesy: {
     label: "Geodezja i pomiary",
-    hint: "Mapowanie uzbrojenia, skanowanie, hydrografia — raporty i pakiety IOR geodezyjne.",
+    hint: "Mapowanie uzbrojenia, skanowanie, hydrografia — raporty i pakiety IBWR geodezyjne.",
   },
   contractorPlusSurveying: {
     label: "Wykonawca + geodezja",
@@ -198,20 +216,21 @@ const LANDING_PROFILES_PL = {
 };
 
 const LANDING_PROFILE_FOCUS_PL = {
-  electricalContractor: ["Elektryka / PAT", "Rejestr prac gorących", "LOTO / izolacja", "Kontrole", "IOR", "Pozwolenia (PTW)"],
-  generalContractor: ["Odprawa dzienna", "Plan BHP", "IOR", "Otwarte usterki", "Karty pracy", "Pozwolenia (PTW)"],
-  buildingTrades: ["Odprawa dzienna", "IOR", "Rejestr usterek", "Kontrole", "Instrukcje techniczne", "PTW"],
-  surveyingGeodesy: ["Raporty pomiarowe", "Dostawy geodezyjne", "Skanowanie i LiDAR", "Instrukcje techniczne", "IOR (geodezja)", "Zdjęcia geo"],
-  foodPharma: ["Przełączenia alergenów", "Odchylenia GMP", "Dostęp high-care", "IOR", "Odprawa dzienna", "PTW"],
-  showEverything: ["Plan BHP", "IOR", "PTW", "Odprawy", "Kontrole lub pomiary", "Powiązane dokumenty"],
-  contractorPlusSurveying: ["Odprawa dzienna", "IOR", "Raporty pomiarowe", "Dostawy geodezyjne", "Kontrole lub pomiary", "PTW"],
-  facilitiesMaintenance: ["Kontrole", "Elektryka / PAT", "Rejestr urządzeń", "Odprawa dzienna", "IOR", "PTW"],
-  demolitionStripout: ["Dziennik wykopów", "Roboty tymczasowe", "Księga bramy", "Rejestr azbestu", "IOR", "PTW"],
+  electricalContractor: ["Elektryka / PAT", "Rejestr prac gorących", "LOTO / izolacja", "Kontrole", "IBWR", "Pozwolenia (PTW)"],
+  generalContractor: ["Odprawa dzienna", "Plan BIOZ", "IBWR", "Otwarte usterki", "Karty pracy", "Pozwolenia (PTW)"],
+  buildingTrades: ["Odprawa dzienna", "IBWR", "Rejestr usterek", "Kontrole", "Instrukcje techniczne", "PTW"],
+  surveyingGeodesy: ["Raporty pomiarowe", "Dostawy geodezyjne", "Skanowanie i LiDAR", "Instrukcje techniczne", "IBWR (geodezja)", "Zdjęcia geo"],
+  foodPharma: ["Przełączenia alergenów", "Odchylenia GMP", "Dostęp high-care", "IBWR", "Odprawa dzienna", "PTW"],
+  showEverything: ["Plan BIOZ", "IBWR", "PTW", "Odprawy", "Kontrole lub pomiary", "Powiązane dokumenty"],
+  contractorPlusSurveying: ["Odprawa dzienna", "IBWR", "Raporty pomiarowe", "Dostawy geodezyjne", "Kontrole lub pomiary", "PTW"],
+  facilitiesMaintenance: ["Kontrole", "Elektryka / PAT", "Rejestr urządzeń", "Odprawa dzienna", "IBWR", "PTW"],
+  demolitionStripout: ["Dziennik wykopów", "Roboty tymczasowe", "Księga bramy", "Rejestr azbestu", "IBWR", "PTW"],
 };
 
 const LANDING_RAMS_SECTOR_TABS_PL = [
   { id: "construction", label: "Budownictwo i roboty ziemne", match: (p) => p.sector === "construction" },
-  { id: "utilities", label: "Instalacje", match: (p) => p.sector === "utilities" || p.sector === "highways" || p.sector === "rail" },
+  { id: "utilities", label: "Instalacje i drogi", match: (p) => p.sector === "utilities" || p.sector === "highways" },
+  { id: "rail", label: "Kolej", match: (p) => p.sector === "rail" },
   { id: "surveying", label: "Geodezja", match: (p) => p.sector === "surveying" },
   {
     id: "industrial",

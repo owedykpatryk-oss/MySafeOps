@@ -32,27 +32,28 @@ function FaqSuspenseFallback() {
 
 function TrustSection({ market }) {
   const isPl = market.id === "pl";
+  const isDe = (market.id === "de" || market.id === "at" || market.id === "ch");
   const items = [
     {
       icon: ShieldCheck,
-      title: isPl ? "Kontrolowany dostęp" : "Controlled access",
-      text: isPl ? "Role organizacji oddzielają ustawienia, management i pracę operacyjną." : "Organisation roles separate management, settings and day-to-day site work.",
+      title: isPl ? "Kontrolowany dostęp" : isDe ? "Kontrollierter Zugang" : "Controlled access",
+      text: isPl ? "Role organizacji oddzielają ustawienia, management i pracę operacyjną." : isDe ? "Organisationsrollen trennen Einstellungen, Leitung und operative Arbeit." : "Organisation roles separate management, settings and day-to-day site work.",
       to: "/security",
-      label: isPl ? "Bezpieczeństwo" : "Security posture",
+      label: isPl ? "Bezpieczeństwo" : isDe ? "Sicherheitslage" : "Security posture",
     },
     {
       icon: CloudCog,
-      title: isPl ? "Offline i chmura" : "Offline and cloud",
-      text: isPl ? "Pracuj bez stabilnego zasięgu i synchronizuj dane, gdy połączenie wróci." : "Keep working through weak signal and synchronise when connectivity returns.",
+      title: isPl ? "Offline i chmura" : isDe ? "Offline und Cloud" : "Offline and cloud",
+      text: isPl ? "Pracuj bez stabilnego zasięgu i synchronizuj dane, gdy połączenie wróci." : isDe ? "Weiterarbeiten bei schwachem Empfang und synchronisieren, sobald die Verbindung steht." : "Keep working through weak signal and synchronise when connectivity returns.",
       to: "/status",
-      label: isPl ? "Status usługi" : "Service status",
+      label: isPl ? "Status usługi" : isDe ? "Dienststatus" : "Service status",
     },
     {
       icon: FileCheck2,
-      title: isPl ? "Kontrolowane dokumenty" : "Controlled documents",
-      text: isPl ? "Rewizje, zatwierdzenia i czytelne PDF-y zamiast ręcznego składania raportów." : "Revisions, approvals and clear PDFs without rebuilding reports by hand.",
+      title: isPl ? "Kontrolowane dokumenty" : isDe ? "Gelenkte Dokumente" : "Controlled documents",
+      text: isPl ? "Rewizje, zatwierdzenia i czytelne PDF-y zamiast ręcznego składania raportów." : isDe ? "Revisionen, Freigaben und klare PDFs, ohne Berichte von Hand neu zu bauen." : "Revisions, approvals and clear PDFs without rebuilding reports by hand.",
       to: market.dpaPath,
-      label: isPl ? "Przetwarzanie danych" : "Data processing",
+      label: isPl ? "Przetwarzanie danych" : isDe ? "Auftragsverarbeitung" : "Data processing",
     },
   ];
 
@@ -60,9 +61,9 @@ function TrustSection({ market }) {
     <section className="landing-v2-trust" aria-labelledby="landing-trust-title">
       <div className="ctn">
         <div className="landing-v2-trust-intro fu">
-          <span>{isPl ? "Zaufanie" : "Built for accountable work"}</span>
-          <h2 id="landing-trust-title">{isPl ? "Mniej deklaracji. Więcej dowodów." : "Less marketing theatre. More operational evidence."}</h2>
-          <p>{isPl ? "MySafeOps pokazuje kto zrobił co, kiedy i dla którego projektu." : "MySafeOps keeps who did what, when and for which project visible to the people responsible."}</p>
+          <span>{isPl ? "Zaufanie" : isDe ? "Vertrauen" : "Built for accountable work"}</span>
+          <h2 id="landing-trust-title">{isPl ? "Mniej deklaracji. Więcej dowodów." : isDe ? "Weniger Versprechen. Mehr Nachweise." : "Less marketing theatre. More operational evidence."}</h2>
+          <p>{isPl ? "MySafeOps pokazuje kto zrobił co, kiedy i dla którego projektu." : isDe ? "MySafeOps zeigt, wer was wann und für welches Projekt getan hat." : "MySafeOps keeps who did what, when and for which project visible to the people responsible."}</p>
         </div>
         <div className="landing-v2-trust-grid">
           {items.map(({ icon: Icon, title, text, to, label }) => (
@@ -100,6 +101,7 @@ export default function LandingContentSections({ market, copy, supportEmail, cta
   const features = getLandingFeatures(market.id).slice(0, 6);
   const pricing = copy.pricing;
   const isPl = market.id === "pl";
+  const isDe = (market.id === "de" || market.id === "at" || market.id === "ch");
 
   return (
     <>
@@ -110,8 +112,8 @@ export default function LandingContentSections({ market, copy, supportEmail, cta
         <div className="ctn">
           <div className="landing-v2-section-head fu">
             <span>{sections.features.badge}</span>
-            <h2>{isPl ? "Jedno środowisko. Najważniejsze procesy." : "One workspace. The workflows that matter."}</h2>
-            <p>{isPl ? "Tylko funkcje, które pomagają przygotować pracę, kontrolować ryzyko i zostawić czytelny ślad." : "The core tools to prepare work, control risk and leave a clear evidence trail."}</p>
+            <h2>{isPl ? "Jedno środowisko. Najważniejsze procesy." : isDe ? "Ein Arbeitsbereich. Die Abläufe, die zählen." : "One workspace. The workflows that matter."}</h2>
+            <p>{isPl ? "Tylko funkcje, które pomagają przygotować pracę, kontrolować ryzyko i zostawić czytelny ślad." : isDe ? "Nur Funktionen, die Arbeit vorbereiten, Risiko steuern und einen klaren Nachweis hinterlassen." : "The core tools to prepare work, control risk and leave a clear evidence trail."}</p>
           </div>
           <div className="landing-v2-feature-grid">
             {features.map((feature, index) => {
@@ -129,7 +131,7 @@ export default function LandingContentSections({ market, copy, supportEmail, cta
           <div className="landing-v2-section-head fu">
             <span>{sections.pricing.badge}</span>
             <h2 id="pricing-heading">{sections.pricing.title}</h2>
-            <p>{isPl ? "Cena za organizację, nie za każdą osobę. 14 dni pełnej ewaluacji w każdym planie." : "Priced per organisation, not per seat. Every plan starts with a 14-day full evaluation."}</p>
+            <p>{isPl ? "Cena za organizację, nie za każdą osobę. 14 dni pełnej ewaluacji w każdym planie." : isDe ? "Preis pro Organisation, nicht pro Person. 14 Tage volle Evaluation in jedem Plan." : "Priced per organisation, not per seat. Every plan starts with a 14-day full evaluation."}</p>
           </div>
           <div className="landing-v2-pricing-grid fu">
             <PricingCard name={sections.pricing.solo} tier={pricing.starter} cta={sections.pricing.startTrial} to={loginTo} />
@@ -152,7 +154,7 @@ export default function LandingContentSections({ market, copy, supportEmail, cta
 
       <section className="cta landing-v2-cta" id="cta">
         <div className="ctn">
-          <span>{isPl ? "14 dni pełnej ewaluacji" : "14-day full evaluation"}</span>
+          <span>{isPl ? "14 dni pełnej ewaluacji" : isDe ? "14 Tage volle Evaluation" : "14-day full evaluation"}</span>
           <h2>{sections.cta.title}</h2>
           <p>{sections.cta.intro}</p>
           <div className="landing-v2-cta-form">

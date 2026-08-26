@@ -109,6 +109,7 @@ import FessRamsCompletenessBadge from "../../components/FessRamsCompletenessBadg
 import { genOpaqueToken } from "../../utils/opaqueToken";
 
 import { localDateISO, todayLocalISO } from "../../utils/localDate";
+import { useWorkspaceT } from "../../i18n/useWorkspaceT";
 // ─── storage ─────────────────────────────────────────────────────────────────
 const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
 const RAMS_DRAFT_SAVED_EVENT = "mysafeops-rams-draft-saved";
@@ -123,6 +124,25 @@ const HAZARD_PACK_STATUS = {
 };
 
 const genId = () => `rams_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+
+/**
+ * Wording the builder writes into the document itself. It has to follow the workspace market,
+ * otherwise a Polish IBWR ends up with English sentences the site was never given.
+ * @param {import("../../config/markets").MarketId} [marketId]
+ */
+function builderDocCopy(marketId = getOrgMarketId()) {
+  if (marketId === "pl") {
+    return {
+      communicationPlan:
+        "Odprawa dla całej brygady, potwierdzenie prawa do wstrzymania pracy i powiązanych zezwoleń przed rozpoczęciem robót.",
+      tradeAddendum: "Uzupełnienie branżowe:",
+    };
+  }
+  return {
+    communicationPlan: "Brief all operatives, confirm stop-work authority and permit interfaces before start.",
+    tradeAddendum: "Trade addendum:",
+  };
+}
 const today = todayLocalISO;
 const fmtDate = formatOrgDate;
 const fmtDateTime = formatOrgDateTime;
@@ -1875,6 +1895,8 @@ function RiskBadge({ rf }) {
 
 // ─── Step 1 — Document info ──────────────────────────────────────────────────
 function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }) {
+  const { t, tf } = useWorkspaceT();
+  const ramsLabel = getRamsShortLabel(getOrgMarketId());
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const smartFields = isFeatureEnabled("rams_header_smart_fields");
   const [draftSavedAtLabel, setDraftSavedAtLabel] = useState("");
@@ -1988,7 +2010,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
       ...f,
       title: f.title || preset.title,
       scope: f.scope || preset.scope,
-      communicationPlan: f.communicationPlan || "Brief all operatives, confirm stop-work authority and permit interfaces before start.",
+      communicationPlan: f.communicationPlan || builderDocCopy().communicationPlan,
     }));
   };
 
@@ -2226,13 +2248,13 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
       )}
 
       <section className="app-rams-header-section" aria-labelledby="rams-h-site">
-        <h3 id="rams-h-site" className="app-rams-header-section-title">Project &amp; site</h3>
+        <h3 id="rams-h-site" className="app-rams-header-section-title">{t("projectAndSite")}</h3>
         <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"0 0 10px", lineHeight:1.45 }}>
           Start with the project (optional autofill), then location and RAMS date. Title is the document name on the cover.
         </p>
         <div className="app-rams-header-section-grid">
           <div style={{ gridColumn: "1 / -1" }}>
-            <label style={ss.lbl}>Project</label>
+            <label style={ss.lbl}>{t("project")}</label>
             <select value={form.projectId||""} onChange={e=>{
               const nextId = e.target.value;
               const project = projects.find((p) => p.id === nextId);
@@ -2287,7 +2309,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             )}
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-location">Location / site *</label>
+            <label style={ss.lbl} htmlFor="rams-template-location">{t("locationSite")}</label>
             <input value={form.location||""} onChange={e=>set("location",e.target.value)}
               onBlur={(e) => saveRecentHeaderValue("locations", e.target.value)}
               placeholder="e.g. Two Sisters Scunthorpe" style={ss.inp}  id="rams-template-location" />
@@ -2300,16 +2322,16 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             )}
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-date">RAMS date</label>
+            <label style={ss.lbl} htmlFor="rams-template-date">{tf("docDate", { label: ramsLabel })}</label>
             <input type="date" value={form.date||today()} onChange={e=>set("date",e.target.value)} style={ss.inp}  id="rams-template-date" />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <label style={ss.lbl}>Job / document title *</label>
+            <label style={ss.lbl}>{t("jobDocTitle")}</label>
             <div style={{ display:"flex", gap:6 }}>
               <input value={form.title||""} onChange={e=>set("title",e.target.value)}
                 placeholder="e.g. Kettle removal and installation of new kettle" style={{ ...ss.inp, flex:1 }} />
               {smartFields && (
-                <button type="button" onClick={suggestTitles} style={{ ...ss.btn, minHeight:40, fontSize:12 }}>Suggest</button>
+                <button type="button" onClick={suggestTitles} style={{ ...ss.btn, minHeight:40, fontSize:12 }}>{t("suggest")}</button>
               )}
             </div>
             {smartFields && titleSuggestions.length > 0 && (
@@ -2326,10 +2348,10 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
       </section>
 
       <section className="app-rams-header-section" aria-labelledby="rams-h-doc">
-        <h3 id="rams-h-doc" className="app-rams-header-section-title">Document control</h3>
+        <h3 id="rams-h-doc" className="app-rams-header-section-title">{t("documentControl")}</h3>
         <div className="app-rams-header-section-grid">
           <div>
-            <label style={ss.lbl}>Document no.</label>
+            <label style={ss.lbl}>{t("documentNo")}</label>
             <div style={{ display:"flex", gap:6, alignItems:"center" }}>
               <input
                 value={form.documentNo||""}
@@ -2343,15 +2365,15 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             </div>
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-revision">Revision</label>
+            <label style={ss.lbl} htmlFor="rams-template-revision">{t("revision")}</label>
             <input value={form.revision||"1A"} onChange={e=>set("revision",e.target.value)} placeholder="1A" style={ss.inp}  id="rams-template-revision" />
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-issue-date">Issue date</label>
+            <label style={ss.lbl} htmlFor="rams-template-issue-date">{t("issueDate")}</label>
             <input type="date" value={form.issueDate||""} onChange={e=>set("issueDate",e.target.value)} style={ss.inp}  id="rams-template-issue-date" />
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-document-status">Document status</label>
+            <label style={ss.lbl} htmlFor="rams-template-document-status">{t("documentStatus")}</label>
             <select value={form.documentStatus||"draft"} onChange={e=>set("documentStatus",e.target.value)} style={ss.inp} id="rams-template-document-status">
               {RAMS_STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>
@@ -2361,16 +2383,16 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             </select>
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-review-date">Review due date</label>
+            <label style={ss.lbl} htmlFor="rams-template-review-date">{t("reviewDueDate")}</label>
             <input type="date" value={form.reviewDate||""} onChange={e=>set("reviewDate",e.target.value)} style={ss.inp}  id="rams-template-review-date" />
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-approved-by">Approved by</label>
+            <label style={ss.lbl} htmlFor="rams-template-approved-by">{t("approvedBy")}</label>
             <input value={form.approvedBy||""} onChange={e=>set("approvedBy",e.target.value)}
               placeholder="e.g. Operations manager" style={ss.inp}  id="rams-template-approved-by" />
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-approval-date">Approval date</label>
+            <label style={ss.lbl} htmlFor="rams-template-approval-date">{t("approvalDate")}</label>
             <input type="date" value={form.approvalDate||""} onChange={e=>set("approvalDate",e.target.value)} style={ss.inp}  id="rams-template-approval-date" />
           </div>
           {isFessOrg() ? (
@@ -2412,10 +2434,10 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
       </section>
 
       <section className="app-rams-header-section" aria-labelledby="rams-h-team">
-        <h3 id="rams-h-team" className="app-rams-header-section-title">Team &amp; job reference</h3>
+        <h3 id="rams-h-team" className="app-rams-header-section-title">{t("teamAndJobRef")}</h3>
         <div className="app-rams-header-section-grid">
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-lead-engineer">Lead engineer / supervisor</label>
+            <label style={ss.lbl} htmlFor="rams-template-lead-engineer">{t("leadEngineer")}</label>
             <input value={form.leadEngineer||""} onChange={e=>set("leadEngineer",e.target.value)}
               onBlur={(e) => saveRecentHeaderValue("leads", e.target.value)}
               placeholder="e.g. D Anderson" style={ss.inp}  id="rams-template-lead-engineer" />
@@ -2428,7 +2450,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
             )}
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="rams-template-job-ref">Job reference</label>
+            <label style={ss.lbl} htmlFor="rams-template-job-ref">{t("jobReference")}</label>
             <input value={form.jobRef||""} onChange={e=>set("jobRef",e.target.value)}
               onBlur={(e) => saveRecentHeaderValue("refs", e.target.value)}
               placeholder="e.g. FP1-DOLAV-001" style={ss.inp}  id="rams-template-job-ref" />
@@ -2532,7 +2554,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
       </div>
 
       <div style={{ marginBottom:20 }}>
-        <label style={ss.lbl} htmlFor="rams-template-scope">Scope of works</label>
+        <label style={ss.lbl} htmlFor="rams-template-scope">{t("scopeOfWorks")}</label>
         <textarea value={form.scope||""} onChange={e=>set("scope",e.target.value)}
           placeholder="Describe the work to be carried out…" style={ss.ta} rows={3}  id="rams-template-scope" />
       </div>
@@ -2540,7 +2562,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
       )}
 
       <section className="app-rams-header-section" aria-labelledby="rams-h-ops">
-        <h3 id="rams-h-ops" className="app-rams-header-section-title">Operatives on this RAMS</h3>
+        <h3 id="rams-h-ops" className="app-rams-header-section-title">{tf("operativesOnDoc", { label: ramsLabel })}</h3>
         <p style={{ fontSize:12, color:"var(--color-text-secondary)", margin:"0 0 10px", lineHeight:1.45 }}>
           Select workers for this document. You can include certificates in print when the option below is enabled.
         </p>
@@ -2893,6 +2915,7 @@ function HazardPicker({
   onNext,
   onBack,
 }) {
+  const { t, tf } = useWorkspaceT();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [quickFilter, setQuickFilter] = useState("all"); // all | favorites | most_used | surveying
@@ -3757,7 +3780,7 @@ function HazardPicker({
         <input
           value={search}
           onChange={e=>setSearch(e.target.value)}
-          placeholder="Search activities… e.g. welding, height, electrical isolation"
+          placeholder={t("searchActivitiesPlaceholder")}
           style={ss.inp}
           aria-label="Search hazard library"
         />
@@ -3918,13 +3941,13 @@ function HazardPicker({
             </button>
           </div>
         ) : null}
-        {results.length===0 && <div style={{ textAlign:"center", padding:"2rem", color:"var(--color-text-secondary)", fontSize:13 }}>No hazards match your search.</div>}
+        {results.length===0 && <div style={{ textAlign:"center", padding:"2rem", color:"var(--color-text-secondary)", fontSize:13 }}>{t("noHazardsMatch")}</div>}
       </div>
 
       <div className="app-sticky-footer app-sticky-footer--split">
-        <button type="button" onClick={onBack} style={ss.btn}>← Back</button>
+        <button type="button" onClick={onBack} style={ss.btn}>← {t("back")}</button>
         <button type="button" disabled={selected.length===0} onClick={onNext} style={{ ...ss.btnP, opacity:selected.length>0?1:0.4 }}>
-          Next — review & edit ({selected.length}) →
+          {tf("nextReviewEdit", { n: selected.length })}
         </button>
       </div>
 
@@ -3976,6 +3999,7 @@ function HazardPicker({
 
 // ─── Step 3 — Review / edit each row ────────────────────────────────────────
 function HazardEditor({ rows, setRows, onNext, onBack }) {
+  const { t, tf } = useWorkspaceT();
   const [editing, setEditing] = useState(null);
   const [expandAll, setExpandAll] = useState(false);
   const [rowFilter, setRowFilter] = useState("");
@@ -4089,10 +4113,10 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16, alignItems: "center" }}>
         <button type="button" onClick={() => { setExpandAll(true); setEditing(null); }} style={{ ...ss.btn, fontSize: 12, padding: "6px 12px", minHeight: 36 }}>
-          Expand all rows
+          {t("expandAllRows")}
         </button>
         <button type="button" onClick={() => { setExpandAll(false); setEditing(null); }} style={{ ...ss.btn, fontSize: 12, padding: "6px 12px", minHeight: 36 }}>
-          Collapse all
+          {t("collapseAll")}
         </button>
         <button
           type="button"
@@ -4100,7 +4124,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
           style={{ ...ss.btnP, fontSize: 12, padding: "6px 12px", minHeight: 36 }}
           title="Generates tailored control measures for every risk row and merges without duplicates"
         >
-          Auto-tailor controls (all rows)
+          {t("autoTailorAllRows")}
         </button>
         {rows.length > 3 && (
           <div style={{ flex: "1 1 220px", minWidth: 0, maxWidth: 420 }}>
@@ -4109,13 +4133,13 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
               type="search"
               value={rowFilter}
               onChange={(e) => setRowFilter(e.target.value)}
-              placeholder="Filter rows by activity, hazard, category…"
+              placeholder={t("filterRowsPlaceholder")}
               style={{ ...ss.inp, fontSize: 12, padding: "8px 12px", minHeight: 40 }}
               aria-label="Filter hazard rows"
             />
             {rowFilter.trim() && (
               <div style={{ fontSize: 11, color: "var(--color-text-tertiary, #94a3b8)", marginTop: 4 }}>
-                Showing {filteredRows.length} of {rows.length} rows
+                {tf("showingRowsOf", { shown: filteredRows.length, total: rows.length })}
               </div>
             )}
           </div>
@@ -4125,7 +4149,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
       <div style={{ marginBottom:20 }}>
         {filteredRows.length === 0 && rowFilter.trim() ? (
           <div style={{ textAlign: "center", padding: "1.5rem", color: "var(--color-text-secondary)", fontSize: 13 }}>
-            No hazard rows match &quot;{rowFilter.trim()}&quot;. Clear the filter to see all rows.
+            {tf("noRowsMatch", { query: rowFilter.trim() })}
           </div>
         ) : null}
         {filteredRows.map((r) => {
@@ -4160,11 +4184,11 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                   <button type="button" onClick={e=>{e.stopPropagation();moveRow(r.id,-1);}} disabled={idx===0} style={{ ...ss.btn, padding:"3px 7px", fontSize:11, opacity:idx===0?0.3:1 }}>↑</button>
                   <button type="button" onClick={e=>{e.stopPropagation();moveRow(r.id,1);}} disabled={idx===rows.length-1} style={{ ...ss.btn, padding:"3px 7px", fontSize:11, opacity:idx===rows.length-1?0.3:1 }}>↓</button>
                   <button type="button" onClick={e=>{e.stopPropagation();duplicateRow(r.id);}} style={{ ...ss.btn, padding:"3px 8px", fontSize:11 }} title="Duplicate this hazard row">
-                    Dup
+                    {t("duplicate2")}
                   </button>
                   <button type="button" onClick={e=>{e.stopPropagation();removeRow(r.id);}} style={{ ...ss.btn, padding:"3px 7px", fontSize:11, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
                   <button type="button" onClick={e=>{e.stopPropagation(); if (expandAll) setExpandAll(false); setEditing(editing===r.id?null:r.id);}} style={{ ...ss.btn, padding:"3px 10px", fontSize:11, background:isOpen?"var(--color-background-secondary,#f7f7f5)":"transparent" }}>
-                    {isOpen?"Done":"Edit"}
+                    {isOpen?t("done"):t("edit")}
                   </button>
                 </div>
               </div>
@@ -4174,11 +4198,11 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                 <div style={{ marginTop:14, paddingTop:14, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
                     <div>
-                      <label style={ss.lbl} htmlFor={`rams-template-activity-2-${r.id}`}>Activity</label>
+                      <label style={ss.lbl} htmlFor={`rams-template-activity-2-${r.id}`}>{t("activity")}</label>
                       <input value={r.activity} onChange={e=>updateRow(r.id,"activity",e.target.value)} style={ss.inp}  id={`rams-template-activity-2-${r.id}`} />
                     </div>
                     <div>
-                      <label style={ss.lbl} htmlFor={`rams-template-hazard-2-${r.id}`}>Hazard / additional hazard</label>
+                      <label style={ss.lbl} htmlFor={`rams-template-hazard-2-${r.id}`}>{t("hazardAdditional")}</label>
                       <input value={r.hazard} onChange={e=>updateRow(r.id,"hazard",e.target.value)} style={ss.inp}  id={`rams-template-hazard-2-${r.id}`} />
                     </div>
                   </div>
@@ -4186,9 +4210,9 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                   {/* risk matrix */}
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:12, marginBottom:12 }}>
                     <div style={{ padding:"10px 12px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8 }}>
-                      <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:8 }}>Initial risk (before controls)</div>
+                      <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:8 }}>{t("initialRisk")}</div>
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
-                        {[["L","Likelihood (H=6 M=4 L=2)","initialRisk"],["S","Severity (Fatal=6 Major=4 Minor=2)","initialRisk"]].map(([k,hint,obj])=>(
+                        {[["L",t("likelihood"),"initialRisk"],["S",t("severity"),"initialRisk"]].map(([k,hint,obj])=>(
                           <div key={k}>
                             <label style={{ ...ss.lbl, marginBottom:2 }} htmlFor="rams-template-k-hint">{k} <span style={{ fontWeight:400 }}>({hint})</span></label>
                             <select value={r[obj][k]} onChange={e=>updateRow(r.id,obj,{...r[obj],[k]:parseInt(e.target.value),RF:parseInt(e.target.value)*(k==="L"?r[obj].S:r[obj].L)})} style={{ ...ss.inp, width:"auto" }} id="rams-template-k-hint">
@@ -4200,7 +4224,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                       <div style={{ marginTop:8, fontSize:12 }}>RF = {r.initialRisk.L} × {r.initialRisk.S} = <strong>{r.initialRisk.L*r.initialRisk.S}</strong> <RiskBadge rf={r.initialRisk.L*r.initialRisk.S} /></div>
                     </div>
                     <div style={{ padding:"10px 12px", background:"var(--color-background-secondary,#f7f7f5)", borderRadius:8 }}>
-                      <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:8 }}>Revised risk (after controls)</div>
+                      <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", marginBottom:8 }}>{t("revisedRisk")}</div>
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
                         {[["L","Likelihood","revisedRisk"],["S","Severity","revisedRisk"]].map(([k,_hint,obj])=>(
                           <div key={k}>
@@ -4217,7 +4241,7 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
 
                   {/* control measures */}
                   <div style={{ marginBottom:12 }}>
-                    <label style={ss.lbl}>Control measures</label>
+                    <label style={ss.lbl}>{t("controlMeasures")}</label>
                     {r.controlMeasures.map((cm,i)=>(
                       <div key={i} style={{ display:"flex", gap:6, marginBottom:6, alignItems:"flex-start" }}>
                         <span style={{ fontSize:12, color:"var(--color-text-secondary)", paddingTop:9, minWidth:16, textAlign:"right" }}>{i+1}.</span>
@@ -4227,25 +4251,25 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                       </div>
                     ))}
                     <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:4 }}>
-                      <button type="button" onClick={()=>addControl(r.id)} style={{ ...ss.btn, fontSize:12 }}>+ Add control measure</button>
+                      <button type="button" onClick={()=>addControl(r.id)} style={{ ...ss.btn, fontSize:12 }}>{t("addControlMeasure")}</button>
                       <button
                         type="button"
                         onClick={() => autoTailorRowControls(r.id)}
                         style={{ ...ss.btnP, fontSize:12 }}
                         title="Generate tailored controls for this specific risk row"
                       >
-                        Auto-tailor this risk
+                        {t("autoTailorThisRisk")}
                       </button>
                     </div>
                   </div>
 
                   {/* PPE */}
                   <div>
-                    <label style={ss.lbl} htmlFor="rams-template-ppe-required">PPE required</label>
+                    <label style={ss.lbl} htmlFor="rams-template-ppe-required">{t("ppeRequired")}</label>
                     <input value={(r.ppeRequired||[]).join(", ")}
                       onChange={e=>updateRow(r.id,"ppeRequired",e.target.value.split(",").map(s=>s.trim()).filter(Boolean))}
                       placeholder="e.g. Hard hat, Safety glasses, Gloves" style={ss.inp}  id="rams-template-ppe-required" />
-                    <div style={{ fontSize:11, color:"var(--color-text-tertiary,#aaa)", marginTop:4 }}>Comma-separated list</div>
+                    <div style={{ fontSize:11, color:"var(--color-text-tertiary,#aaa)", marginTop:4 }}>{t("commaSeparatedList")}</div>
                   </div>
                 </div>
               )}
@@ -4255,8 +4279,8 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
       </div>
 
       <div className="app-sticky-footer app-sticky-footer--split">
-        <button type="button" onClick={onBack} style={ss.btn}>← Back</button>
-        <button type="button" onClick={onNext} style={ss.btnP}>Next — preview & save →</button>
+        <button type="button" onClick={onBack} style={ss.btn}>← {t("back")}</button>
+        <button type="button" onClick={onNext} style={ss.btnP}>{t("nextPreviewSave")}</button>
       </div>
     </div>
   );
@@ -4264,6 +4288,8 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
 
 // ─── Step 4 — Preview & save ─────────────────────────────────────────────────
 function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSave, onBack, onPrintFessSitePack }) {
+  const { t, tf } = useWorkspaceT();
+  const ramsLabel = getRamsShortLabel(getOrgMarketId());
   const [fpCopied, setFpCopied] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
   const [signingWorkerId, setSigningWorkerId] = useState("");
@@ -5532,11 +5558,11 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
       </div>
 
       <div className="app-sticky-footer app-sticky-footer--split">
-        <button type="button" onClick={onBack} style={ss.btn}>← Back</button>
+        <button type="button" onClick={onBack} style={ss.btn}>← {t("back")}</button>
         <div className="app-sticky-footer--actions">
           <button type="button" onClick={printRAMS} style={ss.btn}>
             <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}><rect x="3" y="1" width="10" height="10" rx="1"/><path d="M1 8h14v6H1z"/><path d="M5 14v-3h6v3"/><circle cx="12" cy="11" r=".5" fill="currentColor"/></svg>
-            Print / PDF
+            {t("printPdf")}
           </button>
           {onPrintFessSitePack ? (
             <button type="button" onClick={onPrintFessSitePack} style={ss.btn} title="RAMS + 5-page method statement + permits">
@@ -5544,7 +5570,7 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             </button>
           ) : null}
           <button type="button" onClick={onSave} disabled={issueBlockedByCompetency} style={{ ...ss.btnO, opacity: issueBlockedByCompetency ? 0.55 : 1 }}>
-            {issueBlockedByCompetency ? "Save blocked (competency)" : "Save RAMS"}
+            {issueBlockedByCompetency ? t("saveBlockedCompetency") : tf("saveDocLabel", { label: ramsLabel })}
           </button>
         </div>
       </div>
@@ -5579,6 +5605,8 @@ function SavedList({
   onCopyShareLink,
   onImportJson,
 }) {
+  const { t, tf } = useWorkspaceT();
+  const ramsLabel = getRamsShortLabel(getOrgMarketId());
   const workerMap = Object.fromEntries(workers.map(w=>[w.id,w.name]));
   const projectMap = Object.fromEntries(projects.map(p=>[p.id,p.name]));
   const [q, setQ] = useState("");
@@ -5696,10 +5724,10 @@ function SavedList({
           </div>
           <div className="app-rams-hub__cta">
             <button type="button" onClick={() => onNew({ jumpToHazards: true })} style={ss.btnO}>
-              Start from Quick pack
+              {t("startFromQuickPack")}
             </button>
             <button type="button" onClick={() => onNew()} style={ss.btnP}>
-              + Blank RAMS
+              {tf("blankDoc", { label: ramsLabel })}
             </button>
           </div>
         </div>
@@ -5707,19 +5735,19 @@ function SavedList({
           <div className="app-rams-hub__stats">
             <div className="app-rams-hub__stat">
               <strong>{statusCounts.all}</strong>
-              <span>Documents</span>
+              <span>{t("documents")}</span>
             </div>
             <div className="app-rams-hub__stat">
               <strong>{statusCounts.draft}</strong>
-              <span>Drafts</span>
+              <span>{t("drafts")}</span>
             </div>
             <div className="app-rams-hub__stat">
               <strong>{statusCounts.issued + statusCounts.approved}</strong>
-              <span>Issued</span>
+              <span>{t("issued")}</span>
             </div>
             <div className="app-rams-hub__stat">
               <strong>{statusCounts.favorites}</strong>
-              <span>Favourites</span>
+              <span>{t("favourites")}</span>
             </div>
           </div>
         ) : null}
@@ -5730,14 +5758,14 @@ function SavedList({
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search title, location, ref, project…"
+            placeholder={t("searchRamsList")}
             style={{ ...ss.inp, flex: "1 1 220px", minWidth: 180, maxWidth: 400 }}
             aria-label="Search RAMS list"
           />
         ) : null}
         <input ref={importRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={onImportFile} aria-hidden />
         <button type="button" onClick={() => importRef.current?.click()} style={ss.btn} title="Restore from a previously exported .json file">
-          Import JSON
+          {t("importJson")}
         </button>
         {ramsDocs.length > 0 && onBulkDuplicateToProject ? (
           <button
@@ -5748,7 +5776,7 @@ function SavedList({
             }}
             style={{ ...ss.btn, fontSize: 12, ...(bulkMode ? { borderColor: "#0d9488", color: "#0f766e", background: "#f0fdfa" } : {}) }}
           >
-            {bulkMode ? "Cancel bulk" : "Bulk select"}
+            {bulkMode ? t("cancelBulk") : t("bulkSelect")}
           </button>
         ) : null}
       </div>
@@ -5756,10 +5784,10 @@ function SavedList({
       {liveRamsDocs.length > 0 ? (
         <div className="app-rams-list-filters" role="toolbar" aria-label="Filter RAMS">
           {[
-            ["all", "All", statusCounts.all],
-            ["draft", "Drafts", statusCounts.draft],
-            ["issued", "Issued", statusCounts.issued + statusCounts.approved],
-            ["favorites", "Favourites", statusCounts.favorites],
+            ["all", t("all"), statusCounts.all],
+            ["draft", t("drafts"), statusCounts.draft],
+            ["issued", t("issued"), statusCounts.issued + statusCounts.approved],
+            ["favorites", t("favourites"), statusCounts.favorites],
           ].map(([k, label, count]) => (
             <button
               key={k}
@@ -5773,7 +5801,7 @@ function SavedList({
           ))}
           {q.trim() ? (
             <span style={{ fontSize: 12, color: "var(--color-text-secondary)", marginLeft: 4 }}>
-              Showing {filtered.length}
+              {tf("showingCount", { n: filtered.length })}
             </span>
           ) : null}
         </div>
@@ -5808,11 +5836,11 @@ function SavedList({
       {liveRamsDocs.length===0 ? (
         <EmptyState
           icon="⚠️"
-          title="No RAMS yet"
+          title={tf("noRamsYet", { label: ramsLabel })}
           description="Fastest path: Start from a Quick pack → pick activities → Preview PDF. You can add project, title and site next."
-          actionLabel="Start from Quick pack"
+          actionLabel={t("startFromQuickPack")}
           onAction={() => onNew({ jumpToHazards: true })}
-          secondaryLabel="Blank RAMS"
+          secondaryLabel={tf("blankDoc", { label: ramsLabel }).replace("+ ", "")}
           onSecondary={() => onNew()}
           variant="dashed"
         />
@@ -5909,7 +5937,7 @@ function SavedList({
                   style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}
                   title="Opens A4 layout in a new tab (then use browser Print → Save as PDF)"
                 >
-                  Preview
+                  {t("preview")}
                 </button>
                 <button
                   type="button"
@@ -5917,7 +5945,7 @@ function SavedList({
                   style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}
                   title="Opens print dialog — choose Save as PDF or a printer"
                 >
-                  Print / PDF
+                  {t("printPdf")}
                 </button>
                 <button
                   type="button"
@@ -5927,24 +5955,24 @@ function SavedList({
                 >
                   {onPrintFessSitePack ? "FESS Site Pack" : "Site Pack"}
                 </button>
-                <button type="button" onClick={()=>onDuplicate(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Duplicate</button>
+                <button type="button" onClick={()=>onDuplicate(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>{t("duplicate")}</button>
                 {onDuplicateToProject ? (
                   <button type="button" onClick={()=>onDuplicateToProject(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Copy as draft on another project">
                     To project
                   </button>
                 ) : null}
                 <button type="button" onClick={()=>onRename(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Quick rename document title">
-                  Rename
+                  {t("rename")}
                 </button>
                 <button type="button" onClick={()=>onToggleFavorite(doc.id)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Pin/unpin document as favorite">
-                  {doc.isFavorite ? "★ Unfavorite" : "☆ Favorite"}
+                  {doc.isFavorite ? t("unfavorite") : t("favorite")}
                 </button>
                 <button type="button" onClick={()=>onExportJson(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>JSON</button>
                 <button type="button" onClick={()=>onExportCompliance(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Export compliance/audit snapshot CSV">
-                  Compliance
+                  {t("compliance")}
                 </button>
-                <button type="button" onClick={()=>onCopyShareLink(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Read-only link, this browser only">Share</button>
-                <button type="button" onClick={()=>onEdit(doc)} style={{ ...ss.btnP, padding:"4px 10px", fontSize:12 }}>Edit</button>
+                <button type="button" onClick={()=>onCopyShareLink(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Read-only link, this browser only">{t("share")}</button>
+                <button type="button" onClick={()=>onEdit(doc)} style={{ ...ss.btnP, padding:"4px 10px", fontSize:12 }}>{t("edit")}</button>
                 <button type="button" onClick={()=>onDelete(doc.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
               </div>
             </div>
@@ -6037,6 +6065,7 @@ function snapshotBuilderState(step, form, rows) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function RAMSTemplateBuilder() {
+  const { t, tf } = useWorkspaceT();
   const { pushToast } = useToast();
   const orgMarketId = getOrgMarketId();
   const ramsLabel = getRamsShortLabel(orgMarketId);
@@ -6104,7 +6133,7 @@ export default function RAMSTemplateBuilder() {
       import("./constructionQuickPacks"),
     ]).then(([{ library }, { ensureBuiltInConstructionPacks }]) => {
       setHazardPacks((prev) => {
-        const withBuiltIn = ensureBuiltInConstructionPacks(prev, library);
+        const withBuiltIn = ensureBuiltInConstructionPacks(prev, library, getOrgMarketId());
         const next = ensureOrgExclusiveQuickPacks(withBuiltIn, library, getOrgId());
         if (next.length !== prev.length || next.some((p, i) => p.id !== prev[i]?.id)) {
           save(RAMS_HAZARD_PACKS_KEY, next);
@@ -6977,7 +7006,7 @@ export default function RAMSTemplateBuilder() {
 
     setForm((prev) => {
       const scoped = String(prev.scope || "").trim();
-      const addLine = `Trade addendum: ${starter.scope}`;
+      const addLine = `${builderDocCopy().tradeAddendum} ${starter.scope}`;
       const mergedScope = scoped
         ? scoped.includes(starter.scope) || scoped.includes(addLine)
           ? scoped
@@ -6985,11 +7014,9 @@ export default function RAMSTemplateBuilder() {
         : starter.scope;
       return {
         ...prev,
-        title: prev.title?.trim() ? prev.title : `${starter.label} RAMS`,
+        title: prev.title?.trim() ? prev.title : `${starter.label} — ${getRamsShortLabel(getOrgMarketId())}`,
         scope: mergedScope,
-        communicationPlan:
-          prev.communicationPlan ||
-          "Brief all operatives, confirm stop-work authority and permit interfaces before start.",
+        communicationPlan: prev.communicationPlan || builderDocCopy().communicationPlan,
       };
     });
 
@@ -7612,7 +7639,7 @@ export default function RAMSTemplateBuilder() {
         <PageHero
           badgeText={ramsLabel}
           title={ramsBuilderTitle}
-          lead="Risk assessments and method statements for your site — tap Start from Quick pack, adjust people and site, then Preview PDF. Advanced tools (JSON, share links) stay in the list actions."
+          lead={t("ramsBuilderLead")}
           suppressRegisterPdf
         />
         <SavedList
@@ -7658,15 +7685,15 @@ export default function RAMSTemplateBuilder() {
         }}
       >
         <button type="button" onClick={goToList} style={{ ...ss.btn, fontSize: 12 }}>
-          ← Back to list
+          {t("backToList")}
         </button>
         <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-          <p className="app-rams-builder-header__eyebrow">{editingDoc ? "Editing document" : "New document"}</p>
+          <p className="app-rams-builder-header__eyebrow">{editingDoc ? t("editingDocument") : t("newDocument")}</p>
           <h2 className="app-rams-builder-header__title">
-            {editingDoc ? form.title || "Untitled RAMS" : "New RAMS"}
+            {editingDoc ? form.title || tf("untitledDocLabel", { label: ramsLabel }) : tf("newDocLabel", { label: ramsLabel })}
           </h2>
           <p className="app-rams-builder-header__hint">
-            Step {step} of {STEPS.length} — complete hazards, review controls, then preview the A4 pack.
+            {tf("stepXofY", { step, total: STEPS.length })}
           </p>
         </div>
       </div>

@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `lw_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const today = todayLocalISO;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -54,9 +56,9 @@ function Form({ item, projects, onSave, onClose }) {
         <input style={ss.inp} value={form.workerName} onChange={(e) => set("workerName", e.target.value)}  id="lone-working-worker-name" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-task">Task</label>
         <input style={ss.inp} value={form.task} onChange={(e) => set("task", e.target.value)}  id="lone-working-task" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-location">Location</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-location">{t("location")}</label>
         <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="lone-working-location" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="lone-working-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -65,7 +67,7 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-work-date">Date</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-work-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.workDate} onChange={(e) => set("workDate", e.target.value)}  id="lone-working-work-date" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>
           <div>
@@ -89,11 +91,11 @@ function Form({ item, projects, onSave, onClose }) {
             <input type="datetime-local" style={ss.inp} value={form.signedOffAt || ""} onChange={(e) => set("signedOffAt", e.target.value)}  id="lone-working-signed-off-at" />
           </>
         )}
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lone-working-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="lone-working-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -101,7 +103,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -110,6 +112,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function LoneWorkingLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("lone_working_log", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -168,11 +171,11 @@ export default function LoneWorkingLog() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add record
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -188,7 +191,7 @@ export default function LoneWorkingLog() {
           icon="📡"
           title="No lone working records"
           description="Record check-ins and lone worker welfare details."
-          actionLabel="+ Add record"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -205,7 +208,7 @@ export default function LoneWorkingLog() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="lone-working" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -227,7 +230,7 @@ export default function LoneWorkingLog() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

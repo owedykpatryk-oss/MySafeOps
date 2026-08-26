@@ -22,6 +22,7 @@ describe("orgIndustryPacks", () => {
       "facilitiesMaintenance",
       "demolitionStripout",
       "civilEarthworks",
+      "railInfrastructure",
       "foodPharma",
       "showEverything",
     ]);

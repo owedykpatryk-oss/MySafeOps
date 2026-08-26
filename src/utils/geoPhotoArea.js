@@ -214,6 +214,8 @@ const AREA_PROMPTS = {
   waste_flytipping: "Trace the ground the tipping covers.",
   suspected_acm: "Trace the extent of the material, so the removal can be quoted.",
   ecology_feature: "Trace the habitat or buffer zone to be kept clear.",
+  possession_limit: "Trace the worksite the protection encloses, limit to limit.",
+  track_condition: "Trace the length of track the defect runs over.",
 };
 
 export function geoPhotoTypeWantsArea(type) {

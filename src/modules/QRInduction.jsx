@@ -4,6 +4,7 @@ import { loadOrgScoped as load, saveOrgScoped as save, getOrgId } from "../utils
 import { useToast } from "../context/ToastContext";
 import { copyCapabilityLink } from "../utils/copyCapabilityLink";
 import PageHero from "../components/PageHero";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 // ─── storage ─────────────────────────────────────────────────────────────────
@@ -210,6 +211,7 @@ function InductionForm({ site, checklist, onComplete, onBack: _onBack }) {
 
 // ─── Site manager — create sites with QR codes ───────────────────────────────
 function SiteManager({ sites, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [list, setList] = useState(sites.map(s=>({...s, checklist:s.checklist||[]})));
   const [editing, setEditing] = useState(null);
   const [newItem, setNewItem] = useState("");
@@ -258,13 +260,13 @@ function SiteManager({ sites, onSave, onClose }) {
                   <div style={{ fontWeight:500, fontSize:13 }}>{s.name}</div>
                   <div style={{ fontSize:11, color:"var(--color-text-secondary)" }}>{s.checklist?.length||0} checklist items</div>
                 </div>
-                <button onClick={()=>setEditing(s.id)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
+                <button onClick={()=>setEditing(s.id)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>{t("edit")}</button>
                 <button onClick={()=>removeSite(s.id)} style={{ ...ss.btn, fontSize:12, padding:"4px 8px", color:"#A32D2D", borderColor:"#F09595" }}>×</button>
               </div>
             ))}
             <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"flex-end" }}>
-              <button onClick={addSite} style={ss.btn}>+ Add site</button>
-              <button onClick={()=>onSave(list)} style={ss.btnP}>Save</button>
+              <button onClick={addSite} style={ss.btn}>{t("addRecord")}</button>
+              <button onClick={()=>onSave(list)} style={ss.btnP}>{t("save")}</button>
             </div>
           </>
         ) : (
@@ -426,6 +428,7 @@ function SiteRegister({ entries, sites }) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function QRInduction() {
+  const { t } = useWorkspaceT();
   const [tab, setTab] = useState("register"); // register | qr | preview
   const [sites, setSites] = useState(()=>load("induction_sites",[]));
   const [entries, setEntries] = useState(()=>load("induction_entries",[]));
@@ -477,7 +480,7 @@ export default function QRInduction() {
             </button>
             {entries.length > 0 && (
               <button type="button" onClick={exportCSV} style={ss.btn}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
           </div>

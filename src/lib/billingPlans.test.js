@@ -4,9 +4,9 @@ import { BILLING_PLANS, STRIPE_SUBSCRIBABLE_PLAN_IDS, ANNUAL_PRICE_INCREASE_PERC
 /** Keep in sync with scripts/stripe-seed-prices.mjs PLANS.amountPence */
 const SEED_AMOUNTS_PENCE = {
   starter: 1900,
-  team: 9900,
-  business: 24900,
-  enterprise: 49900,
+  team: 10900,
+  business: 31900,
+  enterprise: 64900,
 };
 
 const STRIPE_PRICE_ENV_KEYS = {

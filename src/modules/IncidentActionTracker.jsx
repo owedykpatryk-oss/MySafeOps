@@ -13,6 +13,7 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const ACTIONS_KEY = "incident_actions_v1";
@@ -49,6 +50,7 @@ function daysToDue(dueDate) {
 }
 
 function ActionForm({ item, incidents, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -137,7 +139,7 @@ function ActionForm({ item, incidents, onSave, onClose }) {
         <textarea style={{ ...ss.inp, minHeight: 64, resize: "vertical" }} value={form.verificationNote} onChange={(e) => set("verificationNote", e.target.value)} placeholder="How closure will be verified (evidence/photo/inspection)."  id="incident-action-verification-note" />
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button
             type="button"
@@ -145,7 +147,7 @@ function ActionForm({ item, incidents, onSave, onClose }) {
             disabled={!form.title.trim() || !form.owner.trim()}
             onClick={() => onSave({ ...form, updatedAt: new Date().toISOString() })}
           >
-            Save action
+            {t("save")}
           </button>
         </div>
       </div>
@@ -154,6 +156,7 @@ function ActionForm({ item, incidents, onSave, onClose }) {
 }
 
 export default function IncidentActionTracker() {
+  const { t } = useWorkspaceT();
   const [items, setItems] = useState(() => load(ACTIONS_KEY, []));
   const [incidents, setIncidents] = useState(() => load(INCIDENTS_KEY, []));
   const [inspections, setInspections] = useState(() => load(INSPECTIONS_KEY, []));
@@ -402,10 +405,10 @@ export default function IncidentActionTracker() {
               Pull from inspections/permits
             </button>
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
             <button type="button" style={ss.btnP} onClick={() => setModal({ item: null })}>
-              + New action
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -540,7 +543,7 @@ export default function IncidentActionTracker() {
                   {row.verificationNote ? <div style={{ marginTop: 6, fontSize: 12, color: "var(--color-text-secondary)" }}>Verification: {row.verificationNote}</div> : null}
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                     <button type="button" style={ss.btn} onClick={() => setModal({ item: row })}>
-                      Edit
+                      {t("edit")}
                     </button>
                     {row.status !== "closed" ? (
                       <button
@@ -552,7 +555,7 @@ export default function IncidentActionTracker() {
                       </button>
                     ) : null}
                     <button type="button" style={{ ...ss.btn, color: "#A32D2D", borderColor: "#F09595" }} onClick={() => remove(row.id)}>
-                      Delete
+                      {t("delete")}
                     </button>
                   </div>
                 </div>

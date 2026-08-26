@@ -848,8 +848,8 @@ export const FAQ_MAIN_ENTITY_BY_SLUG = {
   ],
   "ior-pozwolenie-na-prace-polska": [
     {
-      name: "Czy IOR zastępuje pozwolenie na pracę?",
-      text: "Nie. IOR opisuje organizację robót na inwestycji. Pozwolenie na pracę dotyczy konkretnej czynności szczególnie niebezpiecznej w danym miejscu i czasie.",
+      name: "Czy IBWR zastępuje pozwolenie na pracę?",
+      text: "Nie. IBWR opisuje organizację robót na inwestycji. Pozwolenie na pracę dotyczy konkretnej czynności szczególnie niebezpiecznej w danym miejscu i czasie.",
     },
     {
       name: "Kto wydaje pozwolenie na pracę na budowie?",
@@ -865,7 +865,7 @@ export const FAQ_MAIN_ENTITY_BY_SLUG = {
     },
     {
       name: "Czy MySafeOps to porada prawna?",
-      text: "Nie. To narzędzie do IOR, pozwoleń i rejestrów. Za zgodność ustawową odpowiada pracodawca i kierownik budowy.",
+      text: "Nie. To narzędzie do IBWR, pozwoleń i rejestrów. Za zgodność ustawową odpowiada pracodawca i kierownik budowy.",
     },
     {
       name: "Czy system działa offline na budowie?",

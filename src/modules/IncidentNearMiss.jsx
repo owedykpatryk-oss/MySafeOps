@@ -16,6 +16,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { pushRecycleBinItem } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { exportCsv } from "../utils/exportCsv";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const INCIDENTS_KEY = "mysafeops_incidents";
@@ -272,6 +273,7 @@ function QuickIncidentCapture({ projects, onCreate }) {
 }
 
 function IncidentForm({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -469,7 +471,7 @@ function IncidentForm({ item, projects, onSave, onClose }) {
         ) : null}
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button
             type="button"
@@ -482,7 +484,7 @@ function IncidentForm({ item, projects, onSave, onClose }) {
               })
             }
           >
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -491,6 +493,8 @@ function IncidentForm({ item, projects, onSave, onClose }) {
 }
 
 export default function IncidentNearMiss() {
+  const { t, marketId } = useWorkspaceT();
+  const reportableLabel = marketId === "pl" ? "moduł zdarzeń PIP" : marketId === "de" ? "moduł Unfallanzeige" : marketId === "at" ? "moduł AUVA" : marketId === "ch" ? "moduł Suva" : marketId === "au" ? "notifiable incidents module" : "RIDDOR module";
   const { caps } = useApp();
   const [items, setItems] = useState(loadIncidentsMerged);
   const [actions, setActions] = useState(() => load(ACTIONS_KEY, []));
@@ -633,18 +637,18 @@ export default function IncidentNearMiss() {
       <PageHero
         badgeText="INC"
         title="Incidents & near miss"
-        lead="Site log for events and near misses. Use the RIDDOR module if a reportable incident may apply. Stored only on this device."
+        lead={`Site log for events and near misses. Use the ${reportableLabel} if a statutory notification may apply.`}
         exportModuleId="incidents"
         exportModuleLabel="Incident register"
         right={
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {items.length > 0 && (
               <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add record
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -681,7 +685,7 @@ export default function IncidentNearMiss() {
         <EmptyState
           icon="⚠️"
           title="No incident records yet"
-          description="Log events and near misses on site. Use the RIDDOR module if a reportable incident may apply."
+          description={`Log events and near misses on site. Use the ${reportableLabel} if a statutory notification may apply.`}
           actionLabel="+ Add record"
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
@@ -737,12 +741,12 @@ export default function IncidentNearMiss() {
                     </div>
                   ) : null}
                   {r.injuryInvolved && (
-                    <div style={{ fontSize: 12, color: "#A32D2D", marginTop: 4 }}>Injury / ill-health noted — consider RIDDOR.</div>
+                    <div style={{ fontSize: 12, color: "#A32D2D", marginTop: 4 }}>Injury / ill-health noted — check the {reportableLabel}.</div>
                   )}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {r.type === "near_miss" && (
                     <button type="button" style={ss.btn} onClick={() => escalateNearMissToIncident(r)}>
@@ -770,7 +774,7 @@ export default function IncidentNearMiss() {
                         pushAudit({ action: "incident_delete", entity: "incident", detail: r.id });
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

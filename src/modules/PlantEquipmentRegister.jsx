@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `plant_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const today = todayLocalISO;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -50,9 +52,9 @@ function Form({ item, projects, onSave, onClose }) {
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit plant record" : "Plant / equipment inspection"}</h2>
         <label style={ss.lbl} htmlFor="plant-equipment-asset-ref">Asset / fleet ref</label>
         <input style={ss.inp} value={form.assetRef} onChange={(e) => set("assetRef", e.target.value)} placeholder="e.g. EXC-12"  id="plant-equipment-asset-ref" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="plant-equipment-description">Description</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="plant-equipment-description">{t("description")}</label>
         <input style={ss.inp} value={form.description} onChange={(e) => set("description", e.target.value)}  id="plant-equipment-description" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="plant-equipment-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="plant-equipment-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="plant-equipment-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -83,11 +85,11 @@ function Form({ item, projects, onSave, onClose }) {
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="plant-equipment-inspector">Inspector</label>
         <input style={ss.inp} value={form.inspector} onChange={(e) => set("inspector", e.target.value)}  id="plant-equipment-inspector" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="plant-equipment-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="plant-equipment-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="plant-equipment-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -95,7 +97,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -104,6 +106,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function PlantEquipmentRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("plant_register", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -171,11 +174,11 @@ export default function PlantEquipmentRegister() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add inspection
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -191,7 +194,7 @@ export default function PlantEquipmentRegister() {
           icon="🚜"
           title="No plant inspections recorded"
           description="Log plant and equipment checks so due dates stay visible on site."
-          actionLabel="+ Add inspection"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -209,7 +212,7 @@ export default function PlantEquipmentRegister() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="plant" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -231,7 +234,7 @@ export default function PlantEquipmentRegister() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

@@ -11,6 +11,7 @@ import {
   purgeExpiredRecycleBinEntries,
 } from "../utils/recycleBin";
 import { ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const RECYCLE_LIST_PAGE = 50;
 
@@ -34,6 +35,7 @@ function remainingDays(expiresAt) {
 }
 
 export default function RecycleBin() {
+  const { t } = useWorkspaceT();
   const [items, setItems] = useState(() => listRecycleBinEntries());
   const listPg = useRegisterListPaging(RECYCLE_LIST_PAGE);
 
@@ -88,10 +90,10 @@ export default function RecycleBin() {
         right={
           <>
             <button type="button" style={ss.btn} onClick={refreshAndResetPaging}>
-              Refresh
+              {t("refresh")}
             </button>
             <button type="button" style={ss.btn} onClick={onPurgeExpired}>
-              Purge expired
+              {t("purgeExpired")}
             </button>
           </>
         }
@@ -137,10 +139,10 @@ export default function RecycleBin() {
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button type="button" style={ss.btn} onClick={() => onRestore(item.id)}>
-                      Restore
+                      {t("restore")}
                     </button>
                     <button type="button" style={{ ...ss.btn, color: "#A32D2D", borderColor: "#F09595" }} onClick={() => onDeleteNow(item.id)}>
-                      Delete now
+                      {t("deleteNow")}
                     </button>
                   </div>
                 </div>

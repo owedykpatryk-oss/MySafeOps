@@ -38,6 +38,40 @@ describe("country Stripe billing", () => {
     expect(stripeMarketReady("live", "pl")).toBe(true);
   });
 
+  it("never falls back from a German workspace to UK GBP prices", () => {
+    expect(resolveStripeConfig("live", "de")).toBeNull();
+    expect(stripeMarketReady("live", "de")).toBe(false);
+    values.STRIPE_PRICE_STARTER_EUR = "price_de_starter";
+    values.STRIPE_PRICE_TEAM_EUR = "price_de_team";
+    values.STRIPE_PRICE_BUSINESS_EUR = "price_de_business";
+    values.STRIPE_PRICE_ENTERPRISE_EUR = "price_de_enterprise";
+    expect(stripeMarketReady("live", "de")).toBe(true);
+  });
+
+  it("shares EUR Stripe catalogue with Austria", () => {
+    values.STRIPE_PRICE_STARTER_EUR = "price_eur_starter";
+    values.STRIPE_PRICE_TEAM_EUR = "price_eur_team";
+    values.STRIPE_PRICE_BUSINESS_EUR = "price_eur_business";
+    values.STRIPE_PRICE_ENTERPRISE_EUR = "price_eur_enterprise";
+    expect(stripeMarketReady("live", "at")).toBe(true);
+    expect(resolveStripeConfig("live", "at")?.prices.starter).toBe("price_eur_starter");
+  });
+
+  it("never falls back from a Swiss workspace to DE/AT EUR prices", () => {
+    values.STRIPE_PRICE_STARTER_EUR = "price_eur_starter";
+    values.STRIPE_PRICE_TEAM_EUR = "price_eur_team";
+    values.STRIPE_PRICE_BUSINESS_EUR = "price_eur_business";
+    values.STRIPE_PRICE_ENTERPRISE_EUR = "price_eur_enterprise";
+    expect(resolveStripeConfig("live", "ch")).toBeNull();
+    expect(stripeMarketReady("live", "ch")).toBe(false);
+    values.STRIPE_PRICE_STARTER_CHF = "price_ch_starter";
+    values.STRIPE_PRICE_TEAM_CHF = "price_ch_team";
+    values.STRIPE_PRICE_BUSINESS_CHF = "price_ch_business";
+    values.STRIPE_PRICE_ENTERPRISE_CHF = "price_ch_enterprise";
+    expect(stripeMarketReady("live", "ch")).toBe(true);
+    expect(resolveStripeConfig("live", "ch")?.prices.starter).toBe("price_ch_starter");
+  });
+
   it("maps the full Stripe lifecycle and rejects customer reassignment", () => {
     expect(mapStripeStatus("incomplete_expired")).toBe("incomplete_expired");
     expect(mapStripeStatus("paused")).toBe("paused");

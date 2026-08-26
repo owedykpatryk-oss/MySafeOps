@@ -134,6 +134,25 @@ const GROUP_FIELDS = {
     { key: "testPassed", label: "Test passed", kind: "toggle" },
     { key: "siltControlInPlace", label: "Silt control in place", kind: "toggle" },
   ],
+  "Rail & trackside": [
+    { key: "possessionRef", label: "Possession / blockage ref", kind: "text", placeholder: "T3-1140" },
+    {
+      key: "protectionArrangement",
+      label: "Protection",
+      kind: "select",
+      options: [
+        "Possession (T3)",
+        "Line blockage (T2)",
+        "Separated green zone",
+        "Fenced worksite",
+        "Red zone working",
+        "Outside the boundary fence",
+      ],
+    },
+    { key: "elrMileage", label: "ELR / mileage", kind: "text", placeholder: "ECM1 24m 33ch" },
+    { key: "cossBriefed", label: "COSS briefing given", kind: "toggle" },
+    { key: "adjacentLineOpen", label: "Adjacent line open", kind: "toggle" },
+  ],
   "Facilities & maintenance": [
     { key: "assetRef", label: "Asset ref", kind: "text", placeholder: "AHU-03" },
     {
@@ -753,6 +772,142 @@ const TYPE_DEFS = {
       },
       { key: "dischargeConsented", label: "Discharge consented", kind: "toggle" },
       { key: "maintenanceNeeded", label: "Maintenance needed", kind: "toggle" },
+    ],
+  },
+  possession_limit: {
+    prompt: "Show the marker or protection with the running line behind it, so the limit is readable.",
+    fields: [
+      {
+        key: "limitMarkerType",
+        label: "Marker",
+        kind: "select",
+        options: [
+          "Possession limit board",
+          "Detonator protection",
+          "Stop board",
+          "Line blockage marker",
+          "Site of work marker",
+          "Fence / demarcation",
+        ],
+      },
+      { key: "protectionVerified", label: "Protection verified in place", kind: "toggle" },
+    ],
+  },
+  track_condition: {
+    prompt: "Shoot along the rail with a scale in frame, then square-on at the defect itself.",
+    fields: [
+      {
+        key: "trackForm",
+        label: "Track form",
+        kind: "select",
+        options: ["Ballasted plain line", "S&C / pointwork", "Slab track", "Depot / siding", "Platform road"],
+      },
+      {
+        key: "trackDefect",
+        label: "Defect seen",
+        kind: "select",
+        options: [
+          "None",
+          "Ballast deficiency",
+          "Wet bed / pumping",
+          "Rail defect",
+          "Sleeper defect",
+          "Fastening missing",
+          "Drainage / flooding",
+          "Vegetation encroachment",
+        ],
+      },
+      { key: "speedRestrictionNeeded", label: "Speed restriction needed", kind: "toggle" },
+    ],
+  },
+  ole_equipment: {
+    prompt: "Photograph from outside the exclusion zone — never raise anything to get the shot.",
+    fields: [
+      {
+        key: "electrification",
+        label: "Electrification",
+        kind: "select",
+        options: ["25 kV AC OLE", "750 V DC conductor rail", "1500 V DC", "Dual system", "Not electrified"],
+      },
+      { key: "isolationInPlace", label: "Isolation in place", kind: "toggle" },
+      { key: "earthsApplied", label: "Earths applied", kind: "toggle" },
+      { key: "clearanceM", label: "Clearance to live parts", kind: "number", unit: "m", step: 0.1 },
+    ],
+  },
+  signalling_asset: {
+    prompt: "Get the asset plate in the frame — the reference is what the report is filed under.",
+    fields: [
+      {
+        key: "railAssetType",
+        label: "Asset",
+        kind: "select",
+        options: [
+          "Signal",
+          "Location case",
+          "REB / relay room",
+          "Point machine",
+          "AWS / TPWS",
+          "Axle counter",
+          "Troughing route",
+          "Cable route marker",
+        ],
+      },
+      { key: "railAssetRef", label: "Asset ref", kind: "text", placeholder: "SN 1145" },
+      { key: "cableRouteExposed", label: "Cable route exposed", kind: "toggle" },
+      { key: "assetDamaged", label: "Damage / defect present", kind: "toggle" },
+    ],
+  },
+  level_crossing: {
+    prompt: "Show the sighting a user actually gets, standing where they would stand.",
+    fields: [
+      {
+        key: "crossingType",
+        label: "Crossing",
+        kind: "select",
+        options: [
+          "User worked",
+          "Footpath",
+          "Automatic half barrier",
+          "Manually controlled barrier",
+          "Open crossing",
+          "Station barrow crossing",
+        ],
+      },
+      { key: "sightingAdequate", label: "Sighting adequate", kind: "toggle" },
+      { key: "crossingUserBriefed", label: "Crossing keeper / user briefed", kind: "toggle" },
+    ],
+  },
+  on_track_plant_setup: {
+    prompt: "Show the machine at the access point with the exclusion zone and controller visible.",
+    fields: [
+      {
+        key: "railPlantType",
+        label: "Machine",
+        kind: "select",
+        options: ["RRV excavator", "Tamper", "Stoneblower", "RRV MEWP", "Road-rail dumper", "Trailer / wagon"],
+      },
+      { key: "accessPointRef", label: "Access point ref", kind: "text", placeholder: "AP 24m 10ch" },
+      { key: "slewLimitsSet", label: "Slew limits set", kind: "toggle" },
+      { key: "machineControllerPresent", label: "Machine Controller present", kind: "toggle" },
+    ],
+  },
+  rail_handback: {
+    prompt: "Photograph the worksite empty — the point of this one is that nothing is left behind.",
+    fields: [
+      {
+        key: "handbackState",
+        label: "Handback",
+        kind: "select",
+        options: [
+          "All clear — line fit for traffic",
+          "Clear with speed restriction",
+          "Not handed back",
+          "Possession extended",
+        ],
+      },
+      { key: "trafficRestriction", label: "Restriction imposed", kind: "text", placeholder: "20 mph TSR" },
+      { key: "peopleAndPlantClear", label: "People and plant clear", kind: "toggle" },
+      { key: "toolsAccountedFor", label: "Tools accounted for", kind: "toggle" },
     ],
   },
   asset_nameplate: {

@@ -99,11 +99,11 @@ const APP_UI = {
       skipAria: "Pomiń konfigurację na razie",
       welcomeTitle: "Witaj w MySafeOps",
       welcomeLead: (name) =>
-        `Skonfiguruj <strong>${name}</strong> w mniej niż minutę. Profil obszaru roboczego decyduje, które moduły są widoczne, jak Panel projektu ocenia gotowość i jaki pakiet IOR jest sugerowany — zmienisz to w Ustawieniach.`,
+        `Skonfiguruj <strong>${name}</strong> w mniej niż minutę. Profil obszaru roboczego decyduje, które moduły są widoczne, jak Panel projektu ocenia gotowość i jaki pakiet IBWR jest sugerowany — zmienisz to w Ustawieniach.`,
       getStarted: "Zacznij",
       profileTitle: "Wybierz profil obszaru roboczego",
       profileLead:
-        "Wybierz opcję najbliższą Twojej branży. To pokazuje rejestry w Więcej, ustawia bramki Panelu projektu i sugeruje pakiet IOR — nic nie znika po zmianie profilu.",
+        "Wybierz opcję najbliższą Twojej branży. To pokazuje rejestry w Więcej, ustawia bramki Panelu projektu i sugeruje pakiet IBWR — nic nie znika po zmianie profilu.",
       profileNote:
         "Wiersze startowe mogą zostać dodane do pustych rejestrów po kontynuacji. Pełny przewodnik: Pomoc (<kbd>?</kbd>) → Profile obszaru.",
       profileAdminNote: "Poproś administratora o zastosowanie profilu lub kontynuuj z domyślnym układem.",
@@ -120,13 +120,13 @@ const APP_UI = {
       checklistBranding: "Dodaj logo i dane firmy",
       checklistPeople: "Dodaj ludzi do zespołu",
       checklistProject: "Dodaj pierwszy projekt",
-      checklistRams: "Utwórz pierwszą IOR",
+      checklistRams: "Utwórz pierwszą IBWR",
       openDashboard: "Otwórz panel",
     },
     constructionWizard: {
       badge: "BUD",
       title: "Konfiguracja w popołudnie",
-      lead: "Lista kontrolna dla wykonawców budowlanych — Plan BHP, IOR, pozwolenia, odprawa dzienna i portal klienta w jednej sesji.",
+      lead: "Lista kontrolna dla wykonawców budowlanych — Plan BIOZ, IBWR, pozwolenia, odprawa dzienna i portal klienta w jednej sesji.",
       progress: "Postęp",
       runNow: "Uruchom",
       open: "Otwórz",
@@ -135,9 +135,9 @@ const APP_UI = {
     constructionSteps: {
       workspaceProfile: "Zastosuj profil wykonawcy budowlanego",
       workspaceProfileHint: "Pokazuje odprawę dzienną, kontrole i usterki — ukrywa moduły spożywcze/farmaceutyczne.",
-      hazardPacksHint: "Prace gorące, wysokość, wykopy, elektryczne — gotowe w Kreatorze IOR.",
+      hazardPacksHint: "Prace gorące, wysokość, wykopy, elektryczne — gotowe w Kreatorze IBWR.",
       firstProject: (ed) => `Pierwszy projekt z ${ed}`,
-      firstProjectHint: "Uzupełnij budowę w projekcie — bez SOR nie wydasz IOR.",
+      firstProjectHint: "Uzupełnij budowę w projekcie — bez SOR nie wydasz IBWR.",
       clientPortal: "Portal klienta opublikowany",
       clientPortalHint: "Udostępnij widok zgodności tylko do odczytu — publikacja w chmurze na każdym urządzeniu.",
       inspections: "Rejestr kontroli urządzeń",
@@ -150,7 +150,7 @@ const APP_UI = {
     },
     dashboard: {
       constructionBannerTitle: (c, t, p) => `Konfiguracja budowy — ${c}/${t} ukończone (${p}%)`,
-      constructionBannerLead: " · Plan BHP, IOR, pozwolenia, odprawa dzienna i portal klienta w jednym popołudniu.",
+      constructionBannerLead: " · Plan BIOZ, IBWR, pozwolenia, odprawa dzienna i portal klienta w jednym popołudniu.",
       openWizard: "Otwórz kreator konfiguracji",
     },
     projectHub: {
@@ -174,21 +174,90 @@ const APP_UI = {
       surveyTag: "Proces geodezyjny",
       hygieneTag: "Rejestry higieny",
       cta: "Rozpocznij ewaluację z tym profilem →",
-      ramsBadge: "Pakiety IOR",
+      ramsBadge: "Pakiety IBWR",
       ramsTitle: "Biblioteki branżowe jednym kliknięciem",
       ramsIntro:
         "Gotowe wiersze zagrożeń ze środkami, OOP, przepisami i powiązaniami PTW — roboty ziemne, instalacje, geodezja, M&E i więcej. Nie puste szablony.",
-      ramsSectorsAria: "Branże pakietów IOR",
+      ramsSectorsAria: "Branże pakietów IBWR",
       corePack: "Pakiet podstawowy",
       hazardRows: (n) => `${n} wierszy zagrożeń`,
       moreInSector: (n) => `+ ${n} więcej w tej branży — pełna biblioteka w 14-dniowej ewaluacji.`,
     },
   },
+  de: {
+    workspace: { moreModules: "Weitere Module", workspace: "Arbeitsbereich" },
+    moreSections: {
+      "Site operations": "Baustellenbetrieb",
+      "Health, safety & environment": "Arbeitsschutz und Umwelt",
+      "Insights & reports": "Auswertung und Berichte",
+      "Data & app": "Daten und App",
+    },
+    onboarding: {
+      skipAria: "Einrichtung vorerst überspringen",
+      welcomeTitle: "Willkommen bei MySafeOps",
+      welcomeLead: (name) =>
+        `Richten Sie <strong>${name}</strong> in unter einer Minute ein. Das Profil bestimmt sichtbare Module, die Projektbereitschaft und das vorgeschlagene GBU-Paket — später in den Einstellungen änderbar.`,
+      getStarted: "Loslegen",
+      profileTitle: "Arbeitsbereichsprofil wählen",
+      profileLead:
+        "Wählen Sie die Option, die Ihrem Gewerk am nächsten kommt. Das zeigt Register unter Mehr, setzt Projekt-Gates und schlägt ein GBU-Paket vor.",
+      profileNote:
+        "Startzeilen können leeren Registern hinzugefügt werden. Vollständige Anleitung: Hilfe (<kbd>?</kbd>) → Profile.",
+      profileAdminNote: "Bitten Sie einen Admin, das Profil anzuwenden, oder fahren Sie mit dem Standardlayout fort.",
+      back: "Zurück",
+      continue: "Weiter",
+      shortcutTitle: "Modul in der unteren Leiste anheften",
+      shortcutLead: "Ersetzen Sie den Standardplatz <strong>Papierkorb</strong> durch das meistgenutzte Register.",
+      shortcutLabel: "Shortcut der unteren Leiste",
+      shortcutDefault: "Papierkorb (Standard)",
+      shortcutAdminNote: "Admins stellen das unter Einstellungen → Organisation → Module ein.",
+      doneTitle: "Fertig",
+      doneLead: "Der Arbeitsbereich ist angepasst. Ergänzen Sie dies, wenn Sie Zeit haben:",
+      checklistHelp: "Profilanleitung lesen (Hilfe)",
+      checklistBranding: "Logo und Firmendaten hinzufügen",
+      checklistPeople: "Personen zum Team hinzufügen",
+      checklistProject: "Erstes Projekt anlegen",
+      checklistRams: "Erste GBU erstellen",
+      openDashboard: "Übersicht öffnen",
+    },
+    constructionWizard: {
+      badge: "BAU",
+      title: "Einrichtung an einem Nachmittag",
+      lead: "Checkliste für Bauunternehmen — SiGe-Plan, GBU, Erlaubnisscheine, Unterweisung und Auftraggeber-Portal in einer Sitzung.",
+      progress: "Fortschritt",
+      runNow: "Jetzt ausführen",
+      open: "Öffnen",
+      markDone: "Als erledigt markieren",
+    },
+    constructionSteps: {
+      workspaceProfile: "Profil Bauunternehmen anwenden",
+      workspaceProfileHint: "Zeigt Unterweisung, Prüfungen und Mängel — blendet Lebensmittel-/Pharma-Module aus.",
+      hazardPacksHint: "Heißarbeiten, Absturz, Aushub, Elektro — bereit im GBU-Generator.",
+      firstProject: (ed) => `Erstes Projekt mit ${ed}`,
+      firstProjectHint: "Baustelle im Projekt ergänzen — ohne Krankenhaus keine GBU-Ausgabe.",
+      clientPortal: "Auftraggeber-Portal veröffentlicht",
+      clientPortalHint: "Schreibgeschützte Compliance-Ansicht teilen — Cloud-Veröffentlichung auf jedem Gerät.",
+      inspections: "Geräteprüfregister",
+    },
+    constructionActions: {
+      workspaceProfile: "Profil Bauunternehmen mit Startregistern angewendet.",
+      hazardPacks: (n) => `Baupakete bereit (${n} insgesamt).`,
+      legislation: "Arbeitsschutz-Vorschriftenregister geladen.",
+      default: "Öffnen Sie das verknüpfte Modul, um diesen Schritt abzuschließen.",
+    },
+    dashboard: {
+      constructionBannerTitle: (c, t, p) => `Baustellen-Einrichtung — ${c}/${t} erledigt (${p} %)`,
+      constructionBannerLead: " · SiGe-Plan, GBU, Erlaubnisscheine, Unterweisung und Portal an einem Nachmittag.",
+      openWizard: "Einrichtungsassistent öffnen",
+    },
+    projectHub: {},
+    industryShowcase: {},
+  },
 };
 
 /** @param {MarketId} [marketId] */
 export function getAppUiCopy(marketId = "uk") {
-  return APP_UI[marketId] ?? APP_UI.uk;
+  return APP_UI[marketId] ?? (marketId === "at" || marketId === "ch" ? APP_UI.de : APP_UI.uk);
 }
 
 /** @param {string} englishTitle @param {MarketId} [marketId] */
@@ -225,6 +294,8 @@ export function getConstructionWizardCopy(marketId = "uk") {
 export function getIndustryShowcaseUiCopy(marketId = "uk") {
   const pl = APP_UI.pl.industryShowcase;
   if (marketId === "pl" && pl && Object.keys(pl).length) return pl;
+  const de = APP_UI.de.industryShowcase;
+  if ((marketId === "de" || marketId === "at" || marketId === "ch") && de && Object.keys(de).length) return de;
   const ramsLabel = getMarketLabelPack(marketId).ramsShort;
   return {
     swipeProfiles: "Swipe profiles →",

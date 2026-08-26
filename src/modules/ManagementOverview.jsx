@@ -58,6 +58,7 @@ import {
   saveManagementState,
 } from "../utils/managementOverview";
 import "../styles/management-overview.css";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const PROJECTS_KEY = "mysafeops_projects";
 const WORKERS_KEY = "mysafeops_workers";
@@ -150,6 +151,7 @@ function ReadinessRing({ value, size = "normal" }) {
 }
 
 export default function ManagementOverview() {
+  const { t } = useWorkspaceT();
   const { role, isPlatformOwner } = useApp();
   const canView = role === "admin" || Boolean(isPlatformOwner);
   const [state, setState] = useState(loadManagementState);
@@ -510,11 +512,11 @@ export default function ManagementOverview() {
           <div><span className="mgo-eyebrow">Pipeline</span><h2>Add potential work</h2><p>Potential work appears as a ghost job until it is confirmed.</p></div>
           <label>Job name<input autoFocus value={opportunityDraft.name} onChange={(e) => setOpportunityDraft((d) => ({ ...d, name: e.target.value }))} required /></label>
           <label>Client<input value={opportunityDraft.client} onChange={(e) => setOpportunityDraft((d) => ({ ...d, client: e.target.value }))} /></label>
-          <label>Location<input value={opportunityDraft.site} onChange={(e) => setOpportunityDraft((d) => ({ ...d, site: e.target.value }))} /></label>
+          <label>{t("location")}<input value={opportunityDraft.site} onChange={(e) => setOpportunityDraft((d) => ({ ...d, site: e.target.value }))} /></label>
           <label>Start<input type="date" value={opportunityDraft.start} onChange={(e) => setOpportunityDraft((d) => ({ ...d, start: e.target.value }))} /></label>
           <label>Finish<input type="date" value={opportunityDraft.end} onChange={(e) => setOpportunityDraft((d) => ({ ...d, end: e.target.value }))} /></label>
           <label>Preferred team<select value={opportunityDraft.teamId} onChange={(e) => setOpportunityDraft((d) => ({ ...d, teamId: e.target.value }))}><option value="">Unassigned</option>{state.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
-          <div className="mgo-opportunity-form__actions"><button type="button" className="mgo-btn mgo-btn--ghost" onClick={() => setShowOpportunityForm(false)}>Cancel</button><button className="mgo-btn mgo-btn--primary">Add to planner</button></div>
+          <div className="mgo-opportunity-form__actions"><button type="button" className="mgo-btn mgo-btn--ghost" onClick={() => setShowOpportunityForm(false)}>{t("cancel")}</button><button className="mgo-btn mgo-btn--primary">Add to planner</button></div>
         </form>
       ) : null}
 

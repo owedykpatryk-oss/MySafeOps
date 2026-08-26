@@ -19,7 +19,7 @@ import {
   resolveUtilityMappingLogoSrc,
 } from "../../utils/utilityMappingCovers.js";
 import { utilityMappingBodyPrintCss } from "../../utils/utilityMappingPrintTheme.js";
-import { buildPermitStatusDeepLink, renderDigGuidancePrintHtml } from "./permitDigGuidance";
+import { buildPermitStatusDeepLink } from "./permitDigGuidance";
 import { renderGuidancePrintHtml } from "./permitGuidance/registry";
 import { formatDocumentDateTime } from "../../utils/orgLocale.js";
 import { getOrgMarketId } from "../../utils/orgMarket.js";
@@ -308,7 +308,7 @@ export function renderPermitDocumentHtml(permit, options = {}) {
     </div>
   </div>`
     : "";
-  const digGuidanceHtml = renderGuidancePrintHtml(permit, { primaryColor }) || renderDigGuidancePrintHtml(permit, { primaryColor });
+  const digGuidanceHtml = renderGuidancePrintHtml(permit, { primaryColor, marketId: countryPack.marketId });
 
   return `<!DOCTYPE html><html lang="${countryPack.language}"><head><meta charset="utf-8"/><title>${escapeHtml(tx("Permit to work"))} — ${escapeHtml(def.label)}</title>
   <style>

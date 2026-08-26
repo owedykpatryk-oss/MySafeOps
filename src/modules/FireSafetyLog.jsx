@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `fire_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -27,6 +28,7 @@ const ss = ms;
 const TYPES = ["Fire extinguisher", "Fire alarm test", "Emergency lighting", "Assembly point signage", "Fire door", "Other"];
 
 function Form({ item, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -48,15 +50,15 @@ function Form({ item, onSave, onClose }) {
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit fire check" : "Fire safety check"}</h2>
         <label style={ss.lbl} htmlFor="fire-safety-check-type">Check type</label>
         <select style={ss.inp} value={form.checkType} onChange={(e) => set("checkType", e.target.value)} id="fire-safety-check-type">
-          {TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
+          {TYPES.map((tp) => (
+            <option key={tp} value={tp}>
+              {tp}
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-location">Location</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-location">{t("location")}</label>
         <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="fire-safety-location" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-check-date">Date</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-check-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.checkDate} onChange={(e) => set("checkDate", e.target.value)}  id="fire-safety-check-date" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={form.satisfactory} onChange={(e) => set("satisfactory", e.target.checked)} />
@@ -64,18 +66,18 @@ function Form({ item, onSave, onClose }) {
         </label>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-checked-by">Checked by</label>
         <input style={ss.inp} value={form.checkedBy} onChange={(e) => set("checkedBy", e.target.value)}  id="fire-safety-checked-by" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-notes">Notes / actions</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="fire-safety-notes">{t("notes")} / actions</label>
         <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="fire-safety-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const check = validateRequiredFields(form, ["location","checkDate"], { location: "Location", checkDate: "Check date" });
             if (!check.ok) { window.alert(check.message); return; }
             onSave(form);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -84,6 +86,7 @@ function Form({ item, onSave, onClose }) {
 }
 
 export default function FireSafetyLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("fire_safety_log", []));
   const [modal, setModal] = useState(null);
@@ -129,11 +132,11 @@ export default function FireSafetyLog() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add check
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -151,7 +154,7 @@ export default function FireSafetyLog() {
           icon="🔥"
           title="No fire checks recorded"
           description="Log extinguisher, alarm and emergency lighting checks."
-          actionLabel="+ Add check"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -162,12 +165,12 @@ export default function FireSafetyLog() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{r.checkType}</strong> · {r.checkDate}
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.location} · {r.satisfactory ? "OK" : "Action required"}</div>
+                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.location} · {r.satisfactory ? t("conditionOk") : "Action required"}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="fire" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -189,7 +192,7 @@ export default function FireSafetyLog() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

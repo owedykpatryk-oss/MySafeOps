@@ -97,8 +97,14 @@ export const SITE_CONTEXT_OVERLAYS = [
       "Handback and clear line of sight before train movements resume",
     ],
     hazardTokens: ["rail", "network rail", "pts", "possession", "lookout", "trackside", "coss"],
-    hazardIds: ["site_ctx_005", "site_ctx_006", "rail_001"],
-    permitHints: ["Rail corridor access / SSOW", "Possession or line blockage", "Confined space (if tunnel/chamber)"],
+    hazardIds: ["site_ctx_005", "site_ctx_006", "rail_001", "rail_006", "rail_009"],
+    permitHints: [
+      "Rail corridor access / SSOW",
+      "Possession or line blockage",
+      "OLE / conductor rail isolation (if electrified)",
+      "On-track plant / RRV (if machine on site)",
+      "Confined space (if tunnel/chamber)",
+    ],
     requiredCerts: ["PTS (Personal Track Safety)", "COSS / SWL briefing", "Site induction (NR / TOC)"],
     photoChecklist: [
       "PTS / induction board",

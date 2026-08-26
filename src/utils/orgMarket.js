@@ -1,4 +1,4 @@
-import { resolveMarketId, getMarket } from "../config/markets";
+import { resolveMarketId, getMarket, isValidMarketId } from "../config/markets";
 import { getOrgId } from "./orgStorage";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { getStoredMarketId, setStoredMarketId } from "./marketPref";
@@ -10,12 +10,12 @@ import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 /** @returns {MarketId} */
 export function getOrgMarketId(orgId = getOrgId()) {
   const activeWorkspaceMarket = getCachedActiveCountryWorkspace(orgId)?.market_id;
-  if (activeWorkspaceMarket === "au" || activeWorkspaceMarket === "uk" || activeWorkspaceMarket === "pl") {
+  if (isValidMarketId(activeWorkspaceMarket)) {
     return activeWorkspaceMarket;
   }
   const settings = loadOrgSettingsRaw(orgId);
   const fromSettings = settings?.market;
-  if (fromSettings === "au" || fromSettings === "uk" || fromSettings === "pl") return fromSettings;
+  if (isValidMarketId(fromSettings)) return fromSettings;
   const stored = getStoredMarketId();
   if (stored) return stored;
   return "uk";
@@ -47,7 +47,7 @@ export function setOrgMarketId(marketId, orgId = getOrgId()) {
 export async function syncOrgMarketFromAuth(supabase) {
   const orgId = getOrgId();
   const settings = loadOrgSettingsRaw(orgId);
-  if (settings.market === "au" || settings.market === "uk" || settings.market === "pl") {
+  if (isValidMarketId(settings.market)) {
     setStoredMarketId(settings.market);
     return settings.market;
   }
@@ -57,7 +57,7 @@ export async function syncOrgMarketFromAuth(supabase) {
     try {
       const { data } = await supabase.auth.getUser();
       const m = data?.user?.user_metadata?.market;
-      if (m === "au" || m === "uk" || m === "pl") fromMeta = m;
+      if (isValidMarketId(m)) fromMeta = m;
     } catch {
       /* ignore */
     }

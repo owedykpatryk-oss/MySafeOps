@@ -99,6 +99,18 @@
       "destination": "/api/pl-postcode?code=:code"
     },
     {
+      "source": "/api/de-postcode/:code",
+      "destination": "/api/de-postcode?code=:code"
+    },
+    {
+      "source": "/api/at-postcode/:code",
+      "destination": "/api/at-postcode?code=:code"
+    },
+    {
+      "source": "/api/ch-postcode/:code",
+      "destination": "/api/ch-postcode?code=:code"
+    },
+    {
       "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }

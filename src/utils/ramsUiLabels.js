@@ -24,21 +24,30 @@ export function getLeaveRamsBuilderConfirm(marketId = getOrgMarketId()) {
   if (marketId === "pl") {
     return `Opuścić kreator ${label}? Niezapisane zmiany zostaną utracone.`;
   }
+  if (marketId === "de" || marketId === "at" || marketId === "ch") {
+    return `${label}-Generator verlassen? Nicht gespeicherte Änderungen gehen verloren.`;
+  }
   return `Leave ${label} builder? Unsaved changes will be lost.`;
 }
 
-/** Labels for RAMS/SWMS/IOR print & PDF output. */
+/** Labels for RAMS/SWMS/IBWR print & PDF output. */
 export function getRamsPrintLabels(marketId = getOrgMarketId()) {
   const pack = getMarketLabelPack(marketId);
   const market = getMarket(marketId);
   const scopeByMarket = {
     au: "Detailed SWMS pack generated for field execution and WHS compliance review.",
-    pl: "Pakiet IOR wygenerowany do pracy w terenie i weryfikacji BHP na budowie.",
+    pl: "Pakiet IBWR wygenerowany do pracy w terenie i weryfikacji BHP na budowie.",
+    de: "GBU-Paket für die Baustelle und Arbeitsschutz-Überprüfung.",
+    at: "GBU-Paket für die Baustelle und Arbeitsschutz-Überprüfung.",
+    ch: "Gefährdungsermittlungs-Paket für die Baustelle und Arbeitssicherheits-Überprüfung.",
     uk: "Detailed RAMS pack generated for field execution and compliance review.",
   };
   const emergencyByMarket = {
     au: "Dial 000 in an emergency",
     pl: "W nagłych wypadkach dzwoń 112",
+    de: "Im Notfall 112 anrufen",
+    at: "Im Notfall 112 anrufen",
+    ch: "Im Notfall 112 / 144 anrufen",
     uk: "Dial 999 in an emergency",
   };
   return {

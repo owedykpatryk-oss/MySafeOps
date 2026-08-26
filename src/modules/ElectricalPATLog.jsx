@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `pat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const today = todayLocalISO;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -51,11 +53,11 @@ function Form({ item, projects, onSave, onClose }) {
         <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>Portable appliance or fixed equipment inspection — frequency per your risk assessment.</p>
         <label style={ss.lbl} htmlFor="electrical-pat-asset-tag">Asset tag / ID</label>
         <input style={ss.inp} value={form.assetTag} onChange={(e) => set("assetTag", e.target.value)}  id="electrical-pat-asset-tag" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="electrical-pat-description">Description</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="electrical-pat-description">{t("description")}</label>
         <input style={ss.inp} value={form.description} onChange={(e) => set("description", e.target.value)}  id="electrical-pat-description" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="electrical-pat-location">Location</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="electrical-pat-location">{t("location")}</label>
         <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="electrical-pat-location" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="electrical-pat-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="electrical-pat-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="electrical-pat-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -82,11 +84,11 @@ function Form({ item, projects, onSave, onClose }) {
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="electrical-pat-tested-by">Tested by / company</label>
         <input style={ss.inp} value={form.testedBy} onChange={(e) => set("testedBy", e.target.value)}  id="electrical-pat-tested-by" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="electrical-pat-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="electrical-pat-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="electrical-pat-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -94,7 +96,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -103,6 +105,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function ElectricalPATLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("electrical_pat_log", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -161,11 +164,11 @@ export default function ElectricalPATLog() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add record
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -181,7 +184,7 @@ export default function ElectricalPATLog() {
           icon="⚡"
           title="No electrical / PAT records"
           description="Record PAT and electrical inspection results."
-          actionLabel="+ Add record"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -197,7 +200,7 @@ export default function ElectricalPATLog() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="electrical-pat" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -219,7 +222,7 @@ export default function ElectricalPATLog() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

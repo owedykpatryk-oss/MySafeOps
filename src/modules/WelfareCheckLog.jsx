@@ -17,6 +17,9 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getMarketComplianceCopy } from "../utils/marketComplianceCopy";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `welf_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -24,7 +27,9 @@ const today = todayLocalISO;
 
 const ss = ms;
 
-function Form({ item, projects, onSave, onClose }) {
+function Form({ item, projects, marketId, onSave, onClose }) {
+  const { t } = useWorkspaceT();
+  const complianceCopy = getMarketComplianceCopy(marketId);
   const [form, setForm] = useState(
     () =>
       item || {
@@ -49,8 +54,8 @@ function Form({ item, projects, onSave, onClose }) {
     <ModuleOverlay onClose={onClose}>
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 480 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit welfare check" : "Welfare check"}</h2>
-        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>CDM 2015 Schedule 2 / site rules — tick what applies to your setup.</p>
-        <label style={ss.lbl} htmlFor="welfare-check-check-date">Date</label>
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>{complianceCopy.welfareBasis}</p>
+        <label style={ss.lbl} htmlFor="welfare-check-check-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.checkDate} onChange={(e) => set("checkDate", e.target.value)}  id="welfare-check-check-date" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="welfare-check-project-id">Project / site</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="welfare-check-project-id">
@@ -81,7 +86,7 @@ function Form({ item, projects, onSave, onClose }) {
         <textarea style={{ ...ss.inp, minHeight: 48, resize: "vertical" }} value={form.issues} onChange={(e) => set("issues", e.target.value)}  id="welfare-check-issues" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -89,7 +94,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -98,7 +103,9 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function WelfareCheckLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
+  const marketId = getOrgMarketId();
   const [items, setItems] = useState(() => load("welfare_check_log", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
@@ -161,7 +168,7 @@ export default function WelfareCheckLog() {
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="welfare checks" />
-      {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
+      {modal?.type === "form" && <Form item={modal.data} projects={projects} marketId={marketId} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
             <PageHero exportModuleId="welfare"
         badgeText="WF"
         title="Welfare checks"
@@ -169,11 +176,11 @@ export default function WelfareCheckLog() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add check
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -189,7 +196,7 @@ export default function WelfareCheckLog() {
           icon="🚻"
           title="No welfare checks yet"
           description="Record toilets, wash facilities, water and rest areas on site."
-          actionLabel="+ Add check"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -206,7 +213,7 @@ export default function WelfareCheckLog() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="welfare" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -228,7 +235,7 @@ export default function WelfareCheckLog() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

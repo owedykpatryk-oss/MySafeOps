@@ -19,6 +19,7 @@ import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 
 import { todayLocalISO } from "../utils/localDate";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 const genId = () => `brief_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 const today = todayLocalISO;
 const fmtDate = (iso) => {
@@ -86,6 +87,7 @@ const ss = {
 
 // ─── Signature canvas ─────────────────────────────────────────────────────────
 function SigCanvas({ onCapture, compact }) {
+  const { t } = useWorkspaceT();
   const ref = useRef(null);
   const drawing = useRef(false);
   const last = useRef(null);
@@ -196,7 +198,7 @@ function SigCanvas({ onCapture, compact }) {
       </div>
       <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
         <button type="button" onClick={clear} style={{ ...ss.btn, fontSize: 13, padding: "10px 14px", minHeight: 44, touchAction: "manipulation" }}>
-          Clear
+          {t("clear")}
         </button>
         <button
           type="button"
@@ -213,6 +215,7 @@ function SigCanvas({ onCapture, compact }) {
 
 // ─── New briefing form ────────────────────────────────────────────────────────
 function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
+  const { t } = useWorkspaceT();
   const projectSeed = initial?.projectId ? projects.find((p) => p.id === initial.projectId) : null;
   const [form, setForm] = useState({
     date: today(),
@@ -359,7 +362,7 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
              id="daily-briefing-location" />
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="daily-briefing-project-id">Project</label>
+            <label style={ss.lbl} htmlFor="daily-briefing-project-id">{t("project")}</label>
             <select value={form.projectId} onChange={(e) => set("projectId", e.target.value)} style={ss.inp} id="daily-briefing-project-id">
               <option value="">— Select project —</option>
               {projects.map((p) => (
@@ -681,7 +684,7 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={ss.btn}>
-            Cancel
+            {t("cancel")}
           </button>
           <button disabled={!valid} onClick={() => onSave(form)} style={{ ...ss.btnO, opacity: valid ? 1 : 0.4 }}>
             Save briefing record
@@ -907,6 +910,7 @@ function printBriefing(brief) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function DailyBriefing() {
+  const { t } = useWorkspaceT();
   const [briefings, setBriefings] = useState(() => load("daily_briefings", []));
   const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -1103,7 +1107,7 @@ export default function DailyBriefing() {
                   }}
                   style={{ ...ss.btn, fontSize: 12 }}
                 >
-                  Clear
+                  {t("clear")}
                 </button>
               ) : null}
             </div>

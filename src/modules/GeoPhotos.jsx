@@ -80,6 +80,7 @@ import {
 } from "../utils/geoPhotoArea";
 
 import { todayLocalISO } from "../utils/localDate";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 const STORAGE_KEY = "geo_photos";
 const LIST_PAGE = 48;
 
@@ -228,6 +229,7 @@ function GeoPhotoDetail({
   onOpenPermit,
   onResolveAction,
 }) {
+  const { t } = useWorkspaceT();
   const preset = geoPhotoPreset(photo.type);
   const showGi = isGiGeoPhotoType(photo.type);
   const [notes, setNotes] = useState(() => baseNotesOf(photo));
@@ -424,7 +426,7 @@ function GeoPhotoDetail({
             </button>
           ) : null}
           <button type="button" style={ms.btnDanger} onClick={() => onDelete(photo.id)}>
-            Delete
+            {t("delete")}
           </button>
         </div>
       </div>
@@ -433,6 +435,7 @@ function GeoPhotoDetail({
 }
 
 export default function GeoPhotos() {
+  const { t } = useWorkspaceT();
   const { orgName, trialStatus, billing, isPlatformOwner } = useApp();
   const { pushToast } = useToast();
   const pendingGeoPhotoIdRef = useRef(null);
@@ -956,11 +959,11 @@ export default function GeoPhotos() {
         <div className="geo-photos-toolbar__actions">
           {hasActiveFilters ? (
             <button type="button" style={ms.btn} onClick={clearFilters}>
-              Clear filters
+              {t("clearFilters")}
             </button>
           ) : null}
           <button type="button" style={ms.btn} onClick={() => exportCsv(filtered)} disabled={filtered.length === 0}>
-            Export CSV
+            {t("exportCsv")}
           </button>
           <button
             type="button"
@@ -1287,7 +1290,7 @@ export default function GeoPhotos() {
                     onClick={() => handleDelete(photo.id)}
                     aria-label={`Delete ${preset.label} photo`}
                   >
-                    Delete
+                    {t("delete")}
                   </button>
                 </div>
                 <div className="geo-photos-card__map">

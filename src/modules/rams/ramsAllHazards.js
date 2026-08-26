@@ -8,6 +8,8 @@ import GEOSPATIAL, { GEOSPATIAL_CATEGORIES } from "./ramsHazardLibraryGeospatial
 import SITE_INVESTIGATION, { SITE_INVESTIGATION_CATEGORIES } from "./ramsHazardLibrarySiteInvestigation";
 import SITE_CONTEXT, { SITE_CONTEXT_CATEGORIES } from "./ramsHazardLibrarySiteContext";
 import FESS_EXCEL, { FESS_EXCEL_CATEGORIES } from "./fessExcelHazardLibrary";
+import PL_HAZARDS, { PL_HAZARD_CATEGORIES } from "./ramsHazardLibraryPl";
+import PL_IBWR_ROWS, { PL_IBWR_CATEGORIES } from "./ramsIbwrTemplatesPl";
 import { getRiskLevel, RISK_COLORS } from "./ramsRiskLevel.js";
 
 export const TRADE_CATEGORIES = [
@@ -44,11 +46,13 @@ export const TRADE_CATEGORIES = [
       !SITE_INVESTIGATION_CATEGORIES.includes(c)
   ),
   ...FESS_EXCEL_CATEGORIES.filter((c) => !BASE_TRADE_CATEGORIES.includes(c) && !EXTENDED_CATEGORIES.includes(c) && !PRO_CATEGORIES.includes(c)),
+  ...PL_HAZARD_CATEGORIES,
+  ...PL_IBWR_CATEGORIES,
 ];
 
 const CORE = [...BASE, ...EXT, ...PRO, ...CONSTRUCTION, ...SUPPLEMENT, ...GEOSPATIAL, ...SITE_INVESTIGATION, ...SITE_CONTEXT];
 const CORE_IDS = new Set(CORE.map((h) => h.id));
-const ALL = [...CORE, ...FESS_EXCEL.filter((h) => !CORE_IDS.has(h.id))];
+const ALL = [...CORE, ...FESS_EXCEL.filter((h) => !CORE_IDS.has(h.id)), ...PL_HAZARDS, ...PL_IBWR_ROWS];
 
 /** @param {string} [sector] */
 export const getBySector = (sector) =>

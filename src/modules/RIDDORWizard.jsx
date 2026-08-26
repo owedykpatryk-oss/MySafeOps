@@ -19,6 +19,7 @@ import {
 } from "../config/notifiableIncidentsContent";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { formatOrgDate } from "../utils/orgLocale";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { localDateISO, todayLocalISO } from "../utils/localDate";
 const genId = () => `riddor_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -119,6 +120,7 @@ function DeadlineAlert({ reportDate, deadlineDays, content }) {
 }
 
 function RIDDORForm({ report, onSave, onClose, content, marketId }) {
+  const { t } = useWorkspaceT();
   const org = getOrgSettings();
   const projects = load("mysafeops_projects",[]);
   const defaultType = defaultIncidentTypeKey(marketId);
@@ -217,7 +219,7 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
               <textarea value={form.siteAddress||""} onChange={e=>set("siteAddress",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:44 }}  id="riddor-site-address" />
             </div>
             <div>
-              <label style={ss.lbl} htmlFor="riddor-project-id">Project</label>
+              <label style={ss.lbl} htmlFor="riddor-project-id">{t("project")}</label>
               <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="riddor-project-id">
                 <option value="">— Select —</option>
                 {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -406,7 +408,7 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
 
         {/* nav */}
         <div style={{ display:"flex", gap:8, justifyContent:"space-between", marginTop:20, paddingTop:16, borderTop:"0.5px solid var(--color-border-tertiary,#e5e5e5)", flexWrap:"wrap" }}>
-          <button onClick={onClose} style={ss.btn}>Cancel</button>
+          <button onClick={onClose} style={ss.btn}>{t("cancel")}</button>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             {step>0 && <button onClick={()=>setStep(s=>s-1)} style={ss.btn}>← Back</button>}
             {step<STEPS.length-1
@@ -421,6 +423,7 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
 }
 
 export default function RIDDORRegister() {
+  const { t } = useWorkspaceT();
   const marketId = getOrgMarketId();
   const content = getNotifiableIncidentsContent(marketId);
   const [reports, setReports] = useState(()=>load("riddor_reports",[]));
@@ -505,7 +508,7 @@ export default function RIDDORRegister() {
                 </div>
                 <div style={{ display:"flex", gap:6, flexShrink:0, flexWrap:"wrap" }}>
                   <button type="button" onClick={()=>printNotifiableWorksheet(r, content)} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Print</button>
-                  <button onClick={()=>setModal({type:"form",data:r})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>Edit</button>
+                  <button onClick={()=>setModal({type:"form",data:r})} style={{ ...ss.btn, fontSize:12, padding:"4px 10px" }}>{t("edit")}</button>
                   <button onClick={()=>{
                     if (softDeleteToRecycleBin({
                       moduleId: content.moduleId,

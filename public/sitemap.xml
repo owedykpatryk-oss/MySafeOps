@@ -11,6 +11,36 @@
     <priority>0.35</priority>
   </url>
   <url>
+    <loc>https://mysafeops.com/at</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/at/accessibility</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/at/cookies</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/at/dpa</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/at/privacy</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/at/terms</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
     <loc>https://mysafeops.com/au</loc>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
@@ -246,7 +276,67 @@
     <priority>0.75</priority>
   </url>
   <url>
+    <loc>https://mysafeops.com/ch</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/ch/accessibility</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/ch/cookies</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/ch/dpa</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/ch/privacy</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/ch/terms</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
     <loc>https://mysafeops.com/cookies</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/de</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/de/accessibility</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/de/cookies</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/de/dpa</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/de/privacy</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/de/terms</loc>
     <changefreq>weekly</changefreq>
     <priority>0.35</priority>
   </url>
@@ -262,6 +352,31 @@
   </url>
   <url>
     <loc>https://mysafeops.com/legal/accessibility.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/at/accessibility.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/at/cookies.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/at/dpa.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/at/privacy-policy.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/at/terms.html</loc>
     <changefreq>weekly</changefreq>
     <priority>0.35</priority>
   </url>
@@ -291,7 +406,57 @@
     <priority>0.35</priority>
   </url>
   <url>
+    <loc>https://mysafeops.com/legal/ch/accessibility.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/ch/cookies.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/ch/dpa.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/ch/privacy-policy.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/ch/terms.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
     <loc>https://mysafeops.com/legal/cookies.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/de/accessibility.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/de/cookies.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/de/dpa.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/de/privacy-policy.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.35</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/legal/de/terms.html</loc>
     <changefreq>weekly</changefreq>
     <priority>0.35</priority>
   </url>

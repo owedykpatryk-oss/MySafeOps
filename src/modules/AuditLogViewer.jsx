@@ -10,12 +10,16 @@ import { supabase } from "../lib/supabase";
 import { d1ListServerAudit, isD1Configured } from "../lib/d1SyncClient";
 import { useListWindow } from "../utils/useListWindow.js";
 import { formatActorLabel } from "../utils/documentAuthorship.js";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { printDachComplianceSnapshot, supportsDachComplianceSnapshot } from "../utils/dachComplianceSnapshot";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const ss = ms;
 const AUDIT_PAGE = 120;
 
 export default function AuditLogViewer() {
+  const { t } = useWorkspaceT();
   const { caps, role } = useApp();
   const canReadServerAudit = role === "admin" || role === "supervisor";
   const [bump, setBump] = useState(0);
@@ -113,6 +117,9 @@ export default function AuditLogViewer() {
     setBump((x) => x + 1);
   };
 
+  const orgMarketId = getOrgMarketId();
+  const showDachSnapshot = supportsDachComplianceSnapshot(orgMarketId);
+
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <PageHero
@@ -122,8 +129,18 @@ export default function AuditLogViewer() {
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button type="button" style={ss.btn} onClick={refresh}>
-              Refresh
+              {t("refresh")}
             </button>
+            {showDachSnapshot && (
+              <button
+                type="button"
+                style={{ ...ss.btnP }}
+                onClick={() => printDachComplianceSnapshot(orgMarketId)}
+                title="One-page inspection-ready summary — SiGe-Plan/GBU, Erlaubnisscheine, Unterweisungen, offene Ereignisse."
+              >
+                Prüfbereiter Nachweis
+              </button>
+            )}
             {caps.backupImport && (
               <button
                 type="button"

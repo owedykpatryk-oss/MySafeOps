@@ -23,7 +23,7 @@ function LandingIndustryShowcase({ marketId = "uk" }) {
   const profiles = useMemo(() => getLandingWorkspaceProfiles(marketId), [marketId]);
   const sectorTabs = useMemo(() => getLandingRamsSectorTabs(marketId), [marketId]);
   const [ramsTab, setRamsTab] = useState("construction");
-  const [activeProfile, setActiveProfile] = useState(marketId === "pl" ? "generalContractor" : "surveyingGeodesy");
+  const [activeProfile, setActiveProfile] = useState(marketId === "pl" ? "generalContractor" : marketId === "de" || marketId === "at" || marketId === "ch" ? "generalContractor" : "surveyingGeodesy");
   const [ramsCatalog, setRamsCatalog] = useState(null);
 
   useEffect(() => {
@@ -65,11 +65,11 @@ function LandingIndustryShowcase({ marketId = "uk" }) {
           </div>
           <div>
             <strong>{LANDING_RAMS_PACK_COUNT}+</strong>
-            <span>{marketId === "pl" ? `Pakiety ${ramsShort}` : marketId === "au" ? `Built-in ${ramsShort} quick packs` : "Built-in RAMS quick packs"}</span>
+            <span>{marketId === "pl" ? `Pakiety ${ramsShort}` : marketId === "au" ? `Built-in ${ramsShort} quick packs` : marketId === "de" || marketId === "at" || marketId === "ch" ? `${ramsShort}-Pakete` : "Built-in RAMS quick packs"}</span>
           </div>
           <div>
-            <strong>{marketId === "pl" ? "BHP" : marketId === "au" ? "WHS" : "PAS128"}</strong>
-            <span>{marketId === "pl" ? "Plan i rejestry BHP" : marketId === "au" ? "WHS & model codes" : "Survey & AS5488 workflows"}</span>
+            <strong>{marketId === "pl" ? "BHP" : marketId === "au" ? "WHS" : marketId === "de" || marketId === "at" || marketId === "ch" ? "GBU" : "PAS128"}</strong>
+            <span>{marketId === "pl" ? "Plan i rejestry BHP" : marketId === "au" ? "WHS & model codes" : marketId === "de" || marketId === "at" || marketId === "ch" ? "Evaluierung & Schichtpläne" : "Survey & AS5488 workflows"}</span>
           </div>
           <div>
             <strong>Geo</strong>

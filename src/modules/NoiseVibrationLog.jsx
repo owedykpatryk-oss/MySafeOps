@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `nv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const today = todayLocalISO;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -57,9 +59,9 @@ function Form({ item, projects, onSave, onClose }) {
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-activity-or-tool">Activity / equipment</label>
         <input style={ss.inp} value={form.activityOrTool} onChange={(e) => set("activityOrTool", e.target.value)}  id="noise-vibration-activity-or-tool" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-location">Location</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-location">{t("location")}</label>
         <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="noise-vibration-location" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="noise-vibration-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -68,7 +70,7 @@ function Form({ item, projects, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-log-date">Date</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-log-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.logDate} onChange={(e) => set("logDate", e.target.value)}  id="noise-vibration-log-date" />
         {form.recordType === "noise" ? (
           <>
@@ -89,11 +91,11 @@ function Form({ item, projects, onSave, onClose }) {
         )}
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-assessed-by">Recorded by</label>
         <input style={ss.inp} value={form.assessedBy} onChange={(e) => set("assessedBy", e.target.value)}  id="noise-vibration-assessed-by" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="noise-vibration-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="noise-vibration-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -101,7 +103,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -110,6 +112,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function NoiseVibrationLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("noise_vibration_log", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -176,11 +179,11 @@ export default function NoiseVibrationLog() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add record
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -196,7 +199,7 @@ export default function NoiseVibrationLog() {
           icon="🔊"
           title="No noise or vibration records yet"
           description="Log noise exposure and HAV trigger times for tools and plant."
-          actionLabel="+ Add record"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -212,7 +215,7 @@ export default function NoiseVibrationLog() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="noise" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -234,7 +237,7 @@ export default function NoiseVibrationLog() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

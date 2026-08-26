@@ -12,6 +12,7 @@ import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `insp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -34,9 +35,39 @@ const INSPECTION_TYPES = {
   other: { label:"Other equipment inspection", color:"#5F5E5A", bg:"#F1EFE8", freq:"As specified", regs:"" },
 };
 
+function inspectionTypesForMarket(marketId) {
+  if (marketId === "uk") return INSPECTION_TYPES;
+  const deUi = marketId === "de" || marketId === "at" || marketId === "ch";
+  const overrides = marketId === "pl"
+    ? {
+        loler: ["Badanie urządzenia dźwignicowego / UDT", "zgodnie z decyzją UDT, instrukcją i oceną ryzyka", "dozór techniczny"],
+        pat: ["Kontrola elektronarzędzia", "wg oceny ryzyka i instrukcji producenta", "polskie przepisy BHP"],
+        puwer: ["Kontrola maszyny lub wyposażenia", "wg oceny ryzyka i instrukcji producenta", "minimalne wymagania dla maszyn"],
+        pssr: ["Kontrola urządzenia ciśnieniowego", "zgodnie z decyzją UDT i dokumentacją", "dozór techniczny"],
+        eicr: ["Kontrola instalacji elektrycznej", "zgodnie z przepisami i oceną ryzyka", "Prawo budowlane / wymagania elektryczne"],
+        ladder: ["Kontrola drabiny", "przed użyciem i okresowo wg oceny ryzyka", "polskie przepisy BHP"],
+        mewp: ["Kontrola podestu ruchomego / UDT", "zgodnie z decyzją UDT i instrukcją", "dozór techniczny"],
+        scaffold: ["Kontrola rusztowania", "po montażu, zmianach i zdarzeniach oraz wg harmonogramu", "BHP podczas robót budowlanych"],
+      }
+    : deUi
+      ? {
+          loler: ["Prüfung von Hebezeugen", "Frist aus Gefährdungsbeurteilung und Herstellerangaben", marketId === "ch" ? "VUV / BauAV / Suva" : marketId === "at" ? "ASchG / AM-VO / AUVA" : "BetrSichV / DGUV"],
+          pat: ["Prüfung elektrischer Betriebsmittel", "Prüffrist aus Gefährdungsbeurteilung", marketId === "ch" ? "VUV / NIV" : marketId === "at" ? "ASchG / ESV" : "BetrSichV / DGUV Vorschrift 3"],
+          puwer: ["Arbeitsmittelprüfung", "Prüffrist aus Gefährdungsbeurteilung", marketId === "ch" ? "VUV" : marketId === "at" ? "AM-VO" : "BetrSichV"],
+          scaffold: ["Gerüstprüfung", "nach Aufbau, Änderungen, Ereignissen und Prüfplan", marketId === "ch" ? "BauAV" : marketId === "at" ? "BauV" : "BetrSichV / TRBS 2121"],
+        }
+      : {};
+  return Object.fromEntries(Object.entries(INSPECTION_TYPES).map(([key, value]) => {
+    const entry = overrides[key];
+    return [key, entry ? { ...value, label: entry[0], freq: entry[1], regs: entry[2] } : { ...value, freq: "Risk-based / manufacturer and local requirements", regs: "Selected-country requirements" }];
+  }));
+}
+
 const ss = { ...ms, ta: { width:"100%", padding:"7px 10px", border:"0.5px solid var(--color-border-secondary,#ccc)", borderRadius:6, fontSize:13, background:"var(--color-background-primary,#fff)", color:"var(--color-text-primary)", fontFamily:"DM Sans,sans-serif", boxSizing:"border-box", resize:"vertical", minHeight:50 } };
 
 function InspectionForm({ item, onSave, onClose, projects }) {
+  const { t, marketId } = useWorkspaceT();
+  const inspectionTypes = useMemo(() => inspectionTypesForMarket(marketId), [marketId]);
   const blank = {
     id:genId(), type:"loler", name:"", serialNo:"", location:"",
     projectId:"", manufacturer:"", model:"", swl:"",
@@ -48,7 +79,7 @@ function InspectionForm({ item, onSave, onClose, projects }) {
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const photoRef = useRef();
 
-  const def = INSPECTION_TYPES[form.type]||INSPECTION_TYPES.other;
+  const def = inspectionTypes[form.type]||inspectionTypes.other;
 
   const handlePhoto = (e) => {
     const file = e.target.files[0];
@@ -71,7 +102,7 @@ function InspectionForm({ item, onSave, onClose, projects }) {
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl} htmlFor="inspection-type">Inspection type</label>
             <select value={form.type} onChange={e=>set("type",e.target.value)} style={ss.inp} id="inspection-type">
-              {Object.entries(INSPECTION_TYPES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+              {Object.entries(inspectionTypes).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
             </select>
             <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginTop:4 }}>Frequency: {def.freq} · {def.regs}</div>
           </div>
@@ -94,11 +125,11 @@ function InspectionForm({ item, onSave, onClose, projects }) {
             </div>
           )}
           <div>
-            <label style={ss.lbl} htmlFor="inspection-location">Location / project</label>
+            <label style={ss.lbl} htmlFor="inspection-location">{t("location")} / {t("project").toLowerCase()}</label>
             <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="Where is item kept?" style={ss.inp}  id="inspection-location" />
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="inspection-project-id">Project</label>
+            <label style={ss.lbl} htmlFor="inspection-project-id">{t("project")}</label>
             <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="inspection-project-id">
               <option value="">— General / all projects —</option>
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -147,9 +178,9 @@ function InspectionForm({ item, onSave, onClose, projects }) {
         </div>
 
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end", marginTop:16 }}>
-          <button onClick={onClose} style={ss.btn}>Cancel</button>
+          <button onClick={onClose} style={ss.btn}>{t("cancel")}</button>
           <button disabled={!form.name.trim()} onClick={()=>onSave(form)} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
-            {item?"Save changes":"Add record"}
+            {t("save")}
           </button>
         </div>
       </div>
@@ -158,6 +189,8 @@ function InspectionForm({ item, onSave, onClose, projects }) {
 }
 
 export default function InspectionTracker() {
+  const { t, marketId } = useWorkspaceT();
+  const inspectionTypes = useMemo(() => inspectionTypesForMarket(marketId), [marketId]);
   const [items, setItems] = useState(()=>load("inspection_records",[]));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
@@ -240,7 +273,7 @@ export default function InspectionTracker() {
       <PageHero
         badgeText="IN"
         title="Inspection register"
-        lead="LOLER, PAT, PUWER, PSSR, EICR, scaffold, ladder, harness and more — print a branded A4 inspection form per record."
+        lead={marketId === "pl" ? "Kontrole UDT, maszyn, instalacji, rusztowań, drabin i ŚOI — terminy ustalaj według właściwych przepisów, dokumentacji i oceny ryzyka." : marketId === "de" || marketId === "at" || marketId === "ch" ? "Prüfungen von Arbeitsmitteln, Anlagen, Gerüsten, Leitern und PSA — Fristen nach Landesrecht, Herstellerangaben und Gefährdungsbeurteilung festlegen." : marketId === "au" ? "Plant, lifting equipment, scaffold, ladder and PPE inspections — apply the rules of the selected state or territory." : "LOLER, PAT, PUWER, PSSR, EICR, scaffold, ladder, harness and more — print a branded A4 inspection form per record."}
         exportModuleId="inspections"
         exportModuleLabel="Inspection register"
         right={
@@ -258,7 +291,7 @@ export default function InspectionTracker() {
               </button>
             ) : null}
             <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>
-              + Add inspection record
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -284,7 +317,7 @@ export default function InspectionTracker() {
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search equipment…" style={{ ...ss.inp, flex: 1, width: "auto", minWidth: 140 }} />
               <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
                 <option value="">All types</option>
-                {Object.entries(INSPECTION_TYPES).map(([k, v]) => (
+                {Object.entries(inspectionTypes).map(([k, v]) => (
                   <option key={k} value={k}>{v.label}</option>
                 ))}
               </select>
@@ -295,7 +328,7 @@ export default function InspectionTracker() {
                 <option value="ok">Up to date</option>
               </select>
               {(search || filterType || filterResult || filterDue !== "all") ? (
-                <button type="button" onClick={() => { setSearch(""); setFilterType(""); setFilterResult(""); setFilterDue("all"); listPg.reset(); }} style={{ ...ss.btn, fontSize: 12 }}>Clear</button>
+                <button type="button" onClick={() => { setSearch(""); setFilterType(""); setFilterResult(""); setFilterDue("all"); listPg.reset(); }} style={{ ...ss.btn, fontSize: 12 }}>{t("clear")}</button>
               ) : null}
             </div>
           ) : null
@@ -306,14 +339,14 @@ export default function InspectionTracker() {
             icon="🔍"
             title="No inspection records yet"
             description="Track LOLER, PAT, PUWER and other plant and equipment inspections."
-            actionLabel="+ Add first record"
+            actionLabel={t("addRecord")}
             onAction={() => setModal({ type: "form" })}
             variant="dashed"
           />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {listPg.visible(filtered).map((item) => {
-              const def = INSPECTION_TYPES[item.type] || INSPECTION_TYPES.other;
+              const def = inspectionTypes[item.type] || inspectionTypes.other;
               const pill = getStatusPill(item);
               return (
                 <div key={item.id} style={{ ...ss.card, display: "flex", gap: 12, alignItems: "center", borderLeft: `3px solid ${def.color}`, contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
@@ -335,7 +368,7 @@ export default function InspectionTracker() {
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, flexShrink: 0 }}>
                     <RegisterFormPrintButton moduleId="inspections" record={item} />
-                    <button type="button" onClick={() => setModal({ type: "form", data: item })} style={{ ...ss.btn, fontSize: 12, padding: "4px 10px" }}>Edit</button>
+                    <button type="button" onClick={() => setModal({ type: "form", data: item })} style={{ ...ss.btn, fontSize: 12, padding: "4px 10px" }}>{t("edit")}</button>
                     <button type="button" onClick={() => {
                       if (softDeleteToRecycleBin({
                         moduleId: "inspections",

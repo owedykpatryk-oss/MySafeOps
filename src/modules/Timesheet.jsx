@@ -10,6 +10,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 import { localDateISO, localMonthISO } from "../utils/localDate";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const STORAGE_KEY = "mysafeops_timesheets";
@@ -283,6 +284,7 @@ function Avatar({ name, size = 32 }) {
 }
 
 function Badge({ status }) {
+  const { t } = useWorkspaceT();
   const c = STATUS_COLORS[status] || STATUS_COLORS.pending;
   return (
     <span style={{
@@ -290,12 +292,13 @@ function Badge({ status }) {
       background:c.bg, color:c.text,
       fontSize:11, fontWeight:500,
     }}>
-      {c.label}
+      {t(status) !== status ? t(status) : c.label}
     </span>
   );
 }
 
 function DayDots({ days }) {
+  const { dayLabel } = useWorkspaceT();
   return (
     <div style={{ display:"flex", gap:3, alignItems:"center" }}>
       {weekDays.map(d => {
@@ -303,7 +306,7 @@ function DayDots({ days }) {
         const full = h >= 7.5;
         const half = h > 0 && !full;
         return (
-          <div key={d} title={`${d}: ${h}h`} style={{
+          <div key={d} title={`${dayLabel(d)}: ${h}h`} style={{
             width:9, height:9, borderRadius:"50%",
             background: full ? "#1D9E75" : half ? "#EF9F27" : "var(--color-border-secondary, #ccc)",
           }} />
@@ -405,6 +408,7 @@ function SummaryCards({ entries }) {
 
 // ─── Entry modal ─────────────────────────────────────────────────────────────
 function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelete, onClose }) {
+  const { t, dayLabel } = useWorkspaceT();
   const [form, setForm] = useState(() => entry ? {
     ...entry,
     rejectReason: entry.rejectReason || "",
@@ -434,7 +438,7 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
       }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <span style={{ fontWeight:500, fontSize:16 }}>
-            {entry ? "Edit entry" : "New timesheet entry"}
+            {entry ? t("editEntry") : t("newTimesheetEntry")}
           </span>
           <button onClick={onClose} style={{
             background:"none", border:"none", cursor:"pointer",
@@ -444,40 +448,40 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
 
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:12, marginBottom:12 }}>
           <div>
-            <label style={labelStyle}>Worker</label>
+            <label style={labelStyle}>{t("worker")}</label>
             <select value={form.workerId} onChange={e=>set("workerId",e.target.value)} style={inputStyle}>
-              <option value="">Select worker…</option>
+              <option value="">{t("selectWorker")}</option>
               {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Project</label>
+            <label style={labelStyle}>{t("project")}</label>
             <select value={form.projectId} onChange={e=>set("projectId",e.target.value)} style={inputStyle}>
-              <option value="">Select project…</option>
+              <option value="">{t("selectProject")}</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
         </div>
 
         <div style={{ marginBottom:12 }}>
-          <label style={labelStyle}>Task description</label>
+          <label style={labelStyle}>{t("taskDescription")}</label>
           <input value={form.task} onChange={e=>set("task",e.target.value)}
-            placeholder="e.g. Cable containment install, Welding works…"
+            placeholder={t("taskPlaceholder")}
             style={inputStyle} />
         </div>
 
         <div style={{ marginBottom:16 }}>
           <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
-            <label style={labelStyle}>Daily hours</label>
+            <label style={labelStyle}>{t("dailyHours")}</label>
             <span style={{ fontSize:12, color:"var(--color-text-secondary)" }}>
-              Total: <strong>{tot.toFixed(1)}h</strong>
+              {t("total")}: <strong>{tot.toFixed(1)}h</strong>
               {ot > 0 && <span style={{ color:"#BA7517", marginLeft:6 }}>+{ot.toFixed(1)}h OT</span>}
             </span>
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 }}>
             {weekDays.map(d => (
               <div key={d} style={{ textAlign:"center" }}>
-                <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:2, fontWeight:500 }}>{d}</div>
+                <div style={{ fontSize:11, color:"var(--color-text-secondary)", marginBottom:2, fontWeight:500 }}>{dayLabel(d)}</div>
                 <div style={{ fontSize:10, color:"var(--color-text-tertiary,#aaa)", marginBottom:4 }}>
                   {weekStartMonday ? calendarDayLabel(weekStartMonday, d) : ""}
                 </div>
@@ -494,9 +498,9 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
         </div>
 
         <div style={{ marginBottom:16 }}>
-          <label style={labelStyle}>Notes (optional)</label>
+          <label style={labelStyle}>{t("notesOptional")}</label>
           <textarea value={form.notes} onChange={e=>set("notes",e.target.value)}
-            placeholder="Any additional notes…"
+            placeholder={t("notesPlaceholder")}
             rows={2}
             style={{ ...inputStyle, resize:"vertical", height:"auto", lineHeight:1.5 }}
           />
@@ -504,23 +508,23 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
 
         {entry && (
           <div style={{ marginBottom:16 }}>
-            <label style={labelStyle}>Status</label>
+            <label style={labelStyle}>{t("status")}</label>
             <select
               value={form.status || "pending"}
               onChange={(e) => set("status", e.target.value)}
               style={{ ...inputStyle, marginBottom: form.status === "rejected" ? 10 : 0 }}
             >
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
+              <option value="pending">{t("pending")}</option>
+              <option value="approved">{t("approved")}</option>
+              <option value="rejected">{t("rejected")}</option>
             </select>
             {form.status === "rejected" && (
               <>
-                <label style={{ ...labelStyle, marginTop:10 }}>Reject reason</label>
+                <label style={{ ...labelStyle, marginTop:10 }}>{t("rejectReason")}</label>
                 <textarea
                   value={form.rejectReason || ""}
                   onChange={(e) => set("rejectReason", e.target.value)}
-                  placeholder="Why was this line rejected?"
+                  placeholder={t("rejectReasonPlaceholder")}
                   rows={2}
                   style={{ ...inputStyle, resize:"vertical", height:"auto", lineHeight:1.5 }}
                 />
@@ -533,12 +537,12 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
           <div>
             {entry && (
               <button onClick={()=>onDelete(entry.id)} style={{ ...btnStyle, color:"#A32D2D", borderColor:"#F09595" }}>
-                Delete
+                {t("delete")}
               </button>
             )}
           </div>
           <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-            <button onClick={onClose} style={btnStyle}>Cancel</button>
+            <button onClick={onClose} style={btnStyle}>{t("cancel")}</button>
             <button
               onClick={() => onSave({
                 ...form,
@@ -548,7 +552,7 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
               style={{ ...btnStyle, background:"#0d9488", color:"#E1F5EE", borderColor:"#085041",
                 opacity: (!form.workerId||!form.projectId) ? 0.5 : 1 }}
             >
-              Save entry
+              {t("saveEntry")}
             </button>
           </div>
         </div>
@@ -564,6 +568,7 @@ const btnStyle = ss.btn;
 
 // ─── Manage workers/projects panel ──────────────────────────────────────────
 function ManagePanel({ type, items, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [list, setList] = useState(items.map(i=>({...i})));
   const [newName, setNewName] = useState("");
 
@@ -588,14 +593,14 @@ function ManagePanel({ type, items, onSave, onClose }) {
         padding:"1.5rem", width:"100%", maxWidth:400,
       }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-          <span style={{ fontWeight:500, fontSize:16 }}>Manage {type}</span>
+          <span style={{ fontWeight:500, fontSize:16 }}>{type === "workers" ? t("manageWorkers") : t("manageProjects")}</span>
           <button onClick={onClose} style={{ background:"none",border:"none",cursor:"pointer",fontSize:20,color:"var(--color-text-secondary)" }}>×</button>
         </div>
 
         <div style={{ marginBottom:16, maxHeight:240, overflowY:"auto" }}>
           {list.length === 0 && (
             <p style={{ fontSize:13, color:"var(--color-text-secondary)", textAlign:"center", padding:"1rem 0" }}>
-              No {type} yet. Add one below.
+              {type === "workers" ? t("noWorkersYet") : t("noProjectsYetShort")}
             </p>
           )}
           {list.map(item => (
@@ -619,18 +624,18 @@ function ManagePanel({ type, items, onSave, onClose }) {
             value={newName}
             onChange={e=>setNewName(e.target.value)}
             onKeyDown={e=>e.key==="Enter"&&add()}
-            placeholder={`Add new ${type.slice(0,-1)}…`}
+            placeholder={type === "workers" ? t("addNewWorker") : t("addNewProject")}
             style={{ ...inputStyle, flex:1 }}
           />
           <button onClick={add} style={{ ...btnStyle, background:"#0d9488", color:"#E1F5EE", borderColor:"#085041" }}>
-            Add
+            {t("add")}
           </button>
         </div>
 
         <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"flex-end", gap:8 }}>
-          <button onClick={onClose} style={btnStyle}>Cancel</button>
+          <button onClick={onClose} style={btnStyle}>{t("cancel")}</button>
           <button onClick={()=>onSave(list)} style={{ ...btnStyle, background:"#0d9488", color:"#E1F5EE", borderColor:"#085041" }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -640,6 +645,7 @@ function ManagePanel({ type, items, onSave, onClose }) {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 export default function Timesheet() {
+  const { t, dayLabel } = useWorkspaceT();
   const [weekOffset, setWeekOffset] = useState(0);
   const [entries, setEntries] = useState([]);
   const [workers, setWorkers] = useState([]);
@@ -889,8 +895,8 @@ export default function Timesheet() {
 
       <PageHero
         badgeText="TS"
-        title="Timesheet"
-        lead="Track and approve hours per project. People and projects are separate modules — open People or Projects from the bottom bar."
+        title={t("timesheetTitle")}
+        lead={t("timesheetLead")}
         exportModuleId="timesheets"
         exportModuleLabel="Timesheet register"
         right={
@@ -901,20 +907,20 @@ export default function Timesheet() {
               style={btnStyle}
               title="Reload workers and projects from storage (e.g. after editing them elsewhere)"
             >
-              Refresh lists
+              {t("refreshLists")}
             </button>
             <button type="button" onClick={() => setModal({ type: "workers" })} style={btnStyle}>
-              Manage workers
+              {t("manageWorkers")}
             </button>
             <button type="button" onClick={() => setModal({ type: "projects" })} style={btnStyle}>
-              Manage projects
+              {t("manageProjects")}
             </button>
             <button
               type="button"
               onClick={() => setModal({ type: "entry" })}
               style={{ ...btnStyle, background: "#0d9488", color: "#E1F5EE", borderColor: "#085041" }}
             >
-              + Log hours
+              {t("logHours")}
             </button>
           </div>
         }
@@ -948,7 +954,7 @@ export default function Timesheet() {
               style={{ padding:"5px 12px", borderRadius:6, border:"none",
                 background:"#0d9488", color:"#E1F5EE", fontSize:12, cursor:"pointer" }}
             >
-              Approve all
+              {t("approveAll")}
             </button>
             <button
               type="button"
@@ -958,7 +964,7 @@ export default function Timesheet() {
                 border:"0.5px solid var(--color-border-secondary,#ccc)",
                 color:"var(--color-text-primary)" }}
             >
-              Review
+              {t("review")}
             </button>
           </div>
         </div>
@@ -985,7 +991,7 @@ export default function Timesheet() {
                 ) : (
                   <>
                 <span style={{ opacity:0.5 }}>·</span>
-                <span style={{ color:"#0d9488", fontWeight:600 }}>Current week</span>
+                <span style={{ color:"#0d9488", fontWeight:600 }}>{t("currentWeek")}</span>
                   </>
                 )}
                 {weekEntries.length > 0 && (
@@ -998,7 +1004,7 @@ export default function Timesheet() {
             </div>
             <button type="button" onClick={()=>setWeekOffset(w=>w+1)} style={{ ...btnStyle, padding:"6px 12px", fontWeight:600 }} aria-label="Next week">›</button>
             {weekOffset!==0 && (
-              <button type="button" onClick={()=>setWeekOffset(0)} style={{ ...btnStyle, fontSize:12, padding:"6px 12px" }}>This week</button>
+              <button type="button" onClick={()=>setWeekOffset(0)} style={{ ...btnStyle, fontSize:12, padding:"6px 12px" }}>{t("thisWeek")}</button>
             )}
           </div>
           {prevWeekHasEntries && (
@@ -1044,24 +1050,24 @@ export default function Timesheet() {
       {/* filters */}
       <div style={{ display:"flex", gap:8, marginBottom:10, flexWrap:"wrap", alignItems:"center" }}>
         <select value={filterWorker} onChange={e=>setFilterWorker(e.target.value)} style={{ ...inputStyle, width:"auto" }}>
-          <option value="">All workers</option>
+          <option value="">{t("allWorkers")}</option>
           {workers.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
         <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...inputStyle, width:"auto" }}>
-          <option value="">All projects</option>
+          <option value="">{t("allProjectsFilter")}</option>
           {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...inputStyle, width:"auto" }}>
-          <option value="">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
+          <option value="">{t("allStatuses")}</option>
+          <option value="pending">{t("pending")}</option>
+          <option value="approved">{t("approved")}</option>
+          <option value="rejected">{t("rejected")}</option>
         </select>
         <input
           type="search"
           value={filterTask}
           onChange={(e) => setFilterTask(e.target.value)}
-          placeholder="Search task…"
+          placeholder={t("searchTask")}
           style={{ ...inputStyle, minWidth:160, flex:1, maxWidth:280 }}
         />
         {(filterWorker||filterProject||filterStatus||filterTask.trim()) && (
@@ -1069,7 +1075,7 @@ export default function Timesheet() {
             type="button"
             onClick={()=>{ setFilterWorker(""); setFilterProject(""); setFilterStatus(""); setFilterTask(""); }}
             style={{ ...btnStyle, fontSize:12 }}
-          >Clear filters</button>
+          >{t("clearFilters")}</button>
         )}
         {sortKey && (
           <button
@@ -1078,18 +1084,18 @@ export default function Timesheet() {
             style={{ ...btnStyle, fontSize:12 }}
             title="Return to default row order"
           >
-            Clear sort
+            {t("clearSort")}
           </button>
         )}
       </div>
 
       <div style={{ display:"flex", flexWrap:"wrap", gap:6, alignItems:"center", marginBottom:12 }}>
-        <span style={{ fontSize:11, fontWeight:600, color:"var(--color-text-tertiary)", textTransform:"uppercase", letterSpacing:"0.05em", marginRight:4 }}>Status</span>
+        <span style={{ fontSize:11, fontWeight:600, color:"var(--color-text-tertiary)", textTransform:"uppercase", letterSpacing:"0.05em", marginRight:4 }}>{t("status")}</span>
         {[
-          { value: "", label: "All" },
-          { value: "pending", label: "Pending" },
-          { value: "approved", label: "Approved" },
-          { value: "rejected", label: "Rejected" },
+          { value: "", label: t("all") },
+          { value: "pending", label: t("pending") },
+          { value: "approved", label: t("approved") },
+          { value: "rejected", label: t("rejected") },
         ].map((opt) => {
           const on = filterStatus === opt.value;
           return (
@@ -1117,7 +1123,7 @@ export default function Timesheet() {
 
       {filterChips.length > 0 && (
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center", marginBottom:14 }}>
-          <span style={{ fontSize:11, fontWeight:600, color:"var(--color-text-tertiary)", textTransform:"uppercase", letterSpacing:"0.05em" }}>Active</span>
+          <span style={{ fontSize:11, fontWeight:600, color:"var(--color-text-tertiary)", textTransform:"uppercase", letterSpacing:"0.05em" }}>{t("active")}</span>
           {filterChips.map((c) => (
             <button
               key={c.key}
@@ -1133,7 +1139,7 @@ export default function Timesheet() {
                 color:"var(--color-text-primary)",
                 cursor:"pointer",
               }}
-              title="Remove filter"
+              title={t("removeFilter")}
             >
               {c.label}
               <span style={{ fontSize:14, lineHeight:1, opacity:0.55 }} aria-hidden>×</span>
@@ -1157,7 +1163,7 @@ export default function Timesheet() {
           }}
           aria-expanded={advancedOpen}
         >
-          <span style={{ fontWeight:600 }}>Advanced</span>
+          <span style={{ fontWeight:600 }}>{t("advanced")}</span>
           <span style={{ fontSize:10, opacity:0.7 }}>{advancedOpen ? "▼" : "▶"}</span>
           <span style={{ fontSize:11, color:"var(--color-text-secondary)", fontWeight:400 }}>sorting, rules, exports</span>
         </button>
@@ -1250,18 +1256,18 @@ export default function Timesheet() {
                   background:"linear-gradient(180deg, var(--color-background-secondary,#f4f6f5) 0%, #ecefec 100%)",
                   boxShadow:"0 1px 0 rgba(15,23,42,0.06)",
                 }}>
-                  <SortTh id="worker" label="Worker" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
-                  <SortTh id="project" label="Project" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
-                  <SortTh id="task" label="Task" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  <SortTh id="worker" label={t("worker")} sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  <SortTh id="project" label={t("project")} sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  <SortTh id="task" label={t("task")} sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
                   <th style={{
                     padding:"10px 12px", textAlign:"left",
                     fontSize:11, fontWeight:600, color:"var(--color-text-secondary)",
                     borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
                     letterSpacing:"0.02em",
                     background:"#ecefec",
-                  }} title="Visual Mon–Sun; sort other columns">Days</th>
-                  <SortTh id="hours" label="Hours" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
-                  <SortTh id="status" label="Status" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  }} title="Visual Mon–Sun; sort other columns">{t("days")}</th>
+                  <SortTh id="hours" label={t("hours")} sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
+                  <SortTh id="status" label={t("status")} sortKey={sortKey} sortAsc={sortAsc} onSort={handleSortColumn} />
                   <th style={{
                     padding:"10px 12px", textAlign:"left", width:1,
                     fontSize:11, fontWeight:600, color:"var(--color-text-secondary)",

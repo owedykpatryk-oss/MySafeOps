@@ -8,6 +8,12 @@ function cleanText(v) {
 
 export const DEFAULT_PERMIT_DEPENDENCY_RULES = {
   confined_space: [{ requiresActiveType: "loto", reason: "Confined space entry requires active LOTOTO isolation permit." }],
+  on_track_plant: [
+    { requiresActiveType: "rail_corridor_access", reason: "On-track plant cannot be tracked on without an active rail corridor access permit." },
+  ],
+  ole_isolation: [
+    { requiresActiveType: "rail_corridor_access", reason: "OLE / conductor rail isolation is worked under an active rail corridor access permit." },
+  ],
 };
 
 export function normalizeDependencyRules(raw) {

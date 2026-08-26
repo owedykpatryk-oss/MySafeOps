@@ -7,12 +7,12 @@
  * 2. marketModules.js — UK_ONLY / XX_ONLY module ids
  * 3. compliancePackContent.js + notifiableIncidentsContent.js
  * 4. {id}Pricing.js + Stripe STRIPE_PRICE_*_{CURRENCY} + landingMarketContent.js
- * 5. certifications.js + permitTypesMarket.js + constructionQuickPacks.js
+ * 5. utils/certifications.js + modules/permits/permitTypesMarket.js + modules/rams/constructionQuickPacks.js
  * 6. legislation library + postcode/weather adapter in siteAddressLookup.js
  * 7. legalVersions.js + markets.test.js
  */
 
-/** @typedef {'uk' | 'au' | 'pl'} MarketId */
+/** @typedef {'uk' | 'au' | 'pl' | 'de' | 'at' | 'ch'} MarketId */
 
 /** @typedef {{
  *   id: MarketId;
@@ -28,6 +28,7 @@
  *   cookiesPath: string;
  *   dpaPath: string;
  *   accessibilityPath: string;
+ *   impressumPath?: string; // legally required site-notice page (e.g. DE §5 DDG) — only markets that require one set this
  *   loginPath: string;
  *   alternateMarketId: MarketId; // primary switcher hint only — use getAlternateMarkets() for hreflang
  *   legislationLibraryId: string;
@@ -88,6 +89,61 @@ export const MARKETS = {
     loginPath: "/login?market=pl",
     alternateMarketId: "uk",
     legislationLibraryId: "pl",
+  },
+  de: {
+    id: "de",
+    label: "Deutschland",
+    flag: "🇩🇪",
+    locale: "de-DE",
+    ogLocale: "de_DE",
+    currency: "EUR",
+    homePath: "/de",
+    legalBasePath: "/legal/de",
+    privacyPath: "/de/privacy",
+    termsPath: "/de/terms",
+    cookiesPath: "/de/cookies",
+    dpaPath: "/de/dpa",
+    accessibilityPath: "/de/accessibility",
+    impressumPath: "/de/impressum",
+    loginPath: "/login?market=de",
+    alternateMarketId: "uk",
+    legislationLibraryId: "de",
+  },
+  at: {
+    id: "at",
+    label: "Österreich",
+    flag: "🇦🇹",
+    locale: "de-AT",
+    ogLocale: "de_AT",
+    currency: "EUR",
+    homePath: "/at",
+    legalBasePath: "/legal/at",
+    privacyPath: "/at/privacy",
+    termsPath: "/at/terms",
+    cookiesPath: "/at/cookies",
+    dpaPath: "/at/dpa",
+    accessibilityPath: "/at/accessibility",
+    loginPath: "/login?market=at",
+    alternateMarketId: "de",
+    legislationLibraryId: "at",
+  },
+  ch: {
+    id: "ch",
+    label: "Schweiz",
+    flag: "🇨🇭",
+    locale: "de-CH",
+    ogLocale: "de_CH",
+    currency: "CHF",
+    homePath: "/ch",
+    legalBasePath: "/legal/ch",
+    privacyPath: "/ch/privacy",
+    termsPath: "/ch/terms",
+    cookiesPath: "/ch/cookies",
+    dpaPath: "/ch/dpa",
+    accessibilityPath: "/ch/accessibility",
+    loginPath: "/login?market=ch",
+    alternateMarketId: "de",
+    legislationLibraryId: "ch",
   },
 };
 

@@ -52,6 +52,7 @@ import { sanitizePdfFileSegment } from "../utils/pdfFileName";
 import { refreshOrgFromSupabase } from "../utils/orgMembership";
 
 import { localDateISO, localMonthISO } from "../utils/localDate";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 // Locale-aware (not hardcoded en-GB) so AU/PL organisations see their own date
 // conventions instead of UK formatting on the dashboard they use every day.
 const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString(getOrgLocale(), { day:"2-digit", month:"short" }); };
@@ -264,8 +265,6 @@ function ExpiryRow({ name, role, certType, expiryDate }) {
   );
 }
 
-const ROLE_LABEL = { admin: "Organisation admin", supervisor: "Supervisor", operative: "Operative" };
-
 /** Overview metric tile with a smooth count-up when its value changes. */
 function DashboardMetricTile({ label, value, sub, viewId: _viewId, tone, onOpen }) {
   const display = useCountUp(value);
@@ -284,12 +283,13 @@ function DashboardMetricTile({ label, value, sub, viewId: _viewId, tone, onOpen 
 }
 
 export default function AnalyticsDashboard() {
+  const { t } = useWorkspaceT();
   const { role, caps, trialStatus, billing, orgId } = useApp();
   const { supabase } = useSupabaseAuth();
   const branding = useOrgBranding();
   const heroBadge =
     branding.logo ? undefined : (branding.displayName || "MO").split(/\s+/).map((w) => w[0]).join("").slice(0, 3).toUpperCase() || "DB";
-  const roleLabel = ROLE_LABEL[role] || "Team member";
+  const roleLabel = { admin: t("roleAdmin"), supervisor: t("roleSupervisor"), operative: t("roleOperative") }[role] || "Team member";
   const isLead = role === "admin" || role === "supervisor";
 
   const [incidentWeeks, setIncidentWeeks] = useState(8);
@@ -360,7 +360,7 @@ export default function AnalyticsDashboard() {
   const constructionSetup = useMemo(() => getConstructionSetupStatus(), [dataRefreshTick, orgId]);
   const geospatialSetup = useMemo(() => getGeospatialSetupStatus(), [dataRefreshTick, orgId]);
   const dashboardUi = getAppUiCopy(getOrgMarketId()).dashboard;
-  // Market-aware copy so AU (WHS/SWMS) and PL (BHP/IOR) orgs don't see UK-only
+  // Market-aware copy so AU (WHS/SWMS) and PL (BHP/IBWR) orgs don't see UK-only
   // regulatory terminology on the dashboard they open every day.
   const marketId = getOrgMarketId();
   const ramsShortLabel = getRamsShortLabel(marketId);
@@ -1203,7 +1203,7 @@ export default function AnalyticsDashboard() {
       <div ref={dashboardPdfRef}>
       <PageHero
         badgeText={heroBadge}
-        title="Dashboard"
+        title={t("dashboard")}
         lead={dashboardLead}
         right={
           <div className="app-dashboard-hero-tools" aria-busy={pdfExporting !== null} aria-live="polite">
@@ -1224,7 +1224,7 @@ export default function AnalyticsDashboard() {
                   className="app-dashboard-hero-org__link"
                   onClick={() => openWorkspaceSettings({ tab: "organisation" })}
                 >
-                  {org.logo ? "Update branding" : "Add logo"}
+                  {org.logo ? t("updateBranding") : t("addLogo")}
                 </button>
               </div>
             </div>
@@ -1237,7 +1237,7 @@ export default function AnalyticsDashboard() {
                 onClick={() => runDashboardPdfExport("draft")}
                 style={{ ...ms.btn, fontSize: 11, padding: "6px 10px", fontWeight: 600 }}
               >
-                {pdfExporting === "draft" ? "Preparing…" : "PDF · Draft"}
+                {pdfExporting === "draft" ? t("preparing") : "PDF · Draft"}
               </button>
               <button
                 type="button"
@@ -1247,7 +1247,7 @@ export default function AnalyticsDashboard() {
                 onClick={() => runDashboardPdfExport("email")}
                 style={{ ...ms.btn, fontSize: 11, padding: "6px 10px", fontWeight: 600, borderColor: "#0d9488", color: "#0f766e" }}
               >
-                {pdfExporting === "email" ? "Preparing…" : "PDF · Email"}
+                {pdfExporting === "email" ? t("preparing") : "PDF · Email"}
               </button>
               <button
                 type="button"
@@ -1257,7 +1257,7 @@ export default function AnalyticsDashboard() {
                 onClick={() => runDashboardPdfExport("print")}
                 style={{ ...ms.btn, fontSize: 11, padding: "6px 10px", fontWeight: 600, borderColor: "#0f766e", background: "var(--color-accent-muted,#ecfdf5)", color: "#0f766e" }}
               >
-                {pdfExporting === "print" ? "Preparing…" : "PDF · Print"}
+                {pdfExporting === "print" ? t("preparing") : "PDF · Print"}
               </button>
               <button
                 type="button"
@@ -1634,20 +1634,20 @@ export default function AnalyticsDashboard() {
 
       {showWidget("overview_metrics") ? (
       <div style={{ order: widgetSortOrder("overview_metrics") }}>
-      <Section title="Overview">
-        <p className="app-dashboard-section__hint">Tap a tile to open the related module.</p>
+      <Section title={t("overview")}>
+        <p className="app-dashboard-section__hint">{t("tapTileHint")}</p>
         <div className="app-dashboard-metrics-grid app-dashboard-stagger">
           {[
-            { label: "People", value: workers.length, sub: "registered", viewId: "people", tone: "teal" },
-            { label: "Active projects", value: projects.filter((p) => !p.closed).length, sub: "projects", viewId: "projects", tone: "sky" },
-            { label: `${ramsShortLabel} total`, value: rams.length, sub: "documents", viewId: "rams", tone: "teal" },
-            { label: "Permits", value: permits.length, sub: `${permitStats.active} active`, viewId: "permits", tone: "amber" },
-            { label: "Open snags", value: snagStats.open, sub: `${snagStats.in_progress} in progress`, viewId: "snags", tone: "rose" },
-            { label: "Hours (month)", value: Math.round(monthHours), sub: `${tsEntries.length} entries`, viewId: "timesheets", tone: "indigo" },
-            { label: "Incidents", value: incidents.length, sub: "total logged", viewId: "incidents", tone: "rose" },
-            { label: "Training expiring", value: trainingExpiring60, sub: "within 60 days", viewId: "training", tone: "amber" },
-            { label: "Hot work active", value: hotWorkActive, sub: `${hotWork.length} total records`, viewId: "hot-work", tone: "amber" },
-            { label: "On site today", value: todayInductions, sub: "sign-ins", viewId: "induction", tone: "sky" },
+            { label: t("metricPeople"), value: workers.length, sub: t("metricRegistered"), viewId: "people", tone: "teal" },
+            { label: t("metricActiveProjects"), value: projects.filter((p) => !p.closed).length, sub: t("metricProjects"), viewId: "projects", tone: "sky" },
+            { label: `${ramsShortLabel} ${t("metricTotal")}`, value: rams.length, sub: t("metricDocuments"), viewId: "rams", tone: "teal" },
+            { label: t("metricPermits"), value: permits.length, sub: `${permitStats.active} ${t("metricActive")}`, viewId: "permits", tone: "amber" },
+            { label: t("metricOpenSnags"), value: snagStats.open, sub: `${snagStats.in_progress} ${t("metricInProgress")}`, viewId: "snags", tone: "rose" },
+            { label: t("metricHoursMonth"), value: Math.round(monthHours), sub: `${tsEntries.length} ${t("metricEntries")}`, viewId: "timesheets", tone: "indigo" },
+            { label: t("metricIncidents"), value: incidents.length, sub: t("metricTotalLogged"), viewId: "incidents", tone: "rose" },
+            { label: t("metricTrainingExpiring"), value: trainingExpiring60, sub: t("metricWithin60Days"), viewId: "training", tone: "amber" },
+            { label: t("metricHotWorkActive"), value: hotWorkActive, sub: `${hotWork.length} ${t("metricTotalRecords")}`, viewId: "hot-work", tone: "amber" },
+            { label: t("metricOnSiteToday"), value: todayInductions, sub: t("metricSignIns"), viewId: "induction", tone: "sky" },
           ].map((m) => (
             <DashboardMetricTile
               key={m.label}
@@ -1668,13 +1668,13 @@ export default function AnalyticsDashboard() {
       <>
       <div className="app-dashboard-analytics-grid">
         <div className="app-dashboard-card app-dashboard-score-card">
-          <div className="app-dashboard-card__title">Compliance score</div>
+          <div className="app-dashboard-card__title">{t("complianceScore")}</div>
           <div className="app-dashboard-score">
             <div className="app-dashboard-score__ring" style={{ "--score-pct": complianceScore, "--score-color": complianceColor }}>
               <span className="app-dashboard-score__value">{complianceScoreDisplay}</span>
             </div>
             <div className="app-dashboard-score__label" style={{ color: complianceColor }}>
-              {complianceScore >= 80 ? "Good standing" : complianceScore >= 60 ? "Needs attention" : "Action required"}
+              {complianceScore >= 80 ? t("goodStanding") : complianceScore >= 60 ? t("needsAttention") : t("actionRequired")}
             </div>
           </div>
           <div className="app-dashboard-score__bar">
@@ -1687,18 +1687,18 @@ export default function AnalyticsDashboard() {
               ))}
             </ul>
           ) : (
-            <div className="app-dashboard-score__ok">No issues detected</div>
+            <div className="app-dashboard-score__ok">{t("noIssuesDetected")}</div>
           )}
         </div>
 
         <div className="app-dashboard-card">
           <div className="app-dashboard-card__title">
-            Expiring certifications
+            {t("expiringCertifications")}
             {expiringCerts.length > 0 ? <span className="app-dashboard-card__count">{expiringCerts.length}</span> : null}
           </div>
           {expiringCerts.length === 0 ? (
             <div className="app-dashboard-empty">
-              {workers.length === 0 ? "No workers added yet." : "No certifications expiring in the next 30 days."}
+              {workers.length === 0 ? t("noWorkersAddedYet") : t("noCertsExpiring30")}
             </div>
           ) : (
             expiringCerts.slice(0, 5).map((c, i) => (
@@ -1706,12 +1706,12 @@ export default function AnalyticsDashboard() {
             ))
           )}
           {expiringCerts.length > 5 ? (
-            <div className="app-dashboard-card__more">+{expiringCerts.length - 5} more…</div>
+            <div className="app-dashboard-card__more">+{expiringCerts.length - 5} {t("moreEllipsis")}</div>
           ) : null}
           {expiringCerts.length > 0 ? (
             <div className="app-dashboard-card__footer">
               <button type="button" className="app-dashboard-card__btn" onClick={() => openWorkspaceView({ viewId: "projects" })}>
-                Open workers & certifications
+                {t("openWorkersAndCerts")}
               </button>
             </div>
           ) : null}
@@ -1721,9 +1721,9 @@ export default function AnalyticsDashboard() {
       <div className="app-dashboard-charts-grid">
         <div className="app-dashboard-card">
           <div className="app-dashboard-card__head">
-            <div className="app-dashboard-card__title">Incidents / near misses</div>
+            <div className="app-dashboard-card__title">{t("incidentsNearMisses")}</div>
             <div className="app-dashboard-period-toggle" role="group" aria-label="Incident chart period">
-              <span className="app-dashboard-period-toggle__label">Period</span>
+              <span className="app-dashboard-period-toggle__label">{t("period")}</span>
               {INCIDENT_PERIOD_WEEKS.map((w) => {
                 const active = incidentWeeks === w;
                 return (
@@ -1740,15 +1740,15 @@ export default function AnalyticsDashboard() {
             </div>
           </div>
           {incidents.length === 0 ? (
-            <div className="app-dashboard-empty">No incidents logged yet.</div>
+            <div className="app-dashboard-empty">{t("noIncidentsLoggedYet")}</div>
           ) : (
             <BarChart data={incidentTrend} height={80} color="#E24B4A" />
           )}
           <div className="app-dashboard-card__meta">
-            <span>In period: {incidentsInSelectedWeeks} · All time: {incidents.length}</span>
-            <span>Latest week: {incidentTrend[incidentTrend.length - 1]?.value ?? 0}</span>
+            <span>{t("inPeriod")}: {incidentsInSelectedWeeks} · {t("allTime")}: {incidents.length}</span>
+            <span>{t("latestWeek")}: {incidentTrend[incidentTrend.length - 1]?.value ?? 0}</span>
             <button type="button" className="app-dashboard-card__btn app-dashboard-card__btn--inline" onClick={() => openWorkspaceView({ viewId: "incidents" })}>
-              Open incidents
+              {t("openIncidents")}
             </button>
           </div>
         </div>
@@ -1918,7 +1918,7 @@ export default function AnalyticsDashboard() {
 
       {showWidget("reminders") && dashboardReminders.length > 0 ? (
         <div style={{ order: widgetSortOrder("reminders") }}>
-        <Section title="Reminders">
+        <Section title={t("reminders")}>
           <ul className="app-dashboard-reminder-list">
             {dashboardReminders.map((r) => (
               <li
@@ -1938,7 +1938,7 @@ export default function AnalyticsDashboard() {
 
       {showWidget("shortcuts") ? (
       <div style={{ order: widgetSortOrder("shortcuts") }}>
-      <Section title="Shortcuts">
+      <Section title={t("shortcuts")}>
         <div className="app-dashboard-shortcuts">
           {shortcutRows.map((row) => (
             <div key={row.title}>

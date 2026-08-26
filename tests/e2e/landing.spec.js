@@ -54,4 +54,15 @@ test.describe("Landing page", () => {
     await page.locator("#faq").scrollIntoViewIfNeeded();
     await expect(page.getByRole("heading", { name: /Najczęstsze pytania/i })).toBeVisible();
   });
+
+  test("DE landing shows GBU copy and EUR pricing", async ({ page }) => {
+    await page.goto("/de");
+    await expect(page.getByRole("heading", { name: /Arbeitsschutz für Teams/i })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/Deutsche Bauteams/i)).toBeVisible();
+    await page.locator("#pricing").scrollIntoViewIfNeeded();
+    await expect(page.getByText("22 €")).toBeVisible();
+    await expect(page.getByRole("contentinfo").getByRole("link", { name: /🇬🇧 United Kingdom/i })).toBeVisible();
+    await page.locator("#faq").scrollIntoViewIfNeeded();
+    await expect(page.getByRole("heading", { name: /Häufige Fragen/i })).toBeVisible();
+  });
 });

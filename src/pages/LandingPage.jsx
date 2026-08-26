@@ -269,3 +269,8 @@ export function AuLandingPage(props) {
 export function PlLandingPage(props) {
   return <LandingPage marketId={resolveMarketId(props.marketId ?? "pl")} />;
 }
+
+/** @param {{ marketId?: import("../config/markets").MarketId }} props */
+export function DeLandingPage(props) {
+  return <LandingPage marketId={resolveMarketId(props.marketId ?? "de")} />;
+}

@@ -11,6 +11,9 @@ export function formatReadingTimeLabel(minutesOrLabel, marketId = "uk") {
       ? Math.max(1, Math.round(minutesOrLabel))
       : Math.max(1, Number.parseInt(String(minutesOrLabel).match(/\d+/)?.[0] || "1", 10));
   if (marketId === "pl") return `${minutes} min czytania`;
+  if (marketId === "de") return `${minutes} Min. Lesezeit`;
+  if (marketId === "at") return `${minutes} Min. Lesezeit`;
+  if (marketId === "ch") return `${minutes} Min. Lesezeit`;
   return `${minutes} min read`;
 }
 

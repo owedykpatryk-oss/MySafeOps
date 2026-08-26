@@ -19,6 +19,7 @@ import StatusChip from "../components/StatusChip";
 import { printExcavationRecord } from "./excavationPrintHtml";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `exc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -42,6 +43,7 @@ function Field({ label, children, style }) {
 }
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -196,7 +198,7 @@ function Form({ item, projects, onSave, onClose }) {
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 18 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -237,6 +239,7 @@ function MetaCell({ label, value, warn }) {
 }
 
 export default function ExcavationLog() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("excavation_log", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -329,11 +332,11 @@ export default function ExcavationLog() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {liveItems.length > 0 && (
               <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add record
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -372,7 +375,7 @@ export default function ExcavationLog() {
             icon="⛏️"
             title="No excavation records yet"
             description="Log open trenches and trial pits with depth, support, and utility confirmation before dig."
-            actionLabel="+ Add first record"
+            actionLabel={t("addRecord")}
             onAction={() => setModal({ type: "form" })}
             variant="dashed"
           />
@@ -424,7 +427,7 @@ export default function ExcavationLog() {
                         PDF
                       </button>
                       <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                        Edit
+                        {t("edit")}
                       </button>
                       {caps.deleteRecords && (
                         <button
@@ -446,7 +449,7 @@ export default function ExcavationLog() {
                             }
                           }}
                         >
-                          Delete
+                          {t("delete")}
                         </button>
                       )}
                     </div>

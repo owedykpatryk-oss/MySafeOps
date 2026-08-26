@@ -12,6 +12,7 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { printRegisterFormPack } from "../utils/registerFormPrint";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `coshh_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
@@ -56,6 +57,7 @@ function PillSelector({ options, selected, onChange, max }) {
 }
 
 function SubstanceForm({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const blank = {
     id:genId(), name:"", manufacturer:"", productCode:"", projectId:"",
     hazardTypes:[], exposureRoutes:[], riskLevel:"medium",
@@ -91,7 +93,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
             <input value={form.productCode} onChange={e=>set("productCode",e.target.value)} placeholder="e.g. UN1950" style={ss.inp}  id="coshh-product-code" />
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="coshh-project-id">Project</label>
+            <label style={ss.lbl} htmlFor="coshh-project-id">{t("project")}</label>
             <select value={form.projectId} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="coshh-project-id">
               <option value="">— All projects —</option>
               {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
@@ -189,9 +191,9 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
         </div>
 
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
-          <button onClick={onClose} style={ss.btn}>Cancel</button>
+          <button onClick={onClose} style={ss.btn}>{t("cancel")}</button>
           <button disabled={!form.name.trim()} onClick={()=>onSave(form)} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
-            {item ? "Save changes" : "Add substance"}
+            {t("save")}
           </button>
         </div>
       </div>
@@ -200,6 +202,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
 }
 
 function SubstanceCard({ item, onEdit, onDelete }) {
+  const { t } = useWorkspaceT();
   const rl = RISK_LEVELS[item.riskLevel] || RISK_LEVELS.medium;
   return (
     <div style={{ ...ss.card, marginBottom: 8, contentVisibility: "auto", containIntrinsicSize: "0 120px" }}>
@@ -221,7 +224,7 @@ function SubstanceCard({ item, onEdit, onDelete }) {
             </div>
             <div style={{ display:"flex", gap:6, flexShrink:0, flexWrap:"wrap" }}>
               <RegisterFormPrintButton moduleId="coshh" record={item} />
-              <button type="button" onClick={()=>onEdit(item)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>Edit</button>
+              <button type="button" onClick={()=>onEdit(item)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }}>{t("edit")}</button>
               <button type="button" onClick={()=>onDelete(item.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
             </div>
           </div>
@@ -272,6 +275,14 @@ function SubstanceCard({ item, onEdit, onDelete }) {
 }
 
 export default function COSHHRegister() {
+  const { t, marketId } = useWorkspaceT();
+  const chemicalCopy = marketId === "pl"
+    ? { badge: "CHM", title: "Rejestr substancji chemicznych", lead: "Karty charakterystyki, zagrożenia, narażenie, środki ochronne i zasady przechowywania zgodnie z polskimi wymaganiami BHP i REACH." }
+    : marketId === "de" || marketId === "at" || marketId === "ch"
+      ? { badge: "GST", title: "Gefahrstoffverzeichnis", lead: "Sicherheitsdatenblätter, Exposition, Schutzmassnahmen und Lagerung nach den Vorschriften des gewählten Landes und REACH." }
+      : marketId === "au"
+        ? { badge: "CHM", title: "Hazardous chemicals register", lead: "Safety data sheets, exposure routes, controls and storage aligned with the applicable state or territory WHS rules." }
+        : { badge: "COS", title: "COSHH register", lead: "Control of Substances Hazardous to Health — COSHH Regs 2002. Print a branded A4 assessment per substance (Save as PDF)." };
   const [items, setItems] = useState(()=>load("coshh_items",[]));
   const [projects, setProjects] = useState(()=>load("mysafeops_projects",[]));
   const [modal, setModal] = useState(null);
@@ -339,11 +350,11 @@ export default function COSHHRegister() {
       {modal?.type==="form" && <SubstanceForm item={modal.data} projects={projects} onSave={saveItem} onClose={()=>setModal(null)} />}
 
       <PageHero
-        badgeText="COS"
-        title="COSHH register"
-        lead="Control of Substances Hazardous to Health — COSHH Regs 2002. Print a branded A4 assessment per substance (Save as PDF)."
+        badgeText={chemicalCopy.badge}
+        title={chemicalCopy.title}
+        lead={chemicalCopy.lead}
         exportModuleId="coshh"
-        exportModuleLabel="COSHH register"
+        exportModuleLabel={chemicalCopy.title}
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {filtered.length > 0 && (
@@ -360,11 +371,11 @@ export default function COSHHRegister() {
             )}
             {items.length > 0 && (
               <button type="button" onClick={exportCSV} style={ss.btn}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" onClick={() => setModal({ type: "form" })} style={ss.btnP}>
-              + Add substance
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -399,7 +410,7 @@ export default function COSHHRegister() {
               </select>
             )}
             {(filterRisk || filterProject || filterHazard || search) ? (
-              <button type="button" onClick={() => { setFilterRisk(""); setFilterProject(""); setFilterHazard(""); setSearch(""); listPg.reset(); }} style={{ ...ss.btn, fontSize: 12 }}>Clear</button>
+              <button type="button" onClick={() => { setFilterRisk(""); setFilterProject(""); setFilterHazard(""); setSearch(""); listPg.reset(); }} style={{ ...ss.btn, fontSize: 12 }}>{t("clear")}</button>
             ) : null}
           </div>
         }
@@ -409,7 +420,7 @@ export default function COSHHRegister() {
             icon="🧪"
             title="No substances recorded yet"
             description="Add COSHH assessments so site teams can check hazards before work."
-            actionLabel="+ Add first substance"
+            actionLabel={t("addRecord")}
             onAction={() => setModal({ type: "form" })}
             variant="dashed"
           />
@@ -418,7 +429,7 @@ export default function COSHHRegister() {
             icon="🔍"
             title="No items match your filters"
             description="Clear risk, project or search filters to see the full register."
-            actionLabel="Clear filters"
+            actionLabel={t("clearFilters")}
             onAction={() => { setFilterRisk(""); setFilterProject(""); setFilterHazard(""); setSearch(""); listPg.reset(); }}
             variant="dashed"
             compact

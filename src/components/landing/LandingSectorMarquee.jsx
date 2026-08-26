@@ -33,7 +33,7 @@ const SECTORS_AU = [
 const SECTORS_PL = [
   "Budownictwo ogólne",
   "Instalacje M&E",
-  "IOR i plan BHP",
+  "IBWR i plan BIOZ",
   "Pozwolenia na pracę",
   "Prace na wysokości",
   "Prace gorące",
@@ -45,9 +45,57 @@ const SECTORS_PL = [
   "Podwykonawcy",
 ];
 
+const SECTORS_DE = [
+  "Hochbau",
+  "Tiefbau und Leitungen",
+  "GBU und SiGe-Plan",
+  "Erlaubnisscheine",
+  "Absturzgefährdung",
+  "Heißarbeiten",
+  "Abbruch",
+  "Gerüste",
+  "Gefahrstoffe",
+  "Geo-Fotos",
+  "Unfallanzeige",
+  "Nachunternehmer",
+];
+
+const SECTORS_AT = [
+  "Hochbau",
+  "Tiefbau und Leitungen",
+  "Evaluierung und SiGe-Plan",
+  "Erlaubnisscheine",
+  "Absturzgefährdung",
+  "Heißarbeiten",
+  "Abbruch",
+  "Gerüste",
+  "Gefahrstoffe",
+  "Geo-Fotos",
+  "AUVA Unfallanzeige",
+  "Nachunternehmer",
+];
+
+const SECTORS_CH = [
+  "Hochbau",
+  "Tiefbau und Leitungen",
+  "Gefährdungsermittlung und SiKo",
+  "Freigaben",
+  "Absturzgefährdung",
+  "Heissarbeiten",
+  "Abbruch",
+  "Gerüste",
+  "Gefahrstoffe",
+  "Geo-Fotos",
+  "Suva Unfallmeldung",
+  "Nachunternehmer",
+];
+
 /** @param {MarketId} marketId */
 function sectorsFor(marketId) {
   if (marketId === "pl") return SECTORS_PL;
+  if (marketId === "de") return SECTORS_DE;
+  if (marketId === "at") return SECTORS_AT;
+  if (marketId === "ch") return SECTORS_CH;
   if (marketId === "au") return SECTORS_AU;
   return SECTORS_UK;
 }

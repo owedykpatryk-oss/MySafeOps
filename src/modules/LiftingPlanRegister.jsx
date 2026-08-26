@@ -17,6 +17,9 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getMarketComplianceCopy } from "../utils/marketComplianceCopy";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `lift_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -24,7 +27,9 @@ const today = todayLocalISO;
 
 const ss = ms;
 
-function Form({ item, projects, onSave, onClose }) {
+function Form({ item, projects, marketId, onSave, onClose }) {
+  const { t } = useWorkspaceT();
+  const complianceCopy = getMarketComplianceCopy(marketId);
   const [form, setForm] = useState(
     () =>
       item || {
@@ -51,7 +56,7 @@ function Form({ item, projects, onSave, onClose }) {
     <ModuleOverlay onClose={onClose}>
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit lifting plan" : "Lifting operation"}</h2>
-        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>Brief log — LOLER / BS7121 duties remain with competent persons on site.</p>
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px" }}>{complianceCopy.liftingBasis}</p>
         <label style={ss.lbl} htmlFor="lifting-plan-lift-ref">Lift reference</label>
         <input style={ss.inp} value={form.liftRef} onChange={(e) => set("liftRef", e.target.value)}  id="lifting-plan-lift-ref" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lifting-plan-load-description">Load / task</label>
@@ -60,7 +65,7 @@ function Form({ item, projects, onSave, onClose }) {
         <input style={ss.inp} value={form.weightEstimate} onChange={(e) => set("weightEstimate", e.target.value)}  id="lifting-plan-weight-estimate" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lifting-plan-crane-or-lift">Crane / hoist / telehandler</label>
         <input style={ss.inp} value={form.craneOrLift} onChange={(e) => set("craneOrLift", e.target.value)}  id="lifting-plan-crane-or-lift" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lifting-plan-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lifting-plan-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="lifting-plan-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -83,11 +88,11 @@ function Form({ item, projects, onSave, onClose }) {
           <input type="checkbox" checked={form.briefingDone} onChange={(e) => set("briefingDone", e.target.checked)} />
           Pre-lift briefing completed
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lifting-plan-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="lifting-plan-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="lifting-plan-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -95,7 +100,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -104,7 +109,9 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function LiftingPlanRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
+  const marketId = getOrgMarketId();
   const [items, setItems] = useState(() => load("lifting_plan_register", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [modal, setModal] = useState(null);
@@ -154,7 +161,7 @@ export default function LiftingPlanRegister() {
   return (
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="lifting operations" />
-      {modal?.type === "form" && <Form item={modal.data} projects={projects} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
+      {modal?.type === "form" && <Form item={modal.data} projects={projects} marketId={marketId} onSave={(f) => persist(f, !modal.data)} onClose={() => setModal(null)} />}
             <PageHero exportModuleId="lifting"
         badgeText="LIFT"
         title="Lifting operations"
@@ -162,11 +169,11 @@ export default function LiftingPlanRegister() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add lift
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -182,7 +189,7 @@ export default function LiftingPlanRegister() {
           icon="🏗️"
           title="No lifting records"
           description="Record lift plans, equipment and briefings before operations."
-          actionLabel="+ Add lift"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -198,7 +205,7 @@ export default function LiftingPlanRegister() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="lifting" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -220,7 +227,7 @@ export default function LiftingPlanRegister() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

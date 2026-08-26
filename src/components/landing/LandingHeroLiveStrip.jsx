@@ -19,8 +19,14 @@ const CHIPS_BY_MARKET = {
   pl: [
     { dot: "live", label: "5 PTW aktywnych", tone: "live" },
     { dot: "warn", label: "2 wygasa dziś", tone: "warn" },
-    { dot: "ok", label: "IOR zatwierdzona", tone: "ok" },
+    { dot: "ok", label: "IBWR zatwierdzona", tone: "ok" },
     { dot: "ok", label: "14 pracowników na budowie", tone: "ok" },
+  ],
+  de: [
+    { dot: "live", label: "5 Scheine aktiv", tone: "live" },
+    { dot: "warn", label: "2 laufen heute ab", tone: "warn" },
+    { dot: "ok", label: "GBU freigegeben", tone: "ok" },
+    { dot: "ok", label: "14 Beschäftigte auf der Baustelle", tone: "ok" },
   ],
 };
 
@@ -40,7 +46,7 @@ export default function LandingHeroLiveStrip({ marketId = "uk" }) {
     <div className="landing-live-strip" aria-live="polite" aria-atomic="true">
       <span className="landing-live-strip__beacon" aria-hidden />
       <span className="landing-live-strip__label">
-        {marketId === "pl" ? "Na budowie teraz" : marketId === "au" ? "On site now" : "On site now"}
+        {marketId === "pl" ? "Na budowie teraz" : (marketId === "de" || marketId === "at" || marketId === "ch") ? "Jetzt auf der Baustelle" : marketId === "au" ? "On site now" : "On site now"}
       </span>
       <div className="landing-live-strip__chips">
         {chips.map((chip, i) => (

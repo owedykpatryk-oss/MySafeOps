@@ -34,10 +34,18 @@ const SCREENS = [
 export default function LandingProductShowcase({ marketId = "uk" }) {
   const [activeId, setActiveId] = useState(SCREENS[0].id);
   const active = SCREENS.find((screen) => screen.id === activeId) || SCREENS[0];
-  const title = marketId === "pl" ? "To jest prawdziwy produkt — nie wizualizacja." : "The real product — not a concept render.";
-  const intro = marketId === "pl"
-    ? "Zobacz działające widoki używane przez biuro, management i osoby kontrolujące pozwolenia."
-    : "Explore working screens used by management, office teams and permit controllers.";
+  const title =
+    marketId === "pl"
+      ? "To jest prawdziwy produkt — nie wizualizacja."
+      : (marketId === "de" || marketId === "at" || marketId === "ch")
+        ? "Das ist das echte Produkt — keine Visualisierung."
+        : "The real product — not a concept render.";
+  const intro =
+    marketId === "pl"
+      ? "Zobacz działające widoki używane przez biuro, management i osoby kontrolujące pozwolenia."
+      : (marketId === "de" || marketId === "at" || marketId === "ch")
+        ? "Arbeitsansichten für Büro, Leitung und die Kontrolle von Erlaubnisscheinen."
+        : "Explore working screens used by management, office teams and permit controllers.";
 
   return (
     <section className="landing-v2-product" id="product" aria-labelledby="landing-product-title">

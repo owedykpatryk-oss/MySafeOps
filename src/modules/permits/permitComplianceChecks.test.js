@@ -53,4 +53,27 @@ describe("evaluatePermitCompliance", () => {
     );
     expect(r.legalReady).toBe(true);
   });
+
+  it("does not apply the UK legal matrix to Polish permits", () => {
+    const r = evaluatePermitCompliance(
+      {
+        type: "lifting",
+        description: "Podnoszenie",
+        location: "Budowa",
+        issuedBy: "A",
+        issuedTo: "B",
+        authorisedByRole: "Kierownik",
+        briefingConfirmedAt: "2026-04-09T07:30:00.000Z",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T16:00:00.000Z",
+        extraFields: { appointedPerson: "Osoba kompetentna" },
+        checklist: {},
+      },
+      [],
+      { marketId: "pl" },
+    );
+    expect(r.matrixVersion).toBe("pl-site-v1");
+    expect(r.profile.legalRequiredChecklistIds).toEqual([]);
+    expect(r.regulatoryMatrix.some((row) => /LOLER|PUWER|CDM/.test(row.framework))).toBe(false);
+  });
 });

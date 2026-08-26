@@ -1,3 +1,5 @@
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
+
 /**
  * Manage project escape routes — rename, delete, zoom on map.
  */
@@ -15,6 +17,7 @@ export default function ProjectDrawingEscapeRoutesPanel({
   onRemovePoint,
   onDuplicate,
 }) {
+  const { t } = useWorkspaceT();
   if (!routes.length) {
     return (
       <div className="pde-escape-routes pde-escape-routes--empty">
@@ -83,7 +86,7 @@ export default function ProjectDrawingEscapeRoutesPanel({
                 onClick={() => onZoom?.(route)}
                 title="Zoom map to this route"
               >
-                Edit
+                {t("edit")}
               </button>
               <button
                 type="button"
@@ -92,7 +95,7 @@ export default function ProjectDrawingEscapeRoutesPanel({
                 onClick={() => onDelete?.(route.id)}
                 title="Delete route"
               >
-                Delete
+                {t("delete")}
               </button>
             </li>
           );

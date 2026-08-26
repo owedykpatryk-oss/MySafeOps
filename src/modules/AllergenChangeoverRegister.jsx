@@ -14,12 +14,14 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const KEY = "allergen_changeover_windows";
 const genId = () => `acw_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -69,10 +71,10 @@ function Form({ item, projects, onSave, onClose }) {
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => onSave({ ...form, projectName: pm[form.projectId] || "" })}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -81,6 +83,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function AllergenChangeoverRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load(KEY, []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -165,7 +168,7 @@ export default function AllergenChangeoverRegister() {
               </div>
               <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
                 <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                  Edit
+                  {t("edit")}
                 </button>
                 {caps.deleteRecords && (
                   <button
@@ -186,7 +189,7 @@ export default function AllergenChangeoverRegister() {
                       }
                     }}
                   >
-                    Delete
+                    {t("delete")}
                   </button>
                 )}
               </div>

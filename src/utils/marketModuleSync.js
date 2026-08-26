@@ -41,7 +41,7 @@ export function applyMarketModuleDefaults(marketId, orgId) {
   hiddenFeatures = [...new Set([...hiddenFeatures, ...defaultFeatures])];
 
   // When switching away from UK, drop UK-only surveying hide duplicates; when entering AU, ensure surveying hidden.
-  if (market === "au" || market === "pl") {
+  if (market === "au" || market === "pl" || market === "de") {
     if (!hiddenFeatures.includes(RAMS_FEATURES.SURVEYING)) {
       hiddenFeatures.push(RAMS_FEATURES.SURVEYING);
     }

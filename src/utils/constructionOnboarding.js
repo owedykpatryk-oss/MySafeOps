@@ -118,7 +118,7 @@ export function buildConstructionSetupSteps(marketId = getOrgMarketId()) {
     {
       id: "inspections",
       label: steps.inspections || "Equipment inspection register started",
-      hint: marketId === "pl" ? "UDT, rusztowania lub kontrole przed użyciem na budowie." : marketId === "au" ? "Plant, scaffold or pre-use checks on site." : "LOLER, scaffold or plant pre-use checks on site.",
+      hint: marketId === "pl" ? "UDT, rusztowania lub kontrole przed użyciem na budowie." : marketId === "au" ? "Plant, scaffold or pre-use checks on site." : marketId === "de" || marketId === "at" || marketId === "ch" ? "Geräte, Gerüste oder Prüfungen vor der Benutzung auf der Baustelle." : "LOLER, scaffold or plant pre-use checks on site.",
       viewId: "inspections",
       autoCheck: () => load("inspection_records", []).length > 0,
     },

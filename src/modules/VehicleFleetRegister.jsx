@@ -18,6 +18,7 @@ import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { getVehicleDueAlerts } from "../utils/vehicleComplianceDue";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `veh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -39,6 +40,7 @@ function dueTone(days) {
 }
 
 function Form({ item, projects, workers, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -129,11 +131,11 @@ function Form({ item, projects, workers, onSave, onClose }) {
         </div>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="vehicle-fleet-last-daily-check-date">Last daily check</label>
         <input type="date" style={ss.inp} value={form.lastDailyCheckDate || ""} onChange={(e) => set("lastDailyCheckDate", e.target.value)}  id="vehicle-fleet-last-daily-check-date" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="vehicle-fleet-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="vehicle-fleet-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="vehicle-fleet-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button
             type="button"
@@ -149,7 +151,7 @@ function Form({ item, projects, workers, onSave, onClose }) {
               onSave(payload);
             }}
           >
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -158,6 +160,7 @@ function Form({ item, projects, workers, onSave, onClose }) {
 }
 
 export default function VehicleFleetRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("vehicle_register", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -262,11 +265,11 @@ export default function VehicleFleetRegister() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {liveItems.length > 0 && (
               <button type="button" style={ss.btn} onClick={handleExportCsv}>
-                Export CSV
+                {t("exportCsv")}
               </button>
             )}
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-              + Add vehicle
+              {t("addRecord")}
             </button>
           </div>
         }
@@ -289,7 +292,7 @@ export default function VehicleFleetRegister() {
             icon="🚐"
             title="No vehicles on the register"
             description="Add vans, cars or HGVs with MOT and insurance dates."
-            actionLabel="+ Add vehicle"
+            actionLabel={t("addRecord")}
             onAction={() => setModal({ type: "form" })}
             variant="dashed"
           />
@@ -331,7 +334,7 @@ export default function VehicleFleetRegister() {
                     ) : null}
                     <RegisterFormPrintButton moduleId="vehicles" record={r} />
                     <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                      Edit
+                      {t("edit")}
                     </button>
                     {caps.deleteRecords && (
                       <button
@@ -353,7 +356,7 @@ export default function VehicleFleetRegister() {
                           }
                         }}
                       >
-                        Delete
+                        {t("delete")}
                       </button>
                     )}
                   </div>

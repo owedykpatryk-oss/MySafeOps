@@ -45,6 +45,31 @@ describe("marketModules", () => {
     expect(isModuleAllowedForMarket("notifiable-incidents", "pl")).toBe(true);
   });
 
+  it("blocks DE-only modules for UK orgs", () => {
+    expect(isModuleAllowedForMarket("sige-plan", "de")).toBe(true);
+    expect(isModuleAllowedForMarket("sige-plan", "uk")).toBe(false);
+    expect(isModuleAllowedForMarket("bhp-plan", "de")).toBe(false);
+    expect(isModuleAllowedForMarket("notifiable-incidents", "de")).toBe(true);
+    for (const id of UK_ONLY_MODULE_IDS) {
+      expect(isModuleAllowedForMarket(id, "de")).toBe(false);
+    }
+  });
+
+  it("allows shared sige-plan for DE and AT", () => {
+    expect(isModuleAllowedForMarket("sige-plan", "de")).toBe(true);
+    expect(isModuleAllowedForMarket("sige-plan", "at")).toBe(true);
+    expect(isModuleAllowedForMarket("notifiable-incidents", "at")).toBe(true);
+    expect(isModuleAllowedForMarket("cdm", "at")).toBe(false);
+  });
+
+  it("allows shared sige-plan for CH (labelled SiKo)", () => {
+    expect(isModuleAllowedForMarket("sige-plan", "ch")).toBe(true);
+    expect(isModuleAllowedForMarket("notifiable-incidents", "ch")).toBe(true);
+    expect(isModuleAllowedForMarket("cdm", "ch")).toBe(false);
+    expect(isModuleAllowedForMarket("whs-plan", "ch")).toBe(false);
+    expect(isModuleAllowedForMarket("bhp-plan", "ch")).toBe(false);
+  });
+
   it("reserves AU-only ids when added", () => {
     expect(AU_ONLY_MODULE_IDS).toContain("whs-plan");
     expect(AU_ONLY_MODULE_IDS).toContain("notifiable-incidents");

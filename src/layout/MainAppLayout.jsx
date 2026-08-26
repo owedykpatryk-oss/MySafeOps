@@ -9,7 +9,7 @@ import D1WriteForbiddenBanner from "../components/D1WriteForbiddenBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import TrialBillingBanner from "../components/TrialBillingBanner";
 import PastDueBillingBanner from "../components/PastDueBillingBanner";
-import PlEnglishUiBanner from "../components/PlEnglishUiBanner";
+import WorkspaceEnglishUiBanner from "../components/WorkspaceEnglishUiBanner";
 import BillingReadOnlyBanner from "../components/BillingReadOnlyBanner";
 import BillingUsageWarning from "../components/BillingUsageWarning";
 import WorkspaceAppBar from "../components/WorkspaceAppBar";
@@ -978,7 +978,7 @@ export default function MainAppLayout() {
       <D1WriteForbiddenBanner />
       <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
         <PastDueBillingBanner />
-        <PlEnglishUiBanner />
+        <WorkspaceEnglishUiBanner />
         <TrialBillingBanner />
         <BillingReadOnlyBanner />
         <BillingUsageWarning />

@@ -6,10 +6,23 @@ import { getIndustryPackLabel } from "../utils/industryPackProfile";
 import { getRamsStarterAiHint } from "../utils/ramsIndustryStarters";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getRamsShortLabel } from "../utils/marketLabels";
 
 const ss = { ...ms, ta: { ...ms.inp, minHeight: 120, resize: "vertical" } };
 
-const SYSTEM = `You are a UK construction health & safety assistant for RAMS (Risk Assessment and Method Statement).
+const MARKET_AI_CONTEXT = {
+  uk: { jurisdiction: "the United Kingdom", language: "British English", document: "RAMS (Risk Assessment and Method Statement)", authority: "UK legislation and HSE guidance" },
+  au: { jurisdiction: "Australia", language: "Australian English", document: "SWMS / RAMS", authority: "the applicable state or territory WHS legislation and regulator guidance" },
+  pl: { jurisdiction: "Poland", language: "Polish", document: "IBWR (Instrukcja Bezpiecznego Wykonywania Robót)", authority: "Polish BHP and construction legislation, including the Labour Code and applicable regulations" },
+  de: { jurisdiction: "Germany", language: "German", document: "Gefährdungsbeurteilung (GBU) with safe work sequence", authority: "ArbSchG, BaustellV, BetrSichV, GefStoffV and applicable DGUV rules" },
+  at: { jurisdiction: "Austria", language: "Austrian German", document: "Evaluierung with safe work sequence", authority: "ASchG, BauKG and applicable Austrian regulations and AUVA guidance" },
+  ch: { jurisdiction: "Switzerland", language: "Swiss Standard German", document: "Gefährdungsermittlung / SiKo work package", authority: "BauAV, VUV, ArG and applicable EKAS/Suva guidance" },
+};
+
+export function buildAiRamsSystemPrompt(marketId = "uk") {
+  const market = MARKET_AI_CONTEXT[marketId] || MARKET_AI_CONTEXT.uk;
+  return `You are a construction health and safety drafting assistant for ${market.jurisdiction} creating ${market.document}.
 Respond with a single JSON object only, no markdown, with this shape:
 {
   "title": "string",
@@ -25,14 +38,17 @@ Respond with a single JSON object only, no markdown, with this shape:
       "controlMeasures": ["string", ...],
       "revisedRisk": { "L": 1-5, "S": 1-5, "RF": number },
       "ppeRequired": ["string", ...],
-      "regs": ["string — UK regulations only, accurate names"]
+      "regs": ["string — ${market.authority} only; use accurate titles and omit uncertain citations"]
     }
   ],
   "methodSteps": ["high-level safe sequence step 1", "step 2", ...]
 }
-Use British English. Risk factor RF = L * S. Be specific to the activity described. Include 6–15 hazards for a typical site job.`;
+Use ${market.language}. Never cite UK HSE, CDM, COSHH, LOLER, PUWER or other foreign legislation unless the selected jurisdiction is the United Kingdom. Risk factor RF = L * S. Be specific to the activity described. Include 6–15 hazards for a typical site job. Treat the result as a draft requiring approval by a competent person.`;
+}
 
 export default function AIRamsGenerator() {
+  const marketId = getOrgMarketId();
+  const documentLabel = getRamsShortLabel(marketId);
   const [activity, setActivity] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -45,7 +61,7 @@ export default function AIRamsGenerator() {
     setRaw("");
     try {
       const text = await anthropicMessages({
-        system: SYSTEM,
+        system: buildAiRamsSystemPrompt(marketId),
         messages: [
           {
             role: "user",
@@ -84,7 +100,7 @@ export default function AIRamsGenerator() {
     <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14 }}>
       <PageHero
         badgeText="AI"
-        title="AI RAMS generator"
+        title={`AI ${documentLabel} generator`}
         lead={
           showDevHints ? (
             <>

@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `ppe_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -27,6 +28,7 @@ const ss = ms;
 const PPE_ITEMS = ["Hard hat", "Safety boots", "Hi-vis", "Gloves", "Eye protection", "Hearing protection", "Harness / lanyard", "Respiratory", "Other"];
 
 function Form({ item, workers, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -46,8 +48,8 @@ function Form({ item, workers, onSave, onClose }) {
   return (
     <ModuleOverlay onClose={onClose}>
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
-        <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit PPE record" : "Issue / check PPE"}</h2>
-        <label style={ss.lbl} htmlFor="ppe-worker-id">Worker</label>
+        <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? `${t("edit")} PPE` : "PPE"}</h2>
+        <label style={ss.lbl} htmlFor="ppe-worker-id">{t("worker")}</label>
         <select style={ss.inp} value={form.workerId} onChange={(e) => set("workerId", e.target.value)} id="ppe-worker-id">
           <option value="">—</option>
           {workers.map((w) => (
@@ -64,17 +66,17 @@ function Form({ item, workers, onSave, onClose }) {
             </option>
           ))}
         </select>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ppe-issued-date">Date</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ppe-issued-date">{t("date")}</label>
         <input type="date" style={ss.inp} value={form.issuedDate} onChange={(e) => set("issuedDate", e.target.value)}  id="ppe-issued-date" />
         <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
           <input type="checkbox" checked={form.conditionOk} onChange={(e) => set("conditionOk", e.target.checked)} />
           Condition acceptable / fit for use
         </label>
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ppe-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="ppe-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 56, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="ppe-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, workerName: wm[form.workerId] || form.workerName || "" };
@@ -82,7 +84,7 @@ function Form({ item, workers, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -91,6 +93,7 @@ function Form({ item, workers, onSave, onClose }) {
 }
 
 export default function PPERegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("ppe_register", []));
   const [workers, setWorkers] = useState(() => load("mysafeops_workers", []));
@@ -149,11 +152,11 @@ export default function PPERegister() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add record
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -169,7 +172,7 @@ export default function PPERegister() {
           icon="🦺"
           title="No PPE records yet"
           description="Log issue of hard hats, boots, harnesses and other PPE to each person."
-          actionLabel="+ Add record"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -180,12 +183,12 @@ export default function PPERegister() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <strong>{r.item}</strong> · {r.issuedDate}
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.workerName || "—"} · {r.conditionOk ? "OK" : "Issue noted"}</div>
+                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{r.workerName || "—"} · {r.conditionOk ? t("conditionOk") : t("issueNoted")}</div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="ppe" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -207,7 +210,7 @@ export default function PPERegister() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

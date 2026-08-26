@@ -8,13 +8,14 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
-import { UK_LEGISLATION_LIBRARY, seedLegislationRegister } from "../utils/ukLegislationLibrary";
+import { getLegislationLibraryForMarket, seedLegislationRegisterForMarket } from "../utils/legislationLibrary";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { safeHttpUrl } from "../utils/safeUrl";
 
 const KEY = "legislation_register";
@@ -22,6 +23,7 @@ const genId = () => `leg_${Date.now()}_${Math.random().toString(36).slice(2, 5)}
 const ss = ms;
 
 function Form({ item, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -61,7 +63,7 @@ function Form({ item, onSave, onClose }) {
         <input type="date" style={ss.inp} value={form.lastReviewed} onChange={(e) => set("lastReviewed", e.target.value)}  id="legislation-last-reviewed" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="legislation-next-review">Next review</label>
         <input type="date" style={ss.inp} value={form.nextReview} onChange={(e) => set("nextReview", e.target.value)}  id="legislation-next-review" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="legislation-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="legislation-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 40 }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="legislation-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>Cancel</button>
@@ -73,10 +75,12 @@ function Form({ item, onSave, onClose }) {
 }
 
 export default function LegislationRegister() {
+  const { t, marketId } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load(KEY, []));
   const [modal, setModal] = useState(null);
   const [filter, setFilter] = useState("all");
+  const marketLibrary = useMemo(() => getLegislationLibraryForMarket(marketId), [marketId]);
   const listPg = useRegisterListPaging();
   const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
     storageKey: KEY,
@@ -104,9 +108,9 @@ export default function LegislationRegister() {
 
   const seedLibrary = () => {
     const existingRefs = new Set(items.map((i) => i.refId || i.shortName));
-    const toAdd = seedLegislationRegister().filter((s) => !existingRefs.has(s.refId));
+    const toAdd = seedLegislationRegisterForMarket(marketId).filter((s) => !existingRefs.has(s.refId));
     if (!toAdd.length) {
-      window.alert("UK legislation library already loaded.");
+      window.alert(`${marketId.toUpperCase()} legislation library already loaded.`);
       return;
     }
     persist([...items, ...toAdd]);
@@ -116,11 +120,11 @@ export default function LegislationRegister() {
   return (
     <div>
       <PageHero
-        title="Legislation register"
-        lead="UK HSE and food safety law applicability — link to RAMS regs column and compliance reviews."
+        title={marketId === "pl" ? "Rejestr przepisów" : marketId === "de" || marketId === "at" || marketId === "ch" ? "Vorschriftenregister" : "Legislation register"}
+        lead={marketId === "pl" ? "Polskie przepisy BHP i budowlane — powiązane z dokumentami i okresowymi przeglądami." : marketId === "de" || marketId === "at" || marketId === "ch" ? "Marktspezifische Arbeitsschutzvorschriften — mit Dokumenten und Prüfzyklen verknüpft." : "Market-specific safety law applicability — link to document references and compliance reviews."}
         right={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button type="button" style={ss.btn} onClick={seedLibrary}>Load UK library</button>
+            <button type="button" style={ss.btn} onClick={seedLibrary}>{marketId === "pl" ? "Wczytaj bibliotekę PL" : marketId === "de" || marketId === "at" || marketId === "ch" ? "Landesbibliothek laden" : `Load ${marketId.toUpperCase()} library`}</button>
             <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>+ Add entry</button>
           </div>
         }
@@ -142,8 +146,8 @@ export default function LegislationRegister() {
           <EmptyState
             icon="📜"
             title="No legislation entries yet"
-            description={`Load the UK library to seed ${UK_LEGISLATION_LIBRARY.length} common HSE and food safety refs, or add your own.`}
-            actionLabel="Load UK library"
+            description={`${marketId === "pl" ? "Wczytaj" : "Load"} ${marketLibrary.length} ${marketId.toUpperCase()} ${marketId === "pl" ? "pozycji startowych lub dodaj własne." : "starter references, or add your own."}`}
+            actionLabel={marketId === "pl" ? "Wczytaj bibliotekę PL" : `Load ${marketId.toUpperCase()} library`}
             onAction={seedLibrary}
             secondaryLabel="+ Add entry"
             onSecondary={() => setModal({ type: "form" })}
@@ -194,7 +198,7 @@ export default function LegislationRegister() {
                           }
                         }}
                       >
-                        Delete
+                        {t("delete")}
                       </button>
                     ) : null}
                   </div>

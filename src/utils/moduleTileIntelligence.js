@@ -23,7 +23,8 @@ export const MODULE_PREBUILDS = {
   "method-statement": { shortLabel: "Mobilisation MS", label: "Pre-built method statement template", action: "create" },
   cdm: { shortLabel: "CPP starter", label: "Pre-built CDM 2015 compliance pack", action: "create" },
   "whs-plan": { shortLabel: "WHS plan", label: "Pre-built WHS management plan", action: "create" },
-  "bhp-plan": { shortLabel: "Plan BHP", label: "Pre-built construction BHP plan", action: "create" },
+  "bhp-plan": { shortLabel: "Plan BIOZ", label: "Pre-built construction BHP plan", action: "create" },
+  "sige-plan": { shortLabel: "SiGe-Plan", label: "Vorgefertigter SiGe-Plan für die Baustelle", action: "create" },
   snags: { shortLabel: "New snag", label: "Pre-built snag with photo + priority", action: "create" },
   timesheets: { shortLabel: "This week", label: "Pre-built weekly timesheet grid", action: "create" },
   "geo-photos": { shortLabel: "Site photo", label: "Pre-built geo-tagged site photo", action: "capture" },
@@ -101,9 +102,18 @@ function resolvePrebuild(moduleId, stat) {
         ? "WHS legislation register"
         : marketId === "pl"
           ? "Rejestr przepisów BHP"
-          : "UK HSE legislation register";
+          : marketId === "de" || marketId === "at" || marketId === "ch"
+            ? "Arbeitsschutz-Vorschriftenregister"
+            : "UK HSE legislation register";
     return {
-      shortLabel: marketId === "au" ? "WHS library" : marketId === "pl" ? "BHP library" : "UK library",
+      shortLabel:
+        marketId === "au"
+          ? "WHS library"
+          : marketId === "pl"
+            ? "BHP library"
+            : marketId === "de" || marketId === "at" || marketId === "ch"
+              ? "ArbSch-Bibliothek"
+              : "UK library",
       label: `Pre-built ${libLabel}`,
       viewId: "legislation",
       action: "seed",
@@ -132,6 +142,18 @@ function resolvePrebuild(moduleId, stat) {
     };
     if (plOverrides[moduleId] === null) return null;
     if (plOverrides[moduleId]) return { ...plOverrides[moduleId], viewId: moduleId };
+  }
+  if (marketId === "de" || marketId === "at" || marketId === "ch") {
+    const deOverrides = {
+      coshh: { shortLabel: "Gefahrstoff", label: "Gefahrstoffzeile mit SDB-Checkliste", action: "create" },
+      inspections: { shortLabel: "Prüfung", label: "Prüfnachweis Gerät / Baustelle", action: "create" },
+      training: { shortLabel: "Unterweisung", label: "Unterweisung / Qualifikation", action: "create" },
+      plant: { shortLabel: "Gerät", label: "Zeile im Geräteregister", action: "create" },
+      lifting: { shortLabel: "Hebeplan", label: "Kran- / Hebeplan", action: "create" },
+      "electrical-pat": null,
+    };
+    if (deOverrides[moduleId] === null) return null;
+    if (deOverrides[moduleId]) return { ...deOverrides[moduleId], viewId: moduleId };
   }
   if (typeof def === "function") return def(stat);
   if (def) return { ...def, viewId: def.viewId || moduleId };

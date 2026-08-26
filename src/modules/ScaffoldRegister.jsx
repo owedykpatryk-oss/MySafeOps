@@ -17,6 +17,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { exportCsv } from "../utils/exportCsv";
 import { validateRequiredFields } from "../utils/registerPersistGuard";
+import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `scf_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -25,6 +26,7 @@ const today = todayLocalISO;
 const ss = ms;
 
 function Form({ item, projects, onSave, onClose }) {
+  const { t } = useWorkspaceT();
   const [form, setForm] = useState(
     () =>
       item || {
@@ -58,7 +60,7 @@ function Form({ item, projects, onSave, onClose }) {
         <input style={ss.inp} value={form.maxLiftHeight} onChange={(e) => set("maxLiftHeight", e.target.value)}  id="scaffold-max-lift-height" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="scaffold-location">Location / grid</label>
         <input style={ss.inp} value={form.location} onChange={(e) => set("location", e.target.value)}  id="scaffold-location" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="scaffold-project-id">Project</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="scaffold-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="scaffold-project-id">
           <option value="">—</option>
           {projects.map((p) => (
@@ -86,11 +88,11 @@ function Form({ item, projects, onSave, onClose }) {
         <input style={ss.inp} value={form.inspector} onChange={(e) => set("inspector", e.target.value)}  id="scaffold-inspector" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="scaffold-handover-cert-ref">Handover / TG20 / design ref</label>
         <input style={ss.inp} value={form.handoverCertRef} onChange={(e) => set("handoverCertRef", e.target.value)}  id="scaffold-handover-cert-ref" />
-        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="scaffold-notes">Notes</label>
+        <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="scaffold-notes">{t("notes")}</label>
         <textarea style={{ ...ss.inp, minHeight: 44, resize: "vertical" }} value={form.notes} onChange={(e) => set("notes", e.target.value)}  id="scaffold-notes" />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
           <button type="button" style={ss.btn} onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </button>
           <button type="button" style={ss.btnP} onClick={() => {
             const payload = { ...form, projectName: pm[form.projectId] || "" };
@@ -98,7 +100,7 @@ function Form({ item, projects, onSave, onClose }) {
             if (!check.ok) { window.alert(check.message); return; }
             onSave(payload);
           }}>
-            Save
+            {t("save")}
           </button>
         </div>
       </div>
@@ -107,6 +109,7 @@ function Form({ item, projects, onSave, onClose }) {
 }
 
 export default function ScaffoldRegister() {
+  const { t } = useWorkspaceT();
   const { caps } = useApp();
   const [items, setItems] = useState(() => load("scaffold_register", []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
@@ -165,11 +168,11 @@ export default function ScaffoldRegister() {
         right={<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {liveItems.length > 0 && (
             <button type="button" style={ss.btn} onClick={handleExportCsv}>
-              Export CSV
+              {t("exportCsv")}
             </button>
           )}
           <button type="button" style={ss.btnP} onClick={() => setModal({ type: "form" })}>
-            + Add inspection
+            {t("addRecord")}
           </button>
         </div>}
       />
@@ -185,7 +188,7 @@ export default function ScaffoldRegister() {
           icon="🏗️"
           title="No scaffold records yet"
           description="Record scaffold tags, inspections and handovers for this site."
-          actionLabel="+ Add inspection"
+          actionLabel={t("addRecord")}
           onAction={() => setModal({ type: "form" })}
           variant="dashed"
         />
@@ -201,7 +204,7 @@ export default function ScaffoldRegister() {
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <RegisterFormPrintButton moduleId="scaffold" record={r} />
                   <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>
-                    Edit
+                    {t("edit")}
                   </button>
                   {caps.deleteRecords && (
                     <button
@@ -223,7 +226,7 @@ export default function ScaffoldRegister() {
                         }
                       }}
                     >
-                      Delete
+                      {t("delete")}
                     </button>
                   )}
                 </div>

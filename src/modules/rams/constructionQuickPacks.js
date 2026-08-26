@@ -1,6 +1,7 @@
 /**
  * Built-in construction quick packs — seeded once per org from hazard library IDs.
  */
+import { buildIbwrPackDefs } from "./ramsIbwrTemplatesPl";
 
 /** @param {object} h */
 export function hazardToPackTemplate(h) {
@@ -76,8 +77,16 @@ export const BUILTIN_CONSTRUCTION_PACK_DEFS = [
     name: "Rail trackside & OLE",
     sector: "rail",
     pinned: false,
-    description: "Trackside works, OLE awareness, possession interfaces.",
-    hazardIds: ["rail_001", "rail_002", "rail_003", "scaf_001"],
+    description: "Trackside works, OLE and third rail, possession interfaces.",
+    hazardIds: ["rail_001", "rail_002", "rail_003", "rail_006", "rail_009", "scaf_001"],
+  },
+  {
+    id: "builtin_rail_station_signalling",
+    name: "Rail station, signalling & plant",
+    sector: "rail",
+    pinned: false,
+    description: "Platform works with passengers, cable route and signalling, RRV and level crossings.",
+    hazardIds: ["rail_004", "rail_005", "rail_007", "rail_008", "rail_001"],
   },
   {
     id: "builtin_me_hvac",
@@ -432,39 +441,125 @@ export const BUILTIN_AU_CONSTRUCTION_PACK_DEFS = [
 
 const BUILTIN_PL_CONSTRUCTION_PACK_DEFS = [
   {
-    id: "builtin_pl_bhp_core",
-    name: "PL — IOR core (wysokość, wykop, CS)",
+    id: "builtin_pl_psn_core",
+    name: "PL — Roboty szczególnie niebezpieczne",
     sector: "construction",
     pinned: true,
-    description: "Roboty szczególnie niebezpieczne — wysokość, wykop, przestrzeń zamknięta, maszyny.",
-    hazardIds: ["wah_001", "gnd_001", "gnd_002", "cs_001", "scaf_001", "scaf_002", "plant_003", "cst_site_002"],
+    description: "Wysokość, wykop, przestrzeń zamknięta i nadzór — rdzeń pakietu IBWR.",
+    hazardIds: ["pl_psn_001", "pl_wys_001", "pl_wys_002", "pl_ziem_001", "pl_pz_001", "pl_wys_005"],
   },
   {
     id: "builtin_pl_electrical",
     name: "PL — Prace elektryczne i SEP",
     sector: "construction",
     pinned: true,
-    description: "Izolacja, prace pod napięciem — zgodnie z wymaganiami SEP na budowie.",
-    hazardIds: ["elec_001", "elec_002", "elec_003", "util_e001", "util_e002", "gas_001"],
+    description: "Wyłączenie i LOTO, zasilanie placu budowy, linie napowietrzne.",
+    hazardIds: ["pl_ele_001", "pl_ele_002", "pl_ele_003", "pl_psn_001"],
   },
   {
     id: "builtin_pl_civil",
-    name: "PL — Roboty ziemne i drogowe",
+    name: "PL — Roboty ziemne i uzbrojenie",
     sector: "construction",
     pinned: true,
-    description: "Wykopy, uzbrojenie, beton, roboty tymczasowe — pakiet IOR dla budowy.",
+    description: "Wykopy, kolizje z sieciami, koparka i odwodnienie.",
+    hazardIds: ["pl_ziem_001", "pl_ziem_002", "pl_ziem_003", "pl_ziem_004", "pl_masz_003"],
+  },
+  {
+    id: "builtin_pl_wysokosc",
+    name: "PL — Praca na wysokości i rusztowania",
+    sector: "construction",
+    pinned: true,
+    description: "Krawędzie i otwory, rusztowania, podesty ruchome, dachy.",
+    hazardIds: ["pl_wys_001", "pl_wys_002", "pl_wys_003", "pl_wys_004", "pl_wys_005"],
+  },
+  {
+    id: "builtin_pl_maszyny",
+    name: "PL — Maszyny, dźwig i transport",
+    sector: "construction",
+    pinned: false,
+    description: "Żuraw i UDT, wózki jezdniowe, narzędzia z napędem.",
+    hazardIds: ["pl_masz_001", "pl_masz_002", "pl_masz_003", "pl_ele_003"],
+  },
+  {
+    id: "builtin_pl_czynniki",
+    name: "PL — Czynniki szkodliwe i higiena pracy",
+    sector: "construction",
+    pinned: false,
+    description: "Pył i krzemionka, hałas i drgania, chemia, dźwiganie, upał i mróz.",
+    hazardIds: ["pl_czyn_001", "pl_czyn_002", "pl_czyn_003", "pl_czyn_004", "pl_czyn_005"],
+  },
+  {
+    id: "builtin_pl_plac_budowy",
+    name: "PL — Organizacja placu budowy",
+    sector: "construction",
+    pinned: true,
+    description: "Zagospodarowanie terenu, prace pożarowo niebezpieczne, koordynacja i praca jednoosobowa.",
+    hazardIds: ["pl_org_001", "pl_org_002", "pl_org_003", "pl_org_004", "pl_psn_002"],
+  },
+  {
+    id: "builtin_pl_zywnosc",
+    name: "PL — Serwis w zakładzie produkcji żywności",
+    sector: "construction",
+    pinned: false,
+    description: "Prace w strefie produkcyjnej, mycie i dezynfekcja, praca nad linią, chłodnie i zbiorniki CIP.",
+    hazardIds: ["pl_zyw_001", "pl_zyw_002", "pl_zyw_003", "pl_zyw_004", "pl_zyw_005"],
+  },
+  {
+    id: "builtin_pl_rozbiorki",
+    name: "PL — Rozbiórki i azbest",
+    sector: "construction",
+    pinned: false,
+    description: "Rozbiórka konstrukcji i prace przy wyrobach azbestowych.",
+    hazardIds: ["pl_roz_001", "pl_roz_002", "pl_czyn_001"],
+  },
+];
+
+/** Gotowe IBWR dla typowych robót — rozwijane z szablonów etapów. */
+const BUILTIN_PL_IBWR_PACK_DEFS = buildIbwrPackDefs();
+
+/** Ids of the Polish packs — used to keep them aligned with the Polish hazard set. */
+export const BUILTIN_PL_PACK_IDS = new Set(BUILTIN_PL_CONSTRUCTION_PACK_DEFS.map((d) => d.id));
+
+/** Ids of the ready-made IBWR packs. */
+export const BUILTIN_PL_IBWR_PACK_IDS = new Set(BUILTIN_PL_IBWR_PACK_DEFS.map((d) => d.id));
+
+const BUILTIN_DE_CONSTRUCTION_PACK_DEFS = [
+  {
+    id: "builtin_de_sige_core",
+    name: "DE — GBU Kern (Absturz, Aushub, enge Räume)",
+    sector: "construction",
+    pinned: true,
+    description: "Besonders gefährliche Arbeiten — Absturz, Aushub, enge Räume, Maschinen.",
+    hazardIds: ["wah_001", "gnd_001", "gnd_002", "cs_001", "scaf_001", "scaf_002", "plant_003", "cst_site_002"],
+  },
+  {
+    id: "builtin_de_electrical",
+    name: "DE — Elektroarbeiten und Freischaltung",
+    sector: "construction",
+    pinned: true,
+    description: "Freischaltung und Arbeiten an elektrischen Anlagen — BetrSichV auf der Baustelle.",
+    hazardIds: ["elec_001", "elec_002", "elec_003", "util_e001", "util_e002", "gas_001"],
+  },
+  {
+    id: "builtin_de_civil",
+    name: "DE — Tiefbau und Erdarbeiten",
+    sector: "construction",
+    pinned: true,
+    description: "Aushub, Leitungen, Beton, temporäre Bauwerke — GBU-Paket für den Tiefbau.",
     hazardIds: ["gnd_001", "gnd_003", "gnd_004", "con_001", "con_002", "twx_001", "plant_001", "plant_004"],
   },
 ];
 
 function regionalConstructionPackDefs(marketId) {
-  const excluded = [...AU_EXCLUDED_BUILTIN_PACK_IDS];
-  const base = BUILTIN_CONSTRUCTION_PACK_DEFS.filter((d) => !excluded.has(d.id));
+  const base = BUILTIN_CONSTRUCTION_PACK_DEFS.filter((d) => !AU_EXCLUDED_BUILTIN_PACK_IDS.has(d.id));
   if (marketId === "au") {
     return [...base, ...BUILTIN_AU_CONSTRUCTION_PACK_DEFS];
   }
   if (marketId === "pl") {
-    return [...base, ...BUILTIN_PL_CONSTRUCTION_PACK_DEFS];
+    return [...base, ...BUILTIN_PL_CONSTRUCTION_PACK_DEFS, ...BUILTIN_PL_IBWR_PACK_DEFS];
+  }
+  if (marketId === "de" || marketId === "at" || marketId === "ch") {
+    return [...base, ...BUILTIN_DE_CONSTRUCTION_PACK_DEFS];
   }
   return BUILTIN_CONSTRUCTION_PACK_DEFS;
 }
@@ -526,9 +621,14 @@ export function ensureBuiltInConstructionPacks(existingPacks, allHazards, market
   }
   const existingIds = new Set(list.map((p) => p.id));
   let defs = ALL_BUILTIN_PACK_DEFS;
-  if (marketId === "au" || marketId === "pl") {
+  if (marketId === "au" || marketId === "pl" || marketId === "de" || marketId === "at" || marketId === "ch") {
     const seen = new Set();
-    const regional = marketId === "au" ? BUILTIN_AU_CONSTRUCTION_PACK_DEFS : BUILTIN_PL_CONSTRUCTION_PACK_DEFS;
+    const regional =
+      marketId === "au"
+        ? BUILTIN_AU_CONSTRUCTION_PACK_DEFS
+        : marketId === "pl"
+          ? [...BUILTIN_PL_CONSTRUCTION_PACK_DEFS, ...BUILTIN_PL_IBWR_PACK_DEFS]
+          : BUILTIN_DE_CONSTRUCTION_PACK_DEFS;
     defs = [
       ...ALL_BUILTIN_PACK_DEFS.filter((d) => !AU_EXCLUDED_BUILTIN_PACK_IDS.has(d.id)),
       ...regional,
