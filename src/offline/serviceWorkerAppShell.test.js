@@ -80,4 +80,17 @@ describe("service worker SPA shell", () => {
     expect(hit.status).toBe(503);
     expect(await hit.text()).toBe("Offline");
   });
+
+  it("serves the cached SPA shell when /app is a non-OK HTTP response, not a bare 503", () => {
+    const src = readFileSync(SW_PATH, "utf8");
+    const appShellHandler = src.slice(
+      src.indexOf("if (isAppShellRequest"),
+      src.indexOf("if (isDocumentNavigation")
+    );
+    expect(appShellHandler).toContain("if (res && res.ok)");
+    expect(appShellHandler).toContain("return matchAppShell()");
+    expect(appShellHandler).not.toMatch(/return offlineFallbackResponse\(/);
+    const otherDocs = src.slice(src.indexOf("if (isDocumentNavigation"));
+    expect(otherDocs).toMatch(/if \(res\) \{\s*scheduleCachePut/);
+  });
 });

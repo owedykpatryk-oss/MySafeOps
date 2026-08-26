@@ -27,13 +27,24 @@ describe("Utility Mapping trial extension SQL", () => {
     expect(sql).toMatch(/returning o\.slug, o\.trial_ends_at/i);
   });
 
-  it("keeps the courtesy IN list in sync with the client allowlist", () => {
+  it("keeps the courtesy IN list exactly the hyphen-normalised client allowlist", () => {
     const inList = sql.slice(sql.lastIndexOf("update public.organizations"));
-    const slugs = [...new Set([...UTILITY_MAPPING_ORG_SLUGS].map(hyphenSlug))];
-    expect(slugs).toContain("patryk-44bdf196");
-    for (const slug of slugs) {
-      expect(inList).toContain(`'${slug}'`);
-    }
+    const inStart = inList.search(/\bin\s*\(/i);
+    const inEnd = inList.indexOf(")", inStart);
+    const sqlSlugs = [...inList.slice(inStart, inEnd).matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+    const jsSlugs = [...new Set([...UTILITY_MAPPING_ORG_SLUGS].map(hyphenSlug))].sort();
+    expect(jsSlugs).toContain("patryk-44bdf196");
+    expect(sqlSlugs).toEqual(jsSlugs);
+  });
+
+  it("Superadmin RPC overwrites trial_ends_at from now, unlike the courtesy UPDATE guard", () => {
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.superadmin_extend_org_trial"),
+      sql.indexOf("revoke all on function public.superadmin_extend_org_trial")
+    );
+    expect(fn).toContain("trial_ends_at = now() + (v_days * interval '1 day')");
+    expect(fn).not.toMatch(/greatest\s*\(\s*(?:o\.)?trial_ends_at/i);
+    expect(fn).not.toMatch(/trial_ends_at\s*<\s*now\(\)/i);
   });
 
   it("matches @u-map.co.uk by domain equality, not a suffix LIKE", () => {

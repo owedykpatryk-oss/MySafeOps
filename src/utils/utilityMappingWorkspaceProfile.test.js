@@ -5,6 +5,7 @@ import { isValidIndustryPackId, applyIndustryPack, getAppliedIndustryPackId } fr
 import {
   UTILITY_MAPPING_PACK_ID,
   UTILITY_MAPPING_ORG_SLUGS,
+  getUtilityMappingWorkspacePack,
   isUtilityMappingOrgForWorkspaceList,
 } from "./utilityMappingWorkspaceProfile";
 import { isUtilityMappingOrg } from "./utilityMappingOrg";
@@ -44,6 +45,19 @@ describe("Utility Mapping exclusive workspace profile", () => {
     saveOrgSettingsRaw({ name: "Patryk Workspace", hiddenModules: [] });
     expect(isUtilityMappingOrg()).toBe(true);
     expect(listWorkspaceProfilesForOrg().map((p) => p.id)).toContain(UTILITY_MAPPING_PACK_ID);
+  });
+
+  it("enables PAS128 survey, RAMS and permit-to-dig modules for the live u-map tenant", () => {
+    setOrgId("patryk-44bdf196");
+    saveOrgSettingsRaw({ name: "Patryk Workspace", hiddenModules: [], hiddenModulesBootstrapped: true });
+    expect(isUtilityMappingOrg()).toBe(true);
+    const pack = getUtilityMappingWorkspacePack();
+    expect(pack.showModules).toEqual(
+      expect.arrayContaining(["survey-report", "gpr-report", "geo-photos", "rams", "permits"])
+    );
+    expect(pack.hiddenModules).toEqual(expect.arrayContaining(["allergen-changeovers", "fess-setup"]));
+    expect(pack.ramsStarterKey).toBe("geospatial_intelligence");
+    expect(pack.surveyWorkflow).toBe(true);
   });
 
   it("resolves every allowlist slug after hyphen normalisation", () => {
