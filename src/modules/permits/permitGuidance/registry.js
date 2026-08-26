@@ -2,8 +2,10 @@ import PermitDigGuidancePanel from "../components/PermitDigGuidancePanel";
 import PermitHotWorkGuidancePanel from "./components/PermitHotWorkGuidancePanel";
 import PermitWahGuidancePanel from "./components/PermitWahGuidancePanel";
 import PermitConfinedSpaceGuidancePanel from "./components/PermitConfinedSpaceGuidancePanel";
+import { getOrgMarketId } from "../../../utils/orgMarket";
 import {
   isDigPermitType,
+  isUkDigGuidanceMarket,
   renderDigGuidancePrintHtml,
   mechanicalDigAssessment,
   DIG_EXTRA_FIELD_KEYS,
@@ -87,18 +89,21 @@ const REGISTRY = {
   },
 };
 
-export function getPermitGuidance(type) {
+export function getPermitGuidance(type, marketId = getOrgMarketId()) {
   const key = String(type || "").trim();
-  return REGISTRY[key] || null;
+  const entry = REGISTRY[key] || null;
+  if (!entry) return null;
+  if (isDigPermitType(key) && !isUkDigGuidanceMarket(marketId)) return null;
+  return entry;
 }
 
-export function hasPermitGuidance(type) {
-  return Boolean(getPermitGuidance(type));
+export function hasPermitGuidance(type, marketId = getOrgMarketId()) {
+  return Boolean(getPermitGuidance(type, marketId));
 }
 
 /** Unified print section for all guidance-enabled permit types. */
 export function renderGuidancePrintHtml(permit, options = {}) {
-  const entry = getPermitGuidance(permit?.type);
+  const entry = getPermitGuidance(permit?.type, options.marketId);
   if (!entry?.renderPrintHtml) return "";
   return entry.renderPrintHtml(permit, options);
 }

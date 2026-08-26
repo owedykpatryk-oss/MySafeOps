@@ -113,6 +113,11 @@ export function isDigPermitType(type) {
   return DIG_PERMIT_TYPES.has(String(type || "").trim());
 }
 
+/** PAS 128 / HSG47 wizard, quality gates and print graphics are UK-only. */
+export function isUkDigGuidanceMarket(marketId) {
+  return (marketId || getOrgMarketId()) === "uk";
+}
+
 export function pas128QualityMeta(qlId) {
   const id = String(qlId || "").trim().toUpperCase();
   return PAS128_QUALITY_LEVELS.find((q) => q.id === id) || null;

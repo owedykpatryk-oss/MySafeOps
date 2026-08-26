@@ -131,6 +131,18 @@ const PL_PERMIT_TYPE_OVERRIDES = {
   radiography: { label: "Pozwolenie na badania radiograficzne" },
   ground_disturbance: {
     label: "Pozwolenie na naruszenie gruntu",
+    description: "Pale, kotwy, słupy — naruszenie gruntu poza głębokością lokalizacji uzbrojenia",
+    checklist: [
+      "Raport geotechniczny sprawdzony — rodzaj gruntu, zanieczyszczenia, pustki",
+      "Zlecenie mapy uzbrojenia terenu (geodeta / CPD)",
+      "Lokalizacja uzbrojenia oznaczona na placu przed rozpoczęciem prac",
+      "Ocena archeologiczna / konserwatorska tam, gdzie wymagana",
+      "Metoda naruszenia gruntu zatwierdzona przez osobę kompetentną",
+      "Monitoring drgań sąsiednich konstrukcji tam, gdzie wymagany",
+      "Inwentaryzacja stanu sąsiednich obiektów ze zdjęciami",
+      "Monitoring wód gruntowych przy odwodnieniu",
+      "Zabezpieczenia środowiskowe przy ciekach / obszarach wrażliwych",
+    ],
     extraFields: [
       { key: "groundType", label: "Rodzaj gruntu / geologia", type: "text" },
       { key: "disturbanceMethod", label: "Metoda naruszenia gruntu", type: "text" },

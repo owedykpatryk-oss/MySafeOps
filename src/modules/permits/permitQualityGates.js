@@ -1,5 +1,6 @@
 import { permitHasSiteEvidence } from "../../utils/geoPhotoFields";
-import { mechanicalDigAssessment } from "./permitDigGuidance";
+import { getOrgMarketId } from "../../utils/orgMarket";
+import { isUkDigGuidanceMarket, mechanicalDigAssessment } from "./permitDigGuidance";
 import { hotWorkAssessment } from "./permitGuidance/hotWorkGuidance";
 import { confinedSpaceAssessment } from "./permitGuidance/confinedSpaceGuidance";
 
@@ -99,7 +100,7 @@ function buildSmartRecommendations(permit, options = {}) {
     }
   }
 
-  if (type === "excavation" || type === "ground_disturbance") {
+  if ((type === "excavation" || type === "ground_disturbance") && isUkDigGuidanceMarket(options.marketId || getOrgMarketId())) {
     if (!cleanText(extra.pas128QualityLevel)) {
       addRec("pas128_ql", "Record PAS 128 quality level (QL-D to QL-A).");
     }

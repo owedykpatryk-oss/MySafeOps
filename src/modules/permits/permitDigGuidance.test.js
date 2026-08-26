@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isDigPermitType,
+  isUkDigGuidanceMarket,
   pas128QualityMeta,
   pas128SurveyMeta,
   mechanicalDigAssessment,
@@ -13,6 +14,12 @@ describe("permitDigGuidance", () => {
   it("identifies dig permit types", () => {
     expect(isDigPermitType("excavation")).toBe(true);
     expect(isDigPermitType("hot_work")).toBe(false);
+  });
+
+  it("treats PAS 128 wizard/print guidance as UK-only", () => {
+    expect(isUkDigGuidanceMarket("uk")).toBe(true);
+    expect(isUkDigGuidanceMarket("pl")).toBe(false);
+    expect(isUkDigGuidanceMarket("au")).toBe(false);
   });
 
   it("returns PAS 128 QL metadata with accuracy bands", () => {

@@ -21,6 +21,15 @@ describe("permitGuidance registry", () => {
   it("returns wizard hints for hot work", () => {
     expect(getPermitGuidance("hot_work")?.wizardHint).toMatch(/fire watch/i);
   });
+
+  it("hides UK PAS 128 excavation guidance on Poland and Australia workspaces", () => {
+    expect(hasPermitGuidance("excavation", "uk")).toBe(true);
+    expect(getPermitGuidance("excavation", "uk")?.wizardHint).toMatch(/PAS 128/);
+    expect(hasPermitGuidance("excavation", "pl")).toBe(false);
+    expect(hasPermitGuidance("ground_disturbance", "pl")).toBe(false);
+    expect(hasPermitGuidance("excavation", "au")).toBe(false);
+    expect(hasPermitGuidance("hot_work", "pl")).toBe(true);
+  });
 });
 
 describe("hotWorkGuidance", () => {

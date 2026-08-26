@@ -35,4 +35,13 @@ describe("permitTypesMarket", () => {
     expect((pl.excavation.extraFields || []).some((f) => f.key === "pas128QualityLevel")).toBe(false);
     expect((pl.excavation.extraFields || []).some((f) => f.key === "pas128SurveyType")).toBe(false);
   });
+
+  it("replaces UK CAT/PAS 128 ground-disturbance checks with CPD wording for Poland", () => {
+    const pl = getPermitTypesForMarket("pl");
+    const checks = pl.ground_disturbance.checklist.join(" ");
+    expect(checks).toMatch(/CPD|geodeta/i);
+    expect(checks).not.toMatch(/CAT scan/i);
+    expect(checks).not.toMatch(/PAS 128/i);
+    expect(getPermitTypesForMarket("uk").ground_disturbance.checklist.join(" ")).toMatch(/PAS 128/i);
+  });
 });
