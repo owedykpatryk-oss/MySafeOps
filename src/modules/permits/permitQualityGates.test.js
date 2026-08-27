@@ -104,4 +104,23 @@ describe("runPermitQualityGates", () => {
     );
     expect(r.recommendations.some((x) => /PAS 128/i.test(String(x?.text || "")))).toBe(true);
   });
+
+  it("does not recommend PAS 128 / CAT scan on Australia ground-disturbance permits", () => {
+    const r = runPermitQualityGates(
+      {
+        type: "ground_disturbance",
+        description: "Piling near services",
+        location: "Sydney",
+        issuedBy: "Alex",
+        issuedTo: "Sam",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T10:00:00.000Z",
+        notes: "",
+        evidenceNotes: "",
+        extraFields: {},
+      },
+      { marketId: "au" }
+    );
+    expect(r.recommendations.some((x) => /PAS 128|CAT scan/i.test(String(x?.text || "")))).toBe(false);
+  });
 });

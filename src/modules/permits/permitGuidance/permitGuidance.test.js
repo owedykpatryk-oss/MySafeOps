@@ -28,6 +28,7 @@ describe("permitGuidance registry", () => {
     expect(hasPermitGuidance("excavation", "pl")).toBe(false);
     expect(hasPermitGuidance("ground_disturbance", "pl")).toBe(false);
     expect(hasPermitGuidance("excavation", "au")).toBe(false);
+    expect(hasPermitGuidance("ground_disturbance", "au")).toBe(false);
     expect(hasPermitGuidance("hot_work", "pl")).toBe(true);
   });
 });

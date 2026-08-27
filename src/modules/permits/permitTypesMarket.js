@@ -93,6 +93,14 @@ export const AU_PERMIT_TYPE_OVERRIDES = {
       "Groundwater monitoring in place if dewatering required",
       "Environmental controls for waterways / sensitive areas confirmed",
     ],
+    extraFields: [
+      { key: "groundType", label: "Ground type / geology", type: "text" },
+      { key: "disturbanceMethod", label: "Method of disturbance", type: "text" },
+      { key: "maxDepth", label: "Maximum disturbance depth (m)", type: "number" },
+      { key: "dbydRef", label: "DBYD enquiry reference", type: "text" },
+      { key: "surveyDrawingRef", label: "Utility survey / drawing reference", type: "text" },
+      { key: "utilityStrikeContacts", label: "Utility strike emergency contacts", type: "text" },
+    ],
   },
 };
 
