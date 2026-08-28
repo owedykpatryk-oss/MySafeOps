@@ -59,4 +59,14 @@ describe("permitTypesMarket", () => {
     expect(checks).not.toMatch(/PAS 128/i);
     expect(getPermitTypesForMarket("uk").ground_disturbance.checklist.join(" ")).toMatch(/PAS 128/i);
   });
+
+  it("keeps UK LOLER on lifting and uses WHS plant wording for Australia", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const au = getPermitTypesForMarket("au");
+    expect(uk.lifting.description).toMatch(/LOLER/);
+    expect(uk.lifting.checklist.join(" ")).toMatch(/LOLER thorough examination/);
+    expect(au.lifting.description).toMatch(/WHS plant/i);
+    expect(au.lifting.checklist.join(" ")).not.toMatch(/LOLER/);
+    expect(au.lifting.description).not.toMatch(/LOLER/);
+  });
 });
