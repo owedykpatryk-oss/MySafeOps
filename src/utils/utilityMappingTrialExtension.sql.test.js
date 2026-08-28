@@ -67,4 +67,18 @@ describe("Utility Mapping trial extension SQL", () => {
     const updateBlock = withoutComments.slice(withoutComments.lastIndexOf("update public.organizations"));
     expect(updateBlock).toMatch(/\(\s*lower\(replace\(o\.slug/);
   });
+
+  it("does not consume trial_extension_count on the courtesy UPDATE or Superadmin RPC", () => {
+    const withoutComments = sql.replace(/--[^\n]*/g, "");
+    const fn = withoutComments.slice(
+      withoutComments.indexOf("create or replace function public.superadmin_extend_org_trial"),
+      withoutComments.indexOf("revoke all on function public.superadmin_extend_org_trial")
+    );
+    const updateBlock = withoutComments.slice(withoutComments.lastIndexOf("update public.organizations"));
+    expect(fn).not.toMatch(/trial_extension_count/);
+    expect(updateBlock).not.toMatch(/trial_extension_count/);
+    expect(withoutComments).not.toMatch(/trial_extension_count\s*=/);
+    const setTrial = [...withoutComments.matchAll(/\bset\s+trial_ends_at\s*=/gi)];
+    expect(setTrial).toHaveLength(2);
+  });
 });
