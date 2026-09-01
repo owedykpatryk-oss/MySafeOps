@@ -69,4 +69,23 @@ describe("permitTypesMarket", () => {
     expect(au.lifting.checklist.join(" ")).not.toMatch(/LOLER/);
     expect(au.lifting.description).not.toMatch(/LOLER/);
   });
+
+  it("replaces UK LOLER lifting checks with UDT wording for Poland", () => {
+    const pl = getPermitTypesForMarket("pl");
+    expect(pl.lifting.description).toMatch(/UDT/);
+    expect(pl.lifting.checklist.join(" ")).toMatch(/UDT/);
+    expect(pl.lifting.checklist.join(" ")).not.toMatch(/LOLER/);
+    expect(pl.lifting.description).not.toMatch(/LOLER/);
+    expect(pl.lifting.checklist.join(" ")).not.toMatch(/Appointed Person/);
+  });
+
+  it("uses Polish confined-space checks instead of UK English stand-by wording", () => {
+    const pl = getPermitTypesForMarket("pl");
+    const checks = pl.confined_space.checklist.join(" ");
+    expect(pl.confined_space.label).toMatch(/przestrzeni zamkniętej/i);
+    expect(checks).toMatch(/asekuruj/i);
+    expect(checks).not.toMatch(/Stand-by person/i);
+    expect(checks).not.toMatch(/Confined Spaces Regulations/i);
+    expect(getPermitTypesForMarket("uk").confined_space.checklist.join(" ")).toMatch(/Stand-by person/i);
+  });
 });

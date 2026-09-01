@@ -204,8 +204,38 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Pozwolenie u osoby wykonującej pracę",
     ],
   },
-  confined_space: { label: "Pozwolenie na wejście do przestrzeni zamkniętej" },
-  lifting: { label: "Pozwolenie na operacje podnoszenia" },
+  confined_space: {
+    label: "Pozwolenie na wejście do przestrzeni zamkniętej",
+    description: "Wejście do zbiorników, kanałów, pustek — przestrzeń o ograniczonej wymianie powietrza",
+    checklist: [
+      "Ocena ryzyka przestrzeni zamkniętej aktualna i sprawdzona",
+      "Pomiar atmosfery: O₂ (19,5–23,5%), gazy toksyczne w granicach, LEL (<10% przed wejściem)",
+      "Monitoring ciągły podczas przebywania w przestrzeni",
+      "Wentylacja mechaniczna potwierdzona i sprawna",
+      "Osoba asekurująca poinformowana i na stanowisku na zewnątrz",
+      "Sprzęt ratowniczy (trójnóg, wciągarka, szelki) przygotowany",
+      "Plan ewakuacji potwierdzony z osobą asekurującą",
+      "Wszystkie źródła energii odłączone (LOTO) przed wejściem",
+      "Łączność między wchodzącym a asekurującym sprawdzona",
+      "Uzgodniono maksymalną liczbę osób i czas przebywania",
+    ],
+  },
+  lifting: {
+    label: "Pozwolenie na operacje podnoszenia",
+    description: "Żurawie, podesty, zawiesia — operacje podnoszenia zgodnie z wymaganiami UDT",
+    checklist: [
+      "Plan podnoszenia przygotowany przez osobę kompetentną",
+      "Urządzenie dźwigowe z aktualnym badaniem UDT",
+      "Operator z uprawnieniami UDT do danego urządzenia",
+      "Dobór zawiesi — typ, udźwig i kąt pracy",
+      "Masa ładunku potwierdzona — nie przekracza DOR żadnego elementu",
+      "Strefa wyłączona pod i wokół podnoszenia",
+      "Sygnalista na stanowisku z uzgodnionym systemem znaków",
+      "Warunki podłoża sprawdzone — stateczność, poziom, nośność",
+      "Przeszkody nad głową (linie, konstrukcje) potwierdzone jako wolne",
+      "Warunki wiatrowe ocenione i w dopuszczalnych granicach",
+    ],
+  },
 };
 
 /** @param {import("../../config/markets").MarketId} marketId */
