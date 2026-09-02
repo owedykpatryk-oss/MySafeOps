@@ -80,6 +80,11 @@ export const AU_PERMIT_TYPE_OVERRIDES = {
       "Overhead hazards (power lines, structures) confirmed clear",
       "Weather / wind speed assessed and within limits",
     ],
+    extraFields: [
+      { key: "liftingEquipment", label: "Lifting equipment / crane ID", type: "text" },
+      { key: "swl", label: "SWL of equipment (tonnes)", type: "number" },
+      { key: "appointedPerson", label: "Competent person / lift supervisor", type: "text" },
+    ],
   },
   ground_disturbance: {
     checklist: [
@@ -219,6 +224,11 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Łączność między wchodzącym a asekurującym sprawdzona",
       "Uzgodniono maksymalną liczbę osób i czas przebywania",
     ],
+    extraFields: [
+      { key: "spaceDescription", label: "Opis / lokalizacja przestrzeni", type: "text" },
+      { key: "standByPerson", label: "Osoba asekurująca", type: "text" },
+      { key: "atmosphericReadings", label: "Wstępne pomiary atmosfery", type: "text" },
+    ],
   },
   lifting: {
     label: "Pozwolenie na operacje podnoszenia",
@@ -234,6 +244,11 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Warunki podłoża sprawdzone — stateczność, poziom, nośność",
       "Przeszkody nad głową (linie, konstrukcje) potwierdzone jako wolne",
       "Warunki wiatrowe ocenione i w dopuszczalnych granicach",
+    ],
+    extraFields: [
+      { key: "liftingEquipment", label: "Urządzenie dźwigowe / nr żurawia", type: "text" },
+      { key: "swl", label: "DOR urządzenia (tony)", type: "number" },
+      { key: "appointedPerson", label: "Osoba kompetentna nadzorująca podnoszenie", type: "text" },
     ],
   },
 };

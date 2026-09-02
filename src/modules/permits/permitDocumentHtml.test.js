@@ -216,6 +216,36 @@ describe("excavation dig guidance on PDF", () => {
     expect(html).not.toMatch(/PAS 128/);
     localStorage.clear();
   });
+
+  it("drops UK Appointed Person extra-field labels from Poland lifting print", () => {
+    localStorage.setItem("mysafeops_orgId", "pl-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_pl-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const html = renderPermitDocumentHtml({
+      id: "p-pl-lift-1",
+      type: "lifting",
+      status: "active",
+      description: "Podnoszenie prefabrykatu",
+      location: "Kraków",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: {
+        liftingEquipment: "Żuraw Z-12",
+        appointedPerson: "Piotr Nowak",
+      },
+    });
+    expect(html).toContain("Pozwolenie na operacje podnoszenia");
+    expect(html).toContain("Urządzenie dźwigowe / nr żurawia");
+    expect(html).toContain("Żuraw Z-12");
+    expect(html).toContain("Osoba kompetentna nadzorująca podnoszenie");
+    expect(html).toContain("Piotr Nowak");
+    expect(html).not.toContain("Appointed Person");
+    expect(html).not.toContain("LOLER");
+    localStorage.clear();
+  });
 });
 
 describe("hot work guidance on PDF", () => {

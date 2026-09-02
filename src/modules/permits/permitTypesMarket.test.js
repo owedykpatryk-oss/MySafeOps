@@ -79,13 +79,31 @@ describe("permitTypesMarket", () => {
     expect(pl.lifting.checklist.join(" ")).not.toMatch(/Appointed Person/);
   });
 
+  it("drops UK Appointed Person extra-field labels on Poland and Australia lifting", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    const au = getPermitTypesForMarket("au");
+    const ukLabels = (uk.lifting.extraFields || []).map((f) => f.label).join(" ");
+    const plLabels = (pl.lifting.extraFields || []).map((f) => f.label).join(" ");
+    const auLabels = (au.lifting.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukLabels).toMatch(/Appointed Person/);
+    expect(plLabels).toMatch(/osoba kompetentna/i);
+    expect(plLabels).not.toMatch(/Appointed Person/);
+    expect(auLabels).toMatch(/competent person/i);
+    expect(auLabels).not.toMatch(/Appointed Person/);
+  });
+
   it("uses Polish confined-space checks instead of UK English stand-by wording", () => {
     const pl = getPermitTypesForMarket("pl");
     const checks = pl.confined_space.checklist.join(" ");
+    const labels = (pl.confined_space.extraFields || []).map((f) => f.label).join(" ");
     expect(pl.confined_space.label).toMatch(/przestrzeni zamkniętej/i);
     expect(checks).toMatch(/asekuruj/i);
     expect(checks).not.toMatch(/Stand-by person/i);
     expect(checks).not.toMatch(/Confined Spaces Regulations/i);
+    expect(labels).toMatch(/asekuruj/i);
+    expect(labels).not.toMatch(/Stand-by person/i);
     expect(getPermitTypesForMarket("uk").confined_space.checklist.join(" ")).toMatch(/Stand-by person/i);
+    expect((getPermitTypesForMarket("uk").confined_space.extraFields || []).map((f) => f.label).join(" ")).toMatch(/Stand-by person/i);
   });
 });
