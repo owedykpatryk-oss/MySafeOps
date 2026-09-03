@@ -53,4 +53,64 @@ describe("evaluatePermitCompliance", () => {
     );
     expect(r.legalReady).toBe(true);
   });
+
+  it("keeps UK PUWER/LOLER/CDM/SHE hard-stop labels on UK lifting", () => {
+    const r = evaluatePermitCompliance(
+      {
+        type: "lifting",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T16:00:00.000Z",
+        extraFields: {},
+      },
+      [],
+      { marketId: "uk" }
+    );
+    const frameworks = r.regulatoryMatrix.map((row) => row.framework).join(" ");
+    const labels = r.regulatoryMatrix.map((row) => row.label).join(" ");
+    expect(frameworks).toMatch(/LOLER/);
+    expect(frameworks).toMatch(/PUWER/);
+    expect(frameworks).toMatch(/CDM/);
+    expect(labels).toMatch(/appointed person/i);
+    expect(r.hardStops.some((msg) => /PUWER\/LOLER\/CDM\/SHE/i.test(msg))).toBe(true);
+  });
+
+  it("drops UK LOLER/PUWER/CDM hard-stop labels on Poland and Australia lifting", () => {
+    const pl = evaluatePermitCompliance(
+      {
+        type: "lifting",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T16:00:00.000Z",
+        extraFields: {},
+      },
+      [],
+      { marketId: "pl" }
+    );
+    const au = evaluatePermitCompliance(
+      {
+        type: "lifting",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T16:00:00.000Z",
+        extraFields: {},
+      },
+      [],
+      { marketId: "au" }
+    );
+    const plFrameworks = pl.regulatoryMatrix.map((row) => row.framework).join(" ");
+    const auFrameworks = au.regulatoryMatrix.map((row) => row.framework).join(" ");
+    const plLabels = pl.regulatoryMatrix.map((row) => row.label).join(" ");
+    const auLabels = au.regulatoryMatrix.map((row) => row.label).join(" ");
+    expect(plFrameworks).toMatch(/UDT/);
+    expect(plFrameworks).toMatch(/BHP/);
+    expect(plFrameworks).not.toMatch(/LOLER|PUWER|CDM|SHE|WAHR/);
+    expect(plLabels).toMatch(/osoba kompetentna/i);
+    expect(plLabels).not.toMatch(/appointed person/i);
+    expect(pl.hardStops.some((msg) => /UDT\/BHP/i.test(msg))).toBe(true);
+    expect(pl.hardStops.join(" ")).not.toMatch(/LOLER|PUWER|CDM/);
+    expect(auFrameworks).toMatch(/WHS/);
+    expect(auFrameworks).not.toMatch(/LOLER|PUWER|CDM|SHE|WAHR/);
+    expect(auLabels).toMatch(/competent person/i);
+    expect(auLabels).not.toMatch(/appointed person/i);
+    expect(au.hardStops.some((msg) => /WHS/i.test(msg))).toBe(true);
+    expect(au.hardStops.join(" ")).not.toMatch(/LOLER|PUWER|CDM/);
+  });
 });
