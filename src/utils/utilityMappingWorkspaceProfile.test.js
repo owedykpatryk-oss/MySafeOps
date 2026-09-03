@@ -12,6 +12,7 @@ import { isUtilityMappingOrg } from "./utilityMappingOrg";
 import { isUtilityMappingPrintTheme, utilityMappingSurveyCoverCss } from "./utilityMappingPrintTheme";
 import { setOrgId } from "./orgStorage";
 import { saveOrgSettingsRaw, loadOrgSettingsRaw } from "./orgSettingsStorage";
+import { COUNTRY_WORKSPACE_MARKETS } from "./countryWorkspaces";
 import { buildSurveyReportHtml } from "../modules/surveyReport/surveyReportPrintHtml";
 
 describe("Utility Mapping exclusive workspace profile", () => {
@@ -77,6 +78,14 @@ describe("Utility Mapping exclusive workspace profile", () => {
       hiddenModules: [],
     });
     expect(isUtilityMappingOrg()).toBe(false);
+  });
+
+  it("does not treat country workspace market ids as Utility Mapping orgs", () => {
+    expect(COUNTRY_WORKSPACE_MARKETS.length).toBeGreaterThan(0);
+    expect(COUNTRY_WORKSPACE_MARKETS).toEqual(expect.arrayContaining(["uk", "pl", "au"]));
+    for (const market of COUNTRY_WORKSPACE_MARKETS) {
+      expect(isUtilityMappingOrgForWorkspaceList(market)).toBe(false);
+    }
   });
 
   it("hides utilityMapping profile from other orgs", () => {

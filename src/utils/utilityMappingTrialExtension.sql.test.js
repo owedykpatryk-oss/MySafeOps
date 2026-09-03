@@ -68,6 +68,32 @@ describe("Utility Mapping trial extension SQL", () => {
     expect(updateBlock).toMatch(/\(\s*lower\(replace\(o\.slug/);
   });
 
+  it("Superadmin RPC finds orgs by hyphen-folded slug, same as the courtesy UPDATE", () => {
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.superadmin_extend_org_trial"),
+      sql.indexOf("revoke all on function public.superadmin_extend_org_trial")
+    );
+    expect(fn).toContain("lower(replace(o.slug, '_', '-')) = replace(v_slug, '_', '-')");
+  });
+
+  it("write-gate lookup is exact slug; the live UM tenant slug has no underscore so both agree", () => {
+    const gatePath = join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "20260726140000_org_cloud_write_billing_gate.sql"
+    );
+    const gate = readFileSync(gatePath, "utf8");
+    const fn = gate.slice(
+      gate.indexOf("create or replace function public.org_allows_cloud_writes"),
+      gate.indexOf("revoke all on function public.org_allows_cloud_writes")
+    );
+    expect(fn).toMatch(/where\s+o\.slug\s*=\s*p_org_slug/);
+    expect(fn).not.toMatch(/lower\s*\(\s*replace\s*\(\s*o\.slug/);
+    expect("patryk-44bdf196").not.toContain("_");
+    expect(sql).toContain("patryk-44bdf196");
+  });
+
   it("does not consume trial_extension_count on the courtesy UPDATE or Superadmin RPC", () => {
     const withoutComments = sql.replace(/--[^\n]*/g, "");
     const fn = withoutComments.slice(
