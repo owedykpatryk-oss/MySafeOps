@@ -246,6 +246,43 @@ describe("excavation dig guidance on PDF", () => {
     expect(html).not.toContain("LOLER");
     localStorage.clear();
   });
+
+  it("drops UK WAHR/IPAF/ScaffTag and CSR 1997 from Poland WAH and confined-space print", () => {
+    localStorage.setItem("mysafeops_orgId", "pl-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_pl-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const wah = renderPermitDocumentHtml({
+      id: "p-pl-wah-1",
+      type: "work_at_height",
+      status: "active",
+      description: "Praca na rusztowaniu",
+      location: "Kraków",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: { accessEquipment: "MEWP" },
+    });
+    expect(wah).toContain("Pozwolenie na pracę na wysokości");
+    expect(wah).toMatch(/BHP|UDT/);
+    expect(wah).not.toMatch(/IPAF|ScaffTag|Work at Height Regulations 2005/i);
+    const confined = renderPermitDocumentHtml({
+      id: "p-pl-cs-1",
+      type: "confined_space",
+      status: "active",
+      description: "Wejście do komory",
+      location: "Kraków",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: { o2Reading: "20.9" },
+    });
+    expect(confined).toContain("Pozwolenie na wejście do przestrzeni zamkniętej");
+    expect(confined).toMatch(/BHP|przestrzeń zamknięta/i);
+    expect(confined).not.toMatch(/Confined Spaces Regulations 1997|HSE L101/i);
+    localStorage.clear();
+  });
 });
 
 describe("hot work guidance on PDF", () => {

@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import SvgBlock from "../shared/SvgBlock";
+import { getOrgMarketId } from "../../../../utils/orgMarket";
 import {
   confinedSpaceAssessment,
+  confinedGuidanceCopy,
   renderConfinedGaugeSvg,
   renderConfinedRolesSvg,
   renderConfinedEntrySequenceSvg,
@@ -13,8 +15,9 @@ const YES_NO = [
   { value: "no", label: "No" },
 ];
 
-export default function PermitConfinedSpaceGuidancePanel({ extraFields = {}, onExtraChange, ss = {} }) {
+export default function PermitConfinedSpaceGuidancePanel({ extraFields = {}, onExtraChange, ss = {}, marketId }) {
   const extra = extraFields || {};
+  const copy = confinedGuidanceCopy(marketId || getOrgMarketId());
   const set = (key, value) => onExtraChange?.(key, value);
   const assessment = useMemo(() => confinedSpaceAssessment(extra), [extra]);
 
@@ -40,8 +43,8 @@ export default function PermitConfinedSpaceGuidancePanel({ extraFields = {}, onE
           <div style={{ fontSize: 13, fontWeight: 800, color: "#791F1F" }}>Confined space entry</div>
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>O₂ 19.5–23.5%, CO &lt;20 ppm, H₂S &lt;1 ppm, LEL &lt;10% — typical safe bands.</div>
         </div>
-        <a href="https://www.hse.gov.uk/confinedspace/" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#0C447C", fontWeight: 600 }}>
-          HSE confined spaces
+        <a href={copy.refHref} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#0C447C", fontWeight: 600 }}>
+          {copy.refLabel}
         </a>
       </div>
 

@@ -63,7 +63,7 @@ const REGISTRY = {
   work_at_height: {
     Panel: PermitWahGuidancePanel,
     renderPrintHtml: renderWahPrintHtml,
-    assess: (_, extra) => wahAssessment(extra),
+    assess: (_, extra, marketId) => wahAssessment(extra, marketId),
     extraFieldKeys: WAH_EXTRA_FIELD_KEYS,
     wizardHint: "Step 2 includes WAH hierarchy (Avoid → Prevent → Mitigate), access method and exclusion zone.",
     theme: { border: "#fcd34d", bg: "#fffbeb", color: "#854F0B" },
@@ -72,7 +72,7 @@ const REGISTRY = {
   roof_access: {
     Panel: PermitWahGuidancePanel,
     renderPrintHtml: renderWahPrintHtml,
-    assess: (_, extra) => wahAssessment(extra),
+    assess: (_, extra, marketId) => wahAssessment(extra, marketId),
     extraFieldKeys: WAH_EXTRA_FIELD_KEYS,
     wizardHint: "Step 2 includes WAH hierarchy, roof access controls and exclusion zone below work.",
     theme: { border: "#fcd34d", bg: "#fffbeb", color: "#854F0B" },
@@ -109,9 +109,10 @@ export function renderGuidancePrintHtml(permit, options = {}) {
 }
 
 export function runGuidanceAssessment(permit) {
-  const entry = getPermitGuidance(permit?.type);
+  const marketId = getOrgMarketId();
+  const entry = getPermitGuidance(permit?.type, marketId);
   if (!entry?.assess) return { warnings: [], blockers: [] };
-  return entry.assess(permit, permit?.extraFields || {});
+  return entry.assess(permit, permit?.extraFields || {}, marketId);
 }
 
 export { REGISTRY as PERMIT_GUIDANCE_REGISTRY };

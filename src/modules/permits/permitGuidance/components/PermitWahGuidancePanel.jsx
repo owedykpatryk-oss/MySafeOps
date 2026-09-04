@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import SvgBlock from "../shared/SvgBlock";
+import { getOrgMarketId } from "../../../../utils/orgMarket";
 import {
   wahAssessment,
+  wahGuidanceCopy,
   renderWahHierarchySvg,
   renderWahAccessChoiceSvg,
   renderWahExclusionZoneSvg,
@@ -13,16 +15,21 @@ const YES_NO = [
   { value: "no", label: "No" },
 ];
 
-export default function PermitWahGuidancePanel({ permitType, extraFields = {}, onExtraChange, ss = {} }) {
+export default function PermitWahGuidancePanel({ permitType, extraFields = {}, onExtraChange, ss = {}, marketId }) {
   const extra = extraFields || {};
+  const market = marketId || getOrgMarketId();
+  const copy = wahGuidanceCopy(market);
   const set = (key, value) => onExtraChange?.(key, value);
-  const assessment = useMemo(() => wahAssessment(extra), [extra]);
+  const assessment = useMemo(() => wahAssessment(extra, market), [extra, market]);
 
   const hierarchySvg = useMemo(
-    () => renderWahHierarchySvg({ highlight: String(extra.wahControlLevel || "").toLowerCase() }),
-    [extra.wahControlLevel]
+    () => renderWahHierarchySvg({ highlight: String(extra.wahControlLevel || "").toLowerCase(), marketId: market }),
+    [extra.wahControlLevel, market]
   );
-  const accessSvg = useMemo(() => renderWahAccessChoiceSvg({ equipment: extra.accessEquipment }), [extra.accessEquipment]);
+  const accessSvg = useMemo(
+    () => renderWahAccessChoiceSvg({ equipment: extra.accessEquipment, marketId: market }),
+    [extra.accessEquipment, market]
+  );
   const zoneSvg = useMemo(() => renderWahExclusionZoneSvg({}), []);
 
   const lbl = ss.lbl || { display: "block", fontSize: 11, fontWeight: 600, marginBottom: 4 };
@@ -42,10 +49,10 @@ export default function PermitWahGuidancePanel({ permitType, extraFields = {}, o
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 800, color: "#854F0B" }}>{title}</div>
-          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>WAH Regulations 2005 — Avoid → Prevent → Mitigate.</div>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{copy.panelSubtitle}</div>
         </div>
-        <a href="https://www.hse.gov.uk/work-at-height/" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#0C447C", fontWeight: 600 }}>
-          HSE work at height
+        <a href={copy.refHref} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#0C447C", fontWeight: 600 }}>
+          {copy.refLabel}
         </a>
       </div>
 
@@ -82,7 +89,7 @@ export default function PermitWahGuidancePanel({ permitType, extraFields = {}, o
           </select>
         </div>
         <div>
-          <label style={lbl}>IPAF / MEWP verified</label>
+          <label style={lbl}>{copy.ipafLabel}</label>
           <select value={extra.ipafVerified || ""} onChange={(e) => set("ipafVerified", e.target.value)} style={inp}>
             {YES_NO.map((o) => (
               <option key={o.value || "x"} value={o.value}>{o.label}</option>
@@ -90,7 +97,7 @@ export default function PermitWahGuidancePanel({ permitType, extraFields = {}, o
           </select>
         </div>
         <div>
-          <label style={lbl}>Scaffold tag current</label>
+          <label style={lbl}>{copy.scaffoldLabel}</label>
           <select value={extra.scaffoldTagCurrent || ""} onChange={(e) => set("scaffoldTagCurrent", e.target.value)} style={inp}>
             {YES_NO.map((o) => (
               <option key={o.value || "x"} value={o.value}>{o.label}</option>

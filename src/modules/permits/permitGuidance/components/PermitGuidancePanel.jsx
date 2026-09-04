@@ -1,7 +1,9 @@
 import { getPermitGuidance } from "../registry";
+import { getOrgMarketId } from "../../../../utils/orgMarket";
 
-export default function PermitGuidancePanel({ permitType, extraFields, onExtraChange, ss, permit }) {
-  const entry = getPermitGuidance(permitType);
+export default function PermitGuidancePanel({ permitType, extraFields, onExtraChange, ss, permit, marketId }) {
+  const market = marketId || getOrgMarketId();
+  const entry = getPermitGuidance(permitType, market);
   if (!entry?.Panel) return null;
   const Panel = entry.Panel;
   return (
@@ -11,6 +13,7 @@ export default function PermitGuidancePanel({ permitType, extraFields, onExtraCh
       onExtraChange={onExtraChange}
       ss={ss}
       permit={permit}
+      marketId={market}
     />
   );
 }

@@ -1,8 +1,58 @@
 /**
- * UK Work at Height Regulations 2005 — hierarchy of control (illustrative).
+ * Work-at-height hierarchy of control (illustrative).
+ * UK copy cites WAHR 2005 / IPAF / ScaffTag; PL/AU keep the widgets with local statute names.
  */
 
+import { getOrgMarketId } from "../../../utils/orgMarket";
+
 export const WAH_PERMIT_TYPES = new Set(["work_at_height", "roof_access"]);
+
+/** Field keys stay shared; ticket and statute names follow the active country workspace. */
+export function wahGuidanceCopy(marketId = getOrgMarketId()) {
+  if (marketId === "pl") {
+    return {
+      hierarchyTitle: "Hierarchia — praca na wysokości (BHP)",
+      mewpTicketShort: "UDT + ratownictwo",
+      mewpWarning: "Podest ruchomy — potwierdź uprawnienia UDT i codzienną kontrolę przed użyciem.",
+      scaffoldWarning: "Rusztowanie — potwierdź aktualny odbiór / tabliczkę dopuszczenia.",
+      ipafLabel: "UDT / podest zweryfikowany",
+      scaffoldLabel: "Tabliczka rusztowania aktualna",
+      printIntro: "Wymagania BHP dotyczące pracy na wysokości. RAMS stanowiskowy jest wiążący.",
+      printFooter: "BHP · praca na wysokości · plan ratowniczy",
+      panelSubtitle: "BHP — Unikaj → Zapobiegaj → Ograniczaj skutki.",
+      refHref: "https://www.pip.gov.pl/",
+      refLabel: "PIP — praca na wysokości",
+    };
+  }
+  if (marketId === "au") {
+    return {
+      hierarchyTitle: "Hierarchy of control — WHS work at height",
+      mewpTicketShort: "EWPA + rescue",
+      mewpWarning: "MEWP operation — confirm EWPA or HRWL ticket and daily pre-use check.",
+      scaffoldWarning: "Scaffold — confirm current handover / inspection tag.",
+      ipafLabel: "EWPA / HRWL verified",
+      scaffoldLabel: "Scaffold tag current",
+      printIntro: "WHS — managing the risk of falls. Site SWMS governs.",
+      printFooter: "WHS · work at height · site rescue plan",
+      panelSubtitle: "WHS — Avoid → Prevent → Mitigate.",
+      refHref: "https://www.safeworkaustralia.gov.au/safety-topic/hazards/working-heights",
+      refLabel: "Safe Work Australia — working at heights",
+    };
+  }
+  return {
+    hierarchyTitle: "WAH hierarchy — Work at Height Regulations 2005",
+    mewpTicketShort: "IPAF + rescue",
+    mewpWarning: "MEWP operation — confirm IPAF card and daily pre-use check.",
+    scaffoldWarning: "Scaffold — confirm current handover / inspection tag (ScaffTag / SG4).",
+    ipafLabel: "IPAF / MEWP verified",
+    scaffoldLabel: "Scaffold tag current",
+    printIntro: "Work at Height Regulations 2005 — hierarchy of control. Site RAMS governs.",
+    printFooter: "WAH Regs 2005 · HSE work at height · site rescue plan",
+    panelSubtitle: "WAH Regulations 2005 — Avoid → Prevent → Mitigate.",
+    refHref: "https://www.hse.gov.uk/work-at-height/",
+    refLabel: "HSE work at height",
+  };
+}
 
 export const WAH_EXTRA_FIELD_KEYS = [
   "accessEquipment",
@@ -19,9 +69,10 @@ export function isWahPermitType(type) {
   return WAH_PERMIT_TYPES.has(String(type || "").trim());
 }
 
-export function wahAssessment(extra = {}) {
+export function wahAssessment(extra = {}, marketId = getOrgMarketId()) {
   const warnings = [];
   const blockers = [];
+  const copy = wahGuidanceCopy(marketId);
   const height = Number(extra.maxHeight || 0);
   const equipment = String(extra.accessEquipment || "").trim().toLowerCase();
   const control = String(extra.wahControlLevel || "").trim();
@@ -34,10 +85,10 @@ export function wahAssessment(extra = {}) {
     warnings.push("Ladder selected above ~3 m — confirm short-duration access only; consider MEWP or scaffold.");
   }
   if ((equipment.includes("mewp") || equipment.includes("cherry")) && String(extra.ipafVerified || "").toLowerCase() !== "yes") {
-    warnings.push("MEWP operation — confirm IPAF card and daily pre-use check.");
+    warnings.push(copy.mewpWarning);
   }
   if (equipment.includes("scaffold") && String(extra.scaffoldTagCurrent || "").toLowerCase() !== "yes") {
-    warnings.push("Scaffold — confirm current handover / inspection tag (ScaffTag / SG4).");
+    warnings.push(copy.scaffoldWarning);
   }
   if (exclusion !== "yes") warnings.push("Establish exclusion zone below work area.");
   if ((equipment.includes("mewp") || equipment.includes("rope")) && !String(extra.rescuePlan || "").trim()) {
@@ -48,7 +99,8 @@ export function wahAssessment(extra = {}) {
 }
 
 /** WAH hierarchy: Avoid → Prevent (collective) → Mitigate (PPE). */
-export function renderWahHierarchySvg({ highlight = "", width = 400, height = 100 } = {}) {
+export function renderWahHierarchySvg({ highlight = "", width = 400, height = 100, marketId } = {}) {
+  const copy = wahGuidanceCopy(marketId);
   const steps = [
     { id: "avoid", label: "Avoid", sub: "Do work at ground level", fill: "#dcfce7", stroke: "#16a34a" },
     { id: "prevent", label: "Prevent", sub: "Collective — guardrails, nets", fill: "#dbeafe", stroke: "#2563eb" },
@@ -68,14 +120,15 @@ export function renderWahHierarchySvg({ highlight = "", width = 400, height = 10
     })
     .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px" role="img" aria-label="Work at height hierarchy">
-    <text x="8" y="12" font-size="10" font-weight="700" fill="#854F0B">WAH hierarchy — Work at Height Regulations 2005</text>
+    <text x="8" y="12" font-size="10" font-weight="700" fill="#854F0B">${copy.hierarchyTitle}</text>
     ${rects}
   </svg>`;
 }
 
 /** Ladder vs MEWP vs scaffold decision strip. */
-export function renderWahAccessChoiceSvg({ equipment = "", width = 420, height = 64 } = {}) {
+export function renderWahAccessChoiceSvg({ equipment = "", width = 420, height = 64, marketId } = {}) {
   const eq = String(equipment || "").toLowerCase();
+  const copy = wahGuidanceCopy(marketId);
   const pick = (token) => (eq.includes(token) ? "#166534" : "#64748b");
   const fill = (token) => (eq.includes(token) ? "#dcfce7" : "#f1f5f9");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px" role="img" aria-label="Access equipment choice">
@@ -85,7 +138,7 @@ export function renderWahAccessChoiceSvg({ equipment = "", width = 420, height =
     <text x="68" y="48" text-anchor="middle" font-size="7" fill="#64748b">Brief access</text>
     <rect x="150" y="20" width="120" height="36" rx="5" fill="${fill("mewp")}" stroke="${pick("mewp")}"/>
     <text x="210" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#0f172a">MEWP</text>
-    <text x="210" y="48" text-anchor="middle" font-size="7" fill="#64748b">IPAF + rescue</text>
+    <text x="210" y="48" text-anchor="middle" font-size="7" fill="#64748b">${copy.mewpTicketShort}</text>
     <rect x="292" y="20" width="120" height="36" rx="5" fill="${fill("scaffold")}" stroke="${pick("scaffold")}"/>
     <text x="352" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#0f172a">Scaffold</text>
     <text x="352" y="48" text-anchor="middle" font-size="7" fill="#64748b">Tag / handover</text>
@@ -104,10 +157,12 @@ export function renderWahExclusionZoneSvg({ width = 280, height = 100 } = {}) {
   </svg>`;
 }
 
-export function renderWahPrintHtml(permit, { primaryColor = "#854F0B" } = {}) {
+export function renderWahPrintHtml(permit, { primaryColor = "#854F0B", marketId } = {}) {
   if (!isWahPermitType(permit?.type)) return "";
   const extra = permit?.extraFields || {};
-  const assessment = wahAssessment(extra);
+  const market = marketId || getOrgMarketId();
+  const copy = wahGuidanceCopy(market);
+  const assessment = wahAssessment(extra, market);
   const control = String(extra.wahControlLevel || "").toLowerCase();
 
   const fieldsHtml = [
@@ -115,8 +170,8 @@ export function renderWahPrintHtml(permit, { primaryColor = "#854F0B" } = {}) {
     ["Max height (m)", extra.maxHeight || "—"],
     ["Control level", extra.wahControlLevel || "—"],
     ["Exclusion zone", extra.exclusionZoneConfirmed || "—"],
-    ["IPAF verified", extra.ipafVerified || "—"],
-    ["Scaffold tag current", extra.scaffoldTagCurrent || "—"],
+    [copy.ipafLabel, extra.ipafVerified || "—"],
+    [copy.scaffoldLabel, extra.scaffoldTagCurrent || "—"],
     ["Harness inspected", extra.harnessInspected || "—"],
     ["Rescue plan ref", extra.rescuePlan || "—"],
   ]
@@ -133,13 +188,13 @@ export function renderWahPrintHtml(permit, { primaryColor = "#854F0B" } = {}) {
 
   return `
   <h2 style="border-left-color:${primaryColor}">Work at height guidance</h2>
-  <p style="font-size:10px;color:#64748b;margin:0 0 8px">Work at Height Regulations 2005 — hierarchy of control. Site RAMS governs.</p>
-  <div style="margin-bottom:8px">${renderWahHierarchySvg({ highlight: control, width: 460 })}</div>
+  <p style="font-size:10px;color:#64748b;margin:0 0 8px">${copy.printIntro}</p>
+  <div style="margin-bottom:8px">${renderWahHierarchySvg({ highlight: control, width: 460, marketId: market })}</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-    <div>${renderWahAccessChoiceSvg({ equipment: extra.accessEquipment, width: 340 })}</div>
+    <div>${renderWahAccessChoiceSvg({ equipment: extra.accessEquipment, width: 340, marketId: market })}</div>
     <div>${renderWahExclusionZoneSvg({ width: 280 })}</div>
   </div>
   <table style="margin-bottom:8px"><tbody>${fieldsHtml}</tbody></table>
   ${warnHtml}
-  <p style="font-size:9px;color:#64748b;margin-top:8px">WAH Regs 2005 · HSE work at height · site rescue plan</p>`;
+  <p style="font-size:9px;color:#64748b;margin-top:8px">${copy.printFooter}</p>`;
 }
