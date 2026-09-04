@@ -94,6 +94,34 @@ describe("Utility Mapping trial extension SQL", () => {
     expect(sql).toContain("patryk-44bdf196");
   });
 
+  it("courtesy UPDATE and Superadmin RPC never change subscription_status or billing_plan", () => {
+    const withoutComments = sql.replace(/--[^\n]*/g, "");
+    const fn = withoutComments.slice(
+      withoutComments.indexOf("create or replace function public.superadmin_extend_org_trial"),
+      withoutComments.indexOf("revoke all on function public.superadmin_extend_org_trial")
+    );
+    const updateBlock = withoutComments.slice(withoutComments.lastIndexOf("update public.organizations"));
+    expect(fn).not.toMatch(/subscription_status|billing_plan/);
+    expect(updateBlock).not.toMatch(/subscription_status|billing_plan/);
+    expect(sql).toContain("revoke all on function public.superadmin_extend_org_trial(text, int) from public");
+  });
+
+  it("write gate still opens canceled or unpaid orgs when trial_ends_at is in the future", () => {
+    const gatePath = join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "20260726140000_org_cloud_write_billing_gate.sql"
+    );
+    const gate = readFileSync(gatePath, "utf8");
+    const fn = gate.slice(
+      gate.indexOf("create or replace function public.org_allows_cloud_writes"),
+      gate.indexOf("revoke all on function public.org_allows_cloud_writes")
+    );
+    expect(fn).toMatch(/if v_status in \('unpaid', 'canceled'\)/);
+    expect(fn).toMatch(/v_trial_ends is not null and v_trial_ends > now\(\)/);
+  });
+
   it("does not consume trial_extension_count on the courtesy UPDATE or Superadmin RPC", () => {
     const withoutComments = sql.replace(/--[^\n]*/g, "");
     const fn = withoutComments.slice(

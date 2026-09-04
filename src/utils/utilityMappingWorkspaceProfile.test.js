@@ -83,9 +83,27 @@ describe("Utility Mapping exclusive workspace profile", () => {
   it("does not treat country workspace market ids as Utility Mapping orgs", () => {
     expect(COUNTRY_WORKSPACE_MARKETS.length).toBeGreaterThan(0);
     expect(COUNTRY_WORKSPACE_MARKETS).toEqual(expect.arrayContaining(["uk", "pl", "au"]));
-    for (const market of COUNTRY_WORKSPACE_MARKETS) {
+    // DACH ids live on feat/geo-photo-type-fields; lock them even before this branch rebases.
+    const dachMarkets = ["de", "at", "ch"];
+    for (const market of [...COUNTRY_WORKSPACE_MARKETS, ...dachMarkets]) {
       expect(isUtilityMappingOrgForWorkspaceList(market)).toBe(false);
     }
+  });
+
+  it("applies the exclusive pack to the live u-map tenant including permit-to-dig", () => {
+    setOrgId("patryk-44bdf196");
+    saveOrgSettingsRaw({ name: "Patryk Workspace", hiddenModules: [], hiddenModulesBootstrapped: true });
+    expect(isUtilityMappingOrg()).toBe(true);
+    applyIndustryPack(UTILITY_MAPPING_PACK_ID, { seedTemplates: false });
+    expect(getAppliedIndustryPackId()).toBe(UTILITY_MAPPING_PACK_ID);
+    const settings = loadOrgSettingsRaw();
+    expect(settings.enabledPermitTypes).toContain("excavation");
+    expect(settings.hiddenModules).toEqual(
+      expect.arrayContaining(["allergen-changeovers", "fess-setup", "fess-sites", "asbestos"])
+    );
+    expect(settings.hiddenModules).not.toContain("survey-report");
+    expect(settings.hiddenModules).not.toContain("rams");
+    expect(settings.hiddenModules).not.toContain("permits");
   });
 
   it("hides utilityMapping profile from other orgs", () => {
