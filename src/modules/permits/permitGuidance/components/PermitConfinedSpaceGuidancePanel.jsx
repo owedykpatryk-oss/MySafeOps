@@ -15,8 +15,10 @@ const YES_NO = [
   { value: "no", label: "No" },
 ];
 
+const EMPTY_EXTRA = {};
+
 export default function PermitConfinedSpaceGuidancePanel({ extraFields = {}, onExtraChange, ss = {}, marketId }) {
-  const extra = extraFields || {};
+  const extra = extraFields || EMPTY_EXTRA;
   const copy = confinedGuidanceCopy(marketId || getOrgMarketId());
   const set = (key, value) => onExtraChange?.(key, value);
   const assessment = useMemo(() => confinedSpaceAssessment(extra), [extra]);

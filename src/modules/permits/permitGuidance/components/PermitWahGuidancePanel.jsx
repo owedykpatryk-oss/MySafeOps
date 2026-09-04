@@ -15,8 +15,10 @@ const YES_NO = [
   { value: "no", label: "No" },
 ];
 
+const EMPTY_EXTRA = {};
+
 export default function PermitWahGuidancePanel({ permitType, extraFields = {}, onExtraChange, ss = {}, marketId }) {
-  const extra = extraFields || {};
+  const extra = extraFields || EMPTY_EXTRA;
   const market = marketId || getOrgMarketId();
   const copy = wahGuidanceCopy(market);
   const set = (key, value) => onExtraChange?.(key, value);
