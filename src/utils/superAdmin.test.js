@@ -103,6 +103,22 @@ describe("superAdmin platform owner probe", () => {
     await expect(superadminExtendOrgTrial(null, "utility-mapping")).rejects.toThrow(/cloud sign-in/i);
   });
 
+  it("superadminExtendOrgTrial persists the live u-map tenant and notifies the SPA", async () => {
+    localStorage.setItem("mysafeops_orgId", "patryk-44bdf196");
+    const rpc = vi.fn().mockResolvedValue({
+      data: { ok: true, org_slug: "patryk-44bdf196", trial_ends_at: "2026-09-21T00:00:00.000Z", days: 14 },
+      error: null,
+    });
+    const seen = [];
+    const onUpdated = () => seen.push(true);
+    window.addEventListener("mysafeops-org-updated", onUpdated);
+    const { superadminExtendOrgTrial } = await import("./superAdmin.js");
+    await superadminExtendOrgTrial({ rpc }, "patryk-44bdf196", 14);
+    window.removeEventListener("mysafeops-org-updated", onUpdated);
+    expect(localStorage.getItem("mysafeops_trial_ends_at_patryk-44bdf196")).toBe("2026-09-21T00:00:00.000Z");
+    expect(seen).toHaveLength(1);
+  });
+
   it("superadminExtendOrgTrial unwraps a one-row RPC array", async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [{ ok: true, org_slug: "patryk-44bdf196", trial_ends_at: "2026-09-01T00:00:00.000Z", days: 14 }],

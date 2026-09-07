@@ -97,7 +97,11 @@ describe("Utility Mapping exclusive workspace profile", () => {
     applyIndustryPack(UTILITY_MAPPING_PACK_ID, { seedTemplates: false });
     expect(getAppliedIndustryPackId()).toBe(UTILITY_MAPPING_PACK_ID);
     const settings = loadOrgSettingsRaw();
-    expect(settings.enabledPermitTypes).toContain("excavation");
+    // PAS128 / permit-to-dig set — excavation + ground disturbance, not a GC hot-work pack.
+    expect(settings.enabledPermitTypes).toEqual(
+      expect.arrayContaining(["excavation", "ground_disturbance", "visitor_access", "general"])
+    );
+    expect(settings.enabledPermitTypes).not.toContain("hot_work");
     expect(settings.hiddenModules).toEqual(
       expect.arrayContaining(["allergen-changeovers", "fess-setup", "fess-sites", "asbestos"])
     );

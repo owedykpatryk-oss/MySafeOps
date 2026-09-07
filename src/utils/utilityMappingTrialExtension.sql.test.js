@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { UTILITY_MAPPING_ORG_SLUGS } from "./utilityMappingWorkspaceProfile.js";
 
@@ -134,5 +134,21 @@ describe("Utility Mapping trial extension SQL", () => {
     expect(withoutComments).not.toMatch(/trial_extension_count\s*=/);
     const setTrial = [...withoutComments.matchAll(/\bset\s+trial_ends_at\s*=/gi)];
     expect(setTrial).toHaveLength(2);
+  });
+
+  it("REST apply script, if present, must keep hyphen-fold slugs and the not-shorten guard", () => {
+    const scriptPath = join(process.cwd(), "scripts", "apply-utility-mapping-trial.mjs");
+    const present = existsSync(scriptPath);
+    if (!present) {
+      // This PR applies via SQL Editor paste. main ships an older REST script without these guards.
+      expect(present).toBe(false);
+      return;
+    }
+    const src = readFileSync(scriptPath, "utf8");
+    expect(src).toContain("patryk-44bdf196");
+    expect(src).toContain("burgpzankkqvpcmdkhro");
+    expect(src).toMatch(/u-map\.co\.uk/);
+    expect(src).toMatch(/replace\(.*slug.*_.*-\)|lower\(replace\(o\.slug/);
+    expect(src).toMatch(/trial_ends_at\s*<|already at\/after now\+14d|not-shorten/i);
   });
 });
