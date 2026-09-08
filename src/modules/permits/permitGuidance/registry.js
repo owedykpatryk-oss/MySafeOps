@@ -89,12 +89,33 @@ const REGISTRY = {
   },
 };
 
+function wizardHintFor(key, marketId, fallback) {
+  if (key === "work_at_height") {
+    if (marketId === "pl") {
+      return "Krok 2 zawiera hierarchię BHP (Unikaj → Zapobiegaj → Ograniczaj skutki), metodę dostępu i strefę wyłączoną.";
+    }
+    if (marketId === "au") {
+      return "Step 2 includes WHS hierarchy of control (Avoid → Prevent → Mitigate), access method and exclusion zone.";
+    }
+  }
+  if (key === "roof_access") {
+    if (marketId === "pl") {
+      return "Krok 2 zawiera hierarchię BHP, kontrolę wejścia na dach i strefę wyłączoną pod robotami.";
+    }
+    if (marketId === "au") {
+      return "Step 2 includes WHS hierarchy of control, roof access controls and exclusion zone below work.";
+    }
+  }
+  return fallback;
+}
+
 export function getPermitGuidance(type, marketId = getOrgMarketId()) {
   const key = String(type || "").trim();
   const entry = REGISTRY[key] || null;
   if (!entry) return null;
   if (isDigPermitType(key) && !isUkDigGuidanceMarket(marketId)) return null;
-  return entry;
+  const wizardHint = wizardHintFor(key, marketId, entry.wizardHint);
+  return wizardHint === entry.wizardHint ? entry : { ...entry, wizardHint };
 }
 
 export function hasPermitGuidance(type, marketId = getOrgMarketId()) {

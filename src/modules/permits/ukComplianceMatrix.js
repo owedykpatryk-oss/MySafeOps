@@ -141,10 +141,53 @@ export const UK_COMPLIANCE_MATRIX = {
   },
 };
 
-export function getComplianceProfile(permitType) {
-  return UK_COMPLIANCE_MATRIX[permitType] || { legalRequiredChecklistIds: [], requiredEvidenceFields: [] };
+/** PAS 128 QL / survey-type evidence is UK dig-only; PL/AU forms no longer collect these keys. */
+const UK_ONLY_DIG_EVIDENCE_KEYS = new Set(["pas128QualityLevel", "pas128SurveyType"]);
+
+function cloneProfile(profile) {
+  return {
+    legalRequiredChecklistIds: [...(profile.legalRequiredChecklistIds || [])],
+    requiredEvidenceFields: [...(profile.requiredEvidenceFields || [])],
+  };
 }
 
-export function getTypeComplianceMeta(permitType) {
-  return UK_TYPE_COMPLIANCE_META[permitType] || UK_TYPE_COMPLIANCE_META.general;
+export function evidenceFieldsForMarket(fields, marketId = "uk") {
+  const list = Array.isArray(fields) ? fields : [];
+  if (marketId === "pl" || marketId === "au") {
+    return list.filter((key) => !UK_ONLY_DIG_EVIDENCE_KEYS.has(key));
+  }
+  return [...list];
+}
+
+export function getComplianceProfile(permitType, marketId = "uk") {
+  const base = UK_COMPLIANCE_MATRIX[permitType] || { legalRequiredChecklistIds: [], requiredEvidenceFields: [] };
+  const cloned = cloneProfile(base);
+  cloned.requiredEvidenceFields = evidenceFieldsForMarket(cloned.requiredEvidenceFields, marketId);
+  return cloned;
+}
+
+export function getTypeComplianceMeta(permitType, marketId = "uk") {
+  const meta = UK_TYPE_COMPLIANCE_META[permitType] || UK_TYPE_COMPLIANCE_META.general;
+  if (marketId === "pl") {
+    return {
+      hseUrl: "https://www.pip.gov.pl/",
+      linkLabel: "Dlaczego te kontrole (PIP)",
+      openGuidanceLabel: "Otwórz wytyczne PIP",
+      rationale:
+        "Kontrole wynikają z wymagań BHP, planu BIOZ i — tam gdzie dotyczy — UDT. Nie zastępują oceny ryzyka na budowie.",
+    };
+  }
+  if (marketId === "au") {
+    return {
+      hseUrl: "https://www.safeworkaustralia.gov.au/",
+      linkLabel: "Why these controls (WHS)",
+      openGuidanceLabel: "Open Safe Work Australia guidance",
+      rationale: "Controls follow WHS codes of practice for the state or territory. Site SWMS governs method selection.",
+    };
+  }
+  return {
+    ...meta,
+    linkLabel: "Why these controls (HSE)",
+    openGuidanceLabel: "Open HSE guidance",
+  };
 }

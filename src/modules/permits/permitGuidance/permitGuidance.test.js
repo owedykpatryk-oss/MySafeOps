@@ -35,6 +35,16 @@ describe("permitGuidance registry", () => {
     expect(hasPermitGuidance("ground_disturbance", "au")).toBe(false);
     expect(hasPermitGuidance("hot_work", "pl")).toBe(true);
   });
+
+  it("uses market-specific WAH wizard hints without UK WAH jargon on Poland", () => {
+    expect(getPermitGuidance("work_at_height", "uk")?.wizardHint).toMatch(/WAH hierarchy/);
+    expect(getPermitGuidance("roof_access", "uk")?.wizardHint).toMatch(/WAH hierarchy/);
+    expect(getPermitGuidance("work_at_height", "pl")?.wizardHint).toMatch(/hierarchię BHP/i);
+    expect(getPermitGuidance("work_at_height", "pl")?.wizardHint).not.toMatch(/WAH hierarchy/);
+    expect(getPermitGuidance("roof_access", "pl")?.wizardHint).not.toMatch(/WAH hierarchy/);
+    expect(getPermitGuidance("work_at_height", "au")?.wizardHint).toMatch(/WHS hierarchy/);
+    expect(getPermitGuidance("work_at_height", "au")?.wizardHint).not.toMatch(/WAH hierarchy/);
+  });
 });
 
 describe("hotWorkGuidance", () => {
@@ -121,6 +131,7 @@ describe("wahGuidance", () => {
     );
     expect(plPanel).toMatch(/BHP|UDT|PIP/);
     expect(plPanel).not.toMatch(/IPAF|ScaffTag|WAH Regulations 2005|hse\.gov\.uk/i);
+    expect(plPanel).not.toMatch(/WAH hierarchy/);
     expect(auPanel).toMatch(/WHS|EWPA|HRWL/);
     expect(auPanel).not.toMatch(/IPAF|ScaffTag|WAH Regulations 2005|hse\.gov\.uk/i);
   });

@@ -18,7 +18,13 @@ describe("document country packs", () => {
     expect(getDocumentCountryPack("uk").ramsLegalReferences.join(" ")).toContain(
       "Construction (Design and Management) Regulations 2015"
     );
-    expect(getDocumentCountryPack("au").ramsLegalReferences.join(" ")).toContain("Work Health and Safety");
+    expect(getDocumentCountryPack("uk").ptwLegalReferencePlaceholder).toMatch(/WAHR/);
+    expect(getDocumentCountryPack("uk").ptwLegalReferencePlaceholder).toMatch(/LOLER/);
+    expect(getDocumentCountryPack("uk").ptwLegalReferencePlaceholder).toMatch(/PUWER/);
+    expect(getDocumentCountryPack("pl").ptwLegalReferencePlaceholder).toMatch(/Kodeks pracy|UDT|PIP/);
+    expect(getDocumentCountryPack("pl").ptwLegalReferencePlaceholder).not.toMatch(/WAHR|LOLER|PUWER/);
+    expect(getDocumentCountryPack("au").ptwLegalReferencePlaceholder).toMatch(/WHS/);
+    expect(getDocumentCountryPack("au").ptwLegalReferencePlaceholder).not.toMatch(/WAHR|LOLER|PUWER/);
   });
 
   it("falls unknown markets back to the UK HSE pack", () => {

@@ -58,7 +58,7 @@ export default function PermitWahGuidancePanel({ permitType, extraFields = {}, o
         </a>
       </div>
 
-      <div style={{ marginBottom: 10 }}><SvgBlock html={hierarchySvg} title="WAH hierarchy" /></div>
+      <div style={{ marginBottom: 10 }}><SvgBlock html={hierarchySvg} title={copy.hierarchyWidgetTitle} /></div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10, marginBottom: 12 }}>
         <SvgBlock html={accessSvg} title="Access method" />
         <SvgBlock html={zoneSvg} title="Exclusion zone" />

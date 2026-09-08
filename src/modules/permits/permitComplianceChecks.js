@@ -1,5 +1,5 @@
 import { getOrgMarketId } from "../../utils/orgMarket";
-import { getComplianceProfile, UK_COMPLIANCE_MATRIX_VERSION } from "./ukComplianceMatrix";
+import { evidenceFieldsForMarket, getComplianceProfile, UK_COMPLIANCE_MATRIX_VERSION } from "./ukComplianceMatrix";
 
 function hasValue(v) {
   if (typeof v === "number") return Number.isFinite(v);
@@ -77,10 +77,15 @@ function regulatoryMatrixForType(type, marketId = "uk") {
 }
 
 export function evaluatePermitCompliance(permit, checklistItems = [], options = {}) {
-  const profile =
+  const marketId = options.marketId || getOrgMarketId();
+  const rawProfile =
     options?.profileOverride && typeof options.profileOverride === "object"
       ? options.profileOverride
-      : getComplianceProfile(permit?.type);
+      : getComplianceProfile(permit?.type, marketId);
+  const profile = {
+    ...rawProfile,
+    requiredEvidenceFields: evidenceFieldsForMarket(rawProfile?.requiredEvidenceFields, marketId),
+  };
   const checklistState = permit?.checklist || {};
   const checklistIds = new Set(checklistItems.map((item) => item.id));
 
@@ -98,7 +103,6 @@ export function evaluatePermitCompliance(permit, checklistItems = [], options = 
   if (missingChecklist.length) hardStops.push("Missing mandatory legal checklist controls.");
   if (missingEvidence.length) hardStops.push("Missing mandatory evidence fields.");
   if (invalidTimeRange) hardStops.push("Permit end time must be after start time.");
-  const marketId = options.marketId || getOrgMarketId();
   const frameworks = regulatoryFrameworksForMarket(marketId);
   const regulatoryMatrix = regulatoryMatrixForType(permit?.type, marketId).map((row) => ({
     ...row,

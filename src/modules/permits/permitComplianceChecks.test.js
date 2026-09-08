@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { evaluatePermitCompliance } from "./permitComplianceChecks";
+import { getComplianceProfile, getTypeComplianceMeta } from "./ukComplianceMatrix";
 
 describe("evaluatePermitCompliance", () => {
   const items = [{ id: "general_1", text: "Work scope defined", required: true }];
@@ -112,5 +113,83 @@ describe("evaluatePermitCompliance", () => {
     expect(auLabels).not.toMatch(/appointed person/i);
     expect(au.hardStops.some((msg) => /WHS/i.test(msg))).toBe(true);
     expect(au.hardStops.join(" ")).not.toMatch(/LOLER|PUWER|CDM/);
+  });
+
+  it("does not require UK PAS 128 evidence on Poland or Australia excavation", () => {
+    const extra = {
+      catScanBy: "Jan",
+      knownServices: "Woda",
+      excavationDepth: 1.2,
+      surveyDrawingRef: "CPD-1",
+    };
+    const uk = evaluatePermitCompliance(
+      {
+        type: "excavation",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T16:00:00.000Z",
+        extraFields: extra,
+      },
+      [],
+      { marketId: "uk" }
+    );
+    const pl = evaluatePermitCompliance(
+      {
+        type: "excavation",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T16:00:00.000Z",
+        extraFields: extra,
+      },
+      [],
+      { marketId: "pl" }
+    );
+    const au = evaluatePermitCompliance(
+      {
+        type: "excavation",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T16:00:00.000Z",
+        extraFields: extra,
+      },
+      [],
+      { marketId: "au" }
+    );
+    expect(uk.missingEvidence).toEqual(expect.arrayContaining(["pas128QualityLevel", "pas128SurveyType"]));
+    expect(pl.missingEvidence).not.toContain("pas128QualityLevel");
+    expect(pl.missingEvidence).not.toContain("pas128SurveyType");
+    expect(au.missingEvidence).not.toContain("pas128QualityLevel");
+    expect(au.missingEvidence).not.toContain("pas128SurveyType");
+    const savedUkProfile = {
+      legalRequiredChecklistIds: [],
+      requiredEvidenceFields: ["catScanBy", "pas128QualityLevel", "pas128SurveyType", "surveyDrawingRef"],
+    };
+    const plOverride = evaluatePermitCompliance(
+      {
+        type: "excavation",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T16:00:00.000Z",
+        extraFields: extra,
+      },
+      [],
+      { marketId: "pl", profileOverride: savedUkProfile }
+    );
+    expect(plOverride.missingEvidence).not.toContain("pas128QualityLevel");
+    expect(plOverride.missingEvidence).not.toContain("pas128SurveyType");
+  });
+
+  it("keeps HSE / WAHR rationale on UK PTW and uses PIP / WHS copy off UK", () => {
+    const uk = getTypeComplianceMeta("work_at_height", "uk");
+    const pl = getTypeComplianceMeta("work_at_height", "pl");
+    const au = getTypeComplianceMeta("work_at_height", "au");
+    expect(uk.hseUrl).toMatch(/hse\.gov\.uk/);
+    expect(uk.linkLabel).toMatch(/HSE/);
+    expect(uk.rationale).toMatch(/WAHR/);
+    expect(pl.hseUrl).toMatch(/pip\.gov\.pl/);
+    expect(pl.linkLabel).toMatch(/PIP/);
+    expect(pl.rationale).not.toMatch(/WAHR|HSE|LOLER/);
+    expect(au.hseUrl).toMatch(/safeworkaustralia/);
+    expect(au.linkLabel).toMatch(/WHS/);
+    expect(au.rationale).not.toMatch(/WAHR|HSE|LOLER/);
+    expect(getComplianceProfile("excavation", "uk").requiredEvidenceFields).toContain("pas128QualityLevel");
+    expect(getComplianceProfile("excavation", "pl").requiredEvidenceFields).not.toContain("pas128QualityLevel");
+    expect(getComplianceProfile("excavation", "au").requiredEvidenceFields).not.toContain("pas128SurveyType");
   });
 });

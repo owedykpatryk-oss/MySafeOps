@@ -12,6 +12,7 @@ export function wahGuidanceCopy(marketId = getOrgMarketId()) {
   if (marketId === "pl") {
     return {
       hierarchyTitle: "Hierarchia — praca na wysokości (BHP)",
+      hierarchyWidgetTitle: "Hierarchia BHP",
       mewpTicketShort: "UDT + ratownictwo",
       mewpWarning: "Podest ruchomy — potwierdź uprawnienia UDT i codzienną kontrolę przed użyciem.",
       scaffoldWarning: "Rusztowanie — potwierdź aktualny odbiór / tabliczkę dopuszczenia.",
@@ -27,6 +28,7 @@ export function wahGuidanceCopy(marketId = getOrgMarketId()) {
   if (marketId === "au") {
     return {
       hierarchyTitle: "Hierarchy of control — WHS work at height",
+      hierarchyWidgetTitle: "WHS hierarchy",
       mewpTicketShort: "EWPA + rescue",
       mewpWarning: "MEWP operation — confirm EWPA or HRWL ticket and daily pre-use check.",
       scaffoldWarning: "Scaffold — confirm current handover / inspection tag.",
@@ -41,6 +43,7 @@ export function wahGuidanceCopy(marketId = getOrgMarketId()) {
   }
   return {
     hierarchyTitle: "WAH hierarchy — Work at Height Regulations 2005",
+    hierarchyWidgetTitle: "WAH hierarchy",
     mewpTicketShort: "IPAF + rescue",
     mewpWarning: "MEWP operation — confirm IPAF card and daily pre-use check.",
     scaffoldWarning: "Scaffold — confirm current handover / inspection tag (ScaffTag / SG4).",
