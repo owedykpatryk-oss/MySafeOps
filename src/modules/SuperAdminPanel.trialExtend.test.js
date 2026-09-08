@@ -16,4 +16,11 @@ describe("Superadmin Trial +14d", () => {
     expect(src).toContain("`Trial +${SUPERADMIN_EXTEND_TRIAL_DAYS}d`");
     expect(src).toContain("setRecentOrgs((prev) => ({");
   });
+
+  it("points the operator at the courtesy migration when the RPC is missing", () => {
+    expect(src).toContain("deploy 20260817130000_utility_mapping_trial_extension.sql");
+    expect(src).toContain('msg.includes("function")');
+    expect(src).toContain('msg.includes("does not exist")');
+    expect(src).toContain('msg.includes("rpc")');
+  });
 });

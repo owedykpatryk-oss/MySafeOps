@@ -119,6 +119,17 @@ describe("superAdmin platform owner probe", () => {
     expect(seen).toHaveLength(1);
   });
 
+  it("superadminExtendOrgTrial hyphen-folds the live tenant slug when persisting", async () => {
+    localStorage.setItem("mysafeops_orgId", "patryk_44bdf196");
+    const rpc = vi.fn().mockResolvedValue({
+      data: { ok: true, org_slug: "patryk-44bdf196", trial_ends_at: "2026-09-22T00:00:00.000Z", days: 14 },
+      error: null,
+    });
+    const { superadminExtendOrgTrial } = await import("./superAdmin.js");
+    await superadminExtendOrgTrial({ rpc }, "patryk_44bdf196", 14);
+    expect(localStorage.getItem("mysafeops_trial_ends_at_patryk_44bdf196")).toBe("2026-09-22T00:00:00.000Z");
+  });
+
   it("superadminExtendOrgTrial unwraps a one-row RPC array", async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: [{ ok: true, org_slug: "patryk-44bdf196", trial_ends_at: "2026-09-01T00:00:00.000Z", days: 14 }],

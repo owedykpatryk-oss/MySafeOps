@@ -54,7 +54,14 @@ describe("Utility Mapping exclusive workspace profile", () => {
     expect(isUtilityMappingOrg()).toBe(true);
     const pack = getUtilityMappingWorkspacePack();
     expect(pack.showModules).toEqual(
-      expect.arrayContaining(["survey-report", "gpr-report", "geo-photos", "rams", "permits"])
+      expect.arrayContaining([
+        "survey-report",
+        "gpr-report",
+        "geo-photos",
+        "rams",
+        "permits",
+        "method-statement",
+      ])
     );
     expect(pack.hiddenModules).toEqual(expect.arrayContaining(["allergen-changeovers", "fess-setup"]));
     expect(pack.ramsStarterKey).toBe("geospatial_intelligence");
@@ -108,6 +115,7 @@ describe("Utility Mapping exclusive workspace profile", () => {
     expect(settings.hiddenModules).not.toContain("survey-report");
     expect(settings.hiddenModules).not.toContain("rams");
     expect(settings.hiddenModules).not.toContain("permits");
+    expect(settings.hiddenModules).not.toContain("method-statement");
   });
 
   it("hides utilityMapping profile from other orgs", () => {
