@@ -13,6 +13,8 @@ import { isUtilityMappingPrintTheme, utilityMappingSurveyCoverCss } from "./util
 import { setOrgId } from "./orgStorage";
 import { saveOrgSettingsRaw, loadOrgSettingsRaw } from "./orgSettingsStorage";
 import { COUNTRY_WORKSPACE_MARKETS } from "./countryWorkspaces";
+import { getHiddenFeatureIds, RAMS_FEATURES } from "./hiddenModules";
+import { PACK_DEFAULT_PERMIT_TYPES } from "../modules/permits/permitPackDefaults";
 import { buildSurveyReportHtml } from "../modules/surveyReport/surveyReportPrintHtml";
 
 describe("Utility Mapping exclusive workspace profile", () => {
@@ -113,9 +115,16 @@ describe("Utility Mapping exclusive workspace profile", () => {
       expect.arrayContaining(["allergen-changeovers", "fess-setup", "fess-sites", "asbestos"])
     );
     expect(settings.hiddenModules).not.toContain("survey-report");
+    expect(settings.hiddenModules).not.toContain("gpr-report");
+    expect(settings.hiddenModules).not.toContain("geo-photos");
     expect(settings.hiddenModules).not.toContain("rams");
     expect(settings.hiddenModules).not.toContain("permits");
     expect(settings.hiddenModules).not.toContain("method-statement");
+    expect(settings.ramsStarterKey).toBe("geospatial_intelligence");
+    expect(settings.enabledPermitTypes).toEqual(PACK_DEFAULT_PERMIT_TYPES.utilityMapping);
+    // surveyingFocus hides food RAMS, not PAS128 surveying packs.
+    expect(getHiddenFeatureIds()).toContain(RAMS_FEATURES.ALLERGEN);
+    expect(getHiddenFeatureIds()).not.toContain(RAMS_FEATURES.SURVEYING);
   });
 
   it("hides utilityMapping profile from other orgs", () => {
