@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { evaluatePermitCompliance } from "./permitComplianceChecks";
+import { getPermitTypesForMarket } from "./permitTypesMarket";
 import { getComplianceProfile, getTypeComplianceMeta } from "./ukComplianceMatrix";
 
 describe("evaluatePermitCompliance", () => {
@@ -191,5 +192,76 @@ describe("evaluatePermitCompliance", () => {
     expect(getComplianceProfile("excavation", "uk").requiredEvidenceFields).toContain("pas128QualityLevel");
     expect(getComplianceProfile("excavation", "pl").requiredEvidenceFields).not.toContain("pas128QualityLevel");
     expect(getComplianceProfile("excavation", "au").requiredEvidenceFields).not.toContain("pas128SurveyType");
+  });
+
+  it("does not require UK checklist IDs that are missing from the Poland form", () => {
+    const plItems = getPermitTypesForMarket("pl").excavation.checklist.map((text, i) => ({
+      id: `excavation_${i + 1}`,
+      text,
+      required: true,
+    }));
+    expect(plItems).toHaveLength(6);
+    const checklist = Object.fromEntries(plItems.map((item) => [item.id, true]));
+    const extra = {
+      catScanBy: "Jan",
+      knownServices: "Woda",
+      excavationDepth: 1.2,
+      surveyDrawingRef: "CPD-1",
+    };
+    const permit = {
+      type: "excavation",
+      description: "Wykop",
+      location: "Plac",
+      issuedBy: "A",
+      issuedTo: "B",
+      authorisedByRole: "Kierownik",
+      briefingConfirmedAt: "2026-04-09T07:30:00.000Z",
+      startDateTime: "2026-04-09T08:00:00.000Z",
+      endDateTime: "2026-04-09T16:00:00.000Z",
+      extraFields: extra,
+      checklist,
+    };
+
+    expect(getComplianceProfile("excavation", "uk").legalRequiredChecklistIds).toContain("excavation_8");
+    expect(getComplianceProfile("excavation", "pl").legalRequiredChecklistIds).not.toContain("excavation_8");
+    expect(getComplianceProfile("work_at_height", "uk").legalRequiredChecklistIds).toContain("work_at_height_8");
+    expect(getComplianceProfile("work_at_height", "pl").legalRequiredChecklistIds).not.toContain("work_at_height_8");
+    expect(getComplianceProfile("electrical", "pl").legalRequiredChecklistIds).not.toContain("electrical_7");
+
+    const pl = evaluatePermitCompliance(permit, plItems, { marketId: "pl" });
+    expect(pl.missingChecklist).not.toContain("excavation_8");
+    expect(pl.legalReady).toBe(true);
+
+    const plOverride = evaluatePermitCompliance(permit, plItems, {
+      marketId: "pl",
+      profileOverride: {
+        legalRequiredChecklistIds: ["excavation_1", "excavation_8"],
+        requiredEvidenceFields: ["catScanBy"],
+      },
+    });
+    expect(plOverride.missingChecklist).not.toContain("excavation_8");
+    expect(plOverride.legalReady).toBe(true);
+
+    const ukItems = getPermitTypesForMarket("uk").excavation.checklist.map((text, i) => ({
+      id: `excavation_${i + 1}`,
+      text,
+      required: true,
+    }));
+    const ukUnchecked = evaluatePermitCompliance(
+      {
+        ...permit,
+        authorisedByRole: "Appointed person",
+        extraFields: {
+          ...extra,
+          pas128QualityLevel: "QL-B",
+          pas128SurveyType: "B1",
+        },
+        checklist: Object.fromEntries(ukItems.map((item) => [item.id, item.id !== "excavation_8"])),
+      },
+      ukItems,
+      { marketId: "uk" }
+    );
+    expect(ukUnchecked.missingChecklist).toContain("excavation_8");
+    expect(ukUnchecked.legalReady).toBe(false);
   });
 });

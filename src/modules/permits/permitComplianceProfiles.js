@@ -2,7 +2,12 @@ import { loadOrgScoped, saveOrgScoped } from "../../utils/orgStorage";
 import { getOrgMarketId } from "../../utils/orgMarket";
 import { PERMIT_TYPES } from "./permitTypes";
 import { getPermitTypesForMarket } from "./permitTypesMarket";
-import { getComplianceProfile, evidenceFieldsForMarket, UK_COMPLIANCE_MATRIX_VERSION } from "./ukComplianceMatrix";
+import {
+  getComplianceProfile,
+  evidenceFieldsForMarket,
+  checklistIdsForMarket,
+  UK_COMPLIANCE_MATRIX_VERSION,
+} from "./ukComplianceMatrix";
 
 const COMPLIANCE_PROFILES_KEY = "permit_compliance_profiles_v1";
 
@@ -16,8 +21,9 @@ function uniqueStrings(list) {
   );
 }
 
-export function checklistIdsForType(type) {
-  const checklist = PERMIT_TYPES[type]?.checklist || PERMIT_TYPES.general?.checklist || [];
+export function checklistIdsForType(type, marketId = getOrgMarketId()) {
+  const checklist =
+    getPermitTypesForMarket(marketId)[type]?.checklist || PERMIT_TYPES.general?.checklist || [];
   return checklist.map((_, idx) => `${type}_${idx + 1}`);
 }
 
@@ -46,7 +52,9 @@ export function normalizeComplianceProfile(type, input, marketId = getOrgMarketI
   };
   return {
     matrixVersion: String(merged.matrixVersion || UK_COMPLIANCE_MATRIX_VERSION),
-    legalRequiredChecklistIds: uniqueStrings(merged.legalRequiredChecklistIds),
+    legalRequiredChecklistIds: uniqueStrings(
+      checklistIdsForMarket(merged.legalRequiredChecklistIds, type, marketId)
+    ),
     requiredEvidenceFields: uniqueStrings(evidenceFieldsForMarket(merged.requiredEvidenceFields, marketId)),
     legalReferences: uniqueStrings(merged.legalReferences),
     notes: String(merged.notes || "").trim(),

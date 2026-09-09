@@ -1,5 +1,10 @@
 import { getOrgMarketId } from "../../utils/orgMarket";
-import { evidenceFieldsForMarket, getComplianceProfile, UK_COMPLIANCE_MATRIX_VERSION } from "./ukComplianceMatrix";
+import {
+  checklistIdsForMarket,
+  evidenceFieldsForMarket,
+  getComplianceProfile,
+  UK_COMPLIANCE_MATRIX_VERSION,
+} from "./ukComplianceMatrix";
 
 function hasValue(v) {
   if (typeof v === "number") return Number.isFinite(v);
@@ -84,12 +89,19 @@ export function evaluatePermitCompliance(permit, checklistItems = [], options = 
       : getComplianceProfile(permit?.type, marketId);
   const profile = {
     ...rawProfile,
+    legalRequiredChecklistIds: checklistIdsForMarket(
+      rawProfile?.legalRequiredChecklistIds,
+      permit?.type,
+      marketId
+    ),
     requiredEvidenceFields: evidenceFieldsForMarket(rawProfile?.requiredEvidenceFields, marketId),
   };
   const checklistState = permit?.checklist || {};
   const checklistIds = new Set(checklistItems.map((item) => item.id));
 
   const missingChecklist = profile.legalRequiredChecklistIds.filter((id) => {
+    // Phantom UK IDs (e.g. excavation_8 on a 6-item Poland form) are not on this checklist.
+    if (checklistIds.size > 0 && !checklistIds.has(id)) return false;
     if (!checklistIds.has(id)) return true;
     return !checklistState[id];
   });

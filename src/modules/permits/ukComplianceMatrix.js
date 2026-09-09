@@ -1,3 +1,5 @@
+import { getPermitTypesForMarket } from "./permitTypesMarket";
+
 export const UK_COMPLIANCE_MATRIX_VERSION = "uk-v2";
 
 /** Short rationale + HSE starting points for inline “why” tooltips (not legal advice). */
@@ -159,9 +161,31 @@ export function evidenceFieldsForMarket(fields, marketId = "uk") {
   return [...list];
 }
 
+/** Checklist IDs that exist on the active market form (`type_1` … `type_N`). */
+export function marketChecklistIdSet(permitType, marketId = "uk") {
+  const list = getPermitTypesForMarket(marketId)[permitType]?.checklist || [];
+  return new Set(list.map((_, idx) => `${permitType}_${idx + 1}`));
+}
+
+/**
+ * UK matrix IDs that are not on a shorter PL/AU checklist must not block LegalReady.
+ * Saved UK profiles are filtered the same way at evaluation time.
+ */
+export function checklistIdsForMarket(ids, permitType, marketId = "uk") {
+  const list = Array.isArray(ids) ? ids : [];
+  if (marketId === "uk" || !permitType) return [...list];
+  const allowed = marketChecklistIdSet(permitType, marketId);
+  return list.filter((id) => allowed.has(id));
+}
+
 export function getComplianceProfile(permitType, marketId = "uk") {
   const base = UK_COMPLIANCE_MATRIX[permitType] || { legalRequiredChecklistIds: [], requiredEvidenceFields: [] };
   const cloned = cloneProfile(base);
+  cloned.legalRequiredChecklistIds = checklistIdsForMarket(
+    cloned.legalRequiredChecklistIds,
+    permitType,
+    marketId
+  );
   cloned.requiredEvidenceFields = evidenceFieldsForMarket(cloned.requiredEvidenceFields, marketId);
   return cloned;
 }

@@ -90,6 +90,11 @@ const REGISTRY = {
 };
 
 function wizardHintFor(key, marketId, fallback) {
+  if (key === "hot_work") {
+    if (marketId === "pl") {
+      return "Krok 2 zawiera strefę 10 m, harmonogram dyżuru pożarowego (min. 60 min) i panel GO/NO-GO.";
+    }
+  }
   if (key === "work_at_height") {
     if (marketId === "pl") {
       return "Krok 2 zawiera hierarchię BHP (Unikaj → Zapobiegaj → Ograniczaj skutki), metodę dostępu i strefę wyłączoną.";

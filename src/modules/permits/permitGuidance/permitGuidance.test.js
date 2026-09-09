@@ -23,7 +23,9 @@ describe("permitGuidance registry", () => {
   });
 
   it("returns wizard hints for hot work", () => {
-    expect(getPermitGuidance("hot_work")?.wizardHint).toMatch(/fire watch/i);
+    expect(getPermitGuidance("hot_work", "uk")?.wizardHint).toMatch(/fire watch/i);
+    expect(getPermitGuidance("hot_work", "pl")?.wizardHint).toMatch(/dyżuru pożarowego/i);
+    expect(getPermitGuidance("hot_work", "pl")?.wizardHint).not.toMatch(/Step 2/);
   });
 
   it("hides UK PAS 128 excavation guidance on Poland and Australia workspaces", () => {
