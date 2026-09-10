@@ -6,10 +6,12 @@ import {
   hotWorkAssessment,
   renderFireWatchTimelineSvg,
   renderHotWorkGoNoGoSvg,
+  renderHotWorkPrintHtml,
   DEFAULT_FIRE_WATCH_MINS,
 } from "./hotWorkGuidance";
 import { wahAssessment, renderWahHierarchySvg, renderWahPrintHtml } from "./wahGuidance";
 import { confinedSpaceAssessment, renderConfinedGaugeSvg, renderConfinedPrintHtml } from "./confinedSpaceGuidance";
+import PermitHotWorkGuidancePanel from "./components/PermitHotWorkGuidancePanel";
 import PermitWahGuidancePanel from "./components/PermitWahGuidancePanel";
 import PermitConfinedSpaceGuidancePanel from "./components/PermitConfinedSpaceGuidancePanel";
 
@@ -26,6 +28,8 @@ describe("permitGuidance registry", () => {
     expect(getPermitGuidance("hot_work", "uk")?.wizardHint).toMatch(/fire watch/i);
     expect(getPermitGuidance("hot_work", "pl")?.wizardHint).toMatch(/dyżuru pożarowego/i);
     expect(getPermitGuidance("hot_work", "pl")?.wizardHint).not.toMatch(/Step 2/);
+    expect(getPermitGuidance("hot_work", "au")?.wizardHint).toMatch(/WHS/);
+    expect(getPermitGuidance("hot_work", "au")?.wizardHint).not.toMatch(/HSE/);
   });
 
   it("hides UK PAS 128 excavation guidance on Poland and Australia workspaces", () => {
@@ -89,6 +93,41 @@ describe("hotWorkGuidance", () => {
   it("renders fire watch timeline with duration", () => {
     const svg = renderFireWatchTimelineSvg({ durationMins: 90 });
     expect(svg).toContain("90 min");
+  });
+
+  it("keeps UK HSE / Fire Safety Order copy on UK hot-work print", () => {
+    const html = renderHotWorkPrintHtml(
+      { type: "hot_work", extraFields: { fireWatchDurationMins: 30, fireWatcher: "Alex" } },
+      { marketId: "uk" }
+    );
+    expect(html).toMatch(/UK HSE hot work|Fire Safety Order/);
+    expect(html).toMatch(/hse\.gov\.uk|HSE \/ typical client/);
+    expect(hotWorkAssessment({ fireWatchDurationMins: 30, fireWatcher: "Alex" }, {}, "uk").blockers.join(" ")).toMatch(/HSE/);
+  });
+
+  it("drops UK HSE / Fire Safety Order copy on Poland and Australia hot-work print", () => {
+    const pl = renderHotWorkPrintHtml(
+      { type: "hot_work", extraFields: { fireWatchDurationMins: 30, fireWatcher: "Jan" } },
+      { marketId: "pl" }
+    );
+    const au = renderHotWorkPrintHtml(
+      { type: "hot_work", extraFields: { fireWatchDurationMins: 30, fireWatcher: "Sam" } },
+      { marketId: "au" }
+    );
+    expect(pl).toMatch(/BHP|prace gorące|dyżuru pożarowego/i);
+    expect(pl).not.toMatch(/HSE|Fire Safety Order|hse\.gov\.uk/i);
+    expect(hotWorkAssessment({ fireWatchDurationMins: 30, fireWatcher: "Jan" }, {}, "pl").blockers.join(" ")).toMatch(/BHP/);
+    expect(hotWorkAssessment({ fireWatchDurationMins: 30, fireWatcher: "Jan" }, {}, "pl").blockers.join(" ")).not.toMatch(/HSE/);
+    expect(au).toMatch(/WHS|welding/);
+    expect(au).not.toMatch(/HSE|Fire Safety Order|hse\.gov\.uk/i);
+    expect(hotWorkAssessment({ fireWatchDurationMins: 30, fireWatcher: "Sam" }, {}, "au").blockers.join(" ")).toMatch(/WHS/);
+    expect(hotWorkAssessment({ fireWatchDurationMins: 30, fireWatcher: "Sam" }, {}, "au").blockers.join(" ")).not.toMatch(/HSE/);
+    const plPanel = renderToStaticMarkup(createElement(PermitHotWorkGuidancePanel, { marketId: "pl" }));
+    const auPanel = renderToStaticMarkup(createElement(PermitHotWorkGuidancePanel, { marketId: "au" }));
+    expect(plPanel).toMatch(/PIP/);
+    expect(plPanel).not.toMatch(/hse\.gov\.uk|HSE hot work/i);
+    expect(auPanel).toMatch(/Safe Work Australia/);
+    expect(auPanel).not.toMatch(/hse\.gov\.uk|HSE hot work/i);
   });
 });
 

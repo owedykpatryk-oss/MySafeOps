@@ -19,7 +19,7 @@ import {
   evidenceKeysForType,
 } from "./permitComplianceProfiles";
 import { buildPermitWarRoomStats, derivePermitStatus, permitEndIso, permitsHeatmap } from "./permitRules";
-import { nextLegalReviewDate } from "./permitLegalGovernance";
+import { legalOwnerRole, nextLegalReviewDate } from "./permitLegalGovernance";
 import { runPermitQualityGates } from "./permitQualityGates";
 import { isFeatureEnabled } from "../../utils/featureFlags";
 import { projectRamsCheckForPermit } from "../../utils/orgAutomationRules";
@@ -898,7 +898,7 @@ function PermitForm({
     templateVersion: 1,
     matrixVersion: "uk-v2",
     templateId: template.templateId || `permit.${defaultType}.default`,
-    legalContentOwner: "HSE / Legal Reviewer",
+    legalContentOwner: legalOwnerRole(),
     createdAt: new Date().toISOString(),
     notes: formDefaults.defaultConditionsTemplate || "",
     authorisedByRole: formDefaults.defaultAuthorisingRole || "",
@@ -930,7 +930,7 @@ function PermitForm({
       templateVersion: permit.templateVersion || 1,
       matrixVersion: permit.matrixVersion || "uk-v2",
       templateId: permit.templateId || `permit.${permitType}.default`,
-      legalContentOwner: permit.legalContentOwner || "HSE / Legal Reviewer",
+      legalContentOwner: permit.legalContentOwner || legalOwnerRole(),
       authorisedByRole: permit.authorisedByRole || "",
       briefingConfirmedAt: permit.briefingConfirmedAt || "",
       evidenceNotes: permit.evidenceNotes || "",
@@ -1728,7 +1728,7 @@ function PermitForm({
       matrixVersion: form.matrixVersion || "uk-v2",
       complianceProfile,
       templateId: form.templateId || `permit.${type}.default`,
-      legalContentOwner: form.legalContentOwner || "HSE / Legal Reviewer",
+      legalContentOwner: form.legalContentOwner || legalOwnerRole(),
       allowSignLater,
       complianceReviewedAt: form.complianceReviewedAt || null,
       endDateTime: form.endDateTime || form.expiryDate || "",

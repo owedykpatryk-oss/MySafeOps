@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import SvgBlock from "../shared/SvgBlock";
+import { getOrgMarketId } from "../../../../utils/orgMarket";
 import {
   DEFAULT_FIRE_WATCH_MINS,
-  MAX_HOT_WORK_HOURS,
   hotWorkAssessment,
+  hotWorkGuidanceCopy,
   renderFireWatchTimelineSvg,
   renderHotWorkGoNoGoSvg,
   renderHotWorkZoneSvg,
@@ -16,18 +17,20 @@ const YES_NO = [
   { value: "na", label: "N/A" },
 ];
 
-export default function PermitHotWorkGuidancePanel({ extraFields = {}, onExtraChange, ss = {}, permit = {} }) {
+export default function PermitHotWorkGuidancePanel({ extraFields = {}, onExtraChange, ss = {}, permit = {}, marketId }) {
   const extra = extraFields || {};
+  const market = marketId || getOrgMarketId();
+  const copy = hotWorkGuidanceCopy(market);
   const set = (key, value) => onExtraChange?.(key, value);
 
-  const assessment = useMemo(() => hotWorkAssessment(extra, permit), [extra, permit]);
+  const assessment = useMemo(() => hotWorkAssessment(extra, permit, market), [extra, permit, market]);
 
-  const zoneSvg = useMemo(() => renderHotWorkZoneSvg({}), []);
+  const zoneSvg = useMemo(() => renderHotWorkZoneSvg({ marketId: market }), [market]);
   const timelineSvg = useMemo(
     () => renderFireWatchTimelineSvg({ durationMins: assessment.fireWatchDurationMins }),
     [assessment.fireWatchDurationMins]
   );
-  const goSvg = useMemo(() => renderHotWorkGoNoGoSvg(extra), [extra]);
+  const goSvg = useMemo(() => renderHotWorkGoNoGoSvg(extra, { marketId: market }), [extra, market]);
 
   const lbl = ss.lbl || { display: "block", fontSize: 11, fontWeight: 600, marginBottom: 4 };
   const inp = ss.inp || { width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #ccc", fontSize: 12 };
@@ -46,16 +49,16 @@ export default function PermitHotWorkGuidancePanel({ extraFields = {}, onExtraCh
         <div>
           <div style={{ fontSize: 13, fontWeight: 800, color: "#991b1b" }}>Hot work controls</div>
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 2, maxWidth: 520 }}>
-            10 m zone clearance, fire watch min {DEFAULT_FIRE_WATCH_MINS} min post-work, typical {MAX_HOT_WORK_HOURS} h permit cap.
+            {copy.panelSubtitle}
           </div>
         </div>
         <a
-          href="https://www.hse.gov.uk/fireandexplosion/hot-work.htm"
+          href={copy.refHref}
           target="_blank"
           rel="noopener noreferrer"
           style={{ fontSize: 11, color: "#0C447C", fontWeight: 600 }}
         >
-          HSE hot work
+          {copy.refLabel}
         </a>
       </div>
 
@@ -161,7 +164,7 @@ export default function PermitHotWorkGuidancePanel({ extraFields = {}, onExtraCh
         </ul>
       ) : null}
       {assessment.ready ? (
-        <div style={{ fontSize: 11, color: "#166534", fontWeight: 600 }}>GO — hot work controls recorded. Maintain fire watch after work stops.</div>
+        <div style={{ fontSize: 11, color: "#166534", fontWeight: 600 }}>{copy.readyCopy}</div>
       ) : null}
     </div>
   );

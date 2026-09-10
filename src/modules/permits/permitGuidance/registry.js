@@ -54,7 +54,7 @@ const REGISTRY = {
   hot_work: {
     Panel: PermitHotWorkGuidancePanel,
     renderPrintHtml: renderHotWorkPrintHtml,
-    assess: (permit, extra) => hotWorkAssessment(extra, permit),
+    assess: (permit, extra, marketId) => hotWorkAssessment(extra, permit, marketId),
     extraFieldKeys: HOT_WORK_EXTRA_FIELD_KEYS,
     wizardHint: "Step 2 includes 10 m zone diagram, fire watch timeline (min 60 min) and GO/NO-GO panel.",
     theme: { border: "#fca5a5", bg: "#fef2f2", color: "#991b1b" },
@@ -93,6 +93,9 @@ function wizardHintFor(key, marketId, fallback) {
   if (key === "hot_work") {
     if (marketId === "pl") {
       return "Krok 2 zawiera strefę 10 m, harmonogram dyżuru pożarowego (min. 60 min) i panel GO/NO-GO.";
+    }
+    if (marketId === "au") {
+      return "Step 2 includes 10 m zone diagram, fire watch timeline (min 60 min) and WHS GO/NO-GO panel.";
     }
   }
   if (key === "work_at_height") {
