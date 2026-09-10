@@ -17,8 +17,10 @@ const YES_NO = [
   { value: "na", label: "N/A" },
 ];
 
+const EMPTY_EXTRA = {};
+
 export default function PermitHotWorkGuidancePanel({ extraFields = {}, onExtraChange, ss = {}, permit = {}, marketId }) {
-  const extra = extraFields || {};
+  const extra = extraFields || EMPTY_EXTRA;
   const market = marketId || getOrgMarketId();
   const copy = hotWorkGuidanceCopy(market);
   const set = (key, value) => onExtraChange?.(key, value);
