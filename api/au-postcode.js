@@ -14,6 +14,7 @@ const API_JSON_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "Cross-Origin-Resource-Policy": "same-site",
   "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+  "Vary": "Origin",
 };
 
 function sendJson(res, status, obj) {

@@ -8,6 +8,9 @@ import {
   writePrintWindowDocument,
 } from "../../utils/htmlEscape.js";
 import { downloadBlob } from "../../utils/downloadBlob.js";
+import { getActiveDocumentLocale } from "../../utils/countryWorkspaces.js";
+import { getOrgMarketId } from "../../utils/orgMarket.js";
+import { documentText } from "../../utils/documentCountryPack.js";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import {
   isUtilityMappingPrintTheme,
@@ -77,6 +80,9 @@ import {
 } from "./pas128MethodPresets";
 import { buildPas128QlBarsHtml, buildPas128WorkflowSvg } from "./pas128WorkflowDiagram";
 import { getSurveyReportDisclaimer } from "./pas128ReportBoilerplate";
+
+const documentLocale = () => getActiveDocumentLocale();
+const tx = (key, fallback = key) => documentText(key, fallback, getOrgMarketId());
 import {
   buildEvidenceRowsHtml,
   buildExtentAreasHtml,
@@ -151,7 +157,7 @@ function imgSrcAttr(raw) {
 
 function nl2p(text) {
   const t = String(text || "").trim();
-  if (!t) return "<p><em>Not recorded.</em></p>";
+  if (!t) return `<p><em>${esc(tx("Not recorded."))}</em></p>`;
   return t
     .split(/\n{2,}/)
     .map((block) => `<p>${esc(block).replace(/\n/g, "<br/>")}</p>`)
@@ -160,7 +166,8 @@ function nl2p(text) {
 
 
 function section(title, body, id, num) {
-  const label = num ? `<span class="sr-sec-num">${num}</span> ${esc(title)}` : esc(title);
+  const translated = tx(title, title);
+  const label = num ? `<span class="sr-sec-num">${num}</span> ${esc(translated)}` : esc(translated);
   return `<section class="sr-section" id="${id || ""}"><h2>${label}</h2>${body}</section>`;
 }
 
@@ -240,7 +247,7 @@ function equipmentCalibrationBlock(rows) {
     rows.map((r) => [
       r.instrument || "",
       r.serialNo || "",
-      r.calibrationDue ? new Date(r.calibrationDue).toLocaleDateString("en-GB") : "",
+      r.calibrationDue ? new Date(r.calibrationDue).toLocaleDateString(documentLocale()) : "",
       r.status === "in_date"
         ? "In date"
         : r.status === "due_soon"
@@ -308,8 +315,8 @@ function coverPage(report, org, primary, accent, extras) {
         ["Client", report.client || getUtilityMappingClient(clientCode)?.name || "—"],
         ["Project", report.projectName || "—"],
         ["Site", report.siteAddress || "—"],
-        ["Survey date", report.surveyDate ? new Date(report.surveyDate).toLocaleDateString("en-GB") : "—"],
-        ["Issue date", issueDate ? new Date(issueDate).toLocaleDateString("en-GB") : "—"],
+        ["Survey date", report.surveyDate ? new Date(report.surveyDate).toLocaleDateString(documentLocale()) : "—"],
+        ["Issue date", issueDate ? new Date(issueDate).toLocaleDateString(documentLocale()) : "—"],
         ["Surveyor", report.surveyor || "—"],
         ["Completeness", `${quality.score}%`],
       ],
@@ -348,26 +355,26 @@ function coverPage(report, org, primary, accent, extras) {
       </div>
     </div>
     <div class="sr-cover-main">
-      <span class="sr-badge sr-badge--cover">${report.status === "final" ? "Final report" : "Draft"}</span>
+      <span class="sr-badge sr-badge--cover">${esc(report.status === "final" ? tx("Final report") : tx("Draft"))}</span>
       ${qlBadge}
       ${methodBadge}
-      <div class="sr-quality-badge" style="border-color:${qualityColour};color:${qualityColour}">Report completeness: ${quality.score}%</div>
-      <h1 class="sr-cover-title">${esc(report.title || "Survey Report")}</h1>
+      <div class="sr-quality-badge" style="border-color:${qualityColour};color:${qualityColour}">${esc(tx("Report completeness"))}: ${quality.score}%</div>
+      <h1 class="sr-cover-title">${esc(report.title || tx("Survey Report"))}</h1>
       <div class="sr-cover-meta">
         ${metaGrid([
-          ["Report ref", report.ref || "—"],
-          ["Issue", dc.issueNumber ? `${dc.issueNumber}${dc.revision ? ` Rev ${dc.revision}` : ""}` : "—"],
-          ["Survey date", report.surveyDate ? new Date(report.surveyDate).toLocaleDateString("en-GB") : "—"],
-          ["Issue date", issueDate ? new Date(issueDate).toLocaleDateString("en-GB") : "—"],
-          ["Client", report.client || "—"],
-          ["Project", report.projectName || "—"],
-          ["Site", report.siteAddress || "—"],
-          ["Survey type", surveyTypeLabel(report.surveyType) || "—"],
-          ["Surveyor", report.surveyor || "—"],
+          [tx("Report ref"), report.ref || "—"],
+          [tx("Issue"), dc.issueNumber ? `${dc.issueNumber}${dc.revision ? ` Rev ${dc.revision}` : ""}` : "—"],
+          [tx("Survey date"), report.surveyDate ? new Date(report.surveyDate).toLocaleDateString(documentLocale()) : "—"],
+          [tx("Issue date"), issueDate ? new Date(issueDate).toLocaleDateString(documentLocale()) : "—"],
+          [tx("Client"), report.client || "—"],
+          [tx("Project"), report.projectName || "—"],
+          [tx("Site"), report.siteAddress || "—"],
+          [tx("Survey type"), surveyTypeLabel(report.surveyType) || "—"],
+          [tx("Surveyor"), report.surveyor || "—"],
         ])}
       </div>
-      ${coverPhoto ? `<figure class="sr-cover-photo"><img src="${coverPhoto}" alt="Site"/><figcaption>Site overview</figcaption></figure>` : ""}
-      ${mapUrl ? `<figure class="sr-cover-map"><img src="${escapeAttr(mapUrl)}" alt="Site location map"/><figcaption>Site location (${Number(extras.projectLat).toFixed(5)}, ${Number(extras.projectLng).toFixed(5)})</figcaption></figure>` : ""}
+      ${coverPhoto ? `<figure class="sr-cover-photo"><img src="${coverPhoto}" alt="Site"/><figcaption>${esc(tx("Site overview"))}</figcaption></figure>` : ""}
+      ${mapUrl ? `<figure class="sr-cover-map"><img src="${escapeAttr(mapUrl)}" alt="Site location map"/><figcaption>${esc(tx("Site location"))} (${Number(extras.projectLat).toFixed(5)}, ${Number(extras.projectLng).toFixed(5)})</figcaption></figure>` : ""}
       ${report.cadImport?.summary?.length ? cadCoverStrip(report.cadImport) : ""}
       ${undertakerStrip}
       ${pas128Summary}
@@ -381,35 +388,35 @@ function tableOfContents(entries) {
   const items = entries
     .map((e) => `<li><a href="#${e.id}"><span>${esc(e.title)}</span><span class="sr-toc-dots"></span></a></li>`)
     .join("");
-  return `<nav class="sr-toc" aria-label="Contents"><h2 class="sr-toc-heading">Contents</h2><ol>${items}</ol></nav>`;
+  return `<nav class="sr-toc" aria-label="${esc(tx("Contents"))}"><h2 class="sr-toc-heading">${esc(tx("Contents"))}</h2><ol>${items}</ol></nav>`;
 }
 
 function documentControlBlock(report) {
   const dc = report.documentControl || {};
   const rows = [
-    ["Issue no.", dc.issueNumber || "1"],
-    ["Revision", dc.revision || "A"],
+    [tx("Issue no."), dc.issueNumber || "1"],
+    [tx("Revision"), dc.revision || "A"],
     [
-      "Issue date",
+      tx("Issue date"),
       (dc.issueDate || report.surveyDate)
-        ? new Date(dc.issueDate || report.surveyDate).toLocaleDateString("en-GB")
+        ? new Date(dc.issueDate || report.surveyDate).toLocaleDateString(documentLocale())
         : "—",
     ],
-    ["Prepared by", dc.preparedBy || report.surveyor || "—"],
-    ["Checked by", dc.checkedBy || "—"],
-    ["Approved by", dc.approvedBy || "—"],
-    ["Status", report.status === "final" ? "Final" : "Draft"],
+    [tx("Prepared by"), dc.preparedBy || report.surveyor || "—"],
+    [tx("Checked by"), dc.checkedBy || "—"],
+    [tx("Approved by"), dc.approvedBy || "—"],
+    [tx("Status"), report.status === "final" ? tx("Final") : tx("Draft")],
   ];
   if (report.finalisedAt) {
-    rows.push(["Finalised", new Date(report.finalisedAt).toLocaleDateString("en-GB")]);
+    rows.push([tx("Finalised"), new Date(report.finalisedAt).toLocaleDateString(documentLocale())]);
   }
-  let body = dataTable(["Field", "Value"], rows);
+  let body = dataTable([tx("Field"), tx("Value")], rows);
   const history = report.revisionHistory || [];
   if (history.length) {
-    body += `<h3 class="sr-subhead">Revision history</h3>${dataTable(
-      ["Date", "Rev", "Author", "Description"],
+    body += `<h3 class="sr-subhead">${esc(tx("Revision history"))}</h3>${dataTable(
+      [tx("Date"), tx("Rev"), tx("Author"), tx("Description")],
       history.map((h) => [
-        h.date ? new Date(h.date).toLocaleDateString("en-GB") : "",
+        h.date ? new Date(h.date).toLocaleDateString(documentLocale()) : "",
         h.revision || "",
         h.author || "",
         h.description || "",
@@ -664,7 +671,7 @@ function recordsReferencesBlock(rows) {
     rows.map((r) => [
       r.source || "",
       r.reference || "",
-      r.receivedDate ? new Date(r.receivedDate).toLocaleDateString("en-GB") : "",
+      r.receivedDate ? new Date(r.receivedDate).toLocaleDateString(documentLocale()) : "",
       recordRefStatusLabel(r.status) || r.status || "",
     ])
   );
@@ -679,7 +686,7 @@ function dbydEnquiriesBlock(rows) {
     rows.map((r) => [
       prov(r.provider),
       r.reference || "",
-      r.enquiryDate ? new Date(r.enquiryDate).toLocaleDateString("en-GB") : "",
+      r.enquiryDate ? new Date(r.enquiryDate).toLocaleDateString(documentLocale()) : "",
       r.undertakers || "",
       stat(r.status),
       r.notes || "",
@@ -702,7 +709,7 @@ function undertakerResponsesBlock(rows) {
       r.undertaker || "",
       cat(r.category),
       stat(r.status),
-      r.responseDate ? new Date(r.responseDate).toLocaleDateString("en-GB") : "",
+      r.responseDate ? new Date(r.responseDate).toLocaleDateString(documentLocale()) : "",
       r.notes || "",
     ])
   )}`;
@@ -749,7 +756,7 @@ function uavFlightsBlock(rows) {
     ["Flight", "Date", "Duration", "Altitude", "Overlap", "GCPs", "Wind", "Notes"],
     rows.map((r) => [
       r.flightId || "",
-      r.flightDate ? new Date(r.flightDate).toLocaleDateString("en-GB") : "",
+      r.flightDate ? new Date(r.flightDate).toLocaleDateString(documentLocale()) : "",
       r.durationMin || "",
       r.altitudeM || "",
       r.overlapPct || "",
@@ -817,12 +824,12 @@ function signaturesBlock(report) {
     <div class="sr-sig-box">
       <div class="sr-sig-label">Surveyor / author</div>
       <div class="sr-sig-line">${esc(surveyor || " ")}</div>
-      <div class="sr-sig-date">Date: ${sig.surveyorSignedDate ? new Date(sig.surveyorSignedDate).toLocaleDateString("en-GB") : "_______________"}</div>
+      <div class="sr-sig-date">Date: ${sig.surveyorSignedDate ? new Date(sig.surveyorSignedDate).toLocaleDateString(documentLocale()) : "_______________"}</div>
     </div>
     <div class="sr-sig-box">
       <div class="sr-sig-label">Client acceptance (optional)</div>
       <div class="sr-sig-line">${esc(sig.clientName || " ")}</div>
-      <div class="sr-sig-date">Date: ${sig.clientAcceptedDate ? new Date(sig.clientAcceptedDate).toLocaleDateString("en-GB") : "_______________"}</div>
+      <div class="sr-sig-date">Date: ${sig.clientAcceptedDate ? new Date(sig.clientAcceptedDate).toLocaleDateString(documentLocale()) : "_______________"}</div>
     </div>
   </div>`;
 }
@@ -979,7 +986,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
 
   const infoBody = metaGrid([
     ["Report ref", r.ref || "—"],
-    ["Survey date", r.surveyDate ? new Date(r.surveyDate).toLocaleDateString("en-GB") : "—"],
+    ["Survey date", r.surveyDate ? new Date(r.surveyDate).toLocaleDateString(documentLocale()) : "—"],
     ["Client", r.client || "—"],
     ["Project", r.projectName || "—"],
     ["Site", r.siteAddress || "—"],
@@ -1287,7 +1294,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
               name: r.documentControl?.preparedBy || r.surveyor || "—",
               title: "Utility Surveyor",
               date: (r.documentControl?.issueDate || r.surveyDate)
-                ? new Date(r.documentControl?.issueDate || r.surveyDate).toLocaleDateString("en-GB")
+                ? new Date(r.documentControl?.issueDate || r.surveyDate).toLocaleDateString(documentLocale())
                 : "",
             },
           ],
@@ -1295,7 +1302,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
             name: r.documentControl?.checkedBy || "—",
             title: "Technical Manager",
             date: r.documentControl?.issueDate
-              ? new Date(r.documentControl.issueDate).toLocaleDateString("en-GB")
+              ? new Date(r.documentControl.issueDate).toLocaleDateString(documentLocale())
               : "",
           },
         })
@@ -1335,7 +1342,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     .join("");
 
   return `<!DOCTYPE html>
-<html lang="en-GB">
+<html lang="${documentLocale()}">
 <head>
 <meta charset="utf-8"/>
 <title>${esc(r.title || r.ref || "Survey Report")}</title>
@@ -1833,7 +1840,7 @@ export function buildSurveyReportHtml(report, extras = {}) {
     ${umRibbon}
     ${umTheme ? "" : `<div class="sr-header-mini">
       <span><strong>${esc(r.title || "Survey Report")}</strong></span>
-      <span>${esc(footerRef)} · Generated ${now.toLocaleDateString("en-GB")}</span>
+      <span>${esc(footerRef)} · Generated ${now.toLocaleDateString(documentLocale())}</span>
     </div>`}
     ${sectionHtml}
     <div class="sr-disclaimer">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeHttpUrl, safeInternalPath } from "./safeUrl.js";
+import { safeBrandAssetUrl, safeHttpUrl, safeInternalPath } from "./safeUrl.js";
 
 describe("safeInternalPath", () => {
   it("allows normal app paths", () => {
@@ -18,6 +18,25 @@ describe("safeInternalPath", () => {
 
   it("decodes once and still rejects", () => {
     expect(safeInternalPath(encodeURIComponent("//x.test"), "/app")).toBe("/app");
+  });
+});
+
+describe("safeBrandAssetUrl", () => {
+  it("allows first-party branding paths and https assets", () => {
+    expect(safeBrandAssetUrl("/branding/barnes-fernandez-logo.png")).toBe(
+      "/branding/barnes-fernandez-logo.png",
+    );
+    expect(safeBrandAssetUrl("https://cdn.example.com/logo.png")).toBe(
+      "https://cdn.example.com/logo.png",
+    );
+  });
+
+  it("rejects protocol-relative, http, and non-http schemes", () => {
+    expect(safeBrandAssetUrl("//evil.test/logo.png")).toBe("");
+    expect(safeBrandAssetUrl("http://cdn.example.com/logo.png")).toBe("");
+    expect(safeBrandAssetUrl("javascript:alert(1)")).toBe("");
+    expect(safeBrandAssetUrl("data:image/png;base64,aaa")).toBe("");
+    expect(safeBrandAssetUrl("")).toBe("");
   });
 });
 

@@ -10,6 +10,7 @@ import { loadDrawingEditorPrefs } from "../modules/permits/projectDrawingEditorP
 import { latLngToPlanPercentAffine } from "../modules/permits/projectDrawingAffine";
 
 import { todayLocalISO } from "./localDate";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 const EARTH_RADIUS_M = 6371000;
 
 /** Local site grid metres from WGS84 relative to origin. */
@@ -87,7 +88,7 @@ function photoMetadataRows(photo) {
     phase ? ["Phase", phase] : null,
     bearing != null ? ["View bearing", `${bearing}°`] : null,
     photo.capturedBy ? ["Captured by", photo.capturedBy] : null,
-    photo.timestampUtc ? ["Captured", new Date(photo.timestampUtc).toLocaleString("en-GB")] : null,
+    photo.timestampUtc ? ["Captured", new Date(photo.timestampUtc).toLocaleString(getActiveDocumentLocale())] : null,
   ].filter(Boolean);
   return rows;
 }
@@ -705,7 +706,7 @@ function buildGeoPhotosViewerHtml(photos, origin, opts = {}) {
   const data = JSON.stringify(rows);
   const originJson = JSON.stringify(origin);
   return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${title} — viewer</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>

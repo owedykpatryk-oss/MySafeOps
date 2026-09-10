@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Info } from "lucide-react";
 import { getOrgMarketId } from "../utils/orgMarket";
+import { COUNTRY_WORKSPACE_CHANGED_EVENT, getCachedActiveCountryWorkspace } from "../utils/countryWorkspaces";
 
 const DISMISS_KEY = "mysafeops_pl_ui_lang_banner_dismissed";
 
@@ -17,8 +18,14 @@ function readDismissed() {
  * Honest disclosure until full i18n exists.
  */
 export default function PlEnglishUiBanner() {
-  const marketId = getOrgMarketId();
+  const [marketId, setMarketId] = useState(() => getCachedActiveCountryWorkspace()?.market_id || getOrgMarketId());
   const [dismissed, setDismissed] = useState(readDismissed);
+
+  useEffect(() => {
+    const sync = () => setMarketId(getCachedActiveCountryWorkspace()?.market_id || getOrgMarketId());
+    window.addEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, sync);
+  }, []);
 
   if (marketId !== "pl" || dismissed) return null;
 

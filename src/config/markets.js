@@ -1,5 +1,6 @@
 /**
- * Regional compliance packs. One org = one market (orgSettings.market).
+ * Regional compliance packs. One organisation may own multiple paid country
+ * workspaces; the active workspace selects the current market pack.
  *
  * Adding a market — touch in order:
  * 1. MARKETS entry below (+ App.jsx routes, public/legal/{id}/)

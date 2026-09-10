@@ -3,6 +3,73 @@ import { describe, it, expect } from "vitest";
 import { renderPermitDocumentHtml, buildPermitStatusDeepLink } from "./permitDocumentHtml";
 
 describe("renderPermitDocumentHtml", () => {
+  it("renders the Polish permit pack for an active Poland workspace", () => {
+    localStorage.setItem("mysafeops_orgId", "pl-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_pl-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const html = renderPermitDocumentHtml({
+      id: "p-pl-1",
+      type: "electrical",
+      status: "pending_review",
+      description: "Odłączenie rozdzielnicy",
+      location: "Warszawa",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: {},
+    });
+    expect(html).toContain('lang="pl-PL"');
+    expect(html).toContain("Pozwolenie na odłączenie elektryczne");
+    expect(html).toContain("Lista kontrolna przed rozpoczęciem pracy");
+    expect(html).toContain("Kodeks pracy");
+    expect(html).not.toContain("Legal references (UK)");
+    localStorage.clear();
+  });
+
+  it("keeps UK en-GB pack and prefers profile legal references over country defaults", () => {
+    localStorage.setItem("mysafeops_orgId", "uk-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_uk-org",
+      JSON.stringify({ id: "ws-uk", market_id: "uk", default_document_locale: "en-GB", is_primary: true }),
+    );
+    const withProfile = renderPermitDocumentHtml({
+      id: "p-uk-1",
+      type: "hot_work",
+      status: "active",
+      description: "Hot work on plant",
+      location: "Plant room",
+      issuedBy: "A",
+      issuedTo: "B",
+      checklist: {},
+      extraFields: {},
+      complianceProfile: {
+        legalReferences: ["Dangerous Substances and Explosive Atmospheres Regulations 2002"],
+      },
+    });
+    expect(withProfile).toContain('lang="en-GB"');
+    expect(withProfile).toContain("Permit to work");
+    expect(withProfile).toContain("Dangerous Substances and Explosive Atmospheres Regulations 2002");
+    expect(withProfile).not.toContain("Kodeks pracy");
+
+    const withoutProfile = renderPermitDocumentHtml({
+      id: "p-uk-2",
+      type: "general",
+      status: "draft",
+      description: "General works",
+      location: "Site compound",
+      issuedBy: "A",
+      issuedTo: "B",
+      checklist: {},
+      extraFields: {},
+    });
+    expect(withoutProfile).toContain('lang="en-GB"');
+    expect(withoutProfile).toContain("Legal and regulatory references (UK)");
+    expect(withoutProfile).toContain("Construction (Design and Management) Regulations 2015");
+    localStorage.clear();
+  });
+
   it("includes closure and lessons learned for closed permits", () => {
     const html = renderPermitDocumentHtml({
       id: "p-closed-1",
@@ -108,8 +175,113 @@ describe("excavation dig guidance on PDF", () => {
     });
     expect(html).toContain("Safe dig");
     expect(html).toContain("PAS 128");
+    expect(html).toContain("HSG47");
+    expect(html).toContain("CAT scan");
     expect(html).toContain("B1");
     expect(html).toContain("PAS128-B1-Rev2");
+  });
+
+  it("drops UK CAT/PAS 128 extra-field labels from Poland excavation print", () => {
+    localStorage.setItem("mysafeops_orgId", "pl-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_pl-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const html = renderPermitDocumentHtml({
+      id: "p-pl-dig-1",
+      type: "excavation",
+      status: "active",
+      description: "Wykop próbny",
+      location: "Warszawa",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: {
+        catScanBy: "Geodeta Kowalski",
+        pas128QualityLevel: "QL-B",
+        pas128SurveyType: "B1",
+        surveyDrawingRef: "CPD-12",
+      },
+    });
+    expect(html).toContain("Pozwolenie na wykop");
+    expect(html).toContain("Lokalizacja uzbrojenia wykonana przez");
+    expect(html).toContain("Geodeta Kowalski");
+    expect(html).toContain("Numer mapy uzbrojenia / rysunku");
+    expect(html).toContain("CPD-12");
+    expect(html).not.toContain("CAT scan carried out by");
+    expect(html).not.toContain("PAS 128 quality level");
+    expect(html).not.toContain("PAS 128 survey type");
+    expect(html).not.toContain("Safe dig & PAS 128");
+    expect(html).not.toContain("CAT scan by");
+    expect(html).not.toMatch(/PAS 128/);
+    localStorage.clear();
+  });
+
+  it("drops UK Appointed Person extra-field labels from Poland lifting print", () => {
+    localStorage.setItem("mysafeops_orgId", "pl-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_pl-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const html = renderPermitDocumentHtml({
+      id: "p-pl-lift-1",
+      type: "lifting",
+      status: "active",
+      description: "Podnoszenie prefabrykatu",
+      location: "Kraków",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: {
+        liftingEquipment: "Żuraw Z-12",
+        appointedPerson: "Piotr Nowak",
+      },
+    });
+    expect(html).toContain("Pozwolenie na operacje podnoszenia");
+    expect(html).toContain("Urządzenie dźwigowe / nr żurawia");
+    expect(html).toContain("Żuraw Z-12");
+    expect(html).toContain("Osoba kompetentna nadzorująca podnoszenie");
+    expect(html).toContain("Piotr Nowak");
+    expect(html).not.toContain("Appointed Person");
+    expect(html).not.toContain("LOLER");
+    localStorage.clear();
+  });
+
+  it("drops UK WAHR/IPAF/ScaffTag and CSR 1997 from Poland WAH and confined-space print", () => {
+    localStorage.setItem("mysafeops_orgId", "pl-org");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_pl-org",
+      JSON.stringify({ id: "ws-pl", market_id: "pl", default_document_locale: "pl-PL", is_primary: false }),
+    );
+    const wah = renderPermitDocumentHtml({
+      id: "p-pl-wah-1",
+      type: "work_at_height",
+      status: "active",
+      description: "Praca na rusztowaniu",
+      location: "Kraków",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: { accessEquipment: "MEWP" },
+    });
+    expect(wah).toContain("Pozwolenie na pracę na wysokości");
+    expect(wah).toMatch(/BHP|UDT/);
+    expect(wah).not.toMatch(/IPAF|ScaffTag|Work at Height Regulations 2005/i);
+    const confined = renderPermitDocumentHtml({
+      id: "p-pl-cs-1",
+      type: "confined_space",
+      status: "active",
+      description: "Wejście do komory",
+      location: "Kraków",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      checklist: {},
+      extraFields: { o2Reading: "20.9" },
+    });
+    expect(confined).toContain("Pozwolenie na wejście do przestrzeni zamkniętej");
+    expect(confined).toMatch(/BHP|przestrzeń zamknięta/i);
+    expect(confined).not.toMatch(/Confined Spaces Regulations 1997|HSE L101/i);
+    localStorage.clear();
   });
 });
 

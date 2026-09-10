@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 
 const BUCKET = "permit-evidence";
 
@@ -17,10 +18,14 @@ export async function uploadPermitEvidencePhoto(file, permitId) {
   } = await supabase.auth.getUser();
   if (userErr) throw userErr;
   if (!user?.id) throw new Error("Sign in to upload photos.");
+  // Country workspaces isolate evidence per paid country. Organisations that have not been
+  // migrated yet (or are offline-only) keep uploading under a stable legacy segment rather
+  // than losing the feature — the storage policy scopes objects by user id either way.
+  const workspaceId = getCachedActiveCountryWorkspace()?.id || "legacy";
 
   const safePermit = String(permitId || "draft").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
   const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-  const path = `${user.id}/${safePermit}/${Date.now()}.${ext}`;
+  const path = `${user.id}/${workspaceId}/${safePermit}/${Date.now()}.${ext}`;
 
   const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
     cacheControl: "3600",

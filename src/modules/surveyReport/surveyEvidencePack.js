@@ -13,6 +13,7 @@ import {
 } from "./surveyReportConstants";
 import { buildWeatherNarrative } from "./surveyReportHelpers";
 import { getQaChecklistItemsForSurveyType } from "./surveyQaPack";
+import { getActiveDocumentLocale } from "../../utils/countryWorkspaces";
 
 const esc = escapeHtml;
 
@@ -755,7 +756,7 @@ export function buildA3BoardPackHtml(report = {}, opts = {}) {
   const recordsBoard = buildRecordsStatusBoardHtml(r);
 
   return `<!DOCTYPE html>
-<html lang="en-GB"><head><meta charset="utf-8"/>
+<html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/>
 <title>${esc(r.ref || "Board pack")} — A3</title>
 <style>
   @page { size: A3 landscape; margin: 12mm; }

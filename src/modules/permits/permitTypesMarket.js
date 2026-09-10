@@ -80,6 +80,11 @@ export const AU_PERMIT_TYPE_OVERRIDES = {
       "Overhead hazards (power lines, structures) confirmed clear",
       "Weather / wind speed assessed and within limits",
     ],
+    extraFields: [
+      { key: "liftingEquipment", label: "Lifting equipment / crane ID", type: "text" },
+      { key: "swl", label: "SWL of equipment (tonnes)", type: "number" },
+      { key: "appointedPerson", label: "Competent person / lift supervisor", type: "text" },
+    ],
   },
   ground_disturbance: {
     checklist: [
@@ -92,6 +97,14 @@ export const AU_PERMIT_TYPE_OVERRIDES = {
       "Pre-work condition survey of adjacent structures photographed",
       "Groundwater monitoring in place if dewatering required",
       "Environmental controls for waterways / sensitive areas confirmed",
+    ],
+    extraFields: [
+      { key: "groundType", label: "Ground type / geology", type: "text" },
+      { key: "disturbanceMethod", label: "Method of disturbance", type: "text" },
+      { key: "maxDepth", label: "Maximum disturbance depth (m)", type: "number" },
+      { key: "dbydRef", label: "DBYD enquiry reference", type: "text" },
+      { key: "surveyDrawingRef", label: "Utility survey / drawing reference", type: "text" },
+      { key: "utilityStrikeContacts", label: "Utility strike emergency contacts", type: "text" },
     ],
   },
 };
@@ -115,7 +128,49 @@ export function mergePermitMarketOverrides(base, overrides) {
 }
 
 const PL_PERMIT_TYPE_OVERRIDES = {
+  hot_work: {
+    label: "Pozwolenie na prace gorące",
+    description: "Spawanie, szlifowanie, cięcie, lutowanie i inne prace powodujące powstawanie ciepła lub iskier",
+  },
+  cold_work: {
+    label: "Pozwolenie na prace zimne",
+    description: "Prace utrzymaniowe bez prac gorących, z wymaganym odłączeniem energii i procedurą LOTO",
+  },
+  line_break: { label: "Pozwolenie na rozszczelnienie instalacji" },
+  roof_access: { label: "Pozwolenie na wejście na dach" },
+  night_works: { label: "Pozwolenie na prace nocne" },
+  valve_isolation: { label: "Pozwolenie na odłączenie armatury" },
+  visitor_access: { label: "Pozwolenie na dostęp gości" },
+  radiography: { label: "Pozwolenie na badania radiograficzne" },
+  ground_disturbance: {
+    label: "Pozwolenie na naruszenie gruntu",
+    description: "Pale, kotwy, słupy — naruszenie gruntu poza głębokością lokalizacji uzbrojenia",
+    checklist: [
+      "Raport geotechniczny sprawdzony — rodzaj gruntu, zanieczyszczenia, pustki",
+      "Zlecenie mapy uzbrojenia terenu (geodeta / CPD)",
+      "Lokalizacja uzbrojenia oznaczona na placu przed rozpoczęciem prac",
+      "Ocena archeologiczna / konserwatorska tam, gdzie wymagana",
+      "Metoda naruszenia gruntu zatwierdzona przez osobę kompetentną",
+      "Monitoring drgań sąsiednich konstrukcji tam, gdzie wymagany",
+      "Inwentaryzacja stanu sąsiednich obiektów ze zdjęciami",
+      "Monitoring wód gruntowych przy odwodnieniu",
+      "Zabezpieczenia środowiskowe przy ciekach / obszarach wrażliwych",
+    ],
+    extraFields: [
+      { key: "groundType", label: "Rodzaj gruntu / geologia", type: "text" },
+      { key: "disturbanceMethod", label: "Metoda naruszenia gruntu", type: "text" },
+      { key: "maxDepth", label: "Maksymalna głębokość naruszenia (m)", type: "number" },
+      { key: "surveyDrawingRef", label: "Numer mapy uzbrojenia / rysunku", type: "text" },
+      { key: "utilityStrikeContacts", label: "Kontakty awaryjne przy uszkodzeniu uzbrojenia", type: "text" },
+    ],
+  },
+  line_clearance: { label: "Pozwolenie na pracę w pobliżu linii" },
+  rail_corridor_access: { label: "Pozwolenie na dostęp do obszaru kolejowego" },
+  marine_hydrographic: { label: "Pozwolenie na pomiary hydrograficzne" },
+  aerial_survey_coordination: { label: "Pozwolenie na koordynację nalotu pomiarowego" },
+  general: { label: "Ogólne pozwolenie na pracę" },
   excavation: {
+    label: "Pozwolenie na wykop / prace ziemne",
     description: "Wykop lub naruszenie gruntu — mapy uzbrojenia (CPD / geodeta)",
     checklist: [
       "Zlecenie mapy uzbrojenia terenu (geodeta / CPD)",
@@ -125,8 +180,16 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Strefa wyłączona nad wykopem",
       "Koordynator BHP poinformowany przed startem",
     ],
+    extraFields: [
+      { key: "catScanBy", label: "Lokalizacja uzbrojenia wykonana przez", type: "text" },
+      { key: "knownServices", label: "Znane uzbrojenie w rejonie", type: "text" },
+      { key: "excavationDepth", label: "Maksymalna głębokość wykopu (m)", type: "number" },
+      { key: "surveyDrawingRef", label: "Numer mapy uzbrojenia / rysunku", type: "text" },
+      { key: "utilityStrikeContacts", label: "Kontakty awaryjne przy uszkodzeniu uzbrojenia", type: "text" },
+    ],
   },
   work_at_height: {
+    label: "Pozwolenie na pracę na wysokości",
     checklist: [
       "Sprawdzenie rusztowań / podestów — aktualna dopuszczalność",
       "Uprawnienia UDT dla podestów i żurawi",
@@ -137,12 +200,55 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   electrical: {
+    label: "Pozwolenie na odłączenie elektryczne",
     checklist: [
       "Punkt izolacji zidentyfikowany",
       "Izolacja przez osobę z uprawnieniami SEP",
       "Kłódka LOTO i tabliczka",
       "Potwierdzenie braku napięcia",
       "Pozwolenie u osoby wykonującej pracę",
+    ],
+  },
+  confined_space: {
+    label: "Pozwolenie na wejście do przestrzeni zamkniętej",
+    description: "Wejście do zbiorników, kanałów, pustek — przestrzeń o ograniczonej wymianie powietrza",
+    checklist: [
+      "Ocena ryzyka przestrzeni zamkniętej aktualna i sprawdzona",
+      "Pomiar atmosfery: O₂ (19,5–23,5%), gazy toksyczne w granicach, LEL (<10% przed wejściem)",
+      "Monitoring ciągły podczas przebywania w przestrzeni",
+      "Wentylacja mechaniczna potwierdzona i sprawna",
+      "Osoba asekurująca poinformowana i na stanowisku na zewnątrz",
+      "Sprzęt ratowniczy (trójnóg, wciągarka, szelki) przygotowany",
+      "Plan ewakuacji potwierdzony z osobą asekurującą",
+      "Wszystkie źródła energii odłączone (LOTO) przed wejściem",
+      "Łączność między wchodzącym a asekurującym sprawdzona",
+      "Uzgodniono maksymalną liczbę osób i czas przebywania",
+    ],
+    extraFields: [
+      { key: "spaceDescription", label: "Opis / lokalizacja przestrzeni", type: "text" },
+      { key: "standByPerson", label: "Osoba asekurująca", type: "text" },
+      { key: "atmosphericReadings", label: "Wstępne pomiary atmosfery", type: "text" },
+    ],
+  },
+  lifting: {
+    label: "Pozwolenie na operacje podnoszenia",
+    description: "Żurawie, podesty, zawiesia — operacje podnoszenia zgodnie z wymaganiami UDT",
+    checklist: [
+      "Plan podnoszenia przygotowany przez osobę kompetentną",
+      "Urządzenie dźwigowe z aktualnym badaniem UDT",
+      "Operator z uprawnieniami UDT do danego urządzenia",
+      "Dobór zawiesi — typ, udźwig i kąt pracy",
+      "Masa ładunku potwierdzona — nie przekracza DOR żadnego elementu",
+      "Strefa wyłączona pod i wokół podnoszenia",
+      "Sygnalista na stanowisku z uzgodnionym systemem znaków",
+      "Warunki podłoża sprawdzone — stateczność, poziom, nośność",
+      "Przeszkody nad głową (linie, konstrukcje) potwierdzone jako wolne",
+      "Warunki wiatrowe ocenione i w dopuszczalnych granicach",
+    ],
+    extraFields: [
+      { key: "liftingEquipment", label: "Urządzenie dźwigowe / nr żurawia", type: "text" },
+      { key: "swl", label: "DOR urządzenia (tony)", type: "number" },
+      { key: "appointedPerson", label: "Osoba kompetentna nadzorująca podnoszenie", type: "text" },
     ],
   },
 };

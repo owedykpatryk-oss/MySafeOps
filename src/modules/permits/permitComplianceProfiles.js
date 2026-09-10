@@ -1,6 +1,13 @@
 import { loadOrgScoped, saveOrgScoped } from "../../utils/orgStorage";
+import { getOrgMarketId } from "../../utils/orgMarket";
 import { PERMIT_TYPES } from "./permitTypes";
-import { getComplianceProfile, UK_COMPLIANCE_MATRIX_VERSION } from "./ukComplianceMatrix";
+import { getPermitTypesForMarket } from "./permitTypesMarket";
+import {
+  getComplianceProfile,
+  evidenceFieldsForMarket,
+  checklistIdsForMarket,
+  UK_COMPLIANCE_MATRIX_VERSION,
+} from "./ukComplianceMatrix";
 
 const COMPLIANCE_PROFILES_KEY = "permit_compliance_profiles_v1";
 
@@ -14,18 +21,20 @@ function uniqueStrings(list) {
   );
 }
 
-export function checklistIdsForType(type) {
-  const checklist = PERMIT_TYPES[type]?.checklist || PERMIT_TYPES.general?.checklist || [];
+export function checklistIdsForType(type, marketId = getOrgMarketId()) {
+  const checklist =
+    getPermitTypesForMarket(marketId)[type]?.checklist || PERMIT_TYPES.general?.checklist || [];
   return checklist.map((_, idx) => `${type}_${idx + 1}`);
 }
 
-export function evidenceKeysForType(type) {
-  const fields = PERMIT_TYPES[type]?.extraFields || PERMIT_TYPES.general?.extraFields || [];
+export function evidenceKeysForType(type, marketId = getOrgMarketId()) {
+  const fields =
+    getPermitTypesForMarket(marketId)[type]?.extraFields || PERMIT_TYPES.general?.extraFields || [];
   return fields.map((f) => String(f?.key || "").trim()).filter(Boolean);
 }
 
-export function defaultComplianceProfileForType(type) {
-  const base = getComplianceProfile(type);
+export function defaultComplianceProfileForType(type, marketId = getOrgMarketId()) {
+  const base = getComplianceProfile(type, marketId);
   return {
     matrixVersion: UK_COMPLIANCE_MATRIX_VERSION,
     legalRequiredChecklistIds: uniqueStrings(base.legalRequiredChecklistIds),
@@ -35,16 +44,18 @@ export function defaultComplianceProfileForType(type) {
   };
 }
 
-export function normalizeComplianceProfile(type, input) {
-  const base = defaultComplianceProfileForType(type);
+export function normalizeComplianceProfile(type, input, marketId = getOrgMarketId()) {
+  const base = defaultComplianceProfileForType(type, marketId);
   const merged = {
     ...base,
     ...(input && typeof input === "object" ? input : {}),
   };
   return {
     matrixVersion: String(merged.matrixVersion || UK_COMPLIANCE_MATRIX_VERSION),
-    legalRequiredChecklistIds: uniqueStrings(merged.legalRequiredChecklistIds),
-    requiredEvidenceFields: uniqueStrings(merged.requiredEvidenceFields),
+    legalRequiredChecklistIds: uniqueStrings(
+      checklistIdsForMarket(merged.legalRequiredChecklistIds, type, marketId)
+    ),
+    requiredEvidenceFields: uniqueStrings(evidenceFieldsForMarket(merged.requiredEvidenceFields, marketId)),
     legalReferences: uniqueStrings(merged.legalReferences),
     notes: String(merged.notes || "").trim(),
   };
@@ -55,7 +66,7 @@ export function loadPermitComplianceProfiles() {
   if (!raw || typeof raw !== "object") return {};
   const out = {};
   Object.keys(raw).forEach((type) => {
-    out[type] = normalizeComplianceProfile(type, raw[type]);
+    out[type] = normalizeComplianceProfile(type, raw[type], getOrgMarketId());
   });
   return out;
 }
@@ -64,14 +75,14 @@ export function savePermitComplianceProfiles(profiles) {
   const src = profiles && typeof profiles === "object" ? profiles : {};
   const out = {};
   Object.keys(src).forEach((type) => {
-    out[type] = normalizeComplianceProfile(type, src[type]);
+    out[type] = normalizeComplianceProfile(type, src[type], getOrgMarketId());
   });
   saveOrgScoped(COMPLIANCE_PROFILES_KEY, out);
 }
 
-export function resolvePermitComplianceProfile(type, profileMap, embeddedProfile = null) {
+export function resolvePermitComplianceProfile(type, profileMap, embeddedProfile = null, marketId = getOrgMarketId()) {
   if (embeddedProfile && typeof embeddedProfile === "object") {
-    return normalizeComplianceProfile(type, embeddedProfile);
+    return normalizeComplianceProfile(type, embeddedProfile, marketId);
   }
-  return normalizeComplianceProfile(type, profileMap?.[type]);
+  return normalizeComplianceProfile(type, profileMap?.[type], marketId);
 }

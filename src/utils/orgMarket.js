@@ -3,11 +3,16 @@ import { getOrgId } from "./orgStorage";
 import { loadOrgSettingsRaw, saveOrgSettingsRaw } from "./orgSettingsStorage";
 import { getStoredMarketId, setStoredMarketId } from "./marketPref";
 import { applyMarketModuleDefaults } from "./marketModuleSync";
+import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 
 /** @typedef {import("../config/markets").MarketId} MarketId */
 
 /** @returns {MarketId} */
 export function getOrgMarketId(orgId = getOrgId()) {
+  const activeWorkspaceMarket = getCachedActiveCountryWorkspace(orgId)?.market_id;
+  if (activeWorkspaceMarket === "au" || activeWorkspaceMarket === "uk" || activeWorkspaceMarket === "pl") {
+    return activeWorkspaceMarket;
+  }
   const settings = loadOrgSettingsRaw(orgId);
   const fromSettings = settings?.market;
   if (fromSettings === "au" || fromSettings === "uk" || fromSettings === "pl") return fromSettings;

@@ -9,7 +9,8 @@
  *
  * Run: npm run stripe:setup-test
  *
- * Creates test prices (same GBP amounts as live), pushes STRIPE_*_TEST secrets to Supabase Edge,
+ * Creates test prices in GBP, PLN and AUD (same amounts as live) so every country workspace
+ * can be rehearsed in test mode, pushes STRIPE_*_TEST secrets to Supabase Edge,
  * and prints webhook setup instructions if test webhook secret is missing.
  */
 import { config } from "dotenv";
@@ -20,6 +21,8 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import Stripe from "stripe";
+import { AU_PLAN_AMOUNT_CENTS } from "../src/config/auPricing.js";
+import { PL_PLAN_AMOUNT_GROSZE } from "../src/config/plPricing.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 config({ path: resolve(__dirname, "../.env.local") });
@@ -49,6 +52,17 @@ const PLANS = [
   { planId: "enterprise", productName: "MySafeOps — Enterprise", amountPence: 49900 },
 ];
 
+/**
+ * Country workspaces are billed independently in local currency, and checkout fails closed
+ * when a market's price catalogue is incomplete. Test mode therefore needs the same three
+ * currencies as live — otherwise the multi-country flow can only be rehearsed with real money.
+ */
+const TEST_MARKETS = [
+  { suffix: "", currency: "gbp", amountFor: (plan) => plan.amountPence },
+  { suffix: "_PLN", currency: "pln", amountFor: (plan) => PL_PLAN_AMOUNT_GROSZE[plan.planId] },
+  { suffix: "_AUD", currency: "aud", amountFor: (plan) => AU_PLAN_AMOUNT_CENTS[plan.planId] },
+];
+
 const TEST_SECRET = (process.env.STRIPE_SECRET_KEY_TEST || readStripeCliTestKey() || "").trim();
 const TEST_WEBHOOK = process.env.STRIPE_WEBHOOK_SECRET_TEST?.trim();
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL?.trim()?.replace(/\/$/, "");
@@ -75,35 +89,43 @@ async function findProductByPlanId(planId) {
   }
 }
 
-async function getOrCreatePrice(plan) {
-  let product = await findProductByPlanId(plan.planId);
-  if (!product) {
-    product = await stripe.products.create({
-      name: plan.productName,
-      metadata: { mysafeops_plan_id: plan.planId },
-    });
-    console.log(`Created test product ${plan.planId}: ${product.id}`);
-  } else {
+async function getOrCreateProduct(plan) {
+  const product = await findProductByPlanId(plan.planId);
+  if (product) {
     console.log(`Found test product ${plan.planId}: ${product.id}`);
+    return product;
+  }
+  const created = await stripe.products.create({
+    name: plan.productName,
+    metadata: { mysafeops_plan_id: plan.planId },
+  });
+  console.log(`Created test product ${plan.planId}: ${created.id}`);
+  return created;
+}
+
+async function getOrCreatePrice(product, plan, market) {
+  const amount = market.amountFor(plan);
+  if (!Number.isFinite(amount)) {
+    throw new Error(`No ${market.currency.toUpperCase()} amount configured for plan ${plan.planId}`);
   }
 
-  const prices = await stripe.prices.list({ product: product.id, active: true, limit: 30 });
+  const prices = await stripe.prices.list({ product: product.id, active: true, limit: 100 });
   const existing = prices.data.find(
-    (p) => p.currency === "gbp" && p.unit_amount === plan.amountPence && p.recurring?.interval === "month",
+    (p) => p.currency === market.currency && p.unit_amount === amount && p.recurring?.interval === "month",
   );
   if (existing) {
-    console.log(`  Using existing test price: ${existing.id}`);
+    console.log(`  Using existing ${market.currency.toUpperCase()} test price: ${existing.id}`);
     return existing.id;
   }
 
   const created = await stripe.prices.create({
     product: product.id,
-    currency: "gbp",
-    unit_amount: plan.amountPence,
+    currency: market.currency,
+    unit_amount: amount,
     recurring: { interval: "month" },
-    metadata: { mysafeops_plan_id: plan.planId },
+    metadata: { mysafeops_plan_id: plan.planId, mysafeops_currency: market.currency },
   });
-  console.log(`  Created test price: ${created.id}`);
+  console.log(`  Created ${market.currency.toUpperCase()} test price: ${created.id}`);
   return created.id;
 }
 
@@ -139,20 +161,16 @@ async function ensureTestWebhook() {
 async function main() {
   console.log("Stripe TEST mode setup (live keys unchanged)\n");
 
-  const priceIds = {};
+  const secrets = { STRIPE_SECRET_KEY_TEST: TEST_SECRET };
   for (const plan of PLANS) {
-    priceIds[plan.planId] = await getOrCreatePrice(plan);
+    const product = await getOrCreateProduct(plan);
+    for (const market of TEST_MARKETS) {
+      const priceId = await getOrCreatePrice(product, plan, market);
+      secrets[`STRIPE_PRICE_${plan.planId.toUpperCase()}_TEST${market.suffix}`] = priceId;
+    }
   }
 
   const webhookSecret = await ensureTestWebhook();
-
-  const secrets = {
-    STRIPE_SECRET_KEY_TEST: TEST_SECRET,
-    STRIPE_PRICE_STARTER_TEST: priceIds.starter,
-    STRIPE_PRICE_TEAM_TEST: priceIds.team,
-    STRIPE_PRICE_BUSINESS_TEST: priceIds.business,
-    STRIPE_PRICE_ENTERPRISE_TEST: priceIds.enterprise,
-  };
   if (webhookSecret) secrets.STRIPE_WEBHOOK_SECRET_TEST = webhookSecret;
 
   console.log("\nPushing Supabase Edge secrets…");

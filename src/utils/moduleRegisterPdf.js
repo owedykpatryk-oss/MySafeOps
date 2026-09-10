@@ -3,6 +3,8 @@ import { loadOrgScoped } from "./orgStorage";
 import { sanitizePdfFileSegment } from "./pdfFileName";
 import { canExportModulePdf, getModulePdfConfig } from "../navigation/moduleCatalogMeta";
 import { getModuleTilePresentation } from "./moduleTileIntelligence";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
+import { documentText } from "./documentCountryPack";
 import { MORE_SECTIONS, getMoreTabsForSection } from "../navigation/appModules";
 import { prepareRegisterExport, renderDailyBriefingDetailPages, renderGeoPhotoDetailPages } from "./registerPdfAdapters";
 import {
@@ -86,7 +88,7 @@ function formatCell(value) {
   const s = String(value);
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
     try {
-      return new Date(s).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+      return new Date(s).toLocaleDateString(getActiveDocumentLocale(), { day: "2-digit", month: "short", year: "numeric" });
     } catch {
       return s.slice(0, 24);
     }
@@ -97,7 +99,7 @@ function formatCell(value) {
 /** @param {Record<string, unknown>[]} rows */
 export function inferRegisterColumns(rows, maxCols = 5) {
   if (!Array.isArray(rows) || rows.length === 0) {
-    return [{ k: "_status", l: "Status" }];
+    return [{ k: "_status", l: documentText("Status") }];
   }
   const keys = new Set();
   rows.slice(0, 25).forEach((row) => {
@@ -193,7 +195,7 @@ function renderModuleOverviewPage(pdf, moduleId, label, org, rgb, accentRgb, the
   pdf.setTextColor(100, 116, 139);
   pdf.text("Exported from your organisation workspace. For live registers with records,", MARGIN + 4, y + 8);
   pdf.text("use Premium PDF on the module tile after adding entries.", MARGIN + 4, y + 13);
-  pdf.text(`Generated ${new Date().toLocaleString("en-GB")}`, MARGIN + 4, y + 22);
+  pdf.text(`${documentText("Generated")} ${new Date().toLocaleString(getActiveDocumentLocale())}`, MARGIN + 4, y + 22);
   return y + 36;
 }
 

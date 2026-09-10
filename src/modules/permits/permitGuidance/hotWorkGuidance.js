@@ -1,9 +1,52 @@
 /**
- * UK hot work permit guidance — HSE hot work, typical client fire watch requirements.
- * Illustrative — site RAMS and fire plan govern on site.
+ * Hot work permit guidance — fire watch and 10 m zone (illustrative).
+ * UK copy cites HSE / Fire Safety Order; PL/AU keep the widgets with local statute names.
  */
 
+import { getOrgMarketId } from "../../../utils/orgMarket";
+
 export const HOT_WORK_PERMIT_TYPES = new Set(["hot_work"]);
+
+/** Field keys stay shared; authority names follow the active country workspace. */
+export function hotWorkGuidanceCopy(marketId = getOrgMarketId()) {
+  if (marketId === "pl") {
+    return {
+      panelSubtitle: `Strefa 10 m, dyżur pożarowy min. ${DEFAULT_FIRE_WATCH_MINS} min po pracy, typowy limit ${MAX_HOT_WORK_HOURS} h pozwolenia.`,
+      refHref: "https://www.pip.gov.pl/",
+      refLabel: "PIP — prace gorące",
+      printIntro: `Prace gorące — wymagania BHP. Typowa reguła: minimum ${DEFAULT_FIRE_WATCH_MINS} min dyżuru pożarowego po pracy; max ${MAX_HOT_WORK_HOURS} h pozwolenia.`,
+      printFooter: "BHP · prace gorące · plan ochrony przeciwpożarowej",
+      durationBlocker: `Dyżur pożarowy po pracy musi trwać co najmniej ${DEFAULT_FIRE_WATCH_MINS} minut (typowa reguła BHP / klienta).`,
+      goFooter: "IOR / plan ppoż. stanowiska jest wiążący — wytyczne BHP",
+      zoneRule: "Minimalny odstęp 10 m (typowa reguła BHP)",
+      readyCopy: "GO — zapisano zabezpieczenia prac gorących. Utrzymaj dyżur pożarowy po zakończeniu prac.",
+    };
+  }
+  if (marketId === "au") {
+    return {
+      panelSubtitle: `10 m zone clearance, fire watch min ${DEFAULT_FIRE_WATCH_MINS} min post-work, typical ${MAX_HOT_WORK_HOURS} h permit cap.`,
+      refHref: "https://www.safeworkaustralia.gov.au/doc/model-code-practice-welding-processes",
+      refLabel: "Safe Work Australia — welding processes",
+      printIntro: `WHS hot work practice. Typical client rule: minimum ${DEFAULT_FIRE_WATCH_MINS} min post-work fire watch; max ${MAX_HOT_WORK_HOURS} h permit.`,
+      printFooter: "WHS · welding / hot work · site fire plan",
+      durationBlocker: `Post-work fire watch must be at least ${DEFAULT_FIRE_WATCH_MINS} minutes (WHS / typical client rule).`,
+      goFooter: "Site SWMS & fire plan govern — WHS hot work guidance",
+      zoneRule: "Minimum 10 m clearance (typical site rule)",
+      readyCopy: "GO — hot work controls recorded. Maintain fire watch after work stops.",
+    };
+  }
+  return {
+    panelSubtitle: `10 m zone clearance, fire watch min ${DEFAULT_FIRE_WATCH_MINS} min post-work, typical ${MAX_HOT_WORK_HOURS} h permit cap.`,
+    refHref: "https://www.hse.gov.uk/fireandexplosion/hot-work.htm",
+    refLabel: "HSE hot work",
+    printIntro: `UK HSE hot work practice. Typical client rule: minimum ${DEFAULT_FIRE_WATCH_MINS} min post-work fire watch; max ${MAX_HOT_WORK_HOURS} h permit.`,
+    printFooter: "HSE hot work · Fire Safety Order · site fire plan",
+    durationBlocker: `Post-work fire watch must be at least ${DEFAULT_FIRE_WATCH_MINS} minutes (HSE / typical client rule).`,
+    goFooter: "Site RAMS & fire plan govern — HSE hot work guidance",
+    zoneRule: "Minimum 10 m clearance (typical UK site rule)",
+    readyCopy: "GO — hot work controls recorded. Maintain fire watch after work stops.",
+  };
+}
 
 export const HOT_WORK_EXTRA_FIELD_KEYS = [
   "equipment",
@@ -27,9 +70,10 @@ export function isHotWorkPermitType(type) {
   return HOT_WORK_PERMIT_TYPES.has(String(type || "").trim());
 }
 
-export function hotWorkAssessment(extra = {}, permit = {}) {
+export function hotWorkAssessment(extra = {}, permit = {}, marketId = getOrgMarketId()) {
   const warnings = [];
   const blockers = [];
+  const copy = hotWorkGuidanceCopy(marketId);
 
   const fireWatcher = String(extra.fireWatcher || "").trim();
   const duration = Number(extra.fireWatchDurationMins || DEFAULT_FIRE_WATCH_MINS);
@@ -42,7 +86,7 @@ export function hotWorkAssessment(extra = {}, permit = {}) {
 
   if (!fireWatcher) warnings.push("Nominate a fire watch person before issue.");
   if (!duration || duration < DEFAULT_FIRE_WATCH_MINS) {
-    blockers.push(`Post-work fire watch must be at least ${DEFAULT_FIRE_WATCH_MINS} minutes (HSE / typical client rule).`);
+    blockers.push(copy.durationBlocker);
   }
   if (combustibles !== "yes") warnings.push("Confirm combustible materials cleared within 10 m of hot work.");
   if (openings !== "yes") warnings.push("Confirm drains, ducts and openings sealed against spark entry.");
@@ -90,7 +134,8 @@ export function hotWorkAssessment(extra = {}, permit = {}) {
 }
 
 /** 10 m clearance zone — combustibles and openings. */
-export function renderHotWorkZoneSvg({ width = 400, height = 130 } = {}) {
+export function renderHotWorkZoneSvg({ width = 400, height = 130, marketId } = {}) {
+  const copy = hotWorkGuidanceCopy(marketId);
   const cx = width * 0.5;
   const cy = height * 0.55;
   const r = Math.min(width, height) * 0.38;
@@ -101,7 +146,7 @@ export function renderHotWorkZoneSvg({ width = 400, height = 130 } = {}) {
     <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="9" font-weight="700" fill="#7f1d1d">HOT WORK</text>
     <text x="14" y="${cy - 8}" font-size="8" fill="#92400e">Combustibles out</text>
     <text x="${width - 14}" y="${cy - 8}" text-anchor="end" font-size="8" fill="#92400e">Openings sealed</text>
-    <text x="${cx}" y="${height - 8}" text-anchor="middle" font-size="9" font-weight="600" fill="#0f172a">Minimum 10 m clearance (typical UK site rule)</text>
+    <text x="${cx}" y="${height - 8}" text-anchor="middle" font-size="9" font-weight="600" fill="#0f172a">${copy.zoneRule}</text>
   </svg>`;
 }
 
@@ -129,7 +174,7 @@ export function renderFireWatchTimelineSvg({ durationMins = DEFAULT_FIRE_WATCH_M
 }
 
 /** GO / NO-GO readiness card from extra field states. */
-export function renderHotWorkGoNoGoSvg(extra = {}, { width = 340, height = 118 } = {}) {
+export function renderHotWorkGoNoGoSvg(extra = {}, { width = 340, height = 118, marketId } = {}) {
   const checks = [
     { key: "combustiblesCleared10m", label: "10 m combustibles clear", ok: String(extra.combustiblesCleared10m || "").toLowerCase() === "yes" },
     { key: "openingsSealed", label: "Openings sealed", ok: String(extra.openingsSealed || "").toLowerCase() === "yes" },
@@ -138,6 +183,7 @@ export function renderHotWorkGoNoGoSvg(extra = {}, { width = 340, height = 118 }
     { key: "alarmIsolated", label: "Alarm isolated / N/A", ok: ["yes", "na"].includes(String(extra.alarmIsolated || "").toLowerCase()) },
     { key: "ventilationConfirmed", label: "Ventilation OK", ok: String(extra.ventilationConfirmed || "").toLowerCase() === "yes" },
   ];
+  const copy = hotWorkGuidanceCopy(marketId);
   const pass = checks.filter((c) => c.ok).length;
   const go = pass === checks.length && String(extra.fireWatcher || "").trim();
   const bg = go ? "#f0fdf4" : "#fef2f2";
@@ -157,14 +203,16 @@ export function renderHotWorkGoNoGoSvg(extra = {}, { width = 340, height = 118 }
     <text x="${width / 2}" y="18" text-anchor="middle" font-size="11" font-weight="800" fill="${titleFill}">${title}</text>
     <text x="${width - 12}" y="18" text-anchor="end" font-size="9" fill="#64748b">${pass}/${checks.length}</text>
     ${rows}
-    <text x="${width / 2}" y="${height - 6}" text-anchor="middle" font-size="7" fill="#64748b">Site RAMS &amp; fire plan govern — HSE hot work guidance</text>
+    <text x="${width / 2}" y="${height - 6}" text-anchor="middle" font-size="7" fill="#64748b">${copy.goFooter.replace(/&/g, "&amp;")}</text>
   </svg>`;
 }
 
-export function renderHotWorkPrintHtml(permit, { primaryColor = "#E24B4A" } = {}) {
+export function renderHotWorkPrintHtml(permit, { primaryColor = "#E24B4A", marketId } = {}) {
   if (!isHotWorkPermitType(permit?.type)) return "";
   const extra = permit?.extraFields || {};
-  const assessment = hotWorkAssessment(extra, permit);
+  const market = marketId || getOrgMarketId();
+  const copy = hotWorkGuidanceCopy(market);
+  const assessment = hotWorkAssessment(extra, permit, market);
 
   const fieldsHtml = [
     ["Equipment", extra.equipment || "—"],
@@ -194,13 +242,13 @@ export function renderHotWorkPrintHtml(permit, { primaryColor = "#E24B4A" } = {}
 
   return `
   <h2 style="border-left-color:${primaryColor}">Hot work guidance</h2>
-  <p style="font-size:10px;color:#64748b;margin:0 0 8px">UK HSE hot work practice. Typical client rule: minimum ${DEFAULT_FIRE_WATCH_MINS} min post-work fire watch; max ${MAX_HOT_WORK_HOURS} h permit.</p>
+  <p style="font-size:10px;color:#64748b;margin:0 0 8px">${copy.printIntro}</p>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-    <div>${renderHotWorkZoneSvg({ width: 320 })}</div>
-    <div>${renderHotWorkGoNoGoSvg(extra, { width: 320 })}</div>
+    <div>${renderHotWorkZoneSvg({ width: 320, marketId: market })}</div>
+    <div>${renderHotWorkGoNoGoSvg(extra, { width: 320, marketId: market })}</div>
   </div>
   <div style="margin-bottom:10px">${renderFireWatchTimelineSvg({ durationMins: assessment.fireWatchDurationMins, width: 480 })}</div>
   <table style="margin-bottom:8px"><tbody>${fieldsHtml}</tbody></table>
   ${warnHtml}
-  <p style="font-size:9px;color:#64748b;margin-top:8px">HSE hot work · Fire Safety Order · site fire plan</p>`;
+  <p style="font-size:9px;color:#64748b;margin-top:8px">${copy.printFooter}</p>`;
 }

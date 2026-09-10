@@ -5,6 +5,8 @@ import { escapeHtml, escapeAttr, safeImageSrc, openPrintWindowOrWarn, writePrint
 import { getOrgSettings } from "./orgSettingsStorage.js";
 import { MODULE_PDF_REGISTRY } from "../navigation/moduleCatalogMeta.js";
 import { wrapPrintHtmlDocument } from "./pdfBranding.js";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
+import { documentText } from "./documentCountryPack";
 
 const SKIP_KEYS = new Set([
   "id",
@@ -40,7 +42,7 @@ export function formatFormValue(value) {
   const s = String(value);
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
     try {
-      return new Date(s).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+      return new Date(s).toLocaleDateString(getActiveDocumentLocale(), { day: "2-digit", month: "short", year: "numeric" });
     } catch {
       return s.slice(0, 32);
     }
@@ -72,7 +74,7 @@ export function formChips(items) {
     .join("")}</div>`;
 }
 
-export function formNotes(text, title = "Notes") {
+export function formNotes(text, title = documentText("Notes")) {
   const t = String(text || "").trim();
   if (!t) return "";
   return `${formSection(title)}<div class="rf-notes">${escapeHtml(t)}</div>`;
@@ -84,18 +86,18 @@ export function formCallout(text, tone = "warn") {
   return `<div class="rf-callout rf-callout--${tone}">${escapeHtml(t)}</div>`;
 }
 
-export function formSigBlock(labels = ["Assessed / completed by", "Reviewed / authorised by"]) {
+export function formSigBlock(labels = [documentText("Assessed / completed by"), documentText("Reviewed / authorised by")]) {
   const cells = labels
     .map(
       (label) => `<div class="rf-sig">
       <div class="rf-sig__label">${escapeHtml(label)}</div>
-      <div class="rf-sig__line"><span>Name</span></div>
-      <div class="rf-sig__line"><span>Signature</span></div>
-      <div class="rf-sig__line"><span>Date</span></div>
+      <div class="rf-sig__line"><span>${escapeHtml(documentText("Name"))}</span></div>
+      <div class="rf-sig__line"><span>${escapeHtml(documentText("Signature"))}</span></div>
+      <div class="rf-sig__line"><span>${escapeHtml(documentText("Date"))}</span></div>
     </div>`
     )
     .join("");
-  return `${formSection("Authorisation")}<div class="rf-sig-grid">${cells}</div>`;
+  return `${formSection(documentText("Authorisation"))}<div class="rf-sig-grid">${cells}</div>`;
 }
 
 export function formAttendanceGrid(count = 8) {

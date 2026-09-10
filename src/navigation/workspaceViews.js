@@ -6,6 +6,7 @@ import { lazy } from "react";
  */
 export const workspaceViewLoaders = {
   dashboard: () => import("../components/AnalyticsDashboard"),
+  "management-overview": () => import("../modules/ManagementOverview"),
   projects: () => import("../modules/Projects"),
   people: () => import("../modules/People"),
   permits: () => import("../modules/permits/PermitSystem"),

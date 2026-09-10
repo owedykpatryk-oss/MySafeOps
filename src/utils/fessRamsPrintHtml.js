@@ -8,11 +8,12 @@ import { getRiskLevel, RISK_COLORS } from "../modules/rams/ramsRiskLevel.js";
 import { wrapRamsPrintDocument } from "../modules/rams/ramsPrintDocument.js";
 import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 import { getFessBrandLogoSrc } from "./fessBranding";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 
 const fmtDate = (iso) => {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    return new Date(iso).toLocaleDateString(getActiveDocumentLocale(), { day: "2-digit", month: "short", year: "numeric" });
   } catch {
     return "—";
   }

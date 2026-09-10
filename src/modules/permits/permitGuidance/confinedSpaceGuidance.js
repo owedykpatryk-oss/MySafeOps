@@ -1,10 +1,38 @@
 /**
- * UK confined spaces — Confined Spaces Regulations 1997 / HSE L101 (illustrative thresholds).
+ * Confined spaces — atmospheric thresholds (illustrative).
+ * UK copy cites Confined Spaces Regulations 1997 / HSE L101; PL/AU keep the gauges with local statute names.
  */
 
 import { escapeHtml } from "../../../utils/htmlEscape.js";
+import { getOrgMarketId } from "../../../utils/orgMarket";
 
 export const CONFINED_PERMIT_TYPES = new Set(["confined_space"]);
+
+/** Field keys stay shared; statute names follow the active country workspace. */
+export function confinedGuidanceCopy(marketId = getOrgMarketId()) {
+  if (marketId === "pl") {
+    return {
+      printIntro: "Przestrzeń zamknięta — wymagania BHP. Ocena ryzyka na stanowisku jest wiążąca.",
+      printFooter: "BHP · przestrzeń zamknięta · monitoring atmosfery",
+      refHref: "https://www.pip.gov.pl/",
+      refLabel: "PIP — przestrzenie zamknięte",
+    };
+  }
+  if (marketId === "au") {
+    return {
+      printIntro: "WHS confined spaces (AS 2865). Site-specific risk assessment governs.",
+      printFooter: "WHS · AS 2865 · continuous gas monitoring",
+      refHref: "https://www.safeworkaustralia.gov.au/safety-topic/hazards/confined-spaces",
+      refLabel: "Safe Work Australia — confined spaces",
+    };
+  }
+  return {
+    printIntro: "Confined Spaces Regulations 1997 · HSE L101. Site-specific risk assessment governs.",
+    printFooter: "Confined Spaces Regs 1997 · HSE L101 · continuous gas monitoring",
+    refHref: "https://www.hse.gov.uk/confinedspace/",
+    refLabel: "HSE confined spaces",
+  };
+}
 
 export const CONFINED_EXTRA_FIELD_KEYS = [
   "gasTester",
@@ -147,9 +175,11 @@ export function renderConfinedEntrySequenceSvg({ width = 460, height = 56 } = {}
   </svg>`;
 }
 
-export function renderConfinedPrintHtml(permit, { primaryColor = "#791F1F" } = {}) {
+export function renderConfinedPrintHtml(permit, { primaryColor = "#791F1F", marketId } = {}) {
   if (!isConfinedPermitType(permit?.type)) return "";
   const extra = permit?.extraFields || {};
+  const market = marketId || getOrgMarketId();
+  const copy = confinedGuidanceCopy(market);
   const assessment = confinedSpaceAssessment(extra);
 
   const fieldsHtml = [
@@ -181,11 +211,11 @@ export function renderConfinedPrintHtml(permit, { primaryColor = "#791F1F" } = {
 
   return `
   <h2 style="border-left-color:${primaryColor}">Confined space guidance</h2>
-  <p style="font-size:10px;color:#64748b;margin:0 0 8px">Confined Spaces Regulations 1997 · HSE L101. Site-specific risk assessment governs.</p>
+  <p style="font-size:10px;color:#64748b;margin:0 0 8px">${copy.printIntro}</p>
   <div style="margin-bottom:8px">${renderConfinedGaugeSvg(extra, { width: 460 })}</div>
   <div style="margin-bottom:8px">${renderConfinedRolesSvg(extra, { width: 460 })}</div>
   <div style="margin-bottom:10px">${renderConfinedEntrySequenceSvg({ width: 480 })}</div>
   <table style="margin-bottom:8px"><tbody>${fieldsHtml}</tbody></table>
   ${warnHtml}
-  <p style="font-size:9px;color:#64748b;margin-top:8px">Confined Spaces Regs 1997 · HSE L101 · continuous gas monitoring</p>`;
+  <p style="font-size:9px;color:#64748b;margin-top:8px">${copy.printFooter}</p>`;
 }

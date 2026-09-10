@@ -4,6 +4,7 @@ import {
   DIG_EXTRA_FIELD_KEYS,
   PAS128_QUALITY_LEVELS,
   PAS128_SURVEY_TYPES,
+  isUkDigGuidanceMarket,
   mechanicalDigAssessment,
   pas128QualityMeta,
   pas128SurveyMeta,
@@ -14,7 +15,7 @@ import {
   renderUtilityStrikeSvg,
 } from "../permitDigGuidance";
 
-export default function PermitDigGuidancePanel({ permitType, extraFields = {}, onExtraChange, ss = {} }) {
+export default function PermitDigGuidancePanel({ permitType, extraFields = {}, onExtraChange, ss = {}, marketId }) {
   const extra = extraFields || {};
   const set = (key, value) => onExtraChange?.(key, value);
 
@@ -42,6 +43,8 @@ export default function PermitDigGuidancePanel({ permitType, extraFields = {}, o
   const inp = ss.inp || { width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #ccc", fontSize: 12 };
 
   const isExcavation = permitType === "excavation";
+
+  if (!isUkDigGuidanceMarket(marketId)) return null;
 
   return (
     <div

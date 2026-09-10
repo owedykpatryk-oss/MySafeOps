@@ -94,6 +94,7 @@ export default async function handler(req, res) {
     res.writeHead(upstream.ok ? 200 : upstream.status, {
       ...API_JSON_HEADERS,
       "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1800",
+      "Vary": "Origin",
     });
     if (req.method === "HEAD") return res.end();
     return res.end(JSON.stringify(safe));

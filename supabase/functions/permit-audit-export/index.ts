@@ -2,38 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { assertOrgSlugAccess } from "../_shared/orgAccess.ts";
 import { enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
-
-type AuditRow = {
-  occurred_at: string;
-  permit_id: string;
-  action: string;
-  from_status: string | null;
-  to_status: string | null;
-  detail: Record<string, unknown> | null;
-};
-
-function csvEsc(v: unknown) {
-  return `"${String(v ?? "").replace(/"/g, "\"\"")}"`;
-}
-
-function toCsv(rows: AuditRow[]) {
-  const header = ["occurred_at", "permit_id", "action", "from_status", "to_status", "location", "type"];
-  const lines = [header.join(",")];
-  rows.forEach((r) => {
-    lines.push(
-      [
-        csvEsc(r.occurred_at),
-        csvEsc(r.permit_id),
-        csvEsc(r.action),
-        csvEsc(r.from_status),
-        csvEsc(r.to_status),
-        csvEsc(r.detail?.location),
-        csvEsc(r.detail?.type),
-      ].join(",")
-    );
-  });
-  return lines.join("\n");
-}
+import { isCountryWorkspaceId, permitAuditRowsToCsv } from "../_shared/permitAuditCsv.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = corsHeadersForRequest(req);
@@ -81,11 +50,38 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const orgSlug = String(body?.orgSlug || "default").slice(0, 200);
+    const workspaceId = String(body?.workspaceId || "");
+    if (!isCountryWorkspaceId(workspaceId)) {
+      return new Response(JSON.stringify({ error: "A valid country workspace is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const access = await assertOrgSlugAccess(supabase, user.id, orgSlug);
     if (!access.ok) {
       return new Response(JSON.stringify({ error: access.error }), {
         status: access.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: workspace, error: workspaceErr } = await supabase
+      .from("org_country_workspaces")
+      .select("id, org_id, organizations!inner(slug)")
+      .eq("id", workspaceId)
+      .eq("enabled", true)
+      .eq("organizations.slug", orgSlug)
+      .maybeSingle();
+    const { data: workspaceMembership, error: membershipErr } = await supabase
+      .from("org_country_workspace_memberships")
+      .select("workspace_id")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (workspaceErr || membershipErr || !workspace?.id || !workspaceMembership?.workspace_id) {
+      return new Response(JSON.stringify({ error: "Forbidden: no access to this country workspace" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -112,7 +108,7 @@ Deno.serve(async (req) => {
     const actions = Array.isArray(body?.actions) ? body.actions.map((a: unknown) => String(a)) : [];
     const maxRows = Math.max(100, Math.min(20000, Number(body?.maxRows || 10000)));
     const pageSize = 1000;
-    const out: AuditRow[] = [];
+    const out: Parameters<typeof permitAuditRowsToCsv>[0] = [];
     let page = 0;
     let truncated = false;
 
@@ -124,6 +120,7 @@ Deno.serve(async (req) => {
         .select("occurred_at, permit_id, action, from_status, to_status, detail")
         .eq("user_id", user.id)
         .eq("org_slug", orgSlug)
+        .eq("workspace_id", workspaceId)
         .order("occurred_at", { ascending: false })
         .range(from, to);
 
@@ -134,7 +131,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await q;
       if (error) throw error;
-      const rows = (Array.isArray(data) ? data : []) as AuditRow[];
+      const rows = (Array.isArray(data) ? data : []) as Parameters<typeof permitAuditRowsToCsv>[0];
       out.push(...rows);
       if (rows.length < pageSize) break;
       page += 1;
@@ -145,7 +142,7 @@ Deno.serve(async (req) => {
     }
 
     const trimmed = out.slice(0, maxRows);
-    const csv = toCsv(trimmed);
+    const csv = permitAuditRowsToCsv(trimmed);
     const fileName = `permit-audit-${new Date().toISOString().slice(0, 10)}.csv`;
     return new Response(
       JSON.stringify({

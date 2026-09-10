@@ -144,5 +144,8 @@ describe("workspace module smoke", () => {
       const mod = await workspaceViewLoaders[id]();
       expect(typeof mod.default).toBe("function");
     },
+    // Same budget as the render cases above: transforming these heavy views exceeds the
+    // 5s default on a loaded machine, which made the whole suite flaky rather than failing.
+    15_000,
   );
 });

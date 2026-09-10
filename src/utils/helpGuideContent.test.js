@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   APP_LAYOUT,
   GLOSSARY,
+  GUIDED_HELP_TASKS,
   HELP_FAQ,
   HELP_TOC,
   SETTINGS_TAB_HELP,
@@ -26,5 +27,15 @@ describe("helpGuideContent", () => {
     expect(GLOSSARY.length).toBeGreaterThan(5);
     expect(HELP_FAQ.length).toBeGreaterThan(3);
     expect(APP_LAYOUT.layers.length).toBeGreaterThan(2);
+  });
+
+  it("guided tasks provide actionable routes and ordered steps", () => {
+    expect(GUIDED_HELP_TASKS.length).toBeGreaterThan(6);
+    for (const task of GUIDED_HELP_TASKS) {
+      expect(task.title).toBeTruthy();
+      expect(task.steps.length).toBeGreaterThan(2);
+      expect(task.target?.viewId || task.target?.settingsTab).toBeTruthy();
+      expect(task.target?.label).toBeTruthy();
+    }
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
@@ -10,6 +10,7 @@ import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
 import { genOpaqueToken } from "../utils/opaqueToken";
 import { formatInviteEmailDeliveryDetail } from "../utils/inviteEmailDelivery";
+import { getEffectiveInviteStatus } from "../utils/inviteStatus";
 const ss = ms;
 const NO_MEMBERSHIP_MSG = "No organisation membership";
 
@@ -53,7 +54,7 @@ export default function InviteUsers() {
 
   const canManage = Boolean(caps?.orgSettings);
   const readOnly = isBillingWriteBlocked({ trialStatus, billing });
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!supabase || !user) return;
     setLoading(true);
     setStatus({ type: "", text: "" });
@@ -152,11 +153,11 @@ export default function InviteUsers() {
     setItems(data || []);
     setLastLoadedAt(new Date().toISOString());
     setLoading(false);
-  };
+  }, [supabase, user, orgId]);
 
   useEffect(() => {
     load().catch(() => {});
-  }, [supabase, user, orgId, refreshNonce]);
+  }, [load, refreshNonce]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -166,7 +167,10 @@ export default function InviteUsers() {
     return () => window.clearInterval(id);
   }, []);
 
-  const pendingCount = useMemo(() => items.filter((x) => x.status === "pending").length, [items]);
+  const pendingCount = useMemo(
+    () => items.filter((x) => getEffectiveInviteStatus(x) === "pending").length,
+    [items]
+  );
   const deliveryCounts = useMemo(() => {
     const base = { pending: 0, sent: 0, skipped: 0, failed: 0 };
     items.forEach((x) => {
@@ -193,11 +197,14 @@ export default function InviteUsers() {
   const visibleItems = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = items.filter((x) => {
-      if (statusFilter !== "all" && x.status !== statusFilter) return false;
+      const effectiveStatus = getEffectiveInviteStatus(x);
+      if (statusFilter !== "all" && effectiveStatus !== statusFilter) return false;
       const delivery = String(x.email_delivery_status || "pending");
       if (deliveryFilter !== "all" && delivery !== deliveryFilter) return false;
       if (!q) return true;
-      return x.email?.toLowerCase().includes(q) || x.role?.toLowerCase().includes(q) || x.status?.toLowerCase().includes(q);
+      return (
+        x.email?.toLowerCase().includes(q) || x.role?.toLowerCase().includes(q) || effectiveStatus.includes(q)
+      );
     });
     filtered.sort((a, b) => {
       if (sortBy === "email") return (a.email || "").localeCompare(b.email || "");
@@ -233,19 +240,13 @@ export default function InviteUsers() {
     try {
       const token = makeToken();
       const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: inserted, error } = await supabase
-        .from("org_invites")
-        .insert({
-          org_id: orgRow.id,
-          email: clean,
-          role,
-          invite_token: token,
-          invited_by: user.id,
-          status: "pending",
-          expires_at: expiresAt,
-        })
-        .select("id")
-        .single();
+      const { data: inviteId, error } = await supabase.rpc("create_org_invite", {
+        p_org_id: orgRow.id,
+        p_email: clean,
+        p_role: role,
+        p_invite_token: token,
+        p_expires_at: expiresAt,
+      });
       if (error) throw error;
       const url = `${window.location.origin}/accept-invite?invite=${encodeURIComponent(token)}`;
       setLastInviteLink(url);
@@ -253,9 +254,9 @@ export default function InviteUsers() {
       setEmail("");
       setStatus({ type: "success", text: "Invite created. Share the link below or send it by email." });
       pushToast({ type: "success", title: "Invite created", message: `Invite ready for ${clean}` });
-      if (inserted?.id) {
+      if (inviteId) {
         const { data: fnData, error: fnErr } = await supabase.functions.invoke("send-org-invite", {
-          body: { inviteId: inserted.id },
+          body: { inviteId },
         });
         if (fnErr) {
           setStatus({
@@ -501,6 +502,7 @@ export default function InviteUsers() {
           <div style={{ display: "grid", gap: 8 }}>
             {visibleItems.map((row) => {
               const deliveryInfo = getEmailDeliveryInfo(row);
+              const effectiveStatus = getEffectiveInviteStatus(row);
               return (
               <div key={row.id} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{row.email}</div>
@@ -512,12 +514,27 @@ export default function InviteUsers() {
                   <span
                     style={{
                       ...ss.chip,
-                      color: row.status === "pending" ? "#0f766e" : row.status === "revoked" ? "#a32d2d" : "#334155",
-                      background: row.status === "pending" ? "#ccfbf1" : row.status === "revoked" ? "#fee2e2" : "#e2e8f0",
-                      borderColor: row.status === "pending" ? "#99f6e4" : row.status === "revoked" ? "#fecaca" : "#cbd5e1",
+                      color:
+                        effectiveStatus === "pending"
+                          ? "#0f766e"
+                          : effectiveStatus === "revoked" || effectiveStatus === "expired"
+                            ? "#a32d2d"
+                            : "#334155",
+                      background:
+                        effectiveStatus === "pending"
+                          ? "#ccfbf1"
+                          : effectiveStatus === "revoked" || effectiveStatus === "expired"
+                            ? "#fee2e2"
+                            : "#e2e8f0",
+                      borderColor:
+                        effectiveStatus === "pending"
+                          ? "#99f6e4"
+                          : effectiveStatus === "revoked" || effectiveStatus === "expired"
+                            ? "#fecaca"
+                            : "#cbd5e1",
                     }}
                   >
-                    {row.status}
+                    {effectiveStatus}
                   </span>
                   <span
                     style={{
@@ -547,7 +564,7 @@ export default function InviteUsers() {
                 {canManage && row.status === "pending" && (
                   <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     <button type="button" style={ss.btn} disabled={busy} onClick={() => resendInviteEmail(row.id)}>
-                      Resend email
+                      {effectiveStatus === "expired" ? "Renew & resend" : "Resend email"}
                     </button>
                     <button type="button" style={ss.btn} disabled={busy} onClick={() => revoke(row.id)}>
                       Revoke
@@ -565,4 +582,3 @@ export default function InviteUsers() {
     </>
   );
 }
-
