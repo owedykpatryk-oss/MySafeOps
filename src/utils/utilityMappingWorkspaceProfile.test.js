@@ -63,9 +63,14 @@ describe("Utility Mapping exclusive workspace profile", () => {
         "rams",
         "permits",
         "method-statement",
+        "daily-briefing",
+        "construction-setup",
       ])
     );
-    expect(pack.hiddenModules).toEqual(expect.arrayContaining(["allergen-changeovers", "fess-setup"]));
+    expect(pack.hiddenModules).toEqual(
+      expect.arrayContaining(["allergen-changeovers", "fess-setup", "electrical-pat", "plant"])
+    );
+    expect(pack.orgExclusive).toBe(true);
     expect(pack.ramsStarterKey).toBe("geospatial_intelligence");
     expect(pack.surveyWorkflow).toBe(true);
   });
@@ -112,7 +117,7 @@ describe("Utility Mapping exclusive workspace profile", () => {
     );
     expect(settings.enabledPermitTypes).not.toContain("hot_work");
     expect(settings.hiddenModules).toEqual(
-      expect.arrayContaining(["allergen-changeovers", "fess-setup", "fess-sites", "asbestos"])
+      expect.arrayContaining(["allergen-changeovers", "fess-setup", "fess-sites", "asbestos", "electrical-pat", "plant"])
     );
     expect(settings.hiddenModules).not.toContain("survey-report");
     expect(settings.hiddenModules).not.toContain("gpr-report");
@@ -120,6 +125,8 @@ describe("Utility Mapping exclusive workspace profile", () => {
     expect(settings.hiddenModules).not.toContain("rams");
     expect(settings.hiddenModules).not.toContain("permits");
     expect(settings.hiddenModules).not.toContain("method-statement");
+    expect(settings.hiddenModules).not.toContain("daily-briefing");
+    expect(settings.hiddenModules).not.toContain("construction-setup");
     expect(settings.ramsStarterKey).toBe("geospatial_intelligence");
     expect(settings.enabledPermitTypes).toEqual(PACK_DEFAULT_PERMIT_TYPES.utilityMapping);
     // surveyingFocus hides food RAMS, not PAS128 surveying packs.
