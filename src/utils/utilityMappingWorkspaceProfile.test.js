@@ -16,6 +16,8 @@ import { COUNTRY_WORKSPACE_MARKETS } from "./countryWorkspaces";
 import { getHiddenFeatureIds, RAMS_FEATURES } from "./hiddenModules";
 import { PACK_DEFAULT_PERMIT_TYPES } from "../modules/permits/permitPackDefaults";
 import { buildSurveyReportHtml } from "../modules/surveyReport/surveyReportPrintHtml";
+import { getPlaybooksForOrg, getFeaturedPlaybooksForOrg } from "./projectHubIndustry";
+import { listGeoPhotoPresetsForOrg, UM_PREFERRED_GEO_PHOTO_IDS } from "./geoPhotoPresets";
 
 describe("Utility Mapping exclusive workspace profile", () => {
   beforeEach(() => {
@@ -67,8 +69,19 @@ describe("Utility Mapping exclusive workspace profile", () => {
         "construction-setup",
       ])
     );
+    expect(pack.hidePreset).toBe("surveyingFocus");
     expect(pack.hiddenModules).toEqual(
-      expect.arrayContaining(["allergen-changeovers", "fess-setup", "electrical-pat", "plant"])
+      expect.arrayContaining([
+        "allergen-changeovers",
+        "gmp-deviations",
+        "high-care-access",
+        "cip-signoff",
+        "ghp-register",
+        "hygiene-setup",
+        "fess-setup",
+        "electrical-pat",
+        "plant",
+      ])
     );
     expect(pack.orgExclusive).toBe(true);
     expect(pack.ramsStarterKey).toBe("geospatial_intelligence");
@@ -117,7 +130,19 @@ describe("Utility Mapping exclusive workspace profile", () => {
     );
     expect(settings.enabledPermitTypes).not.toContain("hot_work");
     expect(settings.hiddenModules).toEqual(
-      expect.arrayContaining(["allergen-changeovers", "fess-setup", "fess-sites", "asbestos", "electrical-pat", "plant"])
+      expect.arrayContaining([
+        "allergen-changeovers",
+        "gmp-deviations",
+        "high-care-access",
+        "cip-signoff",
+        "ghp-register",
+        "hygiene-setup",
+        "fess-setup",
+        "fess-sites",
+        "asbestos",
+        "electrical-pat",
+        "plant",
+      ])
     );
     expect(settings.hiddenModules).not.toContain("survey-report");
     expect(settings.hiddenModules).not.toContain("gpr-report");
@@ -132,6 +157,11 @@ describe("Utility Mapping exclusive workspace profile", () => {
     // surveyingFocus hides food RAMS, not PAS128 surveying packs.
     expect(getHiddenFeatureIds()).toContain(RAMS_FEATURES.ALLERGEN);
     expect(getHiddenFeatureIds()).not.toContain(RAMS_FEATURES.SURVEYING);
+    expect(getPlaybooksForOrg().map((p) => p.id)).toEqual(
+      expect.arrayContaining(["um_pas128_m2", "um_gpr_corridor"])
+    );
+    expect(getFeaturedPlaybooksForOrg(3).map((p) => p.id)[0]).toMatch(/^um_/);
+    expect(listGeoPhotoPresetsForOrg(isUtilityMappingOrg())[0].id).toBe(UM_PREFERRED_GEO_PHOTO_IDS[0]);
   });
 
   it("hides utilityMapping profile from other orgs", () => {
