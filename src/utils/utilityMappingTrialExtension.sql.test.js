@@ -1,0 +1,154 @@
+import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { UTILITY_MAPPING_ORG_SLUGS } from "./utilityMappingWorkspaceProfile.js";
+
+const SQL_PATH = join(
+  process.cwd(),
+  "supabase",
+  "migrations",
+  "20260817130000_utility_mapping_trial_extension.sql"
+);
+
+function hyphenSlug(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+}
+
+describe("Utility Mapping trial extension SQL", () => {
+  const sql = readFileSync(SQL_PATH, "utf8");
+
+  it("extends the live auto-provisioned u-map tenant and canonical slugs", () => {
+    expect(sql).toContain("patryk-44bdf196");
+    expect(sql).toContain("utility-mapping");
+    expect(sql).toContain("now() + interval '14 days'");
+    expect(sql).toMatch(/returning o\.slug, o\.trial_ends_at/i);
+  });
+
+  it("keeps the courtesy IN list exactly the hyphen-normalised client allowlist", () => {
+    const inList = sql.slice(sql.lastIndexOf("update public.organizations"));
+    const inStart = inList.search(/\bin\s*\(/i);
+    const inEnd = inList.indexOf(")", inStart);
+    const sqlSlugs = [...inList.slice(inStart, inEnd).matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
+    const jsSlugs = [...new Set([...UTILITY_MAPPING_ORG_SLUGS].map(hyphenSlug))].sort();
+    expect(jsSlugs).toContain("patryk-44bdf196");
+    expect(sqlSlugs).toEqual(jsSlugs);
+  });
+
+  it("Superadmin RPC overwrites trial_ends_at from now, unlike the courtesy UPDATE guard", () => {
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.superadmin_extend_org_trial"),
+      sql.indexOf("revoke all on function public.superadmin_extend_org_trial")
+    );
+    expect(fn).toContain("trial_ends_at = now() + (v_days * interval '1 day')");
+    expect(fn).not.toMatch(/greatest\s*\(\s*(?:o\.)?trial_ends_at/i);
+    expect(fn).not.toMatch(/trial_ends_at\s*<\s*now\(\)/i);
+  });
+
+  it("matches @u-map.co.uk by domain equality, not a suffix LIKE", () => {
+    expect(sql).toContain("split_part(lower(u.email), '@', 2) = 'u-map.co.uk'");
+    const withoutComments = sql.replace(/--[^\n]*/g, "");
+    expect(withoutComments).not.toMatch(/like\s+'%@u-map\.co\.uk'/i);
+  });
+
+  it("gates the Superadmin RPC on user_is_platform_owner and clamps days", () => {
+    expect(sql).toContain("user_is_platform_owner()");
+    expect(sql).toContain("least(greatest(coalesce(p_days, 14), 1), 90)");
+    expect(sql).toContain("grant execute on function public.superadmin_extend_org_trial(text, int) to authenticated");
+  });
+
+  it("does not shorten a trial already beyond now + 14 days", () => {
+    const withoutComments = sql.replace(/--[^\n]*/g, "");
+    expect(withoutComments).toMatch(
+      /and\s*\(\s*o\.trial_ends_at is null or o\.trial_ends_at < now\(\) \+ interval '14 days'\s*\)/i
+    );
+    const updateBlock = withoutComments.slice(withoutComments.lastIndexOf("update public.organizations"));
+    expect(updateBlock).toMatch(/\(\s*lower\(replace\(o\.slug/);
+  });
+
+  it("Superadmin RPC finds orgs by hyphen-folded slug, same as the courtesy UPDATE", () => {
+    const fn = sql.slice(
+      sql.indexOf("create or replace function public.superadmin_extend_org_trial"),
+      sql.indexOf("revoke all on function public.superadmin_extend_org_trial")
+    );
+    expect(fn).toContain("lower(replace(o.slug, '_', '-')) = replace(v_slug, '_', '-')");
+  });
+
+  it("write-gate lookup is exact slug; the live UM tenant slug has no underscore so both agree", () => {
+    const gatePath = join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "20260726140000_org_cloud_write_billing_gate.sql"
+    );
+    const gate = readFileSync(gatePath, "utf8");
+    const fn = gate.slice(
+      gate.indexOf("create or replace function public.org_allows_cloud_writes"),
+      gate.indexOf("revoke all on function public.org_allows_cloud_writes")
+    );
+    expect(fn).toMatch(/where\s+o\.slug\s*=\s*p_org_slug/);
+    expect(fn).not.toMatch(/lower\s*\(\s*replace\s*\(\s*o\.slug/);
+    expect("patryk-44bdf196").not.toContain("_");
+    expect(sql).toContain("patryk-44bdf196");
+  });
+
+  it("courtesy UPDATE and Superadmin RPC never change subscription_status or billing_plan", () => {
+    const withoutComments = sql.replace(/--[^\n]*/g, "");
+    const fn = withoutComments.slice(
+      withoutComments.indexOf("create or replace function public.superadmin_extend_org_trial"),
+      withoutComments.indexOf("revoke all on function public.superadmin_extend_org_trial")
+    );
+    const updateBlock = withoutComments.slice(withoutComments.lastIndexOf("update public.organizations"));
+    expect(fn).not.toMatch(/subscription_status|billing_plan/);
+    expect(updateBlock).not.toMatch(/subscription_status|billing_plan/);
+    expect(sql).toContain("revoke all on function public.superadmin_extend_org_trial(text, int) from public");
+  });
+
+  it("write gate still opens canceled or unpaid orgs when trial_ends_at is in the future", () => {
+    const gatePath = join(
+      process.cwd(),
+      "supabase",
+      "migrations",
+      "20260726140000_org_cloud_write_billing_gate.sql"
+    );
+    const gate = readFileSync(gatePath, "utf8");
+    const fn = gate.slice(
+      gate.indexOf("create or replace function public.org_allows_cloud_writes"),
+      gate.indexOf("revoke all on function public.org_allows_cloud_writes")
+    );
+    expect(fn).toMatch(/if v_status in \('unpaid', 'canceled'\)/);
+    expect(fn).toMatch(/v_trial_ends is not null and v_trial_ends > now\(\)/);
+  });
+
+  it("does not consume trial_extension_count on the courtesy UPDATE or Superadmin RPC", () => {
+    const withoutComments = sql.replace(/--[^\n]*/g, "");
+    const fn = withoutComments.slice(
+      withoutComments.indexOf("create or replace function public.superadmin_extend_org_trial"),
+      withoutComments.indexOf("revoke all on function public.superadmin_extend_org_trial")
+    );
+    const updateBlock = withoutComments.slice(withoutComments.lastIndexOf("update public.organizations"));
+    expect(fn).not.toMatch(/trial_extension_count/);
+    expect(updateBlock).not.toMatch(/trial_extension_count/);
+    expect(withoutComments).not.toMatch(/trial_extension_count\s*=/);
+    const setTrial = [...withoutComments.matchAll(/\bset\s+trial_ends_at\s*=/gi)];
+    expect(setTrial).toHaveLength(2);
+  });
+
+  it("REST apply script, if present, must keep hyphen-fold slugs and the not-shorten guard", () => {
+    const scriptPath = join(process.cwd(), "scripts", "apply-utility-mapping-trial.mjs");
+    const present = existsSync(scriptPath);
+    if (!present) {
+      // This PR applies via SQL Editor paste. main ships an older REST script without these guards.
+      expect(present).toBe(false);
+      return;
+    }
+    const src = readFileSync(scriptPath, "utf8");
+    expect(src).toContain("patryk-44bdf196");
+    expect(src).toContain("burgpzankkqvpcmdkhro");
+    expect(src).toMatch(/u-map\.co\.uk/);
+    expect(src).toMatch(/replace\(.*slug.*_.*-\)|lower\(replace\(o\.slug/);
+    expect(src).toMatch(/trial_ends_at\s*<|already at\/after now\+14d|not-shorten/i);
+  });
+});

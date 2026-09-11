@@ -15,6 +15,7 @@ import { isAnthropicConfigured } from "../utils/anthropicClient";
 import { downloadBlob } from "../utils/downloadBlob.js";
 
 import { todayLocalISO } from "../utils/localDate";
+import { SUPERADMIN_EXTEND_TRIAL_DAYS, superadminExtendOrgTrial } from "../utils/superAdmin";
 const ss = ms;
 /** SQL files that define owner-only RPCs used by this page (copy into Supabase / CLI). */
 const SUPERADMIN_DB_MIGRATIONS = [
@@ -26,6 +27,7 @@ const SUPERADMIN_DB_MIGRATIONS = [
   "20260427120100_ensure_my_org_invite_switch.sql",
   "20260427140000_org_branding_settings.sql",
   "20260427150000_fess_group_membership_guard.sql",
+  "20260817130000_utility_mapping_trial_extension.sql",
 ];
 const ORG_AUDIT_KEY_PREFIX = "mysafeops_audit_";
 
@@ -409,6 +411,7 @@ export default function SuperAdminPanel() {
   const loadMoreRecentInFlightRef = useRef(false);
   const [recentSort, setRecentSort] = useState({ key: "created_at", dir: "desc" });
   const [copyHint, setCopyHint] = useState("");
+  const [extendingSlug, setExtendingSlug] = useState("");
   const copyTimerRef = useRef(null);
   const cloudFetchSeq = useRef(0);
   const allowed = Boolean(isPlatformOwner);
@@ -423,6 +426,40 @@ export default function SuperAdminPanel() {
       copyTimerRef.current = null;
     }, 2200);
   };
+
+  const extendRecentOrgTrial = useCallback(
+    async (slug) => {
+      const orgSlug = String(slug || "").trim();
+      if (!orgSlug || !supabase || extendingSlug) return;
+      const ok =
+        typeof window === "undefined"
+          ? true
+          : window.confirm(`Extend the evaluation trial for ${orgSlug} by ${SUPERADMIN_EXTEND_TRIAL_DAYS} days from now?`);
+      if (!ok) return;
+      setExtendingSlug(orgSlug);
+      try {
+        const row = await superadminExtendOrgTrial(supabase, orgSlug, SUPERADMIN_EXTEND_TRIAL_DAYS);
+        const ends = row?.trial_ends_at ? new Date(row.trial_ends_at).toLocaleString() : "updated";
+        flashCopy(`Trial for ${orgSlug} now ends ${ends}`);
+        setRecentOrgs((prev) => ({
+          ...prev,
+          rows: (prev.rows || []).map((r) =>
+            String(r.slug || "") === orgSlug ? { ...r, trial_ends_at: row?.trial_ends_at || r.trial_ends_at } : r
+          ),
+        }));
+      } catch (e) {
+        const msg = e?.message || "Could not extend trial.";
+        flashCopy(
+          msg.includes("function") || msg.includes("does not exist") || msg.includes("rpc")
+            ? `${msg} — deploy 20260817130000_utility_mapping_trial_extension.sql`
+            : msg
+        );
+      } finally {
+        setExtendingSlug("");
+      }
+    },
+    [extendingSlug, supabase]
+  );
 
   const fetchCloud = useCallback(() => {
     if (!allowed) return;
@@ -1238,6 +1275,17 @@ export default function SuperAdminPanel() {
                         >
                           Copy JSON
                         </button>
+                        {r.slug ? (
+                          <button
+                            type="button"
+                            style={{ ...ss.btn, padding: "2px 8px", fontSize: 11 }}
+                            title={`Set evaluation trial to ${SUPERADMIN_EXTEND_TRIAL_DAYS} days from now`}
+                            disabled={Boolean(extendingSlug) || !supabase}
+                            onClick={() => void extendRecentOrgTrial(r.slug)}
+                          >
+                            {extendingSlug === String(r.slug) ? "Extending…" : `Trial +${SUPERADMIN_EXTEND_TRIAL_DAYS}d`}
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}

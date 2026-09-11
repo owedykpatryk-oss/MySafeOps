@@ -1,7 +1,7 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.4.0";
+const SW_VERSION = "mysafeops-v1.4.2";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
 
@@ -56,11 +56,32 @@ function shouldBypassSw(url) {
 const PRECACHE_ASSETS = [
   "/",
   "/index.html",
+  "/app",
   "/offline.html",
   "/manifest.webmanifest",
   "/vite.svg",
   "/branding/fess-group-logo.png",
 ];
+
+function isAppShellRequest(_request, url) {
+  const p = url.pathname;
+  // Only the SPA (`/app?view=…`). Do not treat marketing/blog navigations as the shell —
+  // those must keep HTTP 401/404 instead of a cached index.html.
+  return p === "/app" || p.startsWith("/app/");
+}
+
+function isDocumentNavigation(request) {
+  return request.mode === "navigate" || request.destination === "document";
+}
+
+async function matchAppShell() {
+  const keys = ["/index.html", "/", "/app", OFFLINE_URL];
+  for (const key of keys) {
+    const hit = await caches.match(key);
+    if (hit) return hit;
+  }
+  return offlineFallbackResponse();
+}
 
 // ─── Install: pre-cache shell assets ─────────────────────────────────────────
 self.addEventListener("install", (event) => {
@@ -105,19 +126,40 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigation requests — network first, fallback to cached index, then offline page
-  if (request.mode === "navigate") {
+  // SPA shell (/app?view=…) — network first, then cached index.html (never a bare 503).
+  if (isAppShellRequest(request, url)) {
     event.respondWith(
-      fetch(request)
-        .then((res) => {
-          scheduleCachePut(request, res);
-          return res;
-        })
-        .catch(() =>
-          caches.match("/index.html")
-            .then((cached) => cached || caches.match(OFFLINE_URL))
-            .then((fallback) => fallback || offlineFallbackResponse())
-        )
+      (async () => {
+        try {
+          const res = await fetchWithOptionalRetry(request);
+          if (res && res.ok) {
+            scheduleCachePut(request, res);
+            return res;
+          }
+          return matchAppShell();
+        } catch {
+          return matchAppShell();
+        }
+      })()
+    );
+    return;
+  }
+
+  // Other documents — keep HTTP 4xx/5xx; only fall back when the network fails.
+  if (isDocumentNavigation(request)) {
+    event.respondWith(
+      (async () => {
+        try {
+          const res = await fetchWithOptionalRetry(request);
+          if (res) {
+            scheduleCachePut(request, res);
+            return res;
+          }
+          return matchAppShell();
+        } catch {
+          return matchAppShell();
+        }
+      })()
     );
     return;
   }

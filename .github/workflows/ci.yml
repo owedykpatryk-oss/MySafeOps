@@ -68,7 +68,6 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Install Playwright (Chromium)
         run: npx playwright install --with-deps chromium
-      - name: E2E marketing (blog + landing + security)
       - name: E2E marketing + public auth (no secrets)
         run: >
           npx playwright test
