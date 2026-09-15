@@ -7,10 +7,79 @@ import { getOrgMarketId } from "../../../utils/orgMarket";
 
 export const HOT_WORK_PERMIT_TYPES = new Set(["hot_work"]);
 
-/** Field keys stay shared; authority names follow the active country workspace. */
+const HOT_WORK_EN_FIELDS = {
+  panelTitle: "Hot work controls",
+  zoneTitle: "10 m zone",
+  goTitle: "GO / NO-GO",
+  timelineTitle: "Fire watch timeline",
+  printHeading: "Hot work guidance",
+  equipmentLabel: "Equipment to be used",
+  equipmentPlaceholder: "Welder, grinder, torch…",
+  fireWatcherLabel: "Fire watcher name",
+  fireWatchDurationLabel: "Fire watch duration (min)",
+  postInspectionLabel: "Post-work inspection time",
+  combustiblesLabel: "10 m combustibles cleared",
+  openingsLabel: "Openings / ducts sealed",
+  extinguishersLabel: "2 × extinguishers in place",
+  fireBlanketLabel: "Fire blanket in place",
+  alarmLabel: "Fire alarm isolated",
+  ventilationLabel: "Ventilation confirmed",
+  postWatchLabel: "Post-watch signed off",
+  selectLabel: "Select…",
+  yesLabel: "Yes",
+  noLabel: "No",
+  naLabel: "N/A",
+  nominateWatcher: "Nominate a fire watch person before issue.",
+  combustiblesWarning: "Confirm combustible materials cleared within 10 m of hot work.",
+  openingsWarning: "Confirm drains, ducts and openings sealed against spark entry.",
+  extinguishersWarning: "Confirm 2 × fire extinguishers in position.",
+  blanketWarning: "Confirm fire blanket available at work face.",
+  alarmWarning: "Confirm fire alarm isolation authorised (or N/A with justification).",
+  closureSignOffWarning: "Post-work fire watch sign-off not recorded on closure.",
+  printControlsRecorded: "Hot work controls recorded — maintain fire watch after work stops.",
+  qualityRecFireWatch: "Hot work: confirm fire watch details and post-work inspection.",
+  checklistFireWatchNeedles: ["fire watch"],
+};
+
+const HOT_WORK_PL_FIELDS = {
+  panelTitle: "Zabezpieczenia prac gorących",
+  zoneTitle: "Strefa 10 m",
+  goTitle: "GO / NO-GO",
+  timelineTitle: "Oś czasu dyżuru pożarowego",
+  printHeading: "Wytyczne prac gorących",
+  equipmentLabel: "Sprzęt do użycia",
+  equipmentPlaceholder: "Spawarka, szlifierka, palnik…",
+  fireWatcherLabel: "Osoba na dyżurze pożarowym",
+  fireWatchDurationLabel: "Czas dyżuru pożarowego (min)",
+  postInspectionLabel: "Czas inspekcji po pracy",
+  combustiblesLabel: "Materiały palne usunięte w promieniu 10 m",
+  openingsLabel: "Otwory / kanały uszczelnione",
+  extinguishersLabel: "2 × gaśnice na stanowisku",
+  fireBlanketLabel: "Koc gaśniczy na stanowisku",
+  alarmLabel: "Sygnalizacja pożaru odizolowana",
+  ventilationLabel: "Wentylacja potwierdzona",
+  postWatchLabel: "Dyżur pożarowy podpisany",
+  selectLabel: "Wybierz…",
+  yesLabel: "Tak",
+  noLabel: "Nie",
+  naLabel: "N/D",
+  nominateWatcher: "Wyznacz osobę na dyżur pożarowy przed wydaniem pozwolenia.",
+  combustiblesWarning: "Potwierdź usunięcie materiałów palnych w promieniu 10 m od prac gorących.",
+  openingsWarning: "Potwierdź uszczelnienie wpustów, kanałów i otworów przed iskrami.",
+  extinguishersWarning: "Potwierdź 2 × gaśnice na stanowisku.",
+  blanketWarning: "Potwierdź koc gaśniczy przy froncie robót.",
+  alarmWarning: "Potwierdź autoryzowane odizolowanie sygnalizacji pożaru (lub N/D z uzasadnieniem).",
+  closureSignOffWarning: "Brak podpisu dyżuru pożarowego po zakończeniu prac.",
+  printControlsRecorded: "Zapisano zabezpieczenia prac gorących — utrzymaj dyżur pożarowy po zakończeniu prac.",
+  qualityRecFireWatch: "Prace gorące: potwierdź szczegóły dyżuru pożarowego i inspekcji po pracy.",
+  checklistFireWatchNeedles: ["dyżur pożarowy", "dyżurze pożarowym", "fire watch"],
+};
+
+/** Field keys stay shared; labels and authority names follow the active country workspace. */
 export function hotWorkGuidanceCopy(marketId = getOrgMarketId()) {
   if (marketId === "pl") {
     return {
+      ...HOT_WORK_PL_FIELDS,
       panelSubtitle: `Strefa 10 m, dyżur pożarowy min. ${DEFAULT_FIRE_WATCH_MINS} min po pracy, typowy limit ${MAX_HOT_WORK_HOURS} h pozwolenia.`,
       refHref: "https://www.pip.gov.pl/",
       refLabel: "PIP — prace gorące",
@@ -24,6 +93,7 @@ export function hotWorkGuidanceCopy(marketId = getOrgMarketId()) {
   }
   if (marketId === "au") {
     return {
+      ...HOT_WORK_EN_FIELDS,
       panelSubtitle: `10 m zone clearance, fire watch min ${DEFAULT_FIRE_WATCH_MINS} min post-work, typical ${MAX_HOT_WORK_HOURS} h permit cap.`,
       refHref: "https://www.safeworkaustralia.gov.au/doc/model-code-practice-welding-processes",
       refLabel: "Safe Work Australia — welding processes",
@@ -36,6 +106,7 @@ export function hotWorkGuidanceCopy(marketId = getOrgMarketId()) {
     };
   }
   return {
+    ...HOT_WORK_EN_FIELDS,
     panelSubtitle: `10 m zone clearance, fire watch min ${DEFAULT_FIRE_WATCH_MINS} min post-work, typical ${MAX_HOT_WORK_HOURS} h permit cap.`,
     refHref: "https://www.hse.gov.uk/fireandexplosion/hot-work.htm",
     refLabel: "HSE hot work",
@@ -84,15 +155,15 @@ export function hotWorkAssessment(extra = {}, permit = {}, marketId = getOrgMark
   const alarm = String(extra.alarmIsolated || "").toLowerCase();
   const signedOff = String(extra.postWorkWatchSignedOff || "").toLowerCase();
 
-  if (!fireWatcher) warnings.push("Nominate a fire watch person before issue.");
+  if (!fireWatcher) warnings.push(copy.nominateWatcher);
   if (!duration || duration < DEFAULT_FIRE_WATCH_MINS) {
     blockers.push(copy.durationBlocker);
   }
-  if (combustibles !== "yes") warnings.push("Confirm combustible materials cleared within 10 m of hot work.");
-  if (openings !== "yes") warnings.push("Confirm drains, ducts and openings sealed against spark entry.");
-  if (extinguishers !== "yes") warnings.push("Confirm 2 × fire extinguishers in position.");
-  if (blanket !== "yes") warnings.push("Confirm fire blanket available at work face.");
-  if (alarm !== "yes" && alarm !== "na") warnings.push("Confirm fire alarm isolation authorised (or N/A with justification).");
+  if (combustibles !== "yes") warnings.push(copy.combustiblesWarning);
+  if (openings !== "yes") warnings.push(copy.openingsWarning);
+  if (extinguishers !== "yes") warnings.push(copy.extinguishersWarning);
+  if (blanket !== "yes") warnings.push(copy.blanketWarning);
+  if (alarm !== "yes" && alarm !== "na") warnings.push(copy.alarmWarning);
 
   const start = permit?.startDateTime ? new Date(permit.startDateTime) : null;
   const end = permit?.endDateTime ? new Date(permit.endDateTime) : null;
@@ -109,7 +180,7 @@ export function hotWorkAssessment(extra = {}, permit = {}, marketId = getOrgMark
   }
 
   if (permit?.status === "closed" && signedOff !== "yes") {
-    warnings.push("Post-work fire watch sign-off not recorded on closure.");
+    warnings.push(copy.closureSignOffWarning);
   }
 
   const goItems = [
@@ -215,17 +286,17 @@ export function renderHotWorkPrintHtml(permit, { primaryColor = "#E24B4A", marke
   const assessment = hotWorkAssessment(extra, permit, market);
 
   const fieldsHtml = [
-    ["Equipment", extra.equipment || "—"],
-    ["Fire watcher", extra.fireWatcher || "—"],
-    ["Fire watch duration (min)", extra.fireWatchDurationMins || assessment.fireWatchDurationMins],
-    ["Post-work inspection", extra.postInspectionTime || "—"],
-    ["Post-watch signed off", extra.postWorkWatchSignedOff || "—"],
-    ["10 m combustibles clear", extra.combustiblesCleared10m || "—"],
-    ["Openings sealed", extra.openingsSealed || "—"],
-    ["Extinguishers in place", extra.extinguishersInPlace || "—"],
-    ["Fire blanket", extra.fireBlanketInPlace || "—"],
-    ["Alarm isolated", extra.alarmIsolated || "—"],
-    ["Ventilation", extra.ventilationConfirmed || "—"],
+    [copy.equipmentLabel, extra.equipment || "—"],
+    [copy.fireWatcherLabel, extra.fireWatcher || "—"],
+    [copy.fireWatchDurationLabel, extra.fireWatchDurationMins || assessment.fireWatchDurationMins],
+    [copy.postInspectionLabel, extra.postInspectionTime || "—"],
+    [copy.postWatchLabel, extra.postWorkWatchSignedOff || "—"],
+    [copy.combustiblesLabel, extra.combustiblesCleared10m || "—"],
+    [copy.openingsLabel, extra.openingsSealed || "—"],
+    [copy.extinguishersLabel, extra.extinguishersInPlace || "—"],
+    [copy.fireBlanketLabel, extra.fireBlanketInPlace || "—"],
+    [copy.alarmLabel, extra.alarmIsolated || "—"],
+    [copy.ventilationLabel, extra.ventilationConfirmed || "—"],
   ]
     .map(
       ([k, v]) =>
@@ -238,10 +309,10 @@ export function renderHotWorkPrintHtml(permit, { primaryColor = "#E24B4A", marke
       ? `<ul style="margin:6px 0 0;padding-left:18px;font-size:10px;color:#991b1b">${[...assessment.blockers, ...assessment.warnings]
           .map((w) => `<li>${String(w).replace(/</g, "&lt;")}</li>`)
           .join("")}</ul>`
-      : `<p style="margin:6px 0 0;font-size:10px;color:#166534">Hot work controls recorded — maintain fire watch after work stops.</p>`;
+      : `<p style="margin:6px 0 0;font-size:10px;color:#166534">${copy.printControlsRecorded.replace(/</g, "&lt;")}</p>`;
 
   return `
-  <h2 style="border-left-color:${primaryColor}">Hot work guidance</h2>
+  <h2 style="border-left-color:${primaryColor}">${copy.printHeading}</h2>
   <p style="font-size:10px;color:#64748b;margin:0 0 8px">${copy.printIntro}</p>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
     <div>${renderHotWorkZoneSvg({ width: 320, marketId: market })}</div>

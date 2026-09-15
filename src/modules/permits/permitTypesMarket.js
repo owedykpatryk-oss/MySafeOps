@@ -131,6 +131,23 @@ const PL_PERMIT_TYPE_OVERRIDES = {
   hot_work: {
     label: "Pozwolenie na prace gorące",
     description: "Spawanie, szlifowanie, cięcie, lutowanie i inne prace powodujące powstawanie ciepła lub iskier",
+    checklist: [
+      "Usunięto materiały palne w promieniu 10 metrów",
+      "2 × gaśnice 9 kg i koc gaśniczy na stanowisku",
+      "Sprzęt do prac gorących sprawdzony i sprawny",
+      "Sygnalizacja pożaru odizolowana w strefie prac (za zgodą nadzoru)",
+      "Głowice tryskaczy zabezpieczone tam, gdzie dotyczy",
+      "Wyznaczono i poinstruowano osobę na dyżurze pożarowym",
+      "Wszystkie wpusty, kanały i otwory uszczelnione przed iskrami",
+      "Stanowisko zwilżone tam, gdzie to uzasadnione",
+      "Uzgodniono czas trwania pozwolenia — maksymalnie 8 godzin",
+      "Uzgodniono inspekcję po pracy po minimum 1 godzinie",
+    ],
+    extraFields: [
+      { key: "equipment", label: "Sprzęt do użycia", type: "text" },
+      { key: "fireWatcher", label: "Osoba na dyżurze pożarowym", type: "text" },
+      { key: "postInspectionTime", label: "Czas inspekcji po pracy", type: "datetime-local" },
+    ],
   },
   cold_work: {
     label: "Pozwolenie na prace zimne",

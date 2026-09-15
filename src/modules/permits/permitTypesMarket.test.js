@@ -106,4 +106,18 @@ describe("permitTypesMarket", () => {
     expect(getPermitTypesForMarket("uk").confined_space.checklist.join(" ")).toMatch(/Stand-by person/i);
     expect((getPermitTypesForMarket("uk").confined_space.extraFields || []).map((f) => f.label).join(" ")).toMatch(/Stand-by person/i);
   });
+
+  it("uses Polish hot-work checks instead of UK fire-watch wording", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    const checks = pl.hot_work.checklist.join(" ");
+    const labels = (pl.hot_work.extraFields || []).map((f) => f.label).join(" ");
+    expect(pl.hot_work.label).toMatch(/prace gorące/i);
+    expect(checks).toMatch(/dyżurze pożarowym/i);
+    expect(checks).not.toMatch(/Fire watch person/i);
+    expect(labels).toMatch(/dyżurze pożarowym/i);
+    expect(labels).not.toMatch(/Fire watcher name/i);
+    expect(uk.hot_work.checklist.join(" ")).toMatch(/Fire watch person/i);
+    expect((uk.hot_work.extraFields || []).map((f) => f.label).join(" ")).toMatch(/Fire watcher name/i);
+  });
 });

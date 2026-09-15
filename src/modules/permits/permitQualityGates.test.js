@@ -67,6 +67,30 @@ describe("runPermitQualityGates", () => {
     expect(r.recommendations.some((x) => x?.autofix)).toBe(true);
   });
 
+  it("uses Polish fire-watch quality-gate copy on Poland hot work", () => {
+    const r = runPermitQualityGates(
+      {
+        type: "hot_work",
+        description: "Spawanie",
+        location: "Warszawa",
+        issuedBy: "Anna",
+        issuedTo: "Jan",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T10:00:00.000Z",
+        notes: "Fire controls: 2x extinguishers and fire blanket in place.",
+        evidenceNotes: "",
+        extraFields: {},
+        checklist: {},
+        checklistItems: [],
+      },
+      { marketId: "pl" }
+    );
+    const texts = r.recommendations.map((x) => String(x?.text || "")).join(" ");
+    expect(texts).toMatch(/dyżuru pożarowego/i);
+    expect(texts).not.toMatch(/HSE|Fire Safety Order/i);
+    expect(r.recommendations.some((x) => /fire watch/i.test(String(x?.text || "")))).toBe(false);
+  });
+
   it("does not recommend PAS 128 / CAT scan on Poland excavation permits", () => {
     const r = runPermitQualityGates(
       {

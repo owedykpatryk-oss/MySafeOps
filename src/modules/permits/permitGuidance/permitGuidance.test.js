@@ -125,7 +125,10 @@ describe("hotWorkGuidance", () => {
     const plPanel = renderToStaticMarkup(createElement(PermitHotWorkGuidancePanel, { marketId: "pl" }));
     const auPanel = renderToStaticMarkup(createElement(PermitHotWorkGuidancePanel, { marketId: "au" }));
     expect(plPanel).toMatch(/PIP/);
+    expect(plPanel).toMatch(/Osoba na dyżurze pożarowym/);
+    expect(plPanel).toMatch(/Zabezpieczenia prac gorących/);
     expect(plPanel).not.toMatch(/hse\.gov\.uk|HSE hot work/i);
+    expect(plPanel).not.toMatch(/Fire watcher name|Hot work controls/);
     expect(auPanel).toMatch(/Safe Work Australia/);
     expect(auPanel).not.toMatch(/hse\.gov\.uk|HSE hot work/i);
   });

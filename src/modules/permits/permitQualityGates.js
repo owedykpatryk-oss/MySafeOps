@@ -1,7 +1,7 @@
 import { permitHasSiteEvidence } from "../../utils/geoPhotoFields";
 import { getOrgMarketId } from "../../utils/orgMarket";
 import { isUkDigGuidanceMarket, mechanicalDigAssessment } from "./permitDigGuidance";
-import { hotWorkAssessment } from "./permitGuidance/hotWorkGuidance";
+import { hotWorkAssessment, hotWorkGuidanceCopy } from "./permitGuidance/hotWorkGuidance";
 import { confinedSpaceAssessment } from "./permitGuidance/confinedSpaceGuidance";
 
 function isRequired(requiredMap, key, fallback = true) {
@@ -26,6 +26,7 @@ function buildSmartRecommendations(permit, options = {}) {
     out.push({ id, text, autofix });
   };
   const type = String(permit?.type || "").toLowerCase();
+  const market = options.marketId || getOrgMarketId();
   const description = cleanText(permit?.description);
   const location = cleanText(permit?.location);
   const notes = cleanText(permit?.notes);
@@ -47,14 +48,16 @@ function buildSmartRecommendations(permit, options = {}) {
   if (!location || location.length < 4) addRec("precise_location", "Refine location to exact zone/area reference.");
 
   if (type === "hot_work") {
-    const hw = hotWorkAssessment(extra, permit);
+    const hwCopy = hotWorkGuidanceCopy(market);
+    const hw = hotWorkAssessment(extra, permit, market);
     hw.blockers.forEach((msg, i) => addRec(`hw_block_${i}`, msg));
     hw.warnings.slice(0, 3).forEach((msg, i) => addRec(`hw_warn_${i}`, msg));
     const fireWatch = cleanText(dynamic.hotWorkFireWatchMins || extra.fireWatcher || extra.postInspectionTime);
-    if (!fireWatch && !hasChecklistSignal("fire watch")) {
+    const fireWatchTicked = (hwCopy.checklistFireWatchNeedles || ["fire watch"]).some((needle) => hasChecklistSignal(needle));
+    if (!fireWatch && !fireWatchTicked) {
       addRec(
         "hot_work_fire_watch",
-        "Hot work: confirm fire watch details and post-work inspection.",
+        hwCopy.qualityRecFireWatch,
         { type: "set_dynamic", key: "hotWorkFireWatchMins", value: 60 }
       );
     }
@@ -100,7 +103,7 @@ function buildSmartRecommendations(permit, options = {}) {
     }
   }
 
-  if ((type === "excavation" || type === "ground_disturbance") && isUkDigGuidanceMarket(options.marketId || getOrgMarketId())) {
+  if ((type === "excavation" || type === "ground_disturbance") && isUkDigGuidanceMarket(market)) {
     if (!cleanText(extra.pas128QualityLevel)) {
       addRec("pas128_ql", "Record PAS 128 quality level (QL-D to QL-A).");
     }
