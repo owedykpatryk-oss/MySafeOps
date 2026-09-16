@@ -28,8 +28,8 @@ export default function PermitHotWorkGuidancePanel({ extraFields = {}, onExtraCh
 
   const zoneSvg = useMemo(() => renderHotWorkZoneSvg({ marketId: market }), [market]);
   const timelineSvg = useMemo(
-    () => renderFireWatchTimelineSvg({ durationMins: assessment.fireWatchDurationMins }),
-    [assessment.fireWatchDurationMins]
+    () => renderFireWatchTimelineSvg({ durationMins: assessment.fireWatchDurationMins, marketId: market }),
+    [assessment.fireWatchDurationMins, market]
   );
   const goSvg = useMemo(() => renderHotWorkGoNoGoSvg(extra, { marketId: market }), [extra, market]);
 

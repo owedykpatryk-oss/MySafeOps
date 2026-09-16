@@ -91,6 +91,49 @@ describe("runPermitQualityGates", () => {
     expect(r.recommendations.some((x) => /fire watch/i.test(String(x?.text || "")))).toBe(false);
   });
 
+  it("uses Polish extinguisher/fire-blanket quality-gate copy on Poland hot work", () => {
+    const r = runPermitQualityGates(
+      {
+        type: "hot_work",
+        description: "Spawanie",
+        location: "Warszawa",
+        issuedBy: "Anna",
+        issuedTo: "Jan",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T10:00:00.000Z",
+        notes: "",
+        evidenceNotes: "",
+        extraFields: { fireWatcher: "Jan", fireWatchDurationMins: 60 },
+        checklist: { hw1: true },
+        checklistItems: [{ id: "hw1", text: "Osoba na dyżurze pożarowym wyznaczona i poinstruowana" }],
+      },
+      { marketId: "pl" }
+    );
+    const fireControls = r.recommendations.find((x) => x.id === "hot_work_fire_controls");
+    expect(fireControls?.text).toMatch(/gaśnice|koc gaśniczy/i);
+    expect(fireControls?.text).not.toMatch(/extinguisher|fire blanket/i);
+    expect(fireControls?.autofix?.text).toMatch(/gaśnice|koc gaśniczy/i);
+    expect(fireControls?.autofix?.text).not.toMatch(/extinguisher|fire blanket/i);
+
+    const suppressed = runPermitQualityGates(
+      {
+        type: "hot_work",
+        description: "Spawanie",
+        location: "Warszawa",
+        issuedBy: "Anna",
+        issuedTo: "Jan",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T10:00:00.000Z",
+        notes: "Zabezpieczenia ppoż.: 2× gaśnice i koc gaśniczy na stanowisku.",
+        extraFields: { fireWatcher: "Jan", fireWatchDurationMins: 60 },
+        checklist: { hw1: true },
+        checklistItems: [{ id: "hw1", text: "Osoba na dyżurze pożarowym wyznaczona i poinstruowana" }],
+      },
+      { marketId: "pl" }
+    );
+    expect(suppressed.recommendations.some((x) => x.id === "hot_work_fire_controls")).toBe(false);
+  });
+
   it("does not recommend PAS 128 / CAT scan on Poland excavation permits", () => {
     const r = runPermitQualityGates(
       {

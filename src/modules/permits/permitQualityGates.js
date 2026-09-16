@@ -61,11 +61,11 @@ function buildSmartRecommendations(permit, options = {}) {
         { type: "set_dynamic", key: "hotWorkFireWatchMins", value: 60 }
       );
     }
-    if (!containsAny(`${description} ${notes} ${evidenceNotes}`, ["extinguisher", "fire blanket"])) {
+    if (!containsAny(`${description} ${notes} ${evidenceNotes}`, hwCopy.fireControlNeedles || ["extinguisher", "fire blanket"])) {
       addRec(
         "hot_work_fire_controls",
-        "Hot work: add extinguisher/fire blanket controls in notes.",
-        { type: "append_notes", text: "Fire controls: 2x extinguishers and fire blanket in place." }
+        hwCopy.qualityRecFireControls,
+        { type: "append_notes", text: hwCopy.qualityAutofixFireControls }
       );
     }
   }

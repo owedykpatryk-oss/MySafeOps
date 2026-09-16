@@ -7,6 +7,7 @@ import {
   renderFireWatchTimelineSvg,
   renderHotWorkGoNoGoSvg,
   renderHotWorkPrintHtml,
+  renderHotWorkZoneSvg,
   DEFAULT_FIRE_WATCH_MINS,
 } from "./hotWorkGuidance";
 import { wahAssessment, renderWahHierarchySvg, renderWahPrintHtml } from "./wahGuidance";
@@ -131,6 +132,45 @@ describe("hotWorkGuidance", () => {
     expect(plPanel).not.toMatch(/Fire watcher name|Hot work controls/);
     expect(auPanel).toMatch(/Safe Work Australia/);
     expect(auPanel).not.toMatch(/hse\.gov\.uk|HSE hot work/i);
+  });
+
+  it("keeps UK fire-watch SVG and duration wording on UK hot work", () => {
+    const zone = renderHotWorkZoneSvg({ marketId: "uk" });
+    const timeline = renderFireWatchTimelineSvg({ durationMins: 90, marketId: "uk" });
+    const go = renderHotWorkGoNoGoSvg({}, { marketId: "uk" });
+    expect(zone).toMatch(/HOT WORK/);
+    expect(zone).toMatch(/Combustibles out/);
+    expect(timeline).toMatch(/Fire watch timeline/);
+    expect(timeline).toMatch(/Min 90 min after work/);
+    expect(go).toMatch(/Fire blanket/);
+    expect(go).toMatch(/NO-GO — complete checklist/);
+    const longShift = hotWorkAssessment(
+      { fireWatcher: "Alex", fireWatchDurationMins: 60, maxPermitHours: 12 },
+      { startDateTime: "2026-04-09T08:00:00.000Z", endDateTime: "2026-04-09T20:00:00.000Z" },
+      "uk"
+    );
+    expect(longShift.warnings.join(" ")).toMatch(/hot work limit/);
+    expect(longShift.warnings.join(" ")).toMatch(/client cap/);
+  });
+
+  it("localises hot-work SVG internals and duration warnings on Poland", () => {
+    const html = renderHotWorkPrintHtml(
+      {
+        type: "hot_work",
+        extraFields: { fireWatchDurationMins: 90, fireWatcher: "Jan", maxPermitHours: 12 },
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T20:00:00.000Z",
+      },
+      { marketId: "pl" }
+    );
+    expect(html).toMatch(/PRACE GORĄCE|Dyżur pożarowy|Koc gaśniczy/);
+    expect(html).toMatch(/Oś czasu dyżuru pożarowego/);
+    expect(html).not.toMatch(/Fire watch timeline|HOT WORK|Fire blanket|Issuer \/ fire watch/);
+    expect(html).not.toMatch(/hot work limit|client cap/);
+    expect(html).toMatch(/limit 8 h na prace gorące|limit klienta 8 h/);
+    const plPanel = renderToStaticMarkup(createElement(PermitHotWorkGuidancePanel, { marketId: "pl" }));
+    expect(plPanel).toMatch(/Dyżur pożarowy|PRACE GORĄCE/);
+    expect(plPanel).not.toMatch(/Fire watch timeline|HOT WORK/);
   });
 });
 
