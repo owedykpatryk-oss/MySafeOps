@@ -103,7 +103,7 @@ const HOT_WORK_PL_FIELDS = {
   qualityAutofixFireControls: "Zabezpieczenia ppoż.: 2× gaśnice i koc gaśniczy na stanowisku.",
   fireControlNeedles: ["extinguisher", "fire blanket", "gaśnic", "koc gaśniczy"],
   checklistFireWatchNeedles: ["dyżur pożarowy", "dyżurze pożarowym", "fire watch"],
-  zoneSvgTitle: "Strefa 10 m prac gorących — usuń materiały palne i uszczelnij otwory",
+  zoneSvgTitle: "Strefa 10 m — materiały palne i otwory uszczelnione",
   zoneSvgAria: "Strefa 10 m prac gorących",
   zoneHotWorkMark: "PRACE GORĄCE",
   zoneCombustibles: "Materiały palne",
