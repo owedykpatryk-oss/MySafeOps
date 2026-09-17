@@ -93,6 +93,17 @@ describe("permitTypesMarket", () => {
     expect(auLabels).not.toMatch(/Appointed Person/);
   });
 
+  it("drops UK Access equipment extra-field labels on Poland work at height", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    const ukLabels = (uk.work_at_height.extraFields || []).map((f) => f.label).join(" ");
+    const plLabels = (pl.work_at_height.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukLabels).toMatch(/Access equipment type \/ ref/);
+    expect(plLabels).toMatch(/Sprzęt dostępu \/ nr/);
+    expect(plLabels).not.toMatch(/Access equipment type \/ ref/);
+    expect(plLabels).toMatch(/planu ratowniczego/i);
+  });
+
   it("uses Polish confined-space checks instead of UK English stand-by wording", () => {
     const pl = getPermitTypesForMarket("pl");
     const checks = pl.confined_space.checklist.join(" ");

@@ -81,7 +81,7 @@ const REGISTRY = {
   confined_space: {
     Panel: PermitConfinedSpaceGuidancePanel,
     renderPrintHtml: renderConfinedPrintHtml,
-    assess: (_, extra) => confinedSpaceAssessment(extra),
+    assess: (_, extra, marketId) => confinedSpaceAssessment(extra, marketId),
     extraFieldKeys: CONFINED_EXTRA_FIELD_KEYS,
     wizardHint: "Step 2 includes atmospheric gauge panel, role diagram and entry sequence.",
     theme: { border: "#fca5a5", bg: "#fef2f2", color: "#791F1F" },

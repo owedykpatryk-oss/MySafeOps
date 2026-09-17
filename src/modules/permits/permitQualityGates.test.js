@@ -172,6 +172,69 @@ describe("runPermitQualityGates", () => {
     expect(r.recommendations.some((x) => /PAS 128/i.test(String(x?.text || "")))).toBe(true);
   });
 
+  it("uses Polish LOTO quality-gate copy on Poland electrical permits", () => {
+    const pl = runPermitQualityGates(
+      {
+        type: "electrical",
+        description: "Prace przy rozdzielnicy",
+        location: "Warszawa",
+        issuedBy: "Anna",
+        issuedTo: "Jan",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T10:00:00.000Z",
+        notes: "",
+        evidenceNotes: "",
+      },
+      { marketId: "pl" }
+    );
+    const loto = pl.recommendations.find((x) => x.id === "loto_evidence");
+    expect(loto?.text).toMatch(/odłączenia/i);
+    expect(loto?.text).not.toMatch(/Isolation task|try-test/i);
+    expect(loto?.autofix?.text).toMatch(/kłódki/i);
+    expect(loto?.autofix?.text).not.toMatch(/try-test/i);
+
+    const uk = runPermitQualityGates(
+      {
+        type: "electrical",
+        description: "Isolate board",
+        location: "Leeds",
+        issuedBy: "Alice",
+        issuedTo: "Bob",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T10:00:00.000Z",
+        notes: "",
+        evidenceNotes: "",
+      },
+      { marketId: "uk" }
+    );
+    const ukLoto = uk.recommendations.find((x) => x.id === "loto_evidence");
+    expect(ukLoto?.text).toMatch(/Isolation task: capture LOTO/);
+    expect(ukLoto?.autofix?.text).toMatch(/try-test completed/);
+  });
+
+  it("uses Polish confined-space quality-gate copy on Poland", () => {
+    const r = runPermitQualityGates(
+      {
+        type: "confined_space",
+        description: "Wejście do komory",
+        location: "Warszawa",
+        issuedBy: "Anna",
+        issuedTo: "Jan",
+        startDateTime: "2026-04-09T08:00:00.000Z",
+        endDateTime: "2026-04-09T10:00:00.000Z",
+        extraFields: {},
+      },
+      { marketId: "pl" }
+    );
+    const rescue = r.recommendations.find((x) => x.id === "confined_space_rescue_ref");
+    const gas = r.recommendations.find((x) => x.id === "confined_space_gas_tester");
+    expect(rescue?.text).toMatch(/planu ratowniczego/i);
+    expect(rescue?.text).not.toMatch(/Confined space: add rescue/i);
+    expect(gas?.text).toMatch(/tester gazów/i);
+    expect(gas?.autofix?.value).toMatch(/Wyznaczony tester gazów/);
+    expect(gas?.text).not.toMatch(/Assigned gas tester/i);
+  });
+
   it("does not recommend PAS 128 / CAT scan on Australia ground-disturbance permits", () => {
     const r = runPermitQualityGates(
       {

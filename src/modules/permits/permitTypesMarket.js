@@ -215,6 +215,11 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Strefa pod robotami wyłączona",
       "Warunki wiatrowe ocenione",
     ],
+    extraFields: [
+      { key: "accessEquipment", label: "Sprzęt dostępu / nr", type: "text" },
+      { key: "maxHeight", label: "Maksymalna wysokość pracy (m)", type: "number" },
+      { key: "rescuePlan", label: "Numer planu ratowniczego", type: "text" },
+    ],
   },
   electrical: {
     label: "Pozwolenie na odłączenie elektryczne",

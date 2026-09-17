@@ -220,6 +220,31 @@ describe("wahGuidance", () => {
     expect(auPanel).not.toMatch(/IPAF|ScaffTag|WAH Regulations 2005|hse\.gov\.uk/i);
   });
 
+  it("uses Polish WAH field labels and SVG copy on Poland, keeping UK English", () => {
+    const pl = renderWahPrintHtml(
+      { type: "work_at_height", extraFields: { accessEquipment: "MEWP", maxHeight: 8 } },
+      { marketId: "pl" }
+    );
+    const uk = renderWahPrintHtml(
+      { type: "work_at_height", extraFields: { accessEquipment: "MEWP", maxHeight: 8 } },
+      { marketId: "uk" }
+    );
+    expect(pl).toMatch(/Sprzęt dostępu|Unikaj|STREFA WYŁĄCZONA|NA WYSOKOŚCI/);
+    expect(pl).not.toMatch(/Access equipment type|WORK AT HEIGHT|Harness \/ lanyard inspected|WAH controls recorded/);
+    expect(uk).toMatch(/Access equipment|WORK AT HEIGHT|Harness inspected/);
+    expect(uk).not.toMatch(/Sprzęt dostępu|STREFA WYŁĄCZONA/);
+    const plPanel = renderToStaticMarkup(
+      createElement(PermitWahGuidancePanel, { permitType: "work_at_height", marketId: "pl" })
+    );
+    const ukPanel = renderToStaticMarkup(
+      createElement(PermitWahGuidancePanel, { permitType: "work_at_height", marketId: "uk" })
+    );
+    expect(plPanel).toMatch(/Sprzęt dostępu \/ nr|Unikaj — poziom gruntu|Szelki \/ linka sprawdzone/);
+    expect(plPanel).not.toMatch(/Access equipment type \/ ref|Hierarchy control level|WORK AT HEIGHT/);
+    expect(ukPanel).toMatch(/Access equipment type \/ ref|Hierarchy control level/);
+    expect(ukPanel).not.toMatch(/Sprzęt dostępu \/ nr/);
+  });
+
   it("renders hierarchy SVG", () => {
     const svg = renderWahHierarchySvg({ highlight: "prevent" });
     expect(svg).toContain("Prevent");
@@ -230,6 +255,13 @@ describe("confinedSpaceGuidance", () => {
   it("blocks unsafe O2 reading", () => {
     const r = confinedSpaceAssessment({ o2Reading: "18", coReading: "5", h2sReading: "0", lelReading: "2" });
     expect(r.blockers.some((b) => /O₂/i.test(b))).toBe(true);
+  });
+
+  it("treats a blank O2 field as missing, not 0%", () => {
+    const r = confinedSpaceAssessment({ o2Reading: "", coReading: "", h2sReading: "", lelReading: "" });
+    expect(r.blockers.some((b) => /O₂/i.test(b))).toBe(false);
+    expect(r.warnings.some((w) => /Record O₂ reading/i.test(w))).toBe(true);
+    expect(r.readings.o2).toBeNull();
   });
 
   it("renders gauge panel", () => {
@@ -270,5 +302,30 @@ describe("confinedSpaceGuidance", () => {
     expect(plPanel).not.toMatch(/hse\.gov\.uk/i);
     expect(auPanel).toMatch(/Safe Work Australia/);
     expect(auPanel).not.toMatch(/hse\.gov\.uk/i);
+  });
+
+  it("uses Polish confined-space field labels on Poland, keeping UK English", () => {
+    const pl = renderConfinedPrintHtml(
+      { type: "confined_space", extraFields: { o2Reading: "20.9" } },
+      { marketId: "pl" }
+    );
+    const uk = renderConfinedPrintHtml(
+      { type: "confined_space", extraFields: { o2Reading: "20.9" } },
+      { marketId: "uk" }
+    );
+    expect(pl).toMatch(/Osoba asekurująca|Wchodzący|KOMORA|Pomiar gazu/);
+    expect(pl).not.toMatch(/Standby \(at entrance\)|Confined space entry|never enter without standby/);
+    expect(uk).toMatch(/Standby|Confined space guidance|never enter without standby/);
+    expect(uk).not.toMatch(/Osoba asekurująca \(przy wejściu\)|KOMORA/);
+    const plPanel = renderToStaticMarkup(
+      createElement(PermitConfinedSpaceGuidancePanel, { marketId: "pl" })
+    );
+    const ukPanel = renderToStaticMarkup(
+      createElement(PermitConfinedSpaceGuidancePanel, { marketId: "uk" })
+    );
+    expect(plPanel).toMatch(/Osoba asekurująca \(przy wejściu\)|Tester gazów \/ nr przyrządu|Łączność sprawdzona/);
+    expect(plPanel).not.toMatch(/Standby \(at entrance\)|Gas tester \/ instrument ref/);
+    expect(ukPanel).toMatch(/Standby \(at entrance\)|Gas tester \/ instrument ref/);
+    expect(ukPanel).not.toMatch(/Osoba asekurująca \(przy wejściu\)/);
   });
 });

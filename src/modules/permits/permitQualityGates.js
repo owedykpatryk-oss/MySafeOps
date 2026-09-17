@@ -2,7 +2,22 @@ import { permitHasSiteEvidence } from "../../utils/geoPhotoFields";
 import { getOrgMarketId } from "../../utils/orgMarket";
 import { isUkDigGuidanceMarket, mechanicalDigAssessment } from "./permitDigGuidance";
 import { hotWorkAssessment, hotWorkGuidanceCopy } from "./permitGuidance/hotWorkGuidance";
-import { confinedSpaceAssessment } from "./permitGuidance/confinedSpaceGuidance";
+import { confinedSpaceAssessment, confinedGuidanceCopy } from "./permitGuidance/confinedSpaceGuidance";
+
+function lotoQualityCopy(marketId) {
+  if (marketId === "pl") {
+    return {
+      rec: "Izolacja: zapisz dowód LOTO / odłączenia.",
+      autofix: "Dowód LOTO: punkt izolacji, numer kłódki, próba–potwierdzenie wykonane.",
+      needles: ["loto", "lockout", "isolation", "lock-off", "odłącz", "kłódk"],
+    };
+  }
+  return {
+    rec: "Isolation task: capture LOTO/isolation evidence reference.",
+    autofix: "LOTO evidence: isolation point ID, lock number, try-test completed.",
+    needles: ["loto", "lockout", "isolation", "lock-off"],
+  };
+}
 
 function isRequired(requiredMap, key, fallback = true) {
   if (!requiredMap || typeof requiredMap !== "object") return fallback;
@@ -71,25 +86,27 @@ function buildSmartRecommendations(permit, options = {}) {
   }
 
   if (type === "electrical" || type === "cold_work" || type === "loto") {
-    const lotoEvidence = containsAny(`${description} ${notes} ${evidenceNotes}`, ["loto", "lockout", "isolation", "lock-off"]);
+    const lotoCopy = lotoQualityCopy(market);
+    const lotoEvidence = containsAny(`${description} ${notes} ${evidenceNotes}`, lotoCopy.needles);
     if (!lotoEvidence) {
       addRec(
         "loto_evidence",
-        "Isolation task: capture LOTO/isolation evidence reference.",
-        { type: "append_evidence", text: "LOTO evidence: isolation point ID, lock number, try-test completed." }
+        lotoCopy.rec,
+        { type: "append_evidence", text: lotoCopy.autofix }
       );
     }
   }
 
   if (type === "confined_space") {
-    const cs = confinedSpaceAssessment(extra);
+    const csCopy = confinedGuidanceCopy(market);
+    const cs = confinedSpaceAssessment(extra, market);
     cs.blockers.forEach((msg, i) => addRec(`cs_block_${i}`, msg));
     cs.warnings.slice(0, 3).forEach((msg, i) => addRec(`cs_warn_${i}`, msg));
     const rescueRef = cleanText(dynamic.csRescuePlanRef || extra.rescueTeamRef || extra.rescuePlanRef || "");
     if (!rescueRef) {
       addRec(
         "confined_space_rescue_ref",
-        "Confined space: add rescue plan reference.",
+        csCopy.qualityRecRescue,
         { type: "set_dynamic", key: "csRescuePlanRef", value: "RESCUE-PLAN-REF" }
       );
     }
@@ -97,8 +114,8 @@ function buildSmartRecommendations(permit, options = {}) {
     if (!gasTester) {
       addRec(
         "confined_space_gas_tester",
-        "Confined space: record gas tester and latest readings.",
-        { type: "set_dynamic", key: "csGasTester", value: "Assigned gas tester" }
+        csCopy.qualityRecGasTester,
+        { type: "set_dynamic", key: "csGasTester", value: csCopy.qualityAutofixGasTester }
       );
     }
   }
