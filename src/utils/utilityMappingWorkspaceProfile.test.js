@@ -129,6 +129,9 @@ describe("Utility Mapping exclusive workspace profile", () => {
       expect.arrayContaining(["excavation", "ground_disturbance", "visitor_access", "general"])
     );
     expect(settings.enabledPermitTypes).not.toContain("hot_work");
+    // Surface PAS128 / GPR / HSG47 permit-to-dig — not chamber/manhole CS as a default type.
+    expect(settings.enabledPermitTypes).not.toContain("confined_space");
+    expect(settings.enabledPermitTypes).not.toContain("work_at_height");
     expect(settings.hiddenModules).toEqual(
       expect.arrayContaining([
         "allergen-changeovers",
@@ -158,8 +161,11 @@ describe("Utility Mapping exclusive workspace profile", () => {
     expect(getHiddenFeatureIds()).toContain(RAMS_FEATURES.ALLERGEN);
     expect(getHiddenFeatureIds()).not.toContain(RAMS_FEATURES.SURVEYING);
     expect(getPlaybooksForOrg().map((p) => p.id)).toEqual(
-      expect.arrayContaining(["um_pas128_m2", "um_gpr_corridor"])
+      expect.arrayContaining(["um_pas128_m2", "um_gpr_corridor", "um_site_treatment"])
     );
+    // WWTW / pumping-station playbook still calls for a CS permit even though the pack default does not enable it.
+    const treatment = getPlaybooksForOrg().find((p) => p.id === "um_site_treatment");
+    expect(treatment?.permitTypes).toEqual(expect.arrayContaining(["excavation", "confined_space", "general"]));
     expect(getFeaturedPlaybooksForOrg(3).map((p) => p.id)[0]).toMatch(/^um_/);
     expect(listGeoPhotoPresetsForOrg(isUtilityMappingOrg())[0].id).toBe(UM_PREFERRED_GEO_PHOTO_IDS[0]);
   });
