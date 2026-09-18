@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { escapeHtml, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
@@ -150,8 +151,8 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
   const STEPS = ["Incident type","Incident details","Injured person","Employer","Injury & treatment","Actions & reporting","Review"];
 
   return (
-    <div style={{ minHeight:700, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"1.5rem 1rem", overflowY:"auto" }}>
-      <div style={{ ...ss.card, width:"100%", maxWidth:600 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:600 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
             <div style={{ fontWeight:500, fontSize:16 }}>{content.wizardTitle}</div>
@@ -418,7 +419,7 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
           </div>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 

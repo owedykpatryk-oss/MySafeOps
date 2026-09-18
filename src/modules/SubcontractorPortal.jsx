@@ -4,6 +4,7 @@ import { useToast } from "../context/ToastContext";
 import { copyCapabilityLink } from "../utils/copyCapabilityLink";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, countryOperationalStorageKey } from "../utils/orgStorage";
+import { compressImageFile } from "../utils/geoPhotoUtils";
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
 import { genOpaqueToken } from "../utils/opaqueToken";
 import PageHero from "../components/PageHero";
@@ -59,16 +60,31 @@ export function PublicSubcontractorView({ token }) {
     setDone(true);
   };
 
-  const onFile = (e) => {
+  const onFile = async (e) => {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (!f || f.size > 800000) {
-      alert("File too large (max ~800KB for local storage)");
+    if (!f) return;
+    const isPdf = String(f.type || "").toLowerCase().includes("pdf") || /\.pdf$/i.test(f.name || "");
+    if (isPdf) {
+      if (f.size > 800000) {
+        alert("File too large (max ~800KB for local storage)");
+        return;
+      }
+      const r = new FileReader();
+      r.onload = () => setCertData({ name: f.name, dataUrl: r.result });
+      r.readAsDataURL(f);
       return;
     }
-    const r = new FileReader();
-    r.onload = () => setCertData({ name: f.name, dataUrl: r.result });
-    r.readAsDataURL(f);
+    try {
+      const dataUrl = await compressImageFile(f, { maxWidth: 1280, quality: 0.82 });
+      if (String(dataUrl).length > 1100000) {
+        alert("Photo is too large after compression. Try a closer crop or a smaller image.");
+        return;
+      }
+      setCertData({ name: `${String(f.name || "certificate").replace(/\.[^.]+$/, "")}.jpg`, dataUrl });
+    } catch (err) {
+      alert(err?.message || "Could not read file.");
+    }
   };
 
   if (done) {
@@ -96,7 +112,7 @@ export function PublicSubcontractorView({ token }) {
         <label style={{ display: "block", fontSize: 12, marginTop: 10 }}>Certificate label</label>
         <input style={ss.inp} value={certName} onChange={(e) => setCertName(e.target.value)} placeholder="e.g. CSCS, IPAF" />
         <label style={{ display: "block", fontSize: 12, marginTop: 10 }}>Upload certificate (optional)</label>
-        <input type="file" accept="image/*,application/pdf" onChange={onFile} />
+        <input type="file" accept="image/*,.heic,.heif,application/pdf" onChange={onFile} />
         {certData && <div style={{ fontSize: 12, marginTop: 6 }}>Attached: {certData.name}</div>}
         <button type="button" style={{ ...ss.btnP, marginTop: 16 }} onClick={submit}>
           Submit

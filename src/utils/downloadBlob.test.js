@@ -36,4 +36,25 @@ describe("downloadBlob", () => {
     vi.advanceTimersByTime(60_000);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock");
   });
+
+  it("opens blob URLs in a new tab on iOS WebKit", () => {
+    Object.defineProperty(navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+    });
+    const createObjectURL = vi.fn(() => "blob:ios");
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL: vi.fn() });
+
+    let captured;
+    vi.spyOn(document.body, "appendChild").mockImplementation((el) => {
+      captured = el;
+      el.click = vi.fn();
+      el.remove = vi.fn();
+      return el;
+    });
+
+    expect(downloadBlob(new Blob(["x"], { type: "application/pdf" }), "report.pdf")).toBe(true);
+    expect(captured.download).toBe("");
+    expect(captured.target).toBe("_blank");
+  });
 });

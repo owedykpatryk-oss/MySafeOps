@@ -38,6 +38,7 @@ import { formatOrgDate, formatOrgDateTime } from "../../utils/orgLocale";
 import { getEmergencyHospitalHeading, getRamsShortLabel } from "../../utils/marketLabels";
 import { getLeaveRamsBuilderConfirm, getRamsBuilderTitle } from "../../utils/ramsUiLabels";
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
+import { copyTextToClipboard } from "../../utils/copyToClipboard";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { getCachedAuthorshipActor, stampDocumentAuthorship } from "../../utils/documentAuthorship.js";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
@@ -4316,10 +4317,11 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
   const previewFingerprint = computeRamsFingerprint(form, rows);
 
   const copyFingerprint = () => {
-    navigator.clipboard?.writeText(previewFingerprint).then(() => {
+    void copyTextToClipboard(previewFingerprint).then((ok) => {
+      if (!ok) return;
       setFpCopied(true);
       setTimeout(() => setFpCopied(false), 2000);
-    }).catch(() => {});
+    });
   };
 
   const scrollToSection = (sectionId) => {
@@ -4497,10 +4499,11 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
       : ["1. No risk rows selected yet."]),
   ].join("\n");
   const copyToolboxBrief = () => {
-    navigator.clipboard?.writeText(toolboxBriefText).then(() => {
+    void copyTextToClipboard(toolboxBriefText).then((ok) => {
+      if (!ok) return;
       setBriefCopied(true);
       setTimeout(() => setBriefCopied(false), 1800);
-    }).catch(() => {});
+    });
   };
   const liveChangeSummary = editingDoc ? buildChangeSummary(editingDoc, form, rows) : "";
   const signatureEvents = Array.isArray(form.signatureEvents)

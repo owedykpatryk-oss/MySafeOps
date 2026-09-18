@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "../../styles/gpr-report.css";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { stripGeoPhotosForD1, stripGprReportsForD1 } from "../../utils/d1SyncPayload";
@@ -78,10 +78,10 @@ import {
   buildAnomaliesGeoJson,
   buildDuplicateGprPayload,
   autoNumberAnomalies,
+  upsertGprReportInList,
 } from "./gprReportHelpers";
 import { gprTabComplete, GPR_EDITOR_TABS } from "./gprReportEditorNav";
-import {
-  applyGprSmartNarratives,
+import { applyGprSmartNarratives,
   applyPrebuiltGprPack,
   fetchEnvironmentalIntoReport,
   fetchGeologyIntoReport,
@@ -96,6 +96,9 @@ import {
   buildGprLineLengthNarrative,
 } from "./gprReportSmart";
 import { applyIndustryGprTemplate } from "./gprReportTemplateContext";
+import GprPreSurveyCard from "./GprPreSurveyCard";
+import { applyGprStartHereCapture, captureGprStartHere, blankGprSitePhoto } from "./gprPreSurvey";
+import { compressImageFile } from "../../utils/geoPhotoUtils";
 
 const STORAGE_KEY = "gpr_reports";
 
@@ -192,14 +195,14 @@ export default function GprReport() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [livePreviewOpen, setLivePreviewOpen] = useState(() => {
     try {
-      return typeof window !== "undefined" && window.matchMedia("(min-width: 1100px)").matches;
+      return typeof window !== "undefined" && window.matchMedia("(min-width: 1100px) and (pointer: fine)").matches;
     } catch {
       return false;
     }
   });
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return undefined;
-    const mq = window.matchMedia("(min-width: 1100px)");
+    const mq = window.matchMedia("(min-width: 1100px) and (pointer: fine)");
     const onChange = (e) => {
       if (!e.matches) setLivePreviewOpen(false);
     };
@@ -257,7 +260,7 @@ export default function GprReport() {
   }, [dataRefreshTick]);
 
   const persist = useCallback((next) => {
-    setReports(next);
+    setReports((prev) => (typeof next === "function" ? next(prev) : next));
   }, []);
 
   useEffect(() => {
@@ -324,8 +327,38 @@ export default function GprReport() {
     [form, project, linkedSurveyReport]
   );
 
+  const formRef = useRef(form);
+  const modalRef = useRef(modal);
+  const dirtyRef = useRef(false);
+  formRef.current = form;
+  modalRef.current = modal;
+
+  const markDirty = () => {
+    dirtyRef.current = true;
+  };
+
+  const flushEditorToStorage = useCallback(() => {
+    const current = formRef.current;
+    const m = modalRef.current;
+    if (!current?.id || !m || !dirtyRef.current) return;
+    const normalized = stampDocumentAuthorship(normalizeGprReport(current), {
+      isCreate: Boolean(m.isNew) || !current.createdById,
+    });
+    persist((prev) => upsertGprReportInList(prev, normalized));
+    if (m.isNew) {
+      setModal((prev) => (prev ? { ...prev, isNew: false, data: { ...prev.data, createdById: prev.data?.createdById || normalized.createdById } } : prev));
+    }
+  }, [persist]);
+
+  const closeEditor = useCallback(() => {
+    flushEditorToStorage();
+    dirtyRef.current = false;
+    setModal(null);
+  }, [flushEditorToStorage]);
+
   const patch = (partial) => {
     if (!form) return;
+    markDirty();
     setModal({
       ...modal,
       data: normalizeGprReport({ ...form, ...partial, updatedAt: new Date().toISOString() }),
@@ -334,6 +367,7 @@ export default function GprReport() {
 
   const patchReport = (updater) => {
     if (!form) return;
+    markDirty();
     const next = typeof updater === "function" ? updater(form) : { ...form, ...updater };
     setModal({
       ...modal,
@@ -373,13 +407,38 @@ export default function GprReport() {
     }
 
     pushAudit({ action: modal.isNew ? "gpr_report_create" : "gpr_report_update", entity: "gpr_report", detail: normalized.ref });
+    dirtyRef.current = false;
     setModal(null);
   };
+
+  useEffect(() => {
+    if (!form) return undefined;
+    const t = window.setTimeout(() => flushEditorToStorage(), 600);
+    return () => window.clearTimeout(t);
+  }, [form, flushEditorToStorage]);
+
+  useEffect(() => {
+    if (!modal) return undefined;
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flushEditorToStorage();
+    };
+    const onPageHide = () => flushEditorToStorage();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPageHide);
+      flushEditorToStorage();
+    };
+  }, [modal, flushEditorToStorage]);
 
   const handleGprAutofix = (fixId) => {
     if (!form) return;
     const next = applyGprAutofix(fixId, form);
-    if (next) setModal({ ...modal, data: normalizeGprReport(next) });
+    if (next) {
+      markDirty();
+      setModal({ ...modal, data: normalizeGprReport(next) });
+    }
   };
 
   const handleGprCadUpload = async (e) => {
@@ -389,6 +448,7 @@ export default function GprReport() {
     setCadBusy(true);
     try {
       const next = await importGprCadFile(form, file);
+      markDirty();
       setModal({ ...modal, data: normalizeGprReport(next) });
       const cad = next.gprCadImport;
       pushToast({
@@ -442,6 +502,7 @@ export default function GprReport() {
     setBusy("prebuilt");
     try {
       const filled = await applyPrebuiltGprPack(form, project);
+      markDirty();
       setModal({ ...modal, data: normalizeGprReport(filled) });
     } catch (e) {
       alert(e.message || "Prebuilt pack failed");
@@ -455,6 +516,7 @@ export default function GprReport() {
     setBusy("smart");
     try {
       const filled = await runGprSmartFill(form, project);
+      markDirty();
       setModal({ ...modal, data: normalizeGprReport(filled) });
     } catch (e) {
       alert(e.message || "Smart fill failed");
@@ -468,6 +530,7 @@ export default function GprReport() {
     setBusy("geology");
     try {
       const next = await fetchGeologyIntoReport(form, project);
+      markDirty();
       setModal({ ...modal, data: normalizeGprReport(applyGprSmartNarratives(next)) });
     } catch (e) {
       alert(e.message || "Geology lookup failed — set a project map pin or postcode");
@@ -481,12 +544,92 @@ export default function GprReport() {
     setBusy("weather");
     try {
       const next = await fetchEnvironmentalIntoReport(form, project);
+      markDirty();
       setModal({ ...modal, data: normalizeGprReport(next) });
     } catch (e) {
       alert(e.message || "Weather lookup failed");
     } finally {
       setBusy("");
     }
+  };
+
+  const runStartHere = async () => {
+    if (!form) return;
+    setBusy("start");
+    try {
+      const capture = await captureGprStartHere({ project, report: form });
+      const next = applyGprStartHereCapture(form, capture);
+      markDirty();
+      setModal({ ...modal, data: normalizeGprReport(next) });
+      if (capture.gpsError && capture.gpsSource !== "device") {
+        pushToast({
+          type: "info",
+          title: "GPS used a fallback",
+          message: capture.gpsError,
+          durationMs: 3200,
+        });
+      } else {
+        pushToast({
+          type: "success",
+          title: "Start here stamped",
+          message: "GPS and live weather are on this report.",
+          durationMs: 2400,
+        });
+      }
+    } catch (e) {
+      pushToast({
+        type: "error",
+        title: "Start here failed",
+        message: e.message || "Could not capture GPS or weather.",
+      });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const addPreSurveyPhoto = async (file) => {
+    if (!file || !form) return;
+    try {
+      const dataUrl = await compressImageFile(file, { maxWidth: 1280, quality: 0.78 });
+      patchReport((r) => {
+        const photos = [
+          ...(r.preSurvey?.photos || []),
+          blankGprSitePhoto({
+            dataUrl,
+            fileName: file.name,
+            capturedAt: new Date().toISOString(),
+            caption: "General site photo",
+          }),
+        ];
+        return { ...r, preSurvey: { ...r.preSurvey, photos } };
+      });
+    } catch (e) {
+      pushToast({ type: "error", title: "Photo failed", message: e.message || "Could not add photo." });
+    }
+  };
+
+  const patchPreSurvey = (nextPs) => {
+    const firstDate = (nextPs.surveyDates || []).filter(Boolean)[0];
+    const obs = form.groundConditions?.siteObservations || {};
+    const surfaceType =
+      nextPs.surfaceKeys?.length === 1
+        ? nextPs.surfaceKeys[0]
+        : nextPs.surfaceKeys?.length > 1
+          ? "mixed"
+          : obs.surfaceType;
+    patchReport((r) => ({
+      ...r,
+      preSurvey: nextPs,
+      surveyDate: firstDate || r.surveyDate,
+      groundConditions: {
+        ...r.groundConditions,
+        siteObservations: {
+          ...obs,
+          surfaceType: surfaceType || obs.surfaceType,
+          moisture: nextPs.moisture || obs.moisture,
+        },
+      },
+    }));
   };
 
   const suggestLimitations = () => {
@@ -522,17 +665,17 @@ export default function GprReport() {
     patch({ deliverables: suggestDeliverableFlags(form) });
   };
 
-  const addPlanFigureFile = (file) => {
+  const addPlanFigureFile = async (file) => {
     if (!file || !form) return;
-    const reader = new FileReader();
-    reader.onload = () => {
+    try {
+      const dataUrl = await compressImageFile(file, { maxWidth: 1600, quality: 0.82 });
       patchReport((r) => {
         const planFigures = [
           ...(r.planFigures || []),
           blankGprPlanFigure({
             label: file.name.replace(/\.[^.]+$/, ""),
-            dataUrl: reader.result,
-            fileName: file.name,
+            dataUrl,
+            fileName: `${String(file.name || "plan").replace(/\.[^.]+$/, "")}.jpg`,
             capturedAt: new Date().toISOString(),
           }),
         ];
@@ -542,8 +685,9 @@ export default function GprReport() {
           deliverables: suggestDeliverableFlags({ ...r, planFigures }),
         };
       });
-    };
-    reader.readAsDataURL(file);
+    } catch (e) {
+      pushToast({ type: "error", title: "Photo failed", message: e?.message || "Could not add plan image." });
+    }
   };
 
   useEffect(() => {
@@ -637,10 +781,10 @@ export default function GprReport() {
     }
   };
 
-  const addRadargramFile = (file) => {
+  const addRadargramFile = async (file) => {
     if (!file || !form) return;
-    const reader = new FileReader();
-    reader.onload = () => {
+    try {
+      const dataUrl = await compressImageFile(file, { maxWidth: 1600, quality: 0.82 });
       patchReport((r) => ({
         ...r,
         radargrams: [
@@ -649,19 +793,35 @@ export default function GprReport() {
             id: `rg_${Date.now()}`,
             label: file.name.replace(/\.[^.]+$/, ""),
             lineRef: "",
-            dataUrl: reader.result,
-            fileName: file.name,
+            dataUrl,
+            fileName: `${String(file.name || "radargram").replace(/\.[^.]+$/, "")}.jpg`,
             capturedAt: new Date().toISOString(),
             notes: "",
           },
         ],
       }));
-    };
-    reader.readAsDataURL(file);
+    } catch (e) {
+      pushToast({ type: "error", title: "Photo failed", message: e?.message || "Could not add radargram." });
+    }
   };
 
   const renderSetup = () => (
     <>
+      <GprPreSurveyCard
+        preSurvey={form.preSurvey}
+        busy={busy}
+        surveyor={form.surveyor}
+        onStartHere={runStartHere}
+        onChange={patchPreSurvey}
+        onAddPhoto={addPreSurveyPhoto}
+        onBeforePickPhoto={flushEditorToStorage}
+        onRemovePhoto={(id) =>
+          patchPreSurvey({
+            ...form.preSurvey,
+            photos: (form.preSurvey?.photos || []).filter((p) => p.id !== id),
+          })
+        }
+      />
       <Field label="Report ref">
         <input style={ss.input} value={form.ref} onChange={(e) => patch({ ref: e.target.value })} />
       </Field>
@@ -1186,11 +1346,14 @@ export default function GprReport() {
       <div className="app-gpr-radargram-panel">
         <div style={ss.sectionHead}>Radargrams & scan images</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          <label style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e", cursor: "pointer" }}>
+          <label
+            style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e", cursor: "pointer" }}
+            onPointerDown={flushEditorToStorage}
+          >
             + Upload image
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif"
               style={{ display: "none" }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -1261,11 +1424,14 @@ export default function GprReport() {
       <div className="app-gpr-radargram-panel" style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div style={ss.sectionHead}>Plan layouts & CAD figures</div>
-          <label style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e", cursor: "pointer" }}>
+          <label
+            style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e", cursor: "pointer" }}
+            onPointerDown={flushEditorToStorage}
+          >
             + Upload plan / CAD
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif"
               style={{ display: "none" }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -1952,7 +2118,7 @@ export default function GprReport() {
           <GprEditorHero
             form={form}
             project={project}
-            onClose={() => setModal(null)}
+            onClose={closeEditor}
             onGoToTab={setTab}
             livePreviewOpen={livePreviewOpen}
             onToggleLivePreview={setLivePreviewOpen}
@@ -2004,8 +2170,8 @@ export default function GprReport() {
             <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={exportHtml}>
               Export HTML
             </button>
-            <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={() => setModal(null)}>
-              Cancel
+            <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={closeEditor}>
+              Close
             </button>
             <button type="button" style={{ ...ss.btn, ...ss.btnP }} onClick={saveReport}>
               Save report
@@ -2022,7 +2188,7 @@ export default function GprReport() {
       <PageHero
         badgeText="GPR"
         title="GPR report"
-        lead="Prebuilt GPR reports — equipment presets, BGS geology, weather impact, rule-based narratives (offline-ready)."
+        lead="Prebuilt GPR reports — Start here stamps GPS and weather, then BGS geology, equipment presets and rule-based narratives."
         suppressRegisterPdf
       />
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="GPR reports" />

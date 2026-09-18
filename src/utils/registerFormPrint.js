@@ -167,7 +167,9 @@ const FORM_EXTRA_CSS = `
   .rf-muted { font-size: 11px; color: #64748b; margin: 0 0 8px; }
   .rf-hero {
     display: flex; justify-content: space-between; gap: 12px; align-items: flex-start;
-    margin: 0 0 12px; padding: 12px 14px; border-radius: 10px; background: #f1f5f9; border: 1px solid #e2e8f0;
+    margin: 0 0 12px; padding: 14px 16px; border-radius: 12px;
+    background: linear-gradient(165deg, #f8fafc 0%, #fff 55%, #f0fdfa 100%);
+    border: 1px solid #e2e8f0;
   }
   .rf-hero h2 { margin: 0 0 4px; font-size: 16px; color: #0f172a; }
   .rf-hero p { margin: 0; font-size: 11px; color: #64748b; }
@@ -183,6 +185,10 @@ const FORM_EXTRA_CSS = `
     .rf-sig-grid { break-inside: avoid; }
     .rf-attend { break-inside: auto; }
     .rf-attend tr { break-inside: avoid; }
+    .rf-hero, .rf-chip, .rf-risk, .rf-notes, .rf-callout, .rf-kv th {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
   }
   @media (max-width: 640px) {
     .rf-sig-grid { grid-template-columns: 1fr; }

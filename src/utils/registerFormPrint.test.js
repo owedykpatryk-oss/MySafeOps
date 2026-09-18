@@ -79,6 +79,8 @@ describe("registerFormPrint", () => {
     expect(doc).toContain("Acme Civils");
     expect(doc).toContain("Body");
     expect(doc).toContain("@page");
+    expect(doc).toContain("print-running-footer");
+    expect(doc).toContain("print-kpi-grid");
   });
 
   it("exposes form printers for main HSE register modules", () => {

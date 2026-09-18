@@ -6,6 +6,7 @@ import {
   GPR_QA_ITEMS,
   PROCESSING_STEPS,
 } from "./gprReportConstants";
+import { isGprPreSurveyStarted, normalizeGprPreSurvey } from "./gprPreSurvey";
 import {
   recommendAntennaMhz,
   interpretGeologyForGpr,
@@ -45,6 +46,7 @@ export function normalizeGprReport(raw) {
     anomalies: Array.isArray(raw.anomalies) ? raw.anomalies : [],
     limitationKeys: Array.isArray(raw.limitationKeys) ? raw.limitationKeys : [],
     photos: Array.isArray(raw.photos) ? raw.photos : [],
+    preSurvey: normalizeGprPreSurvey(raw.preSurvey),
     radargrams: Array.isArray(raw.radargrams) ? raw.radargrams : [],
     planFigures: Array.isArray(raw.planFigures) ? raw.planFigures : [],
     scanPanels: Array.isArray(raw.scanPanels) ? raw.scanPanels : [],
@@ -159,6 +161,8 @@ export function gprEvidenceStats(report) {
     anomalies,
     filtersApplied,
     totalEvidence: radargrams + panels + chainage + planFigures,
+    preSurveyStarted: isGprPreSurveyStarted(report?.preSurvey),
+    sitePhotos: report?.preSurvey?.photos?.length || 0,
   };
 }
 
@@ -261,6 +265,7 @@ export function enrichGprListRow(report, project) {
     penLabel: r.groundConditions?.expectedPenetrationM ? `~${r.groundConditions.expectedPenetrationM} m` : null,
     anomalyCount: r.anomalies?.length || 0,
     evidenceLabel: parts.length ? parts.join(" · ") : null,
+    preSurveyStarted: isGprPreSurveyStarted(r.preSurvey),
   };
 }
 
@@ -337,6 +342,13 @@ export function buildDuplicateGprPayload(report) {
       id: `rg_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
     })),
   });
+}
+
+export function upsertGprReportInList(reports, report) {
+  const r = normalizeGprReport(report);
+  const list = Array.isArray(reports) ? reports : [];
+  const exists = list.some((row) => row.id === r.id);
+  return exists ? list.map((row) => (row.id === r.id ? r : row)) : [...list, r];
 }
 
 export function autoNumberAnomalies(report) {

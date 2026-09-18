@@ -1,4 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
+import {
+  overlayDraftKey,
+  seedOverlayForm,
+  useOverlayFormDraft,
+  clearOverlayFormDraft,
+} from "../hooks/useOverlayFormDraft";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -16,6 +23,7 @@ import { ensureProjectLinked } from "../utils/projectRequiredGate";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { compressImageFile } from "../utils/geoPhotoUtils";
 
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `snag_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -77,19 +85,21 @@ function Badge({ type, value }) {
 function PhotoCapture({ photos, onChange }) {
   const inputRef = useRef();
 
-  const handleFiles = (e) => {
-    const files = Array.from(e.target.files);
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
+  const handleFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    for (const file of files) {
+      try {
+        const dataUrl = await compressImageFile(file);
+        const name = String(file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg";
         onChange((prev) => [
           ...prev,
-          { id: genId(), dataUrl: ev.target.result, name: file.name, ts: new Date().toISOString() },
+          { id: genId(), dataUrl, name, ts: new Date().toISOString() },
         ]);
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = "";
+      } catch (err) {
+        window.alert(err?.message || "Could not add photo.");
+      }
+    }
   };
 
   return (
@@ -163,9 +173,8 @@ function PhotoCapture({ photos, onChange }) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         multiple
-        capture="environment"
         style={{ display: "none" }}
         onChange={handleFiles}
       />
@@ -190,8 +199,10 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
     createdAt: new Date().toISOString(),
     ref: "",
   };
-  const [form, setForm] = useState(snag ? { ...snag } : blank);
+  const draftKey = overlayDraftKey("snag", snag?.id || "new");
+  const [form, setForm] = useState(() => seedOverlayForm(snag ? { ...snag } : blank, draftKey));
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  useOverlayFormDraft(draftKey, form, setForm);
 
   const autoRef = () => {
     if (!form.ref) {
@@ -203,17 +214,8 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
   useEffect(autoRef, []);
 
   return (
-    <div
-      style={{
-        minHeight: 600,
-        background: "rgba(0,0,0,0.45)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "1.5rem 1rem",
-      }}
-    >
-      <div style={{ ...ss.card, width: "100%", maxWidth: 560 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 560 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <span style={{ fontWeight: 500, fontSize: 16 }}>
             {snag ? `Edit snag ${snag.ref || ""}` : "New snag item"}
@@ -354,14 +356,17 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
           </button>
           <button
             disabled={!form.title.trim() || !form.projectId}
-            onClick={() => onSave(form)}
+            onClick={() => {
+              clearOverlayFormDraft(draftKey);
+              onSave(form);
+            }}
             style={{ ...ss.btnP, opacity: form.title.trim() && form.projectId ? 1 : 0.4 }}
           >
             {t("save")}
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 

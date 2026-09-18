@@ -75,8 +75,7 @@ function PrintPreviewFrame({
         title={title}
         srcDoc={srcDoc || EMPTY_PREVIEW_SRCDOC}
         className="app-print-preview__frame"
-        sandbox=""
-        loading="lazy"
+        sandbox="allow-same-origin"
         referrerPolicy="no-referrer"
       />
     </div>

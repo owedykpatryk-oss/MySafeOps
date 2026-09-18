@@ -145,6 +145,7 @@ export const GUIDED_HELP_TASKS = [
     target: { viewId: "gpr-report", label: "Open GPR Reports" },
     steps: [
       { title: "Create and link the project", body: "New GPR report → select the project (map pin preferred for BGS DigMap). Prefill pulls site address and job refs. Keep the same project as the utility survey for sync." },
+      { title: "Start here on site", body: "On Setup tap Start here. That stamps device GPS and live weather at that moment, then add general site photos, surface/substrate, survey day(s) and what you are looking for (services, foundations, voids…). It prints as Pre-survey start checks." },
       { title: "Set equipment and velocity", body: "Choose a manufacturer preset (GSSI, IDS, MALÅ…). Set assumed or measured velocity (cm/ns) and scan mode / line spacing. Wrong velocity skews depth estimates in the PDF." },
       { title: "Fetch geology and weather", body: "On Ground & env, fetch BGS geology (50k) and weather for the survey date. Review penetration vs target depth and note clay / saturated ground limitations." },
       { title: "Import CAD verification (optional)", body: "Findings → CAD model-space verification for GPR corridor lengths, UMG→B1 upgrades and no-access hatches. See Import CAD into a GPR report." },

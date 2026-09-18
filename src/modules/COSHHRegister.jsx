@@ -1,4 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
+import {
+  overlayDraftKey,
+  seedOverlayForm,
+  useOverlayFormDraft,
+  clearOverlayFormDraft,
+} from "../hooks/useOverlayFormDraft";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
@@ -66,12 +73,14 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
     sdsUrl:"", sdsReviewDate:"", assessedBy:"", assessedDate:todayLocalISO(),
     notes:"",
   };
-  const [form, setForm] = useState(item ? {...item} : blank);
+  const draftKey = overlayDraftKey("coshh", item?.id || "new");
+  const [form, setForm] = useState(() => seedOverlayForm(item ? { ...item } : blank, draftKey));
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  useOverlayFormDraft(draftKey, form, setForm);
 
   return (
-    <div style={{ minHeight:700, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"1.5rem 1rem", overflowY:"auto" }}>
-      <div style={{ ...ss.card, width:"100%", maxWidth:600 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:600 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <span style={{ fontWeight:500, fontSize:16 }}>{item ? "Edit substance" : "Add substance"}</span>
           <button onClick={onClose} style={{ ...ss.btn, padding:"4px 8px" }}>×</button>
@@ -192,12 +201,12 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
 
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
           <button onClick={onClose} style={ss.btn}>{t("cancel")}</button>
-          <button disabled={!form.name.trim()} onClick={()=>onSave(form)} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
+          <button disabled={!form.name.trim()} onClick={()=>{ clearOverlayFormDraft(draftKey); onSave(form); }} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
             {t("save")}
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 

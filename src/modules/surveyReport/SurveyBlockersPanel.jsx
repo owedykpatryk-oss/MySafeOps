@@ -1,9 +1,10 @@
 import { memo, useMemo, useState } from "react";
 import { buildSurveyBlockers } from "./surveyReportBlockers";
 import { SURVEY_AUTOFIX_ACTIONS, suggestSurveyAutofixes } from "./surveyAutofix";
+import { preferCollapsedEditorChrome } from "../../utils/narrowUi";
 
 function SurveyBlockersPanel({ report, context, onGoToTab, onAutofix }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(() => !preferCollapsedEditorChrome());
   const { blockers, score } = useMemo(() => buildSurveyBlockers(report, context), [report, context]);
   const autofixIds = useMemo(() => suggestSurveyAutofixes(report), [report]);
   const autofixActions = useMemo(
@@ -42,8 +43,11 @@ function SurveyBlockersPanel({ report, context, onGoToTab, onAutofix }) {
     >
       <button type="button" className="app-survey-blockers__toggle" onClick={() => setOpen((v) => !v)}>
         <span>
-          {critical.length ? "Cannot finalise yet" : "Complete before issue"} — {blockers.length} item
-          {blockers.length === 1 ? "" : "s"} · {score}%
+          {critical.length
+            ? `Cannot finalise yet — ${critical.length} must-fix · ${score}%`
+            : warnings.length
+              ? `Complete before issue — ${warnings.length} item${warnings.length === 1 ? "" : "s"} · ${score}%`
+              : `Suggestions — ${hints.length} tip${hints.length === 1 ? "" : "s"} · ${score}%`}
         </span>
         <span aria-hidden>{open ? "▾" : "▸"}</span>
       </button>

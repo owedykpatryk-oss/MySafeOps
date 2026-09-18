@@ -3,6 +3,14 @@
  * Instant revokeObjectURL after click often cancels the download in Chromium.
  */
 
+/** iOS WebKit ignores `<a download>` for blob: URLs — open in a new tab instead. */
+export function isIosWebKitDownload() {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/iP(ad|hone|od)/i.test(ua)) return true;
+  return /Macintosh/i.test(ua) && Number(navigator.maxTouchPoints || 0) > 1;
+}
+
 /**
  * @param {Blob | string} blobOrUrl
  * @param {string} fileName
@@ -22,9 +30,13 @@ export function downloadBlob(blobOrUrl, fileName) {
 
     const a = document.createElement("a");
     a.href = objectUrl;
-    a.download = name;
     a.rel = "noopener";
     a.style.display = "none";
+    if (isIosWebKitDownload()) {
+      a.target = "_blank";
+    } else {
+      a.download = name;
+    }
     document.body.appendChild(a);
     a.click();
     a.remove();

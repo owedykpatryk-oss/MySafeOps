@@ -10,6 +10,7 @@ import { getOrgId, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import PageHero from "../components/PageHero";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { compressImageFile, isHeicLikeFile, jpegFileFromDataUrl } from "../utils/geoPhotoUtils";
 
 const DOC_META_KEY = "mysafeops_doc_library";
 const R2_UPLOADS_KEY = "mysafeops_r2_uploads";
@@ -27,8 +28,8 @@ const ss = ms;
 const FILE_LIST_PAGE = 120;
 const R2_LIST_PAGE = 60;
 const R2_ACCEPT =
-  ".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.kml,.kmz";
-const R2_ALLOWED_EXT = /\.(pdf|png|jpe?g|gif|webp|docx?|xlsx?|csv|txt|zip|kml|kmz)$/i;
+  ".pdf,.png,.jpg,.jpeg,.gif,.webp,.heic,.heif,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.kml,.kmz";
+const R2_ALLOWED_EXT = /\.(pdf|png|jpe?g|gif|webp|hei[cf]|docx?|xlsx?|csv|txt|zip|kml|kmz)$/i;
 
 async function readDirRecursive(dirHandle, basePath = "") {
   const out = [];
@@ -119,14 +120,20 @@ export default function DocumentLibrary() {
     try {
       for (let i = 0; i < fl.length; i++) {
         const file = fl[i];
-        if (!R2_ALLOWED_EXT.test(file.name || "")) {
+        const heic = isHeicLikeFile(file) || /\.hei[cf]$/i.test(file.name || "");
+        if (!heic && !R2_ALLOWED_EXT.test(file.name || "")) {
           setR2Msg(`Skipped ${file.name || "file"} — type not allowed.`);
           continue;
         }
-        const result = await uploadFileToR2Storage(file, { orgId: orgIdForPath, subPath: "documents" });
+        let toUpload = file;
+        if (heic) {
+          const dataUrl = await compressImageFile(file);
+          toUpload = jpegFileFromDataUrl(dataUrl, file.name);
+        }
+        const result = await uploadFileToR2Storage(toUpload, { orgId: orgIdForPath, subPath: "documents" });
         const row = {
           id: `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}`,
-          name: file.name,
+          name: toUpload.name || file.name,
           key: result.key,
           size: result.size,
           publicUrl: result.publicUrl,

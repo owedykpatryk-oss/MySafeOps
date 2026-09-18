@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase";
 import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
+import { compressImageFile, jpegFileFromDataUrl } from "./geoPhotoUtils";
 
 const BUCKET = "permit-evidence";
 
@@ -24,12 +25,14 @@ export async function uploadPermitEvidencePhoto(file, permitId) {
   const workspaceId = getCachedActiveCountryWorkspace()?.id || "legacy";
 
   const safePermit = String(permitId || "draft").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-  const path = `${user.id}/${workspaceId}/${safePermit}/${Date.now()}.${ext}`;
+  const dataUrl = await compressImageFile(file, { maxWidth: 1920, quality: 0.82 });
+  const jpeg = jpegFileFromDataUrl(dataUrl, file?.name || "evidence.jpg");
+  const path = `${user.id}/${workspaceId}/${safePermit}/${Date.now()}.jpg`;
 
-  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, jpeg, {
     cacheControl: "3600",
     upsert: false,
+    contentType: "image/jpeg",
   });
   if (upErr) throw upErr;
 

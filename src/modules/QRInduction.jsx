@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save, getOrgId } from "../utils/orgStorage";
 import { useToast } from "../context/ToastContext";
@@ -244,8 +245,8 @@ function SiteManager({ sites, onSave, onClose }) {
   const ed = list.find(s=>s.id===editing);
 
   return (
-    <div style={{ minHeight:400, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"1.5rem 1rem" }}>
-      <div style={{ ...ss.card, width:"100%", maxWidth:560 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:560 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <span style={{ fontWeight:500, fontSize:16 }}>{ed ? "Edit site" : "Manage sites"}</span>
           <button onClick={onClose} style={{ ...ss.btn, padding:"4px 8px" }}>×</button>
@@ -302,7 +303,7 @@ function SiteManager({ sites, onSave, onClose }) {
           </>
         )}
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -311,8 +312,8 @@ function QRModal({ site, baseUrl, onClose }) {
   const { pushToast } = useToast();
   const url = `${baseUrl}?site=${site.id}&org=${getOrgId()}`;
   return (
-    <div style={{ minHeight:480, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", padding:"1.5rem 1rem" }}>
-      <div style={{ ...ss.card, width:"100%", maxWidth:360, textAlign:"center" }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:360, textAlign:"center" }}>
         <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
           <button onClick={onClose} style={{ ...ss.btn, padding:"4px 8px" }}>×</button>
         </div>
@@ -330,7 +331,7 @@ function QRModal({ site, baseUrl, onClose }) {
           Workers scan this with their phone camera to begin site induction. Link works with this org&apos;s data in the same browser / synced workspace.
         </p>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 

@@ -42,19 +42,17 @@ function printMonthlyReport(monthLabel) {
   const win = openPrintWindowOrWarn();
   if (!win) return;
   const bodyHtml = `
-  <div class="print-section-title">Monthly snapshot</div>
-  <table style="width:100%;border-collapse:collapse;margin-top:4px">
-    <tr><th style="border:1px solid #e2e8f0;padding:8px;text-align:left;background:#f8fafc">Metric</th><th style="border:1px solid #e2e8f0;padding:8px;text-align:left;background:#f8fafc">Value</th></tr>
-    <tr><td style="border:1px solid #e2e8f0;padding:8px">Compliance score (estimate)</td><td style="border:1px solid #e2e8f0;padding:8px">${score}%</td></tr>
-    <tr><td style="border:1px solid #e2e8f0;padding:8px">Active projects</td><td style="border:1px solid #e2e8f0;padding:8px">${projects.length}</td></tr>
-    <tr><td style="border:1px solid #e2e8f0;padding:8px">Workers on record</td><td style="border:1px solid #e2e8f0;padding:8px">${workers.length}</td></tr>
-    <tr><td style="border:1px solid #e2e8f0;padding:8px">RAMS documents</td><td style="border:1px solid #e2e8f0;padding:8px">${rams.length}</td></tr>
-    <tr><td style="border:1px solid #e2e8f0;padding:8px">Permits (all statuses)</td><td style="border:1px solid #e2e8f0;padding:8px">${permits.length}</td></tr>
-    <tr><td style="border:1px solid #e2e8f0;padding:8px">Open snags</td><td style="border:1px solid #e2e8f0;padding:8px">${snags.filter((s) => s.status === "open").length}</td></tr>
-    <tr><td style="border:1px solid #e2e8f0;padding:8px">Incidents / near misses (total)</td><td style="border:1px solid #e2e8f0;padding:8px">${incidents.length}</td></tr>
-    <tr><td style="border:1px solid #e2e8f0;padding:8px">Certificates expiring in 30 days</td><td style="border:1px solid #e2e8f0;padding:8px">${in30.length}</td></tr>
-    <tr><td style="border:1px solid #e2e8f0;padding:8px">Expired certificates (action required)</td><td style="border:1px solid #e2e8f0;padding:8px">${expiredCerts.length}</td></tr>
-  </table>
+  <div class="print-kpi-grid">
+    <div class="print-kpi"><div class="print-kpi__l">Compliance score</div><div class="print-kpi__v">${score}%</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Active projects</div><div class="print-kpi__v">${projects.length}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Workers</div><div class="print-kpi__v">${workers.length}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">RAMS documents</div><div class="print-kpi__v">${rams.length}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Permits</div><div class="print-kpi__v">${permits.length}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Open snags</div><div class="print-kpi__v">${snags.filter((s) => s.status === "open").length}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Incidents / near misses</div><div class="print-kpi__v">${incidents.length}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Certs expiring (30 days)</div><div class="print-kpi__v">${in30.length}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Expired certificates</div><div class="print-kpi__v">${expiredCerts.length}</div></div>
+  </div>
   <div class="print-section-title">Notes</div>
   <p style="font-size:12px;line-height:1.6">This report is generated locally from MySafeOps data. ${complianceCopy.statutoryReportingNote}</p>`;
 

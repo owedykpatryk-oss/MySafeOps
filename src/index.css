@@ -156,6 +156,11 @@ body.mysafeops-overlay-open {
   padding-bottom: var(--safe-bottom);
 }
 
+body.mysafeops-overlay-open .app-bottom-nav {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* ── Mobile touch-target & input fixes ── */
 
 button,

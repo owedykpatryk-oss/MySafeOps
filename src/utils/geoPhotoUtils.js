@@ -1,5 +1,7 @@
 /** Bearing / map helpers for geo-photos. */
 
+import { dataUrlToBlob } from "./dataUrlBlob.js";
+
 const EARTH_RADIUS_M = 6371000;
 /** Visible length of a view-direction arrow on site-scale maps. */
 export const DIRECTION_LENGTH_M = 25;
@@ -63,65 +65,131 @@ export function flipBearing180(bearing) {
   return b == null ? null : normalizeBearing(b + 180);
 }
 
-/** Resize image file to JPEG data URL for local storage (PWA camera-safe). */
-export function compressImageFile(file, { maxWidth = 1280, quality = 0.82 } = {}) {
+export function isHeicLikeFile(file) {
+  const type = String(file?.type || "").toLowerCase();
+  const name = String(file?.name || "").toLowerCase();
+  return type.includes("heic") || type.includes("heif") || /\.hei[cf]$/i.test(name);
+}
+
+/** iPhone Photos often omits MIME type or sends HEIC as octet-stream. */
+export function isLikelyImageFile(file) {
+  if (!file) return false;
+  const type = String(file.type || "").toLowerCase();
+  if (type.startsWith("image/")) return true;
+  if (type && type !== "application/octet-stream") return false;
+  return isHeicLikeFile(file) || /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(file.name || "");
+}
+
+export function photoReadErrorMessage(file) {
+  if (isHeicLikeFile(file)) {
+    return "This iPhone photo (HEIC) could not be converted. In Settings → Camera → Formats, choose Most Compatible, then try again.";
+  }
+  return "Could not read photo. Try another image or take a new photo.";
+}
+
+function drawSourceToJpeg(source, width, height, maxWidth, quality) {
+  const scale = Math.min(1, maxWidth / Math.max(1, width));
+  const w = Math.max(1, Math.round(width * scale));
+  const h = Math.max(1, Math.round(height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(source, 0, 0, w, h);
+  try {
+    return canvas.toDataURL("image/jpeg", quality);
+  } catch {
+    return null;
+  }
+}
+
+function decodeViaHtmlImage(file, maxWidth, quality) {
   return new Promise((resolve, reject) => {
     if (!file) {
       reject(new Error("No photo file"));
       return;
     }
-
     const objectUrl = URL.createObjectURL(file);
     const img = new Image();
     let settled = false;
+    const timer = window.setTimeout(() => finish(reject, new Error(photoReadErrorMessage(file))), 15000);
 
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
+      window.clearTimeout(timer);
       URL.revokeObjectURL(objectUrl);
       fn(value);
     };
 
-    const drawToJpeg = (source, width, height) => {
-      const scale = Math.min(1, maxWidth / Math.max(1, width));
-      const w = Math.max(1, Math.round(width * scale));
-      const h = Math.max(1, Math.round(height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      ctx.drawImage(source, 0, 0, w, h);
-      try {
-        return canvas.toDataURL("image/jpeg", quality);
-      } catch {
-        return null;
-      }
-    };
-
     img.onload = () => {
-      const jpeg = drawToJpeg(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
-      if (jpeg) {
+      const jpeg = drawSourceToJpeg(
+        img,
+        img.naturalWidth || img.width,
+        img.naturalHeight || img.height,
+        maxWidth,
+        quality
+      );
+      if (jpeg && jpeg.startsWith("data:image/jpeg")) {
         finish(resolve, jpeg);
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => finish(resolve, String(reader.result || ""));
-      reader.onerror = () => finish(reject, new Error("Could not read photo"));
-      reader.readAsDataURL(file);
+      finish(reject, new Error(photoReadErrorMessage(file)));
     };
-    img.onerror = () => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const raw = String(reader.result || "");
-        if (raw.startsWith("data:image")) finish(resolve, raw);
-        else finish(reject, new Error("Could not read photo from camera"));
-      };
-      reader.onerror = () => finish(reject, new Error("Could not read photo from camera"));
-      reader.readAsDataURL(file);
-    };
+    img.onerror = () => finish(reject, new Error(photoReadErrorMessage(file)));
     img.src = objectUrl;
   });
+}
+
+/**
+ * Resize image file to JPEG data URL for local storage (PWA / iPhone HEIC-safe).
+ * Never returns a raw HEIC data URL — those fail in Chrome, PDF, and html2canvas.
+ */
+export async function compressImageFile(file, { maxWidth = 1280, quality = 0.82 } = {}) {
+  if (!file) throw new Error("No photo file");
+
+  if (typeof createImageBitmap === "function") {
+    const optionSets = [{ imageOrientation: "from-image" }, undefined];
+    for (const options of optionSets) {
+      let bitmap = null;
+      try {
+        bitmap = options ? await createImageBitmap(file, options) : await createImageBitmap(file);
+        const jpeg = drawSourceToJpeg(bitmap, bitmap.width, bitmap.height, maxWidth, quality);
+        bitmap.close?.();
+        if (jpeg && jpeg.startsWith("data:image/jpeg")) return jpeg;
+      } catch {
+        try {
+          bitmap?.close?.();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  return decodeViaHtmlImage(file, maxWidth, quality);
+}
+
+/** JPEG File for storage uploads (HEIC must never be sent as-is). */
+export function jpegFileFromDataUrl(dataUrl, baseName = "photo.jpg") {
+  const blob = dataUrlToBlob(dataUrl);
+  const stem =
+    String(baseName || "photo")
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^\w.-]+/g, "_")
+      .slice(0, 80) || "photo";
+  const name = `${stem}.jpg`;
+  try {
+    return new File([blob], name, { type: "image/jpeg", lastModified: Date.now() });
+  } catch {
+    try {
+      blob.name = name;
+    } catch {
+      /* ignore */
+    }
+    return blob;
+  }
 }
 
 export function requestDeviceLocation() {

@@ -3,6 +3,7 @@ import { anthropicVision, isAnthropicConfigured } from "../utils/anthropicClient
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "../components/PageHero";
+import { compressImageFile, isLikelyImageFile } from "../utils/geoPhotoUtils";
 
 const ss = ms;
 
@@ -12,39 +13,35 @@ export default function PhotoHazardAI() {
   const [err, setErr] = useState("");
   const ref = useRef();
 
-  const onPick = (e) => {
+  const onPick = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file || !file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result;
-      const m = dataUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
+    if (!file || !isLikelyImageFile(file)) return;
+    setErr("");
+    setOut("");
+    setLoading(true);
+    try {
+      const dataUrl = await compressImageFile(file);
+      const m = String(dataUrl).match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
       if (!m) {
         setErr("Could not read image");
         return;
       }
       const mediaType = m[1];
       const base64 = m[2];
-      setErr("");
-      setOut("");
-      setLoading(true);
-      try {
-        const text = await anthropicVision({
-          base64,
-          mediaType,
-          prompt:
-            "You are a UK construction safety observer. List visible hazards and practical controls (bullet list). Note limitations: photo may not show full context. British English.",
-        });
-        setOut(text);
-        pushAudit({ action: "ai_photo_hazard", entity: "claude", detail: "ok" });
-      } catch (er) {
-        setErr(er.message || "Failed");
-      } finally {
-        setLoading(false);
-      }
-    };
-    reader.readAsDataURL(file);
+      const text = await anthropicVision({
+        base64,
+        mediaType,
+        prompt:
+          "You are a UK construction safety observer. List visible hazards and practical controls (bullet list). Note limitations: photo may not show full context. British English.",
+      });
+      setOut(text);
+      pushAudit({ action: "ai_photo_hazard", entity: "claude", detail: "ok" });
+    } catch (er) {
+      setErr(er.message || "Failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -55,7 +52,7 @@ export default function PhotoHazardAI() {
         lead="Claude Vision — upload a site photo. Not a substitute for a formal risk assessment."
       />
       <div style={ss.card}>
-        <input ref={ref} type="file" accept="image/*" style={{ display: "none" }} onChange={onPick} />
+        <input ref={ref} type="file" accept="image/*,.heic,.heif" style={{ display: "none" }} onChange={onPick} />
         <button type="button" style={ss.btnP} disabled={loading || !isAnthropicConfigured()} onClick={() => ref.current?.click()}>
           {loading ? "Analysing…" : "Choose photo"}
         </button>

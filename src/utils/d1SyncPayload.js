@@ -108,6 +108,14 @@ export function stripGprReportsForD1(reports) {
     const planFigures = Array.isArray(row.planFigures)
       ? row.planFigures.map((pf) => stripDataUrlField(pf))
       : row.planFigures;
-    return { ...row, radargrams, planFigures };
+    const preSurvey = row.preSurvey && typeof row.preSurvey === "object"
+      ? {
+          ...row.preSurvey,
+          photos: Array.isArray(row.preSurvey.photos)
+            ? row.preSurvey.photos.map((ph) => stripDataUrlField(ph))
+            : row.preSurvey.photos,
+        }
+      : row.preSurvey;
+    return { ...row, radargrams, planFigures, preSurvey };
   });
 }

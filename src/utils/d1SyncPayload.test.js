@@ -67,10 +67,13 @@ describe("d1SyncPayload", () => {
         id: "g1",
         radargrams: [{ id: "r1", dataUrl: "data:image/png;base64,rg" }],
         planFigures: [{ id: "p1", dataUrl: "https://cdn.example/plan.png" }],
+        preSurvey: { photos: [{ id: "s1", dataUrl: "data:image/jpeg;base64,site" }] },
       },
     ]);
     expect(out[0].radargrams[0].dataUrl).toBe("");
     expect(out[0].radargrams[0].hasLocalMedia).toBe(true);
     expect(out[0].planFigures[0].dataUrl).toBe("https://cdn.example/plan.png");
+    expect(out[0].preSurvey.photos[0].dataUrl).toBe("");
+    expect(out[0].preSurvey.photos[0].hasLocalMedia).toBe(true);
   });
 });

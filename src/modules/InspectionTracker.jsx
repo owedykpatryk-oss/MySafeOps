@@ -1,4 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
+import {
+  overlayDraftKey,
+  seedOverlayForm,
+  useOverlayFormDraft,
+  clearOverlayFormDraft,
+} from "../hooks/useOverlayFormDraft";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
@@ -11,6 +18,7 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterFormPrintButton from "../components/RegisterFormPrintButton";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { printRegisterFormPack } from "../utils/registerFormPrint";
+import { compressImageFile } from "../utils/geoPhotoUtils";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
@@ -75,24 +83,29 @@ function InspectionForm({ item, onSave, onClose, projects }) {
     inspectedBy:"", certNumber:"", result:"pass",
     notes:"", photo:null, createdAt:new Date().toISOString(),
   };
-  const [form, setForm] = useState(item?{...item}:blank);
+  const draftKey = overlayDraftKey("inspection", item?.id || "new");
+  const [form, setForm] = useState(() => seedOverlayForm(item ? { ...item } : blank, draftKey));
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const photoRef = useRef();
+  useOverlayFormDraft(draftKey, form, setForm);
 
   const def = inspectionTypes[form.type]||inspectionTypes.other;
 
-  const handlePhoto = (e) => {
+  const handlePhoto = async (e) => {
     const file = e.target.files[0];
     e.target.value = "";
     if (!file) return;
-    const r = new FileReader();
-    r.onload = ev => set("photo",ev.target.result);
-    r.readAsDataURL(file);
+    try {
+      const dataUrl = await compressImageFile(file);
+      set("photo", dataUrl);
+    } catch (err) {
+      window.alert(err?.message || "Could not add photo.");
+    }
   };
 
   return (
-    <div style={{ minHeight:600, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"1.5rem 1rem" }}>
-      <div style={{ ...ss.card, width:"100%", maxWidth:580 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:580 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <span style={{ fontWeight:500, fontSize:15 }}>{item?"Edit inspection record":"New inspection record"}</span>
           <button onClick={onClose} style={{ ...ss.btn, padding:"4px 8px" }}>×</button>
@@ -172,19 +185,19 @@ function InspectionForm({ item, onSave, onClose, projects }) {
                 {form.photo?"Change photo":"Add photo"}
               </button>
               {form.photo && <button onClick={()=>set("photo",null)} style={{ ...ss.btn, color:"#A32D2D", borderColor:"#F09595" }}>Remove</button>}
-              <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{ display:"none" }} onChange={handlePhoto} />
+              <input ref={photoRef} type="file" accept="image/*,.heic,.heif" style={{ display:"none" }} onChange={handlePhoto} />
             </div>
           </div>
         </div>
 
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end", marginTop:16 }}>
           <button onClick={onClose} style={ss.btn}>{t("cancel")}</button>
-          <button disabled={!form.name.trim()} onClick={()=>onSave(form)} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
+          <button disabled={!form.name.trim()} onClick={()=>{ clearOverlayFormDraft(draftKey); onSave(form); }} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
             {t("save")}
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 

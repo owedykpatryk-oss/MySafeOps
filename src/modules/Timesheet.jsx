@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { ms } from "../utils/moduleStyles";
@@ -426,12 +427,8 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
   const ot = overtime(tot);
 
   return (
-    <div style={{
-      minHeight:520, background:"rgba(0,0,0,0.45)",
-      display:"flex", alignItems:"center", justifyContent:"center",
-      padding:"1rem",
-    }}>
-      <div style={{
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{
         background:"var(--color-background-primary,#fff)",
         borderRadius:12, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
         padding:"1.5rem", width:"100%", maxWidth:520,
@@ -557,7 +554,7 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
           </div>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -583,11 +580,8 @@ function ManagePanel({ type, items, onSave, onClose }) {
   const rename = (id, name) => setList(l => l.map(i=>i.id===id?{...i,name}:i));
 
   return (
-    <div style={{
-      minHeight:400, background:"rgba(0,0,0,0.45)",
-      display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem",
-    }}>
-      <div style={{
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{
         background:"var(--color-background-primary,#fff)",
         borderRadius:12, border:"0.5px solid var(--color-border-tertiary,#e5e5e5)",
         padding:"1.5rem", width:"100%", maxWidth:400,
@@ -639,7 +633,7 @@ function ManagePanel({ type, items, onSave, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 

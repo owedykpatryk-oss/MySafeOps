@@ -2534,7 +2534,7 @@ function PermitForm({
                 <label style={{ ...ss.lbl, fontSize:12 }} htmlFor="permit-or-upload-image-signed-in-7-day-view-link">Or upload image (signed in; 7-day view link)</label>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  accept="image/*,.heic,.heif"
                   disabled={evidenceUploadBusy}
                   onChange={async (e) => {
                     const f = e.target.files?.[0];

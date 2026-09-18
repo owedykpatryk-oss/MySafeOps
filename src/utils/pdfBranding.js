@@ -448,7 +448,7 @@ export function printDocTheme(org) {
 export function printDocBaseCss(org) {
   const { primary, accent, theme } = printDocTheme(org);
   return `
-    @page { size: A4; margin: 12mm; }
+    @page { size: A4; margin: 12mm 12mm 16mm; }
     * { box-sizing: border-box; }
     body {
       font-family: "Segoe UI", Arial, sans-serif;
@@ -456,7 +456,7 @@ export function printDocBaseCss(org) {
       line-height: 1.45;
       color: #0f172a;
       margin: 0;
-      padding: 16px 16px 28px;
+      padding: 12px 12px 22px;
       background: #fff;
     }
     .print-brand-stripe {
@@ -592,12 +592,64 @@ export function printDocBaseCss(org) {
       letter-spacing: 0.04em;
       margin-bottom: 8px;
     }
+    .print-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin: 0 0 14px;
+    }
+    .print-kpi {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+      break-inside: avoid;
+    }
+    .print-kpi__l {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: ${primary};
+      margin-bottom: 4px;
+    }
+    .print-kpi__v {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .print-running-footer {
+      display: none;
+    }
     @media print {
-      body { padding: 0 0 12mm; }
-      .print-brand-stripe, .print-doc-header, .print-meta-strip, .print-doc-badge {
+      body { padding: 0 0 8mm; }
+      .print-brand-stripe, .print-doc-header, .print-meta-strip, .print-doc-badge,
+      .print-kpi, .print-kpi-grid, .print-running-footer {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
+      .print-running-footer {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 3px 2mm 0;
+        font-size: 8px;
+        color: #64748b;
+        border-top: 1px solid #e2e8f0;
+        background: #fff;
+      }
+      .print-doc-header, .print-meta-strip, .print-kpi-grid { break-inside: avoid; }
+    }
+    @media (max-width: 640px) {
+      .print-kpi-grid { grid-template-columns: 1fr 1fr; }
+      .print-meta-strip { grid-template-columns: 1fr; }
     }
     ${theme === "classic" ? ".print-doc-header { border-bottom-width: 1px; }" : ""}
   `;
@@ -669,11 +721,17 @@ export function renderPrintDocFooter(org, opts = {}) {
   </footer>`;
 }
 
+export function renderPrintRunningFooter(org) {
+  const line = escapeHtml(org?.pdfFooter || `${org?.name || "MySafeOps"} · mysafeops.com`);
+  return `<div class="print-running-footer"><span>${line}</span><span>MySafeOps · A4</span></div>`;
+}
+
 export function wrapPrintHtmlDocument(org, { pageTitle, bodyHtml, extraCss = "", headerOpts = {}, metaFields = {}, footerExtra = "" }) {
   const title = escapeHtml(pageTitle || "MySafeOps document");
   return `<!DOCTYPE html><html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/>
   <title>${title}</title>
   <style>${printDocBaseCss(org)}${extraCss || ""}</style></head><body>
+  ${renderPrintRunningFooter(org)}
   ${renderPrintDocHeader(org, headerOpts)}
   ${renderPrintMetaStrip(org, { moduleLabel: headerOpts.docTitle, ...metaFields })}
   ${bodyHtml || ""}

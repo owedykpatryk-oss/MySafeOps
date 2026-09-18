@@ -1,9 +1,10 @@
 import { loadOrgScoped as load, saveOrgScoped as save, asStorageArray } from "../../utils/orgStorage";
+import { compressImageFile, isHeicLikeFile, isLikelyImageFile } from "../../utils/geoPhotoUtils";
 
 const PLANS_KEY = "project_plan_overlays_v1";
 
-export const PLAN_UPLOAD_ACCEPT = "image/png,image/jpeg,image/webp,application/pdf,.kml,.kmz";
-export const PLAN_UPLOAD_MIME = new Set(["image/png", "image/jpeg", "image/webp", "application/pdf"]);
+export const PLAN_UPLOAD_ACCEPT = "image/*,image/heic,image/heif,.heic,.heif,application/pdf,.kml,.kmz";
+export const PLAN_UPLOAD_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/heic", "image/heif", "application/pdf"]);
 export const PLAN_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 
 export function clampPercent(v) {
@@ -57,28 +58,46 @@ export function buildPlanOverlayRecord({ projectId, name, mimeType, dataUrl, upl
   };
 }
 
-export function readPlanUploadFile(file) {
-  return new Promise((resolve, reject) => {
-    const normalizedType = String(file?.type || "").toLowerCase();
-    if (!PLAN_UPLOAD_MIME.has(normalizedType)) {
-      reject(new Error("Only PNG, JPG, WEBP or PDF plans are supported."));
-      return;
-    }
-    if (Number(file?.size || 0) > PLAN_UPLOAD_MAX_BYTES) {
-      reject(new Error("Plan file is too large. Use files up to 8 MB."));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      resolve({
-        name: file.name,
-        mimeType: file.type || "application/octet-stream",
-        dataUrl: String(reader.result || ""),
-      });
-    };
-    reader.onerror = () => reject(new Error("Could not read file"));
-    reader.readAsDataURL(file);
-  });
+function isPlanPdf(file) {
+  const type = String(file?.type || "").toLowerCase();
+  const name = String(file?.name || "").toLowerCase();
+  return type.includes("pdf") || name.endsWith(".pdf");
+}
+
+function isPlanImage(file) {
+  if (!file || isPlanPdf(file)) return false;
+  return isLikelyImageFile(file) || isHeicLikeFile(file) || PLAN_UPLOAD_MIME.has(String(file.type || "").toLowerCase());
+}
+
+export async function readPlanUploadFile(file) {
+  if (!file) throw new Error("No file");
+  if (Number(file.size || 0) > PLAN_UPLOAD_MAX_BYTES) {
+    throw new Error("Plan file is too large. Use files up to 8 MB.");
+  }
+  if (isPlanPdf(file)) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        resolve({
+          name: file.name,
+          mimeType: file.type || "application/pdf",
+          dataUrl: String(reader.result || ""),
+        });
+      };
+      reader.onerror = () => reject(new Error("Could not read file"));
+      reader.readAsDataURL(file);
+    });
+  }
+  if (!isPlanImage(file)) {
+    throw new Error("Only photos or PDF plans are supported.");
+  }
+  const dataUrl = await compressImageFile(file, { maxWidth: 2400, quality: 0.88 });
+  const stem = String(file.name || "plan").replace(/\.[^.]+$/, "");
+  return {
+    name: `${stem}.jpg`,
+    mimeType: "image/jpeg",
+    dataUrl,
+  };
 }
 
 export function addPlanEmergencyAsset(plan, { kind = "muster", x = 50, y = 50, label = "" }) {

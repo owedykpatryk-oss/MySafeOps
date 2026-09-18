@@ -58,6 +58,7 @@ function formatOpenWeatherSnapshot(j, when) {
   return {
     text: `Site weather (${when}): ~${t}°C, ${desc}, wind ~${w.toFixed(1)} mph — OpenWeather snapshot.`,
     tempC: Number(j.main?.temp),
+    windMph: Number(w.toFixed(1)),
     description: desc,
     fetchedAt: new Date().toISOString(),
     source: "openweather",
@@ -138,6 +139,7 @@ async function fetchOpenMeteoCurrent(lat, lng, when) {
   return {
     text: `Site weather (${when}): ~${t}°C, ${desc}, wind ~${w} mph — Open-Meteo snapshot.`,
     tempC: t,
+    windMph: w ?? null,
     description: desc,
     fetchedAt: new Date().toISOString(),
     source: "open-meteo",

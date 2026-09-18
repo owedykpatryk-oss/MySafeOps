@@ -4,6 +4,7 @@ import {
   buildPlanOverlayRecord,
   listProjectPlans,
   planIsMarkable,
+  PLAN_UPLOAD_ACCEPT,
   readPlanUploadFile,
   saveProjectPlans,
   updateProjectPlan,
@@ -171,7 +172,7 @@ export default function ProjectSitePlanPanel({
         <input
           ref={planInputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp,application/pdf"
+          accept={PLAN_UPLOAD_ACCEPT}
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
