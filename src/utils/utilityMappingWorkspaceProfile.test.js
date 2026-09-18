@@ -18,6 +18,7 @@ import { PACK_DEFAULT_PERMIT_TYPES } from "../modules/permits/permitPackDefaults
 import { buildSurveyReportHtml } from "../modules/surveyReport/surveyReportPrintHtml";
 import { getPlaybooksForOrg, getFeaturedPlaybooksForOrg } from "./projectHubIndustry";
 import { listGeoPhotoPresetsForOrg, UM_PREFERRED_GEO_PHOTO_IDS } from "./geoPhotoPresets";
+import { UM_PROJECT_PLAYBOOKS } from "./utilityMappingProjectPlaybooks";
 
 describe("Utility Mapping exclusive workspace profile", () => {
   beforeEach(() => {
@@ -168,6 +169,34 @@ describe("Utility Mapping exclusive workspace profile", () => {
     expect(treatment?.permitTypes).toEqual(expect.arrayContaining(["excavation", "confined_space", "general"]));
     expect(getFeaturedPlaybooksForOrg(3).map((p) => p.id)[0]).toMatch(/^um_/);
     expect(listGeoPhotoPresetsForOrg(isUtilityMappingOrg())[0].id).toBe(UM_PREFERRED_GEO_PHOTO_IDS[0]);
+  });
+
+  it("keeps confined-space and rail access playbook-only; no WAH or hot work in UM playbooks", () => {
+    const idsFor = (type) =>
+      UM_PROJECT_PLAYBOOKS.filter((p) => (p.permitTypes || []).includes(type)).map((p) => p.id);
+
+    expect(PACK_DEFAULT_PERMIT_TYPES.utilityMapping).toEqual([
+      "excavation",
+      "ground_disturbance",
+      "visitor_access",
+      "general",
+    ]);
+    expect(PACK_DEFAULT_PERMIT_TYPES.utilityMapping).not.toContain("confined_space");
+    expect(PACK_DEFAULT_PERMIT_TYPES.utilityMapping).not.toContain("work_at_height");
+    expect(PACK_DEFAULT_PERMIT_TYPES.utilityMapping).not.toContain("rail_corridor_access");
+    expect(PACK_DEFAULT_PERMIT_TYPES.utilityMapping).not.toContain("hot_work");
+
+    // Chamber / wet-well CS stays on the WWTW playbook only (ACOP L101), not default PTW.
+    expect(idsFor("confined_space")).toEqual(["um_site_treatment"]);
+    // Surface PAS128 M-series / GPR corridor stay HSG47 permit-to-dig, not CS.
+    for (const id of ["um_pas128_m2", "um_pas128_m2p", "um_pas128_m4p", "um_gpr_corridor"]) {
+      const playbook = UM_PROJECT_PLAYBOOKS.find((p) => p.id === id);
+      expect(playbook?.permitTypes).not.toContain("confined_space");
+    }
+    // Work at Height / hot work are not UM survey defaults; rail stays NR playbook-only.
+    expect(idsFor("work_at_height")).toEqual([]);
+    expect(idsFor("hot_work")).toEqual([]);
+    expect(idsFor("rail_corridor_access")).toEqual(["um_site_rail"]);
   });
 
   it("hides utilityMapping profile from other orgs", () => {
