@@ -131,4 +131,25 @@ describe("permitTypesMarket", () => {
     expect(uk.hot_work.checklist.join(" ")).toMatch(/Fire watch person/i);
     expect((uk.hot_work.extraFields || []).map((f) => f.label).join(" ")).toMatch(/Fire watcher name/i);
   });
+
+  it("uses Polish electrical and cold-work extra-field labels, keeping UK English", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    const ukElectrical = (uk.electrical.extraFields || []).map((f) => f.label).join(" ");
+    const plElectrical = (pl.electrical.extraFields || []).map((f) => f.label).join(" ");
+    const ukCold = (uk.cold_work.extraFields || []).map((f) => f.label).join(" ");
+    const plCold = (pl.cold_work.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukElectrical).toMatch(/Circuit \/ board reference/);
+    expect(ukElectrical).toMatch(/Lock-out padlock number/);
+    expect(ukElectrical).toMatch(/Authorised person \(isolation\)/);
+    expect(plElectrical).toMatch(/Oznaczenie obwodu \/ rozdzielnicy/);
+    expect(plElectrical).toMatch(/Numer kłódki LOTO/);
+    expect(plElectrical).toMatch(/Osoba uprawniona \(odłączenie\)/);
+    expect(plElectrical).not.toMatch(/Circuit \/ board reference|Lock-out padlock number|Authorised person \(isolation\)/);
+    expect(ukCold).toMatch(/LOTO key holder name/);
+    expect(ukCold).toMatch(/Equipment tag \/ ID/);
+    expect(plCold).toMatch(/Osoba z kluczem LOTO/);
+    expect(plCold).toMatch(/Oznaczenie \/ nr urządzenia/);
+    expect(plCold).not.toMatch(/LOTO key holder name|Equipment tag \/ ID/);
+  });
 });

@@ -152,6 +152,11 @@ const PL_PERMIT_TYPE_OVERRIDES = {
   cold_work: {
     label: "Pozwolenie na prace zimne",
     description: "Prace utrzymaniowe bez prac gorących, z wymaganym odłączeniem energii i procedurą LOTO",
+    extraFields: [
+      { key: "equipmentTag", label: "Oznaczenie / nr urządzenia", type: "text" },
+      { key: "isolationPoints", label: "Liczba punktów odłączenia", type: "number" },
+      { key: "lotoKeyHolder", label: "Osoba z kluczem LOTO", type: "text" },
+    ],
   },
   line_break: { label: "Pozwolenie na rozszczelnienie instalacji" },
   roof_access: { label: "Pozwolenie na wejście na dach" },
@@ -229,6 +234,11 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Kłódka LOTO i tabliczka",
       "Potwierdzenie braku napięcia",
       "Pozwolenie u osoby wykonującej pracę",
+    ],
+    extraFields: [
+      { key: "circuitRef", label: "Oznaczenie obwodu / rozdzielnicy", type: "text" },
+      { key: "lockoutRef", label: "Numer kłódki LOTO", type: "text" },
+      { key: "authorisedPerson", label: "Osoba uprawniona (odłączenie)", type: "text" },
     ],
   },
   confined_space: {

@@ -61,11 +61,11 @@ export default function PermitConfinedSpaceGuidancePanel({ extraFields = {}, onE
         </div>
         <div>
           <label style={lbl}>{copy.o2Label}</label>
-          <input type="number" step={0.1} value={extra.o2Reading || ""} onChange={(e) => set("o2Reading", e.target.value)} style={inp} placeholder="19.5–23.5" />
+          <input type="number" step={0.1} value={extra.o2Reading || ""} onChange={(e) => set("o2Reading", e.target.value)} style={inp} placeholder={copy.o2Placeholder} />
         </div>
         <div>
           <label style={lbl}>{copy.coLabel}</label>
-          <input type="number" step={1} value={extra.coReading || ""} onChange={(e) => set("coReading", e.target.value)} style={inp} placeholder="&lt;20" />
+          <input type="number" step={1} value={extra.coReading || ""} onChange={(e) => set("coReading", e.target.value)} style={inp} placeholder={copy.coPlaceholder} />
         </div>
         <div>
           <label style={lbl}>{copy.h2sLabel}</label>
@@ -73,7 +73,7 @@ export default function PermitConfinedSpaceGuidancePanel({ extraFields = {}, onE
         </div>
         <div>
           <label style={lbl}>{copy.lelLabel}</label>
-          <input type="number" step={0.1} value={extra.lelReading || ""} onChange={(e) => set("lelReading", e.target.value)} style={inp} placeholder="&lt;10" />
+          <input type="number" step={0.1} value={extra.lelReading || ""} onChange={(e) => set("lelReading", e.target.value)} style={inp} placeholder={copy.lelPlaceholder} />
         </div>
         <div>
           <label style={lbl}>{copy.entrantLabel}</label>

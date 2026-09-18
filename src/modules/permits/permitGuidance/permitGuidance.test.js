@@ -328,4 +328,32 @@ describe("confinedSpaceGuidance", () => {
     expect(ukPanel).toMatch(/Standby \(at entrance\)|Gas tester \/ instrument ref/);
     expect(ukPanel).not.toMatch(/Osoba asekurująca \(przy wejściu\)/);
   });
+
+  it("uses Polish comma gas-band placeholders on Poland, keeping UK 19.5", () => {
+    const plPanel = renderToStaticMarkup(
+      createElement(PermitConfinedSpaceGuidancePanel, { marketId: "pl" })
+    );
+    const ukPanel = renderToStaticMarkup(
+      createElement(PermitConfinedSpaceGuidancePanel, { marketId: "uk" })
+    );
+    expect(plPanel).toMatch(/19,5–23,5/);
+    expect(plPanel).not.toMatch(/19\.5–23\.5/);
+    expect(ukPanel).toMatch(/19\.5–23\.5/);
+    expect(ukPanel).not.toMatch(/19,5–23,5/);
+    const plGauge = renderConfinedGaugeSvg({ o2Reading: "20.9" }, { marketId: "pl" });
+    const ukGauge = renderConfinedGaugeSvg({ o2Reading: "20.9" }, { marketId: "uk" });
+    expect(plGauge).toMatch(/19,5–23,5%/);
+    expect(plGauge).toMatch(/20,9%/);
+    expect(plGauge).not.toMatch(/20\.9%/);
+    expect(ukGauge).toMatch(/19\.5–23\.5%/);
+    expect(ukGauge).toMatch(/20\.9%/);
+    const comma = confinedSpaceAssessment({ o2Reading: "19,6", coReading: "5", h2sReading: "0", lelReading: "2" }, "pl");
+    expect(comma.readings.o2).toBe(19.6);
+    expect(comma.blockers).toEqual([]);
+    const ukDot = confinedSpaceAssessment({ o2Reading: "18", coReading: "5", h2sReading: "0", lelReading: "2" }, "uk");
+    expect(ukDot.blockers.some((b) => /19\.5–23\.5/.test(b))).toBe(true);
+    const plOut = confinedSpaceAssessment({ o2Reading: "18", coReading: "5", h2sReading: "0", lelReading: "2" }, "pl");
+    expect(plOut.blockers.some((b) => /19,5–23,5/.test(b))).toBe(true);
+    expect(plOut.blockers.some((b) => /19\.5–23\.5/.test(b))).toBe(false);
+  });
 });

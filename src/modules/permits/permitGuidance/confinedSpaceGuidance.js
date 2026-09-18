@@ -16,9 +16,13 @@ const CONFINED_EN_FIELDS = {
   sequenceWidgetTitle: "Entry sequence",
   gasTesterLabel: "Gas tester / instrument ref",
   o2Label: "O₂ (%)",
+  o2Placeholder: "19.5–23.5",
+  o2Band: "19.5–23.5%",
   coLabel: "CO (ppm)",
+  coPlaceholder: "<20",
   h2sLabel: "H₂S (ppm)",
   lelLabel: "LEL (%)",
+  lelPlaceholder: "<10",
   entrantLabel: "Entrant name",
   standbyLabel: "Standby (at entrance)",
   supervisorLabel: "Supervisor",
@@ -80,9 +84,13 @@ const CONFINED_PL_FIELDS = {
   sequenceWidgetTitle: "Kolejność wejścia",
   gasTesterLabel: "Tester gazów / nr przyrządu",
   o2Label: "O₂ (%)",
+  o2Placeholder: "19,5–23,5",
+  o2Band: "19,5–23,5%",
   coLabel: "CO (ppm)",
+  coPlaceholder: "<20",
   h2sLabel: "H₂S (ppm)",
   lelLabel: "LEL (%)",
+  lelPlaceholder: "<10",
   entrantLabel: "Osoba wchodząca",
   standbyLabel: "Osoba asekurująca (przy wejściu)",
   supervisorLabel: "Nadzorujący",
@@ -105,7 +113,7 @@ const CONFINED_PL_FIELDS = {
   printReady: "Odczyty w typowym paśmie bezpiecznym — utrzymuj monitoring ciągły.",
   readyCopy: "Odczyty w typowym paśmie — utrzymuj monitoring ciągły podczas przebywania.",
   o2Missing: "Zapisz odczyt O₂ (pasmo 19,5–23,5%).",
-  o2Blocker: (o2, min, max) => `O₂ ${o2}% poza pasmem bezpiecznym (${min}–${max}%).`,
+  o2Blocker: (o2, min, max) => `O₂ ${formatPlDecimal(o2)}% poza pasmem bezpiecznym (${formatPlDecimal(min)}–${formatPlDecimal(max)}%).`,
   coMissing: "Zapisz odczyt CO (typ. <20 ppm).",
   coBlocker: (co, max) => `CO ${co} ppm na granicy lub powyżej limitu ${max} ppm.`,
   h2sMissing: "Zapisz odczyt H₂S (typ. <1 ppm).",
@@ -192,8 +200,12 @@ export function isConfinedPermitType(type) {
   return CONFINED_PERMIT_TYPES.has(String(type || "").trim());
 }
 
+function formatPlDecimal(value) {
+  return String(value).replace(".", ",");
+}
+
 function parseReading(value) {
-  const raw = String(value ?? "").replace(/[^\d.]/g, "");
+  const raw = String(value ?? "").trim().replace(",", ".").replace(/[^\d.]/g, "");
   if (!raw) return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
@@ -234,7 +246,7 @@ export function confinedSpaceAssessment(extra = {}, marketId = getOrgMarketId())
 export function renderConfinedGaugeSvg(extra = {}, { width = 400, height = 110, marketId } = {}) {
   const copy = confinedGuidanceCopy(marketId);
   const gauges = [
-    { key: "o2Reading", ...GAS_THRESHOLDS.o2, band: "19.5–23.5%" },
+    { key: "o2Reading", ...GAS_THRESHOLDS.o2, band: copy.o2Band },
     { key: "coReading", ...GAS_THRESHOLDS.co, band: "<20" },
     { key: "h2sReading", ...GAS_THRESHOLDS.h2s, band: "<1" },
     { key: "lelReading", ...GAS_THRESHOLDS.lel, band: "<10%" },
@@ -249,7 +261,9 @@ export function renderConfinedGaugeSvg(extra = {}, { width = 400, height = 110, 
       const fill = val == null ? "#f1f5f9" : ok ? "#dcfce7" : "#fecaca";
       const stroke = val == null ? "#94a3b8" : ok ? "#16a34a" : "#dc2626";
       const x = i * cellW + 4;
-      const display = val != null ? `${val}${g.unit}` : "—";
+      const display = val != null
+        ? `${marketId === "pl" ? formatPlDecimal(val) : val}${g.unit}`
+        : "—";
       return `<g>
         <rect x="${x}" y="22" width="${cellW - 8}" height="72" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
         <text x="${x + (cellW - 8) / 2}" y="40" text-anchor="middle" font-size="11" font-weight="800" fill="#0f172a">${g.label}</text>
