@@ -2,6 +2,7 @@ import { getMarket } from "../config/markets";
 import { getOrgMarketId } from "./orgMarket";
 import { getOrgId } from "./orgStorage";
 import { loadOrgSettingsRaw } from "./orgSettingsStorage";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 
 const DATE_FMT = { day: "2-digit", month: "short", year: "numeric" };
 const DATETIME_FMT = {
@@ -30,4 +31,15 @@ export function formatOrgDate(iso, orgId = getOrgId()) {
 export function formatOrgDateTime(iso, orgId = getOrgId()) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString(getOrgLocale(orgId), DATETIME_FMT);
+}
+
+/** Document locale follows the selected country workspace, not the user's UI. */
+export function formatDocumentDate(iso, orgId = getOrgId()) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(getActiveDocumentLocale(orgId, getOrgMarketId(orgId)), DATE_FMT);
+}
+
+export function formatDocumentDateTime(iso, orgId = getOrgId()) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString(getActiveDocumentLocale(orgId, getOrgMarketId(orgId)), DATETIME_FMT);
 }

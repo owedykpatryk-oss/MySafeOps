@@ -4,6 +4,8 @@
  */
 import { safeCssColor } from "../../utils/htmlEscape.js";
 import { renderMySafeOpsMarkSvg, printDocTheme } from "../../utils/pdfBranding.js";
+import { getActiveDocumentLocale } from "../../utils/countryWorkspaces.js";
+import { documentText } from "../../utils/documentCountryPack.js";
 
 function escHtml(s) {
   if (s == null || s === undefined) return "";
@@ -111,7 +113,7 @@ function ramsDocumentCss(themeOrPrimary = "#0C447C") {
       z-index:9998;
     }
     .page-footer .page-num::after{
-      content:"Page " counter(page);
+      content:counter(page);
     }
     h1,h2,h3{break-after:avoid-page;page-break-after:avoid}
     .header-table,.cover-page,.pack-site-summary{break-inside:avoid-page;page-break-inside:avoid}
@@ -133,8 +135,8 @@ export function wrapRamsPrintDocument(pageTitle, bodyInner, extraHeadCss = "", f
   const complianceHtml = theme.complianceLine
     ? `<div style="font-size:9px;color:#94a3b8;margin-top:2px;max-width:72vw">${escHtml(theme.complianceLine)}</div>`
     : "";
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${escHtml(pageTitle)}</title>
+  return `<!DOCTYPE html><html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/><title>${escHtml(pageTitle)}</title>
   <style>${ramsDocumentCss(themeOrPrimary)}${extraHeadCss || ""}</style></head><body>${bodyInner}
-  <div class="page-footer"><span>${escHtml(footerMeta)}${complianceHtml}</span><span style="display:inline-flex;align-items:center;gap:5px">${renderMySafeOpsMarkSvg(16)}<span class="page-num"></span></span></div>
+  <div class="page-footer"><span>${escHtml(footerMeta)}${complianceHtml}</span><span style="display:inline-flex;align-items:center;gap:5px">${renderMySafeOpsMarkSvg(16)}<span>${escHtml(documentText("Page"))} <span class="page-num"></span></span></span></div>
   </body></html>`;
 }

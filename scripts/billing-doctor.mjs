@@ -69,7 +69,10 @@ async function checkFunction(fnName) {
         rawStatus: res.status,
       };
     }
-    return { fnName, deployed: true, configured: null, rawStatus: res.status };
+    // Unauthenticated probes get the public health body, which deliberately omits the
+    // detailed `configured` map but still answers readiness. Keep those flags, otherwise
+    // every run without a billing-admin token reports a false failure.
+    return { fnName, deployed: true, configured: null, liveReady, testReady, rawStatus: res.status };
   } catch (error) {
     return { fnName, deployed: null, configured: null, error: error instanceof Error ? error.message : String(error) };
   } finally {

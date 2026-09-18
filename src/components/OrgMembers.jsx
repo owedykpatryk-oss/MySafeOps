@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
@@ -7,6 +7,7 @@ import { revokeOrgMemberSessions } from "../utils/revokeMemberSessions";
 import { ms } from "../utils/moduleStyles";
 import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
+import { countryWorkspaceDefinition, loadCountryWorkspaces } from "../utils/countryWorkspaces";
 
 const ss = ms;
 const ROLES = ["admin", "supervisor", "operative"];
@@ -23,6 +24,8 @@ export default function OrgMembers() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [sortBy, setSortBy] = useState("joined");
+  const [countryWorkspaces, setCountryWorkspaces] = useState([]);
+  const [countryAssignments, setCountryAssignments] = useState(() => new Set());
 
   const canManage = Boolean(caps?.orgSettings);
   const visibleRows = useMemo(() => {
@@ -40,7 +43,7 @@ export default function OrgMembers() {
     return filtered;
   }, [rows, query, roleFilter, sortBy]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!supabase || !user) return;
     setStatus({ type: "", text: "" });
     setLoading(true);
@@ -68,12 +71,29 @@ export default function OrgMembers() {
       return;
     }
     setRows(data || []);
+    if (canManage) {
+      try {
+        const workspaces = await loadCountryWorkspaces(supabase);
+        setCountryWorkspaces(workspaces);
+        if (workspaces.length) {
+          const { data: assignments, error: assignmentError } = await supabase
+            .from("org_country_workspace_memberships")
+            .select("workspace_id,user_id")
+            .in("workspace_id", workspaces.map((workspace) => workspace.id));
+          if (assignmentError) throw assignmentError;
+          setCountryAssignments(new Set((assignments || []).map((item) => `${item.workspace_id}:${item.user_id}`)));
+        }
+      } catch {
+        setCountryWorkspaces([]);
+        setCountryAssignments(new Set());
+      }
+    }
     setLoading(false);
-  };
+  }, [canManage, supabase, user]);
 
   useEffect(() => {
     load().catch(() => {});
-  }, [supabase, user]);
+  }, [load]);
 
   const changeRole = async (targetId, nextRole) => {
     if (!supabase || !canManage) return;
@@ -125,6 +145,31 @@ export default function OrgMembers() {
     } catch (e) {
       setStatus({ type: "error", text: e.message || "Could not remove member." });
       pushToast({ type: "error", title: "Removal failed", message: e.message || "Could not remove member." });
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const setCountryAccess = async (workspace, member, enabled) => {
+    if (!supabase || !canManage) return;
+    const busyKey = `${workspace.id}:${member.user_id}`;
+    setBusyId(busyKey);
+    try {
+      const { error } = await supabase.rpc("set_org_country_workspace_member", {
+        p_workspace_id: workspace.id,
+        p_user_id: member.user_id,
+        p_enabled: enabled,
+      });
+      if (error) throw error;
+      setCountryAssignments((current) => {
+        const next = new Set(current);
+        if (enabled) next.add(busyKey);
+        else next.delete(busyKey);
+        return next;
+      });
+      pushToast({ type: "success", message: `${workspace.display_name} access ${enabled ? "enabled" : "removed"} for ${member.email}.` });
+    } catch (error) {
+      pushToast({ type: "error", message: error?.message || "Could not update country access." });
     } finally {
       setBusyId("");
     }
@@ -191,6 +236,27 @@ export default function OrgMembers() {
                     <div style={{ marginTop: 8 }}>
                       <span style={ss.chip}>{row.role}</span>
                     </div>
+                    {canManage && countryWorkspaces.length ? (
+                      <fieldset style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 0", padding: 0, border: 0 }}>
+                        <legend style={{ marginBottom: 5, color: "var(--color-text-secondary)", fontSize: 11, fontWeight: 700 }}>Country access</legend>
+                        {countryWorkspaces.map((workspace) => {
+                          const key = `${workspace.id}:${row.user_id}`;
+                          const definition = countryWorkspaceDefinition(workspace.market_id);
+                          const locked = workspace.is_primary || row.role === "admin";
+                          return (
+                            <label key={workspace.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, minHeight: 32, padding: "5px 8px", border: "1px solid #dbe7e3", borderRadius: 999, fontSize: 11 }}>
+                              <input
+                                type="checkbox"
+                                checked={locked || countryAssignments.has(key)}
+                                disabled={locked || busyId === key}
+                                onChange={(event) => void setCountryAccess(workspace, row, event.target.checked)}
+                              />
+                              {definition.flag} {workspace.display_name}
+                            </label>
+                          );
+                        })}
+                      </fieldset>
+                    ) : null}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                     {canManage ? (

@@ -9,6 +9,7 @@ import {
   buildDocReference,
   setPdfFont,
 } from "./pdfBranding.js";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 
 const he = (s) =>
   String(s ?? "")
@@ -106,7 +107,7 @@ export function flattenGeoPhotoRow(photo) {
     type: geoPhotoPresetLabel(photo?.type),
     project: photo?.projectName || "—",
     captured: photo?.timestampUtc
-      ? new Date(photo.timestampUtc).toLocaleString("en-GB", {
+      ? new Date(photo.timestampUtc).toLocaleString(getActiveDocumentLocale(), {
           day: "2-digit",
           month: "short",
           year: "numeric",
@@ -237,7 +238,7 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
   const fmtDate = (iso) => {
     if (!iso) return "—";
     try {
-      return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+      return new Date(iso).toLocaleDateString(getActiveDocumentLocale(), { day: "2-digit", month: "short", year: "numeric" });
     } catch {
       return String(iso);
     }
@@ -418,7 +419,7 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
       cx += colW[2];
       if (att.sigTime) {
         try {
-          const t = new Date(att.sigTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+          const t = new Date(att.sigTime).toLocaleTimeString(getActiveDocumentLocale(), { hour: "2-digit", minute: "2-digit" });
           pdf.setFontSize(7.5);
           pdf.setTextColor(30, 41, 59);
           pdf.text(t, cx + 1, y + 8);
@@ -495,7 +496,7 @@ export function renderGeoPhotoDetailPages(pdf, photos, helpers) {
     pdf.setFontSize(9);
     pdf.setTextColor(51, 65, 85);
     const meta = [
-      `Captured: ${photo.timestampUtc ? new Date(photo.timestampUtc).toLocaleString("en-GB") : "—"}`,
+      `Captured: ${photo.timestampUtc ? new Date(photo.timestampUtc).toLocaleString(getActiveDocumentLocale()) : "—"}`,
       photo.capturedBy ? `By: ${photo.capturedBy}` : "",
       `Coordinates: ${formatCoords(photo)}`,
       photo.bearing != null && !Number.isNaN(Number(photo.bearing))
@@ -529,7 +530,7 @@ export function dailyBriefingHtmlForPrint(brief) {
     .filter((a) => a.present)
     .map((a) => {
       const sig = a.sig && String(a.sig).startsWith("data:image") ? a.sig : "";
-      return `<tr><td>${he(a.name)}</td><td>${he(a.role || "")}</td><td>${sig ? `<img src="${sig}" style="height:36px;max-width:140px"/>` : ""}</td><td>${a.sigTime ? he(new Date(a.sigTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })) : ""}</td></tr>`;
+      return `<tr><td>${he(a.name)}</td><td>${he(a.role || "")}</td><td>${sig ? `<img src="${sig}" style="height:36px;max-width:140px"/>` : ""}</td><td>${a.sigTime ? he(new Date(a.sigTime).toLocaleTimeString(getActiveDocumentLocale(), { hour: "2-digit", minute: "2-digit" })) : ""}</td></tr>`;
     })
     .join("");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Briefing ${he(brief.date)}</title>

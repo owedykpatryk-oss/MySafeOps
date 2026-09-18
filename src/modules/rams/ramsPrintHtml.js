@@ -25,11 +25,12 @@ import {
 import { utilityMappingBodyPrintCss } from "../../utils/utilityMappingPrintTheme.js";
 import { getRamsPrintLabels } from "../../utils/ramsUiLabels.js";
 import { getOrgMarketId } from "../../utils/orgMarket.js";
-import { formatOrgDate, formatOrgDateTime } from "../../utils/orgLocale.js";
+import { formatDocumentDate, formatDocumentDateTime } from "../../utils/orgLocale.js";
 import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import { wrapRamsPrintDocument } from "./ramsPrintDocument.js";
 import { siteContextBadgeLabel } from "./ramsPlaybookEnrichment.js";
 import { safeHttpUrl } from "../../utils/safeUrl.js";
+import { documentStatusLabel, documentText, getDocumentCountryPack } from "../../utils/documentCountryPack.js";
 
 export { wrapRamsPrintDocument } from "./ramsPrintDocument.js";
 
@@ -39,8 +40,9 @@ const RL = {
   low: { bg: "#EAF3DE", color: "#27500A" },
 };
 
-const fmtDate = formatOrgDate;
-const fmtDateTime = formatOrgDateTime;
+const fmtDate = formatDocumentDate;
+const fmtDateTime = formatDocumentDateTime;
+const tx = (key, fallback = key) => documentText(key, fallback, getOrgMarketId());
 
 function riskScore(risk) {
   const l = Number(risk?.L || 0);
@@ -422,7 +424,7 @@ function loadOrgPrintSettings() {
     watermarkText: String(org.pdfWatermarkText || "").trim(),
     complianceLine:
       String(org.pdfComplianceLine || "").trim() ||
-      "Controlled document. Ensure latest approved revision is in use.",
+      getDocumentCountryPack().controlledDocument,
   };
 }
 
@@ -566,7 +568,9 @@ export function buildSitePackSummaryHtml(sitePackMeta, permits = [], projectName
 
 /** RAMS body only (no html/head wrapper). */
 export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll) {
-  const printLabels = getRamsPrintLabels(getOrgMarketId());
+  const marketId = getOrgMarketId();
+  const countryPack = getDocumentCountryPack(marketId);
+  const printLabels = getRamsPrintLabels(marketId);
   const docShort = printLabels.docShort;
   const rowList = rows || [];
   const opList = operatives || [];
@@ -594,6 +598,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
         .filter(Boolean)
     )
   ).sort((a, b) => a.localeCompare(b));
+  const effectiveRegs = marketId === "uk" && regsRollup.length > 0 ? regsRollup : countryPack.ramsLegalReferences;
   const qaChecks = buildQaChecklist(form, rowList, opList);
   const qaPass = qaChecks.filter((x) => x.ok).length;
   const qaPct = qaChecks.length ? Math.round((qaPass / qaChecks.length) * 100) : 0;
@@ -686,7 +691,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
 
   const weatherBlock =
     pf[RAMS_SECTION_IDS.WEATHER] && (form.siteWeatherNote || "").trim()
-      ? `<h2 style="font-size:13px;margin:18px 0 8px">2. Site weather</h2>
+      ? `<h2 style="font-size:13px;margin:18px 0 8px">2. ${escHtml(tx("Site weather"))}</h2>
          <p style="font-size:12px;white-space:pre-wrap;margin:0 0 12px">${escHtml(form.siteWeatherNote)}</p>`
       : "";
 
@@ -695,11 +700,11 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
     ((form.siteMapUrl || "").trim() || ((form.siteLat || "").trim() && (form.siteLng || "").trim()))
       ? (() => {
           const thumbUrl = staticSiteMapUrl(form.siteLat, form.siteLng);
-          return `<h2 style="font-size:13px;margin:18px 0 8px">3. Site map / location</h2>
+          return `<h2 style="font-size:13px;margin:18px 0 8px">3. ${escHtml(tx("Site map / location"))}</h2>
          ${thumbUrl ? `<img src="${escHtml(thumbUrl)}" alt="Site location map" style="width:100%;max-height:220px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0;margin:0 0 10px"/>` : ""}
          ${(form.siteMapUrl || "").trim() && safeHttpUrl(form.siteMapUrl) ? `<p style="font-size:12px;word-break:break-all"><a href="${escHtml(safeHttpUrl(form.siteMapUrl))}">${escHtml(form.siteMapUrl)}</a></p>` : ""}
          ${(form.siteLat || "").trim() && (form.siteLng || "").trim()
-        ? `<p style="font-size:12px">Coordinates: ${escHtml(form.siteLat)}, ${escHtml(form.siteLng)}</p>`
+        ? `<p style="font-size:12px">${escHtml(tx("Coordinates"))}: ${escHtml(form.siteLat)}, ${escHtml(form.siteLng)}</p>`
         : ""}`;
         })()
       : "";
@@ -707,12 +712,12 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   const hospitalBlock =
     pf[RAMS_SECTION_IDS.HOSPITAL] &&
     ((form.nearestHospital || "").trim() || (form.hospitalDirectionsUrl || "").trim())
-      ? `<h2 style="font-size:13px;margin:18px 0 8px">4. Emergency response</h2>
+      ? `<h2 style="font-size:13px;margin:18px 0 8px">4. ${escHtml(tx("Emergency response"))}</h2>
          <p style="font-size:11px;color:#64748b;margin:0 0 6px">${printLabels.hospitalHeading}</p>
          ${printLabels.emergencyLine ? `<p style="font-size:11px;color:#64748b;margin:0 0 6px">${printLabels.emergencyLine}</p>` : ""}
          ${(form.nearestHospital || "").trim() ? `<p style="font-size:12px;margin:4px 0">${escHtml(form.nearestHospital)}</p>` : ""}
          ${(form.hospitalDirectionsUrl || "").trim() && safeHttpUrl(form.hospitalDirectionsUrl)
-        ? `<p style="font-size:12px;word-break:break-all"><a href="${escHtml(safeHttpUrl(form.hospitalDirectionsUrl))}">Directions</a></p>`
+        ? `<p style="font-size:12px;word-break:break-all"><a href="${escHtml(safeHttpUrl(form.hospitalDirectionsUrl))}">${escHtml(tx("Directions"))}</a></p>`
         : ""}`
       : "";
 
@@ -735,13 +740,13 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
     </tr>`
             )
             .join("");
-          return `<h2 style="font-size:13px;margin:18px 0 8px">5. Competence matrix</h2>
+          return `<h2 style="font-size:13px;margin:18px 0 8px">5. ${escHtml(tx("Competence matrix"))}</h2>
   <p style="font-size:10px;color:#666;margin:0 0 8px">From Workers module — verify training and expiry on site.</p>
   <table style="width:100%;border-collapse:collapse;margin-bottom:12px">
     <thead><tr>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:22%">Name</th>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:18%">Role</th>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">Certificates / notes</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:22%">${escHtml(tx("Name"))}</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:18%">${escHtml(tx("Role"))}</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">${escHtml(tx("Certificates / notes"))}</th>
     </tr></thead>
     <tbody>${certRows}</tbody>
   </table>`;
@@ -750,25 +755,25 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
 
   const riskTable =
     pf[RAMS_SECTION_IDS.HAZARDS] && rowList.length > 0
-      ? `<h2 style="font-size:13px;margin:18px 0 8px">6. Risk assessment and controls</h2>
+      ? `<h2 style="font-size:13px;margin:18px 0 8px">6. ${escHtml(tx("Risk assessment and controls"))}</h2>
   <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#fafafa">
     <div style="font-size:11px;color:#334155;margin-bottom:8px">
       ${rowList.length} assessed activities · Initial high risk: <strong>${initialHighCount}</strong> · Residual high: <strong>${residualHighCount}</strong>
     </div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-      <span style="font-size:10px;background:#FCEBEB;color:#791F1F;padding:2px 8px;border-radius:999px">High ${residualHighCount}</span>
-      <span style="font-size:10px;background:#FAEEDA;color:#633806;padding:2px 8px;border-radius:999px">Medium ${residualMediumCount}</span>
-      <span style="font-size:10px;background:#EAF3DE;color:#27500A;padding:2px 8px;border-radius:999px">Low ${residualLowCount}</span>
-      <span style="font-size:10px;background:#E6F1FB;color:#0C447C;padding:2px 8px;border-radius:999px">Avg reduction ${avgReduction}%</span>
+      <span style="font-size:10px;background:#FCEBEB;color:#791F1F;padding:2px 8px;border-radius:999px">${escHtml(tx("High"))} ${residualHighCount}</span>
+      <span style="font-size:10px;background:#FAEEDA;color:#633806;padding:2px 8px;border-radius:999px">${escHtml(tx("Medium"))} ${residualMediumCount}</span>
+      <span style="font-size:10px;background:#EAF3DE;color:#27500A;padding:2px 8px;border-radius:999px">${escHtml(tx("Low"))} ${residualLowCount}</span>
+      <span style="font-size:10px;background:#E6F1FB;color:#0C447C;padding:2px 8px;border-radius:999px">${escHtml(tx("Average reduction"))} ${avgReduction}%</span>
     </div>
   </div>
   <table class="ra">
     <thead><tr>
-      <th style="width:18%">Activity</th>
-      <th style="width:18%">Additional hazard</th>
-      <th style="width:10%">Risk factor<br/>L / S / RF</th>
-      <th style="width:40%">Control measures</th>
-      <th style="width:10%">Revised RF<br/>L / S / RF</th>
+      <th style="width:18%">${escHtml(tx("Activity"))}</th>
+      <th style="width:18%">${escHtml(tx("Additional hazard"))}</th>
+      <th style="width:10%">${escHtml(tx("Risk factor"))}<br/>L / S / RF</th>
+      <th style="width:40%">${escHtml(tx("Control measures"))}</th>
+      <th style="width:10%">${escHtml(tx("Revised RF"))}<br/>L / S / RF</th>
     </tr></thead>
     <tbody>${rowsHTML}</tbody>
   </table>`
@@ -928,10 +933,10 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
       : "";
 
   const ppeRegsBlock =
-    ppeRollup.length > 0 || regsRollup.length > 0
-      ? `<h2 style="font-size:13px;margin:18px 0 8px">PPE and legal references pack</h2>
-  ${ppeRollup.length > 0 ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>PPE roll-up</strong> (${ppeRollup.length})</p><p style="font-size:11px;line-height:1.5;margin:0 0 8px">${ppeRollup.map((p) => `• ${escHtml(p)}`).join("<br/>")}</p>` : ""}
-  ${regsRollup.length > 0 ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>Regulatory references</strong> (${regsRollup.length})</p><p style="font-size:11px;line-height:1.5;margin:0 0 12px">${regsRollup.map((r) => `• ${escHtml(r)}`).join("<br/>")}</p>` : ""}`
+    ppeRollup.length > 0 || effectiveRegs.length > 0
+      ? `<h2 style="font-size:13px;margin:18px 0 8px">${escHtml(tx("PPE and legal references pack"))}</h2>
+  ${ppeRollup.length > 0 ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>${escHtml(tx("PPE roll-up"))}</strong> (${ppeRollup.length})</p><p style="font-size:11px;line-height:1.5;margin:0 0 8px">${ppeRollup.map((p) => `• ${escHtml(p)}`).join("<br/>")}</p>` : ""}
+  ${effectiveRegs.length > 0 ? `<p style="font-size:11px;color:#64748b;margin:0 0 4px"><strong>${escHtml(tx("Regulatory references"))}</strong> (${effectiveRegs.length})</p><p style="font-size:11px;line-height:1.5;margin:0 0 12px">${effectiveRegs.map((r) => `• ${escHtml(r)}`).join("<br/>")}</p>` : ""}`
       : "";
 
   const competencyAlertsBlock =
@@ -1007,13 +1012,13 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
 
   const sigTable =
     pf[RAMS_SECTION_IDS.SIGNATURES] && opList.length > 0
-      ? `<h2 style="font-size:13px;margin:18px 0 8px">8. Sign-off list</h2>
-  <p style="font-size:10px;color:#666;margin:0 0 8px">Operative signatures</p>
+      ? `<h2 style="font-size:13px;margin:18px 0 8px">8. ${escHtml(tx("Sign-off list"))}</h2>
+  <p style="font-size:10px;color:#666;margin:0 0 8px">${escHtml(tx("Operative signatures"))}</p>
   <table style="width:100%;border-collapse:collapse">
     <thead><tr>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">Name</th>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">Signature</th>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">Date</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">${escHtml(tx("Name"))}</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">${escHtml(tx("Signature"))}</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">${escHtml(tx("Date"))}</th>
     </tr></thead>
     <tbody>${sigRows}</tbody>
   </table>`
@@ -1021,13 +1026,13 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
 
   const methodStatementBlock =
     rowList.length > 0
-      ? `<h2 style="font-size:13px;margin:18px 0 8px">7. Method statement (risk reduction steps)</h2>
+      ? `<h2 style="font-size:13px;margin:18px 0 8px">7. ${escHtml(tx("Method statement (risk reduction steps)"))}</h2>
   <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
     <thead><tr>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:7%">Step</th>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:28%">Activity</th>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">Control method to reduce risk</th>
-      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:15%">Residual RF</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:7%">${escHtml(tx("Step"))}</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:28%">${escHtml(tx("Activity"))}</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5">${escHtml(tx("Control method to reduce risk"))}</th>
+      <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:15%">${escHtml(tx("Residual risk"))}</th>
       <th style="padding:6px;border:1px solid #ccc;text-align:left;font-size:11px;background:#f5f5f5;width:12%">Reduction</th>
     </tr></thead>
     <tbody>
@@ -1211,7 +1216,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
       : "";
 
   const docStatus = String(form.documentStatus || form.status || "draft");
-  const statusLabel = docStatus.replace(/_/g, " ").toUpperCase();
+  const statusLabel = documentStatusLabel(docStatus, marketId);
   const orgTheme = loadOrgPrintSettings();
   const orgName = orgTheme.orgName;
   const logoSrc = resolveUtilityMappingLogoSrc(orgTheme.org) || safeImageSrc(orgTheme.org?.logo);
@@ -1319,13 +1324,13 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
       </div>
     </div>
     <div class="cover-meta">
-      <div class="cover-kpi"><strong>Document no.</strong><br/>${escHtml(form.documentNo || "—")}</div>
-      <div class="cover-kpi"><strong>Issue date</strong><br/>${escHtml(fmtDate(form.issueDate))}</div>
-      <div class="cover-kpi"><strong>Location</strong><br/>${escHtml(form.location || "—")}</div>
+      <div class="cover-kpi"><strong>${escHtml(tx("Document no."))}</strong><br/>${escHtml(form.documentNo || "—")}</div>
+      <div class="cover-kpi"><strong>${escHtml(tx("Issue date"))}</strong><br/>${escHtml(fmtDate(form.issueDate))}</div>
+      <div class="cover-kpi"><strong>${escHtml(tx("Location"))}</strong><br/>${escHtml(form.location || "—")}</div>
       ${siteCtxBadge ? `<div class="cover-kpi"><strong>Site context</strong><br/>${escHtml(siteCtxBadge)}</div>` : ""}
-      <div class="cover-kpi"><strong>Project</strong><br/>${escHtml(projName || "—")}</div>
-      <div class="cover-kpi"><strong>Lead engineer</strong><br/>${escHtml(form.leadEngineer || "—")}</div>
-      <div class="cover-kpi"><strong>Revision</strong><br/>${escHtml(form.revision || "1A")}</div>
+      <div class="cover-kpi"><strong>${escHtml(tx("Project"))}</strong><br/>${escHtml(projName || "—")}</div>
+      <div class="cover-kpi"><strong>${escHtml(tx("Lead engineer"))}</strong><br/>${escHtml(form.leadEngineer || "—")}</div>
+      <div class="cover-kpi"><strong>${escHtml(tx("Revision"))}</strong><br/>${escHtml(form.revision || "1A")}</div>
     </div>
     <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
       <span style="font-size:11px;background:#FCEBEB;color:#791F1F;padding:2px 8px;border-radius:999px">High residual ${residualHighCount}</span>
@@ -1346,16 +1351,16 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   <div class="rams-watermark">${escHtml(watermark)}</div>
   <div class="rams-content">
   <table class="header-table"><tr>
-    <td><span class="lbl">Location:</span> ${escHtml(form.location)}</td>
-    <td><span class="lbl">Project:</span> ${escHtml(projName || "—")}</td>
-    <td><span class="lbl">Job reference:</span> ${escHtml(form.jobRef || "—")}</td>
+    <td><span class="lbl">${escHtml(tx("Location"))}:</span> ${escHtml(form.location)}</td>
+    <td><span class="lbl">${escHtml(tx("Project"))}:</span> ${escHtml(projName || "—")}</td>
+    <td><span class="lbl">${escHtml(tx("Job reference"))}:</span> ${escHtml(form.jobRef || "—")}</td>
   </tr><tr>
-    <td><span class="lbl">Date:</span> ${escHtml(fmtDate(form.date))}</td>
-    <td><span class="lbl">Lead engineer:</span> ${escHtml(form.leadEngineer || "—")}</td>
-    <td><span class="lbl">Doc no:</span> ${escHtml(form.documentNo || "—")}</td>
+    <td><span class="lbl">${escHtml(tx("Date"))}:</span> ${escHtml(fmtDate(form.date))}</td>
+    <td><span class="lbl">${escHtml(tx("Lead engineer"))}:</span> ${escHtml(form.leadEngineer || "—")}</td>
+    <td><span class="lbl">${escHtml(tx("Document no."))}:</span> ${escHtml(form.documentNo || "—")}</td>
   </tr><tr>
-    <td><span class="lbl">Issue date:</span> ${escHtml(fmtDate(form.issueDate) || "—")}</td>
-    <td colspan="2"><span class="lbl">Status:</span> ${escHtml(statusLabel)}</td>
+    <td><span class="lbl">${escHtml(tx("Issue date"))}:</span> ${escHtml(fmtDate(form.issueDate) || "—")}</td>
+    <td colspan="2"><span class="lbl">${escHtml(tx("Status"))}:</span> ${escHtml(statusLabel)}</td>
   </tr></table>
   <h1 style="background:${orgTheme.primaryColor}">1. ${escHtml(form.title)}</h1>
   ${form.scope ? `<p style="font-size:12px;margin-bottom:16px">${escHtml(form.scope)}</p>` : ""}
@@ -1381,8 +1386,8 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   ${handoverAppendixBlock}
   ${approvalBlock}
   ${signatureEvidenceBlock}
-  <h2 style="font-size:13px;margin:18px 0 8px">10. Document integrity</h2>
-  <p style="font-size:10px;color:#888;margin-top:20px">Generated by MySafeOps · REVISION ${escHtml(form.revision || "1A")} · Review due: ${escHtml(fmtDate(form.reviewDate) || "—")} · Layout: A4</p>
+  <h2 style="font-size:13px;margin:18px 0 8px">10. ${escHtml(tx("Document integrity"))}</h2>
+  <p style="font-size:10px;color:#888;margin-top:20px">${escHtml(tx("Generated"))} MySafeOps · ${escHtml(tx("Revision"))} ${escHtml(form.revision || "1A")} · ${escHtml(tx("Review due"))}: ${escHtml(fmtDate(form.reviewDate) || "—")} · A4</p>
   <p style="font-size:10px;color:#64748b;margin:0 0 8px">${escHtml(orgTheme.complianceLine)}</p>
   ${integrityBlock}
   </div>

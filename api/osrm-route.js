@@ -61,6 +61,7 @@ export default async function handler(req, res) {
     res.writeHead(200, {
       ...API_JSON_HEADERS,
       "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600",
+      "Vary": "Origin",
     });
     return res.end(
       JSON.stringify({

@@ -3,7 +3,7 @@ import { useApp } from "../context/AppContext";
 import { useToast } from "../context/ToastContext";
 import { copyCapabilityLink } from "../utils/copyCapabilityLink";
 import { ms } from "../utils/moduleStyles";
-import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, countryOperationalStorageKey } from "../utils/orgStorage";
 import { safeOpaqueToken } from "../utils/htmlEscape.js";
 import { genOpaqueToken } from "../utils/opaqueToken";
 import PageHero from "../components/PageHero";
@@ -121,7 +121,9 @@ export default function SubcontractorPortal() {
   }, [subs]);
 
   useEffect(() => {
-    const subKey = orgScopedKey("subcontractor_submissions");
+    // Must match the key `save()` actually writes, which is country-scoped for a
+    // secondary workspace — otherwise cross-tab sync silently stops in that country.
+    const subKey = countryOperationalStorageKey("subcontractor_submissions");
     const onStorage = (e) => {
       if (e.key === subKey && e.newValue) {
         try {

@@ -4,7 +4,7 @@ import { copyTextToClipboard } from "../../utils/copyToClipboard";
 import { ms } from "../../utils/moduleStyles";
 import PageHero from "../../components/PageHero";
 import ConfettiCelebration from "../../components/ConfettiCelebration";
-import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey, ORG_DATA_CHANGED_EVENT, getOrgId } from "../../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, countryOperationalStorageKey, ORG_DATA_CHANGED_EVENT, getOrgId } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { getTemplateForType, saveOrgTemplate } from "./permitTemplateCatalog";
 import { evaluatePermitCompliance } from "./permitComplianceChecks";
@@ -19,7 +19,7 @@ import {
   evidenceKeysForType,
 } from "./permitComplianceProfiles";
 import { buildPermitWarRoomStats, derivePermitStatus, permitEndIso, permitsHeatmap } from "./permitRules";
-import { nextLegalReviewDate } from "./permitLegalGovernance";
+import { legalOwnerRole, nextLegalReviewDate } from "./permitLegalGovernance";
 import { runPermitQualityGates } from "./permitQualityGates";
 import { isFeatureEnabled } from "../../utils/featureFlags";
 import { projectRamsCheckForPermit } from "../../utils/orgAutomationRules";
@@ -60,6 +60,7 @@ import { getTypeComplianceMeta } from "./ukComplianceMatrix";
 import { PERMIT_TYPES, checklistStringsForType } from "./permitTypes";
 import { getPermitTypesForMarket } from "./permitTypesMarket";
 import { getOrgMarketId } from "../../utils/orgMarket";
+import { getDocumentCountryPack } from "../../utils/documentCountryPack";
 import { renderPermitDocumentHtml } from "./permitDocumentHtml";
 import { safeOpaqueToken, openPrintWindowOrWarn, writePrintWindowDocument } from "../../utils/htmlEscape.js";
 import { buildPermitEmailRecipients, parseManualEmails, sendPermitNotificationEmail, sendPermitNotificationWebPush } from "../../utils/permitNotifications";
@@ -516,7 +517,7 @@ function certificationDisplayLabel(cert) {
 
 function loadSnippetList(baseKey) {
   try {
-    const rows = JSON.parse(localStorage.getItem(orgScopedKey(baseKey)) || "[]");
+    const rows = JSON.parse(localStorage.getItem(countryOperationalStorageKey(baseKey)) || "[]");
     if (!Array.isArray(rows)) return [];
     return rows.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 24);
   } catch {
@@ -527,7 +528,7 @@ function loadSnippetList(baseKey) {
 function saveSnippetToList(baseKey, text) {
   const clean = String(text || "").trim();
   if (!clean) return;
-  const key = orgScopedKey(baseKey);
+  const key = countryOperationalStorageKey(baseKey);
   const next = [clean, ...loadSnippetList(baseKey).filter((x) => x.toLowerCase() !== clean.toLowerCase())].slice(0, 24);
   localStorage.setItem(key, JSON.stringify(next));
 }
@@ -876,7 +877,7 @@ function PermitForm({
     [fieldConfig, type]
   );
   const isFieldRequired = useCallback((fieldId) => Boolean(getFieldConfig(fieldId)?.required), [getFieldConfig]);
-  const typeMeta = getTypeComplianceMeta(type);
+  const typeMeta = getTypeComplianceMeta(type, getOrgMarketId());
   const initChecklist = (items) => Object.fromEntries((items || []).map((item) => [item.id, false]));
   const template = getTemplateForType(defaultType, permitTypes);
   const initialChecklistItems = permit
@@ -897,7 +898,7 @@ function PermitForm({
     templateVersion: 1,
     matrixVersion: "uk-v2",
     templateId: template.templateId || `permit.${defaultType}.default`,
-    legalContentOwner: "HSE / Legal Reviewer",
+    legalContentOwner: legalOwnerRole(),
     createdAt: new Date().toISOString(),
     notes: formDefaults.defaultConditionsTemplate || "",
     authorisedByRole: formDefaults.defaultAuthorisingRole || "",
@@ -929,7 +930,7 @@ function PermitForm({
       templateVersion: permit.templateVersion || 1,
       matrixVersion: permit.matrixVersion || "uk-v2",
       templateId: permit.templateId || `permit.${permitType}.default`,
-      legalContentOwner: permit.legalContentOwner || "HSE / Legal Reviewer",
+      legalContentOwner: permit.legalContentOwner || legalOwnerRole(),
       authorisedByRole: permit.authorisedByRole || "",
       briefingConfirmedAt: permit.briefingConfirmedAt || "",
       evidenceNotes: permit.evidenceNotes || "",
@@ -1727,7 +1728,7 @@ function PermitForm({
       matrixVersion: form.matrixVersion || "uk-v2",
       complianceProfile,
       templateId: form.templateId || `permit.${type}.default`,
-      legalContentOwner: form.legalContentOwner || "HSE / Legal Reviewer",
+      legalContentOwner: form.legalContentOwner || legalOwnerRole(),
       allowSignLater,
       complianceReviewedAt: form.complianceReviewedAt || null,
       endDateTime: form.endDateTime || form.expiryDate || "",
@@ -2828,7 +2829,7 @@ function PermitForm({
             </div>
             {typeMeta?.hseUrl ? (
               <a href={typeMeta.hseUrl} target="_blank" rel="noopener noreferrer" title={typeMeta.rationale} style={{ fontSize:11, color:"#0C447C" }}>
-                Why these controls (HSE)
+                {typeMeta.linkLabel || "Why these controls (HSE)"}
               </a>
             ) : null}
             <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20,
@@ -2922,7 +2923,7 @@ function PermitForm({
                   rows={3}
                   value={(complianceProfile.legalReferences || []).join("\n")}
                   onChange={(e) => updateComplianceRefs(e.target.value)}
-                  placeholder={"e.g.\nWAHR Reg 6 planning\nLOLER Reg 8 organisation\nPUWER Reg 4 suitability"}
+                  placeholder={getDocumentCountryPack(getOrgMarketId()).ptwLegalReferencePlaceholder}
                   style={{ ...ss.ta, minHeight:70 }}
                  id="permit-custom-legal-references-one-per-line" />
               </div>
@@ -3000,7 +3001,7 @@ function PermitForm({
             {simopsHits.length > 0 ? <li style={{ color:"#791F1F" }}>SIMOPS: {simopsHits.length} overlapping permit(s) at this location</li> : null}
           </ul>
           {typeMeta.hseUrl ? (
-            <a href={typeMeta.hseUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#0C447C", marginTop:8, display:"inline-block" }}>Open HSE guidance</a>
+            <a href={typeMeta.hseUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#0C447C", marginTop:8, display:"inline-block" }}>{typeMeta.openGuidanceLabel || "Open HSE guidance"}</a>
           ) : null}
         </div>
         {Array.isArray(form.versionHistory) && form.versionHistory.length > 0 ? (

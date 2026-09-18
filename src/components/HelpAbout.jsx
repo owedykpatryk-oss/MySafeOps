@@ -1,318 +1,169 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import PageHero from "./PageHero";
-import { getSupportEmail } from "../config/supportContact";
-import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
-import { getDisplayAppVersion } from "../utils/appBuildInfo";
-import { showAdminLoginHints } from "../lib/showAdminLoginHints";
-import { getAppliedIndustryPackId } from "../utils/orgIndustryPacks";
-import { isIndustryPackPreviewActive } from "../utils/industryPackPreview";
 import {
-  getWorkspaceProfileOverview,
-  getActiveProfileGuideSummary,
-  listProfileGuideCatalogue,
-} from "../utils/workspaceProfileGuide";
-import { getOrgMarketId } from "../utils/orgMarket";
-import { getRamsShortLabel } from "../utils/marketLabels";
-import { MORE_SECTIONS, getMoreTabsForSection, NAV_TAB_IDS } from "../navigation/appModules";
+  ArrowRight,
+  BarChart3,
+  BookOpen,
+  Building2,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  CircleHelp,
+  ClipboardCheck,
+  Clock3,
+  Command,
+  DatabaseBackup,
+  FileText,
+  HardHat,
+  LayoutGrid,
+  LifeBuoy,
+  Mail,
+  MapPinned,
+  Search,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  X,
+} from "lucide-react";
+
+import { getSupportEmail } from "../config/supportContact";
 import { WORKSPACE_SETTINGS_TABS } from "../config/workspaceSettingsTabs";
+import { showAdminLoginHints } from "../lib/showAdminLoginHints";
+import { getDisplayAppVersion } from "../utils/appBuildInfo";
 import {
   APP_LAYOUT,
   BILLING_TRIAL_GUIDE,
   FIRST_WEEK_STEPS,
   GLOSSARY,
+  GUIDED_HELP_TASKS,
   HELP_FAQ,
-  HELP_TOC,
   MODULE_BLURBS_EXTRA,
   SETTINGS_TAB_HELP,
 } from "../utils/helpGuideContent";
+import { getAppliedIndustryPackId } from "../utils/orgIndustryPacks";
+import { isIndustryPackPreviewActive } from "../utils/industryPackPreview";
+import { getOrgMarketId } from "../utils/orgMarket";
+import { getRamsShortLabel } from "../utils/marketLabels";
+import {
+  getActiveProfileGuideSummary,
+  listProfileGuideCatalogue,
+} from "../utils/workspaceProfileGuide";
+import { MORE_SECTIONS, getMoreTabsForSection, NAV_TAB_IDS } from "../navigation/appModules";
+import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
+import "../styles/help-centre.css";
 
+const SUPPORT_EMAIL = getSupportEmail();
 const DISPLAY_APP_VERSION = getDisplayAppVersion();
 const SHOW_DEV_HINTS = showAdminLoginHints();
 
-const ss = {
-  card: {
-    background: "var(--color-background-primary,#fff)",
-    border: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
-    borderRadius: 12,
-    padding: "1.25rem",
-    marginBottom: 16,
-  },
-  h2: { margin: "0 0 8px", fontSize: 20, fontWeight: 500 },
-  p: { fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.55, margin: "0 0 12px" },
-  ul: { fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.6, paddingLeft: 20, margin: 0 },
-  a: { color: "#0d9488" },
-  linkBtn: {
-    background: "none",
-    border: "none",
-    padding: 0,
-    font: "inherit",
-    color: "#0d9488",
-    fontWeight: 600,
-    cursor: "pointer",
-    textAlign: "left",
-  },
-  btn: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    padding: "10px 14px",
-    borderRadius: 10,
-    border: "1px solid #0d9488",
-    background: "var(--color-accent-muted,#ccfbf1)",
-    color: "#0f766e",
-    fontSize: 13,
-    fontWeight: 600,
-    fontFamily: "inherit",
-    cursor: "pointer",
-    marginTop: 4,
-  },
-  btnGhost: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    padding: "10px 14px",
-    borderRadius: 10,
-    border: "1px solid var(--color-border-secondary,#cbd5e1)",
-    background: "var(--color-background-primary,#fff)",
-    color: "var(--color-text-primary)",
-    fontSize: 13,
-    fontWeight: 600,
-    fontFamily: "inherit",
-    cursor: "pointer",
-    marginTop: 4,
-  },
-  h3: {
-    margin: "20px 0 8px",
-    fontSize: 15,
-    fontWeight: 600,
-    color: "var(--color-text-primary)",
-    letterSpacing: "-0.01em",
-  },
-  h3First: {
-    margin: "0 0 8px",
-    fontSize: 15,
-    fontWeight: 600,
-    color: "var(--color-text-primary)",
-    letterSpacing: "-0.01em",
-  },
-  note: {
-    fontSize: 12,
-    color: "var(--color-text-tertiary,#64748b)",
-    lineHeight: 1.5,
-    margin: "0 0 12px",
-    padding: "10px 12px",
-    background: "var(--color-background-secondary,#f8fafc)",
-    borderRadius: 8,
-    border: "0.5px solid var(--color-border-tertiary,#e2e8f0)",
-  },
-  ol: { fontSize: 13, color: "var(--color-text-primary)", lineHeight: 1.65, paddingLeft: 22, margin: "0 0 12px" },
-  kbd: {
-    fontSize: 11,
-    padding: "2px 6px",
-    borderRadius: 4,
-    border: "1px solid var(--color-border-tertiary,#e2e8f0)",
-    background: "var(--color-background-secondary,#f1f5f9)",
-    fontFamily: "ui-monospace, monospace",
-  },
-  btnRow: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12, alignItems: "center" },
-  moduleLi: { marginBottom: 6 },
-  toc: {
-    display: "grid",
-    gap: 6,
-    margin: 0,
-    padding: 0,
-    listStyle: "none",
-    fontSize: 13,
-  },
-  tocLi: { margin: 0 },
-  details: {
-    marginBottom: 10,
-    border: "0.5px solid var(--color-border-tertiary,#e2e8f0)",
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  summary: {
-    padding: "10px 12px",
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: 13,
-    listStyle: "none",
-    background: "var(--color-background-secondary,#f8fafc)",
-  },
-  detailsBody: { padding: "10px 12px", fontSize: 13, lineHeight: 1.55, color: "var(--color-text-secondary)" },
-  glossGrid: { display: "grid", gap: 10, margin: 0 },
-  glossTerm: { fontWeight: 600, fontSize: 13, color: "var(--color-text-primary)" },
-  glossDef: { fontSize: 13, color: "var(--color-text-secondary)", margin: "2px 0 0" },
+const GUIDE_ICONS = {
+  building: Building2,
+  shield: ShieldCheck,
+  clipboard: ClipboardCheck,
+  users: Users,
+  "hard-hat": HardHat,
+  map: MapPinned,
+  chart: BarChart3,
+  mail: Mail,
+  database: DatabaseBackup,
 };
 
-const SUPPORT_EMAIL = getSupportEmail();
-
-/** One-line purpose for every workspace screen (used in the full module index). */
 const MODULE_BLURBS = {
-  dashboard: "Site today snapshot, onboarding checklist, KPIs, and quick actions.",
-  permits: "Permit-to-work, board and timeline views, plan overlay, linked incidents.",
-  rams: "RAMS builder, hazard library, PDF export, evidence packs, JSON import.",
-  workers: "Legacy route — use Projects and People.",
-  projects: "Sites and jobs — 5-step wizard, playbooks, project hub.",
-  people: "Team members, certifications, CSV export.",
-  bin: "Recently deleted register rows — restore or remove permanently.",
-  "site-map": "Map of project sites, who is on site, boundaries, escape routes.",
-  "project-drawings": "Upload plans; click to mark escape routes, zones, and emergency assets.",
-  "method-statement": "Standalone method statements linked to projects.",
-  cdm: "CDM duty-holder checklist, F10 notifiability hint, and H&S file inventory.",
-  "daily-briefing": "Daily site briefing, attendance, hazards — feeds site map presence.",
-  induction: "QR-based site induction and sign-on records.",
-  signatures: "Capture digital signatures on documents.",
-  timesheets: "Worker hours by project.",
-  snags: "Snag list with photos, status, and project link.",
-  "geo-photos": "GPS-tagged site photos for surveys and utility records.",
-  coshh: "COSHH / substance register and assessments.",
-  inspections: "Scheduled and ad-hoc inspection tracker.",
-  incidents: "Incidents and near-miss log.",
-  "incident-actions": "Corrective and preventive actions from incidents.",
-  "incident-map": "Heatmap of incident locations on site boundaries.",
-  riddor: "RIDDOR decision support and record keeping (HSE reporting is your responsibility).",
-  emergency: "Emergency contact list for sites and projects.",
-  ppe: "PPE issue and inspection register.",
-  plant: "Plant and equipment register with checks.",
-  fire: "Fire safety inspections, drills, and equipment log.",
-  "hot-work": "Hot work permit register and QC sign-off.",
-  training: "Training matrix — who holds which competencies.",
-  visitors: "Visitor sign-in log.",
-  "toolbox-reg": "Toolbox talk attendance register.",
-  "first-aid": "First aiders and kit locations.",
-  "lone-working": "Lone working log and check-ins.",
-  environmental: "Environmental incidents and controls log.",
-  observations: "Safety observations and close-out.",
-  ladders: "Ladder inspection register.",
-  mewp: "MEWP inspection and use log.",
-  gate: "Gate book — deliveries and site traffic.",
-  asbestos: "Asbestos register and survey references.",
-  "confined-space": "Confined space entry log.",
-  loto: "Lock-out tag-out register.",
-  "electrical-pat": "Electrical equipment and PAT records.",
-  lifting: "Lifting plans and equipment register.",
-  dsear: "DSEAR / ATEX hazardous area register.",
-  "high-care-access": "High-care / hygiene area access log (food manufacturing).",
-  "cip-signoff": "CIP cleaning sign-off register.",
-  "allergen-changeovers": "Allergen changeover records between production runs.",
-  "gmp-deviations": "GMP deviation log.",
-  noise: "Noise and hand-arm vibration exposure records.",
-  scaffold: "Scaffold inspection register.",
-  excavation: "Excavation and permit-to-dig log.",
-  "temp-works": "Temporary works design and checks register.",
-  welfare: "Welfare facility checks on site.",
-  "water-hygiene": "Water hygiene / Legionella-style outlet log.",
-  analytics: "Charts and compliance metrics across modules.",
-  "monthly-report": "Monthly H&S summary report builder.",
-  "survey-report": "Professional survey reports — scope, findings, plans, geo-photos, PDF export.",
-  "gpr-report": "Advanced GPR reports — equipment presets, BGS geology, weather impact on penetration, anomaly log, PDF.",
-  waste: "Waste transfer and consignment notes register.",
-  templates: "Reusable document templates for exports.",
-  "client-portal": "Generate read-only client portal links.",
-  "client-acquisition": "Sales playbook for winning new construction clients.",
-  "sales-enablement": "Collateral and talk tracks for demos.",
-  "enterprise-readiness": "Checklist for larger multi-site rollouts.",
-  subcontractor: "Subcontractor portal tokens and scoped access.",
-  documents: "Local folder browser; optional cloud file upload.",
-  backup: "JSON export, import, and cloud backup.",
-  audit: "Who changed what — local log plus optional cloud copy.",
-  superadmin: "Platform owner dashboard (restricted).",
-  help: "This page.",
-  "ai-rams": "AI-assisted RAMS draft generator (when enabled).",
-  "ai-toolbox": "AI toolbox talk drafts (when enabled).",
-  "ai-photo": "AI hazard hints from site photos (when enabled).",
+  dashboard: "See today’s risks, readiness, KPIs and next actions.",
+  projects: "Create jobs and use Project Hub to prepare every site.",
+  people: "Manage people, roles, competencies and expiry dates.",
+  permits: "Issue, monitor, hand over and close permits to work.",
+  rams: "Build, review, issue and export RAMS documents.",
+  bin: "Restore recently deleted register records.",
+  "management-overview": "Private 90-day planning, capacity and management actions.",
+  "project-drawings": "Upload plans and mark work zones, routes and emergency assets.",
+  "daily-briefing": "Record daily hazards, controls and attendance.",
+  induction: "Create and record site inductions and sign-on.",
+  signatures: "Collect digital signatures for controlled documents.",
+  timesheets: "Record worker hours against projects.",
+  snags: "Track defects, photos, owners and close-out.",
+  "geo-photos": "Capture GPS-tagged photos for site and survey evidence.",
+  coshh: "Maintain substances and COSHH assessments.",
+  inspections: "Schedule and complete site inspections.",
+  incidents: "Record incidents and near misses with evidence.",
+  "incident-actions": "Assign and close corrective actions.",
+  riddor: "Support RIDDOR decisions and retain the record.",
+  emergency: "Maintain project emergency contacts and arrangements.",
+  ppe: "Record PPE issue, checks and replacement.",
+  plant: "Track plant, equipment and inspection dates.",
+  fire: "Record fire checks, drills and equipment.",
+  training: "See competency and training gaps across the team.",
+  visitors: "Maintain the visitor sign-in record.",
+  "toolbox-reg": "Record toolbox talks and attendance.",
+  "first-aid": "Track first aiders, kits and checks.",
+  observations: "Capture safety observations and close-out.",
+  ladders: "Maintain the ladder inspection register.",
+  mewp: "Record MEWP inspections and use.",
+  asbestos: "Maintain asbestos information and survey references.",
+  "confined-space": "Manage confined-space entry records.",
+  loto: "Record isolations and lock-out tag-out controls.",
+  lifting: "Manage lifting plans and equipment records.",
+  excavation: "Track excavation controls and permits to dig.",
+  "temp-works": "Manage temporary works designs and checks.",
+  analytics: "Review compliance trends and module performance.",
+  "monthly-report": "Build a monthly H&S management summary.",
+  "survey-report": "Create professional survey reports and PDFs.",
+  "gpr-report": "Create detailed GPR reports and anomaly records.",
+  templates: "Maintain reusable document templates.",
+  "client-portal": "Create read-only client compliance views.",
+  subcontractor: "Create scoped access for supply-chain partners.",
+  documents: "Browse local files and optional cloud uploads.",
+  backup: "Export, import and protect workspace data.",
+  audit: "Review who changed what and when.",
+  settings: "Manage organisation, users, billing and preferences.",
+  help: "Step-by-step guidance for MySafeOps.",
   ...MODULE_BLURBS_EXTRA,
 };
 
-const BOTTOM_NAV_IDS = NAV_TAB_IDS.filter((t) => t.id !== "more").map((t) => t.id);
+const START_ACTIONS = [
+  { icon: Settings2, title: "Set up the organisation", detail: "Profile, branding and modules", action: () => openWorkspaceSettings({ tab: "organisation" }) },
+  { icon: Building2, title: "Create a project", detail: "Client, site, dates and team", action: () => openWorkspaceView({ viewId: "projects" }) },
+  { icon: ShieldCheck, title: "Prepare RAMS", detail: "Hazards, controls and review", action: () => openWorkspaceView({ viewId: "rams" }) },
+  { icon: ClipboardCheck, title: "Issue a permit", detail: "Authorise high-risk work", action: () => openWorkspaceView({ viewId: "permits" }) },
+];
 
-function HelpAnchor({ id, children }) {
-  return (
-    <section id={id} style={{ scrollMarginTop: 80 }}>
-      {children}
-    </section>
-  );
+const HELP_NAV = [
+  ["help-start", "Start here"],
+  ["help-guides", "Guided tasks"],
+  ["help-first-week", "First week"],
+  ["help-workspace", "Your workspace"],
+  ["help-settings", "Settings"],
+  ["help-questions", "Questions"],
+  ["help-modules", "Module finder"],
+];
+
+function openTarget(target) {
+  if (target?.settingsTab) openWorkspaceSettings({ tab: target.settingsTab });
+  else if (target?.viewId) openWorkspaceView({ viewId: target.viewId });
 }
 
-function ModuleLink({ viewId, label }) {
-  if (viewId === "help") return <strong>{label}</strong>;
-  if (viewId === "settings") {
-    return (
-      <button type="button" style={ss.linkBtn} onClick={() => openWorkspaceSettings({ tab: "organisation" })}>
-        {label}
-      </button>
-    );
-  }
-  return (
-    <button type="button" style={ss.linkBtn} onClick={() => openWorkspaceView({ viewId })}>
-      {label}
-    </button>
-  );
-}
-
-function ModuleIndexList({ tabs }) {
-  return (
-    <ul style={ss.ul}>
-      {tabs.map((t) => (
-        <li key={t.id} style={ss.moduleLi}>
-          <ModuleLink viewId={t.id} label={t.label} />
-          {MODULE_BLURBS[t.id] ? (
-            <span style={{ color: "var(--color-text-secondary)" }}> — {MODULE_BLURBS[t.id]}</span>
-          ) : null}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ProfileGuideCatalogue({ activePackId }) {
+function ProfileCatalogue({ activePackId }) {
   const [openId, setOpenId] = useState(activePackId || null);
   const catalogue = listProfileGuideCatalogue(getOrgMarketId());
 
   return (
-    <div className="app-help-profile-catalogue">
+    <div className="help-profile-catalogue">
       {catalogue.map((entry) => {
-        const isActive = entry.id === activePackId;
-        const isOpen = openId === entry.id;
+        const active = entry.id === activePackId;
+        const open = entry.id === openId;
         return (
-          <article
-            key={entry.id}
-            className={`app-help-profile-card${isActive ? " app-help-profile-card--active" : ""}`}
-          >
-            <button
-              type="button"
-              className="app-help-profile-card__head"
-              aria-expanded={isOpen}
-              onClick={() => setOpenId(isOpen ? null : entry.id)}
-            >
-              <span className="app-help-profile-card__title">{entry.label}</span>
-              {isActive ? <span className="app-help-profile-card__badge">Your profile</span> : null}
-              <span className="app-help-profile-card__hint">{entry.hint}</span>
+          <article key={entry.id} className={`help-profile-card${active ? " is-active" : ""}`}>
+            <button type="button" aria-expanded={open} onClick={() => setOpenId(open ? null : entry.id)}>
+              <span><strong>{entry.label}</strong><small>{entry.hint}</small></span>
+              {active ? <em>Your profile</em> : null}
+              <ChevronRight size={16} />
             </button>
-            {isOpen ? (
-              <div className="app-help-profile-card__body">
+            {open ? (
+              <div>
                 <p>{entry.tagline}</p>
-                <p>
-                  <strong>Best for:</strong> {entry.whoFor}
-                </p>
-                <p>
-                  <strong>What it adjusts</strong>
-                </p>
-                <ul>
-                  {entry.adjusts.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-                <p>
-                  <strong>Site pack export:</strong> {entry.hubFocus}
-                </p>
-                <p>
-                  <strong>RAMS builder:</strong> {entry.ramsNote}
-                </p>
+                <p><strong>Best for:</strong> {entry.whoFor}</p>
+                <ul>{entry.adjusts.map((line) => <li key={line}>{line}</li>)}</ul>
               </div>
             ) : null}
           </article>
@@ -322,560 +173,213 @@ function ProfileGuideCatalogue({ activePackId }) {
   );
 }
 
+function GuideCard({ guide, selected, onSelect }) {
+  const Icon = GUIDE_ICONS[guide.icon] || BookOpen;
+  return (
+    <button type="button" className={`help-guide-card${selected ? " is-selected" : ""}`} onClick={onSelect}>
+      <span className="help-guide-card__icon"><Icon size={19} /></span>
+      <span className="help-guide-card__copy">
+        <small>{guide.category}</small>
+        <strong>{guide.title}</strong>
+        <span>{guide.summary}</span>
+        <em><Clock3 size={12} />{guide.time}<i />{guide.roles}</em>
+      </span>
+      <ChevronRight className="help-guide-card__arrow" size={17} />
+    </button>
+  );
+}
+
 export default function HelpAbout() {
+  const [query, setQuery] = useState("");
+  const [selectedGuideId, setSelectedGuideId] = useState(GUIDED_HELP_TASKS[0].id);
+  const [completedSteps, setCompletedSteps] = useState(() => new Set());
+  const [showAllModules, setShowAllModules] = useState(false);
   const marketId = getOrgMarketId();
-  const profileOverview = getWorkspaceProfileOverview(marketId);
   const ramsLabel = getRamsShortLabel(marketId);
   const activePackId = getAppliedIndustryPackId() || "generalContractor";
   const profileSummary = getActiveProfileGuideSummary(marketId);
-  const bottomNavTabs = BOTTOM_NAV_IDS.map((id) => {
-    const nav = NAV_TAB_IDS.find((t) => t.id === id);
-    return nav || { id, label: id };
+  const selectedGuide = GUIDED_HELP_TASKS.find((guide) => guide.id === selectedGuideId) || GUIDED_HELP_TASKS[0];
+  const normalisedQuery = query.trim().toLowerCase();
+
+  const moduleItems = useMemo(() => {
+    const items = new Map();
+    NAV_TAB_IDS.filter((item) => item.id !== "more").forEach((item) => items.set(item.id, item));
+    MORE_SECTIONS.forEach((section) => getMoreTabsForSection(section).forEach((item) => items.set(item.id, item)));
+    return [...items.values()];
+  }, []);
+
+  const visibleGuides = GUIDED_HELP_TASKS.filter((guide) => {
+    if (!normalisedQuery) return true;
+    return `${guide.title} ${guide.summary} ${guide.category} ${guide.roles} ${guide.steps.map((step) => `${step.title} ${step.body}`).join(" ")}`.toLowerCase().includes(normalisedQuery);
   });
+  const matchingFaq = normalisedQuery
+    ? HELP_FAQ.filter((item) => `${item.q} ${item.a}`.toLowerCase().includes(normalisedQuery))
+    : [];
+  const matchingModules = moduleItems.filter((item) => {
+    if (!normalisedQuery) return true;
+    return `${item.label} ${MODULE_BLURBS[item.id] || ""}`.toLowerCase().includes(normalisedQuery);
+  });
+  const guideCompleted = selectedGuide.steps.filter((_, index) => completedSteps.has(`${selectedGuide.id}:${index}`)).length;
+
+  const selectGuide = (guideId) => {
+    setSelectedGuideId(guideId);
+    window.requestAnimationFrame(() => document.getElementById("help-guide-viewer")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
+
+  const toggleStep = (index) => {
+    const key = `${selectedGuide.id}:${index}`;
+    setCompletedSteps((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   return (
-    <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14, maxWidth: 800, color: "var(--color-text-primary)" }}>
-      <PageHero
-        badgeText="?"
-        title="Help & about"
-        lead="Everything in plain English: what each part of MySafeOps does, how to get started, and where to click. Press ? from anywhere (when not typing) to return here."
-      />
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          On this page
-        </h2>
-        <ul style={ss.toc}>
-          {HELP_TOC.map((item) => (
-            <li key={item.id} style={ss.tocLi}>
-              <a href={`#${item.id}`} style={ss.a}>
-                {item.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <HelpAnchor id="start-here">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          {APP_LAYOUT.title}
-        </h2>
-        <p style={ss.p}>{APP_LAYOUT.lead}</p>
-        <ul style={ss.ul}>
-          {APP_LAYOUT.layers.map((layer) => (
-            <li key={layer.name} style={{ ...ss.moduleLi, marginBottom: 10 }}>
-              <strong>{layer.name}</strong> — {layer.body}
-            </li>
-          ))}
-        </ul>
-      </div>
-      </HelpAnchor>
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Find anything fast
-        </h2>
-        <ul style={ss.ul}>
-          <li>
-            <strong>Search</strong> — top bar, <kbd style={ss.kbd}>Ctrl</kbd>+<kbd style={ss.kbd}>K</kbd>, or <kbd style={ss.kbd}>/</kbd> — jump to a module or find workers, projects, RAMS, permits, snags.
-          </li>
-          <li>
-            <strong>More</strong> — filter the module grid; pin tiles for shortcuts; long-press to set bottom-bar favourite.
-          </li>
-          <li>
-            <strong>Module index</strong> — complete list with one-line descriptions at the bottom of this page; names are clickable.
-          </li>
-          <li>
-            <strong>Help</strong> — press <kbd style={ss.kbd}>?</kbd> from anywhere (when not typing in a field).
-          </li>
-        </ul>
-      </div>
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Quick links
-        </h2>
-        <div style={ss.btnRow}>
-          <button type="button" style={ss.btn} onClick={() => openWorkspaceSettings({ tab: "organisation" })}>
-            Organisation
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "projects" })}>
-            Projects
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "people" })}>
-            People
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "permits" })}>
-            Permits
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "rams" })}>
-            RAMS
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "dashboard" })}>
-            Dashboard
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "backup" })}>
-            Backup
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceSettings({ tab: "notifications" })}>
-            Notifications
-          </button>
+    <div className="help-centre">
+      <section className="help-hero" id="help-start">
+        <div className="help-hero__glow help-hero__glow--one" />
+        <div className="help-hero__glow help-hero__glow--two" />
+        <div className="help-hero__content">
+          <span className="help-eyebrow"><Sparkles size={13} /> MySafeOps guide</span>
+          <h1>What do you need to do?</h1>
+          <p>Choose a task and follow the steps. Every guide uses plain UK English and opens the right place in MySafeOps.</p>
+          <label className="help-search">
+            <Search size={20} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search: create RAMS, invite someone, export PDF…" aria-label="Search help" />
+            {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear help search"><X size={16} /></button> : <kbd>?</kbd>}
+          </label>
+          <div className="help-hero__promises">
+            <span><CheckCircle2 size={14} />Step by step</span>
+            <span><Command size={14} />Direct links</span>
+            <span><ShieldCheck size={14} />Role-aware guidance</span>
+          </div>
         </div>
-      </div>
-
-      <HelpAnchor id="first-week">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Your first week
-        </h2>
-        <ol style={{ ...ss.ol, listStyle: "decimal" }}>
-          {FIRST_WEEK_STEPS.map((step, i) => (
-            <li key={step.title} style={{ marginBottom: 10 }}>
-              <strong>
-                {i + 1}. {step.title}
-              </strong>{" "}
-              — {step.body}
-            </li>
-          ))}
-        </ol>
-        <p style={ss.note}>
-          Workspace profile details are in the{" "}
-          <a href="#workspace-profiles" style={ss.a}>
-            profile guide
-          </a>{" "}
-          below.
-        </p>
-        {SHOW_DEV_HINTS ? (
-          <p style={{ ...ss.p, marginBottom: 0, fontSize: 12 }}>
-            Deep links: <code style={{ fontSize: 11 }}>/app?view=permits</code>, <code style={{ fontSize: 11 }}>?settingsTab=billing</code>, etc.
-          </p>
-        ) : null}
-      </div>
-      </HelpAnchor>
-
-      <HelpAnchor id="settings-guide">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Settings centre
-        </h2>
-        <p style={ss.p}>
-          <strong>More → Settings</strong>. Each tab:
-        </p>
-        <ul style={ss.ul}>
-          {WORKSPACE_SETTINGS_TABS.filter((t) => t.id !== "developer" || SHOW_DEV_HINTS).map((t) => (
-            <li key={t.id} style={ss.moduleLi}>
-              <button type="button" style={ss.linkBtn} onClick={() => openWorkspaceSettings({ tab: t.id })}>
-                {t.label}
-              </button>
-              {" — "}
-              {SETTINGS_TAB_HELP[t.id] || ""}
-            </li>
-          ))}
-        </ul>
-      </div>
-      </HelpAnchor>
-
-      <HelpAnchor id="billing-trial">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          {BILLING_TRIAL_GUIDE.title}
-        </h2>
-        <ul style={ss.ul}>
-          {BILLING_TRIAL_GUIDE.points.map((line) => (
-            <li key={line} style={ss.moduleLi}>
-              {line}
-            </li>
-          ))}
-        </ul>
-        <div style={ss.btnRow}>
-          <button type="button" style={ss.btn} onClick={() => openWorkspaceSettings({ tab: "billing" })}>
-            Open Billing
-          </button>
+        <div className="help-hero__visual" aria-hidden>
+          <div className="help-orbit help-orbit--one"><span>1</span><strong>Choose</strong></div>
+          <div className="help-orbit help-orbit--two"><span>2</span><strong>Follow</strong></div>
+          <div className="help-orbit help-orbit--three"><span>3</span><strong>Complete</strong></div>
+          <div className="help-orbit__core"><BookOpen size={27} /><small>Clear guidance</small></div>
         </div>
-      </div>
-      </HelpAnchor>
+      </section>
 
-      <HelpAnchor id="glossary">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Glossary
-        </h2>
-        <p style={ss.p}>Short definitions for terms used across modules and this help page.</p>
-        <dl style={ss.glossGrid}>
-          {GLOSSARY.map((entry) => (
-            <div key={entry.term}>
-              <dt style={ss.glossTerm}>{entry.term}</dt>
-              <dd style={ss.glossDef}>{entry.def}</dd>
+      <div className="help-layout">
+        <aside className="help-side-nav" aria-label="Help sections">
+          <span>Guide contents</span>
+          {HELP_NAV.map(([id, label], index) => <a key={id} href={`#${id}`}><b>{String(index + 1).padStart(2, "0")}</b>{label}</a>)}
+          <div className="help-side-nav__support"><LifeBuoy size={18} /><strong>Still stuck?</strong><a href={`mailto:${SUPPORT_EMAIL}`}>Email support</a></div>
+        </aside>
+
+        <main className="help-main">
+          {normalisedQuery ? (
+            <section className="help-search-summary" aria-live="polite">
+              <div><span className="help-section-kicker">Search results</span><h2>Results for “{query.trim()}”</h2></div>
+              <span>{visibleGuides.length + matchingFaq.length + matchingModules.length} matches</span>
+              {!visibleGuides.length && !matchingFaq.length && !matchingModules.length ? (
+                <div className="help-no-results"><CircleHelp size={24} /><strong>No exact match</strong><p>Try a module name such as “RAMS”, “Permits”, “People” or “Backup”.</p></div>
+              ) : null}
+              {matchingFaq.map((item) => <article key={item.q} className="help-search-answer"><strong>{item.q}</strong><p>{item.a}</p></article>)}
+              {matchingModules.length ? <div className="help-search-links">{matchingModules.slice(0, 6).map((item) => <button type="button" key={item.id} onClick={() => openWorkspaceView({ viewId: item.id })}><FileText size={14} /><span><strong>{item.label}</strong><small>{MODULE_BLURBS[item.id] || "Open this MySafeOps module."}</small></span><ArrowRight size={13} /></button>)}</div> : null}
+            </section>
+          ) : null}
+
+          <section className="help-section help-quick-start">
+            <div className="help-section__head"><div><span className="help-section-kicker">Quick start</span><h2>Go straight to the job</h2><p>The four most common starting points.</p></div></div>
+            <div className="help-start-grid">
+              {START_ACTIONS.map(({ icon: Icon, title, detail, action }) => (
+                <button type="button" key={title} onClick={action}><span><Icon size={19} /></span><strong>{title}</strong><small>{detail}</small><ArrowRight size={15} /></button>
+              ))}
             </div>
-          ))}
-        </dl>
-      </div>
-      </HelpAnchor>
+          </section>
 
-      <HelpAnchor id="faq">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Common questions
-        </h2>
-        {HELP_FAQ.map((item) => (
-          <details key={item.q} style={ss.details}>
-            <summary style={ss.summary}>{item.q}</summary>
-            <div style={ss.detailsBody}>{item.a}</div>
-          </details>
-        ))}
-      </div>
-      </HelpAnchor>
+          <section className="help-section" id="help-guides">
+            <div className="help-section__head"><div><span className="help-section-kicker">Guided tasks</span><h2>Choose what you want to achieve</h2><p>Select a guide to see exactly what to do and in which order.</p></div><span className="help-count">{visibleGuides.length} guides</span></div>
+            <div className="help-guide-grid">
+              {visibleGuides.map((guide) => <GuideCard key={guide.id} guide={guide} selected={guide.id === selectedGuide.id} onSelect={() => selectGuide(guide.id)} />)}
+            </div>
+          </section>
 
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          About this app
-        </h2>
-        <p style={{ ...ss.p, marginBottom: 0 }}>
-          Version <strong>{DISPLAY_APP_VERSION}</strong>.
-          {SHOW_DEV_HINTS ? <> CI / monitoring: <code style={{ fontSize: 12 }}>.env.example</code>.</> : null}
-        </p>
-      </div>
+          <section className="help-guide-viewer" id="help-guide-viewer" aria-labelledby="help-guide-title">
+            <header>
+              <div>
+                <span className="help-section-kicker">Step-by-step guide · {selectedGuide.time}</span>
+                <h2 id="help-guide-title">{selectedGuide.title}</h2>
+                <p>{selectedGuide.summary}</p>
+              </div>
+              <span className="help-guide-viewer__role">{selectedGuide.roles}</span>
+            </header>
+            <div className="help-guide-progress"><span style={{ width: `${(guideCompleted / selectedGuide.steps.length) * 100}%` }} /><small>{guideCompleted} of {selectedGuide.steps.length} checked</small></div>
+            <ol className="help-steps">
+              {selectedGuide.steps.map((step, index) => {
+                const complete = completedSteps.has(`${selectedGuide.id}:${index}`);
+                return (
+                  <li key={step.title} className={complete ? "is-complete" : ""}>
+                    <button type="button" onClick={() => toggleStep(index)} aria-label={`${complete ? "Mark incomplete" : "Mark complete"}: ${step.title}`}><span>{complete ? <Check size={16} /> : index + 1}</span></button>
+                    <div><strong>{step.title}</strong><p>{step.body}</p></div>
+                  </li>
+                );
+              })}
+            </ol>
+            <footer><span><ShieldCheck size={15} />MySafeOps supports the record; competent people remain responsible for site decisions.</span><button type="button" onClick={() => openTarget(selectedGuide.target)}>{selectedGuide.target.label}<ArrowRight size={15} /></button></footer>
+          </section>
 
-      <HelpAnchor id="workspace-profiles">
-      <div className="app-surface-card" style={ss.card} id="workspace-profiles">
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          {profileOverview.title}
-        </h2>
-        <p style={ss.p}>{profileOverview.lead}</p>
+          <section className="help-section" id="help-first-week">
+            <div className="help-section__head"><div><span className="help-section-kicker">Recommended order</span><h2>Your first week with MySafeOps</h2><p>Complete these once to create a useful, controlled workspace.</p></div></div>
+            <div className="help-week-path">
+              {FIRST_WEEK_STEPS.map((step, index) => <article key={step.title}><span>{index + 1}</span><div><strong>{step.title}</strong><p>{step.body}</p></div></article>)}
+            </div>
+          </section>
 
-        <div className="app-help-profile-active">
-          <p className="app-help-profile-active__label">Your active profile</p>
-          <p className="app-help-profile-active__title">
-            {profileSummary.label}
-            {isIndustryPackPreviewActive() ? " · preview mode" : ""}
-          </p>
-          <p className="app-help-profile-active__tagline">{profileSummary.tagline}</p>
-          <ul className="app-help-profile-meta">
-            <li>Site pack: {profileSummary.sitePackTitle}</li>
-            {profileSummary.ramsStarter ? <li>{ramsLabel} starter: {profileSummary.ramsStarter}</li> : null}
-          </ul>
-        </div>
+          <section className="help-section" id="help-workspace">
+            <div className="help-section__head"><div><span className="help-section-kicker">Your workspace</span><h2>{profileSummary.label}{isIndustryPackPreviewActive() ? " · preview" : ""}</h2><p>{profileSummary.tagline}</p></div><button type="button" className="help-secondary-btn" onClick={() => openWorkspaceSettings({ tab: "organisation" })}>Change profile<Settings2 size={14} /></button></div>
+            <div className="help-workspace-card">
+              <div className="help-workspace-card__summary"><span><LayoutGrid size={20} /></span><div><small>Active workflow</small><strong>{profileSummary.sitePackTitle}</strong><p>{profileSummary.summary}</p></div></div>
+              <ol>{profileSummary.steps.map((step, index) => <li key={step}><b>{index + 1}</b><span>{step}</span></li>)}</ol>
+              <div className="help-workspace-card__actions"><button type="button" onClick={() => openWorkspaceView({ viewId: "projects" })}>Open Project Hub</button><button type="button" onClick={() => openWorkspaceView({ viewId: "rams" })}>Open {ramsLabel}</button></div>
+            </div>
+            <details className="help-profile-details"><summary>Compare all workspace profiles<ChevronRight size={15} /></summary><ProfileCatalogue activePackId={activePackId} /></details>
+            <div className="help-app-map">
+              <div><span className="help-section-kicker">How the app fits together</span><h3>{APP_LAYOUT.title}</h3><p>{APP_LAYOUT.lead}</p></div>
+              <ol>{APP_LAYOUT.layers.map((layer, index) => <li key={layer.name}><span>{index + 1}</span><div><strong>{layer.name}</strong><p>{layer.body}</p></div></li>)}</ol>
+            </div>
+          </section>
 
-        <p style={ss.p}>{profileSummary.summary}</p>
-        <p style={{ ...ss.p, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Typical workflow for your profile</p>
-        <ol style={ss.ol}>
-          {profileSummary.steps.map((step) => (
-            <li key={step} style={{ marginBottom: 6 }}>
-              {step}
-            </li>
-          ))}
-        </ol>
+          <section className="help-section" id="help-settings">
+            <div className="help-section__head"><div><span className="help-section-kicker">Settings explained</span><h2>What each settings area controls</h2><p>Settings affect the organisation, not just one project.</p></div></div>
+            <div className="help-settings-grid">
+              {WORKSPACE_SETTINGS_TABS.filter((tab) => SETTINGS_TAB_HELP[tab.id] && (tab.id !== "developer" || SHOW_DEV_HINTS)).map((tab) => <button type="button" key={tab.id} onClick={() => openWorkspaceSettings({ tab: tab.id })}><span><Settings2 size={16} /></span><strong>{tab.label}</strong><p>{SETTINGS_TAB_HELP[tab.id]}</p><ArrowRight size={14} /></button>)}
+            </div>
+            <details className="help-info-details"><summary>{BILLING_TRIAL_GUIDE.title}<ChevronRight size={15} /></summary><ul>{BILLING_TRIAL_GUIDE.points.map((point) => <li key={point}>{point}</li>)}</ul><button type="button" onClick={() => openWorkspaceSettings({ tab: "billing" })}>Open Billing</button></details>
+          </section>
 
-        <div style={ss.btnRow}>
-          <button type="button" style={ss.btn} onClick={() => openWorkspaceSettings({ tab: "organisation" })}>
-            Change profile
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "projects" })}>
-            Open Project Hub
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "rams" })}>
-            {ramsLabel} builder
-          </button>
-        </div>
+          <section className="help-section" id="help-questions">
+            <div className="help-section__head"><div><span className="help-section-kicker">Troubleshooting</span><h2>Common questions</h2><p>Short answers to the issues people hit most often.</p></div></div>
+            <div className="help-faq-list">
+              {HELP_FAQ.map((item, index) => <details key={item.q} open={index === 0}><summary><span>{String(index + 1).padStart(2, "0")}</span>{item.q}<ChevronRight size={16} /></summary><p>{item.a}</p></details>)}
+            </div>
+            <details className="help-info-details"><summary>Plain-English glossary<ChevronRight size={15} /></summary><dl className="help-glossary">{GLOSSARY.map((entry) => <div key={entry.term}><dt>{entry.term}</dt><dd>{entry.def}</dd></div>)}</dl></details>
+          </section>
 
-        <h3 style={ss.h3}>What a profile changes</h3>
-        <ul style={ss.ul}>
-          {profileOverview.whatItDoes.map((line) => (
-            <li key={line} style={ss.moduleLi}>
-              {line}
-            </li>
-          ))}
-        </ul>
-        <p style={ss.note}>{profileOverview.whatItDoesNot}</p>
+          <section className="help-section" id="help-modules">
+            <div className="help-section__head"><div><span className="help-section-kicker">Module finder</span><h2>Every tool, explained</h2><p>Use the search above or select a module to open it.</p></div><span className="help-count">{matchingModules.length} modules</span></div>
+            <div className="help-module-grid">
+              {matchingModules.slice(0, showAllModules || normalisedQuery ? matchingModules.length : 18).map((item) => <button type="button" key={item.id} onClick={() => openWorkspaceView({ viewId: item.id })}><span><FileText size={15} /></span><div><strong>{item.label}</strong><small>{MODULE_BLURBS[item.id] || "Open this MySafeOps module."}</small></div><ChevronRight size={14} /></button>)}
+            </div>
+            {!normalisedQuery && matchingModules.length > 18 ? <button type="button" className="help-show-all" onClick={() => setShowAllModules((value) => !value)}>{showAllModules ? "Show fewer modules" : `Show all ${matchingModules.length} modules`}<ChevronRight size={14} /></button> : null}
+          </section>
 
-        <h3 style={ss.h3}>{profileOverview.previewTitle}</h3>
-        <p style={{ ...ss.p, marginBottom: 8 }}>{profileOverview.previewBody}</p>
+          <section className="help-contact">
+            <div><span><LifeBuoy size={21} /></span><div><small>Need a human?</small><h2>We’ll help you find the right workflow.</h2><p>Include the module name, project and what you expected to happen. Never email passwords or API keys.</p></div></div>
+            <a href={`mailto:${SUPPORT_EMAIL}`}>Email {SUPPORT_EMAIL}<Mail size={15} /></a>
+          </section>
 
-        <h3 style={ss.h3}>How to change profile</h3>
-        <ol style={ss.ol}>
-          {profileOverview.changeSteps.map((step) => (
-            <li key={step} style={{ marginBottom: 6 }}>
-              {step}
-            </li>
-          ))}
-        </ol>
-
-        <h3 style={ss.h3}>Profile catalogue</h3>
-        <p style={{ ...ss.p, marginBottom: 0 }}>
-          Tap a profile to read who it is for, what it adjusts, and which RAMS starter it suggests. Your data is never deleted when you switch.
-        </p>
-        <ProfileGuideCatalogue activePackId={activePackId} />
-      </div>
-      </HelpAnchor>
-
-      <HelpAnchor id="project-hub">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Project Hub &amp; readiness
-        </h2>
-        <p style={ss.p}>
-          Each project has a <strong>Project Hub</strong> card driven by your workspace profile. The readiness ring scores CDM, RAMS, briefings, and profile-specific gates (e.g. PAT for electrical, survey QA for geodesy, allergen windows for food).
-        </p>
-        <ul style={ss.ul}>
-          <li>
-            <strong>Next action</strong> — one suggested step on the hub card (issue PTW, close snag, complete survey checklist, etc.).
-          </li>
-          <li>
-            <strong>Playbooks</strong> — pre-built project templates in the new-project wizard; filtered by profile.
-          </li>
-          <li>
-            <strong>Site pack PDF</strong> — export focused on your trade (contractor, electrical, survey, food, demolition, etc.).
-          </li>
-          <li>
-            <strong>More command centre</strong> — industry-aware pulse on open registers relevant to your profile.
-          </li>
-        </ul>
-        <div style={ss.btnRow}>
-          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "projects" })}>
-            Projects
-          </button>
-        </div>
-      </div>
-      </HelpAnchor>
-
-      <HelpAnchor id="workflows">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Key workflows
-        </h2>
-
-        <h3 style={ss.h3First}>New project (5 steps)</h3>
-        <p style={ss.p}>
-          <strong>Projects → Add project</strong> — name &amp; client → team &amp; industry → location (postcode, map, weather, A&amp;E) → timeline → permits &amp; go-live checklist.
-        </p>
-
-        <h3 style={ss.h3}>Permits</h3>
-        <p style={ss.p}>
-          List, board, and timeline views; live wall for the gate; conflict checks between permit types; evidence photos; handover between shifts.
-          Upload a site plan under <strong>Drawings</strong> or permit plan overlay — click escape routes and emergency assets.
-          <strong> Report incident</strong> on a permit card links to the incident register. Competent-person confirm is required before activate/close when enabled.
-        </p>
-
-        <h3 style={ss.h3}>RAMS</h3>
-        <p style={ss.p}>
-          <strong>First RAMS in minutes:</strong> open RAMS → <strong>Start new</strong> → pick a <strong>Quick pack</strong> for the job → link the project and people → Preview PDF.
-          Tick <strong>competent review</strong> before issuing — the app records the review; you remain responsible for competence on site.
-          Advanced (when you need it): JSON export/import, share links, evidence packs.
-        </p>
-
-        <h3 style={ss.h3}>CDM &amp; H&amp;S file</h3>
-        <p style={ss.p}>
-          <strong>CDM compliance</strong> module tracks duty holders and checklist items. Project dashboard shows an <strong>F10 indicator</strong> when duration/workers may make the project notifiable — verify and submit to HSE yourself.
-          <strong> H&amp;S file</strong> inventory builds from linked project records; export and complete for handover.
-        </p>
-
-        <h3 style={ss.h3}>Daily briefing → Site map</h3>
-        <p style={ss.p}>
-          Record who attended the briefing and which project they are on. Site map can <strong>Apply from today&apos;s briefing</strong> to show presence pins.
-        </p>
-
-        <h3 style={ss.h3}>Incidents</h3>
-        <p style={ss.p}>
-          Log in <strong>Incidents</strong> → track actions in <strong>Incident actions</strong> → view clusters on <strong>Incident map</strong> → use <strong>RIDDOR</strong> wizard for reportability decisions (you still submit to HSE where required).
-        </p>
-
-        <h3 style={ss.h3}>Survey report</h3>
-        <p style={ss.p}>
-          <strong>First survey in ~10 minutes:</strong> New report → pick project → <strong>Smart fill</strong> → Preview PDF → mark final when ready.
-          <strong> Simple mode</strong> (default for many orgs) walks you through guided steps; PAS 128 detail and CAD/export tools stay under More / advanced.
-          Visible for surveying profiles and <strong>Show all modules</strong> — hidden for pure contractor menus.
-        </p>
-
-        <h3 style={ss.h3}>Geo-photos</h3>
-        <p style={ss.p}>
-          Capture or import photos with GPS coordinates — pull into survey reports or utility mapping workflows.
-        </p>
-
-        <h3 style={ss.h3}>HSE registers</h3>
-        <p style={ss.p}>
-          COSHH, ladders, MEWP, hot work, confined space, LOTO, scaffold, excavations, and the rest follow the same pattern: add rows, attach to projects where asked, export or print from each module.
-        </p>
-
-        <h3 style={ss.h3}>Food &amp; pharma (optional)</h3>
-        <p style={ss.p}>
-          Tick food/pharma under Settings → Organisation → Sectors to see hygiene banners and modules: high-care access, CIP sign-off, allergen changeovers, GMP deviations, glass &amp; hard plastic.
-        </p>
-      </div>
-      </HelpAnchor>
-
-      <HelpAnchor id="roles">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Roles &amp; permissions
-        </h2>
-        <ul style={ss.ul}>
-          <li><strong>Admin</strong> — full access, backup import, billing, invites, organisation settings.</li>
-          <li><strong>Supervisor</strong> — operational access; can read cloud audit log when enabled.</li>
-          <li><strong>Operative</strong> — day-to-day registers and permits; no backup restore or admin settings.</li>
-        </ul>
-        <p style={ss.note}>Roles are set per organisation under Settings → Members.</p>
-      </div>
-      </HelpAnchor>
-
-      <HelpAnchor id="backup-audit">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Backup, bin &amp; audit
-        </h2>
-        <ul style={ss.ul}>
-          <li><strong>Backup</strong> — download JSON; replace or merge; optional cloud upload when signed in.</li>
-          <li><strong>Bin</strong> — bottom bar; restore recently deleted register rows before they are purged.</li>
-          <li><strong>Audit log</strong> — local history of changes; cloud copy for admins/supervisors when enabled.</li>
-        </ul>
-        <div style={ss.btnRow}>
-          <button type="button" style={ss.btn} onClick={() => openWorkspaceView({ viewId: "backup" })}>
-            Backup
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "bin" })}>
-            Bin
-          </button>
-          <button type="button" style={ss.btnGhost} onClick={() => openWorkspaceView({ viewId: "audit" })}>
-            Audit log
-          </button>
-        </div>
-      </div>
-      </HelpAnchor>
-
-      <HelpAnchor id="portals">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Client &amp; subcontractor portals
-        </h2>
-        <p style={ss.p}>
-          <strong>Client portal</strong> — read-only compliance snapshot for a client (permits, RAMS status, open snags). Create tokens in that module.
-          <strong> Subcontractor portal</strong> — scoped access for supply chain partners.
-        </p>
-        {SHOW_DEV_HINTS ? (
-          <p style={{ ...ss.p, marginBottom: 0, fontSize: 12 }}>
-            URL: <code style={{ fontSize: 11 }}>?portal=TOKEN</code> or <code style={{ fontSize: 11 }}>?subcontractor=TOKEN</code>
-          </p>
-        ) : null}
-      </div>
-      </HelpAnchor>
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Keyboard shortcuts
-        </h2>
-        <ul style={ss.ul}>
-          <li><kbd style={ss.kbd}>Ctrl</kbd>+<kbd style={ss.kbd}>K</kbd> / <kbd style={ss.kbd}>Cmd</kbd>+<kbd style={ss.kbd}>K</kbd> — Search</li>
-          <li><kbd style={ss.kbd}>/</kbd> — Search (when not in an input)</li>
-          <li><kbd style={ss.kbd}>?</kbd> — Open Help</li>
-        </ul>
-      </div>
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          What&apos;s new
-        </h2>
-        <ul style={ss.ul}>
-          <li><strong>Workspace profiles</strong> — trade presets; Project Hub, modules, RAMS starters, site pack PDFs.</li>
-          <li><strong>CDM F10 hint</strong> — project dashboard flag for notifiable duration/workers.</li>
-          <li><strong>H&amp;S file inventory</strong> — auto-collect linked records per project.</li>
-          <li><strong>Competent review gates</strong> — RAMS issue and PTW activate/close confirmations.</li>
-          <li><strong>Billing usage banners</strong> — warn before worker/project caps.</li>
-          <li><strong>Survey report</strong> — professional report builder with plans and geo-photos.</li>
-        </ul>
-      </div>
-
-      <HelpAnchor id="module-index">
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Complete module index
-        </h2>
-        <p style={ss.p}>Synced with the More menu. Click a name to open that screen.</p>
-
-        <h3 style={ss.h3First}>Bottom navigation</h3>
-        <ModuleIndexList tabs={bottomNavTabs} />
-
-        {MORE_SECTIONS.map((section) => (
-          <div key={section.title} style={{ marginTop: 16 }}>
-            <h3 style={ss.h3}>{section.title}</h3>
-            <ModuleIndexList tabs={getMoreTabsForSection(section)} />
-          </div>
-        ))}
-
-        {SHOW_DEV_HINTS ? (
-          <div style={{ marginTop: 16 }}>
-            <h3 style={ss.h3}>AI tools (when configured)</h3>
-            <ModuleIndexList
-              tabs={[
-                { id: "ai-rams", label: "AI RAMS generator" },
-                { id: "ai-toolbox", label: "AI toolbox talk" },
-                { id: "ai-photo", label: "AI photo hazard" },
-              ]}
-            />
-          </div>
-        ) : null}
-      </div>
-      </HelpAnchor>
-
-      {SHOW_DEV_HINTS ? (
-        <>
-          <div className="app-surface-card" style={ss.card}>
-            <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-              Production hardening (Vercel)
-            </h2>
-            <p style={{ ...ss.p, marginBottom: 0 }}>
-              CSP and cache in <code style={{ fontSize: 12 }}>vercel.json</code>; Anthropic proxy at <code style={{ fontSize: 12 }}>/api/anthropic-messages</code>; see <code style={{ fontSize: 12 }}>.env.example</code>.
-            </p>
-          </div>
-          <div className="app-surface-card" style={ss.card}>
-            <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-              Developer setup
-            </h2>
-            <p style={{ ...ss.p, marginBottom: 0 }}>
-              README.md, <code style={{ fontSize: 12 }}>.env.local</code>, DOCS/architecture-current.md, DOCS/PRODUCT_SCOPE.md.
-            </p>
-          </div>
-        </>
-      ) : null}
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Help &amp; contact
-        </h2>
-        <p style={{ ...ss.p, marginBottom: 0 }}>
-          Email{" "}
-          <a href={`mailto:${SUPPORT_EMAIL}`} style={ss.a}>
-            {SUPPORT_EMAIL}
-          </a>
-          {" · "}
-          <Link to="/terms" style={ss.a}>
-            Terms of service
-          </Link>
-          {" · "}
-          <Link to="/privacy" style={ss.a}>
-            Privacy policy
-          </Link>
-          {" · "}
-          <Link to="/docs" style={ss.a}>
-            Docs hub
-          </Link>
-          {" · "}
-          <Link to="/" style={ss.a}>
-            Home page
-          </Link>
-        </p>
-      </div>
-
-      <div className="app-surface-card" style={ss.card}>
-        <h2 className="app-section-label" style={{ ...ss.h2, textTransform: "none", letterSpacing: "normal" }}>
-          Disclaimer
-        </h2>
-        <p style={{ ...ss.p, marginBottom: 0 }}>
-          Record-keeping support only — not legal, HSE, engineering, or insurance advice. Verify RIDDOR, CDM F10, competent persons, and site-specific requirements with qualified advisers and official guidance. See{" "}
-          <Link to="/terms" style={ss.a}>
-            Terms of service
-          </Link>
-          .
-        </p>
+          <footer className="help-footer">
+            <span>MySafeOps {DISPLAY_APP_VERSION}</span>
+            <Link to="/docs">Docs hub</Link><Link to="/terms">Terms</Link><Link to="/privacy">Privacy</Link>
+            <p>Record-keeping support only — not legal, HSE, engineering or insurance advice. Verify site-specific requirements with competent advisers and official guidance.</p>
+          </footer>
+        </main>
       </div>
     </div>
   );

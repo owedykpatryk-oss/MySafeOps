@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { ClipboardCheck, Download, FileCheck2, SlidersHorizontal } from "lucide-react";
 import { loginLinkPrefetchProps } from "../../utils/routePrefetch";
 import { getLandingSectionsCopy } from "../../data/landingSectionsCopy";
 import { getMarket } from "../../config/markets";
@@ -7,6 +8,7 @@ import { getMarket } from "../../config/markets";
 export default function LandingWorkflowBento({ marketId = "uk" }) {
   const copy = getLandingSectionsCopy(marketId);
   const loginTo = getMarket(marketId).loginPath;
+  const icons = [SlidersHorizontal, FileCheck2, ClipboardCheck, Download];
 
   return (
     <section className="landing-bento" id="workflow">
@@ -20,24 +22,17 @@ export default function LandingWorkflowBento({ marketId = "uk" }) {
         </div>
 
         <div className="landing-bento-grid fu">
-          {copy.workflow.steps.map((step, i) => (
-            <article
-              key={step.id}
-              className={`landing-bento-card landing-bento-card--${step.span}`}
-              style={{
-                "--bento-accent": step.accent,
-                "--bento-border": step.border,
-                "--bento-delay": `${i * 80}ms`,
-              }}
-            >
-              <span className="landing-bento-card__step">{String(i + 1).padStart(2, "0")}</span>
-              <span className="landing-bento-card__emoji" aria-hidden>
-                {step.emoji}
-              </span>
-              <h3>{step.title}</h3>
-              <p>{step.copy}</p>
-            </article>
-          ))}
+          {copy.workflow.steps.map((step, i) => {
+            const Icon = icons[i];
+            return (
+              <article key={step.id} className="landing-bento-card" style={{ "--bento-delay": `${i * 60}ms` }}>
+                <span className="landing-bento-card__step">{String(i + 1).padStart(2, "0")}</span>
+                <span className="landing-bento-card__icon" aria-hidden><Icon size={20} /></span>
+                <h3>{step.title}</h3>
+                <p>{step.copy}</p>
+              </article>
+            );
+          })}
         </div>
 
         <div className="landing-bento-cta fu">

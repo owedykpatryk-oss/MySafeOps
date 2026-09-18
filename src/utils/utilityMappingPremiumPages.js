@@ -12,6 +12,7 @@ import {
 } from "./utilityMappingCovers.js";
 import { getUtilityMappingClient, utilityMappingClientLogoUrl } from "./utilityMappingClients";
 import { parseUtilityMappingRef } from "./utilityMappingDocRefs";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 
 function clip(text, max = 420) {
   const t = String(text || "").trim();
@@ -331,7 +332,7 @@ export function renderUtilityMappingDrawingsPage(report, opts = {}) {
       <div><strong>Rev</strong> ${escapeHtml(report.documentControl?.revision || "A")}</div>
       <div><strong>Date</strong> ${escapeHtml(
         report.documentControl?.issueDate
-          ? new Date(report.documentControl.issueDate).toLocaleDateString("en-GB")
+          ? new Date(report.documentControl.issueDate).toLocaleDateString(getActiveDocumentLocale())
           : "—"
       )}</div>
     </div>
