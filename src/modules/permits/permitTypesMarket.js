@@ -158,9 +158,33 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       { key: "lotoKeyHolder", label: "Osoba z kluczem LOTO", type: "text" },
     ],
   },
-  line_break: { label: "Pozwolenie na rozszczelnienie instalacji" },
-  roof_access: { label: "Pozwolenie na wejście na dach" },
-  night_works: { label: "Pozwolenie na prace nocne" },
+  line_break: {
+    label: "Pozwolenie na rozszczelnienie instalacji",
+    description: "Otwieranie rurociągu, zbiornika lub instalacji pod ciśnieniem z cieczą, gazem lub chemikaliami",
+    extraFields: [
+      { key: "pipeContents", label: "Zawartość rurociągu", type: "text" },
+      { key: "workingPressure", label: "Ciśnienie robocze (bar)", type: "number" },
+      { key: "temperature", label: "Temperatura medium (°C)", type: "number" },
+    ],
+  },
+  roof_access: {
+    label: "Pozwolenie na wejście na dach",
+    description: "Wejście na dach — płaski, spadzisty, kruchy lub inny",
+    extraFields: [
+      { key: "roofType", label: "Rodzaj dachu (płaski/spadzisty/kruchy)", type: "text" },
+      { key: "accessMethod", label: "Sposób dostępu (drabina/rusztowanie/właz)", type: "text" },
+      { key: "maxPersons", label: "Maksymalna liczba osób na dachu", type: "number" },
+    ],
+  },
+  night_works: {
+    label: "Pozwolenie na prace nocne",
+    description: "Prace poza normalnymi godzinami — noc, weekend, święto",
+    extraFields: [
+      { key: "siteContact", label: "Kontakt poza godzinami / telefon", type: "text" },
+      { key: "securityCode", label: "Ustalenia ochrony / alarmu", type: "text" },
+      { key: "loneworkingArrangement", label: "Interwał meldunku przy pracy samotnej", type: "text" },
+    ],
+  },
   valve_isolation: { label: "Pozwolenie na odłączenie armatury" },
   visitor_access: { label: "Pozwolenie na dostęp gości" },
   radiography: { label: "Pozwolenie na badania radiograficzne" },
@@ -212,6 +236,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
   },
   work_at_height: {
     label: "Pozwolenie na pracę na wysokości",
+    description: "Rusztowania, podesty, drabiny, dostęp linowy — każda praca powyżej 2 m",
     checklist: [
       "Sprawdzenie rusztowań / podestów — aktualna dopuszczalność",
       "Uprawnienia UDT dla podestów i żurawi",
@@ -228,6 +253,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
   },
   electrical: {
     label: "Pozwolenie na odłączenie elektryczne",
+    description: "Bezpieczne odłączenie obwodów elektrycznych, LOTO, prace pod napięciem",
     checklist: [
       "Punkt izolacji zidentyfikowany",
       "Izolacja przez osobę z uprawnieniami SEP",

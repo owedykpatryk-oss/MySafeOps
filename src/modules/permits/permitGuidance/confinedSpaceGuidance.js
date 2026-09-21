@@ -268,7 +268,7 @@ export function renderConfinedGaugeSvg(extra = {}, { width = 400, height = 110, 
         <rect x="${x}" y="22" width="${cellW - 8}" height="72" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="2"/>
         <text x="${x + (cellW - 8) / 2}" y="40" text-anchor="middle" font-size="11" font-weight="800" fill="#0f172a">${g.label}</text>
         <text x="${x + (cellW - 8) / 2}" y="58" text-anchor="middle" font-size="12" font-weight="700" fill="#334155">${display}</text>
-        <text x="${x + (cellW - 8) / 2}" y="72" text-anchor="middle" font-size="7" fill="#64748b">${g.band} ${g.unit}</text>
+        <text x="${x + (cellW - 8) / 2}" y="72" text-anchor="middle" font-size="7" fill="#64748b">${g.band.includes(g.unit) ? g.band : `${g.band} ${g.unit}`}</text>
       </g>`;
     })
     .join("");

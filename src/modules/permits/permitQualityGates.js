@@ -4,6 +4,21 @@ import { isUkDigGuidanceMarket, mechanicalDigAssessment } from "./permitDigGuida
 import { hotWorkAssessment, hotWorkGuidanceCopy } from "./permitGuidance/hotWorkGuidance";
 import { confinedSpaceAssessment, confinedGuidanceCopy } from "./permitGuidance/confinedSpaceGuidance";
 
+function genericQualityCopy(marketId) {
+  if (marketId === "pl") {
+    return {
+      linkRams: "Powiąż IBWR / RAMS dla lepszej identyfikowalności prawnej.",
+      evidencePhoto: "Dołącz jedno zdjęcie dowodowe ze stanowiska przed wydaniem.",
+      preciseLocation: "Uściślij lokalizację do dokładnej strefy / obszaru.",
+    };
+  }
+  return {
+    linkRams: "Link RAMS for stronger legal traceability.",
+    evidencePhoto: "Attach one site evidence photo before issue.",
+    preciseLocation: "Refine location to exact zone/area reference.",
+  };
+}
+
 function lotoQualityCopy(marketId) {
   if (marketId === "pl") {
     return {
@@ -58,9 +73,10 @@ function buildSmartRecommendations(permit, options = {}) {
     return checks[hitItem.id] === true;
   };
 
-  if (!linkedRamsId) addRec("link_rams", "Link RAMS for stronger legal traceability.");
-  if (!hasEvidencePhoto) addRec("evidence_photo", "Attach one site evidence photo before issue.");
-  if (!location || location.length < 4) addRec("precise_location", "Refine location to exact zone/area reference.");
+  const genericCopy = genericQualityCopy(market);
+  if (!linkedRamsId) addRec("link_rams", genericCopy.linkRams);
+  if (!hasEvidencePhoto) addRec("evidence_photo", genericCopy.evidencePhoto);
+  if (!location || location.length < 4) addRec("precise_location", genericCopy.preciseLocation);
 
   if (type === "hot_work") {
     const hwCopy = hotWorkGuidanceCopy(market);

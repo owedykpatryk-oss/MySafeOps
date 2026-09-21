@@ -253,4 +253,30 @@ describe("runPermitQualityGates", () => {
     );
     expect(r.recommendations.some((x) => /PAS 128|CAT scan/i.test(String(x?.text || "")))).toBe(false);
   });
+
+  it("uses Polish generic quality-gate recs on Poland, keeping UK English", () => {
+    const base = {
+      type: "general",
+      description: "Prace ogolne",
+      location: "A",
+      issuedBy: "Anna",
+      issuedTo: "Jan",
+      startDateTime: "2026-04-09T08:00:00.000Z",
+      endDateTime: "2026-04-09T10:00:00.000Z",
+    };
+    const pl = runPermitQualityGates(base, { marketId: "pl" });
+    const plTexts = pl.recommendations.map((x) => String(x?.text || "")).join(" | ");
+    expect(pl.recommendations.find((x) => x.id === "link_rams")?.text).toMatch(/IBWR \/ RAMS/);
+    expect(pl.recommendations.find((x) => x.id === "evidence_photo")?.text).toMatch(/zdjęcie dowodowe/);
+    expect(pl.recommendations.find((x) => x.id === "precise_location")?.text).toMatch(/Uściślij lokalizację/);
+    expect(plTexts).not.toMatch(/Link RAMS for stronger|Attach one site evidence photo|Refine location to exact/);
+
+    const uk = runPermitQualityGates(
+      { ...base, description: "General works", location: "A", issuedBy: "Alice", issuedTo: "Bob" },
+      { marketId: "uk" }
+    );
+    expect(uk.recommendations.find((x) => x.id === "link_rams")?.text).toBe("Link RAMS for stronger legal traceability.");
+    expect(uk.recommendations.find((x) => x.id === "evidence_photo")?.text).toBe("Attach one site evidence photo before issue.");
+    expect(uk.recommendations.find((x) => x.id === "precise_location")?.text).toBe("Refine location to exact zone/area reference.");
+  });
 });

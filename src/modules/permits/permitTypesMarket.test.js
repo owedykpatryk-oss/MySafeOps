@@ -152,4 +152,35 @@ describe("permitTypesMarket", () => {
     expect(plCold).toMatch(/Oznaczenie \/ nr urządzenia/);
     expect(plCold).not.toMatch(/LOTO key holder name|Equipment tag \/ ID/);
   });
+
+  it("uses Polish electrical/WAH descriptions and line-break/roof/night extra-fields", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    expect(uk.electrical.description).toMatch(/Safe isolation of electrical circuits/);
+    expect(pl.electrical.description).toMatch(/Bezpieczne odłączenie obwodów elektrycznych/);
+    expect(pl.electrical.description).not.toMatch(/Safe isolation of electrical circuits/);
+    expect(uk.work_at_height.description).toMatch(/Scaffold, MEWP/);
+    expect(pl.work_at_height.description).toMatch(/Rusztowania, podesty/);
+    expect(pl.work_at_height.description).not.toMatch(/Scaffold, MEWP/);
+
+    const ukLine = (uk.line_break.extraFields || []).map((f) => f.label).join(" ");
+    const plLine = (pl.line_break.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukLine).toMatch(/Pipe contents/);
+    expect(plLine).toMatch(/Zawartość rurociągu/);
+    expect(plLine).not.toMatch(/Pipe contents|Normal working pressure/);
+    expect(pl.line_break.description).toMatch(/rurociągu/);
+    expect(pl.line_break.description).not.toMatch(/Opening any pressurised pipe/);
+
+    const ukRoof = (uk.roof_access.extraFields || []).map((f) => f.label).join(" ");
+    const plRoof = (pl.roof_access.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukRoof).toMatch(/Roof type \(flat\/pitched\/fragile\)/);
+    expect(plRoof).toMatch(/Rodzaj dachu \(płaski\/spadzisty\/kruchy\)/);
+    expect(plRoof).not.toMatch(/Roof type \(flat\/pitched\/fragile\)|Access method \(ladder/);
+
+    const ukNight = (uk.night_works.extraFields || []).map((f) => f.label).join(" ");
+    const plNight = (pl.night_works.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukNight).toMatch(/Out-of-hours site contact/);
+    expect(plNight).toMatch(/Kontakt poza godzinami/);
+    expect(plNight).not.toMatch(/Out-of-hours site contact|Lone working check-in/);
+  });
 });

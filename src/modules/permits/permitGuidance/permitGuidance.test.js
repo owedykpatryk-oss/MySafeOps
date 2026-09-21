@@ -343,9 +343,11 @@ describe("confinedSpaceGuidance", () => {
     const plGauge = renderConfinedGaugeSvg({ o2Reading: "20.9" }, { marketId: "pl" });
     const ukGauge = renderConfinedGaugeSvg({ o2Reading: "20.9" }, { marketId: "uk" });
     expect(plGauge).toMatch(/19,5–23,5%/);
+    expect(plGauge).not.toMatch(/19,5–23,5% %/);
     expect(plGauge).toMatch(/20,9%/);
     expect(plGauge).not.toMatch(/20\.9%/);
     expect(ukGauge).toMatch(/19\.5–23\.5%/);
+    expect(ukGauge).not.toMatch(/19\.5–23\.5% %/);
     expect(ukGauge).toMatch(/20\.9%/);
     const comma = confinedSpaceAssessment({ o2Reading: "19,6", coReading: "5", h2sReading: "0", lelReading: "2" }, "pl");
     expect(comma.readings.o2).toBe(19.6);
