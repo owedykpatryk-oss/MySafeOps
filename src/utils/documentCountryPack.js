@@ -8,6 +8,8 @@ const COMMON = {
     emergencyNumber: "999",
     controlledDocument: "Controlled document. Ensure the latest approved revision is in use.",
     legalReferencesHeading: "Legal and regulatory references (UK)",
+    ptwLegalReferencePlaceholder:
+      "e.g.\nWAHR Reg 6 planning\nLOLER Reg 8 organisation\nPUWER Reg 4 suitability",
     ramsLegalReferences: [
       "Health and Safety at Work etc. Act 1974",
       "Management of Health and Safety at Work Regulations 1999",
@@ -23,6 +25,8 @@ const COMMON = {
     emergencyNumber: "112",
     controlledDocument: "Dokument nadzorowany. Przed użyciem sprawdź, czy jest to najnowsza zatwierdzona wersja.",
     legalReferencesHeading: "Podstawy prawne i wymagania (Polska)",
+    ptwLegalReferencePlaceholder:
+      "np.\nKodeks pracy dział X — BHP\nRozporządzenie BHP przy robotach budowlanych\nWymagania UDT / PIP",
     ramsLegalReferences: [
       "Ustawa z dnia 26 czerwca 1974 r. – Kodeks pracy, dział X Bezpieczeństwo i higiena pracy",
       "Rozporządzenie Ministra Infrastruktury z dnia 6 lutego 2003 r. w sprawie BHP podczas wykonywania robót budowlanych",
@@ -38,6 +42,8 @@ const COMMON = {
     emergencyNumber: "000",
     controlledDocument: "Controlled document. Confirm the current approved revision before use.",
     legalReferencesHeading: "Legal and regulatory references (Australia)",
+    ptwLegalReferencePlaceholder:
+      "e.g.\nWHS Act — construction work\nCode of Practice: managing the risk of falls\nPlant / lifting SWMS controls",
     ramsLegalReferences: [
       "Applicable Work Health and Safety Act and Regulations for the state or territory",
       "Model Code of Practice: Construction Work",

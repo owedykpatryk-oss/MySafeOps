@@ -183,7 +183,7 @@ begin
 
       if nullif(trim(coalesce(v_link.allowed_email_domain, '')), '') is not null
         and split_part(v_email, '@', 2) <> lower(trim(v_link.allowed_email_domain)) then
-        raise exception 'Use your verified company email address to join this organisation.';
+        raise exception 'Use your verified work email address to join this organisation.';
       end if;
 
       -- A user has one membership row. Serialize competing join attempts before

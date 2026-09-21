@@ -6,18 +6,13 @@ import { buildInviteLoginPath, setPendingInviteToken } from "../lib/inviteToken"
 import { ms } from "../utils/moduleStyles";
 import InlineAlert from "../components/InlineAlert";
 import { getSupportEmail } from "../config/supportContact";
+import { safeBrandAssetUrl } from "../utils/safeUrl";
+import { formatInviteExpiryEnGb } from "../utils/inviteStatus";
 
 const ss = ms;
 const teal = "#0d9488";
 const navy = "#0f172a";
 const SUPPORT_EMAIL = getSupportEmail();
-
-function safeBrandLogo(value) {
-  const url = String(value || "").trim();
-  if (url.startsWith("/")) return url;
-  if (url.startsWith("https://")) return url;
-  return "";
-}
 
 export default function AcceptInvitePage() {
   const [searchParams] = useSearchParams();
@@ -67,8 +62,8 @@ export default function AcceptInvitePage() {
           return;
         }
         setPreview(row);
-        if (row.email || row.invite_email) {
-          setPendingInviteToken(invite, row.email || row.invite_email);
+        if (row.invite_email) {
+          setPendingInviteToken(invite, row.invite_email);
         }
       })
       .catch(() => {
@@ -79,7 +74,7 @@ export default function AcceptInvitePage() {
     };
   }, [invite, email]);
 
-  const loginEmail = (preview?.email || preview?.invite_email || email || "").trim().toLowerCase();
+  const loginEmail = (preview?.invite_email || email || "").trim().toLowerCase();
   const loginHref = buildInviteLoginPath({ token: invite, email: loginEmail });
   // Reusable join links reject users already in another org server-side; only
   // legacy one-time email invites still switch membership.
@@ -87,7 +82,7 @@ export default function AcceptInvitePage() {
   const canContinue = Boolean(preview && invite && !err && (isReusableJoin || understoodSwitch));
   const primary = preview?.primary_color || teal;
   const accent = preview?.accent_color || "#E1F5EE";
-  const companyLogo = safeBrandLogo(preview?.logo_url);
+  const companyLogo = safeBrandAssetUrl(preview?.logo_url);
 
   return (
     <div style={{ minHeight: "100vh", background: `linear-gradient(180deg, ${accent}22 0%, #f8fafc 38%)`, fontFamily: "DM Sans, system-ui, sans-serif", padding: "1.5rem 1rem 2rem" }}>
@@ -139,12 +134,12 @@ export default function AcceptInvitePage() {
                   ? `Sign in or create an account with a verified @${preview.allowed_email_domain} email to accept.`
                   : "Sign in or create an account with the same email to accept."}{" "}
                 Link expires:{" "}
-                {new Date(preview.expires_at).toLocaleString()}.
+                {formatInviteExpiryEnGb(preview.expires_at)}.
               </p>
               {isReusableJoin ? (
                 <InlineAlert
                   type="info"
-                  text={`This company join link only works for accounts that are not already in another organisation. One login can only belong to one organisation.`}
+                  text={`This organisation join link only works for accounts that are not already in another organisation. One login can only belong to one organisation.`}
                   style={{ marginBottom: 14 }}
                 />
               ) : (

@@ -18,6 +18,29 @@ export function safeHttpUrl(raw) {
 }
 
 /**
+ * Brand logo / asset URL for invite previews and similar surfaces.
+ * Allows same-origin paths (`/branding/...`) and absolute https URLs.
+ * Rejects protocol-relative (`//evil.test`), http, and non-http schemes.
+ * @param {string | null | undefined} raw
+ * @returns {string}
+ */
+export function safeBrandAssetUrl(raw) {
+  if (raw == null || typeof raw !== "string") return "";
+  const t = raw.trim();
+  if (!t) return "";
+  if (/^https:\/\//i.test(t)) {
+    try {
+      const u = new URL(t);
+      if (u.protocol === "https:") return u.href;
+    } catch {
+      return "";
+    }
+    return "";
+  }
+  return safeInternalPath(t, "");
+}
+
+/**
  * In-app path for client-side navigation (`next=` after login, etc.). Blocks open redirects
  * (e.g. <code>//phishing.test/path</code>, <code>https:...</code>) while allowing <code>/app?tab=1#x</code>.
  * @param {string | null | undefined} raw

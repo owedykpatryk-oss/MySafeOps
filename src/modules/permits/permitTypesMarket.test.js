@@ -5,11 +5,182 @@ describe("permitTypesMarket", () => {
   it("returns UK types unchanged", () => {
     const uk = getPermitTypesForMarket("uk");
     expect(uk.electrical.checklist.some((x) => /GS38/i.test(x))).toBe(true);
+    expect(uk.excavation.checklist.some((x) => /PAS 128/i.test(x))).toBe(true);
+    expect(uk.excavation.checklist.some((x) => /CAT scan/i.test(x))).toBe(true);
+    expect(uk.excavation.checklist.join(" ")).not.toMatch(/Dial Before You Dig/i);
   });
 
   it("returns AU electrical checklist with AS/NZS reference", () => {
     const au = getPermitTypesForMarket("au");
     expect(au.electrical.checklist.some((x) => /AS\/NZS 3012/i.test(x))).toBe(true);
     expect(au.excavation.checklist.some((x) => /Dial Before You Dig/i.test(x))).toBe(true);
+  });
+
+  it("drops UK PAS 128 extra-field labels on Australia excavation and ground disturbance", () => {
+    const au = getPermitTypesForMarket("au");
+    const excavationLabels = (au.excavation.extraFields || []).map((f) => f.label).join(" ");
+    const groundLabels = (au.ground_disturbance.extraFields || []).map((f) => f.label).join(" ");
+    expect(excavationLabels).toMatch(/DBYD|utility locate/i);
+    expect(excavationLabels).not.toMatch(/PAS 128/i);
+    expect(excavationLabels).not.toMatch(/CAT scan/i);
+    expect(groundLabels).toMatch(/DBYD/i);
+    expect(groundLabels).not.toMatch(/PAS 128/i);
+    expect(groundLabels).not.toMatch(/CAT scan/i);
+    expect((au.excavation.extraFields || []).some((f) => f.key === "pas128QualityLevel")).toBe(false);
+    expect((au.ground_disturbance.extraFields || []).some((f) => f.key === "pas128QualityLevel")).toBe(false);
+    expect((au.ground_disturbance.extraFields || []).some((f) => f.key === "pas128SurveyType")).toBe(false);
+  });
+
+  it("replaces UK CAT/PAS 128 excavation checks with CPD wording for Poland", () => {
+    const pl = getPermitTypesForMarket("pl");
+    expect(pl.excavation.checklist.join(" ")).toMatch(/CPD|geodeta/i);
+    expect(pl.excavation.checklist.join(" ")).not.toMatch(/CAT scan/i);
+    expect(pl.excavation.checklist.join(" ")).not.toMatch(/PAS 128/i);
+  });
+
+  it("drops UK CAT/PAS 128 extra-field labels on Poland excavation and ground disturbance", () => {
+    const pl = getPermitTypesForMarket("pl");
+    const excavationLabels = (pl.excavation.extraFields || []).map((f) => f.label).join(" ");
+    const groundLabels = (pl.ground_disturbance.extraFields || []).map((f) => f.label).join(" ");
+    expect(excavationLabels).toMatch(/uzbrojenia/i);
+    expect(excavationLabels).not.toMatch(/CAT scan/i);
+    expect(excavationLabels).not.toMatch(/PAS 128/i);
+    expect(groundLabels).not.toMatch(/CAT scan/i);
+    expect(groundLabels).not.toMatch(/PAS 128/i);
+    expect((pl.excavation.extraFields || []).some((f) => f.key === "pas128QualityLevel")).toBe(false);
+    expect((pl.excavation.extraFields || []).some((f) => f.key === "pas128SurveyType")).toBe(false);
+  });
+
+  it("replaces UK CAT/PAS 128 ground-disturbance checks with CPD wording for Poland", () => {
+    const pl = getPermitTypesForMarket("pl");
+    const checks = pl.ground_disturbance.checklist.join(" ");
+    expect(checks).toMatch(/CPD|geodeta/i);
+    expect(checks).not.toMatch(/CAT scan/i);
+    expect(checks).not.toMatch(/PAS 128/i);
+    expect(getPermitTypesForMarket("uk").ground_disturbance.checklist.join(" ")).toMatch(/PAS 128/i);
+  });
+
+  it("keeps UK LOLER on lifting and uses WHS plant wording for Australia", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const au = getPermitTypesForMarket("au");
+    expect(uk.lifting.description).toMatch(/LOLER/);
+    expect(uk.lifting.checklist.join(" ")).toMatch(/LOLER thorough examination/);
+    expect(au.lifting.description).toMatch(/WHS plant/i);
+    expect(au.lifting.checklist.join(" ")).not.toMatch(/LOLER/);
+    expect(au.lifting.description).not.toMatch(/LOLER/);
+  });
+
+  it("replaces UK LOLER lifting checks with UDT wording for Poland", () => {
+    const pl = getPermitTypesForMarket("pl");
+    expect(pl.lifting.description).toMatch(/UDT/);
+    expect(pl.lifting.checklist.join(" ")).toMatch(/UDT/);
+    expect(pl.lifting.checklist.join(" ")).not.toMatch(/LOLER/);
+    expect(pl.lifting.description).not.toMatch(/LOLER/);
+    expect(pl.lifting.checklist.join(" ")).not.toMatch(/Appointed Person/);
+  });
+
+  it("drops UK Appointed Person extra-field labels on Poland and Australia lifting", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    const au = getPermitTypesForMarket("au");
+    const ukLabels = (uk.lifting.extraFields || []).map((f) => f.label).join(" ");
+    const plLabels = (pl.lifting.extraFields || []).map((f) => f.label).join(" ");
+    const auLabels = (au.lifting.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukLabels).toMatch(/Appointed Person/);
+    expect(plLabels).toMatch(/osoba kompetentna/i);
+    expect(plLabels).not.toMatch(/Appointed Person/);
+    expect(auLabels).toMatch(/competent person/i);
+    expect(auLabels).not.toMatch(/Appointed Person/);
+  });
+
+  it("drops UK Access equipment extra-field labels on Poland work at height", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    const ukLabels = (uk.work_at_height.extraFields || []).map((f) => f.label).join(" ");
+    const plLabels = (pl.work_at_height.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukLabels).toMatch(/Access equipment type \/ ref/);
+    expect(plLabels).toMatch(/Sprzęt dostępu \/ nr/);
+    expect(plLabels).not.toMatch(/Access equipment type \/ ref/);
+    expect(plLabels).toMatch(/planu ratowniczego/i);
+  });
+
+  it("uses Polish confined-space checks instead of UK English stand-by wording", () => {
+    const pl = getPermitTypesForMarket("pl");
+    const checks = pl.confined_space.checklist.join(" ");
+    const labels = (pl.confined_space.extraFields || []).map((f) => f.label).join(" ");
+    expect(pl.confined_space.label).toMatch(/przestrzeni zamkniętej/i);
+    expect(checks).toMatch(/asekuruj/i);
+    expect(checks).not.toMatch(/Stand-by person/i);
+    expect(checks).not.toMatch(/Confined Spaces Regulations/i);
+    expect(labels).toMatch(/asekuruj/i);
+    expect(labels).not.toMatch(/Stand-by person/i);
+    expect(getPermitTypesForMarket("uk").confined_space.checklist.join(" ")).toMatch(/Stand-by person/i);
+    expect((getPermitTypesForMarket("uk").confined_space.extraFields || []).map((f) => f.label).join(" ")).toMatch(/Stand-by person/i);
+  });
+
+  it("uses Polish hot-work checks instead of UK fire-watch wording", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    const checks = pl.hot_work.checklist.join(" ");
+    const labels = (pl.hot_work.extraFields || []).map((f) => f.label).join(" ");
+    expect(pl.hot_work.label).toMatch(/prace gorące/i);
+    expect(checks).toMatch(/dyżurze pożarowym/i);
+    expect(checks).not.toMatch(/Fire watch person/i);
+    expect(labels).toMatch(/dyżurze pożarowym/i);
+    expect(labels).not.toMatch(/Fire watcher name/i);
+    expect(uk.hot_work.checklist.join(" ")).toMatch(/Fire watch person/i);
+    expect((uk.hot_work.extraFields || []).map((f) => f.label).join(" ")).toMatch(/Fire watcher name/i);
+  });
+
+  it("uses Polish electrical and cold-work extra-field labels, keeping UK English", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    const ukElectrical = (uk.electrical.extraFields || []).map((f) => f.label).join(" ");
+    const plElectrical = (pl.electrical.extraFields || []).map((f) => f.label).join(" ");
+    const ukCold = (uk.cold_work.extraFields || []).map((f) => f.label).join(" ");
+    const plCold = (pl.cold_work.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukElectrical).toMatch(/Circuit \/ board reference/);
+    expect(ukElectrical).toMatch(/Lock-out padlock number/);
+    expect(ukElectrical).toMatch(/Authorised person \(isolation\)/);
+    expect(plElectrical).toMatch(/Oznaczenie obwodu \/ rozdzielnicy/);
+    expect(plElectrical).toMatch(/Numer kłódki LOTO/);
+    expect(plElectrical).toMatch(/Osoba uprawniona \(odłączenie\)/);
+    expect(plElectrical).not.toMatch(/Circuit \/ board reference|Lock-out padlock number|Authorised person \(isolation\)/);
+    expect(ukCold).toMatch(/LOTO key holder name/);
+    expect(ukCold).toMatch(/Equipment tag \/ ID/);
+    expect(plCold).toMatch(/Osoba z kluczem LOTO/);
+    expect(plCold).toMatch(/Oznaczenie \/ nr urządzenia/);
+    expect(plCold).not.toMatch(/LOTO key holder name|Equipment tag \/ ID/);
+  });
+
+  it("uses Polish electrical/WAH descriptions and line-break/roof/night extra-fields", () => {
+    const uk = getPermitTypesForMarket("uk");
+    const pl = getPermitTypesForMarket("pl");
+    expect(uk.electrical.description).toMatch(/Safe isolation of electrical circuits/);
+    expect(pl.electrical.description).toMatch(/Bezpieczne odłączenie obwodów elektrycznych/);
+    expect(pl.electrical.description).not.toMatch(/Safe isolation of electrical circuits/);
+    expect(uk.work_at_height.description).toMatch(/Scaffold, MEWP/);
+    expect(pl.work_at_height.description).toMatch(/Rusztowania, podesty/);
+    expect(pl.work_at_height.description).not.toMatch(/Scaffold, MEWP/);
+
+    const ukLine = (uk.line_break.extraFields || []).map((f) => f.label).join(" ");
+    const plLine = (pl.line_break.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukLine).toMatch(/Pipe contents/);
+    expect(plLine).toMatch(/Zawartość rurociągu/);
+    expect(plLine).not.toMatch(/Pipe contents|Normal working pressure/);
+    expect(pl.line_break.description).toMatch(/rurociągu/);
+    expect(pl.line_break.description).not.toMatch(/Opening any pressurised pipe/);
+
+    const ukRoof = (uk.roof_access.extraFields || []).map((f) => f.label).join(" ");
+    const plRoof = (pl.roof_access.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukRoof).toMatch(/Roof type \(flat\/pitched\/fragile\)/);
+    expect(plRoof).toMatch(/Rodzaj dachu \(płaski\/spadzisty\/kruchy\)/);
+    expect(plRoof).not.toMatch(/Roof type \(flat\/pitched\/fragile\)|Access method \(ladder/);
+
+    const ukNight = (uk.night_works.extraFields || []).map((f) => f.label).join(" ");
+    const plNight = (pl.night_works.extraFields || []).map((f) => f.label).join(" ");
+    expect(ukNight).toMatch(/Out-of-hours site contact/);
+    expect(plNight).toMatch(/Kontakt poza godzinami/);
+    expect(plNight).not.toMatch(/Out-of-hours site contact|Lone working check-in/);
   });
 });

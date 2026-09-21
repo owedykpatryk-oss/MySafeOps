@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isDigPermitType,
+  isUkDigGuidanceMarket,
   pas128QualityMeta,
   pas128SurveyMeta,
   mechanicalDigAssessment,
@@ -13,6 +14,12 @@ describe("permitDigGuidance", () => {
   it("identifies dig permit types", () => {
     expect(isDigPermitType("excavation")).toBe(true);
     expect(isDigPermitType("hot_work")).toBe(false);
+  });
+
+  it("treats PAS 128 wizard/print guidance as UK-only", () => {
+    expect(isUkDigGuidanceMarket("uk")).toBe(true);
+    expect(isUkDigGuidanceMarket("pl")).toBe(false);
+    expect(isUkDigGuidanceMarket("au")).toBe(false);
   });
 
   it("returns PAS 128 QL metadata with accuracy bands", () => {
@@ -47,6 +54,21 @@ describe("permitDigGuidance", () => {
     expect(html).toContain("PAS 128");
     expect(html).toContain("QL-B");
     expect(html).toContain("<svg");
+  });
+
+  it("omits UK PAS 128 print guidance for Poland and Australia", () => {
+    expect(
+      renderDigGuidancePrintHtml(
+        { type: "excavation", extraFields: { pas128QualityLevel: "QL-B" } },
+        { marketId: "pl" }
+      )
+    ).toBe("");
+    expect(
+      renderDigGuidancePrintHtml(
+        { type: "excavation", extraFields: { pas128QualityLevel: "QL-B" } },
+        { marketId: "au" }
+      )
+    ).toBe("");
   });
 
   it("highlights selected QL in ladder SVG", () => {

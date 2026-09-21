@@ -1,7 +1,38 @@
 import { permitHasSiteEvidence } from "../../utils/geoPhotoFields";
-import { mechanicalDigAssessment } from "./permitDigGuidance";
-import { hotWorkAssessment } from "./permitGuidance/hotWorkGuidance";
-import { confinedSpaceAssessment } from "./permitGuidance/confinedSpaceGuidance";
+import { getOrgMarketId } from "../../utils/orgMarket";
+import { isUkDigGuidanceMarket, mechanicalDigAssessment } from "./permitDigGuidance";
+import { hotWorkAssessment, hotWorkGuidanceCopy } from "./permitGuidance/hotWorkGuidance";
+import { confinedSpaceAssessment, confinedGuidanceCopy } from "./permitGuidance/confinedSpaceGuidance";
+
+function genericQualityCopy(marketId) {
+  if (marketId === "pl") {
+    return {
+      linkRams: "Powiąż IBWR / RAMS dla lepszej identyfikowalności prawnej.",
+      evidencePhoto: "Dołącz jedno zdjęcie dowodowe ze stanowiska przed wydaniem.",
+      preciseLocation: "Uściślij lokalizację do dokładnej strefy / obszaru.",
+    };
+  }
+  return {
+    linkRams: "Link RAMS for stronger legal traceability.",
+    evidencePhoto: "Attach one site evidence photo before issue.",
+    preciseLocation: "Refine location to exact zone/area reference.",
+  };
+}
+
+function lotoQualityCopy(marketId) {
+  if (marketId === "pl") {
+    return {
+      rec: "Izolacja: zapisz dowód LOTO / odłączenia.",
+      autofix: "Dowód LOTO: punkt izolacji, numer kłódki, próba–potwierdzenie wykonane.",
+      needles: ["loto", "lockout", "isolation", "lock-off", "odłącz", "kłódk"],
+    };
+  }
+  return {
+    rec: "Isolation task: capture LOTO/isolation evidence reference.",
+    autofix: "LOTO evidence: isolation point ID, lock number, try-test completed.",
+    needles: ["loto", "lockout", "isolation", "lock-off"],
+  };
+}
 
 function isRequired(requiredMap, key, fallback = true) {
   if (!requiredMap || typeof requiredMap !== "object") return fallback;
@@ -25,6 +56,7 @@ function buildSmartRecommendations(permit, options = {}) {
     out.push({ id, text, autofix });
   };
   const type = String(permit?.type || "").toLowerCase();
+  const market = options.marketId || getOrgMarketId();
   const description = cleanText(permit?.description);
   const location = cleanText(permit?.location);
   const notes = cleanText(permit?.notes);
@@ -41,51 +73,56 @@ function buildSmartRecommendations(permit, options = {}) {
     return checks[hitItem.id] === true;
   };
 
-  if (!linkedRamsId) addRec("link_rams", "Link RAMS for stronger legal traceability.");
-  if (!hasEvidencePhoto) addRec("evidence_photo", "Attach one site evidence photo before issue.");
-  if (!location || location.length < 4) addRec("precise_location", "Refine location to exact zone/area reference.");
+  const genericCopy = genericQualityCopy(market);
+  if (!linkedRamsId) addRec("link_rams", genericCopy.linkRams);
+  if (!hasEvidencePhoto) addRec("evidence_photo", genericCopy.evidencePhoto);
+  if (!location || location.length < 4) addRec("precise_location", genericCopy.preciseLocation);
 
   if (type === "hot_work") {
-    const hw = hotWorkAssessment(extra, permit);
+    const hwCopy = hotWorkGuidanceCopy(market);
+    const hw = hotWorkAssessment(extra, permit, market);
     hw.blockers.forEach((msg, i) => addRec(`hw_block_${i}`, msg));
     hw.warnings.slice(0, 3).forEach((msg, i) => addRec(`hw_warn_${i}`, msg));
     const fireWatch = cleanText(dynamic.hotWorkFireWatchMins || extra.fireWatcher || extra.postInspectionTime);
-    if (!fireWatch && !hasChecklistSignal("fire watch")) {
+    const fireWatchTicked = (hwCopy.checklistFireWatchNeedles || ["fire watch"]).some((needle) => hasChecklistSignal(needle));
+    if (!fireWatch && !fireWatchTicked) {
       addRec(
         "hot_work_fire_watch",
-        "Hot work: confirm fire watch details and post-work inspection.",
+        hwCopy.qualityRecFireWatch,
         { type: "set_dynamic", key: "hotWorkFireWatchMins", value: 60 }
       );
     }
-    if (!containsAny(`${description} ${notes} ${evidenceNotes}`, ["extinguisher", "fire blanket"])) {
+    if (!containsAny(`${description} ${notes} ${evidenceNotes}`, hwCopy.fireControlNeedles || ["extinguisher", "fire blanket"])) {
       addRec(
         "hot_work_fire_controls",
-        "Hot work: add extinguisher/fire blanket controls in notes.",
-        { type: "append_notes", text: "Fire controls: 2x extinguishers and fire blanket in place." }
+        hwCopy.qualityRecFireControls,
+        { type: "append_notes", text: hwCopy.qualityAutofixFireControls }
       );
     }
   }
 
   if (type === "electrical" || type === "cold_work" || type === "loto") {
-    const lotoEvidence = containsAny(`${description} ${notes} ${evidenceNotes}`, ["loto", "lockout", "isolation", "lock-off"]);
+    const lotoCopy = lotoQualityCopy(market);
+    const lotoEvidence = containsAny(`${description} ${notes} ${evidenceNotes}`, lotoCopy.needles);
     if (!lotoEvidence) {
       addRec(
         "loto_evidence",
-        "Isolation task: capture LOTO/isolation evidence reference.",
-        { type: "append_evidence", text: "LOTO evidence: isolation point ID, lock number, try-test completed." }
+        lotoCopy.rec,
+        { type: "append_evidence", text: lotoCopy.autofix }
       );
     }
   }
 
   if (type === "confined_space") {
-    const cs = confinedSpaceAssessment(extra);
+    const csCopy = confinedGuidanceCopy(market);
+    const cs = confinedSpaceAssessment(extra, market);
     cs.blockers.forEach((msg, i) => addRec(`cs_block_${i}`, msg));
     cs.warnings.slice(0, 3).forEach((msg, i) => addRec(`cs_warn_${i}`, msg));
     const rescueRef = cleanText(dynamic.csRescuePlanRef || extra.rescueTeamRef || extra.rescuePlanRef || "");
     if (!rescueRef) {
       addRec(
         "confined_space_rescue_ref",
-        "Confined space: add rescue plan reference.",
+        csCopy.qualityRecRescue,
         { type: "set_dynamic", key: "csRescuePlanRef", value: "RESCUE-PLAN-REF" }
       );
     }
@@ -93,13 +130,13 @@ function buildSmartRecommendations(permit, options = {}) {
     if (!gasTester) {
       addRec(
         "confined_space_gas_tester",
-        "Confined space: record gas tester and latest readings.",
-        { type: "set_dynamic", key: "csGasTester", value: "Assigned gas tester" }
+        csCopy.qualityRecGasTester,
+        { type: "set_dynamic", key: "csGasTester", value: csCopy.qualityAutofixGasTester }
       );
     }
   }
 
-  if (type === "excavation" || type === "ground_disturbance") {
+  if ((type === "excavation" || type === "ground_disturbance") && isUkDigGuidanceMarket(market)) {
     if (!cleanText(extra.pas128QualityLevel)) {
       addRec("pas128_ql", "Record PAS 128 quality level (QL-D to QL-A).");
     }

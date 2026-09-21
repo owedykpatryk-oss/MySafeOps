@@ -12,6 +12,25 @@ describe("document country packs", () => {
   it("keeps UK wording and selects Australian WHS references", () => {
     expect(documentText("Location", "Location", "uk")).toBe("Location");
     expect(getDocumentCountryPack("uk").safetyAuthority).toBe("HSE");
-    expect(getDocumentCountryPack("au").ramsLegalReferences.join(" ")).toContain("Work Health and Safety");
+    expect(getDocumentCountryPack("uk").ramsLegalReferences.join(" ")).toContain(
+      "Health and Safety at Work etc. Act 1974"
+    );
+    expect(getDocumentCountryPack("uk").ramsLegalReferences.join(" ")).toContain(
+      "Construction (Design and Management) Regulations 2015"
+    );
+    expect(getDocumentCountryPack("uk").ptwLegalReferencePlaceholder).toMatch(/WAHR/);
+    expect(getDocumentCountryPack("uk").ptwLegalReferencePlaceholder).toMatch(/LOLER/);
+    expect(getDocumentCountryPack("uk").ptwLegalReferencePlaceholder).toMatch(/PUWER/);
+    expect(getDocumentCountryPack("pl").ptwLegalReferencePlaceholder).toMatch(/Kodeks pracy|UDT|PIP/);
+    expect(getDocumentCountryPack("pl").ptwLegalReferencePlaceholder).not.toMatch(/WAHR|LOLER|PUWER/);
+    expect(getDocumentCountryPack("au").ptwLegalReferencePlaceholder).toMatch(/WHS/);
+    expect(getDocumentCountryPack("au").ptwLegalReferencePlaceholder).not.toMatch(/WAHR|LOLER|PUWER/);
+  });
+
+  it("falls unknown markets back to the UK HSE pack", () => {
+    expect(getDocumentCountryPack("de").marketId).toBe("uk");
+    expect(getDocumentCountryPack("de").safetyAuthority).toBe("HSE");
+    expect(getDocumentCountryPack("de").emergencyNumber).toBe("999");
+    expect(documentText("Permit to work", "Permit to work", "de")).toBe("Permit to work");
   });
 });
