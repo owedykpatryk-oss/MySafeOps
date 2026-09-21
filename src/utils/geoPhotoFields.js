@@ -108,6 +108,22 @@ export function buildStructuredGeoPhotoNotes({ notes = "", locationId = "", dept
   return parts.filter(Boolean).join(" · ");
 }
 
+/**
+ * Remove the tokens `buildStructuredGeoPhotoNotes` appended, so an editor shows the prose
+ * the user actually typed. Without this the merged tokens grow by one copy per edit.
+ */
+export function stripStructuredGeoPhotoNotes(notes, fields = {}) {
+  const suffix = buildStructuredGeoPhotoNotes({ ...fields, notes: "" });
+  let text = String(notes || "").trim();
+  if (!suffix) return text;
+  for (let i = 0; i < 20; i += 1) {
+    if (text === suffix) return "";
+    if (!text.endsWith(` · ${suffix}`)) return text;
+    text = text.slice(0, text.length - suffix.length - 3).trim();
+  }
+  return text;
+}
+
 export function permitHasSiteEvidence(permit) {
   return Boolean(permit?.evidencePhotoUrl || permit?.evidencePhotoStoragePath || permit?.evidenceGeoPhotoId);
 }

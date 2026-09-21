@@ -16,6 +16,7 @@ import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
 import { utilityMappingExportBaseName } from "../../utils/utilityMappingDocRefs";
 import { buildCadPreviewSvg } from "../../utils/cadPreviewSvg.js";
 import { getOrgSettings } from "../../utils/orgSettingsStorage";
+import { getActiveDocumentLocale } from "../../utils/countryWorkspaces";
 import {
   buildUtilityMappingClientPackHtml,
   buildUtilityMappingQrSrc,
@@ -176,7 +177,7 @@ export function buildVerificationSheetHtml(report = {}, opts = {}) {
   const orgName = opts.orgName || (isUtilityMappingOrg() ? UTILITY_MAPPING_BRAND.name : "MySafeOps");
 
   return `<!DOCTYPE html>
-<html lang="en-GB"><head><meta charset="utf-8"/>
+<html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/>
 <title>Verify ${escapeHtml(r.ref || "survey")}</title>
 <style>
   body { font-family: "Segoe UI", Arial, sans-serif; margin: 24px; color: #0f172a; max-width: 720px; }

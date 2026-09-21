@@ -87,3 +87,15 @@ export function consumeWorkspaceNavTarget() {
   }
   return v;
 }
+
+/**
+ * Open Help Centre focused on a guided task and/or section anchor.
+ * HelpAbout consumes `{ viewId: "help", guideId, section }` once on mount.
+ * @param {{ guideId?: string, section?: string }} [opts]
+ */
+export function openHelpGuide(opts = {}) {
+  const guideId = opts?.guideId ? String(opts.guideId) : undefined;
+  const section = opts?.section ? String(opts.section) : guideId ? "help-guides" : "help-start";
+  setWorkspaceNavTarget({ viewId: "help", guideId, section });
+  openWorkspaceView({ viewId: "help" });
+}

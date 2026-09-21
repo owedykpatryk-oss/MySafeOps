@@ -4,7 +4,7 @@ import { copyTextToClipboard } from "../../utils/copyToClipboard";
 import { ms } from "../../utils/moduleStyles";
 import PageHero from "../../components/PageHero";
 import ConfettiCelebration from "../../components/ConfettiCelebration";
-import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey, ORG_DATA_CHANGED_EVENT, getOrgId } from "../../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, countryOperationalStorageKey, ORG_DATA_CHANGED_EVENT, getOrgId } from "../../utils/orgStorage";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { getTemplateForType, saveOrgTemplate } from "./permitTemplateCatalog";
 import { evaluatePermitCompliance } from "./permitComplianceChecks";
@@ -89,6 +89,8 @@ import {
   missingRequiredPermits,
   requiredPermitTypesForProject,
 } from "./permitProjectDefaults";
+import { enrichPermitDraftFromProjectSurveys } from "../../utils/surveyPermitLink";
+import { formatActorLabel } from "../../utils/documentAuthorship.js";
 import PermitQuickIssueHub from "./components/PermitQuickIssueHub";
 import PermitStudioShell, { PermitStudioPanel, PERMIT_FIELD_SECTIONS } from "./components/PermitStudioShell";
 import PermitFirstRunGuide from "./components/PermitFirstRunGuide";
@@ -516,7 +518,7 @@ function certificationDisplayLabel(cert) {
 
 function loadSnippetList(baseKey) {
   try {
-    const rows = JSON.parse(localStorage.getItem(orgScopedKey(baseKey)) || "[]");
+    const rows = JSON.parse(localStorage.getItem(countryOperationalStorageKey(baseKey)) || "[]");
     if (!Array.isArray(rows)) return [];
     return rows.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 24);
   } catch {
@@ -527,7 +529,7 @@ function loadSnippetList(baseKey) {
 function saveSnippetToList(baseKey, text) {
   const clean = String(text || "").trim();
   if (!clean) return;
-  const key = orgScopedKey(baseKey);
+  const key = countryOperationalStorageKey(baseKey);
   const next = [clean, ...loadSnippetList(baseKey).filter((x) => x.toLowerCase() !== clean.toLowerCase())].slice(0, 24);
   localStorage.setItem(key, JSON.stringify(next));
 }
@@ -3743,7 +3745,8 @@ const PermitCard = memo(function PermitCard({
               <ul style={{ margin: 0, paddingLeft: 16, lineHeight: 1.5 }}>
                 {[...permit.auditLog].slice(-12).reverse().map((e, i) => (
                   <li key={`${e.at}-${i}`}>
-                    {fmtDateTime(e.at)} —{" "}
+                    {fmtDateTime(e.at)}
+                    {e.by || e.byEmail ? ` · ${formatActorLabel({ name: e.by, email: e.byEmail }) || e.by}` : ""} —{" "}
                     {e.action === "status_changed"
                       ? `Status: ${e.from || "—"} → ${e.to || "—"}`
                       : e.action === "created"
@@ -6323,10 +6326,11 @@ export default function PermitSystem() {
     const tid = String(typeId || "").trim();
     if (!tid || !issuePermitTypes[tid]) return;
     const template = getTemplateForType(tid, issuePermitTypes);
-    const draft = normalizeAdvancedPermit(
+    const projectId = String(extra.projectId || planProjectId || "").trim();
+    let draft = normalizeAdvancedPermit(
       {
         type: tid,
-        projectId: String(extra.projectId || planProjectId || "").trim(),
+        projectId,
         location: String(extra.location || "").trim(),
         linkedRamsId: String(extra.linkedRamsId || "").trim(),
         status: "draft",
@@ -6338,6 +6342,9 @@ export default function PermitSystem() {
       },
       tid
     );
+    if (projectId && (tid === "excavation" || tid === "ground_disturbance")) {
+      draft = enrichPermitDraftFromProjectSurveys(draft, { id: projectId }, load("survey_reports", []));
+    }
     setModal({ type: "form", data: draft });
     trackEvent("permit_quick_issue_type", { type: tid });
   };

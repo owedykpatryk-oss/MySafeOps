@@ -14,11 +14,12 @@ import { buildFessMethodStatementPackHtml } from "./fessMsPrintHtml";
 import { buildFessBriefingOperativeRows } from "./fessBriefingRecord";
 import { buildFessRamsPrintBodyHTML, fessOrgPrintTheme } from "./fessRamsPrintHtml";
 import { escapeHtml as escHtml } from "./htmlEscape";
+import { getActiveDocumentLocale } from "./countryWorkspaces";
 
 const fmtDate = (iso) => {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    return new Date(iso).toLocaleDateString(getActiveDocumentLocale(), { day: "2-digit", month: "short", year: "numeric" });
   } catch {
     return "—";
   }

@@ -412,6 +412,36 @@ const RAW_LANDING_BLOG_POSTS = [
     image: "/blog/images/permit-to-work-app-uk-hero.png",
     marketId: "pl",
   },
+  {
+    slug: "hand-arm-vibration-havs-construction-uk",
+    title: "Hand-Arm Vibration (HAVS) on UK Construction Sites: Limits and Controls",
+    excerpt:
+      "Hand-arm vibration UK: Exposure Action Values, tool timers, health surveillance and records HSE expects for HAVS on construction sites.",
+    dateLabel: "Aug 2026",
+    publishedIso: "2026-08-07",
+    readTime: "9 min read",
+    image: "/blog/images/hand-arm-vibration-havs-construction-uk-hero.png",
+  },
+  {
+    slug: "manual-handling-construction-uk",
+    title: "Manual Handling on UK Construction Sites: Risk Assessment That Works",
+    excerpt:
+      "Manual handling UK construction: TILE assessment, mechanical aids, RAMS controls and what HSE looks for when lifting on site goes wrong.",
+    dateLabel: "Aug 2026",
+    publishedIso: "2026-08-07",
+    readTime: "9 min read",
+    image: "/blog/images/manual-handling-construction-uk-hero.png",
+  },
+  {
+    slug: "near-miss-reporting-construction-uk",
+    title: "Near Miss Reporting on UK Construction Sites: Closing the Loop",
+    excerpt:
+      "Near miss reporting UK construction: how to capture incidents, investigate without blame, and turn reports into controls before RIDDOR happens.",
+    dateLabel: "Aug 2026",
+    publishedIso: "2026-08-07",
+    readTime: "9 min read",
+    image: "/blog/images/near-miss-reporting-construction-uk-hero.png",
+  },
 ];
 
 /** @type {BlogPostMeta[]} */

@@ -3,12 +3,16 @@ import { isAutomationEnabled } from "./orgAutomationRules";
 
 /**
  * Soft gate: site-linked documents should belong to a project.
+ * @param {object} opts
+ * @param {boolean} [opts.allowInlineCreate] caller offers its own project picker/creator,
+ *   so stay put instead of alerting and navigating to Projects.
  * @returns {boolean} true if OK to proceed
  */
-export function ensureProjectLinked({ projectId, projects = [], moduleLabel = "record" }) {
+export function ensureProjectLinked({ projectId, projects = [], moduleLabel = "record", allowInlineCreate = false }) {
   if (!isAutomationEnabled("requireProjectLink")) return true;
   const pid = String(projectId || "").trim();
   if (pid && projects.some((p) => p.id === pid)) return true;
+  if (allowInlineCreate) return false;
 
   if (!projects.length) {
     window.alert(`Add a project first — every ${moduleLabel} should be linked to a site.`);

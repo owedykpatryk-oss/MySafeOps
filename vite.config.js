@@ -587,6 +587,10 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             const norm = id.replace(/\\/g, "/");
+            // Let Rollup co-locate first-party module cycles automatically.
+            // The legacy feature buckets below can create production TDZ crashes
+            // (for example permits-studio ↔ project-drawing ↔ survey-report).
+            if (!norm.includes("node_modules")) return;
             if (!norm.includes("node_modules")) {
               // Tiny loader only — AppContext clears cache; must not sit in rams-hazards
               // (shared-ui ↔ rams-hazards TDZ). Heavy library stays in rams-hazards via dynamic import.

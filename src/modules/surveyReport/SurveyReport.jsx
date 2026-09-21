@@ -5,6 +5,7 @@ import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { useApp } from "../../context/AppContext";
 import { useToast } from "../../context/ToastContext";
 import { pushAudit } from "../../utils/auditLog";
+import { stampDocumentAuthorship } from "../../utils/documentAuthorship.js";
 import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import PageHero from "../../components/PageHero";
@@ -110,6 +111,8 @@ import SurveyHandoverModal from "./SurveyHandoverModal";
 import { resolveSurveyFixTarget, scheduleSurveyFixScroll } from "./surveyFixNav";
 import SurveyPas128Dashboard from "./SurveyPas128Dashboard";
 import { applySurveyAutofix } from "./surveyAutofix";
+import { runSurveyIssuePackPrep } from "./surveyIssuePack";
+import { autoSyncGprIntoSurvey } from "./surveyGprBridge";
 import { getSpecialistFindingsConfig } from "./surveySpecialistFindings";
 import { applyPas128MethodToReport, pas128MethodAppliesToSurveyType } from "./pas128MethodPresets";
 import { buildPas128Foreword } from "./pas128ReportBoilerplate";
@@ -121,7 +124,7 @@ import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } f
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
 import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable, geoPhotosToGiLocationsTable } from "../../utils/geoPhotoIntegrations";
-import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings } from "../../utils/surveyDxfAnalyzer";
+import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings, seedUtilitiesTableFromCad } from "../../utils/surveyDxfAnalyzer";
 import CadImportPanel from "./CadImportPanel";
 import EmptyState from "../../components/EmptyState";
 import RegisterListPagingFooter from "../../components/RegisterListPagingFooter";
@@ -210,15 +213,17 @@ const ss = {
     paddingBottom: 10,
   },
   tab: (active) => ({
-    padding: "6px 12px",
+    padding: "10px 14px",
+    minHeight: 44,
     borderRadius: 6,
     border: "none",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
     background: active ? "#ccfbf1" : "transparent",
     color: active ? "#115e59" : "var(--color-text-secondary)",
     fontFamily: "DM Sans,sans-serif",
+    touchAction: "manipulation",
   }),
 };
 
@@ -398,7 +403,7 @@ function CheckboxGrid({ options, selected, onToggle }) {
   );
 }
 
-function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = [], permits = [], onApply, linkedRams, onGoToTab, simpleMode = false }) {
+function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = [], permits = [], gprReports = [], onApply, linkedRams, onGoToTab, simpleMode = false }) {
   const [open, setOpen] = useState(!simpleMode);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [busy, setBusy] = useState("");
@@ -464,10 +469,9 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
   const assistBtn = (label, disabled, onClick, primary = false) => (
     <button
       type="button"
+      className="app-survey-touch-btn"
       style={{
         ...(primary ? ss.btnP : ss.btn),
-        fontSize: 11,
-        padding: "6px 10px",
         opacity: disabled ? 0.55 : 1,
         borderColor: busy === label ? "#0d9488" : undefined,
       }}
@@ -497,7 +501,7 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
               : "One-click fill, site plan import, weather, templates and optional AI polish."}
           </div>
         </div>
-        <button type="button" style={{ ...ss.btn, fontSize: 11, padding: "4px 8px" }} onClick={() => setOpen((o) => !o)}>
+        <button type="button" className="app-survey-touch-btn" style={ss.btn} onClick={() => setOpen((o) => !o)}>
           {open ? "Hide" : "Show"}
         </button>
       </div>
@@ -519,6 +523,45 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
                 }),
               true
             )}
+            <button
+              type="button"
+              style={{
+                ...ss.btn,
+                fontSize: 11,
+                padding: "6px 10px",
+                opacity: busy || (!project && !form.surveyType) ? 0.55 : 1,
+                borderColor: "#0d9488",
+                color: "#0f766e",
+                background: "#ecfdf5",
+                fontWeight: 600,
+              }}
+              disabled={Boolean(busy) || (!project && !form.surveyType)}
+              onClick={() =>
+                run("Prepare issue pack", async () => {
+                  const { report, summary } = await runSurveyIssuePackPrep(form, {
+                    project,
+                    ramsDocs,
+                    projectPlans: plansWithMarkup,
+                    linkedRams,
+                    useAi: useAiOnFill,
+                    geoPhotos,
+                    permits,
+                    gprReports,
+                  });
+                  // Defer so run()'s default "done" message is replaced with pack status.
+                  queueMicrotask(() => {
+                    setMsg(
+                      summary.canMarkFinal
+                        ? `Issue pack ready (${summary.qualityScore}%) — Mark final, then download handover ZIP.`
+                        : `Issue pack prepared (${summary.qualityScore}%) — ${summary.criticalBlockers || summary.blockersRemaining} item(s) still block final.`
+                    );
+                  });
+                  return report;
+                })
+              }
+            >
+              {busy === "Prepare issue pack" ? "…" : "Prepare issue pack"}
+            </button>
             {!simpleMode &&
               assistBtn(
                 "PAS128 complete pack",
@@ -650,7 +693,8 @@ function SmartAssistPanel({ form, projects, ramsDocs, projectPlans, geoPhotos = 
             {geoReportCount > 0 && (
               <button
                 type="button"
-                style={{ ...ss.btn, fontSize: 11, padding: "6px 10px" }}
+                className="app-survey-touch-btn"
+                style={ss.btn}
                 onClick={() => {
                   setWorkspaceNavTarget({ viewId: "geo-photos", projectId: form.projectId, action: "capture" });
                   openWorkspaceView({ viewId: "geo-photos" });
@@ -750,6 +794,19 @@ function ReportEditor({
   const [livePreviewOpen, setLivePreviewOpen] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 1100px)").matches
   );
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const mq = window.matchMedia("(min-width: 1100px)");
+    const onChange = (e) => {
+      if (!e.matches) setLivePreviewOpen(false);
+    };
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
   const autoFillRan = useRef(false);
   const draftPromptRan = useRef(false);
   const lastDraftJsonRef = useRef("");
@@ -1102,12 +1159,34 @@ function ReportEditor({
     if (findings.includes(marker)) {
       findings = findings.replace(new RegExp(`${marker}[\\s\\S]*?(?=\\n===|$)`, "m"), nextCad.narrative).trim();
     }
-    setForm((f) => ({
-      ...f,
-      cadImport: nextCad,
-      sections: { ...f.sections, findings },
-      updatedAt: new Date().toISOString(),
-    }));
+    setForm((f) => {
+      const withCad = {
+        ...f,
+        cadImport: nextCad,
+        sections: { ...f.sections, findings },
+        updatedAt: new Date().toISOString(),
+      };
+      const seeded = seedUtilitiesTableFromCad(withCad, { replaceCadRows: true });
+      if (!seeded) return withCad;
+      const { _cadSeedMeta, ...clean } = seeded;
+      return clean;
+    });
+  };
+
+  const handleSeedUtilitiesFromCad = () => {
+    const seeded = seedUtilitiesTableFromCad(form, { replaceCadRows: true });
+    if (!seeded) {
+      pushToast({ type: "warn", title: "CAD → utilities", message: "Upload a DXF with classified layers first." });
+      return;
+    }
+    const meta = seeded._cadSeedMeta || {};
+    const { _cadSeedMeta, ...clean } = seeded;
+    setForm(clean);
+    pushToast({
+      type: "success",
+      title: "Utilities seeded from CAD",
+      message: `${meta.added || 0} row(s) refreshed into the schedule.`,
+    });
   };
 
   const linkedRams = ramsDocs.find((d) => d.id === form.linkedRamsId);
@@ -1237,6 +1316,11 @@ function ReportEditor({
       const parent = reports.find((r) => r.id === payload.parentReportId);
       if (parent) payload.changesSincePrevious = compareSurveyReports(parent, payload);
     }
+    // Keep PAS128 anomaly cards in sync with linked / project GPR on every save.
+    if (gprReports?.length) {
+      payload = autoSyncGprIntoSurvey(payload, gprReports);
+    }
+    payload = stampDocumentAuthorship(payload, { isCreate: !form.createdById });
     return payload;
   };
 
@@ -1423,6 +1507,7 @@ function ReportEditor({
           projectPlans={projectPlansForForm}
           geoPhotos={geoPhotos}
           permits={permits}
+          gprReports={gprReports}
           linkedRams={linkedRams}
           onGoToTab={goToSurveyFix}
           simpleMode={simpleMode}
@@ -2168,20 +2253,38 @@ function ReportEditor({
                     </option>
                   ))}
                 </select>
-                {form.hseRefs.linkedPermitId ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                  {form.hseRefs.linkedPermitId ? (
+                    <button
+                      type="button"
+                      style={{ ...ss.btn, fontSize: 11 }}
+                      onClick={() =>
+                        openWorkspaceView({ viewId: "permits", permitId: form.hseRefs.linkedPermitId, mode: "view" })
+                      }
+                    >
+                      Open linked permit
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    style={{ ...ss.btn, fontSize: 11, marginTop: 6 }}
-                    onClick={() =>
-                      openWorkspaceView({ viewId: "permits", permitId: form.hseRefs.linkedPermitId, mode: "view" })
-                    }
+                    style={{ ...ss.btnP, fontSize: 11 }}
+                    onClick={() => {
+                      setWorkspaceNavTarget({
+                        viewId: "permits",
+                        projectId: form.projectId,
+                        action: "issueFromDefaults",
+                        permitType: "excavation",
+                        surveyId: form.id || "",
+                      });
+                      openWorkspaceView({ viewId: "permits" });
+                    }}
                   >
-                    Open linked permit
+                    Issue permit to dig from this survey
                   </button>
-                ) : null}
+                </div>
                 {projectPermits.length === 0 ? (
                   <p style={{ fontSize: 11, color: "var(--color-text-secondary)", margin: "6px 0 0" }}>
-                    No permits on this project — create a permit to dig under Permits, then link here.
+                    No permits on this project yet — use the button above to open an excavation draft with survey dig risk and PAS 128 fields prefilled.
                   </p>
                 ) : null}
               </div>
@@ -2572,6 +2675,7 @@ function ReportEditor({
               ss={ss}
               onUpload={handleCadUpload}
               onLayerMappingsChange={handleCadLayerMappings}
+              onSeedUtilities={handleSeedUtilitiesFromCad}
               onClear={() => setForm((f) => ({ ...f, cadImport: null, updatedAt: new Date().toISOString() }))}
             />
             </div>
@@ -2590,6 +2694,9 @@ function ReportEditor({
                     { key: "locationId", label: "Location ID", placeholder: "BH01" },
                     { key: "method", label: "Method", options: GI_METHOD_OPTIONS },
                     { key: "depth", label: "Depth", placeholder: "12.5 m" },
+                    { key: "ground", label: "Ground", placeholder: "Made ground" },
+                    { key: "waterStrike", label: "Water strike", placeholder: "3.5 m bgl" },
+                    { key: "reinstatement", label: "Reinstatement", placeholder: "Permanent" },
                     { key: "notes", label: "Notes", placeholder: "Made ground to 1.2 m" },
                   ]}
                 />

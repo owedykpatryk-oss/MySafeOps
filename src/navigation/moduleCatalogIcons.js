@@ -63,6 +63,7 @@ export const DEFAULT_MODULE_ICON = FileText;
 
 /** @type {Record<string, import("lucide-react").LucideIcon>} */
 export const MODULE_ICONS = {
+  "management-overview": LayoutDashboard,
   "site-map": MapPin,
   "project-drawings": PenTool,
   "method-statement": FileText,

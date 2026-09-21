@@ -35,6 +35,7 @@ export function filterModuleTabsByQuery(tabs, rawQuery) {
 
 /** Flat list for More grid (order within sections below) */
 export const MORE_TABS = [
+  { id: "management-overview", label: "Management overview" },
   { id: "project-drawings", label: "Drawings" },
   { id: "method-statement", label: "Method statement" },
   { id: "cdm", label: "CDM compliance" },
@@ -129,6 +130,10 @@ export function getWorkspaceTitle(viewId, navTab, marketId) {
 
 /** Grouped sections for the More screen (easier to scan on mobile) */
 export const MORE_SECTIONS = [
+  {
+    title: "Management & planning",
+    ids: ["management-overview"],
+  },
   {
     title: "Site operations",
     ids: [

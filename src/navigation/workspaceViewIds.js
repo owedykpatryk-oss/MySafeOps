@@ -9,6 +9,7 @@
  */
 export const WORKSPACE_VIEW_IDS = [
   "dashboard",
+  "management-overview",
   "projects",
   "people",
   "permits",

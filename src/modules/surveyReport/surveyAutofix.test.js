@@ -20,6 +20,17 @@ describe("surveyAutofix", () => {
     const next = applySurveyAutofix("deliverables_default", report);
     expect(next?.deliverables?.length).toBeGreaterThan(0);
   });
+
+  it("suggests utilities_from_cad when CAD exists without schedule rows", () => {
+    const report = blankSurveyReport({
+      surveyType: "utility_mapping_survey",
+      cadImport: {
+        summary: [{ utilityKey: "gas", lengthM: 12, layers: ["UMG_GAS_B2"], pas128Equivalent: "B2" }],
+      },
+      utilitiesTable: [],
+    });
+    expect(suggestSurveyAutofixes(report)).toContain("utilities_from_cad");
+  });
 });
 
 describe("surveySpecialistFindings", () => {

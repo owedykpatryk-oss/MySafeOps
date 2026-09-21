@@ -8,6 +8,7 @@ import {
 } from "../../utils/cadImportVisuals.js";
 import { cadPreviewPathElements, cadQlDonutSegments } from "../../utils/cadPreviewSvg.js";
 import { formatLengthM, formatSummaryLine } from "../../utils/surveyDxfAnalyzer.js";
+import { openHelpGuide } from "../../utils/workspaceNavContext.js";
 import { PAS128_QUALITY_LEVELS, UTILITY_TYPE_OPTIONS } from "./surveyReportConstants.js";
 
 const LAYER_QL_OPTIONS = [
@@ -280,17 +281,7 @@ function LayerMappingPanel({ unmatchedLayers, layerMappings, onMappingChange }) 
       {unmatchedLayers.slice(0, 6).map((lr) => {
         const mapping = layerMappings?.[lr.layer] || {};
         return (
-          <div
-            key={lr.layer}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(100px,1fr) 120px 100px auto",
-              gap: 8,
-              alignItems: "center",
-              marginBottom: 8,
-              fontSize: 11,
-            }}
-          >
+          <div key={lr.layer} className="app-cad-layer-map-row">
             <span style={{ fontWeight: 600, color: "#7c2d12" }}>
               {lr.layer} <span style={{ fontWeight: 400, color: "#9a3412" }}>({lr.lengthM} m)</span>
             </span>
@@ -299,7 +290,6 @@ function LayerMappingPanel({ unmatchedLayers, layerMappings, onMappingChange }) 
               onChange={(e) =>
                 onMappingChange(lr.layer, { ...mapping, utilityKey: e.target.value, qlKey: mapping.qlKey || "B2" })
               }
-              style={{ fontSize: 11, padding: "4px 6px", borderRadius: 4, border: "1px solid #fdba74" }}
             >
               <option value="">Utility…</option>
               {UTILITY_TYPE_OPTIONS.map((o) => (
@@ -311,7 +301,6 @@ function LayerMappingPanel({ unmatchedLayers, layerMappings, onMappingChange }) 
             <select
               value={mapping.qlKey || ""}
               onChange={(e) => onMappingChange(lr.layer, { ...mapping, qlKey: e.target.value, utilityKey: mapping.utilityKey || "other" })}
-              style={{ fontSize: 11, padding: "4px 6px", borderRadius: 4, border: "1px solid #fdba74" }}
             >
               <option value="">QL…</option>
               {LAYER_QL_OPTIONS.map((o) => (
@@ -334,6 +323,7 @@ export default function CadImportPanel({
   cadBusy,
   onUpload,
   onLayerMappingsChange,
+  onSeedUtilities,
   ss,
 }) {
   const visual = cadImport ? buildCadVisualSummary(cadImport) : null;
@@ -357,15 +347,27 @@ export default function CadImportPanel({
         background: "linear-gradient(180deg, #f8fafc 0%, #fff 100%)",
       }}
     >
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4, color: "#0f766e" }}>CAD utility mapping (DXF)</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#0f766e" }}>CAD utility mapping (DXF)</div>
+        <button
+          type="button"
+          className="app-survey-touch-btn"
+          style={ss.btn}
+          onClick={() => openHelpGuide({ guideId: "survey-cad-import" })}
+        >
+          Help
+        </button>
+      </div>
       <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 12px", lineHeight: 1.45 }}>
         Measures <strong>LINE</strong>, <strong>LWPOLYLINE</strong> and <strong>3D POLYLINE</strong> only (plan length).
-        Blocks, text and annotations are ignored. Layers like <code>UMG_LV_B1</code> map to utility + PAS128 QL.
+        Model space only — layouts ignored. Layers like <code>UMG_LV_B1</code> map to utility + PAS128 QL.
       </p>
       <label
+        className="app-survey-touch-btn"
         style={{
           ...(cadBusy ? ss.btn : ss.btnP),
-          display: "inline-block",
+          display: "inline-flex",
+          alignItems: "center",
           cursor: cadBusy ? "wait" : "pointer",
           opacity: cadBusy ? 0.7 : 1,
         }}
@@ -451,6 +453,24 @@ export default function CadImportPanel({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            {onSeedUtilities ? (
+              <button
+                type="button"
+                className="app-survey-touch-btn"
+                style={ss.btnP}
+                onClick={onSeedUtilities}
+              >
+                Seed utilities table from CAD
+              </button>
+            ) : null}
+            {comparison.some((r) => r.cadLengthM > 0 && !r.hasFieldMatch) ? (
+              <span style={{ fontSize: 11, color: "#b45309" }}>
+                Some CAD utilities are not in the field schedule yet.
+              </span>
+            ) : null}
           </div>
 
           {comparison.some((r) => r.fieldCount > 0) && (

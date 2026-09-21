@@ -39,6 +39,7 @@ import { getEmergencyHospitalHeading, getRamsShortLabel } from "../../utils/mark
 import { getLeaveRamsBuilderConfirm, getRamsBuilderTitle } from "../../utils/ramsUiLabels";
 import PrintPreviewFrame from "../../components/PrintPreviewFrame";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { getCachedAuthorshipActor, stampDocumentAuthorship } from "../../utils/documentAuthorship.js";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
 import { nextUtilityMappingRamsDocNo } from "../../utils/utilityMappingDocRefs";
@@ -5869,6 +5870,12 @@ function SavedList({
                     <span className="app-rams-doc-row__meta-chip">{doc.signatureEvents.length} signatures</span>
                   ) : null}
                   <span className="app-rams-doc-row__meta-chip">Created {fmtDate(doc.createdAt)}</span>
+                  {doc.createdBy ? (
+                    <span className="app-rams-doc-row__meta-chip">By {doc.createdBy}</span>
+                  ) : null}
+                  {doc.updatedBy && doc.updatedBy !== doc.createdBy ? (
+                    <span className="app-rams-doc-row__meta-chip">Edited {doc.updatedBy}</span>
+                  ) : null}
                   {doc.issueDate ? <span className="app-rams-doc-row__meta-chip">Issued {fmtDate(doc.issueDate)}</span> : null}
                   {doc.reviewDate ? (
                     <span
@@ -7146,21 +7153,27 @@ export default function RAMSTemplateBuilder() {
       });
       setCelebrateRamsIssue(true);
     }
-    const docBase = {
-      ...form,
-      competentReviewAck: undefined,
-      documentNo: form.documentNo || generateRamsDocNo(),
-      revision: nextRevision,
-      revisionSummary: nextRevisionSummary,
-      signatureEvents: nextSignatureEvents,
-      id: editingDoc?.id || genId(),
-      rows: editedRows,
-      status: resolvedStatus,
-      isFavorite: !!editingDoc?.isFavorite,
-      createdAt: editingDoc?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      contentHash,
-    };
+    const actor = getCachedAuthorshipActor();
+    const docBase = stampDocumentAuthorship(
+      {
+        ...form,
+        competentReviewAck: undefined,
+        documentNo: form.documentNo || generateRamsDocNo(),
+        revision: nextRevision,
+        revisionSummary: nextRevisionSummary,
+        signatureEvents: nextSignatureEvents,
+        id: editingDoc?.id || genId(),
+        rows: editedRows,
+        status: resolvedStatus,
+        isFavorite: !!editingDoc?.isFavorite,
+        createdAt: editingDoc?.createdAt || new Date().toISOString(),
+        createdBy: editingDoc?.createdBy,
+        createdByEmail: editingDoc?.createdByEmail,
+        createdById: editingDoc?.createdById,
+        contentHash,
+      },
+      { isCreate: !editingDoc?.createdById },
+    );
     const becomingLocked =
       ["approved", "issued"].includes(resolvedStatus) &&
       !["approved", "issued"].includes(previousStatus);
@@ -7180,7 +7193,11 @@ export default function RAMSTemplateBuilder() {
         {
           id: `rv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
           at: new Date().toISOString(),
-          by: String(form.approvedBy || form.leadEngineer || "").trim() || "Document controller",
+          by:
+            String(form.approvedBy || form.leadEngineer || "").trim() ||
+            actor?.name ||
+            "Document controller",
+          byUserId: actor?.id || undefined,
           note: becomingLocked
             ? `Status → ${resolvedStatus} — immutable checkpoint`
             : "Content change while approved/issued — immutable checkpoint",

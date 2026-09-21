@@ -3,7 +3,7 @@
  * One row per org + namespace + data_key; latest payload wins.
  */
 
-import { d1GetKv, d1PutKv } from "./d1SyncClient.js";
+import { d1GetKv, d1PutKv, isD1TransientError } from "./d1SyncClient.js";
 import { isForbiddenD1Write, notifyD1WriteForbidden } from "./d1WriteForbidden.js";
 
 const DB_NAME = "mysafeops_d1_outbox";
@@ -132,7 +132,7 @@ export async function d1OutboxCountForOrg(orgSlug) {
   }
 }
 
-const transientHttp = (e) => /^http_(502|503|504|429)$/.test(String(e || ""));
+const transientHttp = (e) => isD1TransientError(e);
 
 /**
  * Replay one pending PUT (after transient retry). On version conflict, refetch server

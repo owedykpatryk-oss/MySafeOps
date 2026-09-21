@@ -57,6 +57,21 @@ describe("geoPhotoExport", () => {
     expect(kml).toContain("Location ID");
   });
 
+  it("draws the view direction as a line with an arrow head", () => {
+    const kml = buildGeoPhotosKml([samplePhotos[0]]);
+    expect(kml).toContain("<MultiGeometry>");
+    expect(kml).toContain("<LineString>");
+    expect(kml).toContain("<outerBoundaryIs>");
+    expect(kml).toContain("<PolyStyle>");
+    expect(kml).toContain("view direction");
+  });
+
+  it("leaves out direction geometry when no bearing was recorded", () => {
+    const kml = buildGeoPhotosKml([{ ...samplePhotos[0], bearing: null }]);
+    expect(kml).not.toContain("view direction");
+    expect(kml).not.toContain("<MultiGeometry>");
+  });
+
   it("builds KMZ-style KML with ground overlays when enabled", () => {
     const kml = buildGeoPhotosKml(samplePhotos, { groundOverlays: true });
     expect(kml).toContain("<GroundOverlay>");
@@ -82,6 +97,81 @@ describe("geoPhotoExport", () => {
     expect(gpx).toContain("BH01");
     expect(gpx).toContain("View bearing 45°");
     expect(gpx).not.toContain("gp_3");
+  });
+
+  it("carries National Grid coordinates into KML for UK sites", () => {
+    const kml = buildGeoPhotosKml(samplePhotos);
+    expect(kml).toContain('<Data name="gridRef"><value>TQ ');
+    expect(kml).toContain('<Data name="easting">');
+    expect(kml).toContain('<Data name="northing">');
+    expect(kml).toContain("OSGB36 / British National Grid (EPSG:27700)");
+    expect(kml).toContain("OS grid ref");
+  });
+
+  it("omits National Grid data for photos outside Great Britain", () => {
+    const kml = buildGeoPhotosKml([{ ...samplePhotos[0], latitude: 48.8584, longitude: 2.2945 }]);
+    expect(kml).not.toContain("gridRef");
+    expect(kml).not.toContain("EPSG:27700");
+  });
+
+  it("records survey provenance and elevation in KML", () => {
+    const kml = buildGeoPhotosKml([
+      { ...samplePhotos[0], gpsAccuracyMeters: 42, altitudeMeters: 31.4, locationSource: "photo_exif" },
+    ]);
+    expect(kml).toContain('<Data name="gpsAccuracyMeters"><value>42</value></Data>');
+    expect(kml).toContain('<Data name="locationSource"><value>photo_exif</value></Data>');
+    expect(kml).toContain("±42 m (approximate)");
+    expect(kml).toContain("Photo metadata (EXIF)");
+    expect(kml).toContain("<altitudeMode>absolute</altitudeMode>");
+    expect(kml).toContain(",31.4</coordinates>");
+  });
+
+  it("keeps a plain sea-level point when no elevation was captured", () => {
+    const kml = buildGeoPhotosKml([samplePhotos[0]]);
+    expect(kml).not.toContain("altitudeMode");
+    expect(kml).toContain(",0</coordinates>");
+  });
+
+  describe("extents traced on site", () => {
+    const overgrown = {
+      ...samplePhotos[0],
+      type: "vegetation",
+      area: {
+        points: [
+          [51.501, -0.1],
+          [51.5019, -0.1],
+          [51.5019, -0.09855],
+          [51.501, -0.09855],
+        ],
+      },
+    };
+
+    it("exports the boundary as a closed KML polygon carrying its size", () => {
+      const kml = buildGeoPhotosKml([overgrown]);
+      expect(kml).toContain("— extent 1.00 ha");
+      expect(kml).toContain("<outerBoundaryIs>");
+      expect(kml).toContain('<Data name="areaVertices"><value>4</value></Data>');
+      expect(kml).toMatch(/<Data name="areaSqm"><value>\d/);
+      // Five coordinates for four corners: KML wants the ring closed explicitly. The arrow
+      // head is a polygon too, so read the ring out of the extent placemark itself.
+      const extent = kml.slice(kml.indexOf('<Data name="areaSqm">'));
+      const ring = extent.match(/<LinearRing>\s*<coordinates>([^<]+)<\/coordinates>/)[1].trim().split(/\s+/);
+      expect(ring).toHaveLength(5);
+      expect(ring[0]).toBe(ring[4]);
+    });
+
+    it("leaves photos without an extent as bare placemarks", () => {
+      const kml = buildGeoPhotosKml([samplePhotos[0]]);
+      expect(kml).not.toContain("areaSqm");
+      expect(kml).not.toContain("— extent");
+    });
+
+    it("draws the boundary on its own CAD layer with the size labelled", () => {
+      const dxf = buildGeoPhotosDxf([overgrown]);
+      expect(dxf).toContain("GEO_EXTENTS");
+      expect(dxf).toContain("LWPOLYLINE");
+      expect(dxf).toMatch(/1\.00 ha \(\d+ m perimeter\)/);
+    });
   });
 
   it("filters photos with and without GPS", () => {

@@ -55,4 +55,26 @@ describe("orgMembership billing/trial org-scoping (shared-device isolation)", ()
     expect(localStorage.getItem("mysafeops_trial_ends_at")).not.toBeNull();
     expect(getTrialStatus()?.isActive).toBe(true);
   });
+
+  it("does not overwrite a secondary country's billing with organisation billing", async () => {
+    localStorage.setItem("mysafeops_orgId", "multi-country");
+    localStorage.setItem(
+      "mysafeops_active_country_workspace_snapshot_multi-country",
+      JSON.stringify({ id: "workspace-pl", is_primary: false, market_id: "pl" }),
+    );
+    localStorage.setItem("mysafeops_billing_plan_multi-country", "business");
+    localStorage.setItem("mysafeops_subscription_status_multi-country", "active");
+    const { persistOrgRow } = await import("./orgMembership.js");
+
+    persistOrgRow({ billing_plan: "starter", subscription_status: "past_due" });
+    expect(localStorage.getItem("mysafeops_billing_plan_multi-country")).toBe("business");
+    expect(localStorage.getItem("mysafeops_subscription_status_multi-country")).toBe("active");
+
+    persistOrgRow(
+      { billing_plan: "team", subscription_status: "trialing" },
+      { billingScope: "workspace" },
+    );
+    expect(localStorage.getItem("mysafeops_billing_plan_multi-country")).toBe("team");
+    expect(localStorage.getItem("mysafeops_subscription_status_multi-country")).toBe("trialing");
+  });
 });

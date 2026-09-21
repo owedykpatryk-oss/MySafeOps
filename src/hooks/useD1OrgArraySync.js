@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
-import { d1GetKv, d1PutKv, isD1Configured } from "../lib/d1SyncClient";
+import { d1GetKv, d1PutKv, isD1Configured, isD1RateLimitedError, isD1TransientError } from "../lib/d1SyncClient";
 import {
   clearD1WriteForbidden,
   isForbiddenD1Write,
@@ -15,8 +15,9 @@ import {
 } from "../lib/d1SyncOutbox.js";
 import { D1_OUTBOX_MANUAL_RETRY_EVENT } from "../lib/d1OutboxRetryEvent.js";
 import { mergeOrgArrays } from "../utils/d1ArrayMerge.js";
+import { getCachedActiveCountryWorkspace } from "../utils/countryWorkspaces.js";
 
-const transient = (e) => /^http_(502|503|504|429)$/.test(String(e || ""));
+const transient = (e) => isD1TransientError(e);
 
 /**
  * Hydrate an org-scoped JSON array from D1 (when VITE_D1_API_URL + Supabase + org), keep localStorage as cache,
@@ -47,44 +48,56 @@ export function useD1OrgArraySync({
   debounceMs = 1500,
   serializeForSync = null,
 }) {
-  const toSyncValue = (arr) => {
+  const activeCountry = getCachedActiveCountryWorkspace();
+  const countryDataKey = activeCountry?.id && !activeCountry.is_primary ? `country:${activeCountry.id}:${d1DataKey}` : d1DataKey;
+  const toSyncValue = useCallback((arr) => {
     if (typeof serializeForSync !== "function") return arr;
     try {
       return serializeForSync(arr);
     } catch {
       return arr;
     }
-  };
+  }, [serializeForSync]);
   const [d1Ready, setD1Ready] = useState(() => !isD1Configured());
   const [d1OrgEpoch, setD1OrgEpoch] = useState(0);
   const [d1OutboxPending, setD1OutboxPending] = useState(false);
   const d1VersionRef = useRef(0);
   const d1DebounceRef = useRef(null);
 
+  // Callers may pass inline closures; hydration must not re-run (and re-fetch) on every render.
+  const loadRef = useRef(load);
+  const saveRef = useRef(save);
+  const setValueRef = useRef(setValue);
+  const toSyncRef = useRef(toSyncValue);
+  loadRef.current = load;
+  saveRef.current = save;
+  setValueRef.current = setValue;
+  toSyncRef.current = toSyncValue;
+
   useEffect(() => {
     const cacheMs = Math.min(debounceMs, 500);
     let timer = null;
     const key = storageKey;
     const val = value;
-    timer = window.setTimeout(() => save(key, val), cacheMs);
+    timer = window.setTimeout(() => saveRef.current(key, val), cacheMs);
     return () => {
       if (timer != null) {
         window.clearTimeout(timer);
-        save(key, val);
+        saveRef.current(key, val);
       }
     };
-  }, [storageKey, value, save, debounceMs]);
+  }, [storageKey, value, debounceMs]);
 
   useEffect(() => {
     const onOrgChange = () => {
-      setValue(load(storageKey, []));
+      setValueRef.current(loadRef.current(storageKey, []));
       setD1Ready(!isD1Configured());
       setD1OutboxPending(false);
       setD1OrgEpoch((n) => n + 1);
     };
     window.addEventListener(ORG_CHANGED_EVENT, onOrgChange);
     return () => window.removeEventListener(ORG_CHANGED_EVENT, onOrgChange);
-  }, [storageKey, load, setValue]);
+  }, [storageKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,13 +111,13 @@ export function useD1OrgArraySync({
         if (!cancelled) setD1OutboxPending(false);
         return;
       }
-      const p = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+      const p = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
       if (!cancelled) setD1OutboxPending(p);
     })();
     return () => {
       cancelled = true;
     };
-  }, [d1OrgEpoch, namespace, d1DataKey]);
+  }, [d1OrgEpoch, namespace, countryDataKey]);
 
   useEffect(() => {
     if (!isD1Configured() || !supabase) {
@@ -121,29 +134,41 @@ export function useD1OrgArraySync({
       supabase,
       orgSlug,
       namespace,
-      d1DataKey,
+      d1DataKey: countryDataKey,
       storageKey,
-      setValue,
-      save,
+      setValue: setValueRef.current,
+      save: saveRef.current,
       versionRef: d1VersionRef,
     });
     const refreshPending = async () => {
-      const still = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+      const still = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
       if (!cancelled) setD1OutboxPending(still);
     };
     (async () => {
-      /** @type {{ ok: boolean; error?: string; request_id?: string }} */
+      /** @type {{ ok: boolean; error?: string; request_id?: string; retry_after_ms?: number }} */
       let r = { ok: false };
       const delaysMs = [0, 1200, 2800];
       for (let i = 0; i < delaysMs.length; i++) {
         if (cancelled) return;
         if (delaysMs[i] > 0) await new Promise((res) => setTimeout(res, delaysMs[i]));
         try {
-          r = await d1GetKv(supabase, orgSlug, namespace, d1DataKey);
+          r = await d1GetKv(supabase, orgSlug, namespace, countryDataKey);
         } catch {
           r = { ok: false, error: "fetch_failed" };
         }
         if (r.ok) break;
+        // Do not stampede the Worker — one longer wait, one retry, then local cache.
+        if (isD1RateLimitedError(r.error)) {
+          const waitMs = Math.min(Number(r.retry_after_ms) || 20_000, 60_000);
+          if (!cancelled) await new Promise((res) => setTimeout(res, waitMs));
+          if (cancelled) return;
+          try {
+            r = await d1GetKv(supabase, orgSlug, namespace, countryDataKey);
+          } catch {
+            r = { ok: false, error: "fetch_failed" };
+          }
+          break;
+        }
       }
       if (cancelled) return;
       if (!r.ok) {
@@ -155,21 +180,21 @@ export function useD1OrgArraySync({
       }
       d1VersionRef.current = r.version || 0;
       if (Array.isArray(r.value)) {
-        const local = load(storageKey, []);
+        const local = loadRef.current(storageKey, []);
         const merged = mergeOrgArrays(local, r.value);
-        setValue(merged);
-        save(storageKey, merged);
+        setValueRef.current(merged);
+        saveRef.current(storageKey, merged);
         await d1OutboxTryFlush(flushCtxBase());
         await refreshPending();
         setD1Ready(true);
         return;
       }
-      const local = load(storageKey, []);
-      setValue(local);
+      const local = loadRef.current(storageKey, []);
+      setValueRef.current(local);
       if (local.length > 0) {
         let put;
         try {
-          put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, toSyncValue(local), null);
+          put = await d1PutKv(supabase, orgSlug, namespace, countryDataKey, toSyncRef.current(local), null);
         } catch {
           put = { ok: false, error: "fetch_failed" };
         }
@@ -183,7 +208,7 @@ export function useD1OrgArraySync({
     return () => {
       cancelled = true;
     };
-  }, [d1OrgEpoch, storageKey, namespace, d1DataKey, load, save, setValue]);
+  }, [d1OrgEpoch, storageKey, namespace, countryDataKey]);
 
   useEffect(() => {
     if (!d1Ready) return;
@@ -194,15 +219,15 @@ export function useD1OrgArraySync({
       supabase,
       orgSlug,
       namespace,
-      d1DataKey,
+      d1DataKey: countryDataKey,
       storageKey,
-      setValue,
-      save,
+      setValue: setValueRef.current,
+      save: saveRef.current,
       versionRef: d1VersionRef,
     });
     const runFlush = async () => {
       await d1OutboxTryFlush(flushCtxBase());
-      const still = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+      const still = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
       setD1OutboxPending(still);
     };
     const onOnline = () => {
@@ -217,7 +242,7 @@ export function useD1OrgArraySync({
       window.removeEventListener("online", onOnline);
       window.removeEventListener(D1_OUTBOX_MANUAL_RETRY_EVENT, onManualRetry);
     };
-  }, [d1Ready, namespace, d1DataKey, storageKey, setValue, save, d1OrgEpoch]);
+  }, [d1Ready, namespace, countryDataKey, storageKey, d1OrgEpoch]);
 
   useEffect(() => {
     if (!d1Ready || !d1OutboxPending) return;
@@ -228,19 +253,19 @@ export function useD1OrgArraySync({
       supabase,
       orgSlug,
       namespace,
-      d1DataKey,
+      d1DataKey: countryDataKey,
       storageKey,
-      setValue,
-      save,
+      setValue: setValueRef.current,
+      save: saveRef.current,
       versionRef: d1VersionRef,
     });
     const id = window.setInterval(async () => {
       await d1OutboxTryFlush(flushCtxBase());
-      const still = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+      const still = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
       setD1OutboxPending(still);
     }, 45_000);
     return () => window.clearInterval(id);
-  }, [d1Ready, d1OutboxPending, namespace, d1DataKey, storageKey, setValue, save, d1OrgEpoch]);
+  }, [d1Ready, d1OutboxPending, namespace, countryDataKey, storageKey, d1OrgEpoch]);
 
   useEffect(() => {
     if (!d1Ready) return;
@@ -251,17 +276,17 @@ export function useD1OrgArraySync({
     d1DebounceRef.current = setTimeout(async () => {
       const v = d1VersionRef.current;
       const useVersion = v > 0 ? v : undefined;
-      const syncPayload = toSyncValue(value);
+      const syncPayload = toSyncRef.current(value);
       let put;
       try {
-        put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, syncPayload, useVersion);
+        put = await d1PutKv(supabase, orgSlug, namespace, countryDataKey, syncPayload, useVersion);
       } catch {
         put = { ok: false, error: "fetch_failed" };
       }
       if (!put.ok && transient(put.error)) {
         await new Promise((res) => setTimeout(res, 900));
         try {
-          put = await d1PutKv(supabase, orgSlug, namespace, d1DataKey, syncPayload, useVersion);
+          put = await d1PutKv(supabase, orgSlug, namespace, countryDataKey, syncPayload, useVersion);
         } catch {
           put = { ok: false, error: "fetch_failed" };
         }
@@ -269,21 +294,21 @@ export function useD1OrgArraySync({
       if (put.ok) {
         d1VersionRef.current = put.version || 0;
         clearD1WriteForbidden();
-        await d1OutboxDelete(orgSlug, namespace, d1DataKey);
-        const still = await d1OutboxHasPending(orgSlug, namespace, d1DataKey);
+        await d1OutboxDelete(orgSlug, namespace, countryDataKey);
+        const still = await d1OutboxHasPending(orgSlug, namespace, countryDataKey);
         setD1OutboxPending(still);
       } else if (put.error === "version_conflict") {
         let r;
         try {
-          r = await d1GetKv(supabase, orgSlug, namespace, d1DataKey);
+          r = await d1GetKv(supabase, orgSlug, namespace, countryDataKey);
         } catch {
           r = { ok: false };
         }
         if (r.ok && Array.isArray(r.value)) {
           d1VersionRef.current = r.version || 0;
           const merged = mergeOrgArrays(value, r.value);
-          setValue(merged);
-          save(storageKey, merged);
+          setValueRef.current(merged);
+          saveRef.current(storageKey, merged);
         }
       } else if (isForbiddenD1Write(put.error)) {
         notifyD1WriteForbidden(namespace, put.error);
@@ -292,7 +317,7 @@ export function useD1OrgArraySync({
           await d1OutboxEnqueue({
             orgSlug,
             namespace,
-            d1DataKey,
+            d1DataKey: countryDataKey,
             value: syncPayload,
             clientVersion: d1VersionRef.current || 0,
           });
@@ -308,7 +333,7 @@ export function useD1OrgArraySync({
         d1DebounceRef.current = null;
       }
     };
-  }, [value, d1Ready, storageKey, namespace, d1DataKey, save, setValue, debounceMs]);
+  }, [value, d1Ready, storageKey, namespace, countryDataKey, debounceMs]);
 
   const d1Hydrating = isD1Configured() && !d1Ready;
   const d1Syncing = d1Hydrating || d1OutboxPending;

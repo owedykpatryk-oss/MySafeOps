@@ -30,13 +30,19 @@ describe("surveyPermitLink", () => {
   it("enriches excavation permit draft from linked survey", () => {
     const draft = applySurveyLinkToPermitDraft(
       { type: "excavation", projectId: "p1", extraFields: {} },
-      surveys[1],
+      {
+        ...surveys[1],
+        recommendations: "Hand dig within 500mm of marked services.",
+      },
       { permitType: "excavation" }
     );
     expect(draft.extraFields.pas128QualityLevel).toBe("QL-B");
     expect(draft.extraFields.surveyDrawingRef).toBe("SR-002");
     expect(draft.extraFields.knownServices).toMatch(/utility row/i);
     expect(draft.linkedSurveyId).toBe("s2");
+    expect(draft.notes).toMatch(/Linked survey: SR-002/);
+    expect(draft.notes).toMatch(/Dig readiness:/);
+    expect(draft.notes).toMatch(/Hand dig within 500mm/);
   });
 
   it("skips non-excavation permit types", () => {

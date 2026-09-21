@@ -2,6 +2,7 @@
  * PAS128 utility mapping — DXF layer analysis (lengths by utility type & QL).
  */
 import DxfParser from "dxf-parser";
+import { analyzeDxfHatches } from "./dxfHatchAnalyzer.js";
 
 /** Drawing units (AutoCAD $INSUNITS) → metres multiplier. */
 const INSUNITS_TO_METRES = {
@@ -327,11 +328,37 @@ export function applyCadLayerMappings(cadImport, layerMappings, ctx = {}) {
   };
 }
 
-function collectLineworkEntities(dxf) {
+/**
+ * True when the entity lives on a paper-space / layout sheet (DXF group 67).
+ * Model-space entities either omit the flag or set it false.
+ */
+export function isPaperSpaceEntity(entity) {
+  if (!entity || typeof entity !== "object") return false;
+  if (entity.inPaperSpace === true || entity.paperSpace === true || entity.isInPaperSpace === true) {
+    return true;
+  }
+  // Some parsers expose the raw DXF 67 flag as a number/string.
+  if (entity.inPaperSpace === 1 || entity.paperSpace === 1) return true;
+  return false;
+}
+
+/**
+ * Collect measurable linework from the DXF ENTITIES section.
+ * By default skips paper-space / layout entities — only model space is measured.
+ * @param {object} dxf
+ * @param {{ modelSpaceOnly?: boolean }} [opts]
+ */
+function collectLineworkEntities(dxf, opts = {}) {
+  const modelSpaceOnly = opts.modelSpaceOnly !== false;
   const included = [];
   const skipped = {};
+  let paperspaceSkipped = 0;
 
   (dxf?.entities || []).forEach((e) => {
+    if (modelSpaceOnly && isPaperSpaceEntity(e)) {
+      paperspaceSkipped += 1;
+      return;
+    }
     const type = e?.type || "UNKNOWN";
     if (CAD_LENGTH_ENTITY_TYPES.includes(type)) {
       included.push(e);
@@ -340,16 +367,17 @@ function collectLineworkEntities(dxf) {
     skipped[type] = (skipped[type] || 0) + 1;
   });
 
-  return { included, skipped };
+  return { included, skipped, paperspaceSkipped, modelSpaceOnly };
 }
 
 /**
  * @param {string} text DXF file contents
- * @param {{ fileName?: string, layerMappings?: Record<string, object> }} [opts]
+ * @param {{ fileName?: string, layerMappings?: Record<string, object>, modelSpaceOnly?: boolean }} [opts]
  */
 export function analyzeSurveyDxf(text, opts = {}) {
   const fileName = opts.fileName || "import.dxf";
   const layerMappings = opts.layerMappings || {};
+  const modelSpaceOnly = opts.modelSpaceOnly !== false;
   const parser = new DxfParser();
   let dxf;
   try {
@@ -366,7 +394,11 @@ export function analyzeSurveyDxf(text, opts = {}) {
   const segments = [];
   const segmentsMeta = [];
   const layerRaw = new Map();
-  const { included: linework, skipped: skippedEntities } = collectLineworkEntities(dxf);
+  const {
+    included: linework,
+    skipped: skippedEntities,
+    paperspaceSkipped,
+  } = collectLineworkEntities(dxf, { modelSpaceOnly });
 
   linework.forEach((entity, idx) => {
     const layer = entity.layer || "0";
@@ -397,6 +429,13 @@ export function analyzeSurveyDxf(text, opts = {}) {
 
   const rebuilt = rebuildCadFromLayerBreakdown(layerBreakdown, layerMappings);
   const preview = buildPreviewFromLinework(linework, segmentsMeta, scale);
+  // HATCH entities are not handled by dxf-parser — scan raw DXF for access/vegetation fills.
+  let hatchConstraints = null;
+  try {
+    hatchConstraints = analyzeDxfHatches(text, { scale, modelSpaceOnly });
+  } catch {
+    hatchConstraints = null;
+  }
 
   return {
     fileName,
@@ -405,11 +444,17 @@ export function analyzeSurveyDxf(text, opts = {}) {
     units: unitLabel,
     insunits,
     layerMappings,
+    modelSpaceOnly,
     entityFilter: {
       includedTypes: [...CAD_LENGTH_ENTITY_TYPES],
-      includedNote: "LINE, LWPOLYLINE and POLYLINE (incl. 3D) only — blocks, text and other entities ignored.",
+      includedNote: modelSpaceOnly
+        ? "Model space only — paper-space / layout entities ignored. LINE, LWPOLYLINE and POLYLINE (incl. 3D) measured; HATCH areas scanned separately; blocks, text and other entities ignored."
+        : "LINE, LWPOLYLINE and POLYLINE (incl. 3D) only — HATCH areas scanned separately; blocks, text and other entities ignored.",
       skippedEntities,
+      paperspaceSkipped,
       lineworkCount: linework.length,
+      hatchCount: hatchConstraints?.hatchCount || 0,
+      constraintHatchCount: hatchConstraints?.constraintHatchCount || 0,
     },
     preview,
     summary: rebuilt.summary,
@@ -418,6 +463,7 @@ export function analyzeSurveyDxf(text, opts = {}) {
     totals: rebuilt.totals,
     recordsDerivedM: rebuilt.recordsDerivedM,
     hasRecordsLinework: rebuilt.hasRecordsLinework,
+    hatchConstraints,
   };
 }
 
@@ -541,6 +587,99 @@ export async function readCadFile(file) {
   return analyzeSurveyDxf(text, { fileName: name });
 }
 
+/** True when a utilities-table row was seeded from CAD linework. */
+export function isCadSourcedUtilityRow(row) {
+  return Boolean(row?.notes && String(row.notes).includes("CAD layer"));
+}
+
+/**
+ * Build schedule rows from a CAD summary (utility + QL aggregates).
+ * @param {Array} summary cadImport.summary
+ * @param {{ idPrefix?: string }} [opts]
+ */
+export function buildUtilitiesRowsFromCadSummary(summary = [], opts = {}) {
+  const prefix = opts.idPrefix || `ut_cad_${Date.now()}`;
+  return (summary || [])
+    .filter((g) => g.utilityKey && Number(g.lengthM) > 0)
+    .map((g, i) => ({
+      id: `${prefix}_${i}`,
+      utilityType: g.utilityKey,
+      depth: "",
+      method: g.isRecordsDerived ? "Desktop / records (CAD TFR/AR)" : "Utility mapping (CAD)",
+      pas128Ql: g.pas128Equivalent || g.qlKey || "",
+      confidence: g.isRecordsDerived ? "indicative" : "medium",
+      detectStatus: g.isRecordsDerived ? "tfr" : "detected",
+      source: g.isRecordsDerived ? "records" : "both",
+      notes: `CAD layer(s): ${(g.layers || []).join(", ")} · ${formatLengthM(g.lengthM)} total linework`,
+    }));
+}
+
+/**
+ * Merge CAD summary into utilitiesTable.
+ * @param {object} report
+ * @param {object} cadImport — report.cadImport or analysis with summary
+ * @param {{ replaceCadRows?: boolean }} [opts] when true, refresh all CAD-sourced rows from current summary
+ * @returns {{ utilitiesTable: object[], added: number, refreshed: number }}
+ */
+export function mergeUtilitiesFromCad(report, cadImport, opts = {}) {
+  const summary = cadImport?.summary || [];
+  const incoming = buildUtilitiesRowsFromCadSummary(summary);
+  const existing = Array.isArray(report?.utilitiesTable) ? [...report.utilitiesTable] : [];
+  if (!incoming.length) {
+    return { utilitiesTable: existing, added: 0, refreshed: 0 };
+  }
+
+  if (opts.replaceCadRows) {
+    const kept = existing.filter((u) => !isCadSourcedUtilityRow(u));
+    return {
+      utilitiesTable: [...kept, ...incoming],
+      added: incoming.length,
+      refreshed: existing.length - kept.length,
+    };
+  }
+
+  let added = 0;
+  const merged = [...existing];
+  incoming.forEach((row) => {
+    const dupe = merged.find(
+      (u) => u.utilityType === row.utilityType && u.pas128Ql === row.pas128Ql && isCadSourcedUtilityRow(u)
+    );
+    if (!dupe) {
+      merged.push(row);
+      added += 1;
+    } else {
+      // Keep user depth/notes edits; refresh length note from CAD.
+      const lengthBit = row.notes.match(/· .+$/)?.[0];
+      if (lengthBit && dupe.notes && !dupe.notes.includes(lengthBit.trim())) {
+        dupe.notes = `${dupe.notes.replace(/\s*·\s*[\d.]+\s*m total linework/, "")} ${lengthBit}`.trim();
+      }
+    }
+  });
+  return { utilitiesTable: merged, added, refreshed: 0 };
+}
+
+/**
+ * Seed / refresh utilitiesTable from an existing cadImport on the report.
+ * @param {object} report
+ * @param {{ replaceCadRows?: boolean }} [opts]
+ */
+export function seedUtilitiesTableFromCad(report, opts = {}) {
+  if (!report?.cadImport?.summary?.length) return null;
+  const { utilitiesTable, added, refreshed } = mergeUtilitiesFromCad(report, report.cadImport, {
+    replaceCadRows: opts.replaceCadRows !== false,
+  });
+  if (!added && !refreshed && utilitiesTable.length === (report.utilitiesTable || []).length) {
+    const sameCadCount = (report.utilitiesTable || []).filter(isCadSourcedUtilityRow).length;
+    if (sameCadCount === utilitiesTable.filter(isCadSourcedUtilityRow).length) return null;
+  }
+  return {
+    ...report,
+    utilitiesTable,
+    updatedAt: new Date().toISOString(),
+    _cadSeedMeta: { added, refreshed },
+  };
+}
+
 /** Merge CAD analysis into survey report. */
 export function mergeCadAnalysisIntoReport(report, analysis, ctx = {}) {
   const gapLabels = ctx.recordsGapLabels || [];
@@ -593,49 +732,34 @@ export function mergeCadAnalysisIntoReport(report, analysis, ctx = {}) {
     findings = findings ? `${findings}\n\n${narrative}` : narrative;
   }
 
-  const utilitiesFromCad = analysisWithMappings.summary
-    .filter((g) => g.utilityKey && g.lengthM > 0)
-    .map((g, i) => ({
-      id: `ut_cad_${Date.now()}_${i}`,
-      utilityType: g.utilityKey,
-      depth: "",
-      method: g.isRecordsDerived ? "Desktop / records (CAD TFR/AR)" : "Utility mapping (CAD)",
-      pas128Ql: g.pas128Equivalent || g.qlKey || "",
-      confidence: g.isRecordsDerived ? "indicative" : "medium",
-      notes: `CAD layer(s): ${g.layers.join(", ")} · ${formatLengthM(g.lengthM)} total linework`,
-    }));
+  const cadImport = {
+    fileName: analysisWithMappings.fileName,
+    fileType: analysisWithMappings.fileType,
+    importedAt: analysisWithMappings.importedAt,
+    units: analysisWithMappings.units,
+    entityFilter: analysisWithMappings.entityFilter,
+    preview: analysisWithMappings.preview,
+    layerMappings,
+    summary: analysisWithMappings.summary,
+    unmatchedLayers: analysisWithMappings.unmatchedLayers,
+    layerBreakdown: analysisWithMappings.layerBreakdown,
+    totals: analysisWithMappings.totals,
+    recordsDerivedM: analysisWithMappings.recordsDerivedM,
+    importDiff,
+    previousImport: previousSnapshot,
+    narrative,
+    _ctxWhatWasNotFound: ctx.whatWasNotFound ?? report.utilityRecords?.whatWasNotFound,
+    _ctxRecordsGaps: gapLabels,
+  };
 
-  const existing = report.utilitiesTable || [];
-  const mergedUtils = [...existing];
-  utilitiesFromCad.forEach((row) => {
-    const dupe = mergedUtils.find(
-      (u) => u.utilityType === row.utilityType && u.pas128Ql === row.pas128Ql && u.notes?.includes("CAD layer")
-    );
-    if (!dupe) mergedUtils.push(row);
+  const { utilitiesTable } = mergeUtilitiesFromCad(report, cadImport, {
+    replaceCadRows: Boolean(previousSnapshot),
   });
 
   return {
     ...report,
-    cadImport: {
-      fileName: analysisWithMappings.fileName,
-      fileType: analysisWithMappings.fileType,
-      importedAt: analysisWithMappings.importedAt,
-      units: analysisWithMappings.units,
-      entityFilter: analysisWithMappings.entityFilter,
-      preview: analysisWithMappings.preview,
-      layerMappings,
-      summary: analysisWithMappings.summary,
-      unmatchedLayers: analysisWithMappings.unmatchedLayers,
-      layerBreakdown: analysisWithMappings.layerBreakdown,
-      totals: analysisWithMappings.totals,
-      recordsDerivedM: analysisWithMappings.recordsDerivedM,
-      importDiff,
-      previousImport: previousSnapshot,
-      narrative,
-      _ctxWhatWasNotFound: ctx.whatWasNotFound ?? report.utilityRecords?.whatWasNotFound,
-      _ctxRecordsGaps: gapLabels,
-    },
-    utilitiesTable: mergedUtils,
+    cadImport,
+    utilitiesTable,
     sections: { ...report.sections, findings },
   };
 }

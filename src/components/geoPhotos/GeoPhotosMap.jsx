@@ -1,8 +1,9 @@
 import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { bearingToEnd } from "../../utils/geoPhotoUtils";
+import { bearingArrowHead, bearingToEnd } from "../../utils/geoPhotoUtils";
 import { geoPhotoPreset } from "../../utils/geoPhotoPresets";
+import { formatGeoPhotoArea, geoPhotoAreaOf } from "../../utils/geoPhotoArea";
 
 /**
  * Map showing multiple geo-photos with direction arrows.
@@ -78,6 +79,24 @@ function GeoPhotosMap({ photos = [], height = 320, satellite = false, onPhotoCli
         .on("click", () => onPhotoClick?.(photo))
         .addTo(layer);
 
+      const area = geoPhotoAreaOf(photo);
+      if (area) {
+        L.polygon(area.points, {
+          color,
+          weight: 2,
+          opacity: 0.9,
+          fillColor: color,
+          fillOpacity: 0.2,
+        })
+          .bindTooltip(`${preset.icon} ${preset.label} — ${formatGeoPhotoArea(area)}`, {
+            direction: "top",
+            opacity: 0.95,
+          })
+          .on("click", () => onPhotoClick?.(photo))
+          .addTo(layer);
+        area.points.forEach((point) => bounds.extend(point));
+      }
+
       const end = bearingToEnd(lat, lng, photo.bearing);
       if (end) {
         L.polyline(
@@ -87,6 +106,16 @@ function GeoPhotosMap({ photos = [], height = 320, satellite = false, onPhotoCli
           ],
           { color, weight: 3, opacity: 0.9 }
         ).addTo(layer);
+        const head = bearingArrowHead(lat, lng, photo.bearing);
+        if (head) {
+          L.polygon([head.tip, head.left, head.right], {
+            color,
+            weight: 1,
+            opacity: 0.9,
+            fillColor: color,
+            fillOpacity: 0.9,
+          }).addTo(layer);
+        }
       }
 
       bounds.extend([lat, lng]);

@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { ms } from "../../utils/moduleStyles";
 import { geoPhotoPreset } from "../../utils/geoPhotoPresets";
-import { geoPhotoDisplayUrl } from "../../utils/geoPhotoMedia";
+import { geoPhotoHasRenderableMedia } from "../../utils/geoPhotoMedia";
+import GeoPhotoImg from "./GeoPhotoImg";
 import { resolvedGiLocationId } from "../../utils/geoPhotoFields";
 
 /**
@@ -11,7 +12,7 @@ export default function GeoPhotoEvidencePicker({ open, onClose, photos = [], pro
   const list = useMemo(() => {
     const rows = (photos || []).filter((p) => !projectId || p.projectId === projectId);
     return rows
-      .filter((p) => geoPhotoDisplayUrl(p))
+      .filter((p) => geoPhotoHasRenderableMedia(p))
       .sort((a, b) => new Date(b.timestampUtc || b.createdAt).getTime() - new Date(a.timestampUtc || a.createdAt).getTime());
   }, [photos, projectId]);
 
@@ -52,9 +53,8 @@ export default function GeoPhotoEvidencePicker({ open, onClose, photos = [], pro
                       padding: 8,
                     }}
                   >
-                    <img
-                      src={geoPhotoDisplayUrl(p)}
-                      alt=""
+                    <GeoPhotoImg
+                      photo={p}
                       style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 6, flexShrink: 0 }}
                     />
                     <span style={{ flex: 1, minWidth: 0 }}>

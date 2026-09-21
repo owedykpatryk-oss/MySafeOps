@@ -11,6 +11,7 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import TouchSignaturePad from "../components/TouchSignaturePad";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { stampDocumentAuthorship } from "../utils/documentAuthorship.js";
 import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
@@ -18,6 +19,7 @@ import { escapeHtml, escapeAttr, safeImageSrc, openPrintWindowOrWarn, writePrint
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
 import { MS_TEMPLATE_DEFS } from "./msStepTemplates";
+import { getActiveDocumentLocale } from "../utils/countryWorkspaces";
 import { getMsStepTemplate } from "../utils/msOrgTemplates";
 import { isFessOrg } from "../utils/fessOrg";
 import { isUtilityMappingOrg } from "../utils/utilityMappingOrg";
@@ -41,7 +43,7 @@ import { getOrgId } from "../utils/orgStorage";
 import { todayLocalISO } from "../utils/localDate";
 const genId = () => `ms_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 const today = todayLocalISO;
-const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" }); };
+const fmtDate = (iso) => { if (!iso) return "—"; return new Date(iso).toLocaleDateString(getActiveDocumentLocale(), { day:"2-digit", month:"short", year:"numeric" }); };
 
 const ss = {
   ...ms,
@@ -160,9 +162,9 @@ function StepEditor({ steps, setSteps }) {
               </div>
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:4, flexShrink:0 }}>
-              <button onClick={()=>moveStep(s.id,-1)} disabled={i===0} style={{ ...ss.btn, padding:"3px 7px", fontSize:11, opacity:i===0?0.3:1 }}>↑</button>
-              <button onClick={()=>moveStep(s.id,1)} disabled={i===steps.length-1} style={{ ...ss.btn, padding:"3px 7px", fontSize:11, opacity:i===steps.length-1?0.3:1 }}>↓</button>
-              <button onClick={()=>removeStep(s.id)} style={{ ...ss.btn, padding:"3px 7px", fontSize:11, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
+              <button type="button" onClick={()=>moveStep(s.id,-1)} disabled={i===0} style={{ ...ss.btn, padding:"10px 12px", minHeight:44, fontSize:14, opacity:i===0?0.3:1, touchAction:"manipulation" }}>↑</button>
+              <button type="button" onClick={()=>moveStep(s.id,1)} disabled={i===steps.length-1} style={{ ...ss.btn, padding:"10px 12px", minHeight:44, fontSize:14, opacity:i===steps.length-1?0.3:1, touchAction:"manipulation" }}>↓</button>
+              <button type="button" onClick={()=>removeStep(s.id)} style={{ ...ss.btn, padding:"10px 12px", minHeight:44, fontSize:14, color:"#A32D2D", borderColor:"#F09595", touchAction:"manipulation" }}>×</button>
             </div>
           </div>
         </div>
@@ -718,7 +720,7 @@ function printMS(form, workers, _projects) {
     })}`;
     await writePrintWindowDocument(
       win,
-      `<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"/>
+      `<!DOCTYPE html><html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/>
       <title>MS — ${he(form.title || "Method statement")}</title>
       <style>
         @page { size: A4; margin: 14mm 12mm 22mm; }
@@ -812,7 +814,8 @@ export default function MethodStatement() {
   }, [search, filterStatus]);
 
   const saveDoc = (doc) => {
-    const saved = sanitizeMsDocForOrg(doc, getOrgId());
+    const stamped = stampDocumentAuthorship(doc, { isCreate: !doc?.createdById });
+    const saved = sanitizeMsDocForOrg(stamped, getOrgId());
     setDocs(prev => prev.find(d=>d.id===saved.id) ? prev.map(d=>d.id===saved.id?saved:d) : [saved,...prev]);
     setModal(null);
   };

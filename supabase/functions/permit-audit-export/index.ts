@@ -81,11 +81,38 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const orgSlug = String(body?.orgSlug || "default").slice(0, 200);
+    const workspaceId = String(body?.workspaceId || "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(workspaceId)) {
+      return new Response(JSON.stringify({ error: "A valid country workspace is required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const access = await assertOrgSlugAccess(supabase, user.id, orgSlug);
     if (!access.ok) {
       return new Response(JSON.stringify({ error: access.error }), {
         status: access.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const { data: workspace, error: workspaceErr } = await supabase
+      .from("org_country_workspaces")
+      .select("id, org_id, organizations!inner(slug)")
+      .eq("id", workspaceId)
+      .eq("enabled", true)
+      .eq("organizations.slug", orgSlug)
+      .maybeSingle();
+    const { data: workspaceMembership, error: membershipErr } = await supabase
+      .from("org_country_workspace_memberships")
+      .select("workspace_id")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (workspaceErr || membershipErr || !workspace?.id || !workspaceMembership?.workspace_id) {
+      return new Response(JSON.stringify({ error: "Forbidden: no access to this country workspace" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -124,6 +151,7 @@ Deno.serve(async (req) => {
         .select("occurred_at, permit_id, action, from_status, to_status, detail")
         .eq("user_id", user.id)
         .eq("org_slug", orgSlug)
+        .eq("workspace_id", workspaceId)
         .order("occurred_at", { ascending: false })
         .range(from, to);
 

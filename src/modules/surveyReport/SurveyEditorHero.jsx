@@ -10,6 +10,7 @@ import { pas128MethodLabel } from "./pas128MethodPresets";
 import { firstIncompleteSurveyTab, surveyOverallTabProgress } from "./surveyReportListUtils";
 import { SURVEY_EDITOR_TABS } from "./surveyReportEditorNav";
 import { getQaChecklistProgress } from "./surveyQaPack";
+import { openHelpGuide } from "../../utils/workspaceNavContext";
 
 function SurveyEditorHero({
   form,
@@ -149,6 +150,14 @@ function SurveyEditorHero({
             {livePreviewOpen ? "Hide live preview" : "Show live preview"}
           </button>
         ) : null}
+        <button
+          type="button"
+          className="app-survey-live-preview-toggle"
+          onClick={() => openHelpGuide({ guideId: "survey-report" })}
+          title="Open survey help"
+        >
+          Help
+        </button>
       </div>
 
       <button type="button" className="app-survey-editor-hero__close" onClick={onClose} aria-label="Close editor">

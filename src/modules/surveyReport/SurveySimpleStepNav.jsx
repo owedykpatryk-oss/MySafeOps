@@ -62,16 +62,11 @@ function SurveySimpleStepNav({ tab, report, onTabChange }) {
               role="tab"
               aria-selected={tab === t}
               onClick={() => onTabChange(t)}
+              className="app-survey-simple-pill"
               style={{
-                fontSize: 12,
-                fontWeight: 600,
-                padding: "5px 10px",
-                borderRadius: 999,
                 border: `1px solid ${tab === t ? "#0d9488" : "var(--color-border-tertiary, #e2e8f0)"}`,
                 background: tab === t ? "#ccfbf1" : "#fff",
                 color: tab === t ? "#115e59" : "var(--color-text-secondary)",
-                cursor: "pointer",
-                fontFamily: "inherit",
               }}
             >
               {SURVEY_TAB_PLAIN_LABELS[t] || t}

@@ -115,7 +115,28 @@ export function mergePermitMarketOverrides(base, overrides) {
 }
 
 const PL_PERMIT_TYPE_OVERRIDES = {
+  hot_work: {
+    label: "Pozwolenie na prace gorące",
+    description: "Spawanie, szlifowanie, cięcie, lutowanie i inne prace powodujące powstawanie ciepła lub iskier",
+  },
+  cold_work: {
+    label: "Pozwolenie na prace zimne",
+    description: "Prace utrzymaniowe bez prac gorących, z wymaganym odłączeniem energii i procedurą LOTO",
+  },
+  line_break: { label: "Pozwolenie na rozszczelnienie instalacji" },
+  roof_access: { label: "Pozwolenie na wejście na dach" },
+  night_works: { label: "Pozwolenie na prace nocne" },
+  valve_isolation: { label: "Pozwolenie na odłączenie armatury" },
+  visitor_access: { label: "Pozwolenie na dostęp gości" },
+  radiography: { label: "Pozwolenie na badania radiograficzne" },
+  ground_disturbance: { label: "Pozwolenie na naruszenie gruntu" },
+  line_clearance: { label: "Pozwolenie na pracę w pobliżu linii" },
+  rail_corridor_access: { label: "Pozwolenie na dostęp do obszaru kolejowego" },
+  marine_hydrographic: { label: "Pozwolenie na pomiary hydrograficzne" },
+  aerial_survey_coordination: { label: "Pozwolenie na koordynację nalotu pomiarowego" },
+  general: { label: "Ogólne pozwolenie na pracę" },
   excavation: {
+    label: "Pozwolenie na wykop / prace ziemne",
     description: "Wykop lub naruszenie gruntu — mapy uzbrojenia (CPD / geodeta)",
     checklist: [
       "Zlecenie mapy uzbrojenia terenu (geodeta / CPD)",
@@ -127,6 +148,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   work_at_height: {
+    label: "Pozwolenie na pracę na wysokości",
     checklist: [
       "Sprawdzenie rusztowań / podestów — aktualna dopuszczalność",
       "Uprawnienia UDT dla podestów i żurawi",
@@ -137,6 +159,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   electrical: {
+    label: "Pozwolenie na odłączenie elektryczne",
     checklist: [
       "Punkt izolacji zidentyfikowany",
       "Izolacja przez osobę z uprawnieniami SEP",
@@ -145,6 +168,8 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Pozwolenie u osoby wykonującej pracę",
     ],
   },
+  confined_space: { label: "Pozwolenie na wejście do przestrzeni zamkniętej" },
+  lifting: { label: "Pozwolenie na operacje podnoszenia" },
 };
 
 /** @param {import("../../config/markets").MarketId} marketId */

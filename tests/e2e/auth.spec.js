@@ -23,6 +23,13 @@ test.describe("Auth flows", () => {
   });
 
   test("signup shows confirmation instructions", async ({ page }) => {
+    // This creates a real account. Against a deployed environment that means junk users in
+    // the production auth table, and it cannot pass anyway because production enforces the
+    // captcha this test has no token for.
+    test.skip(
+      Boolean(process.env.E2E_BASE_URL) && !process.env.E2E_ALLOW_REMOTE_SIGNUP,
+      "Signup runs against a local server only. Set E2E_ALLOW_REMOTE_SIGNUP=1 to override.",
+    );
     const email = process.env.E2E_SIGNUP_EMAIL || uniqueEmail();
     const password = process.env.E2E_SIGNUP_PASSWORD || "MySafeOpsE2E!234";
 
