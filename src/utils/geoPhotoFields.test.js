@@ -7,6 +7,7 @@ import {
   suggestedGeoPhotoPresetForPermit,
   permitHasSiteEvidence,
   parseLocationIdFromNotes,
+  stripStructuredGeoPhotoNotes,
 } from "./geoPhotoFields.js";
 
 describe("geoPhotoFields", () => {
@@ -36,6 +37,40 @@ describe("geoPhotoFields", () => {
     expect(line).toContain("BH01");
     expect(line).toContain("depth 12 m");
     expect(line).toContain("sample S-9");
+  });
+
+  describe("stripStructuredGeoPhotoNotes", () => {
+    const fields = { locationId: "BH01", depthM: 12, sampleRef: "S-9", capturePhase: "before" };
+
+    it("gives back the prose the user typed", () => {
+      const merged = buildStructuredGeoPhotoNotes({ ...fields, notes: "Made ground" });
+      expect(stripStructuredGeoPhotoNotes(merged, fields)).toBe("Made ground");
+    });
+
+    it("editing and saving repeatedly does not grow the notes", () => {
+      let stored = "Made ground";
+      for (let i = 0; i < 5; i += 1) {
+        const editing = stripStructuredGeoPhotoNotes(stored, fields);
+        stored = buildStructuredGeoPhotoNotes({ ...fields, notes: editing });
+      }
+      expect(stored).toBe(buildStructuredGeoPhotoNotes({ ...fields, notes: "Made ground" }));
+    });
+
+    it("cleans up notes already doubled by earlier saves", () => {
+      const suffix = buildStructuredGeoPhotoNotes({ ...fields, notes: "" });
+      expect(stripStructuredGeoPhotoNotes(`Made ground · ${suffix} · ${suffix}`, fields)).toBe("Made ground");
+    });
+
+    it("leaves notes alone when there is nothing appended", () => {
+      expect(stripStructuredGeoPhotoNotes("Cover cracked", {})).toBe("Cover cracked");
+      expect(stripStructuredGeoPhotoNotes("Cover cracked", fields)).toBe("Cover cracked");
+      expect(stripStructuredGeoPhotoNotes("", fields)).toBe("");
+    });
+
+    it("returns empty when the note was only structured tokens", () => {
+      const suffix = buildStructuredGeoPhotoNotes({ ...fields, notes: "" });
+      expect(stripStructuredGeoPhotoNotes(suffix, fields)).toBe("");
+    });
   });
 
   it("suggests permit presets", () => {

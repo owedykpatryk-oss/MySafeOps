@@ -1,3 +1,5 @@
+import { authorshipAuditFields } from "../../utils/documentAuthorship.js";
+
 const MAX_ENTRIES = 40;
 
 /**
@@ -63,13 +65,20 @@ export function permitAuditDetailSnapshot(permit) {
 function buildLocalEntry(prevPermit, nextPermit) {
   const at = new Date().toISOString();
   const d = describePermitAuditEvent(prevPermit, nextPermit);
-  if (d.action === "created") return { at, action: "created" };
+  const actor = authorshipAuditFields();
+  const who = {
+    ...(actor.by ? { by: actor.by } : {}),
+    ...(actor.byEmail ? { byEmail: actor.byEmail } : {}),
+    ...(actor.byUserId ? { byUserId: actor.byUserId } : {}),
+  };
+  if (d.action === "created") return { at, action: "created", ...who };
   if (d.action === "conflict_warn_override") {
     return {
       at,
       action: "conflict_warn_override",
       approvedBy: nextPermit?.conflictWarnOverride?.approvedBy || "",
       reason: nextPermit?.conflictWarnOverride?.reason || "",
+      ...who,
     };
   }
   if (d.action === "handover_submitted") {
@@ -78,24 +87,29 @@ function buildLocalEntry(prevPermit, nextPermit) {
       action: "handover_submitted",
       outgoingSupervisor: nextPermit?.handoverEntry?.outgoingSupervisor || "",
       incomingSupervisor: nextPermit?.handoverEntry?.incomingSupervisor || "",
+      ...who,
     };
   }
   if (d.action === "handover_ack_outgoing") {
     return {
       at,
       action: "handover_ack_outgoing",
-      by: nextPermit?.handoverEntry?.outgoingSupervisor || "",
+      ...who,
+      by: nextPermit?.handoverEntry?.outgoingSupervisor || actor.by || "",
     };
   }
   if (d.action === "handover_ack_incoming") {
     return {
       at,
       action: "handover_ack_incoming",
-      by: nextPermit?.handoverEntry?.incomingSupervisor || "",
+      ...who,
+      by: nextPermit?.handoverEntry?.incomingSupervisor || actor.by || "",
     };
   }
-  if (d.action === "status_changed") return { at, action: "status_changed", from: d.fromStatus, to: d.toStatus };
-  return { at, action: "updated" };
+  if (d.action === "status_changed") {
+    return { at, action: "status_changed", from: d.fromStatus, to: d.toStatus, ...who };
+  }
+  return { at, action: "updated", ...who };
 }
 
 /**

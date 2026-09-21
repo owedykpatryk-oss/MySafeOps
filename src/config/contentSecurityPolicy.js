@@ -22,6 +22,8 @@ export const CONTENT_SECURITY_POLICY = [
     "https://*.supabase.co",
     "https://*.r2.dev",
     "https://*.cloudflarestorage.com",
+    // Signed R2 preview URLs from the upload Worker (GET /signed) — pin host, not *.workers.dev
+    "https://mysafeops-r2-upload.owedykpatryk.workers.dev",
     "https://*.tile.openstreetmap.org",
     "https://*.openstreetmap.org",
     "https://server.arcgisonline.com",

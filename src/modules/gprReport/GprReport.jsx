@@ -5,6 +5,7 @@ import { stripGeoPhotosForD1, stripGprReportsForD1 } from "../../utils/d1SyncPay
 import { useApp } from "../../context/AppContext";
 import { useToast } from "../../context/ToastContext";
 import { pushAudit } from "../../utils/auditLog";
+import { stampDocumentAuthorship } from "../../utils/documentAuthorship.js";
 import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { downloadBlob } from "../../utils/downloadBlob";
@@ -27,6 +28,9 @@ import GprRadargramLightbox from "./GprRadargramLightbox";
 import GprWaveBackdrop from "./GprWaveBackdrop";
 import GprScanPanelGrid from "./GprScanPanelGrid";
 import GprAcquisitionDiagram from "./GprAcquisitionDiagram";
+import GprBlockersPanel from "./GprBlockersPanel";
+import { applyGprAutofix } from "./gprAutofix";
+import { pushGprIntoLinkedSurvey } from "../surveyReport/surveyGprBridge";
 import { filterGprReports, groupGprReportsByProject, suggestDeliverableFlags, GPR_LIST_STATUS_FILTERS } from "./gprReportListHelpers";
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { countGprGeoPhotos, importGeoPhotosIntoGprReport } from "../../utils/gprGeoIntegrations";
@@ -60,6 +64,8 @@ import {
 import { buildGprReportHtml } from "./gprReportPrintHtml";
 import { useGprPreviewHtml } from "./useGprPreviewHtml";
 import GprLineLengthSummaryCard from "./GprLineLengthSummaryCard.jsx";
+import GprCadImportCard from "./GprCadImportCard.jsx";
+import { importGprCadFile } from "./gprCadImport.js";
 import { downloadGprReportPdf } from "./gprReportPdf";
 import {
   gprReportQuality,
@@ -134,15 +140,17 @@ const ss = {
     paddingBottom: 10,
   },
   tab: (active) => ({
-    padding: "6px 12px",
+    padding: "10px 14px",
+    minHeight: 44,
     borderRadius: 6,
     border: "none",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
     background: active ? "#ccfbf1" : "transparent",
     color: active ? "#0f766e" : "var(--color-text-secondary)",
     fontFamily: "DM Sans,sans-serif",
+    touchAction: "manipulation",
   }),
   btn: {
     padding: "8px 14px",
@@ -182,13 +190,33 @@ export default function GprReport() {
   const [busy, setBusy] = useState("");
   const [search, setSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [livePreviewOpen, setLivePreviewOpen] = useState(true);
+  const [livePreviewOpen, setLivePreviewOpen] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.matchMedia("(min-width: 1100px)").matches;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const mq = window.matchMedia("(min-width: 1100px)");
+    const onChange = (e) => {
+      if (!e.matches) setLivePreviewOpen(false);
+    };
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
   const [depthCalcNs, setDepthCalcNs] = useState("");
   const [lightboxRg, setLightboxRg] = useState(null);
   const [listStatus, setListStatus] = useState("all");
   const [listProject, setListProject] = useState("");
   const [groupByProject, setGroupByProject] = useState(true);
   const [confirmFinal, setConfirmFinal] = useState(false);
+  const [cadBusy, setCadBusy] = useState(false);
 
   const { d1Hydrating: d1RepH, d1OutboxPending: d1RepO } = useD1OrgArraySync({
     storageKey: STORAGE_KEY,
@@ -319,13 +347,66 @@ export default function GprReport() {
 
   const saveReport = () => {
     if (!form) return;
-    const normalized = normalizeGprReport(form);
+    const normalized = stampDocumentAuthorship(normalizeGprReport(form), {
+      isCreate: Boolean(modal.isNew) || !form.createdById,
+    });
     const next = modal.isNew
       ? [...reports, normalized]
       : reports.map((r) => (r.id === normalized.id ? normalized : r));
     persist(next);
+
+    // Bidirectional sync: push anomalies into linked / same-project survey report.
+    try {
+      const surveys = load("survey_reports", []);
+      const { reports: nextSurveys, updated } = pushGprIntoLinkedSurvey(normalized, surveys);
+      if (updated) {
+        save("survey_reports", nextSurveys);
+        pushToast({
+          type: "success",
+          title: "Synced to survey",
+          message: `GPR anomalies merged into ${updated.ref || "linked survey report"}.`,
+          durationMs: 2800,
+        });
+      }
+    } catch {
+      /* survey sync best-effort */
+    }
+
     pushAudit({ action: modal.isNew ? "gpr_report_create" : "gpr_report_update", entity: "gpr_report", detail: normalized.ref });
     setModal(null);
+  };
+
+  const handleGprAutofix = (fixId) => {
+    if (!form) return;
+    const next = applyGprAutofix(fixId, form);
+    if (next) setModal({ ...modal, data: normalizeGprReport(next) });
+  };
+
+  const handleGprCadUpload = async (e) => {
+    const file = e.target?.files?.[0];
+    e.target.value = "";
+    if (!file || !form) return;
+    setCadBusy(true);
+    try {
+      const next = await importGprCadFile(form, file);
+      setModal({ ...modal, data: normalizeGprReport(next) });
+      const cad = next.gprCadImport;
+      pushToast({
+        type: "success",
+        title: "CAD model-space analysed",
+        message: `GPR: ${cad?.gprLayers?.segmentCount || 0} · UMG→B1: ${cad?.umgB1Upgrades?.segmentCount || 0} · No-access hatches: ${cad?.hatches?.constraintHatchCount || 0} · Anomalies: ${cad?.anomalies?.count || 0}`,
+        durationMs: 4200,
+      });
+      pushAudit({ action: "gpr_report_cad_import", entity: "gpr_report", detail: file.name });
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "CAD import failed",
+        message: err?.message || "Could not parse DXF (model space).",
+      });
+    } finally {
+      setCadBusy(false);
+    }
   };
 
   const applyPreset = (presetKey, eqIndex = 0) => {
@@ -615,7 +696,7 @@ export default function GprReport() {
           </div>
         ) : null}
       </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
         <Field label="Survey date">
           <input
             type="date"
@@ -668,7 +749,7 @@ export default function GprReport() {
       </div>
       <div style={{ marginTop: 16 }}>
         <div style={ss.sectionHead}>Report sign-off</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
           <Field label="Author">
             <input
               style={ss.input}
@@ -741,7 +822,7 @@ export default function GprReport() {
             ))}
           </select>
         </Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
           <Field label="Manufacturer">
             <input
               style={ss.input}
@@ -805,7 +886,7 @@ export default function GprReport() {
 
         <div style={ss.sectionHead}>Acquisition</div>
         <GprAcquisitionDiagram scanMode={form.acquisition.scanMode} lineSpacingM={form.acquisition.lineSpacingM} />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
           <Field label="Scan mode">
             <select
               style={ss.input}
@@ -857,7 +938,7 @@ export default function GprReport() {
         </div>
 
         <div style={ss.sectionHead}>Velocity model</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
           <Field label="Calibration method">
             <select
               style={ss.input}
@@ -1007,7 +1088,7 @@ export default function GprReport() {
       ) : null}
 
       <div style={ss.sectionHead}>Site observations</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
         <Field label="Surface type">
           <select
             style={ss.input}
@@ -1387,6 +1468,15 @@ export default function GprReport() {
           </div>
         ))}
       </div>
+      <GprCadImportCard
+        gprCadImport={form.gprCadImport}
+        anomalies={form.anomalies}
+        cadBusy={cadBusy}
+        onUpload={handleGprCadUpload}
+        onClear={() => patch({ gprCadImport: null })}
+        ss={ss}
+      />
+
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
           <div style={ss.sectionHead}>Chainage / corridor segments</div>
@@ -1877,6 +1967,12 @@ export default function GprReport() {
               ))}
             </div>
           ) : null}
+          <GprBlockersPanel
+            report={form}
+            linkedSurveyReport={linkedSurveyReport}
+            onGoToTab={setTab}
+            onAutofix={handleGprAutofix}
+          />
           <div className="app-survey-report-editor__body app-gpr-report-editor__body">
             <div className="app-survey-report-editor__form">
               <div style={ss.tabRow}>

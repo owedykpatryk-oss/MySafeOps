@@ -23,7 +23,12 @@ const AUDIT_FIELD_RE = /^[a-z][a-z0-9_]{0,63}$/i;
 
 const AUDIT_APPEND_MAX_PER_MINUTE = 90;
 const KV_PUT_MAX_PER_MINUTE = 120;
-const KV_GET_MAX_PER_MINUTE = 180;
+/** Orgs hydrate many modules on navigation; 180/min was too tight with retries. */
+const KV_GET_MAX_PER_MINUTE = 360;
+
+function rateLimitedResponse(c) {
+  return json({ error: "rate_limited" }, 429, { ...c, "Retry-After": "30" });
+}
 
 function currentRateWindowStart() {
   const d = new Date();
@@ -397,7 +402,7 @@ async function handleKvGet(request, env, orgSlug, c, authHeader) {
   const actorSub = parseJwtSub(authHeader);
   if (actorSub) {
     const allowed = await consumeRateLimit(env, `kv_get:${orgSlug}:${actorSub}`, KV_GET_MAX_PER_MINUTE);
-    if (!allowed) return json({ error: "rate_limited" }, 429, c);
+    if (!allowed) return rateLimitedResponse(c);
   }
 
   if (list) {
@@ -475,7 +480,7 @@ async function handleKvPut(request, env, orgSlug, authHeader, c) {
   const actorSub = parseJwtSub(authHeader);
   if (actorSub) {
     const allowed = await consumeRateLimit(env, `kv_put:${orgSlug}:${actorSub}`, KV_PUT_MAX_PER_MINUTE);
-    if (!allowed) return json({ error: "rate_limited" }, 429, c);
+    if (!allowed) return rateLimitedResponse(c);
   }
   if (dataKey.length > 256 || namespace.length > 128) {
     return json({ error: "key_too_long" }, 400, c);
@@ -556,7 +561,7 @@ async function handleAuditAppend(request, env, orgSlug, authHeader, c) {
 
   if (actorSub) {
     const allowed = await consumeRateLimit(env, `audit_append:${orgSlug}:${actorSub}`, AUDIT_APPEND_MAX_PER_MINUTE);
-    if (!allowed) return json({ error: "rate_limited" }, 429, c);
+    if (!allowed) return rateLimitedResponse(c);
   }
 
   const maxAttempts = 6;

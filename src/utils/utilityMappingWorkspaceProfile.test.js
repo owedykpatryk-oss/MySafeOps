@@ -35,6 +35,13 @@ describe("Utility Mapping exclusive workspace profile", () => {
     expect(isUtilityMappingOrg()).toBe(true);
   });
 
+  it("treats the live auto-provisioned u-map tenant slug as Utility Mapping", () => {
+    setOrgId("patryk-44bdf196");
+    saveOrgSettingsRaw({ name: "Patryk Workspace", hiddenModules: [] });
+    expect(isUtilityMappingOrg()).toBe(true);
+    expect(listWorkspaceProfilesForOrg().map((p) => p.id)).toContain(UTILITY_MAPPING_PACK_ID);
+  });
+
   it("rejects website / email spoof without allowlisted slug", () => {
     setOrgId("acme-surveys");
     saveOrgSettingsRaw({

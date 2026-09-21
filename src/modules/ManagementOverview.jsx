@@ -46,6 +46,7 @@ import { collectProjectDashboard } from "../utils/projectDashboard";
 import { loadOrgScoped, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
 import {
   addDays,
+  buildManagementDiary,
   buildPlannerWeeks,
   dateOnly,
   isoDate,
@@ -261,25 +262,12 @@ export default function ManagementOverview() {
 
   const selectedJob = jobs.find((job) => job.id === selectedJobId) || null;
   const today = useMemo(() => dateOnly(isoDate(new Date())), []);
-  const inNinetyDays = useMemo(() => addDays(today, 90), [today]);
-  const fourWeeksAgo = useMemo(() => addDays(today, -28), [today]);
-  const scheduledJobs = jobs.filter((job) => {
-    const start = dateOnly(job.start);
-    return start && start >= today && start <= inNinetyDays && job.status !== "cancelled";
-  });
-  const completedJobs = jobs.filter((job) => {
-    const end = dateOnly(job.end);
-    return job.status === "completed" && end && end >= fourWeeksAgo && end <= today;
-  });
+  const diary = useMemo(() => buildManagementDiary(jobs, state.teams, today), [jobs, state.teams, today]);
+  const scheduledJobs = diary.scheduled;
+  const completedJobs = diary.completed;
   const attentionJobs = jobs.filter((job) => job.status !== "completed" && job.status !== "cancelled" && jobTone(job) !== "green");
 
-  const capacityMonths = useMemo(() => {
-    const result = [];
-    for (let offset = 0; offset < 3; offset += 1) {
-      result.push(new Date(today.getFullYear(), today.getMonth() + offset, 1, 12));
-    }
-    return result;
-  }, [today]);
+  const capacityMonths = diary.capacityMonths;
 
   const capacityRows = useMemo(
     () => state.teams.map((team) => ({ team, values: capacityMonths.map((month) => monthCapacity(jobs, team, month)) })),
@@ -287,7 +275,7 @@ export default function ManagementOverview() {
   );
   const capacityValues = capacityRows.flatMap((row) => row.values.map((value) => value.percentage));
   const overallCapacity = capacityValues.length ? Math.round(capacityValues.reduce((sum, value) => sum + value, 0) / capacityValues.length) : 0;
-  const diaryGaps = capacityRows.reduce((sum, row) => sum + row.values.filter((value) => value.percentage < 60).length, 0);
+  const diaryGaps = diary.gapCount;
   const gapSuggestion = useMemo(() => {
     const choices = capacityRows.flatMap((row) => row.values.map((value, index) => ({ team: row.team, value, month: capacityMonths[index] })));
     return choices.sort((a, b) => a.value.percentage - b.value.percentage)[0] || null;
@@ -460,7 +448,7 @@ export default function ManagementOverview() {
         tone: jobTone(job),
       }));
       await buildManagementBoardPackPdf({
-        periodLabel: `${dateLabel(isoDate(today))} - ${dateLabel(isoDate(inNinetyDays))}`,
+        periodLabel: `${dateLabel(isoDate(today))} - ${dateLabel(isoDate(diary.inNinetyDays))}`,
         metrics: { scheduled: scheduledJobs.length, attention: attentionJobs.length, capacity: overallCapacity, gaps: diaryGaps },
         briefing: gapSuggestion
           ? `${attentionJobs.length} job(s) require management attention. ${gapSuggestion.team.name} is ${gapSuggestion.value.percentage}% booked in ${monthLabel.format(gapSuggestion.month)}. ${suggestedOpportunity ? `${suggestedOpportunity.name} could be reviewed as potential gap-filling work.` : "Review the pipeline for suitable work."}`
@@ -558,6 +546,61 @@ export default function ManagementOverview() {
               <p>{suggestedOpportunity ? `${suggestedOpportunity.name} could be reviewed as potential gap-filling work.` : "Add potential work to the pipeline and MySafeOps will surface the best diary fit."}</p>
             </div>
             {suggestedOpportunity ? <button type="button" className="mgo-btn mgo-btn--smart" onClick={() => setSelectedJobId(suggestedOpportunity.id)}>Review opportunity <ArrowRight size={14} /></button> : <button type="button" className="mgo-btn mgo-btn--smart" onClick={() => setShowOpportunityForm(true)}>Add opportunity <Plus size={14} /></button>}
+          </section>
+
+          <section className="mgo-diary" aria-labelledby="mgo-diary-title">
+            <div className="mgo-diary__head">
+              <div>
+                <span className="mgo-eyebrow">Working diary</span>
+                <h2 id="mgo-diary-title">Next 3 months · last 4 weeks · capacity gaps</h2>
+                <p>What is booked ahead, what finished recently, and where teams still have diary space.</p>
+              </div>
+              <button type="button" className="mgo-btn mgo-btn--ghost" onClick={() => setTab("planner")}>Open 90-day planner <ChevronRight size={14} /></button>
+            </div>
+            <div className="mgo-diary__cols">
+              <div className="mgo-diary__col">
+                <header><CalendarDays size={15} /><strong>Upcoming ({scheduledJobs.length})</strong><small>Next 90 days</small></header>
+                <ul>
+                  {scheduledJobs.slice(0, 6).map((job) => (
+                    <li key={job.id}>
+                      <button type="button" onClick={() => setSelectedJobId(job.id)}>
+                        <strong>{job.name}</strong>
+                        <small>{dateLabel(job.start)} · {state.teams.find((team) => team.id === job.teamId)?.name || "Unassigned"}</small>
+                      </button>
+                    </li>
+                  ))}
+                  {!scheduledJobs.length ? <li className="mgo-diary__empty">No jobs scheduled in the next 90 days.</li> : null}
+                </ul>
+              </div>
+              <div className="mgo-diary__col">
+                <header><CheckCircle2 size={15} /><strong>Completed ({completedJobs.length})</strong><small>Last 4 weeks</small></header>
+                <ul>
+                  {completedJobs.slice(0, 6).map((job) => (
+                    <li key={job.id}>
+                      <button type="button" onClick={() => setSelectedJobId(job.id)}>
+                        <strong>{job.name}</strong>
+                        <small>Finished {dateLabel(job.end)} · {job.client || "Client TBC"}</small>
+                      </button>
+                    </li>
+                  ))}
+                  {!completedJobs.length ? <li className="mgo-diary__empty">No completed jobs in the last four weeks.</li> : null}
+                </ul>
+              </div>
+              <div className="mgo-diary__col">
+                <header><Clock3 size={15} /><strong>Gaps ({diaryGaps})</strong><small>Below 60% booked</small></header>
+                <ul>
+                  {diary.gaps.slice(0, 6).map((gap) => (
+                    <li key={`${gap.teamId}-${gap.monthKey}`}>
+                      <button type="button" onClick={() => setTab("teams")}>
+                        <strong>{gap.teamName}</strong>
+                        <small>{monthLabel.format(gap.month)} · {gap.percentage}% booked</small>
+                      </button>
+                    </li>
+                  ))}
+                  {!diary.gaps.length ? <li className="mgo-diary__empty">No low-capacity months in the next quarter.</li> : null}
+                </ul>
+              </div>
+            </div>
           </section>
 
           <div className="mgo-overview-grid">

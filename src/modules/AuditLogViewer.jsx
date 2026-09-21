@@ -9,6 +9,7 @@ import { getOrgId } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
 import { d1ListServerAudit, isD1Configured } from "../lib/d1SyncClient";
 import { useListWindow } from "../utils/useListWindow.js";
+import { formatActorLabel } from "../utils/documentAuthorship.js";
 
 import { todayLocalISO } from "../utils/localDate";
 const ss = ms;
@@ -56,16 +57,32 @@ export default function AuditLogViewer() {
       setServerError("");
       setServerStatus("ok");
       setServerRows(
-        (r.items || []).map((it) => ({
-          id: `d1seq_${it.seq}`,
-          at: it.created_at,
-          action: it.action,
-          entity: it.entity,
-          detail: it.detail || "",
-          source: "server",
-          seq: it.seq,
-          clientRowId: it.client_row_id || null,
-        }))
+        (r.items || []).map((it) => {
+          let byFromPayload = "";
+          let byEmailFromPayload = "";
+          try {
+            const payload = typeof it.payload_json === "string" ? JSON.parse(it.payload_json) : it.payload_json;
+            byFromPayload = payload?.extra?.by || payload?.by || payload?.actor_name || "";
+            byEmailFromPayload = payload?.extra?.byEmail || payload?.byEmail || "";
+          } catch {
+            byFromPayload = "";
+            byEmailFromPayload = "";
+          }
+          const actorShort = it.actor_sub ? String(it.actor_sub).slice(0, 8) : "";
+          return {
+            id: `d1seq_${it.seq}`,
+            at: it.created_at,
+            action: it.action,
+            entity: it.entity,
+            detail: it.detail || "",
+            by: byFromPayload || (actorShort ? `user ${actorShort}…` : ""),
+            byEmail: byEmailFromPayload || "",
+            byUserId: it.actor_sub || "",
+            source: "server",
+            seq: it.seq,
+            clientRowId: it.client_row_id || null,
+          };
+        })
       );
     })();
     return () => {
@@ -258,7 +275,10 @@ function AuditRow({ r, rowHeight }) {
         containIntrinsicSize: "0 52px",
       }}
     >
-      <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{new Date(r.at).toLocaleString("en-GB")}</div>
+      <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>
+        {new Date(r.at).toLocaleString("en-GB")}
+        {r.by || r.byEmail ? ` · ${formatActorLabel({ name: r.by, email: r.byEmail }) || r.by}` : ""}
+      </div>
       <div>
         {r.source === "server" ? (
           <span

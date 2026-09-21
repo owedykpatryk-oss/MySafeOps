@@ -41,6 +41,24 @@ describe("registerPdfAdapters", () => {
     expect(row.inReport).toBe("Yes");
   });
 
+  it("carries a traced extent into the register, and a dash where there is none", () => {
+    const traced = flattenGeoPhotoRow({
+      type: "vegetation",
+      latitude: 51.5,
+      longitude: -0.1,
+      area: {
+        points: [
+          [51.5, -0.1],
+          [51.5009, -0.1],
+          [51.5009, -0.09855],
+          [51.5, -0.09855],
+        ],
+      },
+    });
+    expect(traced.extent).toBe("1.00 ha");
+    expect(flattenGeoPhotoRow({ type: "hazard" }).extent).toBe("—");
+  });
+
   it("uses detail export mode for geo-photos", () => {
     const prepared = prepareRegisterExport("geo-photos", [{ id: "gp1" }], { summary: false });
     expect(prepared.mode).toBe("detail");

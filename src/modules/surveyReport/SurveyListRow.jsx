@@ -119,6 +119,8 @@ function SurveyListRow({
               </div>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>
                 {r.ref} · {r.surveyDate}
+                {r.surveyor ? ` · ${r.surveyor}` : ""}
+                {r.updatedBy ? ` · Edited by ${r.updatedBy}` : r.createdBy ? ` · Created by ${r.createdBy}` : ""}
               </div>
               <div className="app-survey-list-row__meter" aria-hidden>
                 <div className="app-survey-list-row__meter-fill" style={{ width: `${q.score}%` }} />

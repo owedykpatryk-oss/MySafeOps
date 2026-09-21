@@ -4,12 +4,14 @@
 
 import { UTILITY_RECORDS_PRESETS } from "./surveyReportConstants";
 import { catalogDefaultDeliverables } from "../../utils/surveyContentCatalog";
+import { seedUtilitiesTableFromCad } from "../../utils/surveyDxfAnalyzer";
 
 export const SURVEY_AUTOFIX_ACTIONS = [
   { id: "records_pas128", label: "Apply PAS128 records preset", tab: "records", anchor: "records" },
   { id: "deliverables_default", label: "Add default deliverables", tab: "scope", anchor: "deliverables" },
   { id: "calibration_template", label: "Add calibration row template", tab: "professional", anchor: "calibration" },
   { id: "limitations_typical", label: "Apply typical utility limitations", tab: "limitations", anchor: "limitations" },
+  { id: "utilities_from_cad", label: "Seed utilities from CAD", tab: "findings", anchor: "cad-import" },
 ];
 
 const UTILITY_TYPES = new Set(["utility_mapping_survey", "eml_cat_survey", "gpr_survey"]);
@@ -68,6 +70,10 @@ export function applySurveyAutofix(fixId, report) {
     return { ...report, limitationKeys: merged, updatedAt: now };
   }
 
+  if (fixId === "utilities_from_cad") {
+    return seedUtilitiesTableFromCad(report, { replaceCadRows: true });
+  }
+
   return null;
 }
 
@@ -82,5 +88,8 @@ export function suggestSurveyAutofixes(report) {
   if (UTILITY_TYPES.has(report?.surveyType) && !(report?.limitationKeys || []).length) {
     out.push("limitations_typical");
   }
+  const hasCad = Array.isArray(report?.cadImport?.summary) && report.cadImport.summary.some((r) => (Number(r.lengthM) || 0) > 0);
+  const cadUtils = (report?.utilitiesTable || []).filter((u) => String(u?.notes || "").includes("CAD layer")).length;
+  if (hasCad && cadUtils === 0) out.push("utilities_from_cad");
   return out;
 }

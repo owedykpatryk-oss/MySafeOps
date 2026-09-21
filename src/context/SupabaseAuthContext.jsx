@@ -9,6 +9,7 @@ import {
   markPasswordRecoveryPending,
   redirectToResetPasswordIfNeeded,
 } from "../lib/passwordRecovery";
+import { clearAuthorshipUserCache, setAuthorshipUserCache } from "../utils/documentAuthorship.js";
 
 const Ctx = createContext(null);
 
@@ -97,6 +98,11 @@ export function SupabaseAuthProvider({ children }) {
   useEffect(() => {
     syncSentryUser(session?.user ?? null);
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (session?.user) setAuthorshipUserCache(session.user);
+    else clearAuthorshipUserCache();
+  }, [session?.user?.id, session?.user?.email, session?.user?.user_metadata?.full_name, session?.user?.user_metadata?.name]);
 
   useEffect(() => {
     if (!supabase || !session?.user) return undefined;

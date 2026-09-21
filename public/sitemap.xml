@@ -131,6 +131,11 @@
     <priority>0.75</priority>
   </url>
   <url>
+    <loc>https://mysafeops.com/blog/hand-arm-vibration-havs-construction-uk</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.75</priority>
+  </url>
+  <url>
     <loc>https://mysafeops.com/blog/height-work-permit-uk</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
@@ -162,6 +167,16 @@
   </url>
   <url>
     <loc>https://mysafeops.com/blog/lone-worker-construction-uk</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/blog/manual-handling-construction-uk</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.75</priority>
+  </url>
+  <url>
+    <loc>https://mysafeops.com/blog/near-miss-reporting-construction-uk</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>

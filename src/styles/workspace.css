@@ -227,7 +227,7 @@
   color: transparent;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .app-dashboard-metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -297,7 +297,8 @@
   white-space: nowrap;
 }
 
-@media (max-width: 720px) {
+/* iPad / Samsung Tab portrait (~768–834) — use compact chrome, not desktop overflow */
+@media (max-width: 900px) {
   .workspace-app-bar-actions--desktop {
     display: none !important;
   }
@@ -3975,7 +3976,7 @@
   align-items: start;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .plan-markup-stage {
     grid-template-columns: 1fr;
   }
@@ -3999,11 +4000,13 @@
 .plan-markup-subbar input,
 .plan-markup-subbar select {
   font-family: inherit;
-  font-size: 12px;
-  padding: 6px 8px;
+  font-size: 16px;
+  min-height: 44px;
+  padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid var(--color-border-tertiary, #e2e8f0);
   min-width: 140px;
+  touch-action: manipulation;
 }
 
 .plan-markup-hint {
@@ -4017,8 +4020,9 @@
   border-radius: 10px;
   overflow: hidden;
   background: var(--color-background-secondary, #f7f7f5);
-  max-height: min(520px, 70vh);
+  max-height: min(520px, 70vh, 70dvh);
   user-select: none;
+  touch-action: none;
 }
 
 .plan-markup-surface img {
@@ -5199,7 +5203,7 @@
   gap: 8px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .project-wizard-layout {
     grid-template-columns: 1fr;
   }
@@ -5351,7 +5355,7 @@
   margin-bottom: 12px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .app-command-center__grid {
     grid-template-columns: 1fr;
   }
@@ -5651,6 +5655,28 @@
   display: block;
 }
 
+.geo-photo-area-map {
+  display: block;
+  border-radius: var(--radius-md, 10px);
+  overflow: hidden;
+}
+
+/* The running size, sat in the middle of what has been traced so far. */
+.geo-photo-area-map__label {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.78);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.geo-photo-area-map__label::before {
+  display: none;
+}
+
 .geo-photos-report-pack {
   margin-bottom: 16px;
   padding: 14px 16px;
@@ -5781,6 +5807,26 @@
   font-size: 13px;
   font-weight: 600;
   color: #92400e;
+}
+
+/* Ground traced on site — a quantity, so it reads as measurement rather than warning. */
+.geo-photos-extent-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm, 10px);
+  background: rgba(220, 252, 231, 0.6);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+}
+
+.geo-photos-extent-banner__text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #166534;
 }
 
 .register-empty-state {
@@ -6076,6 +6122,12 @@
   color: var(--color-text-secondary);
 }
 
+.geo-photos-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .geo-photos-card__notes {
   margin: 0;
   font-size: 13px;
@@ -6085,6 +6137,63 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.geo-photos-card__observations {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #0f766e;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.geo-photos-card__action {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #b45309;
+}
+
+.geo-photos-card__action--done {
+  font-weight: 600;
+  color: var(--color-text-secondary, #64748b);
+}
+
+.geo-photos-actions-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #fcd34d;
+  border-left: 4px solid #d97706;
+  border-radius: 10px;
+  background: #fffbeb;
+}
+
+.geo-photos-actions-banner__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #d97706;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.geo-photos-actions-banner__text {
+  flex: 1 1 220px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #78350f;
 }
 
 .geo-photos-card__map {
@@ -6277,6 +6386,27 @@
   color: #b45309;
 }
 
+.geo-photo-capture__tickboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* Chip-sized so they can be ticked with a thumb in gloves on site. */
+.geo-photo-capture__tickboxes .geo-photos-card__report {
+  padding: 8px 10px;
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: #fff;
+}
+
+.geo-photo-capture__tickboxes .geo-photos-card__report--on {
+  border-color: #0d9488;
+  background: rgba(13, 148, 136, 0.1);
+}
+
 .geo-photo-capture__actions {
   display: flex;
   flex-wrap: wrap;
@@ -6301,7 +6431,8 @@
   background: rgba(240, 253, 250, 0.85) !important;
 }
 
-@media (max-width: 720px) {
+/* Include 11" tablet portrait (~800px) — Capture FAB while scrolling site photos */
+@media (max-width: 900px) {
   .geo-photos-toolbar__actions {
     width: 100%;
     margin-left: 0;
@@ -6311,10 +6442,11 @@
     display: flex;
     position: fixed;
     right: max(16px, env(safe-area-inset-right));
-    bottom: calc(76px + env(safe-area-inset-bottom));
+    bottom: calc(8px + var(--workspace-bottom-inset, calc(var(--nav-height, 64px) + env(safe-area-inset-bottom, 0px))));
     z-index: 900;
     align-items: center;
     gap: 8px;
+    min-height: 48px;
     padding: 12px 18px;
     border-radius: 999px;
     border: none;
@@ -6325,6 +6457,7 @@
     background: linear-gradient(180deg, #14b8a6 0%, #0d9488 55%, #0f766e 100%);
     box-shadow: 0 8px 24px rgba(13, 148, 136, 0.45);
     cursor: pointer;
+    touch-action: manipulation;
   }
 
   .geo-photos-page .app-page-hero__actions .geo-photos-hero-capture {
@@ -6468,7 +6601,7 @@
   padding: 1rem 1.5rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .app-project-dashboard__hero {
     grid-template-columns: 1fr;
   }
@@ -6626,7 +6759,7 @@
   padding: 0 1.5rem 1.25rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .app-project-dashboard__docs {
     grid-template-columns: 1fr;
   }
@@ -7142,7 +7275,8 @@
   margin-bottom: 10px;
 }
 
-@media (max-width: 720px) {
+/* 11" tablets (~800px portrait) — 4 cols is too cramped for Utility Mapping field use */
+@media (max-width: 900px) {
   .app-survey-editor-nav__groups {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -7151,11 +7285,14 @@
 .app-survey-editor-nav__group {
   text-align: left;
   padding: 10px 12px;
+  min-height: 44px;
   border-radius: 8px;
   border: 1px solid var(--color-border-tertiary, #e2e8f0);
   background: var(--color-surface-secondary, #fafafa);
   cursor: pointer;
   font-family: inherit;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .app-survey-editor-nav__group--active {
@@ -7344,14 +7481,16 @@
 .app-survey-quality-next {
   margin-top: 8px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 6px 10px;
+  min-height: 44px;
+  padding: 10px 14px;
   border-radius: 6px;
   border: 1px solid #99f6e4;
   background: #f0fdfa;
   color: #115e59;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .app-survey-editor-quicklinks {
@@ -7529,6 +7668,7 @@
 
 .app-survey-editor-hero__main {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 14px;
 }
@@ -8006,6 +8146,14 @@
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .app-survey-editor-hero__rings {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 .app-survey-pas128-mini {
@@ -8725,7 +8873,7 @@
   align-items: center;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .app-survey-list-stats--visual {
     grid-template-columns: 1fr;
   }
@@ -8954,11 +9102,14 @@
 .app-survey-live-preview-dock {
   position: sticky;
   top: 12px;
+  max-height: calc(100vh - 120px);
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
   border: 1px solid var(--color-border-tertiary, #e2e8f0);
   border-radius: 10px;
   background: #fff;
-  overflow: hidden;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  -webkit-overflow-scrolling: touch;
 }
 
 .app-survey-live-preview-dock__head {
@@ -8976,43 +9127,97 @@
 
 .app-survey-live-preview-dock__close {
   font-family: inherit;
-  font-size: 11px;
-  padding: 4px 8px;
+  font-size: 13px;
+  min-height: 44px;
+  padding: 8px 12px;
   border: 1px solid #99f6e4;
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .app-survey-live-preview-fab {
   position: fixed;
-  right: 20px;
-  bottom: 88px;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(8px + var(--workspace-bottom-inset, calc(var(--nav-height, 64px) + env(safe-area-inset-bottom, 0px))));
   z-index: 60;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 10px 14px;
+  min-height: 48px;
+  padding: 12px 16px;
   border-radius: 999px;
   border: 1px solid #99f6e4;
   background: #f0fdfa;
   color: #0f766e;
   box-shadow: 0 8px 24px rgba(13, 148, 136, 0.2);
   cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* CAD layer mapping — stack on tablets so selects stay tappable */
+.app-cad-layer-map-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 120px 100px auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.app-cad-layer-map-row select {
+  font-size: 14px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #fdba74;
+  touch-action: manipulation;
+}
+
+.app-survey-touch-btn {
+  min-height: 44px !important;
+  padding: 10px 14px !important;
+  font-size: 13px !important;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-survey-simple-pill {
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 900px) {
+  .app-cad-layer-map-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #fed7aa;
+  }
 }
 
 .app-survey-live-preview-toggle {
   margin-top: 8px;
   margin-left: 8px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 6px 10px;
+  min-height: 44px;
+  padding: 10px 14px;
   border-radius: 6px;
   border: 1px solid #cbd5e1;
   background: #fff;
   color: var(--color-text-secondary);
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .app-survey-live-preview-toggle--on {
@@ -9140,13 +9345,15 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 13px;
+  min-height: 44px;
+  padding: 10px 14px;
   border-radius: 999px;
   border: 1px solid var(--color-border-tertiary, #e2e8f0);
   background: #fff;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
+  touch-action: manipulation;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -9161,6 +9368,28 @@
   color: #115e59;
   font-weight: 700;
   box-shadow: 0 4px 12px rgba(13, 148, 136, 0.18);
+}
+
+/* Touch tablets (iPad, Samsung Tab, Lenovo): kill hover-lift jank, enlarge list menus */
+@media (hover: none), (pointer: coarse) {
+  .app-survey-list-stats__tile:hover,
+  .app-command-center__stat:hover,
+  .app-survey-list-filter-pill:hover {
+    transform: none;
+  }
+
+  .app-survey-list-more__menu button {
+    min-height: 44px;
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+
+  .geo-photos-card__select,
+  .geo-photos-toolbar button,
+  .geo-photos-toolbar__actions button {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
 }
 
 .app-survey-list-filter-pill__count {

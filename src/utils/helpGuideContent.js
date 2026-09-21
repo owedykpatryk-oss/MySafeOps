@@ -27,10 +27,11 @@ export const GUIDED_HELP_TASKS = [
     roles: "Admin · Supervisor",
     target: { viewId: "rams", label: "Open RAMS" },
     steps: [
-      { title: "Start a RAMS record", body: "Open RAMS, select Start new and choose the closest Quick pack for the planned work." },
-      { title: "Link the job", body: "Select the project, work location, responsible people and planned dates." },
-      { title: "Review hazards and controls", body: "Remove anything irrelevant and add site-specific hazards, controls, PPE and permits." },
-      { title: "Review and issue", body: "Complete competent review, preview the PDF, then issue and brief the workforce before work starts." },
+      { title: "Start a RAMS record", body: "Open RAMS, select Start new and choose the closest Quick pack for the planned work (or a playbook from Project Hub)." },
+      { title: "Link the job", body: "Select the project, work location, responsible people and planned dates so the Hub readiness ring updates." },
+      { title: "Review hazards and controls", body: "Remove anything irrelevant and add site-specific hazards, controls, PPE and linked permit types." },
+      { title: "Competent review", body: "Confirm a competent person has reviewed the document. Do not skip this before issue on live sites." },
+      { title: "Issue and brief", body: "Preview the PDF, issue the RAMS, then brief the workforce (Daily briefing or toolbox) before work starts." },
     ],
   },
   {
@@ -43,10 +44,10 @@ export const GUIDED_HELP_TASKS = [
     roles: "Supervisor · Authorised person",
     target: { viewId: "permits", label: "Open Permits" },
     steps: [
-      { title: "Choose the permit type", body: "Open Permits and select the permit that matches the high-risk activity." },
-      { title: "Define the safe scope", body: "Link the project and RAMS, then record the exact work area, task, issuer, receiver and validity window." },
-      { title: "Resolve readiness checks", body: "Complete isolations, controls, evidence and any SIMOPS conflicts shown by MySafeOps." },
-      { title: "Activate, monitor and close", body: "Authorise before work begins. At completion, confirm the area is safe and record close-out evidence." },
+      { title: "Choose the permit type", body: "Open Permits and select the permit that matches the high-risk activity (hot work, excavation, confined space, WAH, etc.). Use the first-run guide if shown." },
+      { title: "Define the safe scope", body: "Link the project and RAMS, then record the exact work area, task, issuer, receiver and validity window. Attach drawing zones when available." },
+      { title: "Resolve readiness checks", body: "Complete isolations, controls, evidence and any SIMOPS conflicts shown by MySafeOps. Excavation PTW should reference survey / CAT / GPR where relevant." },
+      { title: "Activate, monitor and close", body: "Authorise before work begins. At shift change use handover if required. At completion, confirm the area is safe and record close-out evidence." },
     ],
   },
   {
@@ -82,18 +83,124 @@ export const GUIDED_HELP_TASKS = [
   },
   {
     id: "survey-report",
-    category: "Report",
+    category: "Survey",
     icon: "map",
     title: "Create a survey report",
-    summary: "Build a structured survey deliverable with findings, plans, geo-evidence and a client-ready PDF.",
+    summary: "Link a project, choose the survey type, complete scope and findings, then issue a client-ready PDF.",
     time: "10–20 min",
     roles: "Surveyor · Reviewer",
     target: { viewId: "survey-report", label: "Open Survey Reports" },
     steps: [
-      { title: "Create the report", body: "Select New report, link the project and choose the survey type or relevant preset." },
-      { title: "Complete scope and methodology", body: "Record survey limits, equipment, standards, conditions and site-specific limitations." },
-      { title: "Add findings and evidence", body: "Add utilities, anomalies, plans and geo-photos. Use Smart fill only as a draft aid and verify every result." },
-      { title: "Run QA and export", body: "Resolve the completeness checks, preview every PDF page, then mark the revision final." },
+      { title: "Create and link the job", body: "Select New report, pick the project, set the survey date and surveyor, and choose the survey type (e.g. PAS128 utility mapping, topo, GPR, CCTV). Job number and client pull from the project when linked." },
+      { title: "Use Simple mode on site", body: "Toggle Simple mode for four steps: Start → On site → Findings → Print. Switch to Full editor only when you need every PAS128 / premium table (trial holes, QL summary, dig readiness)." },
+      { title: "Fill scope and methodology", body: "Record survey limits, equipment, standards and site conditions. Apply a PAS128 method pack when the job is utility mapping. Note weather and access constraints early — they feed limitations text." },
+      { title: "Import CAD if you have a drawing", body: "Findings → CAD utility mapping: upload DXF, map layers, Seed utilities table. See the guided task Import CAD into a survey report." },
+      { title: "Add findings and evidence", body: "Complete the utilities schedule, trial holes, plans and geo-photos. Use Smart assist / Fill what I can as a draft only — verify every line before Mark final." },
+      { title: "Link GPR when used", body: "If a GPR report exists on the same project, save either report so anomalies sync. Or run Prepare issue pack to merge GPR into the survey." },
+      { title: "QA, preview and mark final", body: "Clear blockers in the quality panel, open live preview, then Mark final. Download the handover ZIP for the client pack (PDF, CSV, verification sheet)." },
+    ],
+  },
+  {
+    id: "survey-issue-pack",
+    category: "Survey",
+    icon: "sparkles",
+    title: "Prepare a survey issue pack",
+    summary: "One-click prep: Smart fill, autofixes, CAD→utilities, GPR sync — then Mark final and handover ZIP.",
+    time: "5–10 min",
+    roles: "Surveyor · Reviewer",
+    target: { viewId: "survey-report", label: "Open Survey Reports" },
+    steps: [
+      { title: "Open a draft report", body: "Link the project and survey type first so Smart fill knows which templates and weather/geology to pull. Upload CAD beforehand if you want utilities seeded in the same run." },
+      { title: "Run Prepare issue pack", body: "In Smart assist, select Prepare issue pack. This runs Smart fill, applies quick autofixes, seeds utilities from CAD when present, and merges linked GPR anomalies." },
+      { title: "Review what changed", body: "Scan the utilities schedule, limitations and anomaly cards. Smart fill is a draft — correct depths, QL and client wording before issue." },
+      { title: "Clear remaining blockers", body: "Use the blockers panel Fix → links. Critical items must be clear before Mark final is allowed." },
+      { title: "Mark final and download pack", body: "Mark final, then use the handover modal for PDF + ZIP (CSV, verification sheet, CAD sidecar where available)." },
+    ],
+  },
+  {
+    id: "survey-cad-import",
+    category: "Survey",
+    icon: "layers",
+    title: "Import CAD into a survey report",
+    summary: "Upload a DXF (model space), map layers to utility + PAS128 QL, and seed the utilities schedule.",
+    time: "5–8 min",
+    roles: "Surveyor",
+    target: { viewId: "survey-report", label: "Open Survey Reports" },
+    steps: [
+      { title: "Export DXF from CAD", body: "From AutoCAD / BricsCAD / QGIS export R2000+ DXF. DWG is not parsed in-browser — always use DXF. Prefer model-space linework only." },
+      { title: "Upload on Findings", body: "Open the report → Findings → CAD utility mapping. Only model-space LINE / LWPOLYLINE / POLYLINE are measured; paper layouts are ignored." },
+      { title: "Name layers for auto-classify", body: "Use names like UMG_LV_B1 or PAS128-HV-B2. Map unmatched layers with the utility + QL dropdowns. Re-map after a new upload if layer names changed." },
+      { title: "Seed the utilities table", body: "Select Seed utilities table from CAD (or let Prepare issue pack do it). Lengths and QL appear in the schedule and PDF." },
+      { title: "Merge vs replace", body: "If the schedule already has field rows, prefer merge so CAD lengths update without wiping hand-entered trial-hole notes. Check the panel summary after seeding." },
+    ],
+  },
+  {
+    id: "gpr-report",
+    category: "Survey",
+    icon: "radar",
+    title: "Create a GPR report",
+    summary: "Equipment, BGS ground, weather impact, anomalies, radargrams and a branded GPR PDF.",
+    time: "10–25 min",
+    roles: "Surveyor · Geophysicist",
+    target: { viewId: "gpr-report", label: "Open GPR Reports" },
+    steps: [
+      { title: "Create and link the project", body: "New GPR report → select the project (map pin preferred for BGS DigMap). Prefill pulls site address and job refs. Keep the same project as the utility survey for sync." },
+      { title: "Set equipment and velocity", body: "Choose a manufacturer preset (GSSI, IDS, MALÅ…). Set assumed or measured velocity (cm/ns) and scan mode / line spacing. Wrong velocity skews depth estimates in the PDF." },
+      { title: "Fetch geology and weather", body: "On Ground & env, fetch BGS geology (50k) and weather for the survey date. Review penetration vs target depth and note clay / saturated ground limitations." },
+      { title: "Import CAD verification (optional)", body: "Findings → CAD model-space verification for GPR corridor lengths, UMG→B1 upgrades and no-access hatches. See Import CAD into a GPR report." },
+      { title: "Log anomalies and radargrams", body: "Add anomalies (or quick templates), attach radargram images / geo-photos, and complete chainage segments with PAS128-style line refs (e.g. UMG_LV_B1)." },
+      { title: "Clear blockers and export", body: "Use the GPR blockers / quick fixes panel, review live preview (acquisition diagram + chainage chart), then Mark final and export PDF. Save once so linked survey reports pick up anomalies." },
+    ],
+  },
+  {
+    id: "gpr-cad-import",
+    category: "Survey",
+    icon: "layers",
+    title: "Import CAD into a GPR report",
+    summary: "Model-space DXF: count GPR layers, UMG→B1 upgrades, vegetation/obstruction hatches, and sync anomalies.",
+    time: "5–10 min",
+    roles: "Surveyor",
+    target: { viewId: "gpr-report", label: "Open GPR Reports" },
+    steps: [
+      { title: "Prepare layer names", body: "Scan corridors: layers containing GPR (e.g. GPR_SCAN_L1). Upgraded utilities: UMG_LV_B1, UMG_GAS_B1. Hatches: VEGETATION, FOLIAGE, OBSTRUCTION, BUILDING, NO_ACCESS." },
+      { title: "Upload DXF on Findings", body: "GPR report → Findings → CAD model-space verification. Paper-space / layout entities are skipped automatically." },
+      { title: "Read the verification card", body: "Check counts and lengths for GPR layers, UMG→B1 segments, anomaly totals, and no-access hatch area (m²). Zero hatch area usually means hatches lived on a layout — re-export from model space." },
+      { title: "Review unable-to-survey text", body: "Hatches auto-add limitation keys and narrative (e.g. no access due to vegetation). Edit if the site story differs." },
+      { title: "Save to sync survey", body: "Save the GPR report so anomalies and CAD-derived limitations push into a linked survey on the same project. Re-run Prepare issue pack on the survey if you need a full client pack refresh." },
+    ],
+  },
+  {
+    id: "geo-photos",
+    category: "Survey",
+    icon: "camera",
+    title: "Capture and use geo-photos",
+    summary: "GPS-tagged site photos as evidence for survey, GPR, permits and Project Hub.",
+    time: "5–10 min",
+    roles: "Surveyor · Supervisor · Operative",
+    target: { viewId: "geo-photos", label: "Open Geo-photos" },
+    steps: [
+      { title: "Allow location", body: "Open Geo-photos on a phone or tablet and allow browser location when prompted. Accuracy is better outdoors with a clear sky view." },
+      { title: "Capture against a project", body: "Select the project, choose a photo type/preset (utility mark-up, trial pit, radargram, general), then take or upload the photo." },
+      { title: "Pull into Survey or GPR", body: "In Survey Smart assist or GPR Findings, import geo-photos for that project. Utility / trial-pit types can seed schedule rows; radargram types fill GPR image slots." },
+      { title: "Use on permits and Hub", body: "The same library feeds Project Hub evidence and can support permit close-out photos — keep captions short and factual." },
+      { title: "Keep evidence tidy", body: "Delete or recycle bad shots, and avoid mixing projects — wrong projectId breaks automatic import." },
+    ],
+  },
+  {
+    id: "survey-gpr-dig",
+    category: "Survey",
+    icon: "workflow",
+    title: "Survey → GPR → dig-ready permit",
+    summary: "End-to-end utility workflow: map services, verify with GPR, then link residual risk into a permit to dig.",
+    time: "15–30 min",
+    roles: "Surveyor · Supervisor",
+    target: { viewId: "survey-report", label: "Open Survey Reports" },
+    steps: [
+      { title: "Issue the survey report", body: "Complete PAS128 utility mapping (CAD + field schedule), run Prepare issue pack, Mark final." },
+      { title: "Add or link a GPR report", body: "Same project → GPR report. Import CAD for GPR/UMG-B1/hatches, log anomalies, save so survey anomaly cards sync." },
+      { title: "Check dig readiness", body: "On utility-mapping orgs, review dig-readiness / executive pages in print preview. Note unmarked or records-only (TFR) lines and no-access hatch zones." },
+      { title: "Brief residual risk", body: "Highlight QL-B4/TFR corridors, vegetation no-access and unverified crossings for the dig team — do not treat the PDF as a dig-safe certificate." },
+      { title: "Link into Permit to dig", body: "Open Permits → excavation / ground disturbance. Link the survey (and CAT/GPR refs). Carry residual risk and no-access zones into the permit scope before activation." },
     ],
   },
   {
@@ -144,20 +251,55 @@ export const GUIDED_HELP_TASKS = [
   },
 ];
 
+/** Side-nav / deep-link section ids (must match HelpAbout HELP_NAV anchors). */
 export const HELP_TOC = [
-  { id: "start-here", label: "Start here — how the app is laid out" },
-  { id: "first-week", label: "Your first week" },
-  { id: "settings-guide", label: "Settings — what each tab does" },
-  { id: "billing-trial", label: "Trial, billing & limits" },
-  { id: "glossary", label: "Glossary (RAMS, PTW, CDM…)" },
-  { id: "faq", label: "Common questions" },
-  { id: "workspace-profiles", label: "Workspace profiles" },
-  { id: "project-hub", label: "Project Hub & readiness" },
-  { id: "workflows", label: "Key workflows" },
-  { id: "roles", label: "Roles & permissions" },
-  { id: "backup-audit", label: "Backup, bin & audit" },
-  { id: "portals", label: "Client & subcontractor portals" },
-  { id: "module-index", label: "Complete module index" },
+  { id: "help-start", label: "Start here" },
+  { id: "help-guides", label: "Guided tasks" },
+  { id: "help-first-week", label: "Your first week" },
+  { id: "help-workspace", label: "Your workspace" },
+  { id: "help-detail", label: "Workflows, roles & portals" },
+  { id: "help-settings", label: "Settings" },
+  { id: "help-questions", label: "Questions & glossary" },
+  { id: "help-modules", label: "Module finder" },
+];
+
+/** Longer explainers rendered under Help → Workflows, roles & portals. */
+export const HELP_DETAIL_SECTIONS = [
+  {
+    id: "project-hub",
+    title: "Project Hub & readiness",
+    body: "Open any project card to see the readiness ring, suggested next action, playbooks and trade checklist for that site. Completing Hub items (RAMS, permits, drawings, survey) raises readiness and clears management overview alerts. Survey / GPR completion feeds dig-readiness cues on utility-mapping profiles.",
+  },
+  {
+    id: "workflows",
+    title: "Key workflows",
+    body: "Typical paths: (1) Project → RAMS → Permit → Daily briefing. (2) Project → Survey / GPR → handover pack → Permit to dig. (3) Project → Drawings → mark zones → link from PTW. Use Guided tasks for step-by-step versions. Contextual Help buttons on Survey, GPR and Geo-photos jump straight to the matching guide.",
+  },
+  {
+    id: "survey-gpr-detail",
+    title: "Survey & GPR deliverables",
+    body: "Survey Reports hold PAS128 schedules, CAD lengths, trial holes and the client PDF/ZIP. GPR Reports hold equipment, BGS/weather, anomalies, radargrams and CAD verification (GPR layers, UMG→B1, no-access hatches). Keep both on the same project so save/sync and Prepare issue pack can merge anomalies. Smart fill and autofix are drafts — competent review before Mark final remains your duty.",
+  },
+  {
+    id: "cad-dxf-detail",
+    title: "CAD / DXF rules of thumb",
+    body: "Always DXF (not DWG), R2000+. Model space only — layouts/title blocks are ignored. Layer names drive classification (UMG_*, PAS128-*, GPR*, VEGETATION…). Survey seeds the utilities table; GPR builds a verification card + hatch narratives. Re-upload after CAD edits; re-seed or rematch layers if names changed.",
+  },
+  {
+    id: "roles",
+    title: "Roles & permissions",
+    body: "Admin — organisation, billing, invites, module visibility. Supervisor — day-to-day RAMS, permits, people, briefings. Operative — registers, briefings, capture evidence; limited organisation settings. Client / subcontractor portals are separate scoped views, not full roles.",
+  },
+  {
+    id: "portals",
+    title: "Client & subcontractor portals",
+    body: "Client portal: read-only compliance snapshot for a client. Subcontractor portal: scoped access for supply-chain partners. Create from More → Client portal / Subcontractor; never share admin credentials.",
+  },
+  {
+    id: "backup-audit",
+    title: "Backup, bin & audit",
+    body: "Backup exports a JSON workspace copy — export before major imports. Recycle bin restores recently deleted register rows. Audit shows who changed what. Cloud sync (when linked) does not replace your own controlled backups for critical sites.",
+  },
 ];
 
 export const APP_LAYOUT = {
@@ -209,6 +351,10 @@ export const FIRST_WEEK_STEPS = [
     body: "RAMS or Permits from the bottom bar. Link to the project, review hazards, issue before work starts.",
   },
   {
+    title: "Survey / GPR (if you map utilities)",
+    body: "For surveying or utility-mapping profiles: create a Survey report, optionally a GPR report, upload DXF on Findings, then Prepare issue pack. See Guided tasks → Survey.",
+  },
+  {
     title: "Invite colleagues",
     body: "Settings → Invites (admin). Supervisors run day-to-day; admins handle billing and organisation.",
   },
@@ -253,6 +399,16 @@ export const GLOSSARY = [
   { term: "Industry sectors", def: "Optional ticks (construction, food, pharma…) — unlock sector banners and packs; separate from workspace profile." },
   { term: "Project Hub", def: "Per-project dashboard card with readiness score and suggested next step." },
   { term: "Competent review", def: "Checkbox or confirm step before issuing RAMS or activating permits — records that a competent person reviewed." },
+  { term: "PAS 128", def: "BSI specification for underground utility detection, verification and location — quality levels and detection methods used in UK utility surveys." },
+  { term: "QL-B0 to B4", def: "PAS 128 quality levels for detected utilities. B0 = verified (e.g. trial hole); B1–B3 = detection with increasing uncertainty; B4 / TFR = taken from records." },
+  { term: "TFR / AR", def: "Taken from records / as recorded — CAD or schedule linework derived from statutory records, not site detection." },
+  { term: "UMG layer", def: "Utility Mapping CAD layer naming (e.g. UMG_LV_B1) encoding utility type and PAS128 QL for length analysis." },
+  { term: "GPR", def: "Ground Penetrating Radar — geophysical method; MySafeOps GPR report records equipment, processing, anomalies and radargrams for the deliverable." },
+  { term: "NDD", def: "Non-destructive digging (e.g. vacuum excavation) — often used to verify QL-B0 after detection." },
+  { term: "Smart fill", def: "One-click draft aid that pulls project, weather, geology, templates and narratives into Survey or GPR — always verify before issue." },
+  { term: "Issue pack", def: "Survey Prepare issue pack: Smart fill + autofixes + CAD utilities + GPR sync, then Mark final and client handover ZIP." },
+  { term: "Model space", def: "CAD construction space. MySafeOps DXF import measures model space only and ignores paper-space / layout sheets." },
+  { term: "No-access hatch", def: "CAD HATCH on layers such as VEGETATION, OBSTRUCTION or BUILDING — area is measured and written as unable-to-survey / limited coverage narrative." },
 ];
 
 export const HELP_FAQ = [
@@ -285,6 +441,34 @@ export const HELP_FAQ = [
     a: "Organisation admins only. Supervisors and operatives use operational modules.",
   },
   {
+    q: "CAD / DXF will not import — what now?",
+    a: "Use DXF (not DWG). Export from AutoCAD/BricsCAD/QGIS as R2000+ ASCII DXF. Import reads model space only — title blocks on layouts are ignored. For Survey, open Findings → CAD utility mapping; for GPR, Findings → CAD model-space verification.",
+  },
+  {
+    q: "Why can't I Mark final on a survey report?",
+    a: "The blockers panel lists critical gaps (title, surveyor, findings, QA, etc.). Use Fix → to jump to each field, or Prepare issue pack then clear what remains. Mark final stays disabled until the final gate passes.",
+  },
+  {
+    q: "My geo-photos have no GPS / wrong place",
+    a: "Allow location in the browser, capture outdoors, and confirm the correct project is selected before taking the photo. Desktop uploads without EXIF GPS stay untagged — re-capture on a phone if coordinates are required.",
+  },
+  {
+    q: "Hatch area is 0 m² or missing in GPR CAD",
+    a: "Hatches need a closed boundary in the DXF and a layer name containing vegetation, foliage, obstruction, building, no_access, etc. Layout hatches are skipped. Re-export model-space hatches if the CAD only drew them on a paper layout.",
+  },
+  {
+    q: "What does UMG → B1 mean on the GPR CAD card?",
+    a: "Linework on layers like UMG_LV_B1 is treated as PAS128 QL-B1 — typically upgraded after GPR verification versus records-only (B4/TFR). Counts and lengths appear in the verification card and PDF.",
+  },
+  {
+    q: "How do Survey and GPR stay in sync?",
+    a: "Use the same project on both reports. Saving a GPR report pushes anomalies into the linked survey; Survey Prepare issue pack also merges GPR. If cards look stale, save GPR again or re-run Prepare issue pack.",
+  },
+  {
+    q: "Where is live Help for Survey / GPR?",
+    a: "More → Help & about, or the Help button on Survey / GPR editor heroes, CAD import panels and Geo-photos. Those open the matching guided task (guideId deep-link).",
+  },
+  {
     q: "Is this legal or HSE advice?",
     a: "No — record-keeping software only. You must verify compliance with competent advisers and official guidance.",
   },
@@ -301,4 +485,8 @@ export const MODULE_BLURBS_EXTRA = {
   "fess-sites": "FESS client & sites — one-click RAMS, method statement and permits per food factory site (FESS org only).",
   "construction-setup": "Construction onboarding wizard — CDM-oriented starter checklist.",
   "site-map": "Legacy label — use Drawings and Project Hub map tools.",
+  "survey-report": "PAS128 / topo / specialist survey deliverables — Smart fill, CAD lengths, QA gates, issue pack and handover ZIP.",
+  "gpr-report": "GPR technical report — BGS/weather, anomalies, radargrams, model-space CAD verification and PDF.",
+  "geo-photos": "GPS-tagged photos for survey, GPR, permits and Project Hub evidence packs.",
 };
+

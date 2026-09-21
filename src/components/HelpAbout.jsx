@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
   BarChart3,
   BookOpen,
   Building2,
+  Camera,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -14,11 +15,14 @@ import {
   Command,
   DatabaseBackup,
   FileText,
+  GitBranch,
   HardHat,
+  Layers,
   LayoutGrid,
   LifeBuoy,
   Mail,
   MapPinned,
+  Radio,
   Search,
   Settings2,
   ShieldCheck,
@@ -37,7 +41,9 @@ import {
   FIRST_WEEK_STEPS,
   GLOSSARY,
   GUIDED_HELP_TASKS,
+  HELP_DETAIL_SECTIONS,
   HELP_FAQ,
+  HELP_TOC,
   MODULE_BLURBS_EXTRA,
   SETTINGS_TAB_HELP,
 } from "../utils/helpGuideContent";
@@ -50,7 +56,11 @@ import {
   listProfileGuideCatalogue,
 } from "../utils/workspaceProfileGuide";
 import { MORE_SECTIONS, getMoreTabsForSection, NAV_TAB_IDS } from "../navigation/appModules";
-import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
+import {
+  consumeWorkspaceNavTarget,
+  openWorkspaceSettings,
+  openWorkspaceView,
+} from "../utils/workspaceNavContext";
 import "../styles/help-centre.css";
 
 const SUPPORT_EMAIL = getSupportEmail();
@@ -67,6 +77,11 @@ const GUIDE_ICONS = {
   chart: BarChart3,
   mail: Mail,
   database: DatabaseBackup,
+  sparkles: Sparkles,
+  layers: Layers,
+  radar: Radio,
+  camera: Camera,
+  workflow: GitBranch,
 };
 
 const MODULE_BLURBS = {
@@ -83,7 +98,6 @@ const MODULE_BLURBS = {
   signatures: "Collect digital signatures for controlled documents.",
   timesheets: "Record worker hours against projects.",
   snags: "Track defects, photos, owners and close-out.",
-  "geo-photos": "Capture GPS-tagged photos for site and survey evidence.",
   coshh: "Maintain substances and COSHH assessments.",
   inspections: "Schedule and complete site inspections.",
   incidents: "Record incidents and near misses with evidence.",
@@ -108,8 +122,9 @@ const MODULE_BLURBS = {
   "temp-works": "Manage temporary works designs and checks.",
   analytics: "Review compliance trends and module performance.",
   "monthly-report": "Build a monthly H&S management summary.",
-  "survey-report": "Create professional survey reports and PDFs.",
-  "gpr-report": "Create detailed GPR reports and anomaly records.",
+  "survey-report": MODULE_BLURBS_EXTRA["survey-report"] || "Create professional survey reports and PDFs.",
+  "gpr-report": MODULE_BLURBS_EXTRA["gpr-report"] || "Create detailed GPR reports and anomaly records.",
+  "geo-photos": MODULE_BLURBS_EXTRA["geo-photos"] || "Capture GPS-tagged photos for site and survey evidence.",
   templates: "Maintain reusable document templates.",
   "client-portal": "Create read-only client compliance views.",
   subcontractor: "Create scoped access for supply-chain partners.",
@@ -128,15 +143,7 @@ const START_ACTIONS = [
   { icon: ClipboardCheck, title: "Issue a permit", detail: "Authorise high-risk work", action: () => openWorkspaceView({ viewId: "permits" }) },
 ];
 
-const HELP_NAV = [
-  ["help-start", "Start here"],
-  ["help-guides", "Guided tasks"],
-  ["help-first-week", "First week"],
-  ["help-workspace", "Your workspace"],
-  ["help-settings", "Settings"],
-  ["help-questions", "Questions"],
-  ["help-modules", "Module finder"],
-];
+const HELP_NAV = HELP_TOC.map((item) => [item.id, item.label]);
 
 function openTarget(target) {
   if (target?.settingsTab) openWorkspaceSettings({ tab: target.settingsTab });
@@ -226,6 +233,23 @@ export default function HelpAbout() {
     window.requestAnimationFrame(() => document.getElementById("help-guide-viewer")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   };
 
+  useEffect(() => {
+    const target = consumeWorkspaceNavTarget();
+    if (!target || target.viewId !== "help") return;
+    if (target.guideId && GUIDED_HELP_TASKS.some((g) => g.id === target.guideId)) {
+      setSelectedGuideId(target.guideId);
+    }
+    const sectionId = target.section || (target.guideId ? "help-guides" : null);
+    if (sectionId) {
+      window.requestAnimationFrame(() => {
+        document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (target.guideId) {
+          document.getElementById("help-guide-viewer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    }
+  }, []);
+
   const toggleStep = (index) => {
     const key = `${selectedGuide.id}:${index}`;
     setCompletedSteps((current) => {
@@ -247,7 +271,7 @@ export default function HelpAbout() {
           <p>Choose a task and follow the steps. Every guide uses plain UK English and opens the right place in MySafeOps.</p>
           <label className="help-search">
             <Search size={20} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search: create RAMS, invite someone, export PDF…" aria-label="Search help" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search: survey, GPR, CAD, RAMS, permit, geo-photos…" aria-label="Search help" />
             {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear help search"><X size={16} /></button> : <kbd>?</kbd>}
           </label>
           <div className="help-hero__promises">
@@ -342,6 +366,24 @@ export default function HelpAbout() {
             <div className="help-app-map">
               <div><span className="help-section-kicker">How the app fits together</span><h3>{APP_LAYOUT.title}</h3><p>{APP_LAYOUT.lead}</p></div>
               <ol>{APP_LAYOUT.layers.map((layer, index) => <li key={layer.name}><span>{index + 1}</span><div><strong>{layer.name}</strong><p>{layer.body}</p></div></li>)}</ol>
+            </div>
+          </section>
+
+          <section className="help-section" id="help-detail">
+            <div className="help-section__head">
+              <div>
+                <span className="help-section-kicker">Deeper detail</span>
+                <h2>Workflows, roles &amp; portals</h2>
+                <p>How Project Hub, permissions and shared portals fit together.</p>
+              </div>
+            </div>
+            <div className="help-detail-grid">
+              {HELP_DETAIL_SECTIONS.map((block) => (
+                <article key={block.id} id={`help-detail-${block.id}`} className="help-detail-card">
+                  <strong>{block.title}</strong>
+                  <p>{block.body}</p>
+                </article>
+              ))}
             </div>
           </section>
 
