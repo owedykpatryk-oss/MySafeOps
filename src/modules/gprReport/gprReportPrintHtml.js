@@ -24,6 +24,7 @@ import {
   gprReportQuality,
   normalizeGprReport,
 } from "./gprReportHelpers";
+import { buildGprPreSurveyPrintHtml } from "./gprPreSurvey";
 import { gprEvidenceStats } from "./gprReportPulse";
 import { GPR_LIMITATION_RULES, SCAN_MODES } from "./gprReportConstants";
 // Shared confidence palette with the survey report's PAS128 visuals, so anomaly
@@ -118,7 +119,7 @@ function styles(primary, accent) {
        apply once, at the very end of the document, not per page. */
     @page { size: A4; margin: 14mm 12mm 20mm; }
     .gpr-doc { font-family: "DM Sans", system-ui, sans-serif; font-size: 10.5pt; color: #1a1a1a; line-height: 1.45; }
-    .gpr-cover { page-break-after: always; min-height: 250mm; display: flex; flex-direction: column; background: linear-gradient(165deg, #f8fafc 0%, #fff 45%, #f0f9ff 100%); padding: 8px 0; }
+    .gpr-cover { page-break-after: always; min-height: 250mm; display: flex; flex-direction: column; background: linear-gradient(165deg, #f8fafc 0%, #fff 42%, #ecfeff 100%); padding: 8px 0; border: 1px solid #e2e8f0; border-radius: 8px; }
     .gpr-cover-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
     .gpr-cover-stat { font-size: 9pt; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: ${accent}; color: ${primary}; }
     .gpr-cover-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
@@ -167,7 +168,7 @@ function styles(primary, accent) {
     .gpr-toc-dots { flex: 1; border-bottom: 1px dotted #cbd5e1; min-width: 24px; margin: 0 6px; }
     .gpr-doc-body { position: relative; z-index: 1; }
     @media print {
-      .gpr-cover-stat, .gpr-badge, .gpr-confidence-pill, .gpr-bar-fill, .gpr-data-table th {
+      .gpr-cover-stat, .gpr-badge, .gpr-confidence-pill, .gpr-bar-fill, .gpr-data-table th, .gpr-cover {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
@@ -655,7 +656,16 @@ export function buildGprReportHtml(report, extras = {}) {
       : org.accentColor || "#E6F1FB";
   const quality = gprReportQuality(r);
   const scanLabel = SCAN_MODES.find((s) => s.key === r.acquisition?.scanMode)?.label || r.acquisition?.scanMode;
-  const mapUrl = staticSiteMapUrl(extras.projectLat, extras.projectLng);
+  const startLat = r.preSurvey?.lat ?? extras.projectLat;
+  const startLng = r.preSurvey?.lng ?? extras.projectLng;
+  const mapUrl = staticSiteMapUrl(startLat, startLng);
+  const surveyDates = (r.preSurvey?.surveyDates || []).filter(Boolean);
+  const surveyDateLabel =
+    surveyDates.length > 1
+      ? surveyDates.map((d) => formatOrgDate(d)).join(" · ")
+      : r.surveyDate
+        ? formatOrgDate(r.surveyDate)
+        : "—";
 
   const limitationText =
     r.sections?.limitations ||
@@ -685,7 +695,7 @@ export function buildGprReportHtml(report, extras = {}) {
         logoSrc: umLogo,
         meta: [
           ["Report ref", r.ref || "—"],
-          ["Survey date", r.surveyDate ? formatOrgDate(r.surveyDate) : "—"],
+          ["Survey date", surveyDateLabel],
           ["Site", r.siteAddress || r.projectName || "—"],
           ["Surveyor", r.surveyor || "—"],
           ["Scan mode", scanLabel || "—"],
@@ -712,7 +722,7 @@ export function buildGprReportHtml(report, extras = {}) {
       ${coverStatsRow(r)}
       ${metaGrid([
         ["Report ref", r.ref],
-        ["Survey date", r.surveyDate ? formatOrgDate(r.surveyDate) : "—"],
+        ["Survey date", surveyDateLabel],
         ["Site", r.siteAddress || r.projectName],
         ["Surveyor", r.surveyor],
         ["Scan mode", scanLabel],
@@ -724,6 +734,10 @@ export function buildGprReportHtml(report, extras = {}) {
   pushSection("Foreword", nl2p(r.sections.foreword), "foreword");
   pushSection("Executive summary", nl2p(r.sections.executiveSummary), "exec");
   pushSection("Scope", nl2p(r.sections.scope), "scope");
+  const preSurveyHtml = buildGprPreSurveyPrintHtml(r.preSurvey);
+  if (preSurveyHtml) {
+    pushSection("Pre-survey start checks", preSurveyHtml, "presurvey");
+  }
   pushSection("Methodology", nl2p(r.sections.methodology), "method");
   pushSection("Equipment", equipmentBlock(r.equipment), "equip");
   pushSection(

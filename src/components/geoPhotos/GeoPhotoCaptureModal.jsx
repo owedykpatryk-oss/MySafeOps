@@ -130,7 +130,8 @@ export default function GeoPhotoCaptureModal({
   const [quickError, setQuickError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
-  const fileRef = useRef(null);
+  const cameraRef = useRef(null);
+  const libraryRef = useRef(null);
   const compassCleanupRef = useRef(null);
   const wasOpenRef = useRef(false);
   const savingRef = useRef(false);
@@ -632,23 +633,41 @@ export default function GeoPhotoCaptureModal({
             {photoDataUrl ? (
               <img src={photoDataUrl} alt={photoName || "Captured"} className="geo-photo-modal__preview" />
             ) : (
-              <button
-                type="button"
-                className="geo-photo-capture__dropzone"
-                onClick={() => fileRef.current?.click()}
-                disabled={photoBusy}
-              >
-                <span className="geo-photo-capture__dropzone-icon" aria-hidden>
-                  📷
-                </span>
-                {photoBusy ? "Reading photo…" : "Take or choose photo"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="geo-photo-capture__dropzone"
+                  onClick={() => cameraRef.current?.click()}
+                  disabled={photoBusy}
+                >
+                  <span className="geo-photo-capture__dropzone-icon" aria-hidden>
+                    📷
+                  </span>
+                  {photoBusy ? "Reading photo…" : "Take photo"}
+                </button>
+                <button
+                  type="button"
+                  className="geo-photo-capture__library-btn"
+                  style={ms.btn}
+                  onClick={() => libraryRef.current?.click()}
+                  disabled={photoBusy}
+                >
+                  Choose from photo library
+                </button>
+              </>
             )}
             <input
-              ref={fileRef}
+              ref={cameraRef}
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif"
               capture="environment"
+              style={{ display: "none" }}
+              onChange={onPickPhoto}
+            />
+            <input
+              ref={libraryRef}
+              type="file"
+              accept="image/*,.heic,.heif"
               style={{ display: "none" }}
               onChange={onPickPhoto}
             />
@@ -657,8 +676,11 @@ export default function GeoPhotoCaptureModal({
             ) : null}
             {photoDataUrl ? (
               <div className="geo-photo-capture__actions">
-                <button type="button" style={ms.btn} onClick={() => fileRef.current?.click()} disabled={photoBusy}>
+                <button type="button" style={ms.btn} onClick={() => cameraRef.current?.click()} disabled={photoBusy}>
                   Retake
+                </button>
+                <button type="button" style={ms.btn} onClick={() => libraryRef.current?.click()} disabled={photoBusy}>
+                  Choose from library
                 </button>
                 <button type="button" style={ms.btnP} onClick={() => setStep("location")} disabled={photoBusy}>
                   Next — location

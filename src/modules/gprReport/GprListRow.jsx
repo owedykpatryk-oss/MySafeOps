@@ -31,7 +31,8 @@ function GprListRow({ enriched, onEdit, onDelete }) {
               <strong style={{ fontSize: 15 }}>{r.title || r.ref || "Untitled"}</strong>
               <StatusChip meta={getSurveyStatusMeta(r.status)} />
               {enriched.ready ? <span className="app-survey-list-row__ready-pill">Ready to finalise</span> : null}
-              {enriched.freqLabel ? <span className="app-gpr-list-chip">{enriched.freqLabel}</span> : null}
+            {enriched.preSurveyStarted ? <span className="app-gpr-list-chip">Started on site</span> : null}
+            {enriched.freqLabel ? <span className="app-gpr-list-chip">{enriched.freqLabel}</span> : null}
               {enriched.penLabel ? <span className="app-gpr-list-chip app-gpr-list-chip--muted">{enriched.penLabel}</span> : null}
             </div>
             <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4 }}>

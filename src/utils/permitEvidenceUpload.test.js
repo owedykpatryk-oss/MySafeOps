@@ -21,7 +21,16 @@ vi.mock("./countryWorkspaces", () => ({
   getCachedActiveCountryWorkspace: vi.fn(),
 }));
 
+vi.mock("./geoPhotoUtils", () => {
+  const jpeg = new File(["jpeg-bytes"], "evidence.jpg", { type: "image/jpeg" });
+  return {
+    compressImageFile: vi.fn(async () => "data:image/jpeg;base64,abc"),
+    jpegFileFromDataUrl: vi.fn(() => jpeg),
+  };
+});
+
 import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
+import { compressImageFile, jpegFileFromDataUrl } from "./geoPhotoUtils";
 import { uploadPermitEvidencePhoto } from "./permitEvidenceUpload";
 
 describe("permitEvidenceUpload workspace path", () => {
@@ -40,12 +49,13 @@ describe("permitEvidenceUpload workspace path", () => {
 
     const result = await uploadPermitEvidencePhoto(file, "permit-42");
 
+    expect(compressImageFile).toHaveBeenCalledWith(file, { maxWidth: 1920, quality: 0.82 });
     expect(upload).toHaveBeenCalledWith(
       expect.stringMatching(
         /^user-1\/11111111-1111-4111-8111-111111111111\/permit-42\/\d+\.jpg$/,
       ),
-      file,
-      expect.objectContaining({ upsert: false }),
+      jpegFileFromDataUrl(),
+      expect.objectContaining({ upsert: false, contentType: "image/jpeg" }),
     );
     expect(result.path).toMatch(
       /^user-1\/11111111-1111-4111-8111-111111111111\/permit-42\/\d+\.jpg$/,
@@ -59,11 +69,11 @@ describe("permitEvidenceUpload workspace path", () => {
 
     const result = await uploadPermitEvidencePhoto(file, "permit-99");
 
-    expect(result.path).toMatch(/^user-1\/legacy\/permit-99\/\d+\.png$/);
+    expect(result.path).toMatch(/^user-1\/legacy\/permit-99\/\d+\.jpg$/);
     expect(upload).toHaveBeenCalledWith(
-      expect.stringMatching(/^user-1\/legacy\/permit-99\/\d+\.png$/),
-      file,
-      expect.any(Object),
+      expect.stringMatching(/^user-1\/legacy\/permit-99\/\d+\.jpg$/),
+      jpegFileFromDataUrl(),
+      expect.objectContaining({ contentType: "image/jpeg" }),
     );
   });
 });

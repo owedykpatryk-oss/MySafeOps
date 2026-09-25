@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
+import {
+  overlayDraftKey,
+  seedOverlayForm,
+  useOverlayFormDraft,
+  clearOverlayFormDraft,
+  writeOverlayFormDraft,
+  readOverlayFormDraft,
+} from "../hooks/useOverlayFormDraft";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -18,6 +26,7 @@ import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { exportCsv } from "../utils/exportCsv";
 
 import { todayLocalISO } from "../utils/localDate";
+import { compressImageFile } from "../utils/geoPhotoUtils";
 const INCIDENTS_KEY = "mysafeops_incidents";
 const LEGACY_INCIDENT_KEY = "incident_register";
 const ACTIONS_KEY = "incident_actions_v1";
@@ -103,15 +112,6 @@ function buildQuickSummary(flags = [], note = "") {
   return `${prefix} ${cleanNote}`;
 }
 
-function readPhotoAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(String(e.target?.result || ""));
-    reader.onerror = () => reject(new Error("Failed to read photo"));
-    reader.readAsDataURL(file);
-  });
-}
-
 function getGpsFix() {
   return new Promise((resolve, reject) => {
     if (!navigator?.geolocation) {
@@ -133,6 +133,7 @@ function getGpsFix() {
 }
 
 function QuickIncidentCapture({ projects, onCreate }) {
+  const draftKey = overlayDraftKey("incident-quick", "capture");
   const [type, setType] = useState("near_miss");
   const [location, setLocation] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -144,6 +145,44 @@ function QuickIncidentCapture({ projects, onCreate }) {
   const [gpsBusy, setGpsBusy] = useState(false);
   const [gpsError, setGpsError] = useState("");
   const fileRef = useRef(null);
+  const restoredRef = useRef(false);
+
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    const draft = readOverlayFormDraft(draftKey);
+    if (!draft) return;
+    if (draft.type) setType(draft.type);
+    if (draft.location) setLocation(draft.location);
+    if (draft.projectId) setProjectId(draft.projectId);
+    if (draft.reportedBy) setReportedBy(draft.reportedBy);
+    if (draft.quickNote) setQuickNote(draft.quickNote);
+    if (Array.isArray(draft.flags)) setFlags(draft.flags);
+    if (Array.isArray(draft.photos) && draft.photos.length) setPhotos(draft.photos);
+    if (draft.gps) setGps(draft.gps);
+  }, [draftKey]);
+
+  useEffect(() => {
+    const flush = () =>
+      writeOverlayFormDraft(draftKey, {
+        type,
+        location,
+        projectId,
+        reportedBy,
+        quickNote,
+        flags,
+        photos,
+        gps,
+      });
+    const t = window.setTimeout(flush, 400);
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", flush);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", flush);
+    };
+  }, [draftKey, type, location, projectId, reportedBy, quickNote, flags, photos, gps]);
 
   const pm = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects]);
   const summary = buildQuickSummary(flags, quickNote);
@@ -156,7 +195,7 @@ function QuickIncidentCapture({ projects, onCreate }) {
     e.target.value = "";
     if (!file) return;
     try {
-      const url = await readPhotoAsDataUrl(file);
+      const url = await compressImageFile(file);
       setPhotos((prev) => [url, ...prev].slice(0, 4));
     } catch {
       window.alert("Could not read photo.");
@@ -200,6 +239,7 @@ function QuickIncidentCapture({ projects, onCreate }) {
       createdAt: new Date().toISOString(),
       quickCapture: true,
     });
+    clearOverlayFormDraft(draftKey);
     setLocation("");
     setProjectId("");
     setReportedBy("");
@@ -246,7 +286,7 @@ function QuickIncidentCapture({ projects, onCreate }) {
         <button type="button" style={ss.btn} onClick={() => fileRef.current?.click()}>
           + Photo
         </button>
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={addPhoto} />
+        <input ref={fileRef} type="file" accept="image/*,.heic,.heif" style={{ display: "none" }} onChange={addPhoto} />
         <button type="button" style={ss.btn} onClick={captureGps} disabled={gpsBusy}>
           {gpsBusy ? "Capturing GPS…" : gps ? "Refresh GPS" : "Add GPS"}
         </button>
@@ -272,30 +312,35 @@ function QuickIncidentCapture({ projects, onCreate }) {
 }
 
 function IncidentForm({ item, projects, onSave, onClose }) {
+  const draftKey = overlayDraftKey("incident", item?.id || "new");
   const [form, setForm] = useState(
     () =>
-      item || {
-        id: genId(),
-        type: "near_miss",
-        occurredAt: `${today()}T12:00`,
-        location: "",
-        projectId: "",
-        description: "",
-        severity: "medium",
-        injuryInvolved: false,
-        immediateActions: "",
-        status: "open",
-        reportedBy: "",
-        quickFlags: [],
-        quickSummary: "",
-        photos: [],
-        gpsLat: null,
-        gpsLng: null,
-        gpsAccuracyM: null,
-        gpsCapturedAt: null,
-        createdAt: new Date().toISOString(),
-      }
+      seedOverlayForm(
+        item || {
+          id: genId(),
+          type: "near_miss",
+          occurredAt: `${today()}T12:00`,
+          location: "",
+          projectId: "",
+          description: "",
+          severity: "medium",
+          injuryInvolved: false,
+          immediateActions: "",
+          status: "open",
+          reportedBy: "",
+          quickFlags: [],
+          quickSummary: "",
+          photos: [],
+          gpsLat: null,
+          gpsLng: null,
+          gpsAccuracyM: null,
+          gpsCapturedAt: null,
+          createdAt: new Date().toISOString(),
+        },
+        draftKey
+      )
   );
+  useOverlayFormDraft(draftKey, form, setForm);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
   const [gpsBusy, setGpsBusy] = useState(false);
@@ -316,7 +361,7 @@ function IncidentForm({ item, projects, onSave, onClose }) {
     e.target.value = "";
     if (!file) return;
     try {
-      const url = await readPhotoAsDataUrl(file);
+      const url = await compressImageFile(file);
       setForm((f) => ({ ...f, photos: [url, ...(Array.isArray(f.photos) ? f.photos : [])].slice(0, 6) }));
     } catch {
       window.alert("Could not read photo.");
@@ -440,7 +485,7 @@ function IncidentForm({ item, projects, onSave, onClose }) {
           <button type="button" style={ss.btn} onClick={() => photoRef.current?.click()}>
             {Array.isArray(form.photos) && form.photos.length ? "Add another photo" : "Add photo"}
           </button>
-          <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={addPhoto} />
+          <input ref={photoRef} type="file" accept="image/*,.heic,.heif" style={{ display: "none" }} onChange={addPhoto} />
           <button type="button" style={ss.btn} onClick={captureGps} disabled={gpsBusy}>
             {gpsBusy ? "Capturing GPS…" : form.gpsLat && form.gpsLng ? "Refresh GPS" : "Add GPS"}
           </button>
@@ -474,13 +519,14 @@ function IncidentForm({ item, projects, onSave, onClose }) {
           <button
             type="button"
             style={ss.btnP}
-            onClick={() =>
+            onClick={() => {
+              clearOverlayFormDraft(draftKey);
               onSave({
                 ...form,
                 description: String(form.description || "").trim() || buildQuickSummary(form.quickFlags || [], form.quickSummary || ""),
                 projectName: pm[form.projectId] || "",
-              })
-            }
+              });
+            }}
           >
             Save
           </button>

@@ -124,6 +124,7 @@ import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } f
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
 import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable, geoPhotosToGiLocationsTable } from "../../utils/geoPhotoIntegrations";
+import { compressImageFile } from "../../utils/geoPhotoUtils";
 import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings, seedUtilitiesTableFromCad } from "../../utils/surveyDxfAnalyzer";
 import CadImportPanel from "./CadImportPanel";
 import EmptyState from "../../components/EmptyState";
@@ -792,11 +793,11 @@ function ReportEditor({
   const [savedFlash, setSavedFlash] = useState(false);
   const savedFlashTimer = useRef(null);
   const [livePreviewOpen, setLivePreviewOpen] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1100px)").matches
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1100px) and (pointer: fine)").matches
   );
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return undefined;
-    const mq = window.matchMedia("(min-width: 1100px)");
+    const mq = window.matchMedia("(min-width: 1100px) and (pointer: fine)");
     const onChange = (e) => {
       if (!e.matches) setLivePreviewOpen(false);
     };
@@ -1107,19 +1108,20 @@ function ReportEditor({
     });
   };
 
-  const addPhoto = (e) => {
+  const addPhoto = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
+    try {
+      const dataUrl = await compressImageFile(file);
       setForm((f) => ({
         ...f,
-        photos: [...(f.photos || []), { id: `ph_${Date.now()}`, dataUrl: reader.result, caption: "", category: "field_work" }],
+        photos: [...(f.photos || []), { id: `ph_${Date.now()}`, dataUrl, caption: "", category: "field_work" }],
         updatedAt: new Date().toISOString(),
       }));
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
+    } catch (err) {
+      pushToast({ type: "error", title: "Photo failed", message: err?.message || "Could not add photo." });
+    }
   };
 
   const handleCadUpload = async (e) => {
@@ -2954,7 +2956,7 @@ function ReportEditor({
             ) : null}
             <label style={{ ...ss.btn, display: "inline-block", cursor: "pointer" }}>
               + Add photo
-              <input type="file" accept="image/*" style={{ display: "none" }} onChange={addPhoto} />
+              <input type="file" accept="image/*,.heic,.heif" style={{ display: "none" }} onChange={addPhoto} />
             </label>
             {photoCoverage.hasPhotos ? (
               <div className="app-survey-photo-coverage" style={{ marginTop: 10, marginBottom: 4 }}>

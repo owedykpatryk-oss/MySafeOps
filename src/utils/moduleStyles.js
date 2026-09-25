@@ -133,7 +133,7 @@ export const ms = {
     maxWidth: 640,
   },
   overlay: {
-    minHeight: "100dvh",
+    minHeight: "100vh",
     background: "rgba(0,0,0,0.45)",
     display: "flex",
     alignItems: "flex-start",

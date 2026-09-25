@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
@@ -205,8 +206,8 @@ export function SignaturePanel({ docId, docTitle, docType="RAMS", signers=[], on
   const allSigned = signers.length > 0 && signers.every(s => signedIds.has(s.id));
 
   return (
-    <div style={{ minHeight:500, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"1.5rem 1rem" }}>
-      <div style={{ ...ss.card, width:"100%", maxWidth:600 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:600 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
@@ -267,7 +268,7 @@ export function SignaturePanel({ docId, docTitle, docType="RAMS", signers=[], on
           </div>
         )}
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 

@@ -1,4 +1,11 @@
 import { useState, useEffect, useRef } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
+import {
+  overlayDraftKey,
+  seedOverlayForm,
+  useOverlayFormDraft,
+  clearOverlayFormDraft,
+} from "../hooks/useOverlayFormDraft";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -214,28 +221,35 @@ function SigCanvas({ onCapture, compact }) {
 // ─── New briefing form ────────────────────────────────────────────────────────
 function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
   const projectSeed = initial?.projectId ? projects.find((p) => p.id === initial.projectId) : null;
-  const [form, setForm] = useState({
-    date: today(),
-    time: new Date().toTimeString().slice(0, 5),
-    location: initial?.location || [projectSeed?.name, projectSeed?.site].filter(Boolean).join(" — ") || "",
-    projectId: initial?.projectId || "",
-    conductedBy: "",
-    weatherConditions: "",
-    temperature: "",
-    topics: [],
-    customTopics: "",
-    scopeToday: "",
-    attendees: workers.map((w) => ({
-      id: w.id,
-      name: w.name,
-      role: w.role || "",
-      present: false,
-      sig: null,
-      sigTime: null,
-    })),
-    notes: "",
-    createdAt: new Date().toISOString(),
-  });
+  const draftKey = overlayDraftKey("briefing", "new");
+  const [form, setForm] = useState(() =>
+    seedOverlayForm(
+      {
+        date: today(),
+        time: new Date().toTimeString().slice(0, 5),
+        location: initial?.location || [projectSeed?.name, projectSeed?.site].filter(Boolean).join(" — ") || "",
+        projectId: initial?.projectId || "",
+        conductedBy: "",
+        weatherConditions: "",
+        temperature: "",
+        topics: [],
+        customTopics: "",
+        scopeToday: "",
+        attendees: workers.map((w) => ({
+          id: w.id,
+          name: w.name,
+          role: w.role || "",
+          present: false,
+          sig: null,
+          sigTime: null,
+        })),
+        notes: "",
+        createdAt: new Date().toISOString(),
+      },
+      draftKey
+    )
+  );
+  useOverlayFormDraft(draftKey, form, setForm);
 
   const [conductPick, setConductPick] = useState("");
   const [workerAddSelect, setWorkerAddSelect] = useState("");
@@ -297,17 +311,8 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
   const valid = form.location?.trim() && form.conductedBy?.trim() && presentCount > 0;
 
   return (
-    <div
-      style={{
-        minHeight: 600,
-        background: "rgba(0,0,0,0.45)",
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: "1.5rem 1rem",
-      }}
-    >
-      <div style={{ ...ss.card, width: "100%", maxWidth: 620 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 620 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
             <div style={{ fontWeight: 500, fontSize: 16 }}>New daily briefing</div>
@@ -683,12 +688,12 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
           <button onClick={onClose} style={ss.btn}>
             Cancel
           </button>
-          <button disabled={!valid} onClick={() => onSave(form)} style={{ ...ss.btnO, opacity: valid ? 1 : 0.4 }}>
+          <button disabled={!valid} onClick={() => { clearOverlayFormDraft(draftKey); onSave(form); }} style={{ ...ss.btnO, opacity: valid ? 1 : 0.4 }}>
             Save briefing record
           </button>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -870,11 +875,11 @@ function printBriefing(brief) {
 
   const org = getOrgSettings();
   const bodyHtml = `
-  <div class="hdr" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px">
-    <div class="hdr-cell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="lbl" style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Location</div>${he(brief.location)}</div>
-    <div class="hdr-cell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="lbl" style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Date</div>${he(fmtDate(brief.date))}</div>
-    <div class="hdr-cell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="lbl" style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Time</div>${he(brief.time)}</div>
-    <div class="hdr-cell" style="border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#fff"><div class="lbl" style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Conducted by</div>${he(brief.conductedBy || "—")}</div>
+  <div class="print-kpi-grid">
+    <div class="print-kpi"><div class="print-kpi__l">Location</div><div class="print-kpi__v">${he(brief.location)}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Date</div><div class="print-kpi__v">${he(fmtDate(brief.date))}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Time</div><div class="print-kpi__v">${he(brief.time)}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Conducted by</div><div class="print-kpi__v">${he(brief.conductedBy || "—")}</div></div>
   </div>
   ${brief.weatherConditions ? `<div style="margin-bottom:12px;border:0.5px solid #e2e8f0;padding:8px 10px;border-radius:8px;background:#f8fafc"><div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:2px">Weather</div>${he(brief.weatherConditions)}${brief.temperature ? ` · ${he(brief.temperature)}°C` : ""}</div>` : ""}
   ${brief.scopeToday ? `<div class="print-section-title">Today's scope</div><p style="font-size:12px;line-height:1.6;margin:0 0 12px">${he(brief.scopeToday)}</p>` : ""}

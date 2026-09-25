@@ -1,9 +1,10 @@
 import { memo, useMemo, useState } from "react";
 import { buildGprBlockers } from "./gprReportBlockers";
 import { GPR_AUTOFIX_ACTIONS, suggestGprAutofixes } from "./gprAutofix";
+import { preferCollapsedEditorChrome } from "../../utils/narrowUi";
 
 function GprBlockersPanel({ report, linkedSurveyReport, onGoToTab, onAutofix }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(() => !preferCollapsedEditorChrome());
   const { blockers, score } = useMemo(
     () => buildGprBlockers(report, { linkedSurveyReport }),
     [report, linkedSurveyReport]
@@ -40,8 +41,11 @@ function GprBlockersPanel({ report, linkedSurveyReport, onGoToTab, onAutofix }) 
     >
       <button type="button" className="app-survey-blockers__toggle" onClick={() => setOpen((v) => !v)}>
         <span>
-          {critical.length ? "Cannot finalise yet" : "Complete before issue"} — {blockers.length} item
-          {blockers.length === 1 ? "" : "s"} · {score}%
+          {critical.length
+            ? `Cannot finalise yet — ${critical.length} must-fix · ${score}%`
+            : warnings.length
+              ? `Complete before issue — ${warnings.length} item${warnings.length === 1 ? "" : "s"} · ${score}%`
+              : `Suggestions — ${hints.length} tip${hints.length === 1 ? "" : "s"} · ${score}%`}
         </span>
         <span aria-hidden>{open ? "▾" : "▸"}</span>
       </button>

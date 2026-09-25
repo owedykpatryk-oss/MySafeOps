@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { ms } from "../utils/moduleStyles";
@@ -11,6 +12,8 @@ import { softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { escapeHtml, openPrintWindowOrWarn, writePrintWindowDocument } from "../utils/htmlEscape.js";
+import { wrapPrintHtmlDocument } from "../utils/pdfBranding.js";
+import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { assessComplianceNotification, getCompliancePackContent } from "../config/compliancePackContent";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { buildHealthSafetyFileInventory } from "../utils/hsFileAccumulator";
@@ -90,8 +93,8 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
   const completedSections = CPP_SECTIONS.filter(s=>form.cppSections?.[s.key]?.trim()).length;
 
   return (
-    <div style={{ minHeight:700, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"1.5rem 1rem", overflowY:"auto" }}>
-      <div style={{ ...ss.card, width:"100%", maxWidth:660 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:660 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
             <div style={{ fontWeight:500, fontSize:16 }}>{pack.title} — {cdm ? `Edit ${pack.packNoun}` : `New ${pack.packNoun}`}</div>
@@ -365,7 +368,7 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
           </div>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 
@@ -382,33 +385,39 @@ function printCDM(form, pack, marketId = getOrgMarketId()) {
   const cppHTML = CPP_SECTIONS.filter((s) => form.cppSections?.[s.key]?.trim())
     .map(
       (s) => `
-    <h3 style="font-size:12px;font-weight:bold;color:#0f172a;background:#f5f5f5;padding:4px 8px;margin:12px 0 4px">${he(s.label)}</h3>
-    <p style="font-size:12px;line-height:1.6;margin:0 0 8px">${nl2br(form.cppSections[s.key])}</p>`
+    <div class="print-section-title">${he(s.label)}</div>
+    <p style="font-size:12px;line-height:1.6;margin:0 0 10px">${nl2br(form.cppSections[s.key])}</p>`
     )
     .join("");
-  await writePrintWindowDocument(win, `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${he(pack.title)} — ${he(form.projectTitle)}</title>
-  <style>body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:0;padding:20px}
-  h1{font-size:15px;background:#0d9488;color:#fff;padding:8px 12px;margin:0 0 12px}
-  h2{font-size:12px;font-weight:bold;background:#f5f5f5;padding:4px 8px;margin:16px 0 6px;border-left:3px solid #0d9488}
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
-  .cell{border:0.5px solid #ccc;padding:5px 8px}.cell .l{font-size:10px;color:#666;font-weight:bold}
-  @media print{h1,h2{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>
-  <h1>${he(pack.title)} — ${he(pack.planFull)} — MySafeOps</h1>
-  <div class="grid">
-    <div class="cell"><div class="l">Project</div>${he(form.projectTitle || "—")}</div>
-    <div class="cell"><div class="l">Client</div>${he(form.clientName || "—")}</div>
-    <div class="cell"><div class="l">Site address</div>${he(form.siteAddress || "—")}</div>
-    <div class="cell"><div class="l">Start date</div>${he(fmtDate(form.startDate, pack.locale))}</div>
-    <div class="cell"><div class="l">End date</div>${he(fmtDate(form.endDate, pack.locale))}</div>
-    <div class="cell"><div class="l">Notifiable</div><strong style="color:${notifiable ? "#A32D2D" : "#27500A"}">${notifiable ? (isUkCdm ? "YES — F10 required" : he(pack.notifiableBadge)) : "No"}</strong></div>
-    <div class="cell"><div class="l">Principal Designer</div>${he(form.principalDesignerName || "—")} (${he(form.principalDesignerCompany || "—")})</div>
-    <div class="cell"><div class="l">Principal Contractor</div>${he(form.principalContractorName || "—")} (${he(form.principalContractorCompany || "—")})</div>
-    <div class="cell"><div class="l">${he(pack.checklistLabel)}</div>${checked}/${pack.dutyholderChecks.length} complete</div>
+  const org = getOrgSettings();
+  const bodyHtml = `
+  <div class="print-kpi-grid">
+    <div class="print-kpi"><div class="print-kpi__l">Project</div><div class="print-kpi__v">${he(form.projectTitle || "—")}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Client</div><div class="print-kpi__v">${he(form.clientName || "—")}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Site address</div><div class="print-kpi__v">${he(form.siteAddress || "—")}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Start date</div><div class="print-kpi__v">${he(fmtDate(form.startDate, pack.locale))}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">End date</div><div class="print-kpi__v">${he(fmtDate(form.endDate, pack.locale))}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Notifiable</div><div class="print-kpi__v" style="color:${notifiable ? "#A32D2D" : "#27500A"}">${notifiable ? (isUkCdm ? "YES — F10 required" : he(pack.notifiableBadge)) : "No"}</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Principal Designer</div><div class="print-kpi__v">${he(form.principalDesignerName || "—")} (${he(form.principalDesignerCompany || "—")})</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">Principal Contractor</div><div class="print-kpi__v">${he(form.principalContractorName || "—")} (${he(form.principalContractorCompany || "—")})</div></div>
+    <div class="print-kpi"><div class="print-kpi__l">${he(pack.checklistLabel)}</div><div class="print-kpi__v">${checked}/${pack.dutyholderChecks.length} complete</div></div>
   </div>
-  <h2>${he(pack.planFull)}</h2>
-  ${cppHTML||"<p style='color:#666'>No plan sections completed yet.</p>"}
-  <p style="font-size:10px;color:#999;margin-top:20px">${he(pack.printFooter)} · ${fmtDate(new Date().toISOString(), pack.locale)}</p>
-  </body></html>`);
+  <div class="print-section-title">${he(pack.planFull)}</div>
+  ${cppHTML || "<p style='color:#64748b'>No plan sections completed yet.</p>"}`;
+  await writePrintWindowDocument(
+    win,
+    wrapPrintHtmlDocument(org, {
+      pageTitle: `${pack.title} — ${form.projectTitle || pack.planFull}`,
+      headerOpts: {
+        docTitle: pack.planFull,
+        docSubtitle: form.projectTitle || pack.title,
+        docBadge: pack.title,
+      },
+      metaFields: { recordNote: notifiable ? pack.notifiableBadge : pack.checklistLabel },
+      footerExtra: pack.printFooter,
+      bodyHtml,
+    })
+  );
   win.print();
   })();
 }

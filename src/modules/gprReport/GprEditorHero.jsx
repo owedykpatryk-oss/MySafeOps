@@ -32,6 +32,7 @@ function GprEditorHero({ form, project, onClose, onGoToTab, livePreviewOpen, onT
             GPR report
             {form.ref ? <span className="app-survey-editor-hero__ref">{form.ref}</span> : null}
             {freq ? <span className="app-gpr-hero-chip">{freq} MHz</span> : null}
+            {form.preSurvey?.startedAt ? <span className="app-gpr-hero-chip">Started on site</span> : null}
             {pen != null ? <span className="app-gpr-hero-chip app-gpr-hero-chip--pen">~{pen} m pen.</span> : null}
           </div>
           <h2 className="app-survey-editor-hero__title">{form.title?.trim() || "New GPR report"}</h2>
