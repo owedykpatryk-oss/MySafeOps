@@ -17,6 +17,7 @@ import {
 } from "./gprReportHelpers";
 import { blankGprReport, GPR_LIMITATION_RULES, ANOMALY_QUICK_TEMPLATES, blankGprAnomaly } from "./gprReportConstants";
 import { applyIndustryGprTemplate } from "./gprReportTemplateContext";
+import { buildPreSurveyScopeLine } from "./gprPreSurvey";
 import {
   buildGprLineLengthNarrative,
   buildGprLineLengthSummary,
@@ -224,6 +225,11 @@ export function applyGprSmartNarratives(report) {
       .join("\n");
   }
 
+  const objectiveLine = buildPreSurveyScopeLine(r.preSurvey);
+  if (objectiveLine && !String(sections.scope || "").includes("Survey objectives")) {
+    sections.scope = sections.scope?.trim() ? `${objectiveLine}\n\n${sections.scope}` : objectiveLine;
+  }
+
   if (r.groundConditions?.narrative && !sections.scope?.includes("BGS")) {
     sections.scope =
       (sections.scope ? `${sections.scope}\n\n` : "") +
@@ -285,6 +291,12 @@ export { GPR_LIMITATION_RULES, ANOMALY_QUICK_TEMPLATES };
 /** Actionable tips for the editor banner. */
 export function gprSmartTips(report, project, linkedSurveyReport = null) {
   const tips = [];
+  if (!report?.preSurvey?.startedAt) {
+    tips.push({
+      level: "info",
+      text: "On site? Tap Start here on Setup to stamp GPS, live weather, surface and what you are looking for into the PDF.",
+    });
+  }
   if (!projectHasMapPin(project) && !project?.postcode && !report?.siteAddress) {
     tips.push({ level: "warn", text: "Link a project with a map pin (preferred) or postcode to enable BGS DigMap 50k geology." });
   } else if (!projectHasMapPin(project) && (project?.postcode || report?.siteAddress)) {

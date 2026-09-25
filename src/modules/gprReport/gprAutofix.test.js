@@ -35,6 +35,7 @@ describe("gprReportBlockers", () => {
     const { blockers, score } = buildGprBlockers(report);
     expect(score).toBeLessThan(70);
     expect(blockers.some((b) => b.id === "no_radargrams")).toBe(true);
+    expect(blockers.some((b) => b.id === "no_start")).toBe(true);
     expect(blockers.some((b) => b.severity === "block")).toBe(true);
   });
 });

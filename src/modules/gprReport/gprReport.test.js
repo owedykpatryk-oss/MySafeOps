@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { blankGprReport } from "./gprReportConstants.js";
-import { buildLimitationsFromKeys, gprReportQuality, nextGprRef, normalizeGprReport, buildAnomaliesGeoJson, buildDuplicateGprPayload, autoNumberAnomalies } from "./gprReportHelpers.js";
+import { buildLimitationsFromKeys, gprReportQuality, nextGprRef, normalizeGprReport, buildAnomaliesGeoJson, buildDuplicateGprPayload, autoNumberAnomalies, upsertGprReportInList } from "./gprReportHelpers.js";
 import { suggestGprLimitationKeys } from "./gprReportSmart.js";
 import { applyIndustryGprTemplate } from "./gprReportTemplateContext.js";
 
@@ -9,6 +9,8 @@ describe("gprReportHelpers", () => {
     const r = normalizeGprReport({ ref: "GPR-2026-001" });
     expect(r.equipment.length).toBeGreaterThan(0);
     expect(r.acquisition.scanMode).toBe("grid");
+    expect(r.preSurvey.objectives).toEqual([]);
+    expect(r.preSurvey.siteChecks.ramsBriefed).toBe(false);
   });
 
   it("generates sequential refs", () => {
@@ -65,6 +67,16 @@ describe("gprReportHelpers", () => {
     const numbered = autoNumberAnomalies(report);
     expect(numbered.anomalies[0].ref).toBe("A1");
     expect(numbered.anomalies[1].ref).toBe("A2");
+  });
+
+  it("upserts an open editor report into the list without duplicating", () => {
+    const a = blankGprReport({ id: "gpr_1", ref: "GPR-1" });
+    const b = { ...a, title: "Site A" };
+    const once = upsertGprReportInList([], b);
+    const twice = upsertGprReportInList(once, { ...b, title: "Site A updated" });
+    expect(once).toHaveLength(1);
+    expect(twice).toHaveLength(1);
+    expect(twice[0].title).toBe("Site A updated");
   });
 });
 

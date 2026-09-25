@@ -2,14 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   bearingArrowHead,
   bearingToEnd,
+  compressImageFile,
   destinationPoint,
   DIRECTION_LENGTH_M,
   flipBearing180,
   GPS_GOOD_ACCURACY_M,
   isCoarseGpsAccuracy,
+  isHeicLikeFile,
+  isLikelyImageFile,
+  jpegFileFromDataUrl,
   normalisePhotoExifLocation,
   normalizeBearing,
   orientationAlphaToBearing,
+  photoReadErrorMessage,
 } from "./geoPhotoUtils.js";
 
 describe("geoPhotoUtils", () => {
@@ -102,5 +107,27 @@ describe("geoPhotoUtils", () => {
     expect(normalisePhotoExifLocation({ latitude: 0, longitude: 0 })).toBeNull();
     expect(normalisePhotoExifLocation({ latitude: 91, longitude: 0 })).toBeNull();
     expect(normalisePhotoExifLocation({ latitude: 51.5, longitude: 181 })).toBeNull();
+  });
+
+  it("treats iPhone HEIC files as photos even when MIME type is empty", () => {
+    expect(isHeicLikeFile({ type: "image/heic", name: "IMG_1.HEIC" })).toBe(true);
+    expect(isHeicLikeFile({ type: "", name: "IMG_2.heif" })).toBe(true);
+    expect(isLikelyImageFile({ type: "", name: "IMG_3.HEIC" })).toBe(true);
+    expect(isLikelyImageFile({ type: "application/octet-stream", name: "site.jpg" })).toBe(true);
+    expect(isLikelyImageFile({ type: "application/pdf", name: "plan.pdf" })).toBe(false);
+    expect(photoReadErrorMessage({ name: "IMG_1.HEIC" })).toMatch(/HEIC/);
+  });
+
+  it("rejects photo decode when no browser image decoder is available", async () => {
+    const file = new File(["not-an-image"], "site.jpg", { type: "image/jpeg" });
+    await expect(compressImageFile(file)).rejects.toThrow(/Could not read photo/);
+  });
+
+  it("wraps a JPEG data URL as an upload File", () => {
+    const dataUrl = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDAREAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGcP//Z";
+    const file = jpegFileFromDataUrl(dataUrl, "IMG_1234.HEIC");
+    expect(file.type).toBe("image/jpeg");
+    expect(file.name).toBe("IMG_1234.jpg");
+    expect(file.size).toBeGreaterThan(0);
   });
 });

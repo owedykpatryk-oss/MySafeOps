@@ -4,6 +4,7 @@
 
 import { gprReportQuality } from "./gprReportHelpers.js";
 import { buildGprLineLengthSummary, buildGprSurveyLineComparison } from "./gprLineLengthSummary.js";
+import { isGprPreSurveyStarted } from "./gprPreSurvey.js";
 
 /**
  * @param {object} report
@@ -68,6 +69,10 @@ export function buildGprBlockers(report, context = {}) {
         "chainage"
       );
     }
+  }
+
+  if (!isGprPreSurveyStarted(report?.preSurvey)) {
+    push("no_start", "Tap Start here on Setup to stamp GPS, weather and pre-survey checks", "setup", "info", "gpr-start-here");
   }
 
   if (report?.status !== "final" && quality.score < 70) {

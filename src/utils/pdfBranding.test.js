@@ -39,4 +39,15 @@ describe("pdfBranding", () => {
     expect(html).toContain("Timesheets");
     expect(html).toContain("print-brand-stripe");
   });
+
+  it("includes A4 running footer in wrapped print documents", async () => {
+    const { wrapPrintHtmlDocument } = await import("./pdfBranding.js");
+    const html = wrapPrintHtmlDocument(
+      { name: "Acme Civils", pdfFooter: "Acme · controlled" },
+      { pageTitle: "Pack", bodyHtml: "<p>Body</p>", headerOpts: { docTitle: "Pack" } }
+    );
+    expect(html).toContain("print-running-footer");
+    expect(html).toContain("@page");
+    expect(html).toContain("print-kpi-grid");
+  });
 });

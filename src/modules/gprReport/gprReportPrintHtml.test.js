@@ -128,4 +128,35 @@ describe("gprReportPrintHtml", () => {
     const html = buildGprReportHtml(report, {});
     expect(html).toContain("Geophysical indication only");
   });
+
+  it("renders pre-survey start checks with GPS, weather and objectives", () => {
+    const report = blankGprReport({
+      title: "Start GPR",
+      preSurvey: {
+        startedAt: "2026-09-18T08:05:00.000Z",
+        startedBy: "Pat",
+        lat: 51.5,
+        lng: -0.12,
+        gpsAccuracyM: 5,
+        gpsSource: "device",
+        weather: { description: "Overcast", tempC: 12, windMph: 8 },
+        surveyDates: ["2026-09-18", "2026-09-19"],
+        surfaceKeys: ["asphalt"],
+        moisture: "damp",
+        objectives: ["voids", "foundations"],
+        siteChecks: { ramsBriefed: true },
+        notes: "East wing pile caps",
+        photos: [{ dataUrl: "data:image/jpeg;base64,sitepic", caption: "North elevation" }],
+      },
+    });
+    const html = buildGprReportHtml(report, {});
+    expect(html).toContain("Pre-survey start checks");
+    expect(html).toContain("51.50000");
+    expect(html).toContain("Overcast");
+    expect(html).toContain("Voids");
+    expect(html).toContain("Foundations");
+    expect(html).toContain("East wing pile caps");
+    expect(html).toContain("data:image/jpeg;base64,sitepic");
+    expect(html).toContain('href="#presurvey"');
+  });
 });

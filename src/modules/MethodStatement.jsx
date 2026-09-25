@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -253,8 +254,8 @@ function MSForm({ ms, onSave, onClose }) {
   const tabs = [["info","Document info"],["steps","Work sequence"],["resources","Plant & materials"],["ppe","PPE & safety"],["preview","Preview"]];
 
   return (
-    <div style={{ minHeight:700, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"1.5rem 1rem", overflowY:"auto" }}>
-      <div style={{ ...ss.card, width:"100%", maxWidth:680 }}>
+    <ModuleOverlay onClose={onClose}>
+      <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:680 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div>
             <div style={{ fontWeight:500, fontSize:16 }}>{ms?"Edit method statement":"New method statement"}</div>
@@ -575,7 +576,7 @@ function MSForm({ ms, onSave, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </ModuleOverlay>
   );
 }
 

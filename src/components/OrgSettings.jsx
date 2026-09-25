@@ -18,6 +18,7 @@ import { MARKET_PACK_HINTS } from "../config/marketModules";
 import { MARKET_IDS, getMarket, isValidMarketId, resolveMarketId } from "../config/markets";
 import { syncOrgBrandingFromCloud } from "../utils/orgBrandingCloudSync";
 import { safeImageSrc } from "../utils/htmlEscape.js";
+import { compressImageFile } from "../utils/geoPhotoUtils";
 import OrgModuleVisibility from "./OrgModuleVisibility";
 import OrgWorkspaceProfile from "./OrgWorkspaceProfile";
 import OrgPermitSettings from "./OrgPermitSettings";
@@ -94,14 +95,32 @@ export default function OrgSettings() {
       .catch(() => {});
   }, [supabase]);
 
-  const handleLogoUpload = (e) => {
+  const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
     e.target.value = "";
     if (!file) return;
-    if (file.size > 500000) { alert("Logo must be under 500KB"); return; }
-    const reader = new FileReader();
-    reader.onload = ev => set("logo", ev.target.result);
-    reader.readAsDataURL(file);
+    const type = String(file.type || "").toLowerCase();
+    const name = String(file.name || "").toLowerCase();
+    if (type.includes("svg") || name.endsWith(".svg")) {
+      if (file.size > 500000) {
+        alert("Logo must be under 500KB");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => set("logo", ev.target.result);
+      reader.readAsDataURL(file);
+      return;
+    }
+    try {
+      const dataUrl = await compressImageFile(file, { maxWidth: 800, quality: 0.88 });
+      if (String(dataUrl).length > 700000) {
+        alert("Logo is too large after compression. Use a simpler PNG or SVG.");
+        return;
+      }
+      set("logo", dataUrl);
+    } catch (err) {
+      alert(err?.message || "Could not read logo.");
+    }
   };
 
   const persistSettings = async (next, auditAction) => {
@@ -202,7 +221,7 @@ export default function OrgSettings() {
                     <button onClick={()=>logoRef.current.click()} style={ss.btn}>Choose file</button>
                     {form.logo && <button onClick={()=>set("logo",null)} style={{ ...ss.btn, color:"#A32D2D", borderColor:"#F09595" }}>Remove logo</button>}
                   </div>
-                  <input ref={logoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleLogoUpload} />
+                  <input ref={logoRef} type="file" accept="image/*,.heic,.heif,.svg" style={{ display:"none" }} onChange={handleLogoUpload} />
                 </Field>
               </div>
             </div>
