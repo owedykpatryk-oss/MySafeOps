@@ -82,9 +82,14 @@ function humanizeKey(key) {
 function formatCell(value) {
   if (value == null || value === "") return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (Array.isArray(value))
-    return value.map((x) => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(", ").slice(0, 160);
-  if (typeof value === "object") return JSON.stringify(value).slice(0, 120);
+  if (Array.isArray(value)) {
+    const text = value.map((x) => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(", ");
+    return text.length > 160 ? `${text.slice(0, 159).trimEnd()}…` : text;
+  }
+  if (typeof value === "object") {
+    const text = JSON.stringify(value);
+    return text.length > 120 ? `${text.slice(0, 119).trimEnd()}…` : text;
+  }
   const s = String(value);
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
     try {
@@ -93,7 +98,7 @@ function formatCell(value) {
       return s.slice(0, 24);
     }
   }
-  return s.slice(0, 160);
+  return s.length > 160 ? `${s.slice(0, 159).trimEnd()}…` : s;
 }
 
 /** @param {Record<string, unknown>[]} rows */
@@ -213,7 +218,13 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, accen
   const headerColors = tableHeaderColors(theme, rgb);
 
   const drawTableHeaderRow = () => {
-    const headerLineSets = columns.map((col) => pdf.splitTextToSize(String(col.l || ""), colW - 3).slice(0, 2));
+    setPdfFont(pdf, "bold");
+    pdf.setFontSize(7.5);
+    const headerLineSets = columns.map((col) => {
+      const lines = pdf.splitTextToSize(String(col.l || ""), colW - 3);
+      if (lines.length <= 2) return lines;
+      return [lines[0], `${String(lines[1]).replace(/\s+$/, "")}…`];
+    });
     const headerH = Math.max(6.5, ...headerLineSets.map((ls) => ls.length * 3.6)) + 2;
     pdf.setFillColor(...headerColors.fill);
     pdf.rect(MARGIN, y, usableW, headerH, "F");
@@ -226,7 +237,7 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, accen
     y += headerH + 1.5;
   };
 
-  const ensureSpace = (need) => {
+  const ensureSpace = (need, repeatHeader = true) => {
     if (y + need <= PAGE_H - FOOTER_H - 8) return;
     pdf.addPage();
     y = drawPdfPageHeader(pdf, {
@@ -239,8 +250,18 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, accen
     });
     y = drawPdfMetaStrip(pdf, org, { moduleLabel: sectionTitle, recordNote: "Continued" }, rgb, y);
     y += 2;
-    drawTableHeaderRow();
+    if (repeatHeader) drawTableHeaderRow();
   };
+
+  setPdfFont(pdf, "normal");
+  pdf.setFontSize(7.5);
+  const firstRowHeight = rows.length
+    ? Math.max(
+        6,
+        ...columns.map((col) => pdf.splitTextToSize(formatCell(rows[0]?.[col.k]), colW - 3).length * 3.6)
+      ) + 2
+    : 0;
+  ensureSpace((rows.length ? 30 : 58) + firstRowHeight, false);
 
   setPdfFont(pdf, "bold");
   pdf.setFontSize(theme === "executive" ? 11 : 10);
@@ -317,14 +338,20 @@ function renderModulesIntoPdf(pdf, { org, rgb, accentRgb, theme, bundleTitle, bu
   y = drawPdfMetaStrip(pdf, org, { moduleLabel: bundleTitle, docRef, recordNote: `${modules.length} modules` }, rgb, y);
   y += 2;
 
-  modules.forEach((mod, index) => {
+  const loadedModules = modules.map((mod) => {
     const { rows, cfg } = loadRegisterRows(mod.id);
-    if (!cfg) return;
+    if (!cfg) return null;
     const prepared = prepareRegisterExport(mod.id, rows, { summary: true });
     const tableRows = prepared.mode === "table" ? prepared.rows : rows;
     const columns =
       prepared.columns ||
       (Array.isArray(cfg.columns) && cfg.columns.length > 0 ? cfg.columns : inferRegisterColumns(tableRows));
+    return { mod, cfg, tableRows, columns };
+  }).filter(Boolean);
+  const emptyModules = loadedModules.filter(({ cfg, tableRows }) => !cfg.overview && tableRows.length === 0);
+  const detailedModules = loadedModules.filter(({ cfg, tableRows }) => cfg.overview || tableRows.length > 0);
+
+  detailedModules.forEach(({ mod, tableRows, columns }, index) => {
     if (y > PAGE_H - 72 && index > 0) {
       pdf.addPage();
       y = drawPdfPageHeader(pdf, {
@@ -359,9 +386,46 @@ function renderModulesIntoPdf(pdf, { org, rgb, accentRgb, theme, bundleTitle, bu
       accentRgb,
       theme,
       startY: y,
+      prebuildLabel: pres.prebuild?.shortLabel || pres.prebuild?.label,
     });
     y += 4;
   });
+
+  if (emptyModules.length) {
+    if (y > PAGE_H - 78) {
+      pdf.addPage();
+      y = drawPdfPageHeader(pdf, { org, title: bundleTitle, subtitle: "Register coverage", rgb, accentRgb, theme, docRef });
+      y = drawPdfMetaStrip(pdf, org, { moduleLabel: bundleTitle, recordNote: `${emptyModules.length} empty registers` }, rgb, y);
+    }
+    y += 3;
+    setPdfFont(pdf, "bold");
+    pdf.setFontSize(10);
+    pdf.setTextColor(15, 23, 42);
+    pdf.text("Empty registers · quick start guide", MARGIN, y);
+    y += 6;
+    const summaryRows = emptyModules.map(({ mod }) => {
+      const suggestion = getModuleTilePresentation(mod.id, { count: 0, status: "empty" });
+      return {
+        register: mod.label,
+        status: "No records",
+        nextStep: suggestion.prebuild?.shortLabel || suggestion.prebuild?.label || "Open the register and add an entry",
+      };
+    });
+    y = renderRegisterTable(pdf, {
+      rows: summaryRows,
+      columns: [
+        { k: "register", l: "Register" },
+        { k: "status", l: "Status" },
+        { k: "nextStep", l: "Suggested next step" },
+      ],
+      sectionTitle: "Empty register summary",
+      org,
+      rgb,
+      accentRgb,
+      theme,
+      startY: y,
+    });
+  }
 
   finalizePdf(pdf, org, theme, rgb, accentRgb);
 }

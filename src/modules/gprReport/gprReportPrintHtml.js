@@ -26,10 +26,24 @@ import {
 } from "./gprReportHelpers";
 import { buildGprPreSurveyPrintHtml } from "./gprPreSurvey";
 import { gprEvidenceStats } from "./gprReportPulse";
-import { GPR_LIMITATION_RULES, SCAN_MODES } from "./gprReportConstants";
+import { GPR_EQUIPMENT_PRESETS, GPR_LIMITATION_RULES, SCAN_MODES } from "./gprReportConstants";
 // Shared confidence palette with the survey report's PAS128 visuals, so anomaly
 // confidence reads the same way (colour + meaning) across document types.
 import { CONFIDENCE_COLORS } from "../surveyReport/surveyPas128Visual.js";
+import { safeImageSrc } from "../../utils/htmlEscape.js";
+import { getUtilityMappingClient, utilityMappingClientLogoUrl } from "../../utils/utilityMappingClients.js";
+import { resolveGprVisualTheme } from "./gprVisualTheme.js";
+import { applyGprNarrativeAutomation } from "./gprNarrativeAutomation.js";
+import {
+  GPR_AI_ACTIONS,
+  GPR_AI_CAVEATS,
+  GPR_AI_MECHANISMS,
+  GPR_AI_RELEVANCE,
+  safeEvidenceImageSrc,
+  sanitizeEvidenceAssessments,
+  verifiedGprEvidence,
+} from "./gprEvidence.js";
+import { GPR_ANOMALY_FIGURE_ROLES } from "./gprReportConstants";
 import {
   buildGprLineLengthSummary,
   buildGprSurveyLineComparison,
@@ -84,9 +98,9 @@ function metaGrid(pairs) {
     .join("")}</div>`;
 }
 
-function coverWaveSvg(primary) {
+function coverWaveSvg(primary, accent) {
   return `<svg viewBox="0 0 800 100" style="width:100%;height:72px;margin:16px 0" aria-hidden="true">
-    <defs><linearGradient id="gprCv" x1="0" x2="1"><stop offset="0" stop-color="${primary}" stop-opacity="0.15"/><stop offset="1" stop-color="#0d9488" stop-opacity="0.25"/></linearGradient></defs>
+    <defs><linearGradient id="gprCv" x1="0" x2="1"><stop offset="0" stop-color="${primary}" stop-opacity="0.15"/><stop offset="1" stop-color="${accent}" stop-opacity="0.25"/></linearGradient></defs>
     <path d="M0,50 Q200,10 400,45 T800,40 L800,100 L0,100 Z" fill="url(#gprCv)"/>
     <path d="M0,65 Q250,35 500,58 T800,55" fill="none" stroke="${primary}" stroke-width="1.5" opacity="0.35"/>
   </svg>`;
@@ -109,7 +123,7 @@ function staticSiteMapUrl(lat, lng) {
   return buildStaticMapUrl(lat, lng, { width: 520, height: 220, zoom: 15, label: "Site location" });
 }
 
-function styles(primary, accent) {
+function styles(primary, accent, accentInk, accentSoft, primarySoft) {
   const umCss = isUtilityMappingPrintTheme()
     ? `${utilityMappingCoverSystemCss()}${utilityMappingGprCoverCss(primary, accent)}`
     : "";
@@ -119,19 +133,25 @@ function styles(primary, accent) {
        apply once, at the very end of the document, not per page. */
     @page { size: A4; margin: 14mm 12mm 20mm; }
     .gpr-doc { font-family: "DM Sans", system-ui, sans-serif; font-size: 10.5pt; color: #1a1a1a; line-height: 1.45; }
-    .gpr-cover { page-break-after: always; min-height: 250mm; display: flex; flex-direction: column; background: linear-gradient(165deg, #f8fafc 0%, #fff 42%, #ecfeff 100%); padding: 8px 0; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .gpr-cover { page-break-after: always; min-height: 250mm; display: flex; flex-direction: column; background: radial-gradient(circle at 100% 0%, ${accentSoft} 0%, transparent 34%), linear-gradient(165deg, ${primarySoft} 0%, #fff 46%, ${accentSoft} 100%); padding: 8px 0; border: 1px solid ${accentSoft}; border-radius: 8px; }
     .gpr-cover-stats { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-    .gpr-cover-stat { font-size: 9pt; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: ${accent}; color: ${primary}; }
+    .gpr-cover-stat { font-size: 9pt; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: ${accentSoft}; color: ${primary}; border: 1px solid ${accent}; }
     .gpr-cover-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
     .gpr-cover-title { font-size: 22pt; font-weight: 700; color: ${primary}; margin: 16px 0; line-height: 1.2; }
-    .gpr-badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 9pt; font-weight: 600; background: ${accent}; color: ${primary}; margin-right: 8px; }
+    .gpr-badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 9pt; font-weight: 600; background: ${accentSoft}; color: ${primary}; border-left: 3px solid ${accent}; margin-right: 8px; }
+    .gpr-doc-status { display: grid; grid-template-columns: 1.25fr repeat(3, 1fr); gap: 1px; margin: 14px 0 4px; overflow: hidden; border: 1px solid ${accent}; border-radius: 6px; background: ${accent}; page-break-inside: avoid; }
+    .gpr-doc-status > div { padding: 8px 10px; background: #fff; }
+    .gpr-doc-status__state { color: #fff !important; background: ${primary} !important; }
+    .gpr-doc-status small { display: block; margin-bottom: 2px; color: #64748b; font-size: 7pt; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .gpr-doc-status__state small { color: rgba(255,255,255,0.72); }
+    .gpr-doc-status strong { display: block; font-size: 9pt; overflow-wrap: anywhere; }
     /* Sections can hold long anomaly/equipment tables that exceed one page —
        page-break-inside:avoid on the whole section would force the browser
        to either ignore it or leave a large blank gap on the previous page.
        Keep only the heading glued to what follows; protect table rows below. */
     .gpr-section { margin: 20px 0; }
     .gpr-section h2 { font-size: 12pt; color: ${primary}; border-bottom: 2px solid ${accent}; padding-bottom: 4px; margin: 0 0 10px; page-break-after: avoid; break-after: avoid-page; }
-    .gpr-sec-num { color: ${accent}; font-weight: 700; margin-right: 6px; }
+    .gpr-sec-num { color: ${accentInk}; font-weight: 700; margin-right: 6px; }
     .gpr-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 12px 0; }
     .gpr-meta-key { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.04em; color: #666; }
     .gpr-meta-val { font-size: 10pt; font-weight: 500; overflow-wrap: anywhere; word-break: break-word; }
@@ -139,11 +159,39 @@ function styles(primary, accent) {
     .gpr-data-table th, .gpr-data-table td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
     .gpr-data-table tr { page-break-inside: avoid; break-inside: avoid; }
     .gpr-data-table th { background: #f4f7fb; color: ${primary}; font-weight: 600; }
+    .gpr-equipment-profile { display: grid; grid-template-columns: 38% 1fr; gap: 14px; margin: 0 0 14px; padding: 12px; border: 1px solid #99f6e4; border-radius: 8px; background: linear-gradient(135deg,#f0fdfa,#fff 55%,#eff6ff); page-break-inside: avoid; break-inside: avoid; }
+    .gpr-equipment-profile img { display: block; width: 100%; height: 150px; object-fit: contain; border-radius: 6px; background: #fff; }
+    .gpr-equipment-profile h3 { margin: 0 0 6px; color: ${primary}; font-size: 14pt; line-height: 1.2; }
+    .gpr-equipment-profile p { margin: 3px 0; font-size: 9pt; overflow-wrap: anywhere; }
+    .gpr-equipment-profile ul { margin: 7px 0; padding-left: 18px; font-size: 8.5pt; columns: 2; column-gap: 18px; }
+    .gpr-equipment-profile a { color: ${primary}; font-size: 8pt; font-weight: 600; }
     .gpr-callout { background: #f8fafc; border-left: 4px solid ${accent}; padding: 10px 12px; margin: 10px 0; font-size: 9.5pt; }
     .gpr-map { width: 100%; max-height: 220px; object-fit: cover; border-radius: 4px; margin: 10px 0; }
     .gpr-footer-note { font-size: 8pt; color: #666; margin-top: 24px; border-top: 1px solid #eee; padding-top: 8px; }
-    .gpr-radargram-fig { margin: 12px 0; page-break-inside: avoid; }
+    .gpr-radargram-fig { margin: 12px 0; page-break-inside: avoid; break-inside: avoid; }
+    .gpr-radargram-fig img { display: block; width: 100%; max-width: 100%; max-height: 210mm; object-fit: contain; object-position: center; border-radius: 6px; background: #fff; }
+    .gpr-finding-card { margin: 0 0 8px; padding: 8px 8px 6px; border: 1px solid #e2e8f0; border-radius: 6px; page-break-inside: avoid; break-inside: avoid; }
+    .gpr-finding-card__head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+    .gpr-finding-card__head strong { color: ${primary}; font-size: 10.5pt; }
+    .gpr-finding-card__meta { margin: 2px 0 4px; color: #475569; font-size: 8.5pt; }
+    .gpr-finding-card__text { margin: 0 0 6px; font-size: 9pt; line-height: 1.35; }
+    .gpr-finding-photos { display: grid; gap: 6px; }
+    .gpr-finding-photos--1 { grid-template-columns: 1fr; }
+    .gpr-finding-photos--2 { grid-template-columns: 1fr 1fr; }
+    .gpr-finding-photos--3 { grid-template-columns: 1fr 1fr 1fr; }
+    .gpr-finding-photos figure { margin: 0; min-width: 0; }
+    .gpr-finding-photos img { display: block; width: 100%; height: 52mm; object-fit: contain; object-position: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; }
+    .gpr-finding-photos--3 img { height: 40mm; }
+    .gpr-finding-photos figcaption { margin-top: 2px; color: #64748b; font-size: 7.5pt; text-align: center; }
     .gpr-radargram-fig figcaption { font-size: 9pt; color: #555; margin-top: 4px; }
+    .gpr-site-photo-page { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 4mm; margin: 0 0 4mm; page-break-inside: avoid; break-inside: avoid; }
+    .gpr-site-photo-page figure { margin: 0; min-width: 0; }
+    .gpr-site-photo-page img { display: block; width: 100%; height: 34mm; object-fit: contain; object-position: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 3px; }
+    .gpr-site-photo-page figcaption { margin-top: 1mm; color: #64748b; font-size: 7.5pt; text-align: center; }
+    .gpr-acq-shots { margin: 8px 0 0; }
+    .gpr-acq-shot { margin: 0 0 8px; page-break-inside: avoid; break-inside: avoid; }
+    .gpr-acq-shot img { display: block; width: 100%; max-height: 95mm; object-fit: contain; object-position: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; }
+    .gpr-acq-shot figcaption { margin-top: 2px; color: #64748b; font-size: 8pt; }
     .gpr-scan-panel { margin: 14px 0; padding: 10px; border: 1px solid #e5e7eb; border-radius: 6px; page-break-inside: avoid; }
     .gpr-scan-panel h3 { font-size: 10.5pt; margin: 0 0 8px; color: ${primary}; }
     .gpr-confidence-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 8.5pt; font-weight: 700; white-space: nowrap; }
@@ -155,12 +203,27 @@ function styles(primary, accent) {
     .gpr-bar-count { font-size: 8.5pt; font-weight: 700; color: ${primary}; width: 20px; text-align: right; flex-shrink: 0; }
     .gpr-acq-diagram { margin: 0 0 14px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: linear-gradient(180deg,#f8fafc,#fff); page-break-inside: avoid; display: inline-block; }
     .gpr-acq-diagram__label { font-size: 9pt; font-weight: 700; color: ${primary}; margin-bottom: 8px; }
+    .gpr-acquisition-layout { display: grid; grid-template-columns: minmax(150px, 34%) 1fr; gap: 14px; align-items: start; page-break-inside: avoid; break-inside: avoid; }
+    .gpr-ground-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin: 8px 0 12px; overflow: hidden; border: 1px solid ${accentSoft}; border-radius: 6px; background: ${accentSoft}; page-break-inside: avoid; break-inside: avoid; }
+    .gpr-ground-summary > div { min-width: 0; padding: 9px; background: #fff; }
+    .gpr-ground-summary small { display: block; margin-bottom: 3px; color: #64748b; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; }
+    .gpr-ground-summary strong { color: ${primary}; font-size: 9pt; overflow-wrap: anywhere; }
+    .gpr-evidence-print { margin: 0 0 12px; padding: 11px 12px; border: 1px solid ${accentSoft}; border-radius: 7px; background: #fff; page-break-inside: avoid; break-inside: avoid; }
+    .gpr-evidence-print h3 { margin: 0 0 6px; color: ${primary}; font-size: 11pt; }
+    .gpr-evidence-print__image { margin: 8px 0; page-break-inside: avoid; }
+    .gpr-evidence-print__image img { display: block; width: 100%; max-height: 145mm; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 5px; }
+    .gpr-evidence-print__image figcaption { margin-top: 4px; color: #64748b; font-size: 8pt; }
+    .gpr-small { color: #64748b; font-size: 8.5pt; }
+    .gpr-anomaly-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin: 8px 0 12px; overflow: hidden; border: 1px solid ${accentSoft}; border-radius: 6px; background: ${accentSoft}; page-break-inside: avoid; break-inside: avoid; }
+    .gpr-anomaly-summary > div { min-width: 0; padding: 9px; background: #fff; }
+    .gpr-anomaly-summary span { display: block; margin-bottom: 3px; color: #64748b; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; }
+    .gpr-anomaly-summary strong { display: block; color: ${primary}; font-size: 11pt; overflow-wrap: anywhere; }
     .gpr-chainage-chart { margin: 0 0 14px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fafcff; page-break-inside: avoid; }
     .gpr-chainage-chart__label { font-size: 9pt; font-weight: 700; color: ${primary}; margin-bottom: 6px; }
     .gpr-watermark { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; font-size: 84px; font-weight: 800; letter-spacing: 0.14em; color: rgba(100,116,139,0.09); transform: rotate(-28deg); z-index: 0; text-transform: uppercase; }
     .gpr-print-footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 8pt; color: #9ca3af; border-top: 1px solid #e5e7eb; padding: 6px 12mm; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: #fff; z-index: 9998; }
     .gpr-running-header { display: flex; justify-content: space-between; font-size: 8pt; color: #94a3b8; border-bottom: 1px solid #e5e7eb; padding: 4px 0 8px; margin-bottom: 12px; }
-    .gpr-toc { page-break-after: always; margin: 0 0 20px; }
+    .gpr-toc { page-break-after: always; margin: 0 0 20px; display: flow-root; }
     .gpr-toc-heading { font-size: 14pt; color: ${primary}; margin: 0 0 12px; }
     .gpr-toc ol { margin: 0; padding: 0; list-style: none; }
     .gpr-toc li { margin: 6px 0; font-size: 10pt; }
@@ -180,7 +243,27 @@ function styles(primary, accent) {
 
 function equipmentBlock(equipment) {
   if (!equipment?.length) return "<p><em>No equipment recorded.</em></p>";
-  return dataTable(
+  const profiles = equipment
+    .map((e) => {
+      const preset = GPR_EQUIPMENT_PRESETS.find((item) => item.key === e.presetKey);
+      if (!preset) return "";
+      const facts = (preset.techHighlights?.length
+        ? preset.techHighlights
+        : [
+            `${preset.antennaFrequencyMhz} MHz`,
+            `${preset.channels} channel${preset.channels === 1 ? "" : "s"}`,
+            preset.processingSoftware,
+          ].filter(Boolean));
+      const image = preset.imageUrl
+        ? `<img src="${escapeAttr(preset.imageUrl)}" alt="${escapeAttr(`${preset.manufacturer} ${preset.model} product reference`)}"/>`
+        : "";
+      const source = safeHttpUrl(preset.sourceUrl)
+        ? `<a href="${escapeAttr(safeHttpUrl(preset.sourceUrl))}">Official product information</a>`
+        : "";
+      return `<div class="gpr-equipment-profile">${image}<div><h3>${esc(preset.manufacturer)} ${esc(preset.model)}</h3><p><strong>${esc(preset.antennaFrequencyMhz)} MHz · ${esc(preset.channels)} channel${preset.channels === 1 ? "" : "s"}</strong></p><p>${esc(preset.configuration)}</p><ul>${facts.map((fact) => `<li>${esc(fact)}</li>`).join("")}</ul><p>${preset.processingSoftware ? `Processing: ${esc(preset.processingSoftware)}` : "Processing software recorded per mobilisation."}</p>${source}</div></div>`;
+    })
+    .join("");
+  const table = dataTable(
     ["Manufacturer", "Model", "Antenna (MHz)", "Channels", "Serial", "Processing SW"],
     equipment.map((e) => [
       e.manufacturer,
@@ -191,6 +274,7 @@ function equipmentBlock(equipment) {
       e.processingSoftware,
     ])
   );
+  return `${profiles}${table}`;
 }
 
 function planFiguresBlock(figures) {
@@ -199,7 +283,7 @@ function planFiguresBlock(figures) {
     .filter((f) => f.dataUrl)
     .map(
       (f) =>
-        `<figure class="gpr-radargram-fig"><img src="${esc(f.dataUrl)}" alt="${esc(f.label || "Plan figure")}" style="max-width:100%;border-radius:6px"/><figcaption>${esc(f.label || "Plan layout")}${f.figureType ? ` · ${esc(f.figureType.replace(/_/g, " "))}` : ""}</figcaption></figure>`
+        `<figure class="gpr-radargram-fig"><img src="${esc(f.dataUrl)}" alt="${esc(f.label || "Plan figure")}"/><figcaption>${esc(f.label || "Plan layout")}${f.figureType ? ` · ${esc(f.figureType.replace(/_/g, " "))}` : ""}</figcaption></figure>`
     )
     .join("");
 }
@@ -210,7 +294,7 @@ function radargramsBlock(radargrams) {
     .filter((rg) => rg.dataUrl)
     .map(
       (rg) =>
-        `<figure class="gpr-radargram-fig"><img src="${esc(rg.dataUrl)}" alt="${esc(rg.label || "Radargram")}" style="max-width:100%;border-radius:6px"/><figcaption>${esc(rg.label || "")}${rg.lineRef ? ` · ${esc(rg.lineRef)}` : ""}${rg.notes ? ` — ${esc(rg.notes)}` : ""}</figcaption></figure>`
+        `<figure class="gpr-radargram-fig"><img src="${esc(rg.dataUrl)}" alt="${esc(rg.label || "Radargram")}"/><figcaption>${esc(rg.label || "")}${rg.lineRef ? ` · ${esc(rg.lineRef)}` : ""}${rg.notes ? ` — ${esc(rg.notes)}` : ""}</figcaption></figure>`
     )
     .join("");
 }
@@ -244,21 +328,67 @@ function anomalyTypeBarsHtml(anomalies) {
   return `<div class="gpr-bar-chart">${rows}</div>`;
 }
 
+function anomalySummaryHtml(anomalies) {
+  if (!anomalies?.length) return "";
+  const confidence = anomalies.reduce(
+    (counts, anomaly) => {
+      const key = ["high", "medium", "low"].includes(anomaly?.confidence) ? anomaly.confidence : "unrated";
+      counts[key] += 1;
+      return counts;
+    },
+    { high: 0, medium: 0, low: 0, unrated: 0 }
+  );
+  const depths = anomalies
+    .map((anomaly) => Number(anomaly?.depthM))
+    .filter((depth) => Number.isFinite(depth) && depth >= 0);
+  const missingDetail = anomalies.filter(
+    (anomaly) => !String(anomaly?.ref || "").trim() || !String(anomaly?.interpretation || "").trim()
+  ).length;
+  const depthRange = depths.length
+    ? `${Math.min(...depths).toFixed(2)}–${Math.max(...depths).toFixed(2)} m`
+    : "Not recorded";
+  const review = [];
+  if (confidence.low) review.push(`${confidence.low} low-confidence response${confidence.low === 1 ? " requires" : "s require"} corroboration`);
+  if (confidence.unrated) review.push(`${confidence.unrated} response${confidence.unrated === 1 ? " is" : "s are"} not rated`);
+  if (depths.length < anomalies.length) review.push(`${anomalies.length - depths.length} depth value${anomalies.length - depths.length === 1 ? " is" : "s are"} missing`);
+  if (missingDetail) review.push(`${missingDetail} row${missingDetail === 1 ? " is" : "s are"} incomplete`);
+
+  return `<div class="gpr-anomaly-summary">
+    <div><span>Total responses</span><strong>${anomalies.length}</strong></div>
+    <div><span>High confidence</span><strong>${confidence.high}</strong></div>
+    <div><span>Medium / low</span><strong>${confidence.medium} / ${confidence.low}</strong></div>
+    <div><span>Recorded depth range</span><strong>${esc(depthRange)}</strong></div>
+  </div>${review.length ? `<div class="gpr-callout" style="border-left-color:#f59e0b"><strong>Interpretation review:</strong> ${esc(review.join("; "))}.</div>` : ""}`;
+}
+
+function anomalyFigureCards(anomalies) {
+  return (anomalies || []).map((anomaly, index) => {
+    const figures = (anomaly.figures || [])
+      .map((figure) => ({ ...figure, src: safeEvidenceImageSrc(figure.dataUrl) }))
+      .filter((figure) => figure.src)
+      .slice(0, 3);
+    const count = figures.length;
+    const photos = count
+      ? `<div class="gpr-finding-photos gpr-finding-photos--${count}">${figures.map((figure) => {
+          const role = GPR_ANOMALY_FIGURE_ROLES.find((item) => item.key === figure.role)?.label || "Figure";
+          return `<figure><img src="${escapeAttr(figure.src)}" alt="${escapeAttr(role)}"/><figcaption>${esc(role)}</figcaption></figure>`;
+        }).join("")}</div>`
+      : "";
+    const correlation = anomaly.archiveCorrelation === "correlates" || anomaly.archiveCorrelation === "does_not_correlate"
+      ? ` ${anomaly.archiveCorrelation === "correlates" ? "Correlates with archive frame" : "Does not correlate with archive frame"}${anomaly.archiveFrameDate ? ` ${anomaly.archiveFrameDate}` : ""}.`
+      : "";
+    return `<article class="gpr-finding-card">
+      <div class="gpr-finding-card__head"><strong>${esc(anomaly.ref || `A${index + 1}`)}</strong>${confidencePillHtml(anomaly.confidence)}</div>
+      <p class="gpr-finding-card__meta">${esc(anomalyTypeLabel(anomaly.anomalyType))} · ${esc(anomaly.depthM ? `${anomaly.depthM} m` : "depth not recorded")}${anomaly.lineOrGrid ? ` · ${esc(anomaly.lineOrGrid)}` : ""}</p>
+      <p class="gpr-finding-card__text">${esc(anomaly.interpretation || "No interpretation recorded.")}${esc(correlation)}</p>
+      ${photos}
+    </article>`;
+  }).join("");
+}
+
 function anomaliesBlock(anomalies) {
   if (!anomalies?.length) return "<p><em>No anomalies logged.</em></p>";
-  const rows = anomalies
-    .map(
-      (a, i) => `<tr>
-        <td>${esc(a.ref || `A${i + 1}`)}</td>
-        <td>${esc(anomalyTypeLabel(a.anomalyType))}</td>
-        <td>${esc(a.depthM ?? "—")}</td>
-        <td>${esc(a.lineOrGrid ?? "—")}</td>
-        <td>${esc(a.interpretation ?? "—")}</td>
-        <td>${confidencePillHtml(a.confidence)}</td>
-      </tr>`
-    )
-    .join("");
-  return `${anomalyTypeBarsHtml(anomalies)}<table class="gpr-data-table"><thead><tr><th>Ref</th><th>Type</th><th>Depth (m)</th><th>Line/grid</th><th>Interpretation</th><th>Confidence</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `${anomalySummaryHtml(anomalies)}${anomalyTypeBarsHtml(anomalies)}${anomalyFigureCards(anomalies)}`;
 }
 
 function processingFiltersBlock(filters) {
@@ -340,6 +470,53 @@ function acquisitionDiagramSvg(scanMode, lineSpacingM) {
   </div>`;
 }
 
+function acquisitionParametersBlock(report, scanLabel) {
+  const acq = report.acquisition || {};
+  const eq = report.equipment?.[0] || {};
+  const expected = Number(report.groundConditions?.expectedPenetrationM);
+  const target = Number(acq.depthRangeM);
+  const risk = Number.isFinite(expected) && Number.isFinite(target)
+    ? target > expected
+      ? `<div class="gpr-callout" style="border-left-color:#dc2626"><strong>Depth feasibility:</strong> Target depth ${esc(String(target))} m exceeds the BGS-informed indicative penetration of ~${esc(String(expected))} m. Confidence is expected to reduce with depth.</div>`
+      : `<div class="gpr-callout"><strong>Depth feasibility:</strong> Target depth ${esc(String(target))} m is within the BGS-informed indicative penetration of ~${esc(String(expected))} m, subject to field signal quality.</div>`
+    : `<div class="gpr-callout" style="border-left-color:#f59e0b"><strong>Depth feasibility:</strong> Complete target depth and ground enrichment to compare the requested range with indicative penetration.</div>`;
+
+  const parameterTable = dataTable(
+    ["Parameter", "Recorded value", "Technical relevance"],
+    [
+      ["Acquisition mode", scanLabel || "—", "Controls coverage geometry and interpretation continuity"],
+      ["Antenna centre frequency", eq.antennaFrequencyMhz ? `${eq.antennaFrequencyMhz} MHz` : "—", "Higher frequency favours resolution; lower frequency generally favours depth"],
+      ["Line spacing", acq.lineSpacingM ? `${acq.lineSpacingM} m` : "—", "Controls cross-line sampling and smallest resolvable lateral feature"],
+      ["Trace spacing", acq.traceSpacingM ? `${acq.traceSpacingM} m` : "—", "Controls along-line sampling density"],
+      ["Time window", acq.timeWindowNs ? `${acq.timeWindowNs} ns` : "—", "Maximum recorded two-way travel time"],
+      ["Target depth", acq.depthRangeM ? `${acq.depthRangeM} m` : "—", "Stated investigation range, not guaranteed achieved penetration"],
+      ["Coverage", acq.coveragePercent ? `${acq.coveragePercent}%` : "—", "Estimated accessible scope completed"],
+      ["Scan direction", acq.scanDirection || "—", "Supports correlation with plans and orthogonal coverage checks"],
+      ["Stacking passes", acq.stackingPasses || "—", "Repeated traces can improve signal-to-noise ratio"],
+      ["Grid / route extent", acq.gridExtentM ? `${acq.gridExtentM} m` : "—", "Recorded acquisition extent"],
+    ]
+  );
+
+  return [
+    `<div class="gpr-acquisition-layout">${acquisitionDiagramSvg(acq.scanMode, acq.lineSpacingM)}<div><p>${esc(buildAcquisitionNarrative({ ...acq, scanMode: scanLabel }))}</p><p><strong>Positioning/configuration:</strong> ${esc(eq.configuration || "Record wheel/DMI, GPS or survey-control configuration in the equipment log.")}</p></div></div>`,
+    risk,
+    parameterTable,
+    acquisitionScreenshotsHtml(acq),
+  ].join("");
+}
+
+function acquisitionScreenshotsHtml(acq) {
+  const figures = (acq?.screenshots || [])
+    .map((shot) => {
+      const src = safeEvidenceImageSrc(shot?.dataUrl);
+      if (!src) return "";
+      const caption = String(shot.caption || "Acquisition screenshot").slice(0, 160);
+      return `<figure class="gpr-acq-shot"><img src="${esc(src)}" alt="${esc(caption)}"/><figcaption>${esc(caption)}</figcaption></figure>`;
+    })
+    .filter(Boolean);
+  return figures.length ? `<div class="gpr-acq-shots">${figures.join("")}</div>` : "";
+}
+
 /** Print-ready chainage depth profile (mirrors editor GprChainageChart). */
 function chainageChartSvg(segments = []) {
   const points = (segments || [])
@@ -401,7 +578,9 @@ function chainageBlock(segments) {
     ["Line / swath", "Chainage (m)", "Thickness / depth", "Condition band", "Notes"],
     segments.map((s) => [
       [s.lineRef, s.swathRef].filter(Boolean).join(" · ") || "—",
-      [s.chainageStartM, s.chainageEndM].filter(Boolean).join(" – ") || "—",
+      [s.chainageStartM, s.chainageEndM]
+        .filter((value) => value !== "" && value !== null && value !== undefined)
+        .join(" – ") || "—",
       s.thicknessOrDepthM || "—",
       s.conditionBand || "—",
       s.profileNotes || "—",
@@ -578,10 +757,17 @@ function gprTableOfContents(entries) {
 
 function groundConditionsBlock(gc) {
   const parts = [];
+  const obs = gc.siteObservations || {};
+  parts.push(`<div class="gpr-ground-summary">
+    <div><small>Mapped ground class</small><strong>${esc((gc.materialClass || "not classified").replace(/_/g, " "))}</strong></div>
+    <div><small>Expected attenuation</small><strong>${esc((gc.attenuationClass || "not assessed").replace(/_/g, " "))}</strong></div>
+    <div><small>Indicative penetration</small><strong>${gc.expectedPenetrationM ? `~${esc(String(gc.expectedPenetrationM))} m` : "Not assessed"}</strong></div>
+    <div><small>Recommended antenna</small><strong>${esc(gc.recommendedAntenna?.label || (gc.recommendedAntenna?.mhz ? `${gc.recommendedAntenna.mhz} MHz` : "Review target depth"))}</strong></div>
+  </div>`);
   if (gc.accuracyWarning) {
     parts.push(`<div class="gpr-callout" style="border-left-color:#f59e0b"><strong>Accuracy:</strong> ${esc(gc.accuracyWarning)}</div>`);
   }
-  if (gc.narrative) parts.push(`<div class="gpr-callout">${esc(gc.narrative)}</div>`);
+  if (gc.narrative) parts.push(`<div class="gpr-callout"><strong>GPR performance interpretation:</strong> ${esc(gc.narrative)}</div>`);
   if (gc.bedrock?.lexDescription || gc.superficial?.lexDescription || gc.artificial?.lexDescription) {
     parts.push(
       metaGrid([
@@ -590,9 +776,11 @@ function groundConditionsBlock(gc) {
         ["Bedrock", gc.bedrock?.lexDescription || "—"],
         ["Attenuation class", gc.attenuationClass || "—"],
         ["Expected penetration", gc.expectedPenetrationM ? `~${gc.expectedPenetrationM} m` : "—"],
+        ["Dielectric range", gc.dielectricRange?.length ? `εr ${gc.dielectricRange.join("-")}` : "—"],
         ["BGS scale", gc.scale || "—"],
         ["Lookup", gc.coordSource || "—"],
         ["Data source", gc.source || "—"],
+        ["Query point", gc.queryLat != null && gc.queryLng != null ? `${Number(gc.queryLat).toFixed(5)}, ${Number(gc.queryLng).toFixed(5)}` : "—"],
       ])
     );
   }
@@ -613,12 +801,12 @@ function groundConditionsBlock(gc) {
       `<p><strong>Nearby BGS borehole index</strong> (click ref for scan when available)</p><table class="gpr-data-table"><thead><tr><th>Ref / scan</th><th>Distance</th><th>Length</th></tr></thead><tbody>${rows}</tbody></table>`
     );
   }
-  const obs = gc.siteObservations || {};
   if (obs.notes || obs.surfaceType) {
     parts.push(
       `<p><strong>Site observations:</strong> Surface ${obs.surfaceType || "—"}, moisture ${obs.moisture || "—"}, reinforcement ${obs.reinforcement || "—"}.${obs.notes ? ` ${esc(obs.notes)}` : ""}</p>`
     );
   }
+  parts.push(`<div class="gpr-callout" style="border-left-color:#64748b"><strong>Use of BGS data:</strong> ${esc(gc.disclaimer || "Mapped geology is regional desk-study context, not a site-specific ground investigation. Local fill, utilities, moisture and construction can differ from the mapped unit.")}</div>`);
   return parts.join("") || "<p><em>Ground conditions not fetched — run site enrichment.</em></p>";
 }
 
@@ -638,22 +826,63 @@ function environmentalBlock(env) {
   ].join("");
 }
 
+function historicalEvidenceBlock(report) {
+  const evidence = verifiedGprEvidence(report);
+  if (!evidence.length) {
+    return `<div class="gpr-callout" style="border-left-color:#64748b"><strong>No verified historic evidence.</strong> No claim about former buildings, structures, burials or previous land use has been included.</div>`;
+  }
+  const assessmentById = new Map(
+    sanitizeEvidenceAssessments(report.evidenceReview?.assessments, evidence.map((item) => item.id))
+      .map((item) => [item.evidenceId, item])
+  );
+  const cards = evidence.map((item) => {
+    const assessment = assessmentById.get(item.id);
+    const url = safeHttpUrl(item.sourceUrl);
+    const imageSrc = safeEvidenceImageSrc(item.imageDataUrl);
+    const sourceLabel = [item.sourceName, item.sourceDate].filter(Boolean).join(" · ") || "Verified source";
+    const classification = assessment
+      ? `<div class="gpr-callout"><strong>Controlled GPR relevance:</strong> ${esc(GPR_AI_RELEVANCE[assessment.relevance])}<br/>
+          <strong>Possible response mechanisms (not site facts):</strong> ${esc((assessment.mechanisms || []).map((key) => GPR_AI_MECHANISMS[key]).filter(Boolean).join("; ") || "None assigned")}<br/>
+          <strong>Follow-up:</strong> ${esc((assessment.recommendedActions || []).map((key) => GPR_AI_ACTIONS[key]).filter(Boolean).join("; ") || "None assigned")}<br/>
+          <strong>Caveat:</strong> ${esc(GPR_AI_CAVEATS[assessment.caveat])}</div>`
+      : `<p><em>Not classified by AI; retained as verified desk-study evidence.</em></p>`;
+    return `<article class="gpr-evidence-print">
+      <h3>${esc(item.title || sourceLabel)}</h3>
+      <p><strong>Source:</strong> ${url ? `<a href="${escapeAttr(url)}">${esc(sourceLabel)}</a>` : esc(sourceLabel)}</p>
+      <p><strong>Verified factual observation:</strong> ${esc(item.observedFact)}</p>
+      ${item.coverageNotes ? `<p><strong>Coverage / alignment:</strong> ${esc(item.coverageNotes)}</p>` : ""}
+      ${imageSrc ? `<figure class="gpr-evidence-print__image"><img src="${escapeAttr(imageSrc)}" alt="Historic evidence"/><figcaption>${esc(item.imageFileName || item.title || "Evidence image")}</figcaption></figure>` : ""}
+      ${classification}
+    </article>`;
+  }).join("");
+  const meta = report.evidenceReview?.reviewedAt
+    ? `<p class="gpr-small"><strong>AI role:</strong> controlled classification only (${esc(report.evidenceReview.model || "OpenAI")}, ${esc(formatOrgDateTime(report.evidenceReview.reviewedAt))}). Facts above are copied from verified evidence, not generated by AI.</p>`
+    : "";
+  return `${cards}${meta}<div class="gpr-callout" style="border-left-color:#f59e0b"><strong>Interpretation boundary:</strong> Historic mapping or imagery can guide correlation, but spatial coincidence does not prove that a radar response is a former structure, service, void or burial. Confirm against survey geometry and, where required, an approved verification method.</div>`;
+}
+
 /**
  * @param {object} report
  * @param {{ projectLat?: number, projectLng?: number, linkedSurveyReport?: object }} [extras]
  */
 export function buildGprReportHtml(report, extras = {}) {
-  const r = normalizeGprReport(report);
+  const r = normalizeGprReport(applyGprNarrativeAutomation(report));
   const org = getOrgSettings();
   const umTheme = isUtilityMappingPrintTheme();
-  const primary =
+  const organisationPrimary =
     umTheme && (!org.primaryColor || org.primaryColor === "#0d9488" || org.primaryColor === "#0C447C")
       ? "#0B1D3A"
       : org.primaryColor || "#0C447C";
-  const accent =
+  const organisationAccent =
     umTheme && (!org.accentColor || org.accentColor === "#f97316" || org.accentColor === "#E6F1FB")
       ? "#00B4E4"
       : org.accentColor || "#E6F1FB";
+  const theme = resolveGprVisualTheme(r, {
+    ...org,
+    primaryColor: organisationPrimary,
+    accentColor: organisationAccent,
+  });
+  const { primary, accent, accentInk, accentSoft, primarySoft } = theme;
   const quality = gprReportQuality(r);
   const scanLabel = SCAN_MODES.find((s) => s.key === r.acquisition?.scanMode)?.label || r.acquisition?.scanMode;
   const startLat = r.preSurvey?.lat ?? extras.projectLat;
@@ -666,6 +895,13 @@ export function buildGprReportHtml(report, extras = {}) {
       : r.surveyDate
         ? formatOrgDate(r.surveyDate)
         : "—";
+  const finalIssue = r.status === "final";
+  const documentStatusHtml = `<div class="gpr-doc-status">
+    <div class="gpr-doc-status__state"><small>Issue status</small><strong>${finalIssue ? "FINAL ISSUE" : "DRAFT - NOT FOR RELIANCE"}</strong></div>
+    <div><small>Revision</small><strong>${esc(r.revision || "P01")}</strong></div>
+    <div><small>Purpose</small><strong>${esc(r.issuePurpose || (finalIssue ? "Final issue" : "For information"))}</strong></div>
+    <div><small>Issued</small><strong>${finalIssue && r.finalisedAt ? esc(formatOrgDateTime(r.finalisedAt)) : "Not finalised"}</strong></div>
+  </div>`;
 
   const limitationText =
     r.sections?.limitations ||
@@ -684,6 +920,20 @@ export function buildGprReportHtml(report, extras = {}) {
   };
 
   const umLogo = resolveUtilityMappingLogoSrc(org);
+  const coverBranding = r.coverBranding || {};
+  const brandMode = coverBranding.mode === "client" || coverBranding.mode === "both" ? coverBranding.mode : "own";
+  const clientName = String(coverBranding.clientName || "").trim() || getUtilityMappingClient(coverBranding.clientCode)?.name || "";
+  const clientLogo =
+    safeImageSrc(coverBranding.clientLogoDataUrl) ||
+    utilityMappingClientLogoUrl(coverBranding.clientCode) ||
+    "";
+  const sitePhoto = (r.preSurvey?.photos || [])
+    .map((photo) => safeEvidenceImageSrc(photo?.dataUrl) || safeImageSrc(photo?.dataUrl))
+    .find(Boolean) || "";
+  const headerLogo = brandMode === "client" ? clientLogo : umLogo;
+  const headerOpts = brandMode === "client"
+    ? { hideWordmark: true, allowEmpty: true, alt: clientName || "Client" }
+    : {};
   const coverHtml = umTheme
     ? renderUtilityMappingHeroCover({
         title: r.title || "Ground Penetrating Radar Report",
@@ -693,11 +943,19 @@ export function buildGprReportHtml(report, extras = {}) {
         kitChips: utilityMappingCoverKitChips({ surveyType: "gpr_survey", pas128Method: "GPR" }),
         orgName: org.name || "Utility Mapping",
         logoSrc: umLogo,
+        brandMode,
+        clientName,
+        clientCode: coverBranding.clientCode || "",
+        clientLogoSrc: clientLogo,
+        sitePhotoSrc: sitePhoto,
         meta: [
           ["Report ref", r.ref || "—"],
           ["Survey date", surveyDateLabel],
-          ["Site", r.siteAddress || r.projectName || "—"],
-          ["Surveyor", r.surveyor || "—"],
+          ["Client", r.client || "—"],
+          ["Site", [r.siteAddress, r.postcode].filter(Boolean).join(", ") || r.projectName || "—"],
+          ["Surveyor", r.surveyor || "Not recorded"],
+          ...(r.gridRef || r.osgbEasting ? [["OSGB", r.gridRef || `${r.osgbEasting} E, ${r.osgbNorthing} N`]] : []),
+          ...(r.what3words ? [["What3Words", r.what3words]] : []),
           ["Scan mode", scanLabel || "—"],
           [
             "Primary antenna",
@@ -710,21 +968,26 @@ export function buildGprReportHtml(report, extras = {}) {
     : `<div class="gpr-cover">
       <div class="gpr-cover-top">
         <div>
-          ${umLogo || org.logo ? `<img src="${esc(umLogo || org.logo)}" alt="" style="max-height:48px;margin-bottom:8px"/>` : ""}
-          <div style="font-weight:600">${esc(org.name)}</div>
+          ${brandMode !== "client" && (umLogo || org.logo) ? `<img src="${esc(umLogo || org.logo)}" alt="" style="max-height:48px;margin-bottom:8px"/>` : ""}
+          ${brandMode !== "own" && clientLogo ? `<img src="${esc(clientLogo)}" alt="${esc(clientName || "Client")}" style="max-height:48px;margin:0 8px 8px 0"/>` : ""}
+          <div style="font-weight:600">${esc(brandMode === "client" ? (clientName || "Client") : org.name)}</div>
         </div>
         <div>${renderMySafeOpsMarkSvg(24)}</div>
       </div>
       <span class="gpr-badge">${r.status === "final" ? "Final GPR report" : "Draft GPR report"}</span>
       <span class="gpr-badge">Completeness ${quality.score}%</span>
+      ${documentStatusHtml}
       <h1 class="gpr-cover-title">${esc(r.title || "Ground Penetrating Radar Report")}</h1>
-      ${coverWaveSvg(primary)}
+      ${sitePhoto ? `<img src="${esc(sitePhoto)}" alt="Site photograph" style="display:block;max-height:42mm;max-width:78mm;object-fit:contain;margin:8px 0"/>` : ""}
+      ${coverWaveSvg(primary, accent)}
       ${coverStatsRow(r)}
       ${metaGrid([
         ["Report ref", r.ref],
         ["Survey date", surveyDateLabel],
-        ["Site", r.siteAddress || r.projectName],
-        ["Surveyor", r.surveyor],
+        ["Site", [r.siteAddress, r.postcode].filter(Boolean).join(", ") || r.projectName],
+        ["Surveyor", r.surveyor || "Not recorded"],
+        ["OSGB", r.gridRef || (r.osgbEasting ? `${r.osgbEasting} E, ${r.osgbNorthing} N` : "")],
+        ["What3Words", r.what3words],
         ["Scan mode", scanLabel],
         ["Primary antenna", r.equipment?.[0]?.antennaFrequencyMhz ? `${r.equipment[0].antennaFrequencyMhz} MHz` : "—"],
       ])}
@@ -742,11 +1005,12 @@ export function buildGprReportHtml(report, extras = {}) {
   pushSection("Equipment", equipmentBlock(r.equipment), "equip");
   pushSection(
     "Acquisition parameters",
-    `${acquisitionDiagramSvg(r.acquisition?.scanMode, r.acquisition?.lineSpacingM)}<p>${esc(buildAcquisitionNarrative({ ...r.acquisition, scanMode: scanLabel }))}</p>`,
+    acquisitionParametersBlock(r, scanLabel),
     "acq"
   );
   pushSection("Velocity model & calibration", `<p>${esc(buildVelocityNarrative(r.velocityModel))}</p>`, "vel");
   pushSection("Ground conditions & geology", groundConditionsBlock(r.groundConditions), "ground");
+  pushSection("Historic evidence & previous land use", historicalEvidenceBlock(r), "history");
   pushSection("Environmental conditions & GPR impact", environmentalBlock(r.environmental), "env");
   pushSection(
     "Data processing",
@@ -798,7 +1062,7 @@ export function buildGprReportHtml(report, extras = {}) {
         client: r.client || r.projectName || "",
         title: r.title || "GPR report",
         reportRef: r.ref || "",
-        logoSrc: umLogo,
+        logoSrc: headerLogo,
         authors: [
           {
             name: r.surveyor || r.signOff?.preparedBy || "—",
@@ -814,15 +1078,15 @@ export function buildGprReportHtml(report, extras = {}) {
       })
     : "";
   const runningHeader = umTheme
-    ? renderUtilityMappingPageHeader(umLogo, r.ref || "")
+    ? renderUtilityMappingPageHeader(headerLogo, r.ref || "", headerOpts)
     : `<div class="gpr-running-header"><span>${esc(r.ref || "")}</span><span>${esc(r.title || "GPR Report")}</span></div>`;
-  const umFooter = umTheme ? renderUtilityMappingPageFooter(umLogo) : "";
+  const umFooter = umTheme ? renderUtilityMappingPageFooter(brandMode === "client" ? clientLogo || umLogo : umLogo) : "";
 
   const body = [
     coverHtml,
     umDocControl,
     umTheme && tocHtml
-      ? `<div class="um-toc-page">${renderUtilityMappingPageHeader(umLogo, r.ref || "")}${renderUtilityMappingComplianceRibbon()}${tocHtml}</div>`
+      ? `<div class="um-toc-page">${renderUtilityMappingPageHeader(headerLogo, r.ref || "", headerOpts)}${renderUtilityMappingComplianceRibbon()}${tocHtml}</div>`
       : tocHtml,
     runningHeader,
     umTheme ? renderUtilityMappingComplianceRibbon() : "",
@@ -837,11 +1101,11 @@ export function buildGprReportHtml(report, extras = {}) {
 
   // Draft/final watermark and running footer — same visual signalling as permits/RAMS,
   // so a GPR export can't be mistaken for a final report while still in draft.
-  const watermarkText = String(org.pdfWatermarkText || "").trim() || (r.status === "final" ? "FINAL" : "DRAFT");
-  const footerRef = esc(r.ref || "GPR report");
+  const watermarkText = r.status === "final" ? "FINAL" : (String(org.pdfWatermarkText || "").trim() || "DRAFT");
+  const footerRef = esc(`${r.ref || "GPR report"}${r.revision ? ` · ${r.revision}` : ""} · ${finalIssue ? "FINAL" : "DRAFT"}`);
   const complianceLine = String(org.pdfComplianceLine || "").trim();
 
-  return `<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"/><title>${esc(r.ref || "GPR Report")}</title>${styles(primary, accent)}</head><body>
+  return `<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8"/><title>${esc(r.ref || "GPR Report")}</title>${styles(primary, accent, accentInk, accentSoft, primarySoft)}</head><body>
     <div class="gpr-watermark">${esc(watermarkText)}</div>
     <div class="gpr-doc gpr-doc-body">${body}</div>
     <div class="gpr-print-footer">

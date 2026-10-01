@@ -21,4 +21,10 @@ describe("safeOrgWebsite", () => {
       "https://u-map.co.uk?ref=UM26-1&rev=B"
     );
   });
+
+  it("normalises a bare organisation domain before building verification links", () => {
+    expect(buildOrgShareUrlWithRef({ website: "www.mypitlab.com" }, "SR-2026-001", undefined, "A")).toBe(
+      "https://www.mypitlab.com?ref=SR-2026-001&rev=A"
+    );
+  });
 });
