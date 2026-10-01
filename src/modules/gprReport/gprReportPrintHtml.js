@@ -43,7 +43,11 @@ import {
   sanitizeEvidenceAssessments,
   verifiedGprEvidence,
 } from "./gprEvidence.js";
-import { GPR_ANOMALY_FIGURE_ROLES } from "./gprReportConstants";
+const GPR_ANOMALY_FIGURE_ROLES = [
+  { key: "gpr", label: "GPR" },
+  { key: "cad", label: "CAD" },
+  { key: "satellite", label: "Archive / satellite" },
+];
 import {
   buildGprLineLengthSummary,
   buildGprSurveyLineComparison,
