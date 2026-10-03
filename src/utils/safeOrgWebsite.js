@@ -11,7 +11,13 @@ const DEFAULT_UM_SITE = "https://u-map.co.uk";
  * @returns {string} origin without trailing slash
  */
 export function safeOrgWebsiteBase(org, fallback = DEFAULT_UM_SITE) {
-  const fromOrg = safeHttpUrl(typeof org?.website === "string" ? org.website : "");
+  const website = typeof org?.website === "string" ? org.website.trim() : "";
+  // Organisation settings commonly store a bare domain (for example www.example.com).
+  // Treat that as a public website instead of resolving it as a path on the app origin.
+  const candidate = website && !/^[a-z][a-z\d+.-]*:/i.test(website) && !website.startsWith("/")
+    ? `https://${website}`
+    : website;
+  const fromOrg = safeHttpUrl(candidate);
   const fb = safeHttpUrl(fallback) || DEFAULT_UM_SITE;
   const raw = (fromOrg || fb).replace(/\/$/, "");
   return raw;

@@ -135,8 +135,22 @@ function geoPhotoImageFormat(url) {
 function tryAddGeoPhotoImage(pdf, url, x, y, w, h) {
   if (!url || !String(url).startsWith("data:image")) return false;
   try {
-    pdf.addImage(String(url), geoPhotoImageFormat(url), x, y, w, h, undefined, "FAST");
-    return true;
+    const { width, height } = pdf.getImageProperties(String(url));
+    if (!(width > 0) || !(height > 0)) return false;
+    const portrait = height > width * 1.08;
+    const frameW = portrait ? 148 : w;
+    const frameH = portrait ? 155 : h;
+    const frameX = portrait ? (PDF_PAGE.W - frameW) / 2 : x;
+    const frameScale = Math.min(frameW / width, frameH / height);
+    const fittedW = width * frameScale;
+    const fittedH = height * frameScale;
+    const imageX = frameX + (frameW - fittedW) / 2;
+    const imageY = y + (frameH - fittedH) / 2;
+    pdf.setFillColor(248, 250, 252);
+    pdf.setDrawColor(226, 232, 240);
+    pdf.roundedRect(frameX, y, frameW, frameH, 2, 2, "FD");
+    pdf.addImage(String(url), geoPhotoImageFormat(url), imageX, imageY, fittedW, fittedH, undefined, "FAST");
+    return { height: frameH };
   } catch {
     return false;
   }
@@ -238,6 +252,17 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
   const contentW = PDF_PAGE.W - margin * 2;
   const bottomY = PDF_PAGE.CONTENT_BOTTOM;
 
+  const fitLines = (value, width, maxLines) => {
+    const text = String(value ?? "—");
+    const lines = pdf.splitTextToSize(text, width);
+    if (lines.length <= maxLines) return lines;
+    const visible = lines.slice(0, maxLines);
+    let last = visible[maxLines - 1];
+    while (last && pdf.getTextWidth(`${last}…`) > width) last = last.slice(0, -1);
+    visible[maxLines - 1] = `${last.trimEnd()}…`;
+    return visible;
+  };
+
   const fmtDate = (iso) => {
     if (!iso) return "—";
     try {
@@ -278,14 +303,13 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
       setPdfFont(pdf, "normal");
       pdf.setFontSize(8);
       pdf.setTextColor(30, 41, 59);
-      const lines = pdf.splitTextToSize(String(v).slice(0, 80), colW - 8);
-      pdf.text(lines.slice(0, 2), x, cy + 3.8);
+      pdf.text(fitLines(v, colW - 8, 2), x, cy + 3.8);
     });
     return y + gridH + 5;
   };
 
   const ensureSpace = (y, need, brief, docRef) => {
-    if (y + need <= bottomY) return y;
+    if (y + need <= bottomY) return { y, continued: false };
     pdf.addPage();
     let ny = drawPdfPageHeader(pdf, {
       org,
@@ -297,7 +321,7 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
       docRef,
     });
     ny = drawPdfMetaStrip(pdf, org, { moduleLabel: "Daily briefing", docRef, recordNote: brief.location || "" }, rgb, ny);
-    return ny + 2;
+    return { y: ny + 2, continued: true };
   };
 
   if (!rows.length) {
@@ -340,20 +364,38 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
     );
     y = drawInfoGrid(brief, y);
 
-    const section = (title, bodyLines, yStart) => {
-      let yy = ensureSpace(yStart, 14 + bodyLines.length * 3.8, brief, docRef);
+    const drawSectionHeading = (title, yy, continued = false) => {
       pdf.setFillColor(...rgb);
       pdf.rect(margin, yy, 2, 6, "F");
       setPdfFont(pdf, "bold");
       pdf.setFontSize(8);
       pdf.setTextColor(...rgb);
-      pdf.text(title, margin + 4, yy + 4.5);
-      yy += 8;
+      pdf.text(continued ? `${title} (continued)` : title, margin + 4, yy + 4.5);
+      return yy + 8;
+    };
+
+    const section = (title, bodyLines, yStart) => {
+      let yy = yStart;
+      let lineIndex = 0;
+      let firstChunk = true;
       setPdfFont(pdf, "normal");
       pdf.setFontSize(8.5);
       pdf.setTextColor(51, 65, 85);
-      pdf.text(bodyLines, margin + 2, yy);
-      return yy + bodyLines.length * 3.8 + 5;
+      do {
+        const remaining = bodyLines.length - lineIndex;
+        const minimumNeed = Math.min(remaining, 1) * 3.8 + 14;
+        const ensured = ensureSpace(yy, minimumNeed, brief, docRef);
+        yy = ensured.y;
+        if (!firstChunk || ensured.continued) yy = drawSectionHeading(`${title}`, yy, !firstChunk || ensured.continued);
+        else yy = drawSectionHeading(title, yy);
+        const capacity = Math.max(1, Math.floor((bottomY - yy - 5) / 3.8));
+        const chunk = bodyLines.slice(lineIndex, lineIndex + capacity);
+        pdf.text(chunk, margin + 2, yy);
+        lineIndex += chunk.length;
+        yy += chunk.length * 3.8 + 5;
+        firstChunk = false;
+      } while (lineIndex < bodyLines.length);
+      return yy;
     };
 
     if (brief.scopeToday) {
@@ -373,27 +415,32 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
       y = section("NOTES / ACTIONS", noteLines, y);
     }
 
-    y = ensureSpace(y, 20, brief, docRef);
+    y = ensureSpace(y, 20, brief, docRef).y;
     setPdfFont(pdf, "bold");
     pdf.setFontSize(8);
     pdf.setTextColor(...rgb);
     pdf.text("ATTENDANCE & SIGNATURES", margin, y);
     y += 6;
 
-    const colW = [58, 34, 72, 26];
+    const colW = [48, 30, 76, 32];
     const startX = margin;
-    pdf.setFillColor(...rgb);
-    pdf.rect(startX, y, contentW, 7, "F");
-    pdf.setFontSize(7.5);
-    pdf.setTextColor(255, 255, 255);
-    ["Name", "Role", "Signature", "Time"].forEach((h, i) => {
-      pdf.text(h, startX + colW.slice(0, i).reduce((s, w) => s + w, 0) + 2, y + 4.8);
-    });
-    y += 8;
+    const drawAttendanceHeader = () => {
+      pdf.setFillColor(...rgb);
+      pdf.rect(startX, y, contentW, 7, "F");
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(255, 255, 255);
+      ["Name", "Role", "Signature", "Time"].forEach((h, i) => {
+        pdf.text(h, startX + colW.slice(0, i).reduce((s, w) => s + w, 0) + 2, y + 4.8);
+      });
+      y += 8;
+    };
+    drawAttendanceHeader();
 
     const present = (brief.attendees || []).filter((a) => a.present);
     present.forEach((att) => {
-      y = ensureSpace(y, 16, brief, docRef);
+      const ensured = ensureSpace(y, 16, brief, docRef);
+      y = ensured.y;
+      if (ensured.continued) drawAttendanceHeader();
       const rowH = 15;
       pdf.setDrawColor(226, 232, 240);
       pdf.setFillColor(255, 255, 255);
@@ -402,9 +449,9 @@ export function renderDailyBriefingDetailPages(pdf, briefings, helpers) {
       pdf.setFontSize(8);
       pdf.setTextColor(30, 41, 59);
       let cx = startX + 2;
-      pdf.text(String(att.name || "").slice(0, 26), cx, y + 5);
+      pdf.text(fitLines(att.name || "—", colW[0] - 4, 2), cx, y + 5);
       cx += colW[0];
-      pdf.text(String(att.role || "").slice(0, 16), cx, y + 5);
+      pdf.text(fitLines(att.role || "—", colW[1] - 4, 2), cx, y + 5);
       cx += colW[1];
       if (att.sig && String(att.sig).startsWith("data:image")) {
         try {
@@ -472,10 +519,11 @@ export function renderGeoPhotoDetailPages(pdf, photos, helpers) {
   rows.forEach((photo, index) => {
     if (index > 0) pdf.addPage();
     const preset = geoPhotoPresetLabel(photo.type);
+    const subtitle = `${photo.projectName || "Site"} · ${preset}`;
     let y = drawPdfPageHeader(pdf, {
       org,
       title: "Geo-photo",
-      subtitle: `${photo.projectName || "Site"} · ${preset}`,
+      subtitle,
       rgb,
       theme,
     });
@@ -492,7 +540,7 @@ export function renderGeoPhotoDetailPages(pdf, photos, helpers) {
         pdf.setTextColor(120, 120, 120);
         pdf.text("Image could not be embedded (use on-device capture or synced URL).", 12, y + 8);
       }
-      y += imgH + 6;
+      y += (added?.height || imgH) + 6;
     }
 
     setPdfFont(pdf, "normal");
@@ -508,21 +556,43 @@ export function renderGeoPhotoDetailPages(pdf, photos, helpers) {
       geoPhotoAreaOf(photo) ? `Extent traced on site: ${formatGeoPhotoArea(photo.area)}` : "",
       photo.includeInReport ? "Included in survey report pack" : "",
     ].filter(Boolean);
+    const contentBottom = PDF_PAGE.CONTENT_BOTTOM - 2;
+    const lineHeight = 4.2;
+    const startContinuationPage = (title = "Geo-photo (continued)") => {
+      pdf.addPage();
+      y = drawPdfPageHeader(pdf, { org, title, subtitle, rgb, theme }) + 4;
+    };
+    const drawWrappedLines = (lines, { fontSize = 8.5, bold = false } = {}) => {
+      setPdfFont(pdf, bold ? "bold" : "normal");
+      pdf.setFontSize(fontSize);
+      let cursor = 0;
+      while (cursor < lines.length) {
+        const room = Math.floor((contentBottom - y) / lineHeight);
+        if (room < 1) {
+          startContinuationPage();
+          continue;
+        }
+        const chunk = lines.slice(cursor, cursor + room);
+        pdf.text(chunk, 12, y, { lineHeightFactor: 1.25 });
+        y += chunk.length * lineHeight;
+        cursor += chunk.length;
+        if (cursor < lines.length) startContinuationPage();
+      }
+    };
     meta.forEach((line) => {
-      pdf.text(line, 12, y);
-      y += 4.5;
+      const wrapped = pdf.splitTextToSize(line, 186);
+      drawWrappedLines(Array.isArray(wrapped) ? wrapped : [wrapped], { fontSize: 9 });
     });
 
     if (photo.notes?.trim()) {
-      y += 2;
-      setPdfFont(pdf, "bold");
-      pdf.setFontSize(8);
-      pdf.text("NOTES", 12, y);
-      y += 4;
-      setPdfFont(pdf, "normal");
-      pdf.setFontSize(8.5);
       const noteLines = pdf.splitTextToSize(String(photo.notes).trim(), 186);
-      pdf.text(noteLines, 12, y);
+      const wrappedNoteLines = Array.isArray(noteLines) ? noteLines : [noteLines];
+      const availableNoteLines = Math.floor((contentBottom - y - 3) / lineHeight);
+      if (wrappedNoteLines.length + 1 > availableNoteLines) startContinuationPage();
+      y += 2;
+      drawWrappedLines(["NOTES"], { fontSize: 8, bold: true });
+      y += 1;
+      drawWrappedLines(wrappedNoteLines);
     }
   });
 }
