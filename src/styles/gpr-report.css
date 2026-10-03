@@ -878,9 +878,17 @@
   opacity: 0.45;
 }
 
-.app-gpr-page-shell > *:not(.app-gpr-wave-backdrop) {
+.app-gpr-page-shell > *:not(.app-gpr-wave-backdrop):not(.app-module-overlay) {
   position: relative;
   z-index: 1;
+}
+
+/* Keep the editor in the viewport. The page-shell stacking helper above must
+   never override ModuleOverlay's fixed positioning. */
+.app-gpr-page-shell > .app-gpr-module-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay, 50);
 }
 
 /* ── List filters & groups ── */

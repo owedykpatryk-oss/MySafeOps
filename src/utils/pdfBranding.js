@@ -31,6 +31,30 @@ export function getPdfTheme(org) {
   return raw === "classic" ? "classic" : "executive";
 }
 
+function fitPdfTextToWidth(pdf, value, maxWidth) {
+  const chars = Array.from(String(value || "").trim());
+  const fullText = chars.join("");
+  if (pdf.getTextWidth(fullText) <= maxWidth) return fullText;
+  let low = 0;
+  let high = chars.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = `${chars.slice(0, mid).join("").trimEnd()}…`;
+    if (pdf.getTextWidth(candidate) <= maxWidth) low = mid;
+    else high = mid - 1;
+  }
+  return `${chars.slice(0, low).join("").trimEnd()}…`;
+}
+
+function contrastTextRgb(backgroundRgb) {
+  const channels = backgroundRgb.map((channel) => {
+    const value = Math.max(0, Math.min(255, Number(channel) || 0)) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  return luminance > 0.42 ? [15, 23, 42] : [255, 255, 255];
+}
+
 export function logoImageFormat(dataUrl) {
   const s = String(dataUrl || "").toLowerCase();
   if (s.includes("image/png") || s.includes("png")) return "PNG";
@@ -44,8 +68,23 @@ export function tryAddLogo(pdf, org, x, y, maxW = 22, maxH = 12) {
   const logo = org?.logo;
   if (!logo || !String(logo).startsWith("data:image")) return 0;
   try {
-    pdf.addImage(String(logo), logoImageFormat(logo), x, y, maxW, maxH, undefined, "FAST");
-    return maxW + 4;
+    const image = pdf.getImageProperties(String(logo));
+    const imageW = Number(image?.width) || maxW;
+    const imageH = Number(image?.height) || maxH;
+    const scale = Math.min(maxW / imageW, maxH / imageH);
+    const width = imageW * scale;
+    const height = imageH * scale;
+    pdf.addImage(
+      String(logo),
+      logoImageFormat(logo),
+      x,
+      y + (maxH - height) / 2,
+      width,
+      height,
+      undefined,
+      "FAST"
+    );
+    return width + 4;
   } catch {
     return 0;
   }
@@ -139,7 +178,6 @@ export function drawPremiumPdfHeader(pdf, meta, yStart = PDF_PAGE.MARGIN) {
   const margin = PDF_PAGE.MARGIN;
   const contentW = pageW - margin * 2;
   const rightColW = PDF_PAGE.RIGHT_COL_W;
-  const leftMaxW = contentW - rightColW - 2;
 
   drawBrandGradientBar(pdf, yStart, rgb, accentRgb, contentW, theme === "executive" ? 4 : 2.5);
   const barH = theme === "executive" ? 4 : 2.5;
@@ -155,6 +193,7 @@ export function drawPremiumPdfHeader(pdf, meta, yStart = PDF_PAGE.MARGIN) {
     theme === "executive" ? 12 : 10
   );
   if (logoW > 0) textX = margin + logoW;
+  const leftMaxW = Math.max(20, pageW - margin - rightColW - textX - 2);
 
   const rightX = pageW - margin;
   drawMySafeOpsBadgeJsPdf(pdf, rightX, bodyY, rgb, accentRgb);
@@ -291,19 +330,23 @@ export function drawRegisterHeroBlock(pdf, opts) {
   }
 
   const statusEntries = Object.entries(stats.byStatus).slice(0, 4);
+  setPdfFont(pdf, "bold");
+  pdf.setFontSize(6);
   let chipX = margin + 6;
   const chipY = y + blockH - 4.5;
+  const chipGap = 3;
+  const maxChipLabelW = statusEntries.length
+    ? (w - 12 - chipGap * (statusEntries.length - 1)) / statusEntries.length - 6
+    : 0;
   statusEntries.forEach(([status, count], idx) => {
-    const label = `${status} ${count}`;
+    const label = fitPdfTextToWidth(pdf, `${status} ${count}`, maxChipLabelW);
     const chipW = pdf.getTextWidth(label) + 6;
     const fill = idx % 2 === 0 ? [r, g, b] : accentRgb;
     pdf.setFillColor(...fill);
     pdf.roundedRect(chipX, chipY - 3.5, chipW, 5, 1.2, 1.2, "F");
-    setPdfFont(pdf, "bold");
-    pdf.setFontSize(6);
-    pdf.setTextColor(255, 255, 255);
+    pdf.setTextColor(...contrastTextRgb(fill));
     pdf.text(label, chipX + 3, chipY);
-    chipX += chipW + 3;
+    chipX += chipW + chipGap;
   });
 
   return y + blockH + 5;
@@ -326,7 +369,7 @@ export function drawEmptyRegisterState(pdf, opts) {
   pdf.circle(margin + 10, y + 12, 5, "F");
   setPdfFont(pdf, "bold");
   pdf.setFontSize(10);
-  pdf.setTextColor(255, 255, 255);
+  pdf.setTextColor(...contrastTextRgb(rgb));
   pdf.text("0", margin + 10, y + 13.2, { align: "center" });
 
   setPdfFont(pdf, "bold");
@@ -344,19 +387,25 @@ export function drawEmptyRegisterState(pdf, opts) {
   pdf.text(msg, margin + 20, y + 16);
 
   if (prebuildLabel) {
-    pdf.setFillColor(...accentRgb);
-    pdf.roundedRect(margin + 20, y + 28, Math.min(w - 24, pdf.getTextWidth(prebuildLabel) + 10), 6, 1.5, 1.5, "F");
     setPdfFont(pdf, "bold");
     pdf.setFontSize(7);
-    pdf.setTextColor(255, 255, 255);
-    pdf.text(`Quick start: ${prebuildLabel}`.slice(0, 70), margin + 25, y + 32);
+    const maxButtonW = w - 24;
+    const maxLabelW = maxButtonW - 10;
+    const buttonLabel = fitPdfTextToWidth(pdf, `Quick start: ${prebuildLabel}`, maxLabelW);
+    const buttonW = Math.min(maxButtonW, pdf.getTextWidth(buttonLabel) + 10);
+    pdf.setFillColor(...accentRgb);
+    pdf.roundedRect(margin + 20, y + 28, buttonW, 6, 1.5, 1.5, "F");
+    pdf.setTextColor(...contrastTextRgb(accentRgb));
+    pdf.text(buttonLabel, margin + 25, y + 32);
   }
 
   setPdfFont(pdf, "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(148, 163, 184);
   const contact = [org?.email, org?.website].filter(Boolean).join(" · ");
-  if (contact) pdf.text(contact.slice(0, 90), margin + 20, y + 38);
+  if (contact) {
+    pdf.text(fitPdfTextToWidth(pdf, contact, w - 28), margin + 20, y + 38);
+  }
 
   return y + h + 6;
 }
