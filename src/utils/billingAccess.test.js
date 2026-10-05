@@ -23,6 +23,30 @@ describe("billingAccess", () => {
     expect(getEffectivePlanId({ isActive: false, remainingDays: 0 }, {})).toBe("expired");
   });
 
+  it("lets a platform owner write after trial expiry with no subscription", () => {
+    expect(
+      isBillingWriteBlocked({
+        trialStatus: { isActive: false },
+        billing: { subscriptionStatus: "none" },
+        isPlatformOwner: true,
+      })
+    ).toBe(false);
+    expect(
+      isTrialExpiredWithoutPaid({
+        trialStatus: { isActive: false },
+        billing: { subscriptionStatus: "none" },
+        isPlatformOwner: true,
+      })
+    ).toBe(false);
+    expect(
+      isBillingWriteBlocked({
+        trialStatus: { isActive: false },
+        billing: { subscriptionStatus: "unpaid", paidPlanId: "team" },
+        isPlatformOwner: true,
+      })
+    ).toBe(false);
+  });
+
   it("allows writes during active trial", () => {
     const future = new Date(Date.now() + 5 * 86400000).toISOString();
     localStorage.setItem("mysafeops_trial_ends_at", future);
