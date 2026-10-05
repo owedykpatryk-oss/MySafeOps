@@ -118,11 +118,25 @@ describe("openPrintWindowOrWarn", () => {
     vi.stubGlobal("window", { open, dispatchEvent, alert: vi.fn() });
     const win = openPrintWindowOrWarn();
     expect(win).toBeNull();
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
     expect(dispatchEvent).toHaveBeenCalled();
     const ev = dispatchEvent.mock.calls[0][0];
     expect(ev.type).toBe("mysafeops-ops-toast");
     expect(ev.detail.message).toMatch(/pop-up blocked/i);
     expect(globalThis.window.alert).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("returns a writable about:blank and clears opener so Print/Preview can fill the tab", () => {
+    const popup = { opener: { app: true }, closed: false };
+    const open = vi.fn(() => popup);
+    vi.stubGlobal("window", { open, dispatchEvent: vi.fn(), alert: vi.fn() });
+    const win = openPrintWindowOrWarn();
+    expect(win).toBe(popup);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith("about:blank", "_blank");
+    expect(open.mock.calls[0][2] ?? "").not.toMatch(/noopener|noreferrer/);
+    expect(popup.opener).toBeNull();
     vi.unstubAllGlobals();
   });
 });

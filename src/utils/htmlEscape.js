@@ -145,11 +145,30 @@ export function buildPrintPreviewSrcDoc(html) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/>${cspMeta}</head><body>${safe}</body></html>`;
 }
 
-/** Open a blank print window without giving it `window.opener` access. */
+/**
+ * Open a same-origin about:blank tab that callers can `document.write` into, then drop `opener`.
+ *
+ * `window.open("", "_blank", "noopener,noreferrer")` still creates a tab, but Chrome returns
+ * null (COOP `same-origin` plus an opaque about:blank). Print/Preview then never writes HTML,
+ * so the tab stays empty. Null `opener` after a scriptable about:blank keeps the print
+ * document from reaching the app.
+ */
 export function openPrintWindow() {
   const openFn = globalThis.window?.open?.bind(globalThis.window) || globalThis.open?.bind(globalThis);
   if (typeof openFn !== "function") return null;
-  return openFn("", "_blank", "noopener,noreferrer");
+  let win = null;
+  try {
+    win = openFn("about:blank", "_blank");
+  } catch {
+    return null;
+  }
+  if (!win) return null;
+  try {
+    win.opener = null;
+  } catch {
+    /* already severed or not scriptable */
+  }
+  return win;
 }
 
 /** Same event ToastProvider listens for (`OPS_TOAST_EVENT_NAME`). */
