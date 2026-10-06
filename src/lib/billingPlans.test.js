@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { BILLING_PLANS, STRIPE_SUBSCRIBABLE_PLAN_IDS, ANNUAL_PRICE_INCREASE_PERCENT, PRICE_ADJUSTMENT_SHORT, getPriceAdjustmentShort, getEffectivePlanId } from "./billingPlans";
 
-/** Keep in sync with scripts/stripe-seed-prices.mjs PLANS.amountPence */
-const SEED_AMOUNTS_PENCE = {
+/** Approved UK monthly display amounts (2026-09-12). Not the seed-script pence. */
+const UK_DISPLAY_PENCE = {
   starter: 1900,
-  team: 9900,
-  business: 24900,
-  enterprise: 49900,
+  team: 10900,
+  business: 31900,
+  enterprise: 64900,
 };
 
 const STRIPE_PRICE_ENV_KEYS = {
@@ -26,15 +26,15 @@ describe("billingPlans", () => {
     expect(STRIPE_SUBSCRIBABLE_PLAN_IDS).toEqual(["starter", "team", "business", "enterprise"]);
     for (const id of STRIPE_SUBSCRIBABLE_PLAN_IDS) {
       expect(STRIPE_PRICE_ENV_KEYS[id]).toMatch(/^STRIPE_PRICE_/);
-      expect(SEED_AMOUNTS_PENCE[id]).toBeGreaterThan(0);
+      expect(UK_DISPLAY_PENCE[id]).toBeGreaterThan(0);
     }
   });
 
-  it("UI price labels match seed amounts (GBP monthly)", () => {
+  it("UI price labels match approved UK monthly amounts", () => {
     for (const id of STRIPE_SUBSCRIBABLE_PLAN_IDS) {
       const plan = BILLING_PLANS[id];
       expect(plan).toBeTruthy();
-      expect(parseGbpPriceLabel(plan.priceLabel)).toBe(SEED_AMOUNTS_PENCE[id]);
+      expect(parseGbpPriceLabel(plan.priceLabel)).toBe(UK_DISPLAY_PENCE[id]);
       expect(plan.interval).toBe("month");
     }
   });

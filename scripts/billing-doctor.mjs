@@ -152,11 +152,11 @@ function printStripePriceGuide() {
     String(process.env[`STRIPE_PRICE_${p}_AUD`] || "").startsWith("price_")
   );
 
-  console.log("\nStripe GBP monthly (billingPlans.js / seed script):");
+  console.log("\nStripe GBP monthly (billingPlans.js display; seed script pence may differ):");
   console.log("  Solo (starter)     £19  → STRIPE_PRICE_STARTER");
-  console.log("  Team               £99  → STRIPE_PRICE_TEAM");
-  console.log("  Business          £249  → STRIPE_PRICE_BUSINESS");
-  console.log("  Enterprise        £499  → STRIPE_PRICE_ENTERPRISE");
+  console.log("  Team              £109  → STRIPE_PRICE_TEAM");
+  console.log("  Business          £319  → STRIPE_PRICE_BUSINESS");
+  console.log("  Enterprise        £649  → STRIPE_PRICE_ENTERPRISE");
   console.log("\nStripe AUD monthly (ex GST):");
   console.log("  Solo (starter)    A$59  → STRIPE_PRICE_STARTER_AUD");
   console.log("  Team             A$229  → STRIPE_PRICE_TEAM_AUD");
