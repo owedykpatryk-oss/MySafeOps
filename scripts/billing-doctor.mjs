@@ -152,7 +152,7 @@ function printStripePriceGuide() {
     String(process.env[`STRIPE_PRICE_${p}_AUD`] || "").startsWith("price_")
   );
 
-  console.log("\nStripe GBP monthly (billingPlans.js display; seed script pence may differ):");
+  console.log("\nStripe GBP monthly (billingPlans.js display; seed script GBP pence match):");
   console.log("  Solo (starter)     £19  → STRIPE_PRICE_STARTER");
   console.log("  Team              £109  → STRIPE_PRICE_TEAM");
   console.log("  Business          £319  → STRIPE_PRICE_BUSINESS");

@@ -23,9 +23,9 @@ config({ path: resolve(__dirname, "../.env") });
 
 const PLANS = [
   { planId: "starter", productName: "MySafeOps — Solo", gbpPence: 1900, audCents: AU_PLAN_AMOUNT_CENTS.starter, plnGrosze: PL_PLAN_AMOUNT_GROSZE.starter },
-  { planId: "team", productName: "MySafeOps — Team", gbpPence: 9900, audCents: AU_PLAN_AMOUNT_CENTS.team, plnGrosze: PL_PLAN_AMOUNT_GROSZE.team },
-  { planId: "business", productName: "MySafeOps — Business", gbpPence: 24900, audCents: AU_PLAN_AMOUNT_CENTS.business, plnGrosze: PL_PLAN_AMOUNT_GROSZE.business },
-  { planId: "enterprise", productName: "MySafeOps — Enterprise", gbpPence: 49900, audCents: AU_PLAN_AMOUNT_CENTS.enterprise, plnGrosze: PL_PLAN_AMOUNT_GROSZE.enterprise },
+  { planId: "team", productName: "MySafeOps — Team", gbpPence: 10900, audCents: AU_PLAN_AMOUNT_CENTS.team, plnGrosze: PL_PLAN_AMOUNT_GROSZE.team },
+  { planId: "business", productName: "MySafeOps — Business", gbpPence: 31900, audCents: AU_PLAN_AMOUNT_CENTS.business, plnGrosze: PL_PLAN_AMOUNT_GROSZE.business },
+  { planId: "enterprise", productName: "MySafeOps — Enterprise", gbpPence: 64900, audCents: AU_PLAN_AMOUNT_CENTS.enterprise, plnGrosze: PL_PLAN_AMOUNT_GROSZE.enterprise },
 ];
 
 const GBP_ENV = {
