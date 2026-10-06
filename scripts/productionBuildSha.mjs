@@ -11,6 +11,8 @@ import { pathToFileURL } from "node:url";
 
 export const PRODUCTION_SITE_URL = "https://www.mysafeops.com/";
 export const BUILD_SHA_MISMATCH_HINT = "possible manual CLI deploy or stale alias";
+export const BUILD_SHA_DIRTY_HINT =
+  "the build modified tracked files (e.g. a generator wrote a file during the build) or a manual CLI deploy came from an uncommitted local copy";
 
 const SHA_RE = /^[0-9a-f]{7,40}$/;
 const DEFAULT_RETRY_MS = 4 * 60 * 1000;
@@ -102,7 +104,7 @@ export function assessProductionHtml(served, expected) {
     return {
       ok: false,
       reason: "dirty",
-      message: `Production build-sha is dirty (expected ${expectedSha}, served ${servedSha}). ${hint}`,
+      message: `Production build-sha is dirty (expected ${expectedSha}, served ${servedSha}). ${BUILD_SHA_DIRTY_HINT}`,
     };
   }
   if (servedSha.toLowerCase() !== expectedSha.toLowerCase()) {

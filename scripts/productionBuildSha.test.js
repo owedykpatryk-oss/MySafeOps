@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BUILD_SHA_DIRTY_HINT,
   BUILD_SHA_MISMATCH_HINT,
   assessProductionHtml,
   buildShaMetaTag,
@@ -58,15 +59,20 @@ describe("assessProductionHtml", () => {
   });
 
   it("fails when the tag is missing, dirty, or a different commit", () => {
-    for (const served of ["", `${MAIN}-dirty`, OTHER, "unknown"]) {
+    for (const served of ["", OTHER, "unknown"]) {
       const result = assessProductionHtml(served, MAIN);
       expect(result.ok).toBe(false);
       expect(result.message).toContain(`expected ${MAIN}`);
       expect(result.message).toContain(served ? `served ${served}` : "served none");
       expect(result.message).toContain(BUILD_SHA_MISMATCH_HINT);
     }
+    const dirty = assessProductionHtml(`${MAIN}-dirty`, MAIN);
+    expect(dirty.ok).toBe(false);
+    expect(dirty.reason).toBe("dirty");
+    expect(dirty.message).toContain(`expected ${MAIN}`);
+    expect(dirty.message).toContain(`served ${MAIN}-dirty`);
+    expect(dirty.message).toContain(BUILD_SHA_DIRTY_HINT);
     expect(assessProductionHtml("", MAIN).reason).toBe("missing");
-    expect(assessProductionHtml(`${MAIN}-dirty`, MAIN).reason).toBe("dirty");
     expect(assessProductionHtml(OTHER, MAIN).reason).toBe("mismatch");
   });
 });
@@ -252,6 +258,6 @@ describe("runProductionBuildShaCheck", () => {
     expect(result.attempts).toBeGreaterThan(1);
     expect(result.message).toContain(`expected ${MAIN}`);
     expect(result.message).toContain(`served ${MAIN}-dirty`);
-    expect(result.message).toContain(BUILD_SHA_MISMATCH_HINT);
+    expect(result.message).toContain(BUILD_SHA_DIRTY_HINT);
   });
 });
