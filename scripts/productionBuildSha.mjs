@@ -18,6 +18,7 @@ const SHA_RE = /^[0-9a-f]{7,40}$/;
 const DEFAULT_RETRY_MS = 4 * 60 * 1000;
 const DEFAULT_INTERVAL_MS = 15 * 1000;
 const FETCH_TIMEOUT_MS = 20 * 1000;
+const MAX_LOGGED_CHANGES = 20;
 
 /**
  * @param {string} value
@@ -59,13 +60,34 @@ export function injectBuildShaMeta(html, sha) {
  * `git rev-parse HEAD`. Append `-dirty` when `git status` shows uncommitted
  * changes. CLI uploads with no git metadata resolve to `unknown`.
  *
- * @param {{ env?: NodeJS.ProcessEnv, runGit?: (args: string[]) => string }} [opts]
+ * When the build is marked dirty, the offending `git status --porcelain` lines
+ * (file paths only) are logged so the cause is visible in the Vercel build log.
+ *
+ * @param {{
+ *   env?: NodeJS.ProcessEnv,
+ *   runGit?: (args: string[]) => string,
+ *   log?: (line: string) => void,
+ * }} [opts]
  */
-export function resolveBuildCommitSha({ env = process.env, runGit = defaultRunGit } = {}) {
+export function resolveBuildCommitSha({
+  env = process.env,
+  runGit = defaultRunGit,
+  log = (line) => console.warn(line),
+} = {}) {
   const fromVercel = readShaToken(env.VERCEL_GIT_COMMIT_SHA);
   const sha = fromVercel || readGitHead(runGit);
   if (!sha) return "unknown";
-  if (workingTreeIsDirty(runGit)) return `${sha}-dirty`;
+  const changes = workingTreeChanges(runGit);
+  if (changes.length > 0) {
+    const shown = changes.slice(0, MAX_LOGGED_CHANGES);
+    const more = changes.length - shown.length;
+    log(
+      `[build-sha] Marking build ${sha} dirty; git status --porcelain reports:\n` +
+        shown.map((line) => `  ${line}`).join("\n") +
+        (more > 0 ? `\n  ... and ${more} more` : "")
+    );
+    return `${sha}-dirty`;
+  }
   return sha;
 }
 
@@ -325,16 +347,17 @@ function readGitHead(runGit) {
  * tree is treated as clean so a Git deployment that only has
  * VERCEL_GIT_COMMIT_SHA still stamps that SHA.
  * @param {(args: string[]) => string} runGit
+ * @returns {string[]} porcelain lines that make the tree dirty
  */
-function workingTreeIsDirty(runGit) {
+function workingTreeChanges(runGit) {
   try {
     const lines = String(runGit(["status", "--porcelain"]) || "")
       .split("\n")
       .map((line) => line.trimEnd())
       .filter(Boolean);
-    return lines.some((line) => !isInstallArtifact(porcelainPath(line)));
+    return lines.filter((line) => !isInstallArtifact(porcelainPath(line)));
   } catch {
-    return false;
+    return [];
   }
 }
 

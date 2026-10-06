@@ -115,6 +115,30 @@ describe("resolveBuildCommitSha", () => {
     expect(sha).toBe(`${MAIN}-dirty`);
   });
 
+  it("logs the porcelain lines that made the build dirty", () => {
+    const lines = [];
+    const sha = resolveBuildCommitSha({
+      env: { VERCEL_GIT_COMMIT_SHA: MAIN },
+      runGit: git({ "status --porcelain": " M package-lock.json\n M public/blog/rss.xml\n?? .cache/x\n" }),
+      log: (line) => lines.push(line),
+    });
+    expect(sha).toBe(`${MAIN}-dirty`);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(" M public/blog/rss.xml");
+    expect(lines[0]).toContain("?? .cache/x");
+    expect(lines[0]).not.toContain("package-lock.json");
+  });
+
+  it("does not log when the tree is clean", () => {
+    const lines = [];
+    resolveBuildCommitSha({
+      env: { VERCEL_GIT_COMMIT_SHA: MAIN },
+      runGit: git({ "status --porcelain": " M package-lock.json\n" }),
+      log: (line) => lines.push(line),
+    });
+    expect(lines).toEqual([]);
+  });
+
   it("ignores a lockfile-only diff left by npm install", () => {
     const clean = resolveBuildCommitSha({
       env: { VERCEL_GIT_COMMIT_SHA: MAIN },
