@@ -96,3 +96,13 @@ jobs:
         run: |
           npm run build 2>&1 | tee build-output.txt
           node scripts/check-vite-circular-chunks.mjs build-output.txt
+      - name: Build leaves tracked files unchanged
+        run: |
+          set -euo pipefail
+          changes="$(git status --porcelain | grep -vE '(^| )package-lock.json$' || true)"
+          if [ -n "$changes" ]; then
+            echo "Build modified tracked files:"
+            printf '%s\n' "$changes"
+            git --no-pager diff --
+            exit 1
+          fi
