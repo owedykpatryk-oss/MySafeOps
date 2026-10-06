@@ -3271,7 +3271,7 @@ function PermitForm({
 const EMPTY_SIMOPS_CONFLICTS = Object.freeze([]);
 const EMPTY_INCIDENT_ROWS = Object.freeze([]);
 
-const PermitCard = memo(function PermitCard({
+export const PermitCard = memo(function PermitCard({
   permit,
   onEdit,
   onClose,
@@ -3347,6 +3347,11 @@ const PermitCard = memo(function PermitCard({
   const statusMeta = getPermitStatusMeta(derived);
   const workflowRail = permitWorkflowRail(derived);
   const permitRisk = computePermitRiskScore(permit, { simopsHits: simopsConflicts });
+  // These consts must be initialised before activationReadiness. Referencing them
+  // earlier is a temporal dead zone and crashes every permit card in production.
+  const activeDurationMs = permit.startDateTime ? Date.now() - new Date(permit.startDateTime).getTime() : 0;
+  const briefingPending = derived === "active" && !permit.briefingConfirmedAt && activeDurationMs > 20 * 60 * 1000;
+  const ramsMissing = derived === "active" && !String(permit.linkedRamsId || "").trim();
   const activationReadiness = computePermitActivationReadiness({
     derivedStatus: derived,
     activateGate,
@@ -3361,9 +3366,6 @@ const PermitCard = memo(function PermitCard({
   const issueDrift = diffPermitVsIssueSnapshot(permit);
   const latestHandover = latestCompletedHandover(permit?.handoverLog || []);
   const density = ["comfort", "compact", "ops"].includes(cardDensity) ? cardDensity : "comfort";
-  const activeDurationMs = permit.startDateTime ? Date.now() - new Date(permit.startDateTime).getTime() : 0;
-  const briefingPending = derived === "active" && !permit.briefingConfirmedAt && activeDurationMs > 20 * 60 * 1000;
-  const ramsMissing = derived === "active" && !String(permit.linkedRamsId || "").trim();
   const headerFontSize = density === "ops" ? 13 : 14;
   const metaFontSize = density === "ops" ? 11 : 12;
   const showDescription = density !== "ops";
