@@ -67,17 +67,19 @@ export function injectBuildShaMeta(html, sha) {
  *   env?: NodeJS.ProcessEnv,
  *   runGit?: (args: string[]) => string,
  *   log?: (line: string) => void,
+ *   readWorkingFile?: (path: string) => string,
  * }} [opts]
  */
 export function resolveBuildCommitSha({
   env = process.env,
   runGit = defaultRunGit,
   log = (line) => console.warn(line),
+  readWorkingFile = defaultReadWorkingFile,
 } = {}) {
   const fromVercel = readShaToken(env.VERCEL_GIT_COMMIT_SHA);
   const sha = fromVercel || readGitHead(runGit);
   if (!sha) return "unknown";
-  const changes = workingTreeChanges(runGit);
+  const changes = workingTreeChanges(runGit, readWorkingFile);
   if (changes.length > 0) {
     const shown = changes.slice(0, MAX_LOGGED_CHANGES);
     const more = changes.length - shown.length;
@@ -346,19 +348,76 @@ function readGitHead(runGit) {
  * package-lock.json without any source change. If git is not available, the
  * tree is treated as clean so a Git deployment that only has
  * VERCEL_GIT_COMMIT_SHA still stamps that SHA.
+ *
+ * A modified JSON config listed in REFORMATTED_JSON_FILES is ignored only when
+ * it still parses to exactly the committed value. `vercel build` rewrites
+ * vercel.json in the build container as single-line JSON before Vite runs (seen
+ * in the Vercel build log as ` M vercel.json` with a `@@ -1,106 +1 @@` diff), so
+ * every Git deployment looked dirty. A real edit to vercel.json still counts.
+ *
  * @param {(args: string[]) => string} runGit
+ * @param {(path: string) => string} readWorkingFile
  * @returns {string[]} porcelain lines that make the tree dirty
  */
-function workingTreeChanges(runGit) {
+function workingTreeChanges(runGit, readWorkingFile) {
   try {
     const lines = String(runGit(["status", "--porcelain"]) || "")
       .split("\n")
       .map((line) => line.trimEnd())
       .filter(Boolean);
-    return lines.filter((line) => !isInstallArtifact(porcelainPath(line)));
+    return lines.filter((line) => {
+      const filePath = porcelainPath(line);
+      if (isInstallArtifact(filePath)) return false;
+      if (isReformattedJson(line, filePath, runGit, readWorkingFile)) return false;
+      return true;
+    });
   } catch {
     return [];
   }
+}
+
+const REFORMATTED_JSON_FILES = new Set(["vercel.json"]);
+
+/**
+ * True when a worktree-only modification of an allowlisted JSON file leaves its
+ * parsed value identical to HEAD (whitespace / key order only).
+ * @param {string} line
+ * @param {string} filePath
+ * @param {(args: string[]) => string} runGit
+ * @param {(path: string) => string} readWorkingFile
+ */
+function isReformattedJson(line, filePath, runGit, readWorkingFile) {
+  if (!REFORMATTED_JSON_FILES.has(filePath)) return false;
+  if (line.slice(0, 2) !== " M") return false;
+  try {
+    const committed = JSON.parse(String(runGit(["show", `HEAD:${filePath}`])));
+    const working = JSON.parse(String(readWorkingFile(filePath)));
+    return canonicalJson(committed) === canonicalJson(working);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string} JSON with object keys sorted, so key order is not a change
+ */
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Vite loads its config from the repository root, so porcelain paths resolve
+ * against the current working directory.
+ * @param {string} filePath
+ */
+function defaultReadWorkingFile(filePath) {
+  return fs.readFileSync(filePath, "utf8");
 }
 
 /**

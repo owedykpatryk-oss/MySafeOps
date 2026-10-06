@@ -152,6 +152,66 @@ describe("resolveBuildCommitSha", () => {
     expect(dirty).toBe(`${MAIN}-dirty`);
   });
 
+  describe("vercel.json rewritten by vercel build", () => {
+    const committed = JSON.stringify(
+      { $schema: "https://openapi.vercel.sh/vercel.json", framework: "vite", headers: [{ source: "/a" }] },
+      null,
+      2
+    );
+    const gitWith = (status) => git({ "status --porcelain": status, "show HEAD:vercel.json": committed });
+
+    it("ignores a whitespace / key-order only rewrite", () => {
+      const lines = [];
+      const sha = resolveBuildCommitSha({
+        env: { VERCEL_GIT_COMMIT_SHA: MAIN },
+        runGit: gitWith(" M vercel.json\n"),
+        readWorkingFile: () =>
+          '{"headers":[{"source":"/a"}],"framework":"vite","$schema":"https://openapi.vercel.sh/vercel.json"}',
+        log: (line) => lines.push(line),
+      });
+      expect(sha).toBe(MAIN);
+      expect(lines).toEqual([]);
+    });
+
+    it("still marks a real vercel.json edit dirty", () => {
+      const sha = resolveBuildCommitSha({
+        env: { VERCEL_GIT_COMMIT_SHA: MAIN },
+        runGit: gitWith(" M vercel.json\n"),
+        readWorkingFile: () =>
+          '{"framework":"vite","headers":[{"source":"/b"}],"$schema":"https://openapi.vercel.sh/vercel.json"}',
+        log: () => {},
+      });
+      expect(sha).toBe(`${MAIN}-dirty`);
+    });
+
+    it("still marks a staged vercel.json change or unparsable file dirty", () => {
+      const staged = resolveBuildCommitSha({
+        env: { VERCEL_GIT_COMMIT_SHA: MAIN },
+        runGit: gitWith("M  vercel.json\n"),
+        readWorkingFile: () => committed,
+        log: () => {},
+      });
+      expect(staged).toBe(`${MAIN}-dirty`);
+      const broken = resolveBuildCommitSha({
+        env: { VERCEL_GIT_COMMIT_SHA: MAIN },
+        runGit: gitWith(" M vercel.json\n"),
+        readWorkingFile: () => "{ not json",
+        log: () => {},
+      });
+      expect(broken).toBe(`${MAIN}-dirty`);
+    });
+
+    it("does not extend the allowance to other JSON files", () => {
+      const sha = resolveBuildCommitSha({
+        env: { VERCEL_GIT_COMMIT_SHA: MAIN },
+        runGit: git({ "status --porcelain": " M package.json\n", "show HEAD:package.json": "{}" }),
+        readWorkingFile: () => "{}",
+        log: () => {},
+      });
+      expect(sha).toBe(`${MAIN}-dirty`);
+    });
+  });
+
   it("returns unknown when a CLI build has no git metadata", () => {
     const sha = resolveBuildCommitSha({
       env: { VERCEL_GIT_COMMIT_SHA: "" },
