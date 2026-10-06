@@ -98,7 +98,7 @@ export const BILLING_PLANS = {
   team: {
     id: "team",
     name: "Team",
-    priceLabel: "£99",
+    priceLabel: "£109",
     interval: "month",
     limits: {
       workers: 20,
@@ -116,7 +116,7 @@ export const BILLING_PLANS = {
   business: {
     id: "business",
     name: "Business",
-    priceLabel: "£249",
+    priceLabel: "£319",
     interval: "month",
     limits: {
       workers: 75,
@@ -135,7 +135,7 @@ export const BILLING_PLANS = {
   enterprise: {
     id: "enterprise",
     name: "Enterprise",
-    priceLabel: "£499",
+    priceLabel: "£649",
     interval: "month",
     limits: {
       workers: 200,
