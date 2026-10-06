@@ -4,8 +4,16 @@ name: Production Smoke
 # config change or an upstream outage is enough. The origin-allowlist bypass that
 # warmed-cache responses caused was invisible to every local test, so this suite
 # runs against the deployed site on a schedule as well as on demand.
+#
+# A successful Vercel Production deployment also starts the suite. Vercel stores
+# the commit SHA in deployment.ref (not the branch name). The build-sha step
+# uses GITHUB_SHA when that deployment is current main, and origin/main for
+# schedule and workflow_dispatch. There is no missing-tag grace period: the
+# commit that adds the meta tag is the deploy that serves it, and the check
+# retries for a few minutes so alias propagation does not fail that first run.
 
 on:
+  deployment_status:
   workflow_dispatch:
     inputs:
       base_url:
@@ -16,22 +24,60 @@ on:
     # Twice a day is enough to catch a silent regression without spamming the log.
     - cron: "17 6,18 * * *"
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
+    # Preview and in-progress deployments are not the production alias.
+    if: >-
+      github.event_name != 'deployment_status' ||
+      (
+        github.event.deployment_status.state == 'success' &&
+        github.event.deployment.environment == 'Production'
+      )
     runs-on: ubuntu-latest
     env:
       E2E_BASE_URL: ${{ github.event.inputs.base_url || 'https://www.mysafeops.com' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Vercel deployment_status events have an empty git ref. Schedule and
+          # workflow_dispatch check out the commit that triggered the workflow.
+          ref: ${{ github.event_name == 'deployment_status' && 'main' || github.sha }}
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
+      - name: Resolve expected production SHA
+        id: expected_sha
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DEPLOYMENT_REF: ${{ github.event.deployment.ref }}
+          DEPLOYMENT_ENVIRONMENT: ${{ github.event.deployment.environment }}
+          DEPLOYMENT_STATE: ${{ github.event.deployment_status.state }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          ORIGIN_MAIN_SHA="$(git rev-parse FETCH_HEAD)" \
+            node scripts/productionBuildSha.mjs --print-expected
+      - name: Check production build SHA
+        if: steps.expected_sha.outputs.run == 'true'
+        env:
+          EXPECTED_BUILD_SHA: ${{ steps.expected_sha.outputs.sha }}
+          # Alias propagation after a push. A match returns immediately.
+          BUILD_SHA_RETRY_MS: "240000"
+          BUILD_SHA_INTERVAL_MS: "15000"
+        run: node scripts/productionBuildSha.mjs --check
       - name: Install
+        if: steps.expected_sha.outputs.run == 'true'
         run: npm ci
       - name: Install Playwright browser
+        if: steps.expected_sha.outputs.run == 'true'
         run: npx playwright install --with-deps chromium
       - name: Smoke the deployed site
+        if: steps.expected_sha.outputs.run == 'true'
         # Auth signup is excluded by the spec itself when E2E_BASE_URL is set: it would
         # create real accounts and cannot pass the production captcha.
         run: >
@@ -47,4 +93,5 @@ jobs:
         with:
           name: production-smoke-results
           path: test-results/
+          if-no-files-found: ignore
           retention-days: 7
