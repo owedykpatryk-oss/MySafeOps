@@ -156,8 +156,8 @@ export default function BillingLimits({ checkoutReturn = null }) {
     stripeTestReady &&
     isAdmin &&
     cloudOk &&
-    import.meta.env.DEV &&
-    (showDevHints || import.meta.env.VITE_STRIPE_ALLOW_TEST_CHECKOUT === "true");
+    ((import.meta.env.DEV && showDevHints) ||
+      String(import.meta.env.VITE_STRIPE_ALLOW_TEST_CHECKOUT || "").trim() === "true");
 
   useEffect(() => {
     if (checkoutReturn !== "success" || !supabase) return;
@@ -683,7 +683,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
               </>
             ) : (
               <>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>Subscribe (Stripe Checkout)</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>Subscribe — live payment (Stripe Checkout)</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {STRIPE_SUBSCRIBABLE_PLAN_IDS.map((id) => {
                     const p = BILLING_PLANS[id];
