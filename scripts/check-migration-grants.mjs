@@ -1,43 +1,95 @@
 #!/usr/bin/env node
-// Fails when a migration creates a table or view in `public` without an explicit
-// GRANT (or a deliberate REVOKE) for it in the same file.
+// Checks that every migration at or after CUTOFF which creates a table or view in `public`
+// also, in the same file:
+//   1. grants it to service_role (GRANT ... ON <name> ... TO service_role),
+//   2. enables RLS on a table that it grants to anon/authenticated/public,
+//   3. sets security_invoker on a view that it grants to anon/authenticated/public.
+// `GRANT ... ON ALL TABLES IN SCHEMA public` only counts for tables created earlier in the
+// same file. Tables created with dynamic SQL (EXECUTE format('create table ...')) cannot be
+// resolved statically: the file must carry the marker comment
+//   -- check-migration-grants: dynamic-reviewed
+// after a human checked those grants.
 //
 // Why: from 2026-10-30 Supabase no longer grants anon/authenticated/service_role on new
 // objects in `public`, so a table without a GRANT is invisible to the Data API (42501).
 // https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically
 //
-// Only migrations at or after CUTOFF are checked; older tables are covered by
-// the catch-up migration 20261021090000_explicit_data_api_grants.sql.
-//
+// Older objects are covered by 20261021090000_explicit_data_api_grants.sql.
 // Usage: node scripts/check-migration-grants.mjs [migrationsDir]
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CUTOFF = "20261021090000";
+const DYNAMIC_MARKER = /check-migration-grants:\s*dynamic-reviewed/i;
+const CLIENT_ROLES = new Set(["anon", "authenticated", "public"]);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dir = process.argv[2] || path.join(here, "..", "supabase", "migrations");
 
 const stripComments = (sql) => sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const IDENT = String.raw`(?:"?([a-z_][a-z0-9_]*)"?\s*\.\s*)?"?([a-z_][a-z0-9_]*)"?`;
 const CREATE_RE = new RegExp(
-  String.raw`\bcreate\s+(?:unlogged\s+)?(table|view|materialized\s+view)\s+(?:if\s+not\s+exists\s+)?(?:"?([a-z_][a-z0-9_]*)"?\s*\.\s*)?"?([a-z_][a-z0-9_]*)"?`,
+  String.raw`\bcreate\s+(?:or\s+replace\s+)?(?:(?:temp|temporary|unlogged)\s+)?(table|view|materialized\s+view)\s+(?:if\s+not\s+exists\s+)?${IDENT}(?![a-z0-9_]|\s*[.%])`,
   "gi",
 );
+const GRANT_RE = /\bgrant\s+([\s\S]+?)\s+on\s+([\s\S]+?)\s+to\s+([\s\S]+?)(?:;|\bwith\s+grant\s+option|'|\$|$)/gi;
+const RLS_RE = new RegExp(
+  String.raw`\balter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?${IDENT}\s+enable\s+row\s+level\s+security`,
+  "gi",
+);
+const DYNAMIC_RE = /\bexecute\b[\s\S]{0,40}?(?:format\s*\(\s*)?(?:'|\$[a-z_]*\$)\s*create\s+(?:unlogged\s+)?table/i;
 
-export function findMissingGrants(sql) {
-  const text = stripComments(sql);
-  if (/\bgrant\s+[^;]*\bon\s+all\s+tables\s+in\s+schema\s+[^;]*\bpublic\b/i.test(text)) return [];
-  const missing = [];
-  for (const m of text.matchAll(CREATE_RE)) {
-    const schema = (m[2] || "public").toLowerCase();
-    if (schema !== "public") continue;
-    const name = m[3].toLowerCase();
-    const target = String.raw`(?:table\s+)?(?:"?public"?\s*\.\s*)?"?${escapeRe(name)}"?(?![a-z0-9_])`;
-    const granted = new RegExp(String.raw`\b(grant|revoke)\s+[^;]*?\bon\s+(?:[^;]*?,\s*)?${target}[^;]*\b(to|from)\b`, "i");
-    if (!granted.test(text)) missing.push(`${m[1].toLowerCase().replace(/\s+/g, " ")} public.${name}`);
+const norm = (s) => s.trim().toLowerCase().replace(/"/g, "").replace(/^public\s*\.\s*/, "");
+
+function parseGrants(text) {
+  const grants = [];
+  for (const m of text.matchAll(GRANT_RE)) {
+    const objects = m[2].trim();
+    const roles = m[3].split(",").map((r) => r.trim().toLowerCase().replace(/"/g, ""));
+    if (/^all\s+tables\s+in\s+schema\b/i.test(objects)) {
+      if (/\bpublic\b/i.test(objects)) grants.push({ all: true, at: m.index, roles });
+      continue;
+    }
+    if (/^(function|functions|procedure|routine|all\s+functions|sequence|all\s+sequences|schema|type|domain)\b/i.test(objects)) continue;
+    const names = objects
+      .replace(/^table\s+/i, "")
+      .split(",")
+      .map(norm);
+    grants.push({ all: false, at: m.index, roles, names });
   }
-  return missing;
+  return grants;
+}
+
+export function checkMigration(sql) {
+  const text = stripComments(sql);
+  const problems = [];
+  if (DYNAMIC_RE.test(text) && !DYNAMIC_MARKER.test(sql)) {
+    problems.push("creates a table with dynamic SQL (EXECUTE); review its grants and add the marker comment '-- check-migration-grants: dynamic-reviewed'");
+  }
+  const grants = parseGrants(text);
+  const rls = new Set();
+  for (const m of text.matchAll(RLS_RE)) {
+    if (!m[1] || m[1].toLowerCase() === "public") rls.add(m[2].toLowerCase());
+  }
+  for (const m of text.matchAll(CREATE_RE)) {
+    const kind = m[1].toLowerCase().replace(/\s+/g, " ");
+    if (/\b(temp|temporary)\b/i.test(m[0])) continue;
+    if (m[2] && m[2].toLowerCase() !== "public") continue;
+    const name = m[3].toLowerCase();
+    const relevant = grants.filter((g) => (g.all ? kind === "table" && g.at > m.index : g.names.includes(name)));
+    const roles = new Set(relevant.flatMap((g) => g.roles));
+    const label = `${kind} public.${name}`;
+    if (!roles.has("service_role")) problems.push(`${label}: no GRANT ... TO service_role in this migration`);
+    const clientRoles = [...roles].filter((r) => CLIENT_ROLES.has(r));
+    if (clientRoles.length && kind === "table" && !rls.has(name)) {
+      problems.push(`${label}: granted to ${clientRoles.join(", ")} but RLS is not enabled in this migration`);
+    }
+    if (clientRoles.length && kind !== "table") {
+      const invoker = new RegExp(String.raw`(?:view\s+(?:"?public"?\s*\.\s*)?"?${name}"?[\s\S]{0,200}?security_invoker|security_invoker[\s\S]{0,40}?\)\s*as[\s\S]*?)`, "i");
+      if (!invoker.test(text)) problems.push(`${label}: granted to ${clientRoles.join(", ")} without security_invoker (definer views bypass RLS)`);
+    }
+  }
+  return problems;
 }
 
 function main() {
@@ -46,15 +98,14 @@ function main() {
   for (const file of files) {
     const version = file.split("_")[0];
     if (version.padEnd(14, "0") < CUTOFF) continue;
-    for (const obj of findMissingGrants(readFileSync(path.join(dir, file), "utf8"))) {
-      problems.push(`${file}: ${obj} has no explicit GRANT/REVOKE in this migration`);
-    }
+    for (const p of checkMigration(readFileSync(path.join(dir, file), "utf8"))) problems.push(`${file}: ${p}`);
   }
   if (problems.length) {
-    console.error("Missing explicit Data API grants (Supabase 2026-10-30 change):");
+    console.error("Supabase Data API grant check failed (2026-10-30 explicit grants):");
     for (const p of problems) console.error(`  - ${p}`);
-    console.error("Add e.g.: grant select, insert, update, delete on table public.<name> to authenticated, service_role;");
-    console.error("(anon only when an RLS policy is meant for it; RLS must be enabled.)");
+    console.error("Example: alter table public.<t> enable row level security;");
+    console.error("         grant select, insert, update, delete on table public.<t> to authenticated, service_role;");
+    console.error("(anon only when an RLS policy is meant for it.)");
     process.exit(1);
   }
   console.log(`check-migration-grants: OK (${files.length} migrations scanned, cutoff ${CUTOFF})`);

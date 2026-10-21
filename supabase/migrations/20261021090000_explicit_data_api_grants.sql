@@ -33,7 +33,7 @@ begin
       ('org_country_workspaces', 'service_role', 'select, insert, update, delete'),
       ('org_document_language_preferences', 'service_role', 'select, insert, update, delete'),
       ('org_invites', 'service_role', 'select, insert, update, delete'),
-      ('org_invites', 'authenticated', 'select, insert, update, delete'),
+      ('org_invites', 'authenticated', 'insert, update, delete'),
       ('org_join_link_uses', 'service_role', 'select, insert, update, delete'),
       ('org_join_links', 'service_role', 'select, insert, update, delete'),
       ('org_memberships', 'service_role', 'select, insert, update, delete'),
@@ -86,4 +86,15 @@ begin
   end loop;
 end
 $seq$;
+
+-- org_invites.invite_token: 20260716180000 revoked SELECT (invite_token) from anon/authenticated,
+-- but a column-level REVOKE is a no-op while a table-level SELECT grant exists (the
+-- pre-2026-10-30 default). Replace table-level SELECT with column-level SELECT on every column
+-- except invite_token. Client code (InviteUsers.jsx) selects explicit columns only; the
+-- send-org-invite edge function reads invite_token with the service role.
+revoke select on table public.org_invites from anon, authenticated;
+grant select (id, org_id, email, role, invited_by, status, expires_at, accepted_user_id,
+  accepted_at, created_at, email_delivery_status, email_delivery_error,
+  email_delivery_attempted_at, email_delivery_sent_at, invite_token_hash)
+  on table public.org_invites to authenticated;
 
