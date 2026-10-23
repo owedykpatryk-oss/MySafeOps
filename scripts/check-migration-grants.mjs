@@ -3,12 +3,20 @@
 // also, in the same file:
 //   1. grants it to service_role (GRANT ... ON <name> ... TO service_role),
 //   2. enables RLS on a table that it grants to anon/authenticated/public,
-//   3. sets security_invoker on a view that it grants to anon/authenticated/public.
+//   3. sets security_invoker on a view that it grants to anon/authenticated/public. This is
+//      checked per view: `with (security_invoker = true)` in that view's own CREATE statement, or
+//      `ALTER VIEW <name> SET (security_invoker = true)`; another view's setting does not count.
+// RLS state is the LAST `ALTER TABLE <t> ENABLE|DISABLE ROW LEVEL SECURITY` in the file, so a later
+// DISABLE after an ENABLE fails the check.
 // `GRANT ... ON ALL TABLES IN SCHEMA public` only counts for tables created earlier in the
 // same file. Tables created with dynamic SQL (EXECUTE format('create table ...')) cannot be
 // resolved statically: the file must carry the marker comment
 //   -- check-migration-grants: dynamic-reviewed
 // after a human checked those grants.
+// Known limitation: `EXECUTE <variable>` / `EXECUTE format(<variable>, ...)` / `EXECUTE '...' || x`
+// build SQL at run time, so the objects they create cannot be analysed. The check does not guess:
+// such a file must carry the same marker comment (a human confirms the grants/RLS it produces).
+// `EXECUTE FUNCTION|PROCEDURE` in CREATE TRIGGER is not dynamic SQL and is ignored.
 //
 // Why: from 2026-10-30 Supabase no longer grants anon/authenticated/service_role on new
 // objects in `public`, so a table without a GRANT is invisible to the Data API (42501).
@@ -30,16 +38,24 @@ const stripComments = (sql) => sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--
 const IDENT = String.raw`(?:"?([a-z_][a-z0-9_]*)"?\s*\.\s*)?"?([a-z_][a-z0-9_]*)"?`;
 const CREATE_RE = new RegExp(
   String.raw`\bcreate\s+(?:or\s+replace\s+)?(?:(?:temp|temporary|unlogged)\s+)?(table|view|materialized\s+view)\s+(?:if\s+not\s+exists\s+)?${IDENT}(?![a-z0-9_]|\s*[.%])`,
-  "gi",
+  "gi"
 );
 const GRANT_RE = /\bgrant\s+([\s\S]+?)\s+on\s+([\s\S]+?)\s+to\s+([\s\S]+?)(?:;|\bwith\s+grant\s+option|'|\$|$)/gi;
 const RLS_RE = new RegExp(
-  String.raw`\balter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?${IDENT}\s+enable\s+row\s+level\s+security`,
-  "gi",
+  String.raw`\balter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?${IDENT}\s+(enable|disable)\s+row\s+level\s+security`,
+  "gi"
 );
+// EXECUTE whose SQL text is not a plain literal: a variable, format(<variable>, ...), or '...' || x.
+const OPAQUE_EXECUTE_RE =
+  /\bexecute\s+(?:(?!function\b|procedure\b)[a-z_][a-z0-9_.]*(?![a-z0-9_.]|\s*\()|format\s*\(\s*(?!e?'|\$[a-z_]*\$)|e?'(?:[^']|'')*'\s*\|\||\$([a-z_]*)\$[\s\S]*?\$\1\$\s*\|\|)/i;
 const DYNAMIC_RE = /\bexecute\b[\s\S]{0,40}?(?:format\s*\(\s*)?(?:'|\$[a-z_]*\$)\s*create\s+(?:unlogged\s+)?table/i;
 
-const norm = (s) => s.trim().toLowerCase().replace(/"/g, "").replace(/^public\s*\.\s*/, "");
+const norm = (s) =>
+  s
+    .trim()
+    .toLowerCase()
+    .replace(/"/g, "")
+    .replace(/^public\s*\.\s*/, "");
 
 function parseGrants(text) {
   const grants = [];
@@ -50,7 +66,12 @@ function parseGrants(text) {
       if (/\bpublic\b/i.test(objects)) grants.push({ all: true, at: m.index, roles });
       continue;
     }
-    if (/^(function|functions|procedure|routine|all\s+functions|sequence|all\s+sequences|schema|type|domain)\b/i.test(objects)) continue;
+    if (
+      /^(function|functions|procedure|routine|all\s+functions|sequence|all\s+sequences|schema|type|domain)\b/i.test(
+        objects
+      )
+    )
+      continue;
     const names = objects
       .replace(/^table\s+/i, "")
       .split(",")
@@ -64,12 +85,21 @@ export function checkMigration(sql) {
   const text = stripComments(sql);
   const problems = [];
   if (DYNAMIC_RE.test(text) && !DYNAMIC_MARKER.test(sql)) {
-    problems.push("creates a table with dynamic SQL (EXECUTE); review its grants and add the marker comment '-- check-migration-grants: dynamic-reviewed'");
+    problems.push(
+      "creates a table with dynamic SQL (EXECUTE); review its grants and add the marker comment '-- check-migration-grants: dynamic-reviewed'"
+    );
+  } else if (OPAQUE_EXECUTE_RE.test(text) && !DYNAMIC_MARKER.test(sql)) {
+    problems.push(
+      "uses EXECUTE with a variable or computed SQL string that cannot be analysed; review the objects/grants/RLS it produces and add the marker comment '-- check-migration-grants: dynamic-reviewed'"
+    );
   }
   const grants = parseGrants(text);
   const rls = new Set();
+  // Last ENABLE/DISABLE wins (matchAll yields statements in file order).
   for (const m of text.matchAll(RLS_RE)) {
-    if (!m[1] || m[1].toLowerCase() === "public") rls.add(m[2].toLowerCase());
+    if (m[1] && m[1].toLowerCase() !== "public") continue;
+    if (m[3].toLowerCase() === "enable") rls.add(m[2].toLowerCase());
+    else rls.delete(m[2].toLowerCase());
   }
   for (const m of text.matchAll(CREATE_RE)) {
     const kind = m[1].toLowerCase().replace(/\s+/g, " ");
@@ -85,15 +115,29 @@ export function checkMigration(sql) {
       problems.push(`${label}: granted to ${clientRoles.join(", ")} but RLS is not enabled in this migration`);
     }
     if (clientRoles.length && kind !== "table") {
-      const invoker = new RegExp(String.raw`(?:view\s+(?:"?public"?\s*\.\s*)?"?${name}"?[\s\S]{0,200}?security_invoker|security_invoker[\s\S]{0,40}?\)\s*as[\s\S]*?)`, "i");
-      if (!invoker.test(text)) problems.push(`${label}: granted to ${clientRoles.join(", ")} without security_invoker (definer views bypass RLS)`);
+      const statement = text.slice(m.index).split(";")[0];
+      const flag = String.raw`security_invoker\s*(?:=\s*(?:true|on|1|'true'|'on')\s*)?(?=[,)])`;
+      const inline = new RegExp(String.raw`\bwith\s*\([^)]*?${flag}`, "i");
+      const altered = new RegExp(
+        String.raw`\balter\s+(?:materialized\s+)?view\s+(?:if\s+exists\s+)?(?:"?public"?\s*\.\s*)?"?${name}"?\s+set\s*\([^)]*?${flag}`,
+        "i"
+      );
+      const invoker = {
+        test: () => inline.test(statement) || altered.test(text),
+      };
+      if (!invoker.test(text))
+        problems.push(
+          `${label}: granted to ${clientRoles.join(", ")} without security_invoker (definer views bypass RLS)`
+        );
     }
   }
   return problems;
 }
 
 function main() {
-  const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
   const problems = [];
   for (const file of files) {
     const version = file.split("_")[0];

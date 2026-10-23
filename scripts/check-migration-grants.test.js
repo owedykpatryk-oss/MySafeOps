@@ -27,7 +27,9 @@ describe("check-migration-grants (Supabase 2026-10-30 explicit grants)", () => {
   });
 
   it("fails when a new public table has no GRANT", () => {
-    const dir = fixture("create table if not exists public.demo (id uuid primary key);\nalter table public.demo enable row level security;\n");
+    const dir = fixture(
+      "create table if not exists public.demo (id uuid primary key);\nalter table public.demo enable row level security;\n"
+    );
     try {
       expect(run(dir)).toBe(1);
     } finally {
@@ -36,7 +38,9 @@ describe("check-migration-grants (Supabase 2026-10-30 explicit grants)", () => {
   });
 
   it("passes when the new table is granted in the same migration", () => {
-    const dir = fixture("create table public.demo (id uuid primary key);\nalter table public.demo enable row level security;\ngrant select, insert, update, delete on table public.demo to authenticated, service_role;\n");
+    const dir = fixture(
+      "create table public.demo (id uuid primary key);\nalter table public.demo enable row level security;\ngrant select, insert, update, delete on table public.demo to authenticated, service_role;\n"
+    );
     try {
       expect(run(dir)).toBe(0);
     } finally {
@@ -44,7 +48,9 @@ describe("check-migration-grants (Supabase 2026-10-30 explicit grants)", () => {
     }
   });
   it("fails when only authenticated is granted (service_role missing)", () => {
-    const dir = fixture("create table public.demo (id uuid primary key);\nalter table public.demo enable row level security;\ngrant select on table public.demo to authenticated;\n");
+    const dir = fixture(
+      "create table public.demo (id uuid primary key);\nalter table public.demo enable row level security;\ngrant select on table public.demo to authenticated;\n"
+    );
     try {
       expect(run(dir)).toBe(1);
     } finally {
@@ -53,7 +59,9 @@ describe("check-migration-grants (Supabase 2026-10-30 explicit grants)", () => {
   });
 
   it("fails when a client role is granted without RLS", () => {
-    const dir = fixture("create table public.demo (id uuid primary key);\ngrant select on table public.demo to authenticated, service_role;\n");
+    const dir = fixture(
+      "create table public.demo (id uuid primary key);\ngrant select on table public.demo to authenticated, service_role;\n"
+    );
     try {
       expect(run(dir)).toBe(1);
     } finally {
@@ -71,7 +79,9 @@ describe("check-migration-grants (Supabase 2026-10-30 explicit grants)", () => {
   });
 
   it("fails for a definer view granted to authenticated", () => {
-    const dir = fixture("create view public.demo_v as select 1 as x;\ngrant select on public.demo_v to authenticated, service_role;\n");
+    const dir = fixture(
+      "create view public.demo_v as select 1 as x;\ngrant select on public.demo_v to authenticated, service_role;\n"
+    );
     try {
       expect(run(dir)).toBe(1);
     } finally {
@@ -80,7 +90,9 @@ describe("check-migration-grants (Supabase 2026-10-30 explicit grants)", () => {
   });
 
   it("does not let an earlier GRANT ON ALL TABLES cover a later table", () => {
-    const dir = fixture("grant select on all tables in schema public to service_role;\ncreate table public.demo (id uuid primary key);\n");
+    const dir = fixture(
+      "grant select on all tables in schema public to service_role;\ncreate table public.demo (id uuid primary key);\n"
+    );
     try {
       expect(run(dir)).toBe(1);
     } finally {
@@ -92,6 +104,65 @@ describe("check-migration-grants (Supabase 2026-10-30 explicit grants)", () => {
     const dir = fixture("do $$ begin execute format('create table public.%I (id int)', 'demo'); end $$;\n");
     try {
       expect(run(dir)).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+const BASE_TABLE = "create table public.t (id int);\ngrant select on table public.t to authenticated, service_role;\n";
+const view = (name, opts) =>
+  `create view public.${name} ${opts} as select 1 as x;\ngrant select on public.${name} to authenticated, service_role;\n`;
+const CASES = [
+  [
+    "fails when a later DISABLE ROW LEVEL SECURITY undoes the ENABLE",
+    BASE_TABLE + "alter table public.t enable row level security;\nalter table public.t disable row level security;\n",
+    1,
+  ],
+  [
+    "passes when RLS is disabled and then enabled again",
+    BASE_TABLE + "alter table public.t disable row level security;\nalter table public.t enable row level security;\n",
+    0,
+  ],
+  [
+    "fails when only one of two views in a file has security_invoker",
+    view("a", "with (security_invoker = true)") + view("b", ""),
+    1,
+  ],
+  [
+    "fails when the second view sets security_invoker = false",
+    view("a", "with (security_invoker = true)") + view("b", "with (security_invoker = false)"),
+    1,
+  ],
+  [
+    "passes when both views in a file have security_invoker",
+    view("a", "with (security_invoker = true)") + view("b", "with (security_invoker)"),
+    0,
+  ],
+  [
+    "passes when a view gets security_invoker through ALTER VIEW",
+    view("a", "") + "alter view public.a set (security_invoker = true);\n",
+    0,
+  ],
+  ["fails for EXECUTE with a variable (cannot be analysed)", "do $$ begin execute v_sql; end $$;\n", 1],
+  ["fails for EXECUTE format() with a variable format string", "do $$ begin execute format(v_fmt, 'x'); end $$;\n", 1],
+  [
+    "passes for EXECUTE with a variable when marked dynamic-reviewed",
+    "-- check-migration-grants: dynamic-reviewed\ndo $$ begin execute v_sql; end $$;\n",
+    0,
+  ],
+  [
+    "passes for EXECUTE FUNCTION in CREATE TRIGGER",
+    "create trigger t before insert on public.x for each row execute function public.f();\n",
+    0,
+  ],
+];
+
+describe("check-migration-grants: view, RLS and EXECUTE edge cases", () => {
+  it.each(CASES)("%s", (_name, sql, expected) => {
+    const dir = fixture(sql);
+    try {
+      expect(run(dir)).toBe(expected);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
