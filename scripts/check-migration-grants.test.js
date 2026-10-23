@@ -156,6 +156,53 @@ const CASES = [
     "create trigger t before insert on public.x for each row execute function public.f();\n",
     0,
   ],
+  [
+    "passes for GRANT EXECUTE ON FUNCTION (a privilege, not dynamic SQL)",
+    "grant execute on function public.get_org_invite_preview(text) to anon, authenticated, service_role;\n",
+    0,
+  ],
+  [
+    "passes for REVOKE EXECUTE ON FUNCTION",
+    "revoke execute on function public.get_org_invite_preview(text) from public;\nREVOKE EXECUTE ON FUNCTION public.f() FROM anon;\n",
+    0,
+  ],
+  [
+    "passes for GRANT EXECUTE ON ALL FUNCTIONS split over lines",
+    "grant execute\n  on all functions in schema public to service_role;\n",
+    0,
+  ],
+  ["fails for EXECUTE of a variable that merely starts with 'on'", "do $$ begin execute on_x; end $$;\n", 1],
+  ["marker is case-sensitive", "-- CHECK-MIGRATION-GRANTS: DYNAMIC-REVIEWED\ndo $$ begin execute v_sql; end $$;\n", 1],
+  [
+    "marker must not be followed by more word characters",
+    "-- check-migration-grants: dynamic-reviewed-not\ndo $$ begin execute v_sql; end $$;\n",
+    1,
+  ],
+  [
+    "marker must be at the start of a line, not after a statement",
+    "select 1; -- check-migration-grants: dynamic-reviewed\ndo $$ begin execute v_sql; end $$;\n",
+    1,
+  ],
+  [
+    "marker inside a string literal does not count",
+    "select 'check-migration-grants: dynamic-reviewed';\ndo $$ begin execute v_sql; end $$;\n",
+    1,
+  ],
+  [
+    "fails when ALTER VIEW later sets security_invoker = false",
+    view("a", "with (security_invoker = true)") + "alter view public.a set (security_invoker = false);\n",
+    1,
+  ],
+  [
+    "fails when ALTER VIEW later RESETs security_invoker",
+    view("a", "with (security_invoker = true)") + "alter view public.a reset (security_invoker);\n",
+    1,
+  ],
+  [
+    "passes when ALTER VIEW later sets security_invoker = true again",
+    view("a", "with (security_invoker = false)") + "alter view public.a set (security_invoker = true);\n",
+    0,
+  ],
 ];
 
 describe("check-migration-grants: view, RLS and EXECUTE edge cases", () => {

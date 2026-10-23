@@ -16,7 +16,8 @@
 // Known limitation: `EXECUTE <variable>` / `EXECUTE format(<variable>, ...)` / `EXECUTE '...' || x`
 // build SQL at run time, so the objects they create cannot be analysed. The check does not guess:
 // such a file must carry the same marker comment (a human confirms the grants/RLS it produces).
-// `EXECUTE FUNCTION|PROCEDURE` in CREATE TRIGGER is not dynamic SQL and is ignored.
+// `EXECUTE FUNCTION|PROCEDURE` in CREATE TRIGGER and the privilege `GRANT|REVOKE EXECUTE ON ...` are
+// not dynamic SQL and are ignored.
 //
 // Why: from 2026-10-30 Supabase no longer grants anon/authenticated/service_role on new
 // objects in `public`, so a table without a GRANT is invisible to the Data API (42501).
@@ -29,7 +30,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CUTOFF = "20261021090000";
-const DYNAMIC_MARKER = /check-migration-grants:\s*dynamic-reviewed/i;
+// Only a whole SQL line comment counts: at line start (indentation allowed), exactly this text,
+// case-sensitive, not followed by more word characters (so `...-reviewed-not` or text inside a
+// statement does not pass).
+const DYNAMIC_MARKER = /^[ \t]*-- check-migration-grants: dynamic-reviewed(?![\w-])/m;
 const CLIENT_ROLES = new Set(["anon", "authenticated", "public"]);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dir = process.argv[2] || path.join(here, "..", "supabase", "migrations");
@@ -47,7 +51,7 @@ const RLS_RE = new RegExp(
 );
 // EXECUTE whose SQL text is not a plain literal: a variable, format(<variable>, ...), or '...' || x.
 const OPAQUE_EXECUTE_RE =
-  /\bexecute\s+(?:(?!function\b|procedure\b)[a-z_][a-z0-9_.]*(?![a-z0-9_.]|\s*\()|format\s*\(\s*(?!e?'|\$[a-z_]*\$)|e?'(?:[^']|'')*'\s*\|\||\$([a-z_]*)\$[\s\S]*?\$\1\$\s*\|\|)/i;
+  /\bexecute\s+(?:(?!function\b|procedure\b|on\b)[a-z_][a-z0-9_.]*(?![a-z0-9_.]|\s*\()|format\s*\(\s*(?!e?'|\$[a-z_]*\$)|e?'(?:[^']|'')*'\s*\|\||\$([a-z_]*)\$[\s\S]*?\$\1\$\s*\|\|)/i;
 const DYNAMIC_RE = /\bexecute\b[\s\S]{0,40}?(?:format\s*\(\s*)?(?:'|\$[a-z_]*\$)\s*create\s+(?:unlogged\s+)?table/i;
 
 const norm = (s) =>
@@ -56,6 +60,20 @@ const norm = (s) =>
     .toLowerCase()
     .replace(/"/g, "")
     .replace(/^public\s*\.\s*/, "");
+
+// State of the security_invoker option inside a WITH/SET/RESET option list: true, false, or null
+// when the option is not mentioned. The last mention wins. `reset` removes it (= false).
+function optionState(options, isReset) {
+  let state = null;
+  for (const part of options.split(",")) {
+    const m = part.trim().match(/^security_invoker\s*(?:=\s*(.*))?$/i);
+    if (!m) continue;
+    if (isReset) state = false;
+    else if (m[1] === undefined) state = true;
+    else state = /^(true|on|1|'true'|'on'|yes|'yes')$/i.test(m[1].trim());
+  }
+  return state;
+}
 
 function parseGrants(text) {
   const grants = [];
@@ -116,16 +134,19 @@ export function checkMigration(sql) {
     }
     if (clientRoles.length && kind !== "table") {
       const statement = text.slice(m.index).split(";")[0];
-      const flag = String.raw`security_invoker\s*(?:=\s*(?:true|on|1|'true'|'on')\s*)?(?=[,)])`;
-      const inline = new RegExp(String.raw`\bwith\s*\([^)]*?${flag}`, "i");
-      const altered = new RegExp(
-        String.raw`\balter\s+(?:materialized\s+)?view\s+(?:if\s+exists\s+)?(?:"?public"?\s*\.\s*)?"?${name}"?\s+set\s*\([^)]*?${flag}`,
-        "i"
+      // security_invoker state: the CREATE's own WITH (...) first, then every later
+      // ALTER VIEW <name> SET|RESET (...) in file order; the last one wins.
+      const alterRe = new RegExp(
+        String.raw`\balter\s+(?:materialized\s+)?view\s+(?:if\s+exists\s+)?(?:"?public"?\s*\.\s*)?"?${name}"?\s+(set|reset)\s*\(([^)]*)\)`,
+        "gi"
       );
-      const invoker = {
-        test: () => inline.test(statement) || altered.test(text),
-      };
-      if (!invoker.test(text))
+      let invoker = optionState(statement.match(/\bwith\s*\(([^)]*)\)/i)?.[1] ?? "", false);
+      for (const a of text.matchAll(alterRe)) {
+        if (a.index < m.index) continue;
+        const state = optionState(a[2], a[1].toLowerCase() === "reset");
+        if (state !== null) invoker = state;
+      }
+      if (invoker !== true)
         problems.push(
           `${label}: granted to ${clientRoles.join(", ")} without security_invoker (definer views bypass RLS)`
         );
