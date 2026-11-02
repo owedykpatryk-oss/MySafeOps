@@ -24,6 +24,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Take site evidence photos to attach to your safety reports.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Select site evidence photos to attach to your safety reports.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Add your current location to a site photo when you choose to use GPS. You can also enter a location manually.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,5 +1,7 @@
 # Android and iOS preview foundation — 2 November 2026
 
+Follow-up: [iPhone photo and upload verification](IPHONE_UPLOAD_QA.md), including native privacy descriptions and the macOS/iOS simulator verification workflow. The native preview remains device-only.
+
 ## What exists
 
 The existing React/Vite application is bundled locally using Capacitor 8.6.0. Both `android/` and `ios/` projects are checked in. The provisional identifier is `com.mysafeops.app`; confirm ownership and the final identifier before registering store records. Neither store has been configured or submitted to.

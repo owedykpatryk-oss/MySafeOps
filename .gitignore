@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-native/
+tests/fixtures/generated-iphone.*
 *.keystore
 *.jks
 .DS_Store

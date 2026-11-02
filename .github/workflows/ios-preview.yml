@@ -1,0 +1,62 @@
+name: iPhone Upload and iOS Preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  iphone:
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      HEIC_FIXTURE_PATH: tests/fixtures/generated-iphone.heic
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Generate a synthetic HEIC with Apple's encoder
+        run: |
+          mkdir -p tests/fixtures
+          python3 - <<'PY'
+          import struct, zlib
+          from pathlib import Path
+          def chunk(kind, data):
+              return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
+          pixels = (b'\x00' + b'\x20\x80\xc0' * 64) * 64
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', 64, 64, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b'')
+          Path('tests/fixtures/generated-iphone.png').write_bytes(png)
+          PY
+          sips -s format heic tests/fixtures/generated-iphone.png --out "$HEIC_FIXTURE_PATH"
+      - run: npx playwright install chromium webkit
+      - name: iPhone photo and document regressions on Apple WebKit
+        run: npx playwright test --config playwright.mobile.config.js tests/e2e/register-mobile.spec.js --project=iphone-webkit --grep 'photo|HEIC|GPS|Documents|upload|signature'
+      - run: npm run native:build:preview
+      - run: npx cap sync ios
+      - name: Compile iOS simulator application
+        run: xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath output/ios-simulator CODE_SIGNING_ALLOWED=NO build > ios-build.log 2>&1
+      - name: Launch on an iPhone simulator
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(v["udid"] for k in sorted(d,reverse=True) if "iOS" in k for v in d[k] if "iPhone" in v["name"]))')
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl install "$DEVICE_ID" output/ios-simulator/Build/Products/Debug-iphonesimulator/App.app
+          xcrun simctl launch "$DEVICE_ID" com.mysafeops.app
+          sleep 10
+          xcrun simctl spawn "$DEVICE_ID" launchctl list | grep com.mysafeops.app
+          xcrun simctl io "$DEVICE_ID" screenshot ios-preview.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iphone-verification
+          path: |
+            ios-build.log
+            ios-preview.png
+            test-results/
+            tests/fixtures/generated-iphone.heic
+          retention-days: 7

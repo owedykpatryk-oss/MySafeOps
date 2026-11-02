@@ -99,23 +99,41 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
     throw new Error("Sign in to upload to cloud storage.");
   }
 
-  const postUpload = (headers) =>
-    fetch(`${base}/upload`, {
-      method: "POST",
-      headers,
-      body: makeForm(),
-    });
+  const postUpload = async (headers) => {
+    const controller = new AbortController();
+    let timer;
+    try {
+      return await Promise.race([
+        (async () => {
+          const response = await fetch(`${base}/upload`, {
+            method: "POST", headers, body: makeForm(), signal: controller.signal,
+          });
+          const decoded = await response.json().catch(() => null);
+          const payload = decoded && typeof decoded === "object" ? decoded : {};
+          return { response, payload };
+        })(),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error("Upload timed out. Check your connection, then retry. Keep the original file until the upload is confirmed."));
+            controller.abort();
+          }, 120_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
 
-  let res = await postUpload(auth.headers);
+  let result = await postUpload(auth.headers);
   // Stale JWT after PWA camera / backgrounding — refresh once and retry.
-  if (res.status === 401) {
+  if (result.response.status === 401) {
     auth = await buildAuthHeaders({ forceRefresh: true });
     if (auth.ok) {
-      res = await postUpload(auth.headers);
+      result = await postUpload(auth.headers);
     }
   }
 
-  const json = await res.json().catch(() => ({}));
+  const { response: res, payload: json } = result;
   if (!res.ok) {
     if (json.error === "billing_write_blocked") throw new Error("This country workspace needs an active subscription. Open Settings → Billing to restore uploads.");
     if (json.error === "storage_limit_reached") throw new Error("Cloud storage limit reached for this country workspace. Upgrade the plan in Settings → Billing.");
@@ -126,7 +144,10 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
     throw new Error(msg);
   }
 
-  const returnedKey = json.key || key;
+  if (!json || typeof json.key !== "string" || !json.key.trim()) {
+    throw new Error("Could not confirm the upload. Check your connection, then retry.");
+  }
+  const returnedKey = json.key;
   // Only build a "public CDN" URL when the base is a real public host — not the upload Worker itself.
   const pub = getR2PublicBaseUrl();
   const apiBase = getStorageApiBase();

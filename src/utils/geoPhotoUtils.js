@@ -95,7 +95,9 @@ export function photoReadErrorMessage(file) {
 }
 
 function drawSourceToJpeg(source, width, height, maxWidth, quality) {
-  const scale = Math.min(1, maxWidth / Math.max(1, width));
+  // Bound the longest edge: portrait panoramas otherwise allocate enormous
+  // canvases on iPhones even when their width is already below the limit.
+  const scale = Math.min(1, maxWidth / Math.max(1, width, height));
   const w = Math.max(1, Math.round(width * scale));
   const h = Math.max(1, Math.round(height * scale));
   const canvas = document.createElement("canvas");
