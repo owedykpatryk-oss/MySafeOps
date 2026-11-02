@@ -1,4 +1,4 @@
-import { loadOrgScoped, saveOrgScoped } from "./orgStorage";
+import { countryOperationalStorageKey, loadOrgScoped, saveOrgScoped } from "./orgStorage";
 import { replaceWithTombstone } from "./d1ArrayMerge";
 import { OPS_TOAST_EVENT_NAME } from "./clientOpsMonitor";
 import { getOrgMarketId } from "./orgMarket";
@@ -61,6 +61,13 @@ export function pushRecycleBinItem({
   payload,
 }) {
   if (!sourceKey || !payload || typeof payload !== "object") return null;
+  const entry = makeRecycleEntry({ moduleId, moduleLabel, itemType, itemLabel, sourceKey, payload });
+  const current = readCleanBin();
+  if (writeBin([entry, ...current].slice(0, MAX_BIN_ITEMS)) !== true) return null;
+  return entry;
+}
+
+function makeRecycleEntry({ moduleId, moduleLabel, itemType, itemLabel, sourceKey, payload }) {
   const now = Date.now();
   const deletedAt = new Date(now).toISOString();
   const expiresAt = new Date(now + RETENTION_MS).toISOString();
@@ -76,8 +83,6 @@ export function pushRecycleBinItem({
     deletedAt,
     expiresAt,
   };
-  const current = readCleanBin();
-  if (writeBin([entry, ...current].slice(0, MAX_BIN_ITEMS)) !== true) return null;
   return entry;
 }
 
@@ -97,17 +102,16 @@ export function softDeleteToRecycleBin({
   payload,
 }) {
   if (!sourceKey || !payload?.id || payload.deletedAt) return false;
+  const expectedScope = countryOperationalStorageKey(sourceKey);
   if (!window.confirm(confirmMessage)) return false;
+  if (countryOperationalStorageKey(sourceKey) !== expectedScope) return false;
   const current = loadOrgScoped(sourceKey, []);
   const live = current.find(row => row?.id === payload.id && !row.deletedAt);
   if (!live) return false;
   const notify = (key, type, vars = {}) => window.dispatchEvent(new CustomEvent(OPS_TOAST_EVENT_NAME, {
     detail: { type, message: tf(key, getOrgMarketId(), vars) },
   }));
-  const archived = pushRecycleBinItem({ moduleId, moduleLabel, itemType, itemLabel, sourceKey, payload: live });
-  if (!archived) { notify("recordCouldNotRemove", "warn"); return false; }
-  if (!saveOrgScoped(sourceKey, replaceWithTombstone(current, live.id))) {
-    deleteRecycleBinEntry(archived.id);
+  if (!archiveRecordsToRecycleBin({ moduleId, moduleLabel, itemType, itemLabel, sourceKey, ids: [live.id], expectedScope })) {
     notify("recordCouldNotRemove", "warn");
     return false;
   }
@@ -161,4 +165,39 @@ export function restoreRecycleBinEntry(entryId) {
     return { ok: true, warning: "The record was restored, but its Recycle Bin entry could not be removed." };
   }
   return { ok: true };
+}
+
+/** Archive every selected live record before durably deleting any of them.
+ * Returns the persisted register, or null without deleting on failure.
+ */
+export function archiveRecordsToRecycleBin({ sourceKey, ids, moduleId, moduleLabel, itemType = "item", itemLabel,
+  expectedScope = countryOperationalStorageKey(sourceKey),
+}) {
+  const isCurrent = () => countryOperationalStorageKey(sourceKey) === expectedScope;
+  if (!isCurrent()) return null;
+  const current = loadOrgScoped(sourceKey, []);
+  const selected = new Set(ids || []);
+  const victims = current.filter(row => selected.has(row?.id) && !row.deletedAt);
+  if (!victims.length || victims.length > MAX_BIN_ITEMS) return null;
+  const originalBin = readBinRaw();
+  const entries = victims.map(payload => makeRecycleEntry({ sourceKey, moduleId, moduleLabel, itemType,
+      itemLabel: typeof itemLabel === "function" ? itemLabel(payload) : itemLabel,
+      payload,
+  }));
+  const stagedBin = [...entries, ...cleanupEntries(originalBin)];
+  // Never evict an unrelated recovery copy to make room for an attempted delete.
+  if (stagedBin.length > MAX_BIN_ITEMS || !isCurrent() || writeBin(stagedBin) !== true) return null;
+  const rollback = () => {
+    // Restore only our own unchanged staging write, and only while all originals
+    // are still live. Otherwise keep the recovery copies rather than risk loss.
+    if (isCurrent() && JSON.stringify(loadOrgScoped(sourceKey, [])) === JSON.stringify(current)
+      && JSON.stringify(readBinRaw()) === JSON.stringify(stagedBin)) writeBin(originalBin);
+  };
+  if (!isCurrent() || JSON.stringify(loadOrgScoped(sourceKey, [])) !== JSON.stringify(current)) {
+    rollback();
+    return null;
+  }
+  const next = victims.reduce((rows, row) => replaceWithTombstone(rows, row.id), current);
+  if (saveOrgScoped(sourceKey, next) !== true) { rollback(); return null; }
+  return isCurrent() ? next : null;
 }

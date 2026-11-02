@@ -27,8 +27,8 @@ function umWordmarkHtml(accent = UTILITY_MAPPING_BRAND.accentColor) {
 }
 
 /** @returns {{ hero: string, letterhead: string, logo: string } | null} */
-export function getUtilityMappingCoverAssets() {
-  if (!isUtilityMappingPrintTheme()) return null;
+export function getUtilityMappingCoverAssets(publishedTheme) {
+  if (!(publishedTheme ?? isUtilityMappingPrintTheme())) return null;
   return {
     hero: UM_COVER_HERO_URL,
     letterhead: UM_LETTERHEAD_URL,
@@ -75,7 +75,7 @@ function metaCells(pairs) {
  * }} opts
  */
 export function renderUtilityMappingHeroCover(opts = {}) {
-  const assets = getUtilityMappingCoverAssets();
+  const assets = getUtilityMappingCoverAssets(opts.publishedTheme);
   if (!assets) return "";
   const logoSrc = opts.logoSrc || assets.logo;
   const primary = UTILITY_MAPPING_BRAND.primaryColor;
@@ -155,7 +155,7 @@ export function renderUtilityMappingHeroCover(opts = {}) {
  * }} opts
  */
 export function renderUtilityMappingDocControlPage(opts = {}) {
-  if (!isUtilityMappingPrintTheme()) return "";
+  if (!(opts.publishedTheme ?? isUtilityMappingPrintTheme())) return "";
   const logoSrc = opts.logoSrc || UM_LOGO_URL;
   const authors = Array.isArray(opts.authors) && opts.authors.length
     ? opts.authors
@@ -176,7 +176,7 @@ export function renderUtilityMappingDocControlPage(opts = {}) {
     : "";
 
   return `<div class="um-doc-control">
-  ${renderUtilityMappingPageHeader(logoSrc, opts.reportRef || "")}
+  ${renderUtilityMappingPageHeader(logoSrc, opts.reportRef || "", { publishedTheme: opts.publishedTheme })}
   <div class="um-doc-control__address">${escapeHtml(UTILITY_MAPPING_BRAND.address)}</div>
   <div class="um-doc-control__client-row">
     <div class="um-doc-control__client">
@@ -240,8 +240,8 @@ export function utilityMappingPas128CoverBadges(method, ql) {
 }
 
 /** CSS for hero cover + doc-control page + letterhead chrome (UM only). */
-export function utilityMappingCoverSystemCss() {
-  if (!isUtilityMappingPrintTheme()) return "";
+export function utilityMappingCoverSystemCss(publishedTheme) {
+  if (!(publishedTheme ?? isUtilityMappingPrintTheme())) return "";
   const primary = UTILITY_MAPPING_BRAND.primaryColor;
   const accent = UTILITY_MAPPING_BRAND.accentColor;
   return `
@@ -694,7 +694,7 @@ export function utilityMappingCoverSystemCss() {
  * @param {string} [rightLabel]
  */
 export function renderUtilityMappingPageHeader(logoSrc, rightLabel = "", options = {}) {
-  if (!isUtilityMappingPrintTheme()) return "";
+  if (!(options.publishedTheme ?? isUtilityMappingPrintTheme())) return "";
   const logo = logoSrc || (options.allowEmpty ? "" : UM_LOGO_URL);
   const accent = UTILITY_MAPPING_BRAND.accentColor;
   const lh = UM_LETTERHEAD_URL;

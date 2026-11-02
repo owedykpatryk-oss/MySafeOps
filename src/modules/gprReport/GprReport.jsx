@@ -1,3 +1,4 @@
+import { useSupabaseAuth } from "../../context/SupabaseAuthContext";
 import { projectDisplayLabel } from "../../utils/projectDisplayLabel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "../../styles/gpr-report.css";
@@ -41,8 +42,8 @@ import { pushGprIntoLinkedSurvey } from "../surveyReport/surveyGprBridge";
 import { filterGprReports, groupGprReportsByProject, suggestDeliverableFlags, GPR_LIST_STATUS_FILTERS } from "./gprReportListHelpers";
 import { consumeWorkspaceNavTarget, peekWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { countGprGeoPhotos, importGeoPhotosIntoGprReport } from "../../utils/gprGeoIntegrations";
-import { pushRecycleBinItem } from "../../utils/recycleBin";
-import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
+import { deleteGprReport, persistGprReports } from "./gprReportPersistence";
+import { liveOrgArrayRows } from "../../utils/d1ArrayMerge";
 import {
   ANOMALY_CONFIDENCE,
   ANOMALY_TYPES,
@@ -127,7 +128,7 @@ import { gprThemeCssVariables } from "./gprVisualTheme.js";
 import GprEvidencePanel from "./GprEvidencePanel.jsx";
 import GprImageAnnotator from "./GprImageAnnotator.jsx";
 import { buildGprEvidenceReviewPayload, mergeGprEvidenceReview } from "./gprEvidence.js";
-import { clearGprEditorSession, readGprEditorSession, writeGprEditorSession } from "./gprEditorSession.js";
+import { clearGprEditorSession, getGprEditorScope, readGprEditorSession, writeGprEditorSession } from "./gprEditorSession.js";
 
 const STORAGE_KEY = "gpr_reports";
 
@@ -251,17 +252,24 @@ function GprEquipmentProfileCard({ preset }) {
 }
 
 export default function GprReport() {
+  useApp();
+  const { user } = useSupabaseAuth();
+  const scope = getGprEditorScope(user?.id || "anonymous");
+  return <ScopedGprReport key={scope} scope={scope} />;
+}
+
+function ScopedGprReport({ scope }) {
   const { dataRefreshTick } = useApp();
   const { pushToast } = useToast();
   const [reports, setReports] = useState(() => load(STORAGE_KEY, []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [geoPhotos, setGeoPhotos] = useState(() => load("geo_photos", []));
   const [modal, setModal] = useState(() => {
-    const restored = readGprEditorSession();
+    const restored = readGprEditorSession(scope);
     return restored ? { isNew: Boolean(restored.isNew), data: restored.data } : null;
   });
   const editorOpenRef = useRef(false);
-  const [tab, setTab] = useState(() => readGprEditorSession()?.tab || "setup");
+  const [tab, setTab] = useState(() => readGprEditorSession(scope)?.tab || "setup");
   const [busy, setBusy] = useState("");
   const [search, setSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -334,8 +342,11 @@ export default function GprReport() {
   }, [dataRefreshTick]);
 
   const persist = useCallback((next) => {
-    setReports((prev) => (typeof next === "function" ? next(prev) : next));
-  }, []);
+    const saved = persistGprReports(scope, next);
+    if (!saved) return false;
+    setReports(saved);
+    return true;
+  }, [scope]);
 
   useEffect(() => {
     const t = peekWorkspaceNavTarget();
@@ -410,7 +421,7 @@ export default function GprReport() {
 
   const formRef = useRef(form);
   const modalRef = useRef(modal);
-  const dirtyRef = useRef(false);
+  const dirtyRef = useRef(Boolean(readGprEditorSession(scope)));
   formRef.current = form;
   modalRef.current = modal;
   editorOpenRef.current = Boolean(modal);
@@ -422,26 +433,28 @@ export default function GprReport() {
   const flushEditorToStorage = useCallback(() => {
     const current = formRef.current;
     const m = modalRef.current;
-    if (!current?.id || !m || !dirtyRef.current) return;
+    if (scope !== getGprEditorScope()) return false;
+    if (!current?.id || !m || !dirtyRef.current) return true;
+    writeGprEditorSession({ ...m, data: current, tab }, scope);
     const normalized = stampDocumentAuthorship(normalizeGprReport(current), {
       isCreate: Boolean(m.isNew) || !current.createdById,
     });
-    persist((prev) => {
-      const next = upsertGprReportInList(prev, normalized);
-      save(STORAGE_KEY, next, { bypassBillingGuard: true });
-      return next;
-    });
+    if (!persist((prev) => upsertGprReportInList(prev, normalized))) return false;
+    dirtyRef.current = false;
     if (m.isNew) {
       setModal((prev) => (prev ? { ...prev, isNew: false, data: { ...prev.data, createdById: prev.data?.createdById || normalized.createdById } } : prev));
     }
-  }, [persist]);
+    return true;
+  }, [persist, scope, tab]);
 
   const closeEditor = useCallback(() => {
-    flushEditorToStorage();
-    dirtyRef.current = false;
-    clearGprEditorSession();
+    if (!flushEditorToStorage()) {
+      pushToast({ type: "error", title: "Report not saved", message: "Your draft remains open. Retry saving before closing." });
+      return;
+    }
+    clearGprEditorSession(scope);
     setModal(null);
-  }, [flushEditorToStorage]);
+  }, [flushEditorToStorage, pushToast, scope]);
 
   const patch = (partial) => {
     if (!form) return;
@@ -467,21 +480,23 @@ export default function GprReport() {
   };
 
   const saveReport = () => {
-    if (!form) return;
+    if (!form || scope !== getGprEditorScope()) return;
+    dirtyRef.current = true;
+    writeGprEditorSession({ ...modal, tab }, scope);
     const normalized = stampDocumentAuthorship(normalizeGprReport(form), {
       isCreate: Boolean(modal.isNew) || !form.createdById,
     });
-    const next = modal.isNew
-      ? [...reports, normalized]
-      : reports.map((r) => (r.id === normalized.id ? normalized : r));
-    persist(next);
+    if (!persist((prev) => upsertGprReportInList(prev, normalized))) {
+      pushToast({ type: "error", title: "Report not saved", message: "Storage could not save your changes. Your draft remains open for retry." });
+      return;
+    }
 
     // Bidirectional sync: push anomalies into linked / same-project survey report.
     try {
       const surveys = load("survey_reports", []);
       const { reports: nextSurveys, updated } = pushGprIntoLinkedSurvey(normalized, surveys);
       if (updated) {
-        save("survey_reports", nextSurveys);
+        if (save("survey_reports", nextSurveys) !== true) throw new Error("Survey save failed");
         pushToast({
           type: "success",
           title: "Synced to survey",
@@ -490,7 +505,7 @@ export default function GprReport() {
         });
       }
     } catch {
-      /* survey sync best-effort */
+      pushToast({ type: "error", title: "Survey sync failed", message: "The GPR report was saved, but the linked survey was not. Retry Save report to sync it." });
     }
 
     pushAudit({ action: modal.isNew ? "gpr_report_create" : "gpr_report_update", entity: "gpr_report", detail: normalized.ref });
@@ -501,11 +516,11 @@ export default function GprReport() {
 
   useEffect(() => {
     if (!modal?.data?.id) {
-      clearGprEditorSession();
+      clearGprEditorSession(scope);
       return;
     }
-    writeGprEditorSession({ isNew: Boolean(modal.isNew), data: modal.data, tab });
-  }, [modal, tab]);
+    writeGprEditorSession({ isNew: Boolean(modal.isNew), data: modal.data, tab }, scope);
+  }, [modal, tab, scope]);
 
   useEffect(() => {
     if (!form) return undefined;
@@ -3028,8 +3043,12 @@ export default function GprReport() {
         destructive
         onCancel={() => setConfirmDelete(null)}
         onConfirm={() => {
-          pushRecycleBinItem({ type: "gpr_report", label: confirmDelete.ref, payload: confirmDelete });
-          persist(replaceWithTombstone(reports, confirmDelete.id));
+          const next = deleteGprReport(scope, confirmDelete);
+          if (!next) {
+            pushToast({ type: "error", title: "Report not deleted", message: "Could not safely save the deletion and recovery copy. Please retry." });
+            return;
+          }
+          setReports(next);
           pushAudit({ action: "gpr_report_delete", entity: "gpr_report", detail: confirmDelete.ref });
           setConfirmDelete(null);
         }}

@@ -62,6 +62,7 @@ export default function PublicRamsShareView({ token }) {
     );
   }
 
+  const printable = !published || doc.publicationSnapshot?.version === 1;
   const rows = Array.isArray(doc.rows) ? doc.rows : [];
 
   return (
@@ -79,10 +80,11 @@ export default function PublicRamsShareView({ token }) {
         </p>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <button type="button" style={ss.btnP} onClick={() => openRamsPrintWindow(doc, rows, published ? [] : workers, published ? [] : projects)}>
+        <button type="button" disabled={!printable} style={ss.btnP} onClick={() => openRamsPrintWindow(doc, rows, published ? (doc.publicationSnapshot?.workers || []) : workers, published ? (doc.publicationSnapshot?.projects || []) : projects)}>
           Print / PDF
         </button>
       </div>
+      {!printable && <p>Ask the sender to republish this link to include the original print details.</p>}
       <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 16 }}>You cannot edit this document here. Close this tab and open MySafeOps to make changes.</p>
     </div>
   );

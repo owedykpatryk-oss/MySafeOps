@@ -164,6 +164,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Zabezpieczenie wycieków i odprowadzenia mediów przygotowane",
     ],
     extraFields: [
+      { key: "authorisedPerson", label: "Osoba uprawniona (odłączenie)", type: "text" },
       { key: "equipmentTag", label: "Oznaczenie / nr urządzenia", type: "text" },
       { key: "isolationPoints", label: "Liczba punktów odłączenia", type: "number" },
       { key: "lotoKeyHolder", label: "Osoba z kluczem LOTO", type: "text" },
@@ -278,6 +279,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Sorbenty i oczomyjka / natrysk dostępne w miejscu pracy",
     ],
     extraFields: [
+      { key: "authorisedPerson", label: "Osoba uprawniona (odłączenie)", type: "text" },
       { key: "pipeContents", label: "Zawartość rurociągu", type: "text" },
       { key: "workingPressure", label: "Ciśnienie robocze (bar)", type: "number" },
       { key: "temperature", label: "Temperatura medium (°C)", type: "number" },

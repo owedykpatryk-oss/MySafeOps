@@ -84,7 +84,7 @@ export default function BackupExport() {
     URL.revokeObjectURL(a.href);
     const detail = `${Object.keys(bundle.keys).length} keys${includeGeocodeCache ? " + geocode cache" : ""}`;
     pushAudit({ action: "backup_export", entity: "all", detail });
-    setMsg("Backup downloaded.");
+    setMsg(bundle.skippedUnknownKeyCount ? `Backup downloaded. ${bundle.skippedUnknownKeyCount} unrecognised storage keys were excluded; review their ownership before relying on this backup.` : "Backup downloaded.");
   };
 
   const onFile = (e) => {
@@ -164,7 +164,7 @@ export default function BackupExport() {
       const slug = await syncOrgSlugIfNeeded(supabase);
       await uploadBackupToSupabase(supabase, slug, { bundle });
       pushAudit({ action: "backup_cloud_upload", entity: "all", detail: slug });
-      setMsg("Cloud backup updated.");
+      setMsg(bundle.skippedUnknownKeyCount ? `Cloud backup updated. ${bundle.skippedUnknownKeyCount} unrecognised storage keys were excluded; review their ownership before relying on this backup.` : "Cloud backup updated.");
       refreshCloudMeta();
     } catch (e) {
       setMsg(formatCloudSyncError(e));
@@ -248,7 +248,7 @@ export default function BackupExport() {
       <PageHero
         badgeText="BU"
         title="Backup & restore"
-        lead="Export all organisation-scoped data and global settings to JSON. Sign in under Settings to sync backups to the cloud."
+        lead="Export recognised organisation data across all country workspaces to JSON. Sign in under Settings to sync backups to the cloud."
       />
       {readOnly ? (
         <div style={{ marginBottom: 16 }}>

@@ -1,44 +1,40 @@
-const LOCK_KEY = "mysafeops_gpr_editor_open";
-const DATA_KEY = "mysafeops_gpr_editor_draft";
+import { countryOperationalStorageKey } from "../../utils/orgStorage";
+import { getCachedAuthorshipActor } from "../../utils/documentAuthorship";
 
-export function isGprEditorLocked() {
-  try {
-    return sessionStorage.getItem(LOCK_KEY) === "1";
-  } catch {
-    return false;
-  }
+export function getGprEditorScope(userId = getCachedAuthorshipActor()?.id || "anonymous") {
+  return JSON.stringify([userId, countryOperationalStorageKey("gpr_reports")]);
 }
 
-export function readGprEditorSession() {
+function sessionKey(scope) {
+  return `mysafeops_gpr_editor_draft_v2:${encodeURIComponent(scope)}`;
+}
+
+export function isGprEditorLocked() {
+  return Boolean(readGprEditorSession());
+}
+
+export function readGprEditorSession(scope = getGprEditorScope()) {
   try {
-    const raw = sessionStorage.getItem(DATA_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed?.data?.id) return null;
-    return parsed;
+    const parsed = JSON.parse(sessionStorage.getItem(sessionKey(scope)) || "null");
+    return parsed?.scope === scope && parsed?.data?.id ? parsed : null;
   } catch {
     return null;
   }
 }
 
-export function writeGprEditorSession(session) {
+export function writeGprEditorSession(session, scope = getGprEditorScope()) {
   try {
-    sessionStorage.setItem(LOCK_KEY, "1");
-    sessionStorage.setItem(DATA_KEY, JSON.stringify(session));
+    sessionStorage.setItem(sessionKey(scope), JSON.stringify({ ...session, scope }));
+    return true;
   } catch {
-    try {
-      sessionStorage.setItem(LOCK_KEY, "1");
-    } catch {
-      /* private mode */
-    }
+    return false;
   }
 }
 
-export function clearGprEditorSession() {
+export function clearGprEditorSession(scope = getGprEditorScope()) {
   try {
-    sessionStorage.removeItem(LOCK_KEY);
-    sessionStorage.removeItem(DATA_KEY);
+    sessionStorage.removeItem(sessionKey(scope));
   } catch {
-    /* ignore */
+    /* Keep the recovery copy if storage is inaccessible. */
   }
 }

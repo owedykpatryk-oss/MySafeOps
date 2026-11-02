@@ -10,6 +10,7 @@ import * as d1Client from "../lib/d1SyncClient.js";
 
 describe("pushBackupBundleToD1", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(d1Client.isD1Configured).mockReturnValue(true);
     vi.mocked(d1Client.d1PutKv).mockResolvedValue({ ok: true, version: 1 });
   });
@@ -18,7 +19,7 @@ describe("pushBackupBundleToD1", () => {
     vi.mocked(d1Client.isD1Configured).mockReturnValue(false);
     const r = await pushBackupBundleToD1(
       {},
-      { version: 1, keys: { "waste_register_acme": "[]" } },
+      { version: 1, orgId: "acme", keys: { "waste_register_acme": "[]" } },
       { orgSlug: "acme" }
     );
     expect(r.ok).toBe(false);
@@ -35,7 +36,7 @@ describe("pushBackupBundleToD1", () => {
   });
 
   it("returns error when org slug is missing or default", async () => {
-    const bundle = { version: 1, keys: { "waste_register_acme": "[]" } };
+    const bundle = { version: 1, orgId: "acme", keys: { "waste_register_acme": "[]" } };
     let r = await pushBackupBundleToD1({}, bundle, { orgSlug: "" });
     expect(r.ok).toBe(false);
     expect(r.errors[0].error).toBe("no_org_slug");
@@ -46,25 +47,26 @@ describe("pushBackupBundleToD1", () => {
 
   it("pushes only known namespaces with matching org suffix and array JSON", async () => {
     const bundle = {
-      version: 1,
+      version: 1, orgId: "acme",
       keys: {
         "waste_register_acme": '[{"id":"a"}]',
-        "not_a_namespace_acme": "[]",
-        "waste_register_other": "[]",
-        "junk_acme": "{}",
+        "document_templates_acme": "[]",
+        "waste_register_acme__country_pl-id": "[]",
+        "permits_v2_acme": "{}",
       },
     };
     const r = await pushBackupBundleToD1({}, bundle, { orgSlug: "acme" });
     expect(r.ok).toBe(true);
-    expect(r.pushed).toBe(1);
-    expect(d1Client.d1PutKv).toHaveBeenCalledTimes(1);
+    expect(r.pushed).toBe(2);
+    expect(d1Client.d1PutKv).toHaveBeenCalledTimes(2);
     expect(d1Client.d1PutKv).toHaveBeenCalledWith({}, "acme", "waste_register", "main", [{ id: "a" }], undefined);
+    expect(d1Client.d1PutKv).toHaveBeenCalledWith({}, "acme", "waste_register", "country:pl-id:main", [], undefined);
   });
 
   it("collects errors when a PUT fails", async () => {
     vi.mocked(d1Client.d1PutKv).mockResolvedValueOnce({ ok: false, error: "http_403" });
     const bundle = {
-      version: 1,
+      version: 1, orgId: "acme",
       keys: {
         "waste_register_acme": "[]",
       },
@@ -73,5 +75,16 @@ describe("pushBackupBundleToD1", () => {
     expect(r.ok).toBe(false);
     expect(r.pushed).toBe(0);
     expect(r.errors).toEqual([{ namespace: "waste_register", error: "http_403" }]);
+  });
+
+  it("rejects mismatched ownership before sending any registers", async () => {
+    for (const bundle of [
+      { version: 1, orgId: "other", keys: { waste_register_acme: "[]" } },
+      { version: 1, orgId: "acme", keys: { waste_register_acme: "[]", waste_register_other: "[]" } },
+      { version: 1, orgId: "acme", keys: { waste_register_other_acme: "[]" } },
+    ]) {
+      expect((await pushBackupBundleToD1({}, bundle, { orgSlug: "acme" })).ok).toBe(false);
+    }
+    expect(d1Client.d1PutKv).not.toHaveBeenCalled();
   });
 });

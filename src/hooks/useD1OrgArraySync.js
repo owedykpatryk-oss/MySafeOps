@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { supabase } from "../lib/supabase";
 import { d1GetKv, d1PutKv, isD1Configured, isD1RateLimitedError, isD1TransientError } from "../lib/d1SyncClient";
@@ -77,7 +77,9 @@ export function useD1OrgArraySync({
   const d1DebounceRef = useRef(null);
   const scopeRef = useRef("");
   const renderScope = `${getOrgId()}|${namespace}|${countryDataKey}`;
-  scopeRef.current = renderScope;
+  const valueScopeRef = useRef(renderScope);
+  const ownsRenderedValue = valueScopeRef.current === renderScope;
+  scopeRef.current = ownsRenderedValue ? renderScope : "";
 
   // Callers may pass inline closures; hydration must not re-run (and re-fetch) on every render.
   const loadRef = useRef(load);
@@ -89,17 +91,31 @@ export function useD1OrgArraySync({
   setValueRef.current = setValue;
   toSyncRef.current = toSyncValue;
 
+  // Another tab can change storage before its storage event is delivered. Never
+  // attach the previous React state to the newly observed destination scope.
+  useLayoutEffect(() => {
+    if (ownsRenderedValue) return;
+    valueScopeRef.current = renderScope;
+    d1VersionRef.current = 0;
+    d1ConflictBlockedRef.current = false;
+    setValueRef.current(loadRef.current(storageKey, []));
+    setD1Ready(!isD1Configured());
+    setD1OutboxPending(false);
+    setD1OrgEpoch((n) => n + 1);
+  }, [ownsRenderedValue, renderScope, storageKey]);
+
   useEffect(() => {
     // Persist before a PDF export, reload or mobile backgrounding can read stale rows.
     // Only cloud writes are debounced; local evidence must be durable immediately.
-    if (activeSyncScope(namespace, d1DataKey) !== renderScope) return;
+    if (!ownsRenderedValue || activeSyncScope(namespace, d1DataKey) !== renderScope) return;
     saveRef.current(storageKey, value);
-  }, [storageKey, value, renderScope, namespace, d1DataKey]);
+  }, [storageKey, value, renderScope, namespace, d1DataKey, ownsRenderedValue]);
 
   useEffect(() => {
     const onOrgChange = () => {
       // Invalidate callbacks synchronously, before React renders/cleans up effects.
       scopeRef.current = "";
+      valueScopeRef.current = activeSyncScope(namespace, d1DataKey);
       d1VersionRef.current = 0;
       d1ConflictBlockedRef.current = false;
       setValueRef.current(loadRef.current(storageKey, []));

@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { useSupabaseAuth } from "../context/SupabaseAuthContext";
+import { ramsDraftScope } from "./rams/ramsBuilderDraft";
+import { ramsDocumentStorageScope } from "./rams/ramsDocumentSave";
+import { writeAiRamsPrefill } from "./rams/ramsAiPrefill";
+import { useState, useRef } from "react";
 import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import { anthropicMessages, isAnthropicConfigured } from "../utils/anthropicClient";
 import { pushAudit } from "../utils/auditLog";
@@ -47,6 +51,11 @@ Use ${market.language}. Never cite UK HSE, CDM, COSHH, LOLER, PUWER or other for
 }
 
 export default function AIRamsGenerator() {
+  const auth = useSupabaseAuth();
+  const ownerRef = useRef(null);
+  ownerRef.current = { userId: auth.user?.id, localOnly: !auth.supabase };
+  const getScope = () => ramsDraftScope({ ...ownerRef.current, storageScope: ramsDocumentStorageScope() });
+  const resultScopeRef = useRef(null);
   const marketId = getOrgMarketId();
   const documentLabel = getRamsShortLabel(marketId);
   const [activity, setActivity] = useState("");
@@ -56,6 +65,8 @@ export default function AIRamsGenerator() {
 
   const run = async () => {
     if (!activity.trim()) return;
+    const requestScope = getScope();
+    if (!requestScope) return;
     setError("");
     setLoading(true);
     setRaw("");
@@ -70,6 +81,8 @@ export default function AIRamsGenerator() {
         ],
         maxTokens: 8192,
       });
+      if (getScope() !== requestScope) return;
+      resultScopeRef.current = requestScope;
       setRaw(text);
       pushAudit({ action: "ai_rams_generate", entity: "claude", detail: "ok" });
     } catch (e) {
@@ -82,14 +95,15 @@ export default function AIRamsGenerator() {
 
   const applyToBuilder = () => {
     try {
+      if (resultScopeRef.current !== getScope()) throw new Error("Workspace changed. Generate a new draft in this workspace.");
       const start = raw.indexOf("{");
       const end = raw.lastIndexOf("}");
       if (start < 0 || end <= start) throw new Error("no json");
       const json = JSON.parse(raw.slice(start, end + 1));
-      sessionStorage.setItem("mysafeops_ai_rams_prefill", JSON.stringify(json));
+      writeAiRamsPrefill(resultScopeRef.current, json);
       alert('Go to RAMS tab → "+ Build new RAMS" — AI draft will load into the builder.');
-    } catch {
-      setError("Could not parse JSON. Copy the response and fix manually.");
+    } catch (error) {
+      setError(error.message || "Could not parse JSON. Copy the response and fix manually.");
     }
   };
 

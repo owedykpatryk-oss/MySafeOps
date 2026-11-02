@@ -1,3 +1,4 @@
+import { formatPublicationDate as publicationDate } from "./ramsPublicationDate";
 import { publicAppUrl } from "../../utils/publicAppUrl";
 import { isPublishedRamsShare } from "../../utils/ramsCloudShare";
 
@@ -46,7 +47,6 @@ const RL = {
 
 const fmtDate = formatDocumentDate;
 const fmtDateTime = formatDocumentDateTime;
-const tx = (key, fallback = key) => documentText(key, fallback, getOrgMarketId());
 
 function riskScore(risk) {
   const l = Number(risk?.L || 0);
@@ -391,13 +391,13 @@ function buildAutoToolboxBriefV2(rows, form) {
 }
 
 /** Human-readable competency line from Workers record (certs text + structured certifications). */
-export function formatOperativeCertsLine(w) {
+export function formatOperativeCertsLine(w, snapshot) {
   if (!w) return "";
   const parts = [];
   if (w.certs?.trim()) parts.push(w.certs.trim());
   (w.certifications || []).forEach((c) => {
     if (c?.certType && c?.expiryDate) {
-      parts.push(`${c.certType} (exp. ${fmtDate(c.expiryDate)})`);
+      parts.push(`${c.certType} (exp. ${snapshot ? publicationDate(c.expiryDate, snapshot) : fmtDate(c.expiryDate)})`);
     } else if (c?.certType) {
       parts.push(c.certType);
     }
@@ -414,10 +414,10 @@ function escHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function loadOrgPrintSettings() {
+function loadOrgPrintSettings(form = {}) {
   let org = {};
   try {
-    org = loadOrgSettingsRaw();
+    org = form.publicationSnapshot ? form.publicationSnapshot.org || {} : loadOrgSettingsRaw();
   } catch {
     org = {};
   }
@@ -429,7 +429,8 @@ function loadOrgPrintSettings() {
     watermarkText: String(org.pdfWatermarkText || "").trim(),
     complianceLine:
       String(org.pdfComplianceLine || "").trim() ||
-      getDocumentCountryPack().controlledDocument,
+      getDocumentCountryPack(form.publicationSnapshot?.marketId || getOrgMarketId()).controlledDocument,
+    locale: form.publicationSnapshot?.locale,
   };
 }
 
@@ -573,7 +574,11 @@ export function buildSitePackSummaryHtml(sitePackMeta, permits = [], projectName
 
 /** RAMS body only (no html/head wrapper). */
 export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll) {
-  const marketId = getOrgMarketId();
+  const snapshot = form.publicationSnapshot;
+  const marketId = snapshot?.marketId || getOrgMarketId();
+  const tx = (key, fallback = key) => documentText(key, fallback, marketId);
+  const fmtDate = (iso) => snapshot ? publicationDate(iso, snapshot) : formatDocumentDate(iso);
+  const fmtDateTime = (iso) => snapshot ? publicationDate(iso, snapshot, true) : formatDocumentDateTime(iso);
   const countryPack = getDocumentCountryPack(marketId);
   const printLabels = getRamsPrintLabels(marketId);
   const docShort = printLabels.docShort;
@@ -741,7 +746,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
     <tr>
       <td style="padding:8px;border:1px solid #e5e5e5;font-size:12px;font-weight:500;vertical-align:top">${escHtml(w.name)}</td>
       <td style="padding:8px;border:1px solid #e5e5e5;font-size:11px;vertical-align:top">${escHtml(w.role || "—")}</td>
-      <td style="padding:8px;border:1px solid #e5e5e5;font-size:11px;vertical-align:top">${escHtml(formatOperativeCertsLine(w) || "—")}</td>
+      <td style="padding:8px;border:1px solid #e5e5e5;font-size:11px;vertical-align:top">${escHtml(formatOperativeCertsLine(w, snapshot) || "—")}</td>
     </tr>`
             )
             .join("");
@@ -1222,9 +1227,9 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
 
   const docStatus = String(form.documentStatus || form.status || "draft");
   const statusLabel = documentStatusLabel(docStatus, marketId);
-  const orgTheme = loadOrgPrintSettings();
+  const orgTheme = loadOrgPrintSettings(form);
   const orgName = orgTheme.orgName;
-  const logoSrc = resolveUtilityMappingLogoSrc(orgTheme.org) || safeImageSrc(orgTheme.org?.logo);
+  const logoSrc = snapshot ? safeImageSrc(orgTheme.org?.logo) : resolveUtilityMappingLogoSrc(orgTheme.org) || safeImageSrc(orgTheme.org?.logo);
   const badgeColor = orgTheme.primaryColor;
   const badgeBg = `${orgTheme.primaryColor}1A`;
   const watermark =
@@ -1267,8 +1272,9 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   const coverMapUrl = staticSiteMapUrl(form.siteLat, form.siteLng);
   const accentColor = orgTheme.accentColor;
 
-  const coverPage = isUtilityMappingOrg()
+  const coverPage = (snapshot ? snapshot.utilityMapping : isUtilityMappingOrg())
     ? `${renderUtilityMappingHeroCover({
+        publishedTheme: snapshot?.utilityMapping,
         title: form.title || printLabels.defaultTitle,
         subtitle: form.scope || printLabels.defaultScope,
         badge: statusLabel,
@@ -1279,6 +1285,7 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
         meta: umCoverMeta,
         footerNote: orgTheme.org?.pdfFooter || "Utility Mapping · u-map.co.uk · Part of IS GROUP",
       })}${renderUtilityMappingDocControlPage({
+        publishedTheme: snapshot?.utilityMapping,
         client: form.client || projName || "",
         title: form.title || printLabels.defaultTitle,
         reportRef: form.documentNo || "",
@@ -1399,15 +1406,15 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
 }
 
 export function generatePrintHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll) {
-  if (isFessOrg()) {
+  if (form.publicationSnapshot ? form.publicationSnapshot.fess : isFessOrg()) {
     return generateFessPrintHTML(form, rows, operatives, projectMap);
   }
-  const printLabels = getRamsPrintLabels(getOrgMarketId());
+  const printLabels = getRamsPrintLabels(form.publicationSnapshot?.marketId || getOrgMarketId());
   const inner = buildRamsPrintBodyHTML(form, rows, operatives, projectMap, printFlags, contentFingerprint, workersAll);
-  const orgTheme = loadOrgPrintSettings();
-  const footer = `${form.documentNo || printLabels.docShort} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
-  const umExtraCss = isUtilityMappingOrg()
-    ? `${utilityMappingCoverSystemCss()}${utilityMappingBodyPrintCss()}`
+  const orgTheme = loadOrgPrintSettings(form);
+  const footer = `${form.documentNo || printLabels.docShort} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${form.publicationSnapshot ? publicationDate(form.issueDate, form.publicationSnapshot) : fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
+  const umExtraCss = (form.publicationSnapshot ? form.publicationSnapshot.utilityMapping : isUtilityMappingOrg())
+    ? `${utilityMappingCoverSystemCss(form.publicationSnapshot?.utilityMapping)}${utilityMappingBodyPrintCss(undefined, undefined, form.publicationSnapshot?.utilityMapping)}`
     : "";
   return wrapRamsPrintDocument(form.title || printLabels.docShort, inner, umExtraCss, footer, orgTheme);
 }
@@ -1434,8 +1441,8 @@ export async function generateRamsProjectPackHTML(form, rows, workers, projects,
   const siteSummary = buildSitePackSummaryHtml(sitePackMeta, permits, form.projectId ? projectMap[form.projectId] : "");
   const combinedBody = `<div class="pack-rams">${ramsInner}</div>${siteSummary}${permitBlocks.join("")}`;
   const pageTitle = `${form.title || "RAMS"} · RAMS + permits (A4)`;
-  const orgTheme = loadOrgPrintSettings();
-  const footer = `${form.documentNo || "RAMS"} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
+  const orgTheme = loadOrgPrintSettings(form);
+  const footer = `${form.documentNo || "RAMS"} · ${String(form.documentStatus || form.status || "draft").replace(/_/g, " ")} · ${form.publicationSnapshot ? publicationDate(form.issueDate, form.publicationSnapshot) : fmtDate(form.issueDate)} · ${orgTheme.orgName}`;
   return wrapRamsPrintDocument(pageTitle, combinedBody, permitExtraCss, footer, orgTheme);
 }
 

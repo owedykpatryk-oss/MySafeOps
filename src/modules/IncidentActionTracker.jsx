@@ -3,9 +3,9 @@ import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { ms } from "../utils/moduleStyles";
-import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
-import { pushRecycleBinItem } from "../utils/recycleBin";
-import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
+import { countryOperationalStorageKey, loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { archiveRecordsToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -293,21 +293,15 @@ export default function IncidentActionTracker() {
   };
 
   const remove = (id) => {
+    const expectedScope = countryOperationalStorageKey(ACTIONS_KEY);
     if (!window.confirm("Delete this action?")) return;
-    setItems((prev) => {
-      const victim = prev.find((x) => x.id === id);
-      if (victim) {
-        pushRecycleBinItem({
-          moduleId: "incident-actions",
-          moduleLabel: "Incident actions",
-          itemType: "incident_action",
-          itemLabel: victim.title || victim.id,
-          sourceKey: ACTIONS_KEY,
-          payload: victim,
-        });
-      }
-      return replaceWithTombstone(prev, id);
+    const next = archiveRecordsToRecycleBin({
+      expectedScope,
+      moduleId: "incident-actions", moduleLabel: "Incident actions", itemType: "incident_action",
+      itemLabel: row => row.title || row.id, sourceKey: ACTIONS_KEY, ids: [id],
     });
+    if (!next) { window.alert("Could not save the recovery copy or deletion. Please retry."); return; }
+    setItems(next);
   };
 
   const handleExportCsv = () => {
@@ -576,4 +570,3 @@ export default function IncidentActionTracker() {
     </div>
   );
 }
-

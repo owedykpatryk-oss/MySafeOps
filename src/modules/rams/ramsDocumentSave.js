@@ -28,6 +28,10 @@ export function commitRamsDocument({ document, editingDocument, expectedScope })
     if (editingDocument ? !existing || existing.deletedAt || snapshot(existing) !== snapshot(editingDocument) : existing) {
       return { ok: false, reason: "document_changed" };
     }
+    // Operatives signed a particular content revision, not future edits to it.
+    if (editingDocument && document.contentHash !== editingDocument.contentHash) {
+      document = { ...document, operativeSignatures: {} };
+    }
     const documents = editingDocument
       ? current.map((row) => row.id === document.id ? document : row)
       : [document, ...current];

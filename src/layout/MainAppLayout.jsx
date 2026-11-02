@@ -1,3 +1,4 @@
+import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, lazy, Suspense, memo, startTransition } from "react";
 import "../styles/workspace.css";
 import "../styles/workspace-more.css";
@@ -399,6 +400,8 @@ function buildNavTabs(marketId = getOrgMarketId(), mode = "default") {
 export default function MainAppLayout() {
   const { caps, role, isPlatformOwner } = useApp();
   const { pushToast } = useToast();
+  const { user } = useSupabaseAuth();
+  const accountScope = user?.id || "local";
   const [workspaceScope, setWorkspaceScope] = useState(() => countryOperationalStorageKey("workspace"));
   useEffect(() => {
     const updateScope = () => setWorkspaceScope(countryOperationalStorageKey("workspace"));
@@ -1050,12 +1053,12 @@ export default function MainAppLayout() {
         ) : null}
         <div className="app-module-shell">
           {view === "settings" ? (
-            <SettingsView key={workspaceScope} initialTab={settingsInitialTab} checkoutReturn={billingCheckoutReturn} />
+            <SettingsView key={`${accountScope}:${workspaceScope}`} initialTab={settingsInitialTab} checkoutReturn={billingCheckoutReturn} />
           ) : (
             <RouteErrorBoundary>
               <RegisterPdfExportProvider viewId={view}>
                 <Suspense fallback={<ViewFallback />}>
-                  <MainComponent key={`${workspaceScope}:${searchNavigationRevision}`} />
+                  <MainComponent key={`${accountScope}:${workspaceScope}:${searchNavigationRevision}`} />
                 </Suspense>
               </RegisterPdfExportProvider>
             </RouteErrorBoundary>

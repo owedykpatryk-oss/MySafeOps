@@ -16,9 +16,10 @@ export function isUtilityMappingPrintTheme() {
  */
 export function utilityMappingBodyPrintCss(
   primary = UTILITY_MAPPING_BRAND.primaryColor,
-  accent = UTILITY_MAPPING_BRAND.accentColor
+  accent = UTILITY_MAPPING_BRAND.accentColor,
+  publishedTheme
 ) {
-  if (!isUtilityMappingPrintTheme()) return "";
+  if (!(publishedTheme ?? isUtilityMappingPrintTheme())) return "";
   return `
   /* —— Contents —— */
   .sr-toc, .gpr-toc, .um-toc-page .sr-toc {

@@ -161,6 +161,7 @@ export const PERMIT_TYPES = {
       "Waste / drainage provisions in place for fluid release",
     ],
     extraFields: [
+      { key:"authorisedPerson", label:"Authorised person (isolation)", type:"text" },
       { key:"equipmentTag", label:"Equipment tag / ID", type:"text" },
       { key:"isolationPoints", label:"Number of isolation points", type:"number" },
       { key:"lotoKeyHolder", label:"LOTO key holder name", type:"text" },
@@ -183,6 +184,7 @@ export const PERMIT_TYPES = {
       "Spill kit and emergency wash available at point of work",
     ],
     extraFields: [
+      { key:"authorisedPerson", label:"Authorised person (isolation)", type:"text" },
       { key:"pipeContents", label:"Pipe contents", type:"text" },
       { key:"workingPressure", label:"Normal working pressure (bar)", type:"number" },
       { key:"temperature", label:"Contents temperature (°C)", type:"number" },

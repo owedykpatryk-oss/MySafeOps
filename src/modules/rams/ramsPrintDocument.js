@@ -140,7 +140,7 @@ export function wrapRamsPrintDocument(pageTitle, bodyInner, extraHeadCss = "", f
   const complianceHtml = theme.complianceLine
     ? `<div style="font-size:9px;color:#94a3b8;margin-top:2px;max-width:72vw">${escHtml(theme.complianceLine)}</div>`
     : "";
-  return `<!DOCTYPE html><html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/><title>${escHtml(pageTitle)}</title>
+  return `<!DOCTYPE html><html lang="${escHtml(themeOrPrimary?.locale || getActiveDocumentLocale())}"><head><meta charset="utf-8"/><title>${escHtml(pageTitle)}</title>
   <style>${ramsDocumentCss(themeOrPrimary)}${extraHeadCss || ""}</style></head><body>
   <table class="rams-page-layout"><tfoot><tr><td><div class="page-footer"><span>${escHtml(footerMeta)}${complianceHtml}</span><span style="display:inline-flex;align-items:center;gap:5px">${renderMySafeOpsMarkSvg(16)}</span></div></td></tr></tfoot><tbody><tr><td>${bodyInner}</td></tr></tbody></table>
   </body></html>`;

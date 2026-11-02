@@ -6,8 +6,8 @@ import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
-import { loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
-import { pushRecycleBinItem, softDeleteToRecycleBin } from "../utils/recycleBin";
+import { countryOperationalStorageKey, loadOrgScoped as load, saveOrgScoped as save } from "../utils/orgStorage";
+import { archiveRecordsToRecycleBin, softDeleteToRecycleBin } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import PageHero from "../components/PageHero";
 import { openHelpGuide } from "../utils/workspaceNavContext";
@@ -795,6 +795,7 @@ export default function GeoPhotos() {
   };
 
   const handleBulkDelete = () => {
+    const expectedScope = countryOperationalStorageKey(STORAGE_KEY);
     const victims = safePhotos.filter((p) => selectedIds.has(p.id));
     if (!victims.length) return;
     const count = victims.length;
@@ -805,18 +806,17 @@ export default function GeoPhotos() {
     ) {
       return;
     }
-    for (const victim of victims) {
-      pushRecycleBinItem({
-        moduleId: "geo-photos",
-        moduleLabel: "Geo-photos",
-        itemType: "geo_photo",
-        itemLabel: geoPhotoPresetLabel(victim.type),
-        sourceKey: STORAGE_KEY,
-        payload: victim,
-      });
-      clearPermitEvidenceForGeoPhoto(victim, { load, save });
+    const next = archiveRecordsToRecycleBin({
+      expectedScope,
+      moduleId: "geo-photos", moduleLabel: "Geo-photos", itemType: "geo_photo",
+      itemLabel: row => geoPhotoPresetLabel(row.type), sourceKey: STORAGE_KEY, ids: victims.map(row => row.id),
+    });
+    if (!next) {
+      pushToast({ type: "error", message: "Could not save the recovery copies or deletion. Please retry." });
+      return;
     }
-    setPhotos((prev) => victims.reduce((acc, v) => replaceWithTombstone(acc, v.id), asPhotoArray(prev)));
+    for (const victim of victims) clearPermitEvidenceForGeoPhoto(victim, { load, save });
+    setPhotos(next);
     setSelectedIds(new Set());
     setDetail(null);
     pushAudit({ action: "geo_photo_bulk_delete", detail: `${count} photo(s)`, module: "geo-photos" });

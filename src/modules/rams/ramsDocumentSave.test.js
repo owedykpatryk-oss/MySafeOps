@@ -47,3 +47,19 @@ describe("RAMS local commit", () => {
     expect(mocks.save).not.toHaveBeenCalled();
   });
 });
+
+it("clears superseded operative signoffs while preserving historical approval events", () => {
+  const signed = { ...original, contentHash: "old", operativeSignatures: { w1: { name: "Worker", dataUrl: "signature" } }, signatureEvents: [{ action: "approval_signed", revision: "1A" }] };
+  mocks.load.mockReturnValue([signed]);
+  const result = commitRamsDocument({ document: { ...signed, title: "Revised", contentHash: "new", revision: "1B" }, editingDocument: signed, expectedScope: args.expectedScope });
+  expect(result.ok).toBe(true);
+  expect(result.documents[0].operativeSignatures).toEqual({});
+  expect(result.documents[0].signatureEvents).toEqual(signed.signatureEvents);
+  expect(signed.operativeSignatures.w1.name).toBe("Worker");
+});
+it("keeps operative signoffs when recording metadata without changing content", () => {
+  const signed = { ...original, contentHash: "same", operativeSignatures: { w1: { name: "Worker" } } };
+  mocks.load.mockReturnValue([signed]);
+  const result = commitRamsDocument({ document: { ...signed, shareToken: "r_token" }, editingDocument: signed, expectedScope: args.expectedScope });
+  expect(result.documents[0].operativeSignatures).toEqual(signed.operativeSignatures);
+});

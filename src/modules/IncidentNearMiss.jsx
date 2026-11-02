@@ -17,7 +17,7 @@ import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
-import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey, ORG_CHANGED_EVENT } from "../utils/orgStorage";
+import { countryOperationalStorageKey, loadOrgScoped as load, saveOrgScoped as save, orgScopedKey, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { COUNTRY_WORKSPACE_CHANGED_EVENT } from "../utils/countryWorkspaces";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
@@ -25,8 +25,8 @@ import RegisterModuleShell from "../components/RegisterModuleShell";
 import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
-import { pushRecycleBinItem } from "../utils/recycleBin";
-import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
+import { archiveRecordsToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows } from "../utils/d1ArrayMerge";
 import { exportCsv } from "../utils/exportCsv";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
@@ -807,16 +807,15 @@ export default function IncidentNearMiss() {
                       type="button"
                       style={{ ...ss.btn, color: "#A32D2D" }}
                       onClick={() => {
+                        const expectedScope = countryOperationalStorageKey(INCIDENTS_KEY);
                         if (!confirm("Delete this record? It moves to Recycle Bin for 7 days.")) return;
-                        pushRecycleBinItem({
-                          moduleId: "incidents",
-                          moduleLabel: "Incidents",
-                          itemType: "incident",
-                          itemLabel: r.ref || r.title || r.id,
-                          sourceKey: INCIDENTS_KEY,
-                          payload: r,
+                        const next = archiveRecordsToRecycleBin({
+                          expectedScope,
+                          moduleId: "incidents", moduleLabel: "Incidents", itemType: "incident",
+                          itemLabel: row => row.ref || row.title || row.id, sourceKey: INCIDENTS_KEY, ids: [r.id],
                         });
-                        setItems((p) => replaceWithTombstone(p, r.id));
+                        if (!next) { window.alert("Could not save the recovery copy or deletion. Please retry."); return; }
+                        setItems(next);
                         pushAudit({ action: "incident_delete", entity: "incident", detail: r.id });
                       }}
                     >

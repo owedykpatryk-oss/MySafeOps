@@ -1,8 +1,9 @@
+import { formatPublicationDate } from "../modules/rams/ramsPublicationDate";
 /**
  * FESS Group — Excel-style RAMS print layout (MC reference structure).
  * Org-exclusive: used when isFessOrg() is true.
  */
-import { escapeHtml as escHtml } from "./htmlEscape";
+import { escapeHtml as escHtml, safeImageSrc } from "./htmlEscape";
 import { canUseFessExclusiveFeatures } from "./fessExclusive";
 import { getRiskLevel, RISK_COLORS } from "../modules/rams/ramsRiskLevel.js";
 import { wrapRamsPrintDocument } from "../modules/rams/ramsPrintDocument.js";
@@ -10,7 +11,8 @@ import { loadOrgSettingsRaw } from "./orgSettingsStorage";
 import { getFessBrandLogoSrc } from "./fessBranding";
 import { getActiveDocumentLocale } from "./countryWorkspaces";
 
-const fmtDate = (iso) => {
+const fmtDate = (iso, snapshot) => {
+  if (snapshot) return formatPublicationDate(iso, snapshot);
   if (!iso) return "—";
   try {
     return new Date(iso).toLocaleDateString(getActiveDocumentLocale(), { day: "2-digit", month: "short", year: "numeric" });
@@ -19,10 +21,11 @@ const fmtDate = (iso) => {
   }
 };
 
-export function fessOrgPrintTheme() {
-  const org = loadOrgSettingsRaw();
+export function fessOrgPrintTheme(form = {}) {
+  const org = form.publicationSnapshot ? form.publicationSnapshot.org || {} : loadOrgSettingsRaw();
   return {
     org,
+    locale: form.publicationSnapshot?.locale,
     primaryColor: org.primaryColor,
     accentColor: org.accentColor,
     complianceLine: org.pdfComplianceLine,
@@ -60,7 +63,7 @@ const fessPrintCss = `
  * RAMS body HTML in FESS Excel layout (no html/head wrapper).
  */
 export function buildFessRamsPrintBodyHTML(form, rows, operatives, projectMap) {
-  if (!canUseFessExclusiveFeatures()) return "";
+  if (!(form.publicationSnapshot ? form.publicationSnapshot.fess : canUseFessExclusiveFeatures())) return "";
   const rowList = Array.isArray(rows) ? rows : [];
   const opList = Array.isArray(operatives) ? operatives : [];
   const projName = form.projectId ? projectMap[form.projectId] || "" : "";
@@ -130,7 +133,7 @@ export function buildFessRamsPrintBodyHTML(form, rows, operatives, projectMap) {
        )}</div>`
     : "";
 
-  const logoSrc = getFessBrandLogoSrc();
+  const logoSrc = form.publicationSnapshot ? safeImageSrc(form.publicationSnapshot.org?.logo) : getFessBrandLogoSrc();
 
   return `<style>${fessPrintCss}</style>
   <div class="fess-rams-cover">
@@ -145,7 +148,7 @@ export function buildFessRamsPrintBodyHTML(form, rows, operatives, projectMap) {
     <div class="fess-rams-meta">
       <div class="fess-rams-cell"><div class="l">Document no.</div>${escHtml(form.documentNo || "—")}</div>
       <div class="fess-rams-cell"><div class="l">Revision</div>${escHtml(form.revision || "1A")}</div>
-      <div class="fess-rams-cell"><div class="l">Issue date</div>${escHtml(fmtDate(form.issueDate))}</div>
+      <div class="fess-rams-cell"><div class="l">Issue date</div>${escHtml(fmtDate(form.issueDate, form.publicationSnapshot))}</div>
       <div class="fess-rams-cell"><div class="l">Status</div>${escHtml(statusLabel)}</div>
       <div class="fess-rams-cell"><div class="l">Job ref</div>${escHtml(form.jobRef || "—")}</div>
       <div class="fess-rams-cell"><div class="l">Project</div>${escHtml(projName || "—")}</div>
@@ -208,9 +211,9 @@ export function buildFessRamsPrintBodyHTML(form, rows, operatives, projectMap) {
 
 /** Full HTML document for FESS RAMS print/preview. */
 export function generateFessPrintHTML(form, rows, operatives, projectMap) {
-  if (!canUseFessExclusiveFeatures()) return "";
+  if (!(form.publicationSnapshot ? form.publicationSnapshot.fess : canUseFessExclusiveFeatures())) return "";
   const inner = buildFessRamsPrintBodyHTML(form, rows, operatives, projectMap);
-  const orgName = String(loadOrgSettingsRaw()?.name || "FESS Group");
-  const footer = `${form.documentNo || "RAMS"} · FESS layout · ${fmtDate(form.issueDate)} · ${orgName}`;
-  return wrapRamsPrintDocument(form.title || "RAMS", inner, "", footer, fessOrgPrintTheme());
+  const orgName = String((form.publicationSnapshot ? form.publicationSnapshot.org : loadOrgSettingsRaw())?.name || "FESS Group");
+  const footer = `${form.documentNo || "RAMS"} · FESS layout · ${fmtDate(form.issueDate, form.publicationSnapshot)} · ${orgName}`;
+  return wrapRamsPrintDocument(form.title || "RAMS", inner, "", footer, fessOrgPrintTheme(form));
 }

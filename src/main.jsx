@@ -1,5 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
+import { installWorkspaceStorageEvents } from "./utils/workspaceStorageEvents";
 // Variable font files are referenced via @font-face in index.css (using original
 // family names so every existing font-family: "DM Sans" / "Plus Jakarta Sans"
 // reference works without changes).
@@ -30,6 +32,8 @@ function scheduleDeferredInit() {
 
 function bootstrap() {
   initClientOpsMonitor();
+  const stopWorkspaceEvents = installWorkspaceStorageEvents(flushSync);
+  if (import.meta.hot) import.meta.hot.dispose(stopWorkspaceEvents);
 
   createRoot(document.getElementById("root")).render(
     <StrictMode>

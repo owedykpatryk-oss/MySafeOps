@@ -27,6 +27,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { D1_BACKUP_PUSH_NAMESPACES } from "../src/lib/d1ImportNamespaces.js";
+import { backupKeyScope, validateBackupBundle } from "../src/utils/backupValidation.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -102,13 +103,15 @@ async function main() {
     process.exit(1);
   }
 
-  const suffix = `_${orgSlug}`;
+  const validation = validateBackupBundle(bundle, { orgId: orgSlug });
+  if (!validation.ok) throw new Error(validation.message);
   const planned = [];
 
   for (const [storageKey, rawVal] of Object.entries(bundle.keys)) {
     if (typeof rawVal !== "string") continue;
-    if (!storageKey.endsWith(suffix)) continue;
-    const ns = storageKey.slice(0, -suffix.length);
+    const scope = backupKeyScope(storageKey, orgSlug);
+    if (!scope) continue;
+    const ns = scope.namespace;
     if (!D1_KNOWN_NAMESPACES.has(ns)) continue;
     let parsed;
     try {
@@ -117,7 +120,7 @@ async function main() {
       continue;
     }
     if (!Array.isArray(parsed)) continue;
-    planned.push({ namespace: ns, dataKey: "main", itemCount: parsed.length, value: parsed });
+    planned.push({ namespace: ns, dataKey: scope.countryId ? `country:${scope.countryId}:main` : "main", itemCount: parsed.length, value: parsed });
   }
 
   if (planned.length === 0) {

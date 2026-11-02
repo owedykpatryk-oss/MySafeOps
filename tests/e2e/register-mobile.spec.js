@@ -27,7 +27,7 @@ test.beforeEach(async ({ page }, testInfo) => {
 });
 
 async function openView(page, view) {
-  await page.goto(`/app?view=${view}`);
+  await page.goto(`/app?view=${view}`, { waitUntil: "domcontentloaded" });
   await expect(page.locator("#main-content")).toBeVisible({ timeout: 30000 });
   const dismiss = page.getByRole("button", { name: "Skip setup for now", exact: true });
   if (await dismiss.isVisible()) await dismiss.click();
@@ -738,9 +738,9 @@ test("permit list and clear filters render without an initialization crash", asy
   await openView(page, "permits");
   await page.getByRole("button", { name: "Skip guide", exact: true }).click();
   await expect(page.getByRole("heading", { name: /Permit/i }).first()).toBeVisible();
-  await page.getByPlaceholder("Search location, worker, issuer, type…").fill("missing permit");
+  await page.getByRole("textbox", { name: "Search permits" }).fill("missing permit");
   await page.getByRole("button", { name: "Clear", exact: true }).click();
-  await expect(page.getByPlaceholder("Search location, worker, issuer, type…")).toHaveValue("");
+  await expect(page.getByRole("textbox", { name: "Search permits" })).toHaveValue("");
   await expect(page.getByText(/Cannot access|Something went wrong/)).toHaveCount(0);
   expect(errors).toEqual([]);
 });

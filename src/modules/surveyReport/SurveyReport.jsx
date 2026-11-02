@@ -1,3 +1,5 @@
+import { getSurveyPersistenceScope, persistSurveyReport } from "./surveyReportPersistence";
+import { useSupabaseAuth } from "../../context/SupabaseAuthContext";
 import { projectDisplayLabel } from "../../utils/projectDisplayLabel";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { isAnthropicConfigured, checkAnthropicProxyReady } from "../../utils/anthropicClient";
@@ -8,7 +10,7 @@ import { useToast } from "../../context/ToastContext";
 import { pushAudit } from "../../utils/auditLog";
 import { stampDocumentAuthorship } from "../../utils/documentAuthorship.js";
 import { ms } from "../../utils/moduleStyles";
-import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
+import { countryOperationalStorageKey, loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import PageHero from "../../components/PageHero";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import {
@@ -122,8 +124,8 @@ import { applyTrialHolesToUtilities, seedTfrCadNotesFromRecords } from "./survey
 import Pas128WorkflowStrip from "./Pas128WorkflowStrip";
 import { listProjectPlans, plansForProject } from "../permits/permitPlanOverlayRegistry";
 import { consumeWorkspaceNavTarget, openWorkspaceView, setWorkspaceNavTarget } from "../../utils/workspaceNavContext";
-import { pushRecycleBinItem } from "../../utils/recycleBin";
-import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
+import { archiveRecordsToRecycleBin } from "../../utils/recycleBin";
+import { liveOrgArrayRows } from "../../utils/d1ArrayMerge";
 import { countGeoPhotosForReport, importGeoPhotosIntoReport as mergeGeoPhotos, geoPhotosToUtilitiesTable, geoPhotosToGiLocationsTable } from "../../utils/geoPhotoIntegrations";
 import { compressImageFile } from "../../utils/geoPhotoUtils";
 import { readCadFile, mergeCadAnalysisIntoReport, applyCadLayerMappings, seedUtilitiesTableFromCad } from "../../utils/surveyDxfAnalyzer";
@@ -167,7 +169,7 @@ import {
 } from "../../utils/documentPropagation";
 
 const STORAGE_KEY = "survey_reports";
-const SURVEY_DRAFT_KEY = "mysafeops_survey_report_editor_draft";
+const SURVEY_DRAFT_PREFIX = "mysafeops_survey_report_editor_draft:v2:";
 const SURVEY_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const ss = {
@@ -779,6 +781,8 @@ function ReportEditor({
   onOpenReport,
 }) {
   const { pushToast } = useToast();
+  const { user } = useSupabaseAuth();
+  const [surveyDraftKey] = useState(() => `${SURVEY_DRAFT_PREFIX}${JSON.stringify([user?.id || "local", countryOperationalStorageKey("workspace"), report.id])}`);
   const [form, setForm] = useState(() => normalizeSurveyReport({ ...report }));
   const [tab, setTab] = useState("details");
   const [simpleMode, setSimpleMode] = useState(() => getSurveySimpleModePref());
@@ -817,13 +821,13 @@ function ReportEditor({
     if (draftPromptRan.current) return;
     draftPromptRan.current = true;
     try {
-      const raw = sessionStorage.getItem(SURVEY_DRAFT_KEY);
+      const raw = sessionStorage.getItem(surveyDraftKey);
       if (!raw) return;
       const draft = JSON.parse(raw);
       if (!draft?.form?.id || draft.form.id !== report.id) return;
       const age = Date.now() - (draft.savedAt || 0);
       if (age < 0 || age > SURVEY_DRAFT_MAX_AGE_MS) {
-        sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+        sessionStorage.removeItem(surveyDraftKey);
         return;
       }
       const when = draft.savedAt
@@ -839,14 +843,14 @@ function ReportEditor({
           setConfirmDialog(null);
         },
         onCancel: () => {
-          sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+          sessionStorage.removeItem(surveyDraftKey);
           setConfirmDialog(null);
         },
       });
     } catch {
       /* ignore */
     }
-  }, [report.id]);
+  }, [report.id, surveyDraftKey]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -858,13 +862,13 @@ function ReportEditor({
         });
         if (payload === lastDraftJsonRef.current) return;
         lastDraftJsonRef.current = payload;
-        sessionStorage.setItem(SURVEY_DRAFT_KEY, payload);
+        sessionStorage.setItem(surveyDraftKey, payload);
       } catch {
         /* quota */
       }
     }, 2200);
     return () => clearTimeout(t);
-  }, [form]);
+  }, [form, surveyDraftKey]);
 
   const projectPlansForForm = useMemo(
     () => (form.projectId ? plansForProject(form.projectId, projectPlans) : []),
@@ -1327,6 +1331,16 @@ function ReportEditor({
     return payload;
   };
 
+  const savePreparedPayload = (payload) => {
+    if (onSave(payload) === true) return true;
+    // Save immediately: the normal draft debounce may not have fired yet.
+    try {
+      sessionStorage.setItem(surveyDraftKey, JSON.stringify({ form: stripSurveyFormForSessionDraft(payload), savedAt: Date.now(), reportId: payload.id }));
+    } catch { /* Preserve the in-memory form if session storage is also unavailable. */ }
+    pushToast({ type: "error", title: "Report not saved", message: "Your draft is retained. Return to its workspace and retry saving." });
+    return false;
+  };
+
   const handleSave = async (extra = {}, opts = {}) => {
     const skipSmartFillPrompt = opts.skipSmartFillPrompt === true;
     setSaving(true);
@@ -1372,9 +1386,9 @@ function ReportEditor({
                   permits,
                 });
                 setForm({ ...p, updatedAt: new Date().toISOString() });
-                onSave(p);
+                if (!savePreparedPayload(p)) return;
                 try {
-                  sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+                  sessionStorage.removeItem(surveyDraftKey);
                 } catch {
                   /* ignore */
                 }
@@ -1387,9 +1401,9 @@ function ReportEditor({
             setConfirmDialog(null);
             setSaving(true);
             try {
-              onSave(payload);
+              if (!savePreparedPayload(payload)) return;
               try {
-                sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+                sessionStorage.removeItem(surveyDraftKey);
               } catch {
                 /* ignore */
               }
@@ -1400,7 +1414,7 @@ function ReportEditor({
         });
         return;
       }
-      onSave(payload);
+      if (!savePreparedPayload(payload)) return;
       if (wasDraft && payload.status === "final") {
         burstSurveyCelebration();
         setHandoverOpen(true);
@@ -1415,7 +1429,7 @@ function ReportEditor({
         durationMs: 2200,
       });
       try {
-        sessionStorage.removeItem(SURVEY_DRAFT_KEY);
+        sessionStorage.removeItem(surveyDraftKey);
       } catch {
         /* ignore */
       }
@@ -3246,6 +3260,13 @@ function ReportEditor({
 }
 
 export default function SurveyReport() {
+  const { user } = useSupabaseAuth();
+  const [persistenceScope] = useState(() => getSurveyPersistenceScope(user?.id || "local"));
+  const persistenceActiveRef = useRef(true);
+  useEffect(() => {
+    persistenceActiveRef.current = true;
+    return () => { persistenceActiveRef.current = false; };
+  }, []);
   const [simpleMode, setSimpleMode] = useState(() => getSurveySimpleModePref());
   const { caps } = useApp();
   const { pushToast } = useToast();
@@ -3343,22 +3364,18 @@ export default function SurveyReport() {
   const ramsById = useMemo(() => Object.fromEntries(ramsDocs.map((d) => [d.id, d])), [ramsDocs]);
 
   const persist = (report, isNew) => {
+    if (!persistenceActiveRef.current) return false;
     if (!ensureProjectLinked({ projectId: report.projectId, projects, moduleLabel: "survey report" })) return;
-    setReports((prev) => {
-      const i = prev.findIndex((x) => x.id === report.id);
-      if (i >= 0) {
-        const n = [...prev];
-        n[i] = report;
-        return n;
-      }
-      return [report, ...prev];
-    });
+    const next = persistSurveyReport(persistenceScope, report);
+    if (!next) return false;
+    setReports(next);
     pushAudit({
       action: isNew ? "survey_report_create" : "survey_report_update",
       entity: "survey_report",
       detail: report.ref || report.id,
     });
     setModal(null);
+    return true;
   };
 
   const duplicateReport = useCallback((report, { asRevision = false } = {}) => {
@@ -3589,26 +3606,29 @@ export default function SurveyReport() {
   }, []);
 
   const handleListDelete = useCallback((r) => {
+    const expectedScope = countryOperationalStorageKey(STORAGE_KEY);
     setListConfirm({
       title: "Delete survey report?",
       message: `${r.ref || r.title || "This report"} moves to Recycle Bin for ${7} days.`,
       tone: "danger",
       confirmLabel: "Delete",
       onConfirm: () => {
-        pushRecycleBinItem({
-          moduleId: "survey-report",
-          moduleLabel: "Survey reports",
-          itemType: "survey_report",
-          itemLabel: r.ref || r.title || r.id,
-          sourceKey: STORAGE_KEY,
-          payload: r,
+        if (persistenceScope !== getSurveyPersistenceScope()) return;
+        const next = archiveRecordsToRecycleBin({
+          expectedScope,
+          moduleId: "survey-report", moduleLabel: "Survey reports", itemType: "survey_report",
+          itemLabel: row => row.ref || row.title || row.id, sourceKey: STORAGE_KEY, ids: [r.id],
         });
-        setReports((p) => replaceWithTombstone(p, r.id));
+        if (!next) {
+          pushToast({ type: "error", title: "Report not deleted", message: "Could not save the recovery copy or deletion. Please retry." });
+          return;
+        }
+        setReports(next);
         pushAudit({ action: "survey_report_delete", entity: "survey_report", detail: r.id });
         setListConfirm(null);
       },
     });
-  }, []);
+  }, [persistenceScope, pushToast]);
 
   const handleProjectHub = useCallback((r) => {
     setWorkspaceNavTarget({

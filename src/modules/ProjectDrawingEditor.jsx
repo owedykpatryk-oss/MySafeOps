@@ -4,7 +4,7 @@ import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { ms } from "../utils/moduleStyles";
 import { exportCsv } from "../utils/exportCsv";
 import PageHero from "../components/PageHero";
-import { getOrgId, loadOrgScoped as load, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import { getOrgId, countryOperationalStorageKey, loadOrgScoped as load, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import { consumeWorkspaceNavTarget, openWorkspaceView } from "../utils/workspaceNavContext";
 import { listProjectPlans } from "./permits/permitPlanOverlayRegistry";
 import {
@@ -210,18 +210,18 @@ function saveR2UploadsList(list) {
   saveOrgScoped(R2_UPLOADS_KEY, list);
 }
 
-function loadPdeSession() {
+function loadPdeSession(key) {
   try {
-    return JSON.parse(sessionStorage.getItem(PDE_SESSION_KEY) || "{}");
+    return JSON.parse(sessionStorage.getItem(key) || "{}");
   } catch {
     return {};
   }
 }
 
-function savePdeSession(partial) {
+function savePdeSession(key, partial) {
   try {
-    const cur = loadPdeSession();
-    sessionStorage.setItem(PDE_SESSION_KEY, JSON.stringify({ ...cur, ...partial, savedAt: new Date().toISOString() }));
+    const cur = loadPdeSession(key);
+    sessionStorage.setItem(key, JSON.stringify({ ...cur, ...partial, savedAt: new Date().toISOString() }));
   } catch {
     /* ignore */
   }
@@ -276,7 +276,12 @@ function shortMapLabel(text, max = 22) {
 }
 
 export default function ProjectDrawingEditor() {
-  const { supabase } = useSupabaseAuth();
+  const { supabase, user } = useSupabaseAuth();
+  const [storageScope] = useState(() => countryOperationalStorageKey("workspace"));
+  const activeRef = useRef(true);
+  useEffect(() => { activeRef.current = true; return () => { activeRef.current = false; }; }, []);
+  const isCurrentWorkspace = useCallback(() => activeRef.current && storageScope === countryOperationalStorageKey("workspace"), [storageScope]);
+  const [pdeSessionKey] = useState(() => `${PDE_SESSION_KEY}:v2:${JSON.stringify([user?.id || "local", countryOperationalStorageKey("workspace")])}`);
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   useD1OrgArraySync({
     storageKey: "mysafeops_projects",
@@ -313,23 +318,23 @@ export default function ProjectDrawingEditor() {
 
   const updateProjectRecord = useCallback(
     (updated) => {
-      if (!updated?.id) return;
+      if (!updated?.id || !isCurrentWorkspace()) return;
       setProjects((prev) => {
         const next = prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
         saveOrgScoped("mysafeops_projects", next);
         return next;
       });
     },
-    [setProjects]
+    [setProjects, isCurrentWorkspace]
   );
   const [objectType, setObjectType] = useState("zone");
   const [visibleType, setVisibleType] = useState("all");
   const [tool, setTool] = useState(() => {
-    const t = loadPdeSession().tool;
+    const t = loadPdeSession(pdeSessionKey).tool;
     return t === "select" || t === "pan" || t === "place" || t === "boundary" || t === "area" || t === "route" ? t : "place";
   });
   const [placeOnly, setPlaceOnly] = useState(() => {
-    const saved = loadPdeSession().placeOnly;
+    const saved = loadPdeSession(pdeSessionKey).placeOnly;
     if (typeof saved === "boolean") return saved;
     if (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches) return true;
     return false;
@@ -341,26 +346,26 @@ export default function ProjectDrawingEditor() {
   const [hospitalBusy, setHospitalBusy] = useState(false);
   const [captureBusy, setCaptureBusy] = useState(false);
   const [sitePackBusy, setSitePackBusy] = useState(false);
-  const [showMapLegend, setShowMapLegend] = useState(() => loadPdeSession().showMapLegend !== false);
+  const [showMapLegend, setShowMapLegend] = useState(() => loadPdeSession(pdeSessionKey).showMapLegend !== false);
   const [mapLayers, setMapLayers] = useState(() => ({ ...DEFAULT_PDE_MAP_LAYERS }));
   const [highlightEscapeRouteId, setHighlightEscapeRouteId] = useState("");
   const [escapeRouteAppendMode, setEscapeRouteAppendMode] = useState(false);
   const [escapeRoutePointIndex, setEscapeRoutePointIndex] = useState(-1);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [snapGrid, setSnapGrid] = useState(() => Boolean(loadPdeSession().snapGrid));
+  const [snapGrid, setSnapGrid] = useState(() => Boolean(loadPdeSession(pdeSessionKey).snapGrid));
   const [listFilter, setListFilter] = useState("");
   const [mapZoom, setMapZoom] = useState(() => {
-    const z = Number(loadPdeSession().mapZoom);
+    const z = Number(loadPdeSession(pdeSessionKey).mapZoom);
     return Number.isFinite(z) ? clamp(z, 0.5, 3) : 1;
   });
-  const [showMapLabels, setShowMapLabels] = useState(() => Boolean(loadPdeSession().showMapLabels ?? true));
-  const [showGeoPreview, setShowGeoPreview] = useState(() => Boolean(loadPdeSession().showGeoPreview));
+  const [showMapLabels, setShowMapLabels] = useState(() => Boolean(loadPdeSession(pdeSessionKey).showMapLabels ?? true));
+  const [showGeoPreview, setShowGeoPreview] = useState(() => Boolean(loadPdeSession(pdeSessionKey).showGeoPreview));
   const [geoAnchor, setGeoAnchor] = useState(() => ({ ...DEFAULT_GEO_ANCHOR }));
   const [siteGeoStatus, setSiteGeoStatus] = useState({ source: "default", busy: false, postcode: "" });
   const [planGeoMode, setPlanGeoMode] = useState("anchor");
   const [planAffine, setPlanAffine] = useState(null);
   const [controlPoints, setControlPoints] = useState(() => [emptyControlPoint(), emptyControlPoint(), emptyControlPoint()]);
-  const [exportPermitRef, setExportPermitRef] = useState(() => String(loadPdeSession().exportPermitRef || ""));
+  const [exportPermitRef, setExportPermitRef] = useState(() => String(loadPdeSession(pdeSessionKey).exportPermitRef || ""));
   const [r2Busy, setR2Busy] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [toast, setToast] = useState(null);
@@ -373,11 +378,11 @@ export default function ProjectDrawingEditor() {
     }
   });
   const [workSurface, setWorkSurface] = useState(() => {
-    const w = loadPdeSession().workSurface;
+    const w = loadPdeSession(pdeSessionKey).workSurface;
     return w === "map" || w === "plan" ? w : "plan";
   });
   const [mapBasemap, setMapBasemap] = useState(() => {
-    const b = loadPdeSession().mapBasemap;
+    const b = loadPdeSession(pdeSessionKey).mapBasemap;
     return b === "satellite" ? "satellite" : "streets";
   });
   const mapCanvasRef = useRef(null);
@@ -538,8 +543,8 @@ export default function ProjectDrawingEditor() {
   }, [projects]);
 
   useEffect(() => {
-    saveProjectDrawingObjects(rows);
-  }, [rows]);
+    if (isCurrentWorkspace()) saveProjectDrawingObjects(rows);
+  }, [rows, isCurrentWorkspace]);
 
   const plansForCurrentProject = useMemo(
     () => projectPlans.filter((p) => p.projectId === projectId),
@@ -556,11 +561,11 @@ export default function ProjectDrawingEditor() {
     }
     setPlanId((cur) => {
       if (cur && plansForCurrentProject.some((p) => p.id === cur)) return cur;
-      const want = loadPdeSession().planByProject?.[projectId];
+      const want = loadPdeSession(pdeSessionKey).planByProject?.[projectId];
       if (want && plansForCurrentProject.some((p) => p.id === want)) return want;
       return plansForCurrentProject[0]?.id || "";
     });
-  }, [plansForCurrentProject, projectId]);
+  }, [plansForCurrentProject, projectId, pdeSessionKey]);
 
   useEffect(() => {
     setHospitalIntel(null);
@@ -623,7 +628,7 @@ export default function ProjectDrawingEditor() {
 
     let cancelled = false;
     const orgSaved = loadDrawingEditorPrefs().geoAnchorByProject?.[projectId];
-    const sessSaved = loadPdeSession().geoAnchorByProject?.[projectId];
+    const sessSaved = loadPdeSession(pdeSessionKey).geoAnchorByProject?.[projectId];
     const saved = orgSaved || sessSaved;
     const hasCustomSaved = saved && typeof saved.lat === "number" && typeof saved.lng === "number" && !isDefaultGeoAnchor(saved);
 
@@ -649,7 +654,7 @@ export default function ProjectDrawingEditor() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, projectSiteLocationSig, currentProject, applyGeoAnchor]);
+  }, [projectId, projectSiteLocationSig, currentProject, applyGeoAnchor, pdeSessionKey]);
 
   useEffect(() => {
     const wasMap = workSurfaceRef.current === "map";
@@ -692,8 +697,8 @@ export default function ProjectDrawingEditor() {
   }, [projectId, planId]);
 
   useEffect(() => {
-    const cur = loadPdeSession();
-    savePdeSession({
+    const cur = loadPdeSession(pdeSessionKey);
+    savePdeSession(pdeSessionKey, {
       mapZoom,
       tool,
       placeOnly,
@@ -707,13 +712,13 @@ export default function ProjectDrawingEditor() {
       geoAnchorByProject: { ...(cur.geoAnchorByProject || {}), ...(projectId ? { [projectId]: geoAnchor } : {}) },
       planByProject: { ...(cur.planByProject || {}), ...(projectId ? { [projectId]: planId } : {}) },
     });
-    if (projectId) {
+    if (projectId && isCurrentWorkspace()) {
       const p = loadDrawingEditorPrefs();
       saveDrawingEditorPrefs({
         geoAnchorByProject: { ...(p.geoAnchorByProject || {}), [projectId]: geoAnchor },
       });
     }
-  }, [mapZoom, tool, placeOnly, snapGrid, showMapLabels, showMapLegend, showGeoPreview, workSurface, mapBasemap, geoAnchor, projectId, planId, exportPermitRef]);
+  }, [mapZoom, tool, placeOnly, snapGrid, showMapLabels, showMapLegend, showGeoPreview, workSurface, mapBasemap, geoAnchor, projectId, planId, exportPermitRef, pdeSessionKey, isCurrentWorkspace]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -1193,7 +1198,7 @@ export default function ProjectDrawingEditor() {
 
   const uploadBlobToOrgR2 = useCallback(
     async (blob, filename) => {
-      if (!blob || !r2Enabled) return null;
+      if (!blob || !r2Enabled || !isCurrentWorkspace()) return null;
       setR2Busy(true);
       let orgIdForPath = getOrgId();
       if (isSupabaseConfigured() && supabase) {
@@ -1204,8 +1209,10 @@ export default function ProjectDrawingEditor() {
         }
       }
       try {
+        if (!isCurrentWorkspace()) return null;
         const file = new File([blob], filename, { type: blob.type || "application/octet-stream" });
         const result = await uploadFileToR2Storage(file, { orgId: orgIdForPath, subPath: "documents" });
+        if (!isCurrentWorkspace()) return null;
         const row = {
           id: `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
           name: filename,
@@ -1229,7 +1236,7 @@ export default function ProjectDrawingEditor() {
         setR2Busy(false);
       }
     },
-    [r2Enabled, supabase]
+    [r2Enabled, supabase, isCurrentWorkspace]
   );
 
   const uploadLastKmlToR2 = async () => {
@@ -1377,13 +1384,13 @@ export default function ProjectDrawingEditor() {
   }, [projectId, hospitalIntel, showHospitalRoute, currentProject, uploadBlobToOrgR2, updateProjectRecord]);
 
   const persistPlanGeoEntry = useCallback((entry) => {
-    if (!projectId || !planId) return;
+    if (!projectId || !planId || !isCurrentWorkspace()) return;
     const key = `${projectId}::${planId}`;
     const p = loadDrawingEditorPrefs();
     saveDrawingEditorPrefs({
       planGeoByPlanKey: { ...(p.planGeoByPlanKey || {}), [key]: entry },
     });
-  }, [projectId, planId]);
+  }, [projectId, planId, isCurrentWorkspace]);
 
   const applyAffineCalibration = useCallback(() => {
     const pts = controlPoints.map((c) => ({

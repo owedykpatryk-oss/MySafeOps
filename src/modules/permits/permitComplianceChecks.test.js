@@ -265,3 +265,24 @@ describe("evaluatePermitCompliance", () => {
     expect(ukUnchecked.legalReady).toBe(false);
   });
 });
+
+describe("isolation permit form acceptance", () => {
+  for (const marketId of ["uk", "pl", "au", "de", "at", "ch"]) {
+    for (const type of ["cold_work", "line_break"]) {
+      it(`${marketId} ${type} can satisfy safety checks using only available form fields`, () => {
+        const definition = getPermitTypesForMarket(marketId)[type];
+        const checklistItems = definition.checklist.map((text, i) => ({ id: `${type}_${i + 1}`, text, required: true }));
+        const permit = {
+          type, description: "Maintenance", location: "Site", issuedBy: "Issuer", issuedTo: "Worker",
+          authorisedByRole: "Supervisor", briefingConfirmedAt: "2026-11-02T07:30:00Z",
+          startDateTime: "2026-11-02T08:00:00Z", endDateTime: "2026-11-02T12:00:00Z",
+          extraFields: Object.fromEntries(definition.extraFields.map((field) => [field.key, field.type === "number" ? 1 : "Recorded evidence"])),
+          checklist: Object.fromEntries(checklistItems.map((item) => [item.id, true])),
+        };
+        expect(evaluatePermitCompliance(permit, checklistItems, { marketId }).legalReady).toBe(true);
+        delete permit.extraFields.authorisedPerson;
+        expect(evaluatePermitCompliance(permit, checklistItems, { marketId }).legalReady).toBe(false);
+      });
+    }
+  }
+});

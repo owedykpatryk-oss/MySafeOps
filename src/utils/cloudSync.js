@@ -37,6 +37,8 @@ export async function uploadBackupToSupabase(supabase, orgSlug, { includeGeocode
   if (!user) throw new Error("Not signed in");
 
   const bundle = presetBundle ?? collectBackupBundle({ includeGeocodeCache });
+  const validation = validateBackupBundle(bundle, { orgId: orgSlug || "default" });
+  if (!validation.ok) throw new Error(validation.message);
   const payload = await encryptBackupForCloud(bundle);
   const { error } = await supabase.from("app_sync").upsert(
     {
@@ -73,7 +75,7 @@ export async function downloadBackupFromSupabase(supabase, orgSlug, { merge = fa
   if (!data?.payload) throw new Error("No cloud backup for this organisation yet.");
 
   const bundle = await decryptCloudBackupPayload(data.payload);
-  const v = validateBackupBundle(bundle);
+  const v = validateBackupBundle(bundle, { orgId: orgSlug || "default" });
   if (!v.ok) throw new Error(v.message);
 
   return restoreBackupBundle(bundle, { merge });

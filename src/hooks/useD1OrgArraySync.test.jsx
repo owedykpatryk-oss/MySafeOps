@@ -75,6 +75,21 @@ async function flush(ms = 60) {
 }
 
 describe("useD1OrgArraySync", () => {
+  it.each(["organisation", "country"])("does not reassign existing rows when %s changes before its event", async (kind) => {
+    let edit;
+    const saves = [];
+    const root = createRoot(document.createElement("div"));
+    try {
+      await act(async () => root.render(<Harness onRender={() => {}} expose={(set) => { edit = set; }} />));
+      await flush();
+      mocks.save.mockImplementation((_key, rows) => { saves.push({ rows, org: mocks.org, country: mocks.country?.id }); return true; });
+      mocks.load.mockReturnValue([{ id: "destination" }]);
+      if (kind === "organisation") mocks.org = "org_y";
+      else mocks.country = { id: "pl", is_primary: false };
+      await act(async () => edit([{ id: "stale-origin" }]));
+      expect(saves.some(({ rows }) => rows.some((r) => r.id === "stale-origin"))).toBe(false);
+    } finally { act(() => root.unmount()); }
+  });
   beforeEach(() => {
     mocks.org = "org_x";
     mocks.country = null;

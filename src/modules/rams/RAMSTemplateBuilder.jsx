@@ -1,6 +1,7 @@
 import { projectDisplayLabel } from "../../utils/projectDisplayLabel";
 import { useState, useEffect, useMemo, useRef, useDeferredValue } from "react";
 import { publicAppUrl } from "../../utils/publicAppUrl";
+import { consumeAiRamsPrefill } from "./ramsAiPrefill";
 import { commitRamsDocument, ramsDocumentStorageScope } from "./ramsDocumentSave";
 import { ramsDraftScope, readRamsDraft, listRamsDrafts, latestRamsDraft, writeRamsDraft, clearRamsDraft, hasLegacyRamsDraft, RAMS_DRAFT_SAVED_EVENT } from "./ramsBuilderDraft";
 import { useSupabaseAuth } from "../../context/SupabaseAuthContext";
@@ -78,7 +79,7 @@ import { exportCsv } from "../../utils/exportCsv";
 import { geocodeAddressNominatim } from "../../utils/geocode";
 import { useToast } from "../../context/ToastContext";
 import { copyCapabilityLink } from "../../utils/copyCapabilityLink";
-import { isPublishedRamsShare, publishRamsShare, revokeRamsShare } from "../../utils/ramsCloudShare";
+import { createRamsPublicationSnapshot, isPublishedRamsShare, publishAndCommitRamsShare, revokeRamsShare } from "../../utils/ramsCloudShare";
 import { orgHasFoodIndustrialPack, orgHasPharmaPack } from "../../utils/industrialSectors";
 import {
   COMPETENT_REVIEW_LABEL,
@@ -6112,6 +6113,9 @@ export default function RAMSTemplateBuilder() {
   const auth = useSupabaseAuth();
   const draftOwnerRef = useRef(null);
   draftOwnerRef.current = { userId: auth.user?.id, localOnly: !auth.supabase };
+  const registerScopeRef = useRef(ramsDocumentStorageScope());
+  const registerActiveRef = useRef(true);
+  useEffect(() => { registerActiveRef.current = true; return () => { registerActiveRef.current = false; }; }, []);
   const currentDraftScope = ramsDraftScope({ ...draftOwnerRef.current, storageScope: ramsDocumentStorageScope() });
   const builderDraftRef = useRef(null);
   const flushDraftRef = useRef(null);
@@ -6166,6 +6170,7 @@ export default function RAMSTemplateBuilder() {
       loadRamsHazardLibrary(),
       import("./constructionQuickPacks"),
     ]).then(([{ library }, { ensureBuiltInConstructionPacks }]) => {
+      if (registerScopeRef.current !== ramsDocumentStorageScope()) return;
       setHazardPacks((prev) => {
         const withBuiltIn = ensureBuiltInConstructionPacks(prev, library, getOrgMarketId());
         const next = ensureOrgExclusiveQuickPacks(withBuiltIn, library, getOrgId());
@@ -6189,6 +6194,7 @@ export default function RAMSTemplateBuilder() {
 
   useEffect(() => {
     const onOrgChange = () => {
+      if (registerScopeRef.current !== ramsDocumentStorageScope()) return;
       setHazardPacks((prev) => {
         const next = filterQuickPacksForOrg(prev, getOrgId());
         if (next.length !== prev.length) save(RAMS_HAZARD_PACKS_KEY, next);
@@ -6238,19 +6244,26 @@ export default function RAMSTemplateBuilder() {
   }, [view, step, form, editedRows, selectedHazards, editingDoc]);
 
   useEffect(() => {
-    const t = setTimeout(() => save(RAMS_ORG_ACTIVITIES_KEY, orgActivities), 600);
+    const t = setTimeout(() => {
+      if (registerScopeRef.current === ramsDocumentStorageScope()) save(RAMS_ORG_ACTIVITIES_KEY, orgActivities);
+    }, 600);
     return () => clearTimeout(t);
   }, [orgActivities]);
   useEffect(() => {
-    const t = setTimeout(() => save(RAMS_HAZARD_PREFS_KEY, hazardPrefs), 600);
+    const t = setTimeout(() => {
+      if (registerScopeRef.current === ramsDocumentStorageScope()) save(RAMS_HAZARD_PREFS_KEY, hazardPrefs);
+    }, 600);
     return () => clearTimeout(t);
   }, [hazardPrefs]);
   useEffect(() => {
-    const t = setTimeout(() => save(RAMS_HAZARD_PACKS_KEY, hazardPacks), 600);
+    const t = setTimeout(() => {
+      if (registerScopeRef.current === ramsDocumentStorageScope()) save(RAMS_HAZARD_PACKS_KEY, hazardPacks);
+    }, 600);
     return () => clearTimeout(t);
   }, [hazardPacks]);
 
   const beginDraft = (documentId) => {
+    if (registerScopeRef.current !== ramsDocumentStorageScope()) return false;
     const scope = ramsDraftScope({ ...draftOwnerRef.current, storageScope: ramsDocumentStorageScope() });
     if (!scope) {
       pushToast({ type: "warn", title: "Sign in to edit RAMS", message: "Your account is not ready. Sign in before opening a document." });
@@ -6263,6 +6276,7 @@ export default function RAMSTemplateBuilder() {
   };
 
   const restoreDraft = (draft) => {
+    if (registerScopeRef.current !== ramsDocumentStorageScope() || draft.scope !== currentDraftScope) return;
     const fi = { ...RAMS_FORM_DEFAULTS, ...draft.form };
     builderDraftRef.current = { scope: draft.scope, documentId: draft.documentId };
     setForm(fi);
@@ -6289,11 +6303,9 @@ export default function RAMSTemplateBuilder() {
     let startStep = 1;
     let usedAi = false;
     try {
-      const raw = sessionStorage.getItem("mysafeops_ai_rams_prefill");
-      if (raw) {
+      const d = consumeAiRamsPrefill(builderDraftRef.current?.scope);
+      if (d) {
         usedAi = true;
-        sessionStorage.removeItem("mysafeops_ai_rams_prefill");
-        const d = JSON.parse(raw);
         formInit = {
           ...formInit,
           title: d.title || "",
@@ -7230,6 +7242,7 @@ export default function RAMSTemplateBuilder() {
         revision: nextRevision,
         revisionSummary: nextRevisionSummary,
         signatureEvents: nextSignatureEvents,
+        operativeSignatures: hasContentChanged ? {} : (form.operativeSignatures || {}),
         id: editingDoc?.id || activeDraft.documentId,
         rows: editedRows,
         status: resolvedStatus,
@@ -7354,8 +7367,10 @@ export default function RAMSTemplateBuilder() {
   };
 
   const deleteDoc = async (id) => {
+    if (registerScopeRef.current !== ramsDocumentStorageScope()) return;
     if (!confirm("Delete this RAMS?")) return;
-    const sharedDoc = ramsDocs.find((d) => d.id === id);
+    const sharedDoc = load("rams_builder_docs", []).find((d) => d.id === id && !d.deletedAt);
+    if (!sharedDoc) return;
     if (sharedDoc?.sharePublishedAt) {
       try {
         await revokeRamsShare(auth.supabase, sharedDoc);
@@ -7364,20 +7379,29 @@ export default function RAMSTemplateBuilder() {
         return;
       }
     }
-    setRamsDocs((prev) => {
-      const victim = prev.find((d) => d.id === id);
-      if (victim) {
-        pushRecycleBinItem({
-          moduleId: "rams",
-          moduleLabel: "RAMS",
-          itemType: "rams_document",
-          itemLabel: victim.title || victim.documentNo || victim.id,
-          sourceKey: "rams_builder_docs",
-          payload: victim,
-        });
-      }
-      return replaceWithTombstone(prev, id);
+    if (registerScopeRef.current !== ramsDocumentStorageScope()) return;
+    const current = load("rams_builder_docs", []);
+    const victim = current.find((d) => d.id === id && !d.deletedAt);
+    if (!victim) return;
+    if (JSON.stringify(victim) !== JSON.stringify(sharedDoc)) {
+      pushToast({ type: "warn", message: "The RAMS changed while revoking its link. Reload and review it before deleting." });
+      return;
+    }
+    const archived = pushRecycleBinItem({
+      moduleId: "rams", moduleLabel: "RAMS", itemType: "rams_document",
+      itemLabel: victim.title || victim.documentNo || victim.id,
+      sourceKey: "rams_builder_docs", payload: victim,
     });
+    if (!archived) {
+      pushToast({ type: "error", message: "RAMS could not be copied to Recycle Bin. The document has been kept." });
+      return;
+    }
+    const documents = replaceWithTombstone(current, id);
+    if (!save("rams_builder_docs", documents)) {
+      pushToast({ type: "error", message: "RAMS could not be deleted. The document and its recovery copy have been kept." });
+      return;
+    }
+    setRamsDocs(documents);
   };
 
   const previewSavedDoc = (doc) => {
@@ -7553,6 +7577,11 @@ export default function RAMSTemplateBuilder() {
   };
 
   const renameDoc = (doc) => {
+    if (registerScopeRef.current !== ramsDocumentStorageScope()) return;
+    if ([doc.documentStatus, doc.status].some(status => ["issued", "approved"].includes(status))) {
+      pushToast({ type: "warn", message: "Open a controlled revision to rename an approved or issued RAMS." });
+      return;
+    }
     const current = String(doc?.title || "").trim();
     const next = prompt("Rename RAMS document title:", current || "RAMS");
     if (next == null) return;
@@ -7561,17 +7590,14 @@ export default function RAMSTemplateBuilder() {
       alert("Title cannot be empty.");
       return;
     }
-    setRamsDocs((prev) =>
-      prev.map((d) =>
-        d.id === doc.id
-          ? {
-              ...d,
-              title: clean,
-              updatedAt: new Date().toISOString(),
-            }
-          : d
-      )
-    );
+    const document = { ...doc, title: clean, updatedAt: new Date().toISOString() };
+    document.contentHash = computeRamsFingerprint(document, document.rows || []);
+    const result = commitRamsDocument({ document, editingDocument: doc, expectedScope: registerScopeRef.current });
+    if (!result.ok) {
+      pushToast({ type: "error", message: "Rename could not be saved. Reload the register and try again." });
+      return;
+    }
+    setRamsDocs(result.documents);
   };
 
   const exportDocJson = (doc) => {
@@ -7679,20 +7705,46 @@ export default function RAMSTemplateBuilder() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       shareToken: undefined,
-      status: parsed.status || "draft",
+      sharePublishedAt: undefined,
+      shareExpiresAt: undefined,
+      shareSourceUpdatedAt: undefined,
+      publicationSnapshot: undefined,
+      status: "draft",
+      documentStatus: "draft",
+      approvedBy: "",
+      approvalDate: "",
+      signatureEvents: [],
+      operativeSignatures: {},
+      clientApproval: null,
+      signed: false,
+      signedAt: null,
+      signedBy: "",
+      competentReviewAck: false,
+      competentReviewAcknowledgedAt: null,
+      competentReviewAcknowledgedBy: "",
       isFavorite: !!parsed.isFavorite,
     };
     doc.contentHash = computeRamsFingerprint(doc, rows);
-    setRamsDocs((prev) => [doc, ...prev]);
+    const result = commitRamsDocument({ document: doc, expectedScope: registerScopeRef.current });
+    if (!result.ok) throw new Error("Import could not be saved. Keep the JSON file and retry after checking storage and workspace.");
+    setRamsDocs(result.documents);
     alert(`Imported: ${doc.title}`);
   };
 
   const copyShareLink = async (doc) => {
+    if (registerScopeRef.current !== ramsDocumentStorageScope()) return;
     try {
-      const { token, publishedAt, expiresAt, shareSourceUpdatedAt } = await publishRamsShare(auth.supabase, doc, getOrgId());
-      setRamsDocs((prev) => prev.map((d) =>
-        d.id === doc.id ? { ...d, shareToken: token, sharePublishedAt: publishedAt, shareExpiresAt: expiresAt, shareSourceUpdatedAt } : d
-      ));
+      const expectedUserId = auth.user?.id;
+      const origin = {
+        expectedUserId,
+        storageScope: registerScopeRef.current,
+        isCurrent: () => registerActiveRef.current && registerScopeRef.current === ramsDocumentStorageScope() && draftOwnerRef.current?.userId === expectedUserId,
+      };
+      const { token, documents } = await publishAndCommitRamsShare(
+        auth.supabase, doc, getOrgId(), createRamsPublicationSnapshot(doc, workers, projects), origin,
+        document => commitRamsDocument({ document, editingDocument: doc, expectedScope: registerScopeRef.current }),
+      );
+      setRamsDocs(documents);
       const url = publicAppUrl(`/app?ramsShare=${encodeURIComponent(token)}`);
       await copyCapabilityLink(url, { pushToast, cloudPublished: true });
     } catch (error) {
@@ -7701,8 +7753,10 @@ export default function RAMSTemplateBuilder() {
   };
 
   const revokeShareLink = async (doc) => {
+    if (registerScopeRef.current !== ramsDocumentStorageScope()) return;
     try {
       await revokeRamsShare(auth.supabase, doc);
+      if (registerScopeRef.current !== ramsDocumentStorageScope()) return;
       setRamsDocs((prev) => prev.map((d) => d.id === doc.id
         ? { ...d, shareToken: undefined, sharePublishedAt: undefined, shareExpiresAt: undefined, shareSourceUpdatedAt: undefined }
         : d));

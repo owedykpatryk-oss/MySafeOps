@@ -3,7 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 // Isolated device-only workspace: no production credentials or cloud writes.
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: "register-mobile.spec.js",
+  globalSetup: "./tests/e2e/operational-global-setup.js",
+  testMatch: ["register-mobile.spec.js", "rams-audit-regressions.spec.js", "workspace-isolation.spec.js"],
   fullyParallel: false,
   workers: 1,
   timeout: 60000,

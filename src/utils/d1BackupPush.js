@@ -1,6 +1,6 @@
 import { d1PutKv, isD1Configured } from "../lib/d1SyncClient";
 import { D1_BACKUP_PUSH_NAMESPACES } from "../lib/d1ImportNamespaces";
-import { validateBackupBundle } from "./backup";
+import { backupKeyScope, validateBackupBundle } from "./backup";
 
 /**
  * Push array-shaped keys from a MySafeOps backup bundle into D1 (org_sync_kv, data_key "main").
@@ -16,22 +16,23 @@ export async function pushBackupBundleToD1(supabase, bundle, opts = {}) {
   if (!isD1Configured()) {
     return { ok: false, pushed: 0, errors: [{ namespace: "_", error: "d1_not_configured" }] };
   }
-  const v = validateBackupBundle(bundle);
-  if (!v.ok) {
-    return { ok: false, pushed: 0, errors: [{ namespace: "_", error: v.message }] };
-  }
   const orgSlug = String(opts.orgSlug || "").trim();
   if (!orgSlug || orgSlug === "default") {
     return { ok: false, pushed: 0, errors: [{ namespace: "_", error: "no_org_slug" }] };
   }
+  const v = validateBackupBundle(bundle, { orgId: orgSlug });
+  if (!v.ok) {
+    return { ok: false, pushed: 0, errors: [{ namespace: "_", error: v.message }] };
+  }
 
-  const suffix = `_${orgSlug}`;
+
   let pushed = 0;
 
   for (const [storageKey, rawVal] of Object.entries(bundle.keys)) {
     if (typeof rawVal !== "string") continue;
-    if (!storageKey.endsWith(suffix)) continue;
-    const ns = storageKey.slice(0, -suffix.length);
+    const scope = backupKeyScope(storageKey, orgSlug);
+    if (!scope) continue;
+    const ns = scope.namespace;
     if (!D1_BACKUP_PUSH_NAMESPACES.has(ns)) continue;
     let parsed;
     try {
@@ -41,7 +42,7 @@ export async function pushBackupBundleToD1(supabase, bundle, opts = {}) {
     }
     if (!Array.isArray(parsed)) continue;
 
-    const put = await d1PutKv(supabase, orgSlug, ns, "main", parsed, undefined);
+    const put = await d1PutKv(supabase, orgSlug, ns, scope.countryId ? `country:${scope.countryId}:main` : "main", parsed, undefined);
     if (!put.ok) {
       errors.push({ namespace: ns, error: String(put.error || "put_failed") });
     } else {

@@ -186,8 +186,8 @@ import {
   buildIntegrationAdaptersStatus,
 } from "./permitIntegrationAdapters";
 import { evaluateWorkerPermitEligibility } from "../../utils/certifications";
-import { pushRecycleBinItem } from "../../utils/recycleBin";
-import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
+import { archiveRecordsToRecycleBin } from "../../utils/recycleBin";
+import { liveOrgArrayRows } from "../../utils/d1ArrayMerge";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
 import { genOpaqueToken } from "../../utils/opaqueToken";
 
@@ -5045,23 +5045,23 @@ export default function PermitSystem() {
     });
   };
   const deletePermit = (id) => {
+    const expectedScope = countryOperationalStorageKey("permits_v2");
     if (!confirm("Delete this permit?")) return;
-    setPermits((prev) => {
-      const victim = prev.find((p) => p.id === id);
-      if (victim) {
-        pushRecycleBinItem({
-          moduleId: "permits",
-          moduleLabel: "Permits",
-          itemType: "permit",
-          itemLabel: victim.description || victim.location || victim.id,
-          sourceKey: "permits_v2",
-          payload: victim,
-        });
-        void logPermitDeletedToSupabase(victim, getOrgId());
-        void dispatchPermitWebhook("deleted", victim);
-      }
-      return replaceWithTombstone(prev, id);
+    const victim = load("permits_v2", []).find(row => row.id === id && !row.deletedAt);
+    const next = archiveRecordsToRecycleBin({
+      expectedScope,
+      moduleId: "permits", moduleLabel: "Permits", itemType: "permit",
+      itemLabel: row => row.description || row.location || row.id, sourceKey: "permits_v2", ids: [id],
     });
+    if (!next) {
+      pushToast({ type: "error", message: "Could not save the recovery copy or deletion. Please retry." });
+      return;
+    }
+    setPermits(next);
+    if (victim) {
+      void logPermitDeletedToSupabase(victim, getOrgId());
+      void dispatchPermitWebhook("deleted", victim);
+    }
   };
 
   // Deferred so a fast typist doesn't force a full re-filter of `permits` (plus gate/
@@ -6217,23 +6217,20 @@ export default function PermitSystem() {
 
   const bulkDeleteSelected = () => {
     if (!hasSelectedPermits) return;
+    const expectedScope = countryOperationalStorageKey("permits_v2");
     if (!window.confirm(`Delete ${selectedPermits.length} selected permit(s)?`)) return;
     const selectedIds = new Set(Object.keys(selectedPermitIds));
-    setPermits((prev) => {
-      prev.forEach((p) => {
-        if (!selectedIds.has(p.id)) return;
-        pushRecycleBinItem({
-          moduleId: "permits",
-          moduleLabel: "Permits",
-          itemType: "permit",
-          itemLabel: p.description || p.location || p.id,
-          sourceKey: "permits_v2",
-          payload: p,
-        });
-        void logPermitDeletedToSupabase(p, getOrgId());
-      });
-      return [...selectedIds].reduce((acc, id) => replaceWithTombstone(acc, id), prev);
+    const victims = load("permits_v2", []).filter(row => selectedIds.has(row.id) && !row.deletedAt);
+    const next = archiveRecordsToRecycleBin({
+      moduleId: "permits", moduleLabel: "Permits", itemType: "permit",
+      itemLabel: row => row.description || row.location || row.id, sourceKey: "permits_v2", ids: [...selectedIds], expectedScope,
     });
+    if (!next) {
+      pushToast({ type: "error", message: "Could not save the recovery copies or deletion. Please retry." });
+      return;
+    }
+    setPermits(next);
+    for (const victim of victims) void logPermitDeletedToSupabase(victim, getOrgId());
     clearPermitSelection();
     trackEvent("permit_bulk_delete", { count: selectedPermits.length });
   };
