@@ -165,6 +165,30 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   };
 }
 
+// Keep the timeout active while consuming the body, not just until headers arrive.
+async function readStorageResponse(url, headers, decode, message) {
+  const controller = new AbortController();
+  let timer;
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch(url, { method: "GET", headers, signal: controller.signal });
+        // Let the caller refresh rejected credentials without waiting for an error body.
+        const payload = response.ok ? await decode(response) : null;
+        return { response, payload };
+      })(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(message));
+          controller.abort();
+        }, 120_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Actual stored file bytes, including older uploads and files retained in the recycle bin. */
 export async function fetchR2StorageUsage(orgId, workspace = getCachedActiveCountryWorkspace(orgId)) {
   const base = getStorageApiBase();
@@ -173,16 +197,16 @@ export async function fetchR2StorageUsage(orgId, workspace = getCachedActiveCoun
   if (!auth.ok) throw new Error("Sign in to check cloud storage.");
   const query = new URLSearchParams({ org: orgId });
   if (workspace?.id && !workspace.is_primary) query.set("country", workspace.id);
-  const read = () => fetch(`${base}/usage?${query}`, { headers: auth.headers });
-  let res = await read();
-  if (res.status === 401) {
+  const read = () => readStorageResponse(`${base}/usage?${query}`, auth.headers, (res) => res.json(), "Storage check timed out. Check your connection, then retry.");
+  let result = await read();
+  if (result.response.status === 401) {
     auth = await buildAuthHeaders({ forceRefresh: true });
-    if (auth.ok) res = await read();
+    if (auth.ok) result = await read();
   }
-  if (!res.ok) throw new Error("Cloud storage usage is temporarily unavailable.");
-  const result = await res.json();
-  if (!Number.isSafeInteger(result.bytes) || result.bytes < 0) throw new Error("Invalid cloud storage usage.");
-  return result.bytes;
+  if (!result.response.ok) throw new Error("Cloud storage usage is temporarily unavailable.");
+  const bytes = result.payload?.bytes;
+  if (!Number.isSafeInteger(bytes) || bytes < 0) throw new Error("Invalid cloud storage usage.");
+  return bytes;
 }
 
 /**
@@ -197,24 +221,18 @@ export async function fetchR2ObjectBlob(key) {
   if (!auth.headers.Authorization) {
     throw new Error("Sign in to download from cloud storage.");
   }
-  let res = await fetch(`${base}/object?key=${encodeURIComponent(key)}`, {
-    method: "GET",
-    headers: auth.headers,
-  });
-  if (res.status === 401 || res.status === 403) {
+  const read = () => readStorageResponse(`${base}/object?key=${encodeURIComponent(key)}`, auth.headers, (res) => res.blob(), "Download timed out. Check your connection, then retry.");
+  let result = await read();
+  if (result.response.status === 401 || result.response.status === 403) {
     auth = await buildAuthHeaders({ forceRefresh: true });
     if (auth.headers.Authorization) {
-      res = await fetch(`${base}/object?key=${encodeURIComponent(key)}`, {
-        method: "GET",
-        headers: auth.headers,
-      });
+      result = await read();
     }
   }
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(json?.error || `Download failed (${res.status})`);
+  if (!result.response.ok) {
+    throw new Error(`Download failed (${result.response.status}). Check your access and connection, then retry.`);
   }
-  return res.blob();
+  return result.payload;
 }
 
 /**

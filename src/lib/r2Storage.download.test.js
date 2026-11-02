@@ -8,7 +8,27 @@ beforeEach(() => {
   mocks.session.mockResolvedValue({ data: { session: { access_token: "initial-test-token", expires_at: Date.now() / 1000 + 3600 } } });
   mocks.refresh.mockResolvedValue({ data: { session: { access_token: "renewed-test-token", expires_at: Date.now() / 1000 + 3600 } } });
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.clearAllMocks(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.clearAllMocks(); });
+
+it.each(["download headers", "download body", "usage headers", "usage body"])("releases stalled %s and allows a fresh retry", async (stage) => {
+  vi.useFakeTimers();
+  const never = () => new Promise(() => {});
+  const download = stage.startsWith("download");
+  const file = new Blob(["pdf"]);
+  const fetch = vi.fn().mockImplementationOnce(stage.endsWith("headers") ? never : async () => ({
+    ok: true, status: 200, blob: never, json: never,
+  })).mockResolvedValue({ ok: true, status: 200, blob: async () => file, json: async () => ({ bytes: 42 }) });
+  vi.stubGlobal("fetch", fetch);
+  const read = () => download ? fetchR2ObjectBlob("files/org_acme/main/site.pdf") : fetchR2StorageUsage("acme", null);
+  let failure;
+  const pending = read().catch((error) => { failure = error; });
+  await vi.advanceTimersByTimeAsync(120_001);
+  expect(failure?.message).toMatch(/timed out/i);
+  expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
+  await pending;
+  expect(await read()).toBe(download ? file : 42);
+  expect(vi.getTimerCount()).toBe(0);
+});
 
 it("renews a rejected session before downloading the private file", async () => {
   const file = new Blob(["pdf"], { type: "application/pdf" });
@@ -18,7 +38,7 @@ it("renews a rejected session before downloading the private file", async () => 
   expect(await fetchR2ObjectBlob("documents/org_x/site.pdf")).toBe(file);
   expect(mocks.refresh).toHaveBeenCalledTimes(1);
   expect(fetch).toHaveBeenLastCalledWith("https://storage.example/object?key=documents%2Forg_x%2Fsite.pdf", {
-    method: "GET", headers: { Authorization: "Bearer renewed-test-token" },
+    method: "GET", headers: { Authorization: "Bearer renewed-test-token" }, signal: expect.any(AbortSignal),
   });
 });
 
