@@ -1,0 +1,35 @@
+.field-home { max-width: 960px; margin: 0 auto; padding: 16px 0 32px; color: var(--color-text-primary); }
+.field-home__hero { background: #123c3a; color: #fff; border-radius: 22px; padding: clamp(20px, 4vw, 36px); margin-bottom: 20px; }
+.field-home__eyebrow { font-size: 11px; letter-spacing: .15em; font-weight: 700; color: #a9e4d4; }
+.field-home h2 { font-size: clamp(26px, 5vw, 36px); margin: 12px 0; letter-spacing: -.03em; }
+.field-home__hero p { max-width: 52ch; line-height: 1.6; color: #e4f2ef; }
+.field-home__connection { display: inline-block; font-size: 12px; padding: 8px 12px; border: 1px solid #65928c; border-radius: 12px; }
+.field-home__site-picker { padding: 18px; border: 1px solid var(--color-border-secondary, #cbd5e1); border-radius: 16px; background: var(--color-background-primary, #fff); }
+.field-home__site-picker label { display: block; font-weight: 700; margin-bottom: 8px; }
+.field-home__site-picker select { width: 100%; min-height: 48px; font: inherit; font-size: 16px; color: inherit; background: var(--color-background-primary, #fff); border: 1px solid var(--color-border-secondary, #cbd5e1); border-radius: 10px; padding: 10px; }
+.field-home__site-picker p { display: flex; align-items: center; gap: 6px; line-height: 1.5; font-size: 14px; }
+.field-home__tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin: 20px 0 24px; padding: 4px; background: var(--color-background-secondary, #f1f5f9); border-radius: 14px; }
+.field-home__tabs button, .field-home__link { min-height: 48px; border: 0; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; color: inherit; background: transparent; padding: 8px 4px; }
+.field-home__tabs button[aria-current] { background: #123c3a; color: #fff; }
+.field-home section { margin-top: 24px; }
+.field-home h3 { font-size: 20px; margin-bottom: 12px; }
+.field-home__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.field-home__card { display: flex; align-items: center; gap: 14px; min-height: 100px; padding: 18px; border: 1px solid var(--color-border-secondary, #cbd5e1); border-radius: 16px; background: var(--color-background-primary, #fff); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.field-home__card > svg { flex-shrink: 0; color: var(--color-accent, #166b56); }
+.field-home__card > span { flex: 1; min-width: 0; }
+.field-home__card strong { display: block; font-size: 16px; }
+.field-home__card small { display: block; margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--color-text-secondary, #475569); }
+.field-home__card:disabled { opacity: .55; cursor: not-allowed; }
+.field-home__card:not(:disabled):hover { border-color: var(--color-accent, #166b56); }
+.field-home button:focus-visible, .field-home select:focus-visible { outline: 3px solid var(--color-accent, #166b56); outline-offset: 3px; }
+.field-home__hint { font-size: 14px; line-height: 1.6; color: var(--color-text-secondary, #475569); }
+.field-home__details { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 18px; border-radius: 12px; background: var(--color-background-secondary, #f1f5f9); }
+.field-home__details dt { font-weight: 700; }.field-home__details dd { margin: 0; overflow-wrap: anywhere; }
+.field-home__link { padding: 10px 16px; border: 1px solid var(--color-border-secondary, #cbd5e1); }
+.field-home__readiness { border-left: 4px solid #b77616; background: var(--color-background-secondary, #f1f5f9); border-radius: 12px; padding: 4px 20px 20px; }
+.field-home__readiness p { line-height: 1.6; }
+@media (max-width: 600px) { .field-home__grid { grid-template-columns: 1fr; } .field-home__card { min-height: 92px; } .field-home__tabs button { font-size: 12px; } }
+@media (max-width: 600px) {
+  .field-home__tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40; margin: 0; border-radius: 16px 16px 0 0; padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--color-border-secondary, #cbd5e1); background: var(--color-background-primary, #fff); box-shadow: 0 -4px 20px #123c3a12; }
+  .field-home__hero { padding: 20px; }
+}

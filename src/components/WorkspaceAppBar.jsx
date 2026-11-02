@@ -130,7 +130,7 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
 
         <div className="app-workspace-header__title">
           <h1>{title}</h1>
-          {navTab === "more" ? <span className="app-workspace-header__subtitle">Browse grouped modules below</span> : null}
+          {navTab === "more" ? <span className="app-workspace-header__subtitle">{view === "field-home" ? "Site information, reports and documents" : "Browse grouped modules below"}</span> : null}
         </div>
 
         <div className="app-workspace-header__actions">

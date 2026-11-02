@@ -5,6 +5,7 @@ import { lazy } from "react";
  * Used by lazy route components and by `viewPrefetch.js` (`prefetchView`).
  */
 export const workspaceViewLoaders = {
+  "field-home": () => import("../modules/FieldHome"),
   dashboard: () => import("../components/AnalyticsDashboard"),
   "management-overview": () => import("../modules/ManagementOverview"),
   projects: () => import("../modules/Projects"),

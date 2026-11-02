@@ -8,6 +8,7 @@
  * (enforced by workspaceViewIds.test.js).
  */
 export const WORKSPACE_VIEW_IDS = [
+  "field-home",
   "dashboard",
   "management-overview",
   "projects",

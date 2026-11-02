@@ -1041,6 +1041,10 @@ export default function MainAppLayout() {
         </Suspense>
       )}
       <main id="main-content" tabIndex={-1} className="app-workspace-main">
+        <div style={{ display: "flex", gap: 8, margin: "12px 0" }} aria-label="Workspace shortcuts">
+          {view !== "field-home" && isModuleVisible("field-home", visibilityOpts) && <button type="button" className="app-panel-surface" style={{ minHeight: 44, padding: "8px 16px", cursor: "pointer", font: "inherit", color: "inherit", borderRadius: 10 }} onClick={() => selectMoreModule("field-home")}>Site workspace</button>}
+          {view === "field-home" && <button type="button" className="app-panel-surface" style={{ minHeight: 44, padding: "8px 16px", cursor: "pointer", font: "inherit", color: "inherit", borderRadius: 10 }} onClick={() => goMainTab("dashboard")}>Office dashboard</button>}
+        </div>
         {unavailableView ? (
           <div className="app-unavailable-view" role="alert">
             <div>
@@ -1250,7 +1254,7 @@ export default function MainAppLayout() {
         )}
       </main>
 
-      <nav
+      {view !== "field-home" && <nav
         className="app-bottom-nav"
         aria-label="Main navigation"
         style={{
@@ -1302,7 +1306,7 @@ export default function MainAppLayout() {
             </button>
           );
         })}
-      </nav>
+      </nav>}
     </div>
   );
 }

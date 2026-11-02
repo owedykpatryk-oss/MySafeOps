@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/operational-global-setup.js",
-  testMatch: ["register-mobile.spec.js", "rams-audit-regressions.spec.js", "workspace-isolation.spec.js"],
+  testMatch: ["register-mobile.spec.js", "rams-audit-regressions.spec.js", "workspace-isolation.spec.js", "field-workspace.spec.js"],
   fullyParallel: false,
   workers: 1,
   timeout: 60000,
