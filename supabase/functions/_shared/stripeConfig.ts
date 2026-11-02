@@ -2,6 +2,16 @@ export type StripeMarketId = "uk" | "au" | "pl" | "de" | "at" | "ch";
 
 export type StripeMode = "live" | "test";
 
+/** QA is the safe default. Only an explicit server setting can enable real charges. */
+export async function resolveStripeMode(
+  supabase: { rpc: (name: string) => PromiseLike<{ data: unknown; error: unknown }> },
+  requestedTestMode: unknown = false,
+): Promise<StripeMode> {
+  const { data, error } = await supabase.rpc("get_billing_runtime_mode");
+  if (error || (data !== "live" && data !== "test")) throw new Error("Billing mode is unavailable");
+  return data === "live" && requestedTestMode !== true ? "live" : "test";
+}
+
 export type StripePricePlanId = "starter" | "team" | "business" | "enterprise";
 
 const MARKET_PRICE_SUFFIX: Record<StripeMarketId, string> = {
@@ -27,7 +37,7 @@ function envTrim(key: string): string {
 }
 
 export function isValidStripeSecret(value: string): boolean {
-  return value.startsWith("sk_");
+  return /^(sk|rk)_(live|test)_/.test(value);
 }
 
 export function isValidWebhookSecret(value: string): boolean {
@@ -49,20 +59,20 @@ export function isValidSiteUrl(value: string): boolean {
 
 export function hasLiveStripeConfig(): boolean {
   const secret = envTrim("STRIPE_SECRET_KEY");
-  return isValidStripeSecret(secret);
+  return /^(sk|rk)_live_/.test(secret);
 }
 
 export function hasTestStripeConfig(): boolean {
   const secret = envTrim("STRIPE_SECRET_KEY_TEST");
-  return secret.startsWith("sk_test_");
+  return /^(sk|rk)_test_/.test(secret);
 }
 
 export function resolveStripeConfig(mode: StripeMode, market: StripeMarketId = "uk"): StripeEnvConfig | null {
   const secretKey =
     mode === "test" ? envTrim("STRIPE_SECRET_KEY_TEST") : envTrim("STRIPE_SECRET_KEY");
   if (!isValidStripeSecret(secretKey)) return null;
-  if (mode === "test" && !secretKey.startsWith("sk_test_")) return null;
-  if (mode === "live" && secretKey.startsWith("sk_test_")) return null;
+  if (!secretKey.startsWith(`sk_${mode}_`) && !secretKey.startsWith(`rk_${mode}_`)) return null;
+  if (!Object.hasOwn(MARKET_PRICE_SUFFIX, market)) return null;
 
   const marketSuffix = MARKET_PRICE_SUFFIX[market] ?? "";
   const priceKeys: Record<StripePricePlanId, string> = {
@@ -95,10 +105,16 @@ export function priceForPlan(config: StripeEnvConfig, planId: StripePricePlanId)
   return priceId && isValidPriceId(priceId) ? priceId : undefined;
 }
 
-export function planFromPriceId(priceId: string): { plan: StripePricePlanId; mode: StripeMode; market: StripeMarketId } | null {
+export function planFromPriceId(
+  priceId: string,
+  expectedMarket?: StripeMarketId,
+  expectedMode?: StripeMode,
+): { plan: StripePricePlanId; mode: StripeMode; market: StripeMarketId } | null {
   const p = priceId.trim();
   for (const mode of ["live", "test"] as const) {
+    if (expectedMode && mode !== expectedMode) continue;
     for (const market of ["uk", "au", "pl", "de", "at", "ch"] as const) {
+      if (expectedMarket && market !== expectedMarket) continue;
       const config = resolveStripeConfig(mode, market);
       if (!config) continue;
       for (const plan of ["starter", "team", "business", "enterprise"] as const) {

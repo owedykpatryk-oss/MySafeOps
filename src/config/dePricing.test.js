@@ -3,8 +3,8 @@ import { DE_PLAN_PRICE_LABELS, stripeEnvKeyForDePlan } from "./dePricing";
 
 describe("dePricing", () => {
   it("exposes EUR price labels", () => {
-    expect(DE_PLAN_PRICE_LABELS.starter).toBe("22 €");
-    expect(DE_PLAN_PRICE_LABELS.team).toBe("129 €");
+    expect(DE_PLAN_PRICE_LABELS.starter).toBe("45 €");
+    expect(DE_PLAN_PRICE_LABELS.team).toBe("189 €");
   });
 
   it("uses _EUR suffix for Stripe env keys", () => {

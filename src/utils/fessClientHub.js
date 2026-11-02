@@ -8,12 +8,11 @@ import { getFessJobStarter } from "./fessJobStarters";
 import { applyAndPersistProjectPlaybook } from "./projectPlaybooks";
 import { openWorkspaceView, setWorkspaceNavTarget } from "./workspaceNavContext";
 import { computeRamsFingerprint } from "../modules/rams/ramsPrintHtml";
-import { todayLocalISO } from "./localDate";
+import { buildRamsCloneForProject } from "./ramsDocumentClone";
 
 const RAMS_KEY = "rams_builder_docs";
 const PROJECTS_KEY = "mysafeops_projects";
 
-const genId = () => `rams_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 /**
  * @param {import("./fessJobStarters").FessJobStarter | null | undefined} [starter]
@@ -34,10 +33,10 @@ export function findProjectForFessSite(siteTemplateId, projects = []) {
   if (!id) return null;
   const list = Array.isArray(projects) ? projects : [];
   return (
-    list.find((p) => p.fessSiteTemplateId === id) ||
+    list.find((p) => !p.deletedAt && p.fessSiteTemplateId === id) ||
     list.find((p) => {
       const tmpl = FESS_CLIENT_SITE_TEMPLATES.find((t) => t.id === id);
-      return tmpl && String(p.name || "").trim().toLowerCase() === tmpl.name.toLowerCase();
+      return tmpl && !p.deletedAt && String(p.name || "").trim().toLowerCase() === tmpl.name.toLowerCase();
     }) ||
     null
   );
@@ -62,9 +61,9 @@ export function getFessSiteDocStats(projectId, rams = [], permits = [], methodSt
       hasFullPack: false,
     };
   }
-  const projectRams = (Array.isArray(rams) ? rams : []).filter((r) => r.projectId === pid);
-  const projectPermits = (Array.isArray(permits) ? permits : []).filter((p) => p.projectId === pid);
-  const projectMs = (Array.isArray(methodStatements) ? methodStatements : []).filter((ms) => ms.projectId === pid);
+  const projectRams = (Array.isArray(rams) ? rams : []).filter((r) => r.projectId === pid && !r.deletedAt);
+  const projectPermits = (Array.isArray(permits) ? permits : []).filter((p) => p.projectId === pid && !p.deletedAt);
+  const projectMs = (Array.isArray(methodStatements) ? methodStatements : []).filter((ms) => ms.projectId === pid && !ms.deletedAt);
   const isActivePermit = (p) => ["active", "issued", "open"].includes(String(p.status || "").toLowerCase());
   const activePermits = projectPermits.filter(isActivePermit).length;
   const lineClearanceOpen = projectPermits.filter(
@@ -167,7 +166,9 @@ export function launchFessSiteJobPack(siteTemplateId, options = {}) {
       } else {
         projects.unshift(merged);
       }
-      save(PROJECTS_KEY, projects);
+      if (save(PROJECTS_KEY, projects) !== true) {
+        return { ok: false, reason: "storage_failed", message: "The site project update could not be saved on this device. Some job documents may already be saved; check the site before retrying." };
+      }
     }
   } catch (e) {
     return { ok: false, message: e?.message || "Playbook could not be applied." };
@@ -205,7 +206,7 @@ export function duplicateFessRamsForSite(siteTemplateId) {
 
   const ramsList = load(RAMS_KEY, []);
   const siteRams = ramsList
-    .filter((r) => r.projectId === project.id)
+    .filter((r) => r.projectId === project.id && !r.deletedAt)
     .sort(
       (a, b) =>
         new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
@@ -218,29 +219,20 @@ export function duplicateFessRamsForSite(siteTemplateId) {
   const source = siteRams[0];
   const starter = getFessJobStarter(tmpl.suggestedJobStarterKey || source.fessJobStarterKey);
   const jobRef = generateFessJobRef(starter);
-  const { shareToken: _st, contentHash: _ch, id: _oid, rows: srcRows, ...rest } = source;
-  const rows = JSON.parse(JSON.stringify(srcRows || []));
-  const now = new Date().toISOString();
   const copy = {
-    ...rest,
-    id: genId(),
+    ...buildRamsCloneForProject(source, project.id, [project]),
     title: source.title || tmpl.name,
     documentNo: jobRef,
     jobRef,
-    issueDate: todayLocalISO(),
-    rows,
-    status: "draft",
     isFavorite: false,
     fessJobStarterKey: starter?.key || source.fessJobStarterKey,
     fessJobStarterLabel: starter?.label || source.fessJobStarterLabel,
     permitControllerName: tmpl.permitControllerHint || source.permitControllerName,
-    createdAt: now,
-    updatedAt: now,
-    shareToken: undefined,
-    contentHash: undefined,
   };
-  copy.contentHash = computeRamsFingerprint(copy, rows);
-  save(RAMS_KEY, [copy, ...ramsList]);
+  copy.contentHash = computeRamsFingerprint(copy, copy.rows);
+  if (save(RAMS_KEY, [copy, ...ramsList]) !== true) {
+    return { ok: false, reason: "storage_failed", message: "The repeat visit RAMS could not be saved on this device. Check storage or workspace access and retry." };
+  }
 
   setWorkspaceNavTarget({ viewId: "rams", projectId: project.id, ramsId: copy.id });
   openWorkspaceView({ viewId: "rams" });

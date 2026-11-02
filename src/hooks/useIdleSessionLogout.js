@@ -9,6 +9,7 @@ import { useApp } from "../context/AppContext";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { clearCloudBackupDek } from "../lib/backupCrypto";
 import { pushAudit } from "../utils/auditLog";
+import { isGprEditorLocked } from "../modules/gprReport/gprEditorSession.js";
 
 export const IDLE_TIMEOUT_MS_DEFAULT = 30 * 60 * 1000;
 export const IDLE_TIMEOUT_MS_ADMIN = 15 * 60 * 1000;
@@ -46,18 +47,17 @@ export function useIdleSessionLogout({ enabled = true } = {}) {
       setWarnSeconds(0);
     };
 
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") bump();
-    };
-
     for (const ev of ACTIVITY_EVENTS) {
       window.addEventListener(ev, bump, { passive: true });
     }
-    document.addEventListener("visibilitychange", onVisibility);
-
-    const tick = window.setInterval(() => {
+    const checkIdle = () => {
       if (signingOutRef.current) return;
       const idle = Date.now() - lastActivityRef.current;
+      if (idle < timeoutMs && document.visibilityState === "visible" && isGprEditorLocked()) {
+        lastActivityRef.current = Date.now();
+        setWarnSeconds(0);
+        return;
+      }
       if (idle >= timeoutMs) {
         signingOutRef.current = true;
         setWarnSeconds(0);
@@ -87,7 +87,12 @@ export function useIdleSessionLogout({ enabled = true } = {}) {
       } else {
         setWarnSeconds(0);
       }
-    }, 1000);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") checkIdle();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    const tick = window.setInterval(checkIdle, 1000);
 
     return () => {
       window.clearInterval(tick);

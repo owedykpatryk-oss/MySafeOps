@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useState, useEffect, useMemo, useRef } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
@@ -314,7 +315,7 @@ function MSForm({ ms, onSave, onClose }) {
                   style={ss.inp}
                 >
                   <option value="">— Select —</option>
-                  {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                  {projects.map(p=><option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
                 </select>
               </div>
               <div>
@@ -622,8 +623,8 @@ function printMS(form, workers, _projects) {
       <td style="padding:6px 8px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:bold;width:40px">${he(s.seq)}</td>
       <td style="padding:6px 8px;border:1px solid #ddd;font-size:12px;font-weight:500">${he(s.title)}</td>
       <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px">${he(s.description||"")}</td>
-      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap">${he(s.responsible||"")}</td>
-      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap">${he(s.duration||"")}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;overflow-wrap:anywhere">${he(s.responsible||"Not specified")}</td>
+      <td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;overflow-wrap:anywhere">${he(s.duration||"Not specified")}</td>
     </tr>`).join("");
 
   const sigRows = isFessOrg()

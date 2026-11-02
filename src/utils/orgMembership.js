@@ -25,6 +25,7 @@ import { getCachedActiveCountryWorkspace } from "./countryWorkspaces";
 
 let orgContextClient = null;
 let orgContextPromise = null;
+let orgContextUserId = null;
 
 export function persistOrgRow(row, { billingScope = "organization" } = {}) {
   const slug = getOrgId();
@@ -43,8 +44,10 @@ export function persistOrgRow(row, { billingScope = "organization" } = {}) {
     writeScopedBilling(ORG_TRIAL_EXTENSION_COUNT_KEY, row.trial_extension_count, slug);
   }
   const activeCountry = getCachedActiveCountryWorkspace(slug);
+  // Once a country is selected, its server-mode entitlement is authoritative,
+  // including for the primary country. Legacy org fields describe live billing only.
   const shouldPersistBilling =
-    billingScope === "workspace" || !activeCountry?.id || Boolean(activeCountry.is_primary);
+    billingScope === "workspace" || !activeCountry?.id;
   if (!shouldPersistBilling) {
     window.dispatchEvent(new CustomEvent("mysafeops-org-updated"));
     return;
@@ -113,10 +116,14 @@ export async function syncOrgSlugIfNeeded(supabase) {
 
 export async function refreshOrgFromSupabase(supabase) {
   if (!supabase) return null;
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const expectedUserId = sessionData?.session?.user?.id;
+  if (sessionError || !expectedUserId) throw new Error("session_changed");
   const { data, error } = await supabase.rpc("ensure_my_org", ensureMyOrgArgs());
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.org_slug) throw new Error("No organisation returned by ensure_my_org.");
+  await assertCurrentOrgContextUser(supabase, expectedUserId);
   setOrgId(row.org_slug);
 
   // Enrich with Stripe renewal / past_due metadata (not yet on ensure_my_org return set).
@@ -136,6 +143,7 @@ export async function refreshOrgFromSupabase(supabase) {
     /* non-fatal — columns may not exist until migration applied */
   }
 
+  await assertCurrentOrgContextUser(supabase, expectedUserId);
   persistOrgRow(row);
   try {
     const { loadOrgSettingsRaw, saveOrgSettingsRaw } = await import("./orgSettingsStorage");
@@ -143,6 +151,7 @@ export async function refreshOrgFromSupabase(supabase) {
     const localName = String(local?.name || "").trim();
     const cloudOrgName = String(row.org_name || "").trim();
     if (cloudOrgName && (!localName || localName === "My Organisation")) {
+      await assertCurrentOrgContextUser(supabase, expectedUserId);
       saveOrgSettingsRaw({ ...local, name: cloudOrgName }, row.org_slug);
     }
   } catch {
@@ -150,7 +159,10 @@ export async function refreshOrgFromSupabase(supabase) {
   }
   try {
     const { syncOrgBrandingFromCloud } = await import("./orgBrandingCloudSync");
-    await syncOrgBrandingFromCloud(supabase, row.org_slug);
+    await assertCurrentOrgContextUser(supabase, expectedUserId);
+    await syncOrgBrandingFromCloud(supabase, row.org_slug, {
+      assertCurrent: () => assertCurrentOrgContextUser(supabase, expectedUserId),
+    });
   } catch {
     /* non-fatal — local branding still works */
   }
@@ -166,6 +178,7 @@ export async function refreshOrgFromSupabase(supabase) {
     } catch {
       /* ignore */
     }
+    await assertCurrentOrgContextUser(supabase, expectedUserId);
     ensureUtilityMappingBranding(row.org_slug, { force });
   } catch {
     /* non-fatal */
@@ -183,16 +196,20 @@ export async function refreshOrgFromSupabase(supabase) {
     } catch {
       /* ignore */
     }
+    await assertCurrentOrgContextUser(supabase, expectedUserId);
     ensureFessBranding(row.org_slug, { force: forceFess });
     ensureFessWorkspaceFocus(row.org_slug, { force: forceFess });
   } catch {
     /* non-fatal */
   }
   try {
-    await syncOrgMarketFromAuth(supabase);
+    await syncOrgMarketFromAuth(supabase, {
+      assertCurrent: () => assertCurrentOrgContextUser(supabase, expectedUserId),
+    });
   } catch {
     /* non-fatal */
   }
+  await assertCurrentOrgContextUser(supabase, expectedUserId);
   return row;
 }
 
@@ -217,22 +234,31 @@ export async function refreshMembershipRoleFromSupabase(supabase) {
   return r;
 }
 
-export function ensureUserOrgContext(supabase) {
+export function ensureUserOrgContext(supabase, userId) {
   if (!supabase) return Promise.resolve(null);
-  if (orgContextPromise && orgContextClient === supabase) return orgContextPromise;
+  const expectedUserId = String(userId || "").trim();
+  if (!expectedUserId) return Promise.reject(new Error("missing_user_id"));
+  if (orgContextPromise && orgContextClient === supabase && orgContextUserId === expectedUserId) return orgContextPromise;
 
-  const sharedPromise = ensureUserOrgContextOnce(supabase).finally(() => {
+  const sharedPromise = ensureUserOrgContextOnce(supabase, expectedUserId).finally(() => {
     if (orgContextPromise === sharedPromise) {
       orgContextPromise = null;
       orgContextClient = null;
+      orgContextUserId = null;
     }
   });
   orgContextClient = supabase;
+  orgContextUserId = expectedUserId;
   orgContextPromise = sharedPromise;
   return sharedPromise;
 }
 
-async function ensureUserOrgContextOnce(supabase) {
+async function assertCurrentOrgContextUser(supabase, expectedUserId) {
+  const { data, error } = await supabase.auth.getSession();
+  if (error || data?.session?.user?.id !== expectedUserId) throw new Error("session_changed");
+}
+
+async function ensureUserOrgContextOnce(supabase, expectedUserId) {
   if (!supabase) return null;
   const { data, error } = await supabase.rpc("ensure_my_org", ensureMyOrgArgs());
   if (error) throw error;
@@ -240,6 +266,9 @@ async function ensureUserOrgContextOnce(supabase) {
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.org_slug) throw new Error("No organisation returned by ensure_my_org.");
 
+  // The RPC can outlive sign-out. Never apply an old user's org or consume an
+  // invite after a different account has become the active Supabase session.
+  await assertCurrentOrgContextUser(supabase, expectedUserId);
   setOrgId(row.org_slug);
   clearPendingInvite();
   persistOrgRow(row);
@@ -251,6 +280,7 @@ async function ensureUserOrgContextOnce(supabase) {
     // Fresh org with empty / default local branding: seed display name from ensure_my_org,
     // never leave the door open for stale cross-org localStorage branding.
     if (cloudOrgName && (!localName || localName === "My Organisation")) {
+      await assertCurrentOrgContextUser(supabase, expectedUserId);
       saveOrgSettingsRaw({ ...local, name: cloudOrgName }, row.org_slug);
     }
   } catch {
@@ -258,7 +288,10 @@ async function ensureUserOrgContextOnce(supabase) {
   }
   try {
     const { syncOrgBrandingFromCloud } = await import("./orgBrandingCloudSync");
-    await syncOrgBrandingFromCloud(supabase, row.org_slug);
+    await assertCurrentOrgContextUser(supabase, expectedUserId);
+    await syncOrgBrandingFromCloud(supabase, row.org_slug, {
+      assertCurrent: () => assertCurrentOrgContextUser(supabase, expectedUserId),
+    });
   } catch {
     /* non-fatal */
   }
@@ -274,6 +307,7 @@ async function ensureUserOrgContextOnce(supabase) {
     } catch {
       /* ignore */
     }
+    await assertCurrentOrgContextUser(supabase, expectedUserId);
     ensureUtilityMappingBranding(row.org_slug, { force });
   } catch {
     /* non-fatal */
@@ -291,30 +325,35 @@ async function ensureUserOrgContextOnce(supabase) {
     } catch {
       /* ignore */
     }
+    await assertCurrentOrgContextUser(supabase, expectedUserId);
     ensureFessBranding(row.org_slug, { force: forceFess });
     ensureFessWorkspaceFocus(row.org_slug, { force: forceFess });
   } catch {
     /* non-fatal */
   }
   try {
-    await syncOrgMarketFromAuth(supabase);
+    await syncOrgMarketFromAuth(supabase, {
+      assertCurrent: () => assertCurrentOrgContextUser(supabase, expectedUserId),
+    });
   } catch {
     /* non-fatal */
   }
+  await assertCurrentOrgContextUser(supabase, expectedUserId);
   pushAudit({ action: "org_context_sync", entity: "org", detail: row.org_slug });
   return row;
 }
 
 export async function extendOrgTrial(supabase) {
   if (!supabase) throw new Error("Cloud sign-in required to extend trial.");
-  const { data, error } = await supabase.rpc("extend_org_trial");
+  const slug = getOrgId();
+  const { data, error } = await supabase.rpc("extend_org_trial", { p_org_slug: slug });
   if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
   if (row?.trial_ends_at) {
-    writeScopedBilling(ORG_TRIAL_ENDS_AT_KEY, row.trial_ends_at);
+    writeScopedBilling(ORG_TRIAL_ENDS_AT_KEY, row.trial_ends_at, slug);
   }
   if (row?.trial_extension_count != null) {
-    writeScopedBilling(ORG_TRIAL_EXTENSION_COUNT_KEY, row.trial_extension_count);
+    writeScopedBilling(ORG_TRIAL_EXTENSION_COUNT_KEY, row.trial_extension_count, slug);
   }
   window.dispatchEvent(new CustomEvent("mysafeops-org-updated"));
   return row;

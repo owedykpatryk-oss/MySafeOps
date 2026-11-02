@@ -408,14 +408,14 @@ export default function PlHarmfulFactorsRegister() {
                         type="button"
                         style={ss.btn}
                         onClick={() => {
-                          if (!window.confirm("Usunąć wpis z rejestru? Rejestr przechowuje się 40 lat.")) return;
-                          softDeleteToRecycleBin({
+                          if (!softDeleteToRecycleBin({
+                            confirmMessage: "Usunąć wpis z rejestru? Rejestr przechowuje się 40 lat.",
                             moduleId: "pl-czynniki",
                             moduleLabel: "Czynniki szkodliwe",
-                            itemId: r.id,
+                            sourceKey: STORAGE_KEY,
                             itemLabel: r.nazwa,
                             payload: r,
-                          });
+                          })) return;
                           persist(replaceWithTombstone(items, r.id));
                           pushAudit({ action: "pl_czynnik_delete", entity: "pl-czynniki", detail: r.nazwa });
                         }}

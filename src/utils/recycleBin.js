@@ -1,4 +1,8 @@
 import { loadOrgScoped, saveOrgScoped } from "./orgStorage";
+import { replaceWithTombstone } from "./d1ArrayMerge";
+import { OPS_TOAST_EVENT_NAME } from "./clientOpsMonitor";
+import { getOrgMarketId } from "./orgMarket";
+import { tf } from "../i18n/workspaceStrings";
 
 export const RECYCLE_BIN_KEY = "mysafeops_recycle_bin_v1";
 export const RECYCLE_RETENTION_DAYS = 7;
@@ -32,7 +36,7 @@ function readBinRaw() {
 }
 
 function writeBin(items) {
-  saveOrgScoped(RECYCLE_BIN_KEY, items);
+  return saveOrgScoped(RECYCLE_BIN_KEY, items);
 }
 
 function readCleanBin() {
@@ -73,14 +77,15 @@ export function pushRecycleBinItem({
     expiresAt,
   };
   const current = readCleanBin();
-  writeBin([entry, ...current].slice(0, MAX_BIN_ITEMS));
+  if (writeBin([entry, ...current].slice(0, MAX_BIN_ITEMS)) !== true) return null;
   return entry;
 }
 
 const DEFAULT_SOFT_DELETE_MSG = "Delete this record? It moves to Recycle Bin for 7 days.";
 
 /**
- * Confirm dialog + queue payload for 7-day restore. Returns true when the caller should remove from live storage.
+ * Confirm, archive and persist the deletion before returning true. Callers then
+ * mirror the tombstone in React state. Failed writes leave the live record intact.
  */
 export function softDeleteToRecycleBin({
   confirmMessage = DEFAULT_SOFT_DELETE_MSG,
@@ -91,22 +96,35 @@ export function softDeleteToRecycleBin({
   sourceKey,
   payload,
 }) {
-  if (!payload || typeof payload !== "object") return false;
+  if (!sourceKey || !payload?.id || payload.deletedAt) return false;
   if (!window.confirm(confirmMessage)) return false;
-  pushRecycleBinItem({ moduleId, moduleLabel, itemType, itemLabel, sourceKey, payload });
+  const current = loadOrgScoped(sourceKey, []);
+  const live = current.find(row => row?.id === payload.id && !row.deletedAt);
+  if (!live) return false;
+  const notify = (key, type, vars = {}) => window.dispatchEvent(new CustomEvent(OPS_TOAST_EVENT_NAME, {
+    detail: { type, message: tf(key, getOrgMarketId(), vars) },
+  }));
+  const archived = pushRecycleBinItem({ moduleId, moduleLabel, itemType, itemLabel, sourceKey, payload: live });
+  if (!archived) { notify("recordCouldNotRemove", "warn"); return false; }
+  if (!saveOrgScoped(sourceKey, replaceWithTombstone(current, live.id))) {
+    deleteRecycleBinEntry(archived.id);
+    notify("recordCouldNotRemove", "warn");
+    return false;
+  }
+  notify("recordRemoved", "success", { name: itemLabel || live.name || live.title || live.id, days: RECYCLE_RETENTION_DAYS });
   return true;
 }
 
 export function deleteRecycleBinEntry(entryId) {
   const current = readCleanBin();
   const next = current.filter((x) => x.id !== entryId);
-  writeBin(next);
+  return writeBin(next) === true;
 }
 
 export function purgeExpiredRecycleBinEntries() {
   const raw = readBinRaw();
   const clean = cleanupEntries(raw);
-  writeBin(clean);
+  if (writeBin(clean) !== true) return 0;
   return Math.max(0, (Array.isArray(raw) ? raw.length : 0) - clean.length);
 }
 
@@ -118,6 +136,9 @@ export function restoreRecycleBinEntry(entryId) {
   if (!Array.isArray(list)) return { ok: false, reason: "Restore target is not a list." };
   const payload = entry.payload;
   const payloadId = payload?.id;
+  if (payloadId && list.some((row) => row?.id === payloadId && !row.deletedAt)) {
+    return { ok: false, reason: "A live record with this ID already exists. Remove or review it before restoring the older copy." };
+  }
   const restoredAt = new Date().toISOString();
   const livePayload =
     payload && typeof payload === "object"
@@ -133,7 +154,11 @@ export function restoreRecycleBinEntry(entryId) {
   } else {
     next = [livePayload, ...list];
   }
-  saveOrgScoped(entry.sourceKey, next);
-  writeBin(current.filter((x) => x.id !== entryId));
+  if (saveOrgScoped(entry.sourceKey, next) !== true) {
+    return { ok: false, reason: "The restored record could not be saved on this device." };
+  }
+  if (writeBin(current.filter((x) => x.id !== entryId)) !== true) {
+    return { ok: true, warning: "The record was restored, but its Recycle Bin entry could not be removed." };
+  }
   return { ok: true };
 }

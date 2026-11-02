@@ -88,7 +88,7 @@ export function syncFessMsFromRams(ramsDoc, options = {}) {
     list.unshift(ms);
   }
 
-  save(MS_KEY, list);
+  if (save(MS_KEY, list) !== true) return { ok: false, reason: "storage_failed", ms: null, created: false };
   return { ok: true, ms, created };
 }
 

@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../../utils/projectDisplayLabel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "../../styles/gpr-report.css";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
@@ -10,6 +11,8 @@ import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load, saveOrgScoped as save } from "../../utils/orgStorage";
 import { downloadBlob } from "../../utils/downloadBlob";
 import { safeHttpUrl } from "../../utils/safeUrl.js";
+import { reviewGprEvidence } from "../../utils/gprEvidenceAiClient.js";
+import { appApiUrl } from "../../utils/appApiUrl";
 import { siteContextBadgeLabel } from "../../utils/inheritSiteContext";
 import PageHero from "../../components/PageHero";
 import { D1ModuleSyncBanner } from "../../components/D1ModuleSyncBanner";
@@ -18,6 +21,8 @@ import ModuleOverlay from "../../components/ModuleOverlay";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import SurveyLivePreviewDock from "../surveyReport/SurveyLivePreviewDock";
 import GprEditorHero from "./GprEditorHero";
+import GprEquipmentProfileImages from "./GprEquipmentProfileImages";
+import GprEditorStepNav from "./GprEditorStepNav";
 import GprInsightPanel from "./GprInsightPanel";
 import GprListStatsBar from "./GprListStatsBar";
 import GprListRow from "./GprListRow";
@@ -30,9 +35,11 @@ import GprScanPanelGrid from "./GprScanPanelGrid";
 import GprAcquisitionDiagram from "./GprAcquisitionDiagram";
 import GprBlockersPanel from "./GprBlockersPanel";
 import { applyGprAutofix } from "./gprAutofix";
+import { buildGprBlockers, buildGprIssueChecklist } from "./gprReportBlockers";
+import { suggestContinuousUtilities } from "./gprNarrativeAutomation.js";
 import { pushGprIntoLinkedSurvey } from "../surveyReport/surveyGprBridge";
 import { filterGprReports, groupGprReportsByProject, suggestDeliverableFlags, GPR_LIST_STATUS_FILTERS } from "./gprReportListHelpers";
-import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
+import { consumeWorkspaceNavTarget, peekWorkspaceNavTarget } from "../../utils/workspaceNavContext";
 import { countGprGeoPhotos, importGeoPhotosIntoGprReport } from "../../utils/gprGeoIntegrations";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
@@ -40,6 +47,9 @@ import {
   ANOMALY_CONFIDENCE,
   ANOMALY_TYPES,
   blankGprAnomaly,
+  blankGprAnomalyFigure,
+  GPR_ANOMALY_FIGURE_LIMIT,
+  GPR_ANOMALY_FIGURE_ROLES,
   blankGprEquipment,
   blankGprReport,
   CALIBRATION_METHODS,
@@ -67,6 +77,7 @@ import GprLineLengthSummaryCard from "./GprLineLengthSummaryCard.jsx";
 import GprCadImportCard from "./GprCadImportCard.jsx";
 import { importGprCadFile } from "./gprCadImport.js";
 import { downloadGprReportPdf } from "./gprReportPdf";
+import { downloadGprReportWord } from "./gprReportWord";
 import {
   gprReportQuality,
   nextGprRef,
@@ -84,6 +95,7 @@ import { gprTabComplete, GPR_EDITOR_TABS } from "./gprReportEditorNav";
 import { applyGprSmartNarratives,
   applyPrebuiltGprPack,
   fetchEnvironmentalIntoReport,
+  fetchWaterIntoReport,
   fetchGeologyIntoReport,
   prefillGprFromProject,
   runGprSmartFill,
@@ -95,10 +107,27 @@ import { applyGprSmartNarratives,
   importChainageFromSurveyCad,
   buildGprLineLengthNarrative,
 } from "./gprReportSmart";
+import { applyGprFindingsDraft } from "./gprNarrativeAutomation.js";
 import { applyIndustryGprTemplate } from "./gprReportTemplateContext";
 import GprPreSurveyCard from "./GprPreSurveyCard";
-import { applyGprStartHereCapture, captureGprStartHere, blankGprSitePhoto } from "./gprPreSurvey";
+import { applyGprStartHereCapture, captureGprStartHere, blankGprSitePhoto, isIndoorGprSurvey } from "./gprPreSurvey";
 import { compressImageFile } from "../../utils/geoPhotoUtils";
+import { lookupSitePostcode } from "../../utils/siteAddressLookup.js";
+import { reverseUkPostcode } from "../../utils/postcodeLookup.js";
+import { getOrgSettings } from "../../utils/orgSettingsStorage";
+import {
+  britishNationalGridToWgs84,
+  normaliseWhat3Words,
+  parseBritishNationalGrid,
+  wgs84ToBritishNationalGrid,
+} from "../../utils/britishNationalGrid.js";
+import { listUtilityMappingClients, utilityMappingClientLogoUrl } from "../../utils/utilityMappingClients.js";
+import GprThemePicker from "./GprThemePicker.jsx";
+import { gprThemeCssVariables } from "./gprVisualTheme.js";
+import GprEvidencePanel from "./GprEvidencePanel.jsx";
+import GprImageAnnotator from "./GprImageAnnotator.jsx";
+import { buildGprEvidenceReviewPayload, mergeGprEvidenceReview } from "./gprEvidence.js";
+import { clearGprEditorSession, readGprEditorSession, writeGprEditorSession } from "./gprEditorSession.js";
 
 const STORAGE_KEY = "gpr_reports";
 
@@ -107,11 +136,11 @@ const ss = {
   ta: {
     width: "100%",
     padding: "10px 12px",
-    border: "0.5px solid var(--color-border-secondary,#ccc)",
-    borderRadius: 6,
+    border: "1px solid #64748b",
+    borderRadius: 8,
     fontSize: 16,
-    background: "var(--color-background-primary,#fff)",
-    color: "var(--color-text-primary)",
+    background: "#fff",
+    color: "#0f172a",
     fontFamily: "DM Sans,sans-serif",
     boxSizing: "border-box",
     resize: "vertical",
@@ -120,16 +149,18 @@ const ss = {
   input: {
     width: "100%",
     padding: "10px 12px",
-    border: "0.5px solid var(--color-border-secondary,#ccc)",
-    borderRadius: 6,
+    border: "1px solid #64748b",
+    borderRadius: 8,
     fontSize: 16,
     boxSizing: "border-box",
     minHeight: 44,
+    background: "#fff",
+    color: "#0f172a",
   },
   sectionHead: {
-    fontSize: 11,
-    fontWeight: 600,
-    color: "var(--color-text-secondary)",
+    fontSize: 12,
+    fontWeight: 800,
+    color: "#1e3a5f",
     textTransform: "uppercase",
     letterSpacing: "0.05em",
     margin: "18px 0 10px",
@@ -139,19 +170,19 @@ const ss = {
     gap: 6,
     flexWrap: "wrap",
     marginBottom: 16,
-    borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
+    borderBottom: "1px solid #cbd5e1",
     paddingBottom: 10,
   },
   tab: (active) => ({
     padding: "10px 14px",
     minHeight: 44,
     borderRadius: 6,
-    border: "none",
+    border: active ? "1px solid #0f766e" : "1px solid #cbd5e1",
     fontSize: 13,
     fontWeight: active ? 600 : 400,
     cursor: "pointer",
-    background: active ? "#ccfbf1" : "transparent",
-    color: active ? "#0f766e" : "var(--color-text-secondary)",
+    background: active ? "#ccfbf1" : "#fff",
+    color: active ? "#115e59" : "#334155",
     fontFamily: "DM Sans,sans-serif",
     touchAction: "manipulation",
   }),
@@ -175,10 +206,47 @@ const TABS = GPR_EDITOR_TABS.map((t) => ({ id: t.id, label: TAB_LABELS[t.id] || 
 
 function Field({ label, children }) {
   return (
-    <label style={{ display: "block", marginBottom: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 4, color: "var(--color-text-secondary)" }}>{label}</div>
+    <label className="app-gpr-field">
+      <div className="app-gpr-field__label">{label}</div>
       {children}
     </label>
+  );
+}
+
+function GprEquipmentProfileCard({ preset }) {
+  if (!preset || preset.key === "custom") return null;
+  const frequencyLabel = preset.frequencyRangeMhz ? `${preset.frequencyRangeMhz} MHz sweep` : `${preset.antennaFrequencyMhz} MHz`;
+  const facts = preset.techHighlights?.length
+    ? preset.techHighlights
+    : [
+        `${preset.antennaFrequencyMhz} MHz`,
+        `${preset.channels} channel${preset.channels === 1 ? "" : "s"}`,
+        preset.processingSoftware,
+      ].filter(Boolean);
+
+  return (
+    <section className="app-gpr-equipment-profile" aria-label={`${preset.manufacturer} ${preset.model} technical profile`}>
+      <GprEquipmentProfileImages key={preset.key} preset={preset} />
+      <div className="app-gpr-equipment-profile__body">
+        <p className="app-gpr-equipment-profile__eyebrow">Selected equipment</p>
+        <h3>{preset.manufacturer} {preset.model}</h3>
+        <div className="app-gpr-equipment-profile__metrics">
+          <span><strong>{frequencyLabel}</strong></span>
+          <span><strong>{preset.channels}</strong> channel{preset.channels === 1 ? "" : "s"}</span>
+          <span><strong>{preset.defaultVelocityCmNs}</strong> cm/ns default</span>
+        </div>
+        <p className="app-gpr-equipment-profile__configuration">{preset.configuration}</p>
+        <ul>
+          {facts.map((fact) => <li key={fact}>{fact}</li>)}
+        </ul>
+        <div className="app-gpr-equipment-profile__footer">
+          {preset.processingSoftware ? <span>Software: {preset.processingSoftware}</span> : <span>Software: set per mobilisation</span>}
+          {preset.sourceUrl ? (
+            <a href={preset.sourceUrl} target="_blank" rel="noopener noreferrer">Official product information ↗</a>
+          ) : null}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -188,8 +256,12 @@ export default function GprReport() {
   const [reports, setReports] = useState(() => load(STORAGE_KEY, []));
   const [projects, setProjects] = useState(() => load("mysafeops_projects", []));
   const [geoPhotos, setGeoPhotos] = useState(() => load("geo_photos", []));
-  const [modal, setModal] = useState(null);
-  const [tab, setTab] = useState("setup");
+  const [modal, setModal] = useState(() => {
+    const restored = readGprEditorSession();
+    return restored ? { isNew: Boolean(restored.isNew), data: restored.data } : null;
+  });
+  const editorOpenRef = useRef(false);
+  const [tab, setTab] = useState(() => readGprEditorSession()?.tab || "setup");
   const [busy, setBusy] = useState("");
   const [search, setSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -215,6 +287,7 @@ export default function GprReport() {
   }, []);
   const [depthCalcNs, setDepthCalcNs] = useState("");
   const [lightboxRg, setLightboxRg] = useState(null);
+  const [imageEdit, setImageEdit] = useState(null);
   const [listStatus, setListStatus] = useState("all");
   const [listProject, setListProject] = useState("");
   const [groupByProject, setGroupByProject] = useState(true);
@@ -251,7 +324,8 @@ export default function GprReport() {
   const d1OutboxPending = d1RepO || d1ProjO || d1GeoO;
 
   const surveyReports = useMemo(() => load("survey_reports", []), [dataRefreshTick]);
-  const listSummary = useMemo(() => summarizeGprReportList(reports), [reports]);
+  const liveReports = useMemo(() => liveOrgArrayRows(reports), [reports]);
+  const listSummary = useMemo(() => summarizeGprReportList(liveReports), [liveReports]);
 
   useEffect(() => {
     setReports(load(STORAGE_KEY, []));
@@ -264,13 +338,19 @@ export default function GprReport() {
   }, []);
 
   useEffect(() => {
-    const t = consumeWorkspaceNavTarget();
-    if (!t || t.viewId !== "gpr-report") return;
+    const t = peekWorkspaceNavTarget();
+    if (!t || t.viewId !== "gpr-report" || editorOpenRef.current) return;
     if (t.reportId) {
       const found = reports.find((r) => r.id === t.reportId);
-      if (found) setModal({ data: found, isNew: false });
-    } else if (t.projectId) {
+      if (!found) return;
+      consumeWorkspaceNavTarget();
+      setModal({ data: found, isNew: false });
+      return;
+    }
+    if (t.projectId) {
       const p = projects.find((x) => x.id === t.projectId);
+      if (!p) return;
+      consumeWorkspaceNavTarget();
       const ref = nextGprRef(reports);
       const base = prefillGprFromProject(blankGprReport({ ref }), p);
       setModal({ data: base, isNew: true });
@@ -278,8 +358,8 @@ export default function GprReport() {
   }, [reports, projects]);
 
   const filtered = useMemo(
-    () => filterGprReports(liveOrgArrayRows(reports), { search, status: listStatus, projectId: listProject }),
-    [reports, search, listStatus, listProject]
+    () => filterGprReports(liveReports, { search, status: listStatus, projectId: listProject }),
+    [liveReports, search, listStatus, listProject]
   );
 
   const grouped = useMemo(
@@ -288,6 +368,7 @@ export default function GprReport() {
   );
 
   const form = modal?.data;
+  const orgSettings = getOrgSettings();
   const project = projects.find((p) => p.id === form?.projectId);
   const linkedSurveyReport = useMemo(() => {
     if (!form?.linkedSurveyReportId) return null;
@@ -332,6 +413,7 @@ export default function GprReport() {
   const dirtyRef = useRef(false);
   formRef.current = form;
   modalRef.current = modal;
+  editorOpenRef.current = Boolean(modal);
 
   const markDirty = () => {
     dirtyRef.current = true;
@@ -344,7 +426,11 @@ export default function GprReport() {
     const normalized = stampDocumentAuthorship(normalizeGprReport(current), {
       isCreate: Boolean(m.isNew) || !current.createdById,
     });
-    persist((prev) => upsertGprReportInList(prev, normalized));
+    persist((prev) => {
+      const next = upsertGprReportInList(prev, normalized);
+      save(STORAGE_KEY, next, { bypassBillingGuard: true });
+      return next;
+    });
     if (m.isNew) {
       setModal((prev) => (prev ? { ...prev, isNew: false, data: { ...prev.data, createdById: prev.data?.createdById || normalized.createdById } } : prev));
     }
@@ -353,6 +439,7 @@ export default function GprReport() {
   const closeEditor = useCallback(() => {
     flushEditorToStorage();
     dirtyRef.current = false;
+    clearGprEditorSession();
     setModal(null);
   }, [flushEditorToStorage]);
 
@@ -408,8 +495,17 @@ export default function GprReport() {
 
     pushAudit({ action: modal.isNew ? "gpr_report_create" : "gpr_report_update", entity: "gpr_report", detail: normalized.ref });
     dirtyRef.current = false;
-    setModal(null);
+    setModal({ ...modal, isNew: false, data: normalized });
+    pushToast({ type: "success", title: "Saved", message: "GPR report stays open.", durationMs: 2200 });
   };
+
+  useEffect(() => {
+    if (!modal?.data?.id) {
+      clearGprEditorSession();
+      return;
+    }
+    writeGprEditorSession({ isNew: Boolean(modal.isNew), data: modal.data, tab });
+  }, [modal, tab]);
 
   useEffect(() => {
     if (!form) return undefined;
@@ -481,6 +577,7 @@ export default function GprReport() {
       antennaFrequencyMhz: preset.antennaFrequencyMhz,
       channels: preset.channels,
       configuration: preset.configuration,
+      processingSoftware: preset.processingSoftware || equipment[eqIndex].processingSoftware,
     };
     patchReport((r) => {
       const withEq = {
@@ -543,7 +640,12 @@ export default function GprReport() {
     if (!form) return;
     setBusy("weather");
     try {
-      const next = await fetchEnvironmentalIntoReport(form, project);
+      let next = await fetchEnvironmentalIntoReport(form, project);
+      try {
+        next = await fetchWaterIntoReport(next, project);
+      } catch {
+        /* weather still applies if the water desk-check is unavailable */
+      }
       markDirty();
       setModal({ ...modal, data: normalizeGprReport(next) });
     } catch (e) {
@@ -572,7 +674,7 @@ export default function GprReport() {
         pushToast({
           type: "success",
           title: "Start here stamped",
-          message: "GPS and live weather are on this report.",
+          message: isIndoorGprSurvey(form) ? "GPS and indoor survey context are on this report." : "GPS and optional live weather are on this report.",
           durationMs: 2400,
         });
       }
@@ -587,22 +689,26 @@ export default function GprReport() {
     }
   };
 
-  const addPreSurveyPhoto = async (file) => {
-    if (!file || !form) return;
+  const addPreSurveyPhoto = async (files) => {
+    const list = [...(files || [])].filter(Boolean);
+    if (!list.length || !form) return;
     try {
-      const dataUrl = await compressImageFile(file, { maxWidth: 1280, quality: 0.78 });
-      patchReport((r) => {
-        const photos = [
-          ...(r.preSurvey?.photos || []),
+      const added = [];
+      for (const file of list) {
+        const dataUrl = await compressImageFile(file, { maxWidth: 1280, quality: 0.78 });
+        added.push(
           blankGprSitePhoto({
             dataUrl,
             fileName: file.name,
             capturedAt: new Date().toISOString(),
-            caption: "General site photo",
-          }),
-        ];
-        return { ...r, preSurvey: { ...r.preSurvey, photos } };
-      });
+            caption: "Site photo",
+          })
+        );
+      }
+      patchReport((r) => ({
+        ...r,
+        preSurvey: { ...r.preSurvey, photos: [...(r.preSurvey?.photos || []), ...added] },
+      }));
     } catch (e) {
       pushToast({ type: "error", title: "Photo failed", message: e.message || "Could not add photo." });
     }
@@ -640,12 +746,47 @@ export default function GprReport() {
 
   const markFinal = () => {
     if (!form) return;
+    const { blockers } = buildGprBlockers(form, { linkedSurveyReport, project });
+    const critical = blockers.filter((item) => item.severity === "block");
+    if (critical.length) {
+      setTab(critical[0].tab || "qa");
+      pushToast({
+        type: "error",
+        title: "Final issue blocked",
+        message: `${critical.length} must-fix item${critical.length === 1 ? "" : "s"}: ${critical.map((item) => item.label).join(" · ")}`,
+        durationMs: 6500,
+      });
+      return;
+    }
     setConfirmFinal(true);
+  };
+
+  const runEvidenceReview = async () => {
+    if (!form) return;
+    setBusy("evidence-ai");
+    try {
+      const result = await reviewGprEvidence(buildGprEvidenceReviewPayload(form));
+      patchReport((report) => mergeGprEvidenceReview(report, result));
+      pushToast({
+        type: "success",
+        title: "Evidence classified",
+        message: `${result.assessments?.length || 0} verified source(s) reviewed. No uncited site facts were generated.`,
+        durationMs: 4200,
+      });
+    } catch (e) {
+      pushToast({ type: "error", title: "AI review blocked safely", message: e.message || "No report content was changed." });
+    } finally {
+      setBusy("");
+    }
   };
 
   const confirmMarkFinal = () => {
     if (!form) return;
-    patch({ status: "final", finalisedAt: new Date().toISOString() });
+    patch({
+      status: "final",
+      issuePurpose: "Final issue",
+      finalisedAt: new Date().toISOString(),
+    });
     setConfirmFinal(false);
   };
 
@@ -734,6 +875,20 @@ export default function GprReport() {
     }
   };
 
+  const exportWord = async () => {
+    if (!form) return;
+    setBusy("word");
+    try {
+      const result = await downloadGprReportWord(form, gprPrintExtras);
+      pushAudit({ action: "gpr_report_word", entity: "gpr_report", detail: form.ref });
+      pushToast({ type: "success", title: "Word downloaded", message: `${result.fileName} · ${result.imageCount} image(s)` });
+    } catch (e) {
+      pushToast({ type: "error", title: "Word export failed", message: e?.message || "Could not generate Word document." });
+    } finally {
+      setBusy("");
+    }
+  };
+
   const duplicateReport = () => {
     if (!form) return;
     const dup = buildDuplicateGprPayload(form);
@@ -781,6 +936,31 @@ export default function GprReport() {
     }
   };
 
+  const addAcquisitionScreenshots = async (files) => {
+    const list = [...(files || [])].filter(Boolean);
+    if (!list.length || !form) return;
+    const existing = form.acquisition?.screenshots || [];
+    const room = Math.max(0, 6 - existing.length);
+    if (!room) {
+      pushToast({ type: "error", title: "Screenshot limit", message: "Up to 6 acquisition screenshots." });
+      return;
+    }
+    try {
+      const added = [];
+      for (const file of list.slice(0, room)) {
+        const dataUrl = await compressImageFile(file, { maxWidth: 1600, quality: 0.82 });
+        added.push({
+          id: `acq_${Date.now()}_${added.length}`,
+          dataUrl,
+          caption: String(file.name || "Acquisition screenshot").replace(/\.[^.]+$/, "").slice(0, 160),
+        });
+      }
+      patchNested("acquisition", { screenshots: [...existing, ...added] });
+    } catch (e) {
+      pushToast({ type: "error", title: "Screenshot failed", message: e?.message || "Could not add screenshot." });
+    }
+  };
+
   const addRadargramFile = async (file) => {
     if (!file || !form) return;
     try {
@@ -821,6 +1001,7 @@ export default function GprReport() {
             photos: (form.preSurvey?.photos || []).filter((p) => p.id !== id),
           })
         }
+        onAnnotatePhoto={(photo) => setImageEdit({ image: photo, save: (updated) => patchReport((r) => ({ ...r, preSurvey: { ...r.preSurvey, photos: (r.preSurvey?.photos || []).map((item) => item.id === photo.id ? { ...item, ...updated } : item) } })) })}
       />
       <Field label="Report ref">
         <input style={ss.input} value={form.ref} onChange={(e) => patch({ ref: e.target.value })} />
@@ -828,7 +1009,7 @@ export default function GprReport() {
       <Field label="Title">
         <input style={ss.input} value={form.title} onChange={(e) => patch({ title: e.target.value })} />
       </Field>
-      <Field label="Project">
+      <Field label="Project (optional)">
         <select
           style={ss.input}
           value={form.projectId}
@@ -840,22 +1021,167 @@ export default function GprReport() {
             });
           }}
         >
-          <option value="">— Select project —</option>
+          <option value="">No project — GPR only</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
       </Field>
-      <Field label="Site / location reference">
-        <input style={ss.input} value={form.siteAddress} onChange={(e) => patch({ siteAddress: e.target.value })} />
+      <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--color-text-secondary,#64748b)" }}>
+        A GPR-only job does not need a project or RAMS. Type the client, address and postcode here.
+      </p>
+      <Field label="Client">
+        <input style={ss.input} value={form.client || ""} placeholder="Barnes Fernandez" onChange={(e) => patch({ client: e.target.value })} />
+      </Field>
+      <Field label="Site address">
+        <input style={ss.input} value={form.siteAddress} placeholder="Street, town" onChange={(e) => patch({ siteAddress: e.target.value })} />
         {siteContextBadgeLabel(form) ? (
           <div style={{ marginTop: 6, fontSize: 11, color: "#27500A", background: "#EAF3DE", display: "inline-block", padding: "2px 8px", borderRadius: 999 }}>
             Site context: {siteContextBadgeLabel(form)}
           </div>
         ) : null}
       </Field>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 12 }}>
+        <Field label="Postcode">
+          <input style={ss.input} value={form.postcode || ""} placeholder="B1 1AA" onChange={(e) => patch({ postcode: e.target.value })} />
+        </Field>
+        <Field label="Latitude">
+          <input style={ss.input} value={form.siteLat ?? ""} placeholder="52.48" onChange={(e) => patch({ siteLat: e.target.value })} />
+        </Field>
+        <Field label="Longitude">
+          <input style={ss.input} value={form.siteLng ?? ""} placeholder="-1.90" onChange={(e) => patch({ siteLng: e.target.value })} />
+        </Field>
+      </div>
+      <button
+        type="button"
+        style={{ ...ss.btn, background: "#e0f2fe", color: "#075985", marginBottom: 12 }}
+        disabled={!!busy}
+        onClick={async () => {
+          setBusy("postcode");
+          try {
+            const hit = await lookupSitePostcode(form.postcode || form.siteAddress);
+            if (!hit?.lat) throw new Error("Postcode not found");
+            patch({
+              postcode: hit.postcode || form.postcode,
+              siteLat: hit.lat,
+              siteLng: hit.lng,
+              siteAddress: form.siteAddress || [hit.adminDistrict, hit.postcode].filter(Boolean).join(", "),
+              ...(() => {
+                const grid = wgs84ToBritishNationalGrid(hit.lat, hit.lng);
+                return grid ? { osgbEasting: grid.easting, osgbNorthing: grid.northing, gridRef: grid.gridRef } : {};
+              })(),
+            });
+          } catch (e) {
+            alert(e.message || "Postcode lookup failed");
+          } finally {
+            setBusy("");
+          }
+        }}
+      >
+        {busy === "postcode" ? "Looking up…" : "Look up postcode"}
+      </button>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))", gap: 12 }}>
+        <Field label="OSGB easting">
+          <input style={ss.input} value={form.osgbEasting ?? ""} placeholder="530262" onChange={(e) => patch({ osgbEasting: e.target.value })} />
+        </Field>
+        <Field label="OSGB northing">
+          <input style={ss.input} value={form.osgbNorthing ?? ""} placeholder="179553" onChange={(e) => patch({ osgbNorthing: e.target.value })} />
+        </Field>
+        <Field label="Grid reference">
+          <input style={ss.input} value={form.gridRef || ""} placeholder="TQ 30262 79553" onChange={(e) => patch({ gridRef: e.target.value })} />
+        </Field>
+      </div>
+      <button
+        type="button"
+        style={{ ...ss.btn, background: "#f1f5f9", color: "#0f172a", marginBottom: 12 }}
+        disabled={!!busy}
+        onClick={async () => {
+          const parsed = parseBritishNationalGrid(form.gridRef || `${form.osgbEasting || ""} ${form.osgbNorthing || ""}`);
+          if (!parsed) {
+            alert("Enter a grid reference such as TQ 30262 79553, or an easting and northing.");
+            return;
+          }
+          const wgs = britishNationalGridToWgs84(parsed.easting, parsed.northing);
+          if (!wgs) {
+            alert("That grid point is outside the National Grid.");
+            return;
+          }
+          const grid = wgs84ToBritishNationalGrid(wgs.lat, wgs.lng);
+          setBusy("osgb");
+          try {
+            const hit = await reverseUkPostcode(wgs.lat, wgs.lng);
+            let next = {
+              ...form,
+              osgbEasting: Math.round(parsed.easting),
+              osgbNorthing: Math.round(parsed.northing),
+              gridRef: grid?.gridRef || form.gridRef,
+              siteLat: Number(wgs.lat.toFixed(6)),
+              siteLng: Number(wgs.lng.toFixed(6)),
+              postcode: hit?.postcode || form.postcode,
+              siteAddress: form.siteAddress || [hit?.adminDistrict, hit?.postcode].filter(Boolean).join(", "),
+            };
+            try {
+              next = await fetchEnvironmentalIntoReport(next, project);
+            } catch (e) {
+              alert(e.message || "Weather lookup failed. The grid point is still saved.");
+            }
+            try {
+              next = await fetchWaterIntoReport(next, project);
+            } catch {
+              /* coordinates and weather stay if the water check is unavailable */
+            }
+            markDirty();
+            setModal({ ...modal, data: normalizeGprReport(next) });
+          } finally {
+            setBusy("");
+          }
+        }}
+      >
+        {busy === "osgb" ? "Reading postcode…" : "Use OSGB as the site point"}
+      </button>
+      <Field label="What3Words">
+        <input style={ss.input} value={form.what3words || ""} placeholder="filled.count.soap" onChange={(e) => patch({ what3words: e.target.value })} />
+      </Field>
+      <button
+        type="button"
+        style={{ ...ss.btn, background: "#f1f5f9", color: "#0f172a", marginBottom: 12 }}
+        disabled={!!busy}
+        onClick={async () => {
+          const words = normaliseWhat3Words(form.what3words);
+          if (!words) {
+            alert("Enter three words, for example filled.count.soap");
+            return;
+          }
+          setBusy("w3w");
+          try {
+            const response = await fetch(appApiUrl("/api/what3words"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ words }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              patch({ what3words: words });
+              throw new Error(payload.error === "what3words_not_configured"
+                ? "Words saved. Add WHAT3WORDS_API_KEY on the server to turn them into a map point."
+                : "Those words were not found.");
+            }
+            const grid = wgs84ToBritishNationalGrid(payload.lat, payload.lng);
+            patch({
+              what3words: payload.words || words,
+              siteLat: Number(payload.lat.toFixed(6)),
+              siteLng: Number(payload.lng.toFixed(6)),
+              ...(grid ? { osgbEasting: grid.easting, osgbNorthing: grid.northing, gridRef: grid.gridRef } : {}),
+            });
+          } catch (e) {
+            alert(e.message || "What3Words lookup failed");
+          } finally {
+            setBusy("");
+          }
+        }}
+      >
+        {busy === "w3w" ? "Looking up…" : "Use What3Words as the site point"}
+      </button>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
         <Field label="Survey date">
           <input
@@ -865,16 +1191,137 @@ export default function GprReport() {
             onChange={(e) => patch({ surveyDate: e.target.value })}
           />
         </Field>
-        <Field label="Surveyor">
-          <input style={ss.input} value={form.surveyor} onChange={(e) => patch({ surveyor: e.target.value })} />
+        <Field label="Surveyor (optional)">
+          <input style={ss.input} value={form.surveyor} placeholder="Name, N/A or Unknown" onChange={(e) => patch({ surveyor: e.target.value })} />
+          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+            {["N/A", "Unknown", ""].map((value) => (
+              <button key={value || "blank"} type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0f172a" }} onClick={() => patch({ surveyor: value })}>
+                {value || "Leave blank"}
+              </button>
+            ))}
+          </div>
         </Field>
       </div>
-      <Field label="Status">
-        <select style={ss.input} value={form.status} onChange={(e) => patch({ status: e.target.value })}>
-          <option value="draft">Draft</option>
-          <option value="final">Final</option>
-        </select>
-      </Field>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(180px, 100%), 1fr))", gap: 12 }}>
+        <Field label="Status">
+          <select
+            style={ss.input}
+            value={form.status}
+            onChange={(e) => {
+              if (e.target.value === "final") {
+                markFinal();
+                return;
+              }
+              patch({
+                status: "draft",
+                issuePurpose: form.issuePurpose === "Final issue" ? "For review" : form.issuePurpose,
+                finalisedAt: null,
+              });
+            }}
+          >
+            <option value="draft">Draft</option>
+            <option value="final">Final</option>
+          </select>
+        </Field>
+        <Field label="Revision">
+          <input style={ss.input} value={form.revision || ""} placeholder="P01 / C01" onChange={(e) => patch({ revision: e.target.value })} />
+        </Field>
+        <Field label="Issue purpose">
+          <select style={ss.input} value={form.issuePurpose || "For information"} onChange={(e) => patch({ issuePurpose: e.target.value })}>
+            <option value="For information">For information</option>
+            <option value="For review">For review</option>
+            <option value="For coordination">For coordination</option>
+            <option value="Final issue">Final issue</option>
+          </select>
+        </Field>
+      </div>
+      <GprThemePicker
+        value={form.visualTheme}
+        organisation={orgSettings}
+        onChange={(visualTheme) => patch({ visualTheme })}
+      />
+      <div style={{ marginTop: 12 }}>
+        <div style={ss.sectionHead}>Cover logos</div>
+        <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--color-text-secondary,#64748b)" }}>
+          Our logo, the client logo only (private job such as Barnes Fernandez), or both (Utility Mapping working for Birmingham City Council).
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[
+            ["own", "Our logo only"],
+            ["client", "Client logo only"],
+            ["both", "Both logos"],
+          ].map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              style={{
+                ...ss.btn,
+                background: (form.coverBranding?.mode || "own") === mode ? "#0f766e" : "#f1f5f9",
+                color: (form.coverBranding?.mode || "own") === mode ? "#fff" : "#0f172a",
+              }}
+              onClick={() => patch({ coverBranding: { ...(form.coverBranding || {}), mode } })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {(form.coverBranding?.mode === "client" || form.coverBranding?.mode === "both") && (
+          <div style={{ display: "grid", gap: 8, marginTop: 10, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+            <Field label="Client name on cover">
+              <input
+                style={ss.input}
+                value={form.coverBranding?.clientName || ""}
+                placeholder="Barnes Fernandez"
+                onChange={(e) => patch({ coverBranding: { ...(form.coverBranding || {}), clientName: e.target.value } })}
+              />
+            </Field>
+            {listUtilityMappingClients().length > 0 && (
+              <Field label="Saved client logo">
+                <select
+                  style={ss.input}
+                  value={form.coverBranding?.clientCode || ""}
+                  onChange={(e) => {
+                    const clientCode = e.target.value;
+                    const picked = listUtilityMappingClients().find((c) => c.code === clientCode);
+                    patch({
+                      coverBranding: {
+                        ...(form.coverBranding || {}),
+                        clientCode,
+                        clientName: form.coverBranding?.clientName || picked?.name || "",
+                      },
+                    });
+                  }}
+                >
+                  <option value="">Upload instead</option>
+                  {listUtilityMappingClients().map((c) => (
+                    <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            <Field label="Client logo file">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  const dataUrl = await compressImageFile(file, { maxWidth: 640, quality: 0.82 });
+                  patch({ coverBranding: { ...(form.coverBranding || {}), clientLogoDataUrl: dataUrl, clientCode: "" } });
+                }}
+              />
+            </Field>
+            {(form.coverBranding?.clientLogoDataUrl || utilityMappingClientLogoUrl(form.coverBranding?.clientCode)) && (
+              <img
+                alt={form.coverBranding?.clientName || "Client logo"}
+                src={form.coverBranding?.clientLogoDataUrl || utilityMappingClientLogoUrl(form.coverBranding?.clientCode)}
+                style={{ height: 48, objectFit: "contain", alignSelf: "end" }}
+              />
+            )}
+          </div>
+        )}
+      </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
         <button type="button" style={{ ...ss.btn, ...ss.btnP }} disabled={!!busy} onClick={runPrebuiltPack}>
           {busy === "prebuilt" ? "Applying…" : "Apply prebuilt pack"}
@@ -883,11 +1330,11 @@ export default function GprReport() {
           Template only
         </button>
         <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0f766e" }} disabled={!!busy} onClick={runSmartFill}>
-          {busy === "smart" ? "Filling…" : "BGS + weather + narratives"}
+          {busy === "smart" ? "Filling…" : "BGS + optional weather + narratives"}
         </button>
       </div>
       <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--color-text-secondary,#64748b)", lineHeight: 1.45 }}>
-        Prebuilt pack loads the generic industry template, fetches BGS geology and weather, then fills report sections from rule-based narratives — no AI required.
+        Prebuilt pack loads the generic industry template, fetches optional BGS geology and outdoor weather, then fills report sections from rule-based narratives — no AI required.
       </p>
       <div style={{ marginTop: 16 }}>
         <div style={ss.sectionHead}>Deliverables checklist</div>
@@ -969,6 +1416,7 @@ export default function GprReport() {
 
   const renderEquipment = () => {
     const eq = form.equipment?.[0] || blankGprEquipment();
+    const selectedPreset = GPR_EQUIPMENT_PRESETS.find((preset) => preset.key === eq.presetKey);
     return (
       <>
         <div style={ss.sectionHead}>Equipment</div>
@@ -982,6 +1430,7 @@ export default function GprReport() {
             ))}
           </select>
         </Field>
+        <GprEquipmentProfileCard preset={selectedPreset} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
           <Field label="Manufacturer">
             <input
@@ -1096,6 +1545,78 @@ export default function GprReport() {
             />
           </Field>
         </div>
+        <div
+          tabIndex={0}
+          onPaste={(e) => {
+            const fromFiles = [...(e.clipboardData?.files || [])];
+            const fromItems = [...(e.clipboardData?.items || [])]
+              .filter((item) => item.type?.startsWith("image/"))
+              .map((item) => item.getAsFile())
+              .filter(Boolean);
+            const images = fromFiles.length ? fromFiles : fromItems;
+            if (!images.length) return;
+            e.preventDefault();
+            addAcquisitionScreenshots(images);
+          }}
+          style={{ marginTop: 12, padding: 10, border: "1px dashed #99f6e4", borderRadius: 8 }}
+        >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+            <label
+              style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e", cursor: "pointer" }}
+              onPointerDown={flushEditorToStorage}
+            >
+              + Acquisition screenshot
+              <input
+                type="file"
+                accept="image/*,.heic,.heif"
+                multiple
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  addAcquisitionScreenshots(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+              Upload or click this box and paste (Ctrl+V) a screenshot from the acquisition software. Up to 6. The whole image prints, nothing cropped.
+            </span>
+          </div>
+          {(form.acquisition.screenshots || []).length ? (
+            <div className="app-gpr-radargram-grid">
+              {(form.acquisition.screenshots || []).map((shot, idx) => (
+                <div key={shot.id || idx} className="app-gpr-radargram-thumb">
+                  <img src={shot.dataUrl} alt="" style={{ objectFit: "contain", background: "#f8fafc" }} />
+                  <button type="button" className="app-gpr-annotate-btn" onClick={() => setImageEdit({ image: shot, save: (updated) => patchReport((r) => ({ ...r, acquisition: { ...r.acquisition, screenshots: (r.acquisition?.screenshots || []).map((item) => item.id === shot.id ? { ...item, ...updated } : item) } })) })}>✎ Annotate image</button>
+                  <input
+                    style={{ ...ss.input, fontSize: 11, marginTop: 4 }}
+                    value={shot.caption || ""}
+                    placeholder="Caption"
+                    onChange={(e) => {
+                      const screenshots = [...(form.acquisition.screenshots || [])];
+                      screenshots[idx] = { ...shot, caption: e.target.value };
+                      patchNested("acquisition", { screenshots });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="app-gpr-list-delete"
+                    onClick={() =>
+                      patchNested("acquisition", {
+                        screenshots: (form.acquisition.screenshots || []).filter((_, i) => i !== idx),
+                      })
+                    }
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: 0 }}>
+              No acquisition screenshot yet.
+            </p>
+          )}
+        </div>
 
         <div style={ss.sectionHead}>Velocity model</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
@@ -1165,6 +1686,20 @@ export default function GprReport() {
 
   const renderGround = () => (
     <>
+      <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600 }}>
+          <input type="checkbox" checked={form.includeGeology} onChange={(e) => patch({ includeGeology: e.target.checked })} />
+          Include BGS geology in this report (optional)
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600 }}>
+          <input type="checkbox" checked={form.includeHistoricalEvidence} onChange={(e) => patch({ includeHistoricalEvidence: e.target.checked })} />
+          Include historic photos and records (optional)
+        </label>
+        <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+          Turn either option off to omit its desk-study section from the report. Saved evidence is retained for later use.
+        </span>
+      </div>
+      {form.includeGeology ? (<>
       <GprInsightPanel
         report={form}
         onRecalcGround={() => patchReport((r) => recalcGroundPenetration(r))}
@@ -1182,8 +1717,27 @@ export default function GprReport() {
         <button type="button" style={{ ...ss.btn, ...ss.btnP }} disabled={!!busy} onClick={fetchGeology}>
           {busy === "geology" ? "Fetching BGS…" : "Fetch BGS geology (50k)"}
         </button>
-        <button type="button" style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }} disabled={!!busy} onClick={fetchWeather}>
-          {busy === "weather" ? "Fetching weather…" : "Fetch weather for survey date"}
+        {!isIndoorGprSurvey(form) ? <button type="button" style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e" }} disabled={!!busy} onClick={fetchWeather}>
+          {busy === "weather" ? "Fetching weather…" : "Fetch optional weather for survey date"}
+        </button> : null}
+        <button
+          type="button"
+          style={{ ...ss.btn, background: "#e0f2fe", color: "#075985" }}
+          disabled={!!busy}
+          onClick={async () => {
+            setBusy("water");
+            try {
+              const next = await fetchWaterIntoReport(form, project);
+              markDirty();
+              setModal({ ...modal, data: normalizeGprReport(next) });
+            } catch (e) {
+              alert(e.message || "Water check failed");
+            } finally {
+              setBusy("");
+            }
+          }}
+        >
+          {busy === "water" ? "Checking water…" : "Check nearby water"}
         </button>
       </div>
       <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 0 }}>
@@ -1246,6 +1800,7 @@ export default function GprReport() {
           </table>
         </div>
       ) : null}
+      </>) : null}
 
       <div style={ss.sectionHead}>Site observations</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
@@ -1332,12 +1887,23 @@ export default function GprReport() {
         />
       </Field>
 
-      {form.groundConditions?.narrative ? (
+      {form.includeGeology && form.groundConditions?.narrative ? (
         <details style={{ marginTop: 12, fontSize: 13 }}>
           <summary style={{ cursor: "pointer", fontWeight: 600 }}>Full BGS narrative</summary>
           <p style={{ marginTop: 8, lineHeight: 1.5 }}>{form.groundConditions.narrative}</p>
         </details>
       ) : null}
+      {form.includeHistoricalEvidence ? <GprEvidencePanel
+        report={form}
+        project={project}
+        busy={busy === "evidence-ai"}
+        onChange={(historicalEvidence) => patch({ historicalEvidence, evidenceReview: { ...form.evidenceReview, assessments: [] } })}
+        onRunAi={runEvidenceReview}
+        onAnnotateImage={(item) => setImageEdit({ image: { dataUrl: item.imageDataUrl, originalDataUrl: item.originalImageDataUrl, annotations: item.annotations }, save: (updated) => patchReport((r) => ({ ...r, historicalEvidence: (r.historicalEvidence || []).map((entry) => entry.id === item.id ? { ...entry, imageDataUrl: updated.dataUrl, originalImageDataUrl: updated.originalDataUrl, annotations: updated.annotations } : entry) })) })}
+        inputStyle={ss.input}
+        textAreaStyle={ss.ta}
+        buttonStyle={{ ...ss.btn, background: "#f1f5f9", color: "#0f766e" }}
+      /> : null}
     </>
   );
 
@@ -1385,6 +1951,7 @@ export default function GprReport() {
             {(form.radargrams || []).map((rg, idx) => (
               <div key={rg.id} className="app-gpr-radargram-thumb" onClick={() => setLightboxRg(rg)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setLightboxRg(rg)}>
                 <img src={rg.dataUrl} alt="" />
+                <button type="button" className="app-gpr-annotate-btn" onClick={(event) => { event.stopPropagation(); setImageEdit({ image: rg, save: (updated) => patchReport((r) => ({ ...r, radargrams: (r.radargrams || []).map((item) => item.id === rg.id ? { ...item, ...updated } : item) })) }); }}>✎ Annotate image</button>
                 <input
                   style={{ ...ss.input, fontSize: 11, marginTop: 4 }}
                   value={rg.label}
@@ -1446,6 +2013,7 @@ export default function GprReport() {
             {(form.planFigures || []).map((pf, idx) => (
               <div key={pf.id} className="app-gpr-radargram-thumb app-gpr-plan-figure-thumb">
                 <img src={pf.dataUrl} alt="" />
+                <button type="button" className="app-gpr-annotate-btn" onClick={() => setImageEdit({ image: pf, save: (updated) => patchReport((r) => ({ ...r, planFigures: (r.planFigures || []).map((item) => item.id === pf.id ? { ...item, ...updated } : item) })) })}>✎ Annotate image</button>
                 <input
                   style={{ ...ss.input, fontSize: 11, marginTop: 4 }}
                   value={pf.label}
@@ -1549,6 +2117,18 @@ export default function GprReport() {
                   onChange={(e) => {
                     const scanPanels = [...form.scanPanels];
                     scanPanels[idx] = { ...p, scanSpacingV: e.target.value };
+                    patch({ scanPanels });
+                  }}
+                />
+              </Field>
+              <Field label="Readable depth (m)">
+                <input
+                  style={ss.input}
+                  value={p.readableDepthM || ""}
+                  placeholder="Deepest readable signal"
+                  onChange={(e) => {
+                    const scanPanels = [...form.scanPanels];
+                    scanPanels[idx] = { ...p, readableDepthM: e.target.value };
                     patch({ scanPanels });
                   }}
                 />
@@ -1794,6 +2374,9 @@ export default function GprReport() {
           </button>
         ))}
       </div>
+      {suggestContinuousUtilities(form.anomalies).map((hint) => (
+        <p key={hint} style={{ margin: "0 0 8px", fontSize: 13, color: "#075985" }}>{hint}</p>
+      ))}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div style={ss.sectionHead}>Anomalies</div>
         <button
@@ -1817,6 +2400,18 @@ export default function GprReport() {
                 onChange={(e) => {
                   const anomalies = [...form.anomalies];
                   anomalies[idx] = { ...a, ref: e.target.value };
+                  patch({ anomalies });
+                }}
+              />
+            </Field>
+            <Field label="Line">
+              <input
+                style={ss.input}
+                value={a.lineOrGrid || ""}
+                placeholder="Line 2"
+                onChange={(e) => {
+                  const anomalies = [...form.anomalies];
+                  anomalies[idx] = { ...a, lineOrGrid: e.target.value };
                   patch({ anomalies });
                 }}
               />
@@ -1879,6 +2474,95 @@ export default function GprReport() {
               }}
             />
           </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
+            <Field label="Archive frame">
+              <select
+                style={ss.input}
+                value={a.archiveCorrelation || "not_checked"}
+                onChange={(e) => {
+                  const anomalies = [...form.anomalies];
+                  anomalies[idx] = { ...a, archiveCorrelation: e.target.value };
+                  patch({ anomalies });
+                }}
+              >
+                <option value="not_checked">Not checked</option>
+                <option value="correlates">Correlates with kept frame</option>
+                <option value="does_not_correlate">Does not correlate</option>
+              </select>
+            </Field>
+            <Field label="Frame date">
+              <select
+                style={ss.input}
+                value={a.archiveFrameDate || ""}
+                onChange={(e) => {
+                  const anomalies = [...form.anomalies];
+                  anomalies[idx] = { ...a, archiveFrameDate: e.target.value };
+                  patch({ anomalies });
+                }}
+              >
+                <option value="">No frame selected</option>
+                {(form.historicalEvidence || []).filter((item) => item.sourceDate).map((item) => (
+                  <option key={item.id} value={item.sourceDate}>{item.sourceDate} — {item.title || item.sourceName || "archive"}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="app-gpr-finding-photos">
+            {(a.figures || []).map((figure) => (
+              <div key={figure.id} className="app-gpr-finding-photos__item">
+                {figure.dataUrl ? <img src={figure.dataUrl} alt="" /> : null}
+                {figure.dataUrl ? <button type="button" className="app-gpr-annotate-btn" onClick={() => setImageEdit({ image: figure, enablePins: true, save: (updated) => patchReport((r) => ({ ...r, anomalies: (r.anomalies || []).map((item) => item.id === a.id ? { ...item, figures: (item.figures || []).map((entry) => entry.id === figure.id ? { ...entry, ...updated } : entry) } : item) })) })}>✎ Annotate / add pins</button> : null}
+                {(figure.annotations || []).filter((shape) => shape.type === "pin").map((shape) => <div key={shape.number} className="app-gpr-finding-pin-note"><b>{shape.number}</b><span>{shape.text}</span></div>)}
+                <select
+                  style={ss.input}
+                  value={figure.role}
+                  onChange={(e) => {
+                    const anomalies = [...form.anomalies];
+                    anomalies[idx] = {
+                      ...a,
+                      figures: a.figures.map((item) => (item.id === figure.id ? { ...item, role: e.target.value } : item)),
+                    };
+                    patch({ anomalies });
+                  }}
+                >
+                  {GPR_ANOMALY_FIGURE_ROLES.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const anomalies = [...form.anomalies];
+                    anomalies[idx] = { ...a, figures: a.figures.filter((item) => item.id !== figure.id) };
+                    patch({ anomalies });
+                  }}
+                >
+                  Remove photo
+                </button>
+              </div>
+            ))}
+            {(a.figures || []).length < GPR_ANOMALY_FIGURE_LIMIT ? (
+              <label className="app-gpr-finding-photos__add">
+                Add GPR, CAD or archive photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    const dataUrl = await compressImageFile(file, { maxWidth: 1200, quality: 0.72 });
+                    const used = new Set((a.figures || []).map((item) => item.role));
+                    const role = GPR_ANOMALY_FIGURE_ROLES.find((item) => !used.has(item.key))?.key || "gpr";
+                    const anomalies = [...form.anomalies];
+                    anomalies[idx] = {
+                      ...a,
+                      figures: [...(a.figures || []), blankGprAnomalyFigure({ role, dataUrl, fileName: file.name })].slice(0, GPR_ANOMALY_FIGURE_LIMIT),
+                    };
+                    patch({ anomalies });
+                  }}
+                />
+              </label>
+            ) : null}
+          </div>
           <button
             type="button"
             style={{ ...ss.btn, background: "transparent", color: "#b91c1c", fontSize: 12 }}
@@ -1888,6 +2572,13 @@ export default function GprReport() {
           </button>
         </div>
       ))}
+      <button
+        type="button"
+        style={{ ...ss.btn, background: "#ccfbf1", color: "#0f766e", marginBottom: 12 }}
+        onClick={() => patchReport((r) => applyGprFindingsDraft(r))}
+      >
+        Apply findings, summary and limitations draft
+      </button>
       <Field label="Findings narrative">
         <textarea
           style={ss.ta}
@@ -2087,9 +2778,22 @@ export default function GprReport() {
       >
         Sync data processing narrative from steps
       </button>
+      {buildGprIssueChecklist(form).length ? (
+        <div style={{ marginTop: 16, fontSize: 13, color: "#9a3412" }}>
+          <strong>Before PDF</strong>
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            {buildGprIssueChecklist(form).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
         <button type="button" style={ss.btnP} disabled={!!busy} onClick={exportPdf}>
           {busy === "pdf" ? "Generating PDF…" : "Download PDF"}
+        </button>
+        <button type="button" style={{ ...ss.btn, background: "#dbeafe", color: "#1e40af" }} disabled={!!busy} onClick={exportWord}>
+          {busy === "word" ? "Generating Word…" : "Download editable Word"}
         </button>
         <button type="button" style={{ ...ss.btn, background: "#f1f5f9", color: "#0f766e" }} onClick={exportHtml}>
           Export HTML
@@ -2114,7 +2818,10 @@ export default function GprReport() {
 
     return (
       <ModuleOverlay className="app-gpr-module-overlay">
-        <div className={`app-survey-report-editor app-gpr-report-editor${livePreviewOpen ? " app-survey-report-editor--split" : ""}`}>
+        <div
+          className={`app-survey-report-editor app-gpr-report-editor${livePreviewOpen ? " app-survey-report-editor--split" : ""}`}
+          style={gprThemeCssVariables(form, orgSettings)}
+        >
           <GprEditorHero
             form={form}
             project={project}
@@ -2124,6 +2831,7 @@ export default function GprReport() {
             onToggleLivePreview={setLivePreviewOpen}
             onMarkFinal={markFinal}
           />
+          <GprEditorStepNav tab={tab} report={form} onTabChange={setTab} tabs={TABS} />
           {smartTips.length ? (
             <div className="app-gpr-smart-tips">
               {smartTips.slice(0, 3).map((tip, i) => (
@@ -2139,20 +2847,27 @@ export default function GprReport() {
             onGoToTab={setTab}
             onAutofix={handleGprAutofix}
           />
+          <div className="app-gpr-guide">
+            <strong>Next</strong>
+            <span>Setup the ref, fetch BGS on Ground, add GPR and CAD photos on Findings, then apply the findings draft and open preview.</span>
+            <button type="button" onClick={() => setTab(gprTabComplete(form, "setup") ? (gprTabComplete(form, "ground") ? "findings" : "ground") : "setup")}>
+              {gprTabComplete(form, "setup") ? (gprTabComplete(form, "ground") ? "Open Findings" : "Open Ground") : "Open Setup"}
+            </button>
+          </div>
           <div className="app-survey-report-editor__body app-gpr-report-editor__body">
-            <div className="app-survey-report-editor__form">
-              <div style={ss.tabRow}>
-                {TABS.map((t) => {
-                  const done = gprTabComplete(form, t.id);
-                  return (
-                    <button key={t.id} type="button" style={ss.tab(tab === t.id)} onClick={() => setTab(t.id)}>
-                      {done ? <span className="app-gpr-tab-dot app-gpr-tab-dot--done" aria-hidden /> : null}
-                      {t.label}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="app-survey-report-editor__form app-gpr-editor-form">
               {tabContent?.()}
+              <div className="app-gpr-section-actions" aria-label="Move between report sections">
+                <button type="button" style={ss.btn} disabled={tab === TABS[0].id}
+                  onClick={() => setTab(TABS[Math.max(0, TABS.findIndex((t) => t.id === tab) - 1)].id)}>
+                  ← Previous section
+                </button>
+                <span>Section {TABS.findIndex((t) => t.id === tab) + 1} of {TABS.length}</span>
+                <button type="button" style={{ ...ss.btn, ...ss.btnP }} disabled={tab === TABS.at(-1).id}
+                  onClick={() => setTab(TABS[Math.min(TABS.length - 1, TABS.findIndex((t) => t.id === tab) + 1)].id)}>
+                  Next section →
+                </button>
+              </div>
             </div>
             <SurveyLivePreviewDock
               open={livePreviewOpen}
@@ -2169,6 +2884,9 @@ export default function GprReport() {
             </button>
             <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={exportHtml}>
               Export HTML
+            </button>
+            <button type="button" style={{ ...ss.btn, background: "#dbeafe", color: "#1e40af" }} disabled={!!busy} onClick={exportWord}>
+              {busy === "word" ? "Generating Word…" : "Download Word"}
             </button>
             <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={closeEditor}>
               Close
@@ -2188,7 +2906,7 @@ export default function GprReport() {
       <PageHero
         badgeText="GPR"
         title="GPR report"
-        lead="Prebuilt GPR reports — Start here stamps GPS and weather, then BGS geology, equipment presets and rule-based narratives."
+        lead="Prebuilt GPR reports — Start here records survey context and GPS, with optional outdoor weather, equipment presets and rule-based narratives."
         suppressRegisterPdf
       />
       <D1ModuleSyncBanner d1Hydrating={d1Hydrating} d1OutboxPending={d1OutboxPending} scopeLabel="GPR reports" />
@@ -2209,9 +2927,7 @@ export default function GprReport() {
         <select style={{ ...ss.input, maxWidth: 180 }} value={listProject} onChange={(e) => setListProject(e.target.value)}>
           <option value="">All projects</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
@@ -2235,7 +2951,7 @@ export default function GprReport() {
       {!filtered.length ? (
         <EmptyState
           title="No GPR reports yet"
-          description="Create a GPR report with prebuilt industry template, equipment presets, BGS ground conditions and weather impact analysis."
+          description="Create a GPR report with equipment presets, optional BGS ground conditions and outdoor weather context."
           actionLabel="New GPR report"
           onAction={() => setModal({ isNew: true, data: blankGprReport({ ref: nextGprRef(reports) }) })}
         />
@@ -2293,6 +3009,7 @@ export default function GprReport() {
           onClose={() => setLightboxRg(null)}
         />
       ) : null}
+      {imageEdit ? <GprImageAnnotator image={imageEdit.image} enablePins={imageEdit.enablePins} onSave={imageEdit.save} onClose={() => setImageEdit(null)} /> : null}
 
       <ConfirmDialog
         open={confirmFinal}

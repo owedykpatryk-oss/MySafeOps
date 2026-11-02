@@ -22,6 +22,7 @@ vi.mock("../lib/r2Storage.js", () => ({
 
 vi.mock("./orgStorage.js", () => ({
   getOrgId: vi.fn(() => "org_1"),
+  countryOperationalStorageKey: vi.fn((key) => `org_1:uk:${key}`),
 }));
 
 describe("geoPhotoMedia", () => {
@@ -64,6 +65,16 @@ describe("geoPhotoMedia", () => {
     expect(preserveGeoPhotoMedia(local, incoming)).toEqual(incoming);
   });
 
+  it("keeps the local fallback through cloud sync when the same uploaded image could not be cached", () => {
+    const local = [{ id: "a", photoStorageKey: "same.jpg", photoDataUrl: "data:image/jpeg;base64,YWJj" }];
+    expect(preserveGeoPhotoMedia(local, [{ id: "a", photoStorageKey: "same.jpg", notes: "Updated" }])).toEqual([
+      { id: "a", photoStorageKey: "same.jpg", notes: "Updated", photoDataUrl: "data:image/jpeg;base64,YWJj" },
+    ]);
+    expect(preserveGeoPhotoMedia(local, [{ id: "a", photoStorageKey: "replacement.jpg" }])).toEqual([
+      { id: "a", photoStorageKey: "replacement.jpg" },
+    ]);
+  });
+
   it("uploads data URL to R2 without fetch", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const result = await uploadGeoPhotoToR2("data:image/jpeg;base64,YWJj", {
@@ -73,6 +84,7 @@ describe("geoPhotoMedia", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
     expect(result).toEqual({
+      photoOfflineCached: false,
       photoStorageKey: "geo-photos/test/photo.jpg",
       photoPublicUrl: "https://cdn.example/photo.jpg",
       photoSignedUrl: "https://worker.example/signed?k=1",

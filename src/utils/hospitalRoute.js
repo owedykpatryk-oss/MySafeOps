@@ -1,4 +1,5 @@
 import { getNearestHospital } from "./nearestHospital";
+import { appApiUrl } from "./appApiUrl";
 
 const OSRM_PROXY = "/api/osrm-route";
 
@@ -7,7 +8,7 @@ const OSRM_PROXY = "/api/osrm-route";
  * @returns {Promise<{ ring: [number, number][], distance_m: number | null, duration_s: number | null } | null>}
  */
 export async function fetchDrivingRouteRing(fromLat, fromLng, toLat, toLng) {
-  const res = await fetch(OSRM_PROXY, {
+  const res = await fetch(appApiUrl(OSRM_PROXY), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ fromLat, fromLng, toLat, toLng }),

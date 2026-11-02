@@ -3,8 +3,8 @@ import { PL_PLAN_PRICE_LABELS, stripeEnvKeyForPlPlan } from "./plPricing";
 
 describe("plPricing", () => {
   it("exposes PLN price labels", () => {
-    expect(PL_PLAN_PRICE_LABELS.starter).toBe("79 zł");
-    expect(PL_PLAN_PRICE_LABELS.team).toBe("439 zł");
+    expect(PL_PLAN_PRICE_LABELS.starter).toBe("159 zł");
+    expect(PL_PLAN_PRICE_LABELS.team).toBe("639 zł");
   });
 
   it("uses _PLN suffix for Stripe env keys", () => {

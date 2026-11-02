@@ -5,7 +5,7 @@
 import { pickBestGeologyFeature, BGS_625K_DISCLAIMER } from "./bgsGeologyPick.mjs";
 
 export const BGS_50K_DISCLAIMER =
-  "BGS Geology 50k (DigMapGB) is detailed digital geology at ~1:50,000. It is still desk-study mapping — not a site investigation, trial-pit soil log or geotechnical design description.";
+  `BGS Geology 50k (DigMapGB) is detailed digital geology at ~1:50,000. It is still desk-study mapping — not a site investigation, trial-pit soil log or geotechnical design description. Contains British Geological Survey materials © UKRI ${new Date().getFullYear()}.`;
 
 export const BGS_POSTCODE_ACCURACY_WARNING =
   "Lookup used a postcode/address centroid, not a project map pin — formation names can be wrong for the true site. Set lat/lng on the project for better accuracy.";

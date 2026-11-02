@@ -3,14 +3,44 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   canExtendOrgTrial,
   isBillingWriteBlocked,
+  isPaidSubscriptionWritable,
   isSubscriptionPastDueOrUnpaid,
   isTrialExpiredWithoutPaid,
   pastDueBillingMessage,
   shouldShowTrialExtensionOffer,
 } from "./billingAccess";
 import { getEffectivePlanId } from "../lib/billingPlans";
+import { cacheActiveCountryWorkspace } from "./countryWorkspaces";
+import { getTrialStatus } from "./billingState";
 
 describe("billingAccess", () => {
+  it("requires a separate subscription for a secondary country even without trial metadata", () => {
+    localStorage.clear();
+    cacheActiveCountryWorkspace({ id: "country", is_primary: false });
+    expect(getTrialStatus()).toMatchObject({ isActive: false, countryWorkspaceRequiresSubscription: true });
+    expect(isBillingWriteBlocked()).toBe(true);
+    expect(canExtendOrgTrial()).toBe(false);
+  });
+  it("does not reopen an overdue subscription through an unexpired evaluation", () => {
+    expect(isBillingWriteBlocked({ trialStatus: { isActive: true }, billing: { subscriptionStatus: "past_due", paidPlanId: "team", pastDueSince: "2020-01-01" } })).toBe(true);
+    expect(canExtendOrgTrial({ trialStatus: { isActive: false }, billing: { subscriptionStatus: "past_due", paidPlanId: "team", pastDueSince: "2020-01-01" } })).toBe(false);
+  });
+  it("does not grant unlimited grace when the selected workspace has no past-due timestamp", () => {
+    localStorage.setItem("mysafeops_subscription_past_due_since", "2020-01-01");
+    expect(isBillingWriteBlocked({ trialStatus: { isActive: false }, billing: { subscriptionStatus: "past_due", paidPlanId: "team", pastDueSince: null } })).toBe(true);
+  });
+  it.each(["unpaid", "canceled", "paused", "incomplete", "incomplete_expired"])("does not reopen %s access through a future trial or extension", (subscriptionStatus) => {
+    const billing = { subscriptionStatus, paidPlanId: null };
+    expect(isBillingWriteBlocked({ trialStatus: { isActive: true }, billing })).toBe(true);
+    expect(canExtendOrgTrial({ trialStatus: { isActive: true }, billing })).toBe(false);
+    expect(getEffectivePlanId({ isActive: true }, billing)).toBe("expired");
+  });
+  it("keeps scheduled cancellation writable only until the paid period ends", () => {
+    const billing = { subscriptionStatus: "active", paidPlanId: "team", cancelAtPeriodEnd: true, currentPeriodEnd: new Date(Date.now() + 10000).toISOString() };
+    expect(isPaidSubscriptionWritable(billing)).toBe(true);
+    expect(isPaidSubscriptionWritable(billing, Date.now() + 20000)).toBe(false);
+    expect(isBillingWriteBlocked({ trialStatus: { isActive: true }, billing: { ...billing, currentPeriodEnd: "2020-01-01" } })).toBe(true);
+  });
   beforeEach(() => {
     localStorage.clear();
   });

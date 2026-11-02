@@ -100,22 +100,32 @@ export function stripBriefingsForD1(rows) {
 /** GPR reports — strip radargram / plan figure base64 before D1 PUT */
 export function stripGprReportsForD1(reports) {
   if (!Array.isArray(reports)) return reports;
+  const stripAnnotatedImage = (image, key = "dataUrl") => stripDataUrlField(stripDataUrlField(image, key), key === "imageDataUrl" ? "originalImageDataUrl" : "originalDataUrl");
   return reports.map((row) => {
     if (!row || typeof row !== "object") return row;
     const radargrams = Array.isArray(row.radargrams)
-      ? row.radargrams.map((rg) => stripDataUrlField(rg))
+      ? row.radargrams.map((rg) => stripAnnotatedImage(rg))
       : row.radargrams;
     const planFigures = Array.isArray(row.planFigures)
-      ? row.planFigures.map((pf) => stripDataUrlField(pf))
+      ? row.planFigures.map((pf) => stripAnnotatedImage(pf))
       : row.planFigures;
     const preSurvey = row.preSurvey && typeof row.preSurvey === "object"
       ? {
           ...row.preSurvey,
           photos: Array.isArray(row.preSurvey.photos)
-            ? row.preSurvey.photos.map((ph) => stripDataUrlField(ph))
+            ? row.preSurvey.photos.map((ph) => stripAnnotatedImage(ph))
             : row.preSurvey.photos,
         }
       : row.preSurvey;
-    return { ...row, radargrams, planFigures, preSurvey };
+    const acquisition = row.acquisition && typeof row.acquisition === "object"
+      ? { ...row.acquisition, screenshots: Array.isArray(row.acquisition.screenshots) ? row.acquisition.screenshots.map((shot) => stripDataUrlField(shot, "originalDataUrl")) : row.acquisition.screenshots }
+      : row.acquisition;
+    const anomalies = Array.isArray(row.anomalies)
+      ? row.anomalies.map((anomaly) => ({ ...anomaly, figures: Array.isArray(anomaly.figures) ? anomaly.figures.map((figure) => stripDataUrlField(figure, "originalDataUrl")) : anomaly.figures }))
+      : row.anomalies;
+    const historicalEvidence = Array.isArray(row.historicalEvidence)
+      ? row.historicalEvidence.map((item) => stripDataUrlField(item, "originalImageDataUrl"))
+      : row.historicalEvidence;
+    return { ...row, radargrams, planFigures, preSurvey, acquisition, anomalies, historicalEvidence };
   });
 }

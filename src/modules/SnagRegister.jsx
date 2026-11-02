@@ -1,10 +1,12 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
+import { persistRegisterRows } from "../utils/registerPersistGuard";
 import { useState, useEffect, useRef, useMemo } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import {
   overlayDraftKey,
   seedOverlayForm,
   useOverlayFormDraft,
-  clearOverlayFormDraft,
+  submitOverlayForm,
 } from "../hooks/useOverlayFormDraft";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
@@ -242,9 +244,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
             <select value={form.projectId} onChange={(e) => set("projectId", e.target.value)} style={ss.inp} id="snag-project-id">
               <option value="">— Select project —</option>
               {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
+                <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
               ))}
             </select>
           </div>
@@ -255,7 +255,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
           <input
             value={form.title}
             onChange={(e) => set("title", e.target.value)}
-            placeholder="e.g. Cable tray not secured at junction box"
+            placeholder="e.g. Unsecured cable tray"
             style={ss.inp}
            id="snag-title" />
         </div>
@@ -271,7 +271,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
            id="snag-description" />
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))", gap: 10, marginBottom: 12 }}>
           <div>
             <label style={ss.lbl} htmlFor="snag-category">Category</label>
             <select value={form.category} onChange={(e) => set("category", e.target.value)} style={ss.inp} id="snag-category">
@@ -315,7 +315,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
             <input
               value={form.location}
               onChange={(e) => set("location", e.target.value)}
-              placeholder="e.g. Level 2, Zone B, near pump room"
+              placeholder="e.g. Level 2, Zone B"
               style={ss.inp}
              id="snag-location" />
           </div>
@@ -357,8 +357,7 @@ function SnagForm({ snag, workers, projects, onSave, onClose }) {
           <button
             disabled={!form.title.trim() || !form.projectId}
             onClick={() => {
-              clearOverlayFormDraft(draftKey);
-              onSave(form);
+              submitOverlayForm(draftKey, form, onSave);
             }}
             style={{ ...ss.btnP, opacity: form.title.trim() && form.projectId ? 1 : 0.4 }}
           >
@@ -588,11 +587,12 @@ export default function SnagRegister() {
   }, [filterStatus, filterPriority, filterProject, filterCategory, filterAssigned, search, sort]);
 
   const saveSnag = (snag) => {
-    if (!ensureProjectLinked({ projectId: snag.projectId, projects, moduleLabel: "snag" })) return;
-    setSnags((prev) =>
-      prev.find((s) => s.id === snag.id) ? prev.map((s) => (s.id === snag.id ? snag : s)) : [snag, ...prev]
-    );
+    if (!ensureProjectLinked({ projectId: snag.projectId, projects, moduleLabel: "snag" })) return false;
+    const next = snags.some(s => s.id === snag.id) ? snags.map(s => s.id === snag.id ? snag : s) : [snag, ...snags];
+    if (!persistRegisterRows("snags", next)) return false;
+    setSnags(next);
     setModal(null);
+    return true;
   };
   const deleteSnag = (id) => {
     if (!caps.deleteRecords) return;
@@ -894,9 +894,7 @@ export default function SnagRegister() {
                 >
                   <option value="">All projects</option>
                   {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
+                    <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
                   ))}
                 </select>
               )}

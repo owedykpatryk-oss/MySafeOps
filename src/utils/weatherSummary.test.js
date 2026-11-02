@@ -32,6 +32,36 @@ describe("resolveSiteCoordinates", () => {
     expect(hit?.postcode).toBe("KT22 7SH");
     expect(hit?.lat).toBeCloseTo(51.299, 2);
   });
+
+  it("falls back from a mistyped dedicated postcode to the postcode in the site address", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        const requested = String(url);
+        const found = requested.includes("PA32ST");
+        return {
+          ok: found,
+          status: found ? 200 : 404,
+          headers: { get: () => "application/json" },
+          text: async () =>
+            JSON.stringify(
+              found
+                ? { result: { postcode: "PA3 2ST", latitude: 55.8719, longitude: -4.4331 } }
+                : { error: "Postcode not found" }
+            ),
+        };
+      })
+    );
+
+    const hit = await resolveSiteCoordinates(
+      "",
+      "",
+      "PA3 2SW",
+      "uk",
+      "Glasgow Airport Limited, Paisley, Renfrewshire, Scotland, PA3 2ST"
+    );
+    expect(hit).toEqual({ lat: 55.8719, lng: -4.4331, postcode: "PA3 2ST" });
+  });
 });
 
 describe("fetchWeatherForPostcode", () => {

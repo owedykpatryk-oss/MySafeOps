@@ -7,18 +7,18 @@
 
 /** Monthly amounts in grosze (PLN × 100). */
 export const PL_PLAN_AMOUNT_GROSZE = {
-  starter: 7900,
-  team: 43900,
-  business: 124900,
-  enterprise: 246900,
+  starter: 15900,
+  team: 63900,
+  business: 136900,
+  enterprise: 265900,
 };
 
 /** Human-readable monthly labels (net). */
 export const PL_PLAN_PRICE_LABELS = {
-  starter: "79 zł",
-  team: "439 zł",
-  business: "1249 zł",
-  enterprise: "2469 zł",
+  starter: "159 zł",
+  team: "639 zł",
+  business: "1369 zł",
+  enterprise: "2659 zł",
   trial: "0 zł",
 };
 

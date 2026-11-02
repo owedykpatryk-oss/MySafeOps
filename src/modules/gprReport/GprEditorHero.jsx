@@ -5,6 +5,7 @@ import SurveyProgressRing from "../surveyReport/SurveyProgressRing";
 import { gprReportQuality, gprStaticMapUrl } from "./gprReportHelpers";
 import { gprEvidenceStats } from "./gprReportPulse";
 import { firstIncompleteGprTab, GPR_EDITOR_TABS, gprOverallTabProgress } from "./gprReportEditorNav";
+import { buildGprBlockers } from "./gprReportBlockers";
 import GprWaveBackdrop from "./GprWaveBackdrop";
 import { openHelpGuide } from "../../utils/workspaceNavContext";
 
@@ -13,10 +14,14 @@ function GprEditorHero({ form, project, onClose, onGoToTab, livePreviewOpen, onT
   const steps = useMemo(() => gprOverallTabProgress(form), [form]);
   const nextTab = useMemo(() => firstIncompleteGprTab(form), [form]);
   const evidence = useMemo(() => gprEvidenceStats(form), [form]);
+  const finalBlockers = useMemo(
+    () => buildGprBlockers(form, { project }).blockers.filter((item) => item.severity === "block"),
+    [form, project]
+  );
   const mapUrl = useMemo(() => gprStaticMapUrl(project?.lat, project?.lng), [project?.lat, project?.lng]);
   const freq = form.equipment?.[0]?.antennaFrequencyMhz;
-  const pen = form.groundConditions?.expectedPenetrationM;
-  const readyToFinal = quality.score >= 80 && form.status !== "final";
+  const pen = form.includeGeology ? form.groundConditions?.expectedPenetrationM : null;
+  const readyToFinal = quality.score >= 80 && finalBlockers.length === 0 && form.status !== "final";
 
   return (
     <header className={`app-survey-editor-hero app-gpr-editor-hero${readyToFinal ? " app-survey-editor-hero--ready app-gpr-editor-hero--ready" : ""}`}>
@@ -46,7 +51,7 @@ function GprEditorHero({ form, project, onClose, onGoToTab, livePreviewOpen, onT
             <p className="app-survey-editor-hero__ready">Ready to mark final — review live preview then sign off.</p>
           ) : (
             <p className="app-survey-editor-hero__hint">
-              {form.status === "final" ? "Final issue" : "Complete each tab — BGS geology and weather enrich automatically"}
+              {form.status === "final" ? "Final issue" : "Complete each tab — optional BGS geology and weather can enrich the report"}
             </p>
           )}
           <div className="app-gpr-hero-stats">

@@ -104,7 +104,7 @@ export function cacheActiveCountryWorkspace(workspace, orgSlug = getOrgId()) {
 async function resolveOrgRow(supabase, orgSlug = getOrgId()) {
   const { data, error } = await supabase
     .from("organizations")
-    .select("id, slug")
+    .select("id, slug, trial_ends_at")
     .eq("slug", orgSlug)
     .limit(1)
     .maybeSingle();
@@ -113,7 +113,7 @@ async function resolveOrgRow(supabase, orgSlug = getOrgId()) {
   return data;
 }
 
-export async function loadCountryWorkspaces(supabase, orgSlug = getOrgId(), { stripeMode = "live" } = {}) {
+export async function loadCountryWorkspaces(supabase, orgSlug = getOrgId(), { stripeMode = null } = {}) {
   if (!supabase) return [];
   const org = await resolveOrgRow(supabase, orgSlug);
   const { data: workspaces, error } = await supabase
@@ -158,6 +158,7 @@ export async function loadCountryWorkspaces(supabase, orgSlug = getOrgId(), { st
   const billingByWorkspace = new Map(subscriptions.map((row) => [row.workspace_id, row]));
   return (workspaces || []).map((workspace) => ({
     ...workspace,
+    evaluation_trial_ends_at: workspace.is_primary ? org.trial_ends_at || null : null,
     billing: billingByWorkspace.get(workspace.id) || null,
     billing_unavailable: !billingReadable,
     is_user_preferred: workspace.id === preferredWorkspaceId,
@@ -172,7 +173,7 @@ export async function ensureLegacyCountryWorkspace(supabase, marketId, orgSlug =
     p_market_id: market,
   });
   if (error) throw error;
-  if (data) cacheActiveCountryWorkspaceId(data, orgSlug);
+  if (data && !getCachedActiveCountryWorkspaceId(orgSlug)) cacheActiveCountryWorkspaceId(data, orgSlug);
   return data || null;
 }
 

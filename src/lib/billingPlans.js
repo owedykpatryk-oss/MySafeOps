@@ -1,4 +1,5 @@
 import { getBillingEntitlements } from "../utils/orgMembership";
+import { BILLING_PLAN_LIMITS } from "../../shared/billingPlanLimits.mjs";
 import { AU_PLAN_PRICE_LABELS } from "../config/auPricing";
 import { PL_PLAN_PRICE_LABELS } from "../config/plPricing";
 import { DE_PLAN_PRICE_LABELS } from "../config/dePricing";
@@ -93,13 +94,9 @@ export const BILLING_PLANS = {
   starter: {
     id: "starter",
     name: "Solo",
-    priceLabel: "£19",
+    priceLabel: "£39",
     interval: "month",
-    limits: {
-      workers: 5,
-      projects: 100,
-      cloudBytes: 2_000_000_000,
-    },
+    limits: BILLING_PLAN_LIMITS.starter,
     includes: [
       "Up to 5 workers",
       "100 active projects",
@@ -111,13 +108,9 @@ export const BILLING_PLANS = {
   team: {
     id: "team",
     name: "Team",
-    priceLabel: "£109",
+    priceLabel: "£159",
     interval: "month",
-    limits: {
-      workers: 20,
-      projects: 500,
-      cloudBytes: 10_000_000_000,
-    },
+    limits: BILLING_PLAN_LIMITS.team,
     includes: [
       "Up to 20 workers",
       "500 active projects",
@@ -129,13 +122,9 @@ export const BILLING_PLANS = {
   business: {
     id: "business",
     name: "Business",
-    priceLabel: "£319",
+    priceLabel: "£349",
     interval: "month",
-    limits: {
-      workers: 75,
-      projects: 2_500,
-      cloudBytes: 50_000_000_000,
-    },
+    limits: BILLING_PLAN_LIMITS.business,
     includes: [
       "Up to 75 workers",
       "2,500 active projects",
@@ -148,13 +137,9 @@ export const BILLING_PLANS = {
   enterprise: {
     id: "enterprise",
     name: "Enterprise",
-    priceLabel: "£649",
+    priceLabel: "£699",
     interval: "month",
-    limits: {
-      workers: 200,
-      projects: 10_000,
-      cloudBytes: 200_000_000_000,
-    },
+    limits: BILLING_PLAN_LIMITS.enterprise,
     includes: [
       "Up to 200 workers",
       "10,000 active projects",
@@ -172,11 +157,7 @@ export const BILLING_PLANS = {
     name: "Enterprise Plus",
     priceLabel: "Contact us",
     interval: "custom",
-    limits: {
-      workers: Number.MAX_SAFE_INTEGER,
-      projects: Number.MAX_SAFE_INTEGER,
-      cloudBytes: Number.MAX_SAFE_INTEGER,
-    },
+    limits: BILLING_PLAN_LIMITS.enterprise_plus,
     includes: [
       "Unlimited workers and projects",
       "Unlimited storage",
@@ -197,11 +178,7 @@ export const TRIAL_PLAN = {
   name: "Evaluation trial",
   priceLabel: "£0",
   interval: "14 days (+ optional 14)",
-  limits: {
-    workers: 200,
-    projects: 100,
-    cloudBytes: 10_000_000_000,
-  },
+  limits: BILLING_PLAN_LIMITS.trial,
   includes: [
     "Full module library — all registers and RAMS sections",
     "One free +14 day extension per organisation",
@@ -251,11 +228,13 @@ export function getPlanByComparisonId(id) {
 
 export function getEffectivePlanId(trialStatus, billing) {
   const b = billing ?? getBillingEntitlements();
+  if (b.cancelAtPeriodEnd && !(Date.now() < new Date(b.currentPeriodEnd).getTime())) return "expired";
   const paidActive =
     (b.subscriptionStatus === "active" || b.subscriptionStatus === "trialing") && b.paidPlanId;
   if (paidActive) return b.paidPlanId;
   // Keep paid limits during past_due dunning (write access gated separately by grace window).
   if (b.subscriptionStatus === "past_due" && b.paidPlanId) return b.paidPlanId;
+  if (b.subscriptionStatus && b.subscriptionStatus !== "none") return "expired";
   if (trialStatus?.isActive) return "trial";
   if (trialStatus && !trialStatus.isActive) return "expired";
   return "local";

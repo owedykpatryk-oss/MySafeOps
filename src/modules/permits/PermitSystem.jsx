@@ -1,4 +1,6 @@
+import { projectDisplayLabel } from "../../utils/projectDisplayLabel";
 import { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue, memo, lazy, Suspense } from "react";
+import { getPublicAppOrigin, publicAppUrl } from "../../utils/publicAppUrl";
 import { useToast } from "../../context/ToastContext";
 import { copyTextToClipboard } from "../../utils/copyToClipboard";
 import { ms } from "../../utils/moduleStyles";
@@ -388,8 +390,8 @@ function resolvePermitThemeVars(themeMode = "auto", prefersDark = false) {
     "--permit-surface-bg": "transparent",
     "--permit-panel-bg": "#ffffff",
     "--permit-panel-border": "#e5e7eb",
-    "--permit-text": "var(--color-text-primary)",
-    "--permit-text-muted": "var(--color-text-secondary)",
+    "--permit-text": "#0f172a",
+    "--permit-text-muted": "#475569",
     "--permit-chip-neutral-bg": "var(--color-background-secondary,#f7f7f5)",
     "--permit-chip-neutral-fg": "var(--color-text-secondary)",
     "--permit-chip-neutral-border": "var(--color-border-tertiary,#e5e5e5)",
@@ -952,6 +954,7 @@ function PermitForm({
   const geoPhotos = load("geo_photos", []);
   const [geoEvidencePickerOpen, setGeoEvidencePickerOpen] = useState(false);
   const [evidenceUploadBusy, setEvidenceUploadBusy] = useState(false);
+  const [evidenceUploadMessage, setEvidenceUploadMessage] = useState("");
   const [fieldCaptureOpen, setFieldCaptureOpen] = useState(false);
   const [fieldCaptureKind, setFieldCaptureKind] = useState("scan_proof");
   const [fieldCaptureNote, setFieldCaptureNote] = useState("");
@@ -2221,7 +2224,7 @@ function PermitForm({
               style={ss.inp}
             >
               <option value="">— Select project —</option>
-              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map(p=><option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
             </select>
             {form.projectId ? (() => {
               const project = projects.find((p) => p.id === form.projectId);
@@ -2541,11 +2544,14 @@ function PermitForm({
                     e.target.value = "";
                     if (!f) return;
                     setEvidenceUploadBusy(true);
+                    setEvidenceUploadMessage("");
                     try {
                       const { path } = await uploadPermitEvidencePhoto(f, form.id);
                       // Persist storage path only — signed URLs are minted at display/print time.
                       setForm((prev) => ({ ...prev, evidencePhotoStoragePath: path, evidencePhotoUrl: "" }));
+                      setEvidenceUploadMessage("Image uploaded. Save the permit to keep this attachment.");
                     } catch (err) {
+                      setEvidenceUploadMessage("");
                       window.alert(err?.message || String(err));
                     } finally {
                       setEvidenceUploadBusy(false);
@@ -2553,6 +2559,7 @@ function PermitForm({
                   }}
                   style={{ display:"block", marginTop:4, fontSize:12 }}
                  id="permit-or-upload-image-signed-in-7-day-view-link" />
+                {evidenceUploadMessage ? <p role="status" style={{ margin: "6px 0 0", color: "var(--color-text-primary)", fontSize: 12 }}>{evidenceUploadMessage}</p> : null}
               </div>
             ) : null}
           </div>
@@ -2858,8 +2865,8 @@ function PermitForm({
 
         {/* checklist */}
         <div style={{ marginBottom:16 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-            <div style={{ fontSize:11, fontWeight:500, color:"var(--color-text-secondary)", textTransform:"uppercase", letterSpacing:"0.05em" }}>
+          <div className="permit-checklist-header" style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:10, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:500, color:"var(--permit-text-muted)", textTransform:"uppercase", letterSpacing:"0.05em" }}>
               Pre-work checklist
             </div>
             {typeMeta?.hseUrl ? (
@@ -2872,10 +2879,10 @@ function PermitForm({
               color:allChecked?"#27500A":"#633806" }}>
               {checkCount}/{totalChecks}
             </span>
-            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary)" }}>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--permit-text-muted)" }}>
               Template v{form.templateVersion || 1}
             </span>
-            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary)" }}>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--permit-text-muted)" }}>
               Matrix {complianceProfile.matrixVersion || "uk-v2"}
             </span>
             <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background: legalReady ? "#EAF3DE" : "#FCEBEB", color: legalReady ? "#27500A" : "#791F1F" }}>
@@ -2884,7 +2891,7 @@ function PermitForm({
             <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"#E6F1FB", color:"#0C447C" }}>
               DataComplete {Math.round(compliance.dataComplete * 100)}%
             </span>
-            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--color-text-secondary)" }}>
+            <span style={{ fontSize:11, padding:"1px 8px", borderRadius:20, background:"var(--color-background-secondary,#f7f7f5)", color:"var(--permit-text-muted)" }}>
               Legal review by {nextLegalReviewDate(form.createdAt || new Date().toISOString())}
             </span>
             {flags && (
@@ -2985,7 +2992,7 @@ function PermitForm({
                     <button type="button" onClick={() => moveChecklistItem(item.id, "down")} style={{ ...ss.btn, fontSize:11, padding:"2px 6px" }}>↓</button>
                   </div>
                 ) : (
-                  <span style={{ fontSize:13, lineHeight:1.5 }}>{item.text}</span>
+                  <span style={{ fontSize:13, lineHeight:1.5, color:"var(--permit-text)" }}>{item.text}</span>
                 )}
                 {templateEditMode && !item.required && (
                   <button type="button" onClick={() => removeChecklistItem(item.id)} style={{ ...ss.btn, fontSize:11, padding:"2px 8px", color:"#A32D2D", borderColor:"#F09595" }}>
@@ -3912,7 +3919,7 @@ function openPermitDocument(permit, { autoPrint = false } = {}) {
     await writePrintWindowDocument(
       win,
       renderPermitDocumentHtml(permit, {
-        origin: typeof window !== "undefined" ? window.location.origin : "",
+        origin: getPublicAppOrigin(),
       })
     );
     if (autoPrint) {
@@ -6678,7 +6685,7 @@ export default function PermitSystem() {
     );
     const targetToken = token || permit.ackToken;
     if (!targetToken) return;
-    const url = `${window.location.origin}${window.location.pathname}?view=permits&permitAck=${encodeURIComponent(targetToken)}`;
+    const url = publicAppUrl(`/app?view=permits&permitAck=${encodeURIComponent(targetToken)}`);
     const ok = await copyTextToClipboard(url);
     if (ok) {
       pushToast({
@@ -7845,7 +7852,7 @@ export default function PermitSystem() {
           <select value={planProjectId} onChange={(e) => setPlanProjectId(e.target.value)} style={{ ...ss.inp, minWidth:220 }}>
             <option value="">Select project</option>
             {load("mysafeops_projects", []).map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
             ))}
           </select>
           <input
@@ -8040,7 +8047,7 @@ export default function PermitSystem() {
       {/* filters */}
       <div className="ptw-layout">
       <div className="ptw-order-filters" style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search location, worker, issuer, type…" style={{ ...ss.inp, flex:1, width: isNarrow ? "100%" : "auto", minWidth: isNarrow ? "100%" : 140 }} />
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search permits" aria-label="Search permits by location, worker, issuer or type" style={{ ...ss.inp, flex:1, width: isNarrow ? "100%" : "auto", minWidth: isNarrow ? "100%" : 180 }} />
         <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...ss.inp, width: isNarrow ? "100%" : "auto" }}>
           <option value="">All permit types</option>
           {Object.entries(effectivePermitTypes).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
@@ -9141,7 +9148,7 @@ export default function PermitSystem() {
           <div className="app-panel-surface" style={{ padding:10, borderRadius:10 }}>
             <div style={{ fontSize:12, fontWeight:600, marginBottom:8 }}>Permit risk heatmap (type × status)</div>
             <div style={{ overflowX:"auto" }}>
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <table style={{ width:"100%", minWidth:640, borderCollapse:"collapse", fontSize:12 }}>
                 <thead>
                   <tr>
                     <th style={{ textAlign:"left", padding:"6px 8px" }}>Type</th>

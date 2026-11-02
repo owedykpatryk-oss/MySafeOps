@@ -1,15 +1,35 @@
+import { useEffect, useState } from "react";
 import { openRamsPrintWindow } from "./ramsPrintHtml";
 import { ms } from "../../utils/moduleStyles";
 import { loadOrgScoped as load } from "../../utils/orgStorage";
 import { safeOpaqueToken } from "../../utils/htmlEscape.js";
+import { supabase } from "../../lib/supabase";
+import { fetchPublishedRams } from "../../utils/ramsCloudShare";
 
 const ss = { ...ms, btnP: ms.btnP };
 
 /**
- * Read-only RAMS view opened via ?ramsShare=TOKEN (same browser / localStorage as builder).
+ * Read-only RAMS view opened via ?ramsShare=TOKEN.
  */
 export default function PublicRamsShareView({ token }) {
   const safeToken = safeOpaqueToken(token);
+  const [published, setPublished] = useState(null);
+  const [loading, setLoading] = useState(Boolean(supabase));
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    if (!safeToken || !supabase) return;
+    let active = true;
+    setLoading(true);
+    setPublished(null);
+    setLoadError("");
+    fetchPublishedRams(supabase, safeToken)
+      .then((doc) => { if (active) setPublished(doc); })
+      .catch(() => { if (active) setLoadError("Could not check this link. Check your connection and reload the page."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [safeToken]);
+
   const ramsDocs = load("rams_builder_docs", []);
   const workers = load("mysafeops_workers", []);
   const projects = load("mysafeops_projects", []);
@@ -25,20 +45,24 @@ export default function PublicRamsShareView({ token }) {
     );
   }
 
-  const doc = ramsDocs.find((d) => d.shareToken && d.shareToken === safeToken);
+  const doc = published || ramsDocs.find((d) => d.shareToken === safeToken && !d.sharePublishedAt);
+
+  if (loading && !doc) return <div role="status" style={{ padding: "2rem 1rem", textAlign: "center" }}>Loading shared RAMS…</div>;
+
+  if (loadError && !doc) return <div role="alert" style={{ padding: "2rem 1rem", textAlign: "center" }}>{loadError}</div>;
 
   if (!doc) {
     return (
       <div style={{ padding: "2rem 1rem", maxWidth: 480, margin: "0 auto", fontFamily: "DM Sans, system-ui, sans-serif" }}>
         <h1 style={{ fontSize: 18, fontWeight: 600 }}>RAMS link not available</h1>
         <p style={{ fontSize: 14, color: "var(--color-text-secondary,#64748b)", lineHeight: 1.5 }}>
-          This read-only link only works in the same browser profile where the RAMS was saved. If you opened this on another device, use Backup / export from the main app instead.
+          This link has expired, was revoked, or has not been published. Ask the sender for a new link.
         </p>
       </div>
     );
   }
 
-  const rows = doc.rows || [];
+  const rows = Array.isArray(doc.rows) ? doc.rows : [];
 
   return (
     <div style={{ padding: "1.5rem 1rem", maxWidth: 720, margin: "0 auto", fontFamily: "DM Sans, system-ui, sans-serif", fontSize: 14 }}>
@@ -55,7 +79,7 @@ export default function PublicRamsShareView({ token }) {
         </p>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <button type="button" style={ss.btnP} onClick={() => openRamsPrintWindow(doc, rows, workers, projects)}>
+        <button type="button" style={ss.btnP} onClick={() => openRamsPrintWindow(doc, rows, published ? [] : workers, published ? [] : projects)}>
           Print / PDF
         </button>
       </div>

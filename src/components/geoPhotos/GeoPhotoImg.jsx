@@ -1,61 +1,40 @@
-import { useEffect, useState } from "react";
-import { geoPhotoDisplayUrl, resolveGeoPhotoObjectUrl } from "../../utils/geoPhotoMedia";
+import { useEffect, useRef, useState } from "react";
+import { geoPhotoDisplayUrl, resolveGeoPhotoCachedDataUrl, resolveGeoPhotoPdfDataUrl } from "../../utils/geoPhotoMedia";
 
-/**
- * Geo-photo thumbnail / preview. Uses data/signed/public URL when available;
- * falls back to authenticated R2 GET /object when only photoStorageKey remains
- * (e.g. after D1 sync stripped base64, or misconfigured public base cleared the data URL).
- */
+/** Prefer the offline copy; ignore responses for older photos. */
 export default function GeoPhotoImg({ photo, alt = "", className = "", style, loading = "lazy" }) {
   const direct = geoPhotoDisplayUrl(photo);
-  const [src, setSrc] = useState(direct);
+  const key = photo?.photoStorageKey;
+  const identity = `${photo?.id || ""}|${key || ""}|${direct}`;
+  const [image, setImage] = useState({ identity, src: direct });
+  const errorHandler = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
-    let objectUrl = "";
-
-    if (direct) {
-      setSrc(direct);
-      return () => {
-        cancelled = true;
-      };
+    let attempted = false;
+    const show = (url) => {
+      if (!cancelled) setImage({ identity, src: url || "" });
+    };
+    const fallback = async () => {
+      if (attempted || !key) { show(""); return; }
+      attempted = true;
+      show(await resolveGeoPhotoPdfDataUrl({ photoStorageKey: key }));
+    };
+    errorHandler.current = { identity, run: fallback };
+    show(direct);
+    if (key && !direct.startsWith("data:")) {
+      void resolveGeoPhotoCachedDataUrl(key).then((url) => {
+        if (url) show(url);
+        else if (!cancelled && !direct) void fallback();
+      });
     }
-
-    setSrc("");
-    if (!photo?.photoStorageKey) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    void resolveGeoPhotoObjectUrl(photo.photoStorageKey).then((url) => {
-      if (cancelled) {
-        if (url) URL.revokeObjectURL(url);
-        return;
-      }
-      if (!url) return;
-      objectUrl = url;
-      setSrc(url);
-    });
-
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [direct, photo?.id, photo?.photoStorageKey]);
+  }, [direct, key, identity]);
 
-  const onError = () => {
-    if (!photo?.photoStorageKey || !direct || src !== direct) {
-      setSrc("");
-      return;
-    }
-    void resolveGeoPhotoObjectUrl(photo.photoStorageKey).then((url) => {
-      if (url) setSrc(url);
-      else setSrc("");
-    });
-  };
-
+  const src = image.identity === identity ? image.src : direct;
   if (!src) return null;
-
-  return <img src={src} alt={alt} className={className} style={style} loading={loading} onError={onError} />;
+  return <img src={src} alt={alt} className={className} style={style} loading={loading}
+    onError={() => { if (errorHandler.current?.identity === identity) void errorHandler.current.run(); }} />;
 }

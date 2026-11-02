@@ -81,6 +81,7 @@ export const workspaceViewLoaders = {
   "monthly-report": () => import("../modules/MonthlyReport"),
   "survey-report": () => import("../modules/surveyReport/SurveyReport"),
   "gpr-report": () => import("../modules/gprReport/GprReport"),
+  "drone-operations": () => import("../modules/droneOperations/DroneOperations"),
   waste: () => import("../modules/WasteRegister"),
   templates: () => import("../modules/DocumentTemplates"),
   // AI generators hidden from More nav until prebuilt packs ship (routes kept for later).

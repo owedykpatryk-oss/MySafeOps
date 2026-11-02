@@ -9,15 +9,15 @@ import {
 
 describe("auPricing", () => {
   it("exposes AUD list prices ex GST", () => {
-    expect(AU_PLAN_PRICE_LABELS.starter).toBe("A$59");
-    expect(AU_PLAN_PRICE_LABELS.team).toBe("A$249");
-    expect(AU_PLAN_PRICE_LABELS.business).toBe("A$719");
-    expect(AU_PLAN_PRICE_LABELS.enterprise).toBe("A$1429");
+    expect(AU_PLAN_PRICE_LABELS.starter).toBe("A$119");
+    expect(AU_PLAN_PRICE_LABELS.team).toBe("A$359");
+    expect(AU_PLAN_PRICE_LABELS.business).toBe("A$789");
+    expect(AU_PLAN_PRICE_LABELS.enterprise).toBe("A$1539");
   });
 
   it("maps plan ids to Stripe cents", () => {
     expect(getAuPlanAmountCents("starter")).toBe(AU_PLAN_AMOUNT_CENTS.starter);
-    expect(getAuPlanPriceLabel("enterprise")).toBe("A$1429");
+    expect(getAuPlanPriceLabel("enterprise")).toBe("A$1539");
   });
 
   it("uses _AUD suffix for Stripe env keys", () => {

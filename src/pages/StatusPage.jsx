@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import LandingFooter from "../components/landing/LandingFooter";
 import { getSupportEmail } from "../config/supportContact";
 import { showAdminLoginHints } from "../lib/showAdminLoginHints";
+import { appApiUrl } from "../utils/appApiUrl";
 import "../styles/landing.css";
 
 const SUPPORT_EMAIL = getSupportEmail();
@@ -24,7 +25,7 @@ export default function StatusPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/health", { cache: "no-store" })
+    fetch(appApiUrl("/api/health"), { cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error("unhealthy");
         const json = await res.json();

@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../../../utils/projectDisplayLabel";
 import { useMemo } from "react";
 import {
   labelRuleAction,
@@ -148,9 +149,7 @@ export default function PermitConditionalRulesBoard({
                             >
                               <option value="">Any project</option>
                               {projects.slice(0, 300).map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name || p.id}
-                                </option>
+                                <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
                               ))}
                             </select>
                           )}

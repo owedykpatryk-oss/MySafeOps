@@ -1,16 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { blankGprReport } from "./gprReportConstants.js";
+import { blankGprReport, GPR_EQUIPMENT_PRESETS } from "./gprReportConstants.js";
 import { buildLimitationsFromKeys, gprReportQuality, nextGprRef, normalizeGprReport, buildAnomaliesGeoJson, buildDuplicateGprPayload, autoNumberAnomalies, upsertGprReportInList } from "./gprReportHelpers.js";
 import { suggestGprLimitationKeys } from "./gprReportSmart.js";
+import { buildGprBlockers } from "./gprReportBlockers.js";
 import { applyIndustryGprTemplate } from "./gprReportTemplateContext.js";
 
 describe("gprReportHelpers", () => {
+  it("offers current utility and 3D-array equipment presets with unique keys", () => {
+    const byKey = Object.fromEntries(GPR_EQUIPMENT_PRESETS.map((preset) => [preset.key, preset]));
+    expect(Object.keys(byKey)).toHaveLength(GPR_EQUIPMENT_PRESETS.length);
+    expect(byKey.ids_stream_dp).toMatchObject({ antennaFrequencyMhz: 600, channels: 30 });
+    expect(byKey.impulse_pinpointr).toMatchObject({ antennaFrequencyMhz: 400, channels: 2 });
+    expect(byKey.impulse_raptor).toMatchObject({ model: "Raptor-45", antennaFrequencyMhz: 450, channels: 8 });
+    expect(byKey.mala_mira_hdr).toMatchObject({ antennaFrequencyMhz: 500, channels: 132 });
+    expect(byKey.proceq_gp8100).toMatchObject({
+      model: "GP8100",
+      frequencyRangeMhz: "400–4000",
+      channels: 6,
+    });
+    expect(byKey.proceq_gp8100.imageUrls).toHaveLength(2);
+  });
+
   it("normalizes legacy partial report", () => {
     const r = normalizeGprReport({ ref: "GPR-2026-001" });
     expect(r.equipment.length).toBeGreaterThan(0);
     expect(r.acquisition.scanMode).toBe("grid");
     expect(r.preSurvey.objectives).toEqual([]);
     expect(r.preSurvey.siteChecks.ramsBriefed).toBe(false);
+    expect(r.includeGeology).toBe(false);
+    expect(r.includeHistoricalEvidence).toBe(false);
+  });
+
+  it("keeps desk-study choices optional and preserves legacy evidence", () => {
+    const draft = blankGprReport({ groundConditions: { fetchedAt: "2026-01-01" } });
+    expect(gprReportQuality(draft).missing).not.toContain("BGS ground data");
+    expect(gprReportQuality({ ...draft, includeGeology: true }).missing).not.toContain("BGS ground data");
+    expect(normalizeGprReport({ groundConditions: { fetchedAt: "2026-01-01" }, historicalEvidence: [{ id: "old" }] }))
+      .toMatchObject({ includeGeology: true, includeHistoricalEvidence: true });
+    expect(normalizeGprReport({ ...draft, includeGeology: false }).includeGeology).toBe(false);
   });
 
   it("generates sequential refs", () => {
@@ -39,6 +66,14 @@ describe("gprReportHelpers", () => {
       velocityModel: { assumedVelocityCmNs: 10 },
     });
     expect(gprReportQuality(full).score).toBeGreaterThan(70);
+  });
+
+  it("keeps weather optional in quality scoring and issue checks", () => {
+    const report = blankGprReport({ preSurvey: { surveySetting: "indoor", levelBelow: "yes" } });
+    expect(gprReportQuality(report).missing).not.toContain("Weather / environment");
+    expect(buildGprBlockers(report).blockers).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ label: "Weather / environment" })]),
+    );
   });
 
   it("exports anomalies as GeoJSON feature collection", () => {
@@ -83,11 +118,25 @@ describe("gprReportHelpers", () => {
 describe("gprReportSmart limitations", () => {
   it("suggests clay attenuation limitation", () => {
     const report = blankGprReport({
+      includeGeology: true,
       groundConditions: { attenuationClass: "high", materialClass: "clay_silt" },
     });
     const keys = suggestGprLimitationKeys(report);
     expect(keys).toContain("attenuation_clay");
     expect(keys).toContain("velocity_uncertainty");
+  });
+
+  it("does not turn outdoor rain into an indoor limitation, but keeps observed slab moisture", () => {
+    const report = blankGprReport({
+      preSurvey: { surveySetting: "indoor" },
+      environmental: { rainDuringSurvey: "heavy" },
+      groundConditions: { siteObservations: { moisture: "dry" } },
+    });
+    expect(suggestGprLimitationKeys(report)).not.toContain("weather_moisture");
+    expect(suggestGprLimitationKeys({
+      ...report,
+      groundConditions: { siteObservations: { moisture: "wet" } },
+    })).toContain("surface_moisture");
   });
 });
 

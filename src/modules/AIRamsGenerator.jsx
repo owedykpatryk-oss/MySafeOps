@@ -34,16 +34,16 @@ Respond with a single JSON object only, no markdown, with this shape:
       "category": "string",
       "activity": "string",
       "hazard": "string",
-      "initialRisk": { "L": 1-5, "S": 1-5, "RF": number },
+      "initialRisk": { "L": 1-6, "S": 1-6, "RF": number },
       "controlMeasures": ["string", ...],
-      "revisedRisk": { "L": 1-5, "S": 1-5, "RF": number },
+      "revisedRisk": { "L": 1-6, "S": 1-6, "RF": number },
       "ppeRequired": ["string", ...],
       "regs": ["string — ${market.authority} only; use accurate titles and omit uncertain citations"]
     }
   ],
   "methodSteps": ["high-level safe sequence step 1", "step 2", ...]
 }
-Use ${market.language}. Never cite UK HSE, CDM, COSHH, LOLER, PUWER or other foreign legislation unless the selected jurisdiction is the United Kingdom. Risk factor RF = L * S. Be specific to the activity described. Include 6–15 hazards for a typical site job. Treat the result as a draft requiring approval by a competent person.`;
+Use ${market.language}. Never cite UK HSE, CDM, COSHH, LOLER, PUWER or other foreign legislation unless the selected jurisdiction is the United Kingdom. Use integer L and S from 1 to 6 on the application's existing scale. Risk factor RF = L * S; bands are low below 12, medium from 12 to 23, high from 24. Do not lower severity merely because a control reduces likelihood. Describe why any reduction of severity is justified. Be specific to the activity described. Include 6–15 hazards for a typical site job. Treat the result as a draft requiring approval by a competent person.`;
 }
 
 export default function AIRamsGenerator() {

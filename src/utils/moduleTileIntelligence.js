@@ -12,7 +12,7 @@ function loadRegisterItems(moduleId) {
   const cfg = MODULE_PDF_REGISTRY[moduleId];
   if (!cfg) return [];
   const data = loadOrgScoped(cfg.key, []);
-  return Array.isArray(data) ? data : [];
+  return Array.isArray(data) ? data.filter((row) => row && !row.deletedAt) : [];
 }
 
 /** @typedef {{ shortLabel: string, label: string, viewId?: string, action?: string, seed?: boolean }} PrebuildDef */
@@ -199,9 +199,8 @@ export function getModuleTilePresentation(moduleId, stat) {
   };
 }
 
-/** One-line smart hint for tile (truncated). */
+/** Full smart hint for tile; safety instructions must remain readable. */
 export function tileSmartLine(presentation) {
   if (!presentation?.smartText) return "";
-  const t = String(presentation.smartText);
-  return t.length > 72 ? `${t.slice(0, 69)}…` : t;
+  return String(presentation.smartText);
 }

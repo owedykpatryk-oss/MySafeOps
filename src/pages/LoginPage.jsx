@@ -224,7 +224,8 @@ export default function LoginPage() {
         return;
       }
       try {
-        await ensureUserOrgContext(client);
+        await ensureUserOrgContext(client, user.id);
+        if (cancelled) return;
         const ue = (user.email || "").trim();
         if (ue) {
           trackAuthEvent("sign_in_success", { email: ue.toLowerCase() });
@@ -539,7 +540,7 @@ export default function LoginPage() {
                   const em = (user?.email || email || "").trim();
                   if (!em) return;
                   try {
-                    await ensureUserOrgContext(client);
+                    await ensureUserOrgContext(client, user.id);
                     trackAuthEvent("sign_in_success", { email: em.toLowerCase() });
                     clearAuthFailures(em.toLowerCase());
                     rememberAuthEmail(em);

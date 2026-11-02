@@ -1,8 +1,8 @@
-import { useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { checkBillingLimit } from "../utils/billingLimits";
 import { openWorkspaceSettings } from "../utils/workspaceNavContext";
 import InlineAlert from "./InlineAlert";
+import { useBillingUsageRevision } from "../hooks/useBillingUsageRevision";
 
 const WARN_RATIO = 0.8;
 
@@ -10,15 +10,16 @@ const WARN_RATIO = 0.8;
  * Workspace banner when workers or projects approach plan caps (≥80%).
  */
 export default function BillingUsageWarning() {
-  const { trialStatus, billing, orgId } = useApp();
+  const { trialStatus, billing, orgId, isPlatformOwner } = useApp();
+  useBillingUsageRevision();
 
-  const warnings = useMemo(() => {
-    if (!orgId || orgId === "default") return [];
-    const opts = { trialStatus, billing, isPlatformOwner: false };
+  const warnings = (() => {
+    if (!orgId || orgId === "default" || isPlatformOwner) return [];
+    const opts = { trialStatus, billing, isPlatformOwner };
     const out = [];
     for (const kind of ["projects", "workers"]) {
       const gate = checkBillingLimit(kind, opts);
-      if (!gate.ok || gate.readOnly || !gate.limit) continue;
+      if (gate.readOnly || !gate.limit) continue;
       const ratio = gate.count / gate.limit;
       if (ratio >= WARN_RATIO) {
         out.push({
@@ -31,7 +32,7 @@ export default function BillingUsageWarning() {
       }
     }
     return out;
-  }, [trialStatus, billing, orgId]);
+  })();
 
   if (!warnings.length) return null;
 

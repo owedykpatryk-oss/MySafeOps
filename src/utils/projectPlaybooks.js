@@ -689,10 +689,16 @@ export function applyAndPersistProjectPlaybook(project, playbookId) {
     plans: [],
   };
   const result = applyProjectPlaybook(project, playbookId, existing);
-  if (result.created.rams.length) save(PROJECT_DOC_KEYS.rams, result.store.rams);
-  if (result.created.surveys.length) save(PROJECT_DOC_KEYS.surveys, result.store.surveys);
-  if (result.created.gprReports.length) save(PROJECT_DOC_KEYS.gprReports, result.store.gprReports);
-  if (result.created.permits.length) save(PROJECT_DOC_KEYS.permits, result.store.permits);
-  if (result.created.methodStatements.length) save(PROJECT_DOC_KEYS.methodStatements, result.store.methodStatements);
+  const persist = (key, rows, created, label) => {
+    if (!created.length) return;
+    if (save(key, rows) !== true) {
+      throw new Error(`The project playbook ${label} could not be saved on this device. Check storage or workspace access and retry.`);
+    }
+  };
+  persist(PROJECT_DOC_KEYS.rams, result.store.rams, result.created.rams, "RAMS draft");
+  persist(PROJECT_DOC_KEYS.surveys, result.store.surveys, result.created.surveys, "survey draft");
+  persist(PROJECT_DOC_KEYS.gprReports, result.store.gprReports, result.created.gprReports, "GPR draft");
+  persist(PROJECT_DOC_KEYS.permits, result.store.permits, result.created.permits, "permit drafts");
+  persist(PROJECT_DOC_KEYS.methodStatements, result.store.methodStatements, result.created.methodStatements, "method statement");
   return result;
 }

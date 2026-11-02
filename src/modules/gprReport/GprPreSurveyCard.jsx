@@ -30,10 +30,12 @@ export default function GprPreSurveyCard({
   onChange,
   onAddPhoto,
   onRemovePhoto,
+  onAnnotatePhoto,
   onBeforePickPhoto,
 }) {
   const ps = preSurvey || {};
   const started = isGprPreSurveyStarted(ps);
+  const indoor = ps.surveySetting === "indoor";
   const dates = ps.surveyDates?.length ? ps.surveyDates : [""];
   const coord = formatPreSurveyCoord(ps.lat, ps.lng, ps.gpsAccuracyM);
   const weatherBits = [ps.weather?.description, ps.weather?.tempC != null ? `${ps.weather.tempC}°C` : "", ps.weather?.windMph != null ? `wind ~${ps.weather.windMph} mph` : ""]
@@ -55,7 +57,7 @@ export default function GprPreSurveyCard({
           <div className="app-gpr-start-card__eyebrow">Pre-survey checks</div>
           <h3 className="app-gpr-start-card__title">Start here</h3>
           <p className="app-gpr-start-card__lead">
-            Tap once on site. We stamp GPS and live weather at that moment, then you add general photos, surface, survey days and what you are looking for. All of it goes into the PDF.
+            Record the survey setting first, then tap Start here on site. GPS is stamped at that moment; weather is optional and skipped indoors. Add photos, substrate and objectives for the PDF.
           </p>
         </div>
         <button
@@ -64,7 +66,7 @@ export default function GprPreSurveyCard({
           disabled={!!busy}
           onClick={onStartHere}
         >
-          {busy === "start" ? "Capturing…" : started ? "Re-stamp GPS & weather" : "Start here"}
+          {busy === "start" ? "Capturing…" : started ? indoor ? "Re-stamp GPS" : "Re-stamp GPS & weather" : "Start here"}
         </button>
       </div>
 
@@ -84,14 +86,40 @@ export default function GprPreSurveyCard({
               {ps.gpsSource ? ` · ${preSurveyGpsSourceLabel(ps.gpsSource)}` : ""}
             </span>
           </div>
-          <div>
+          {!indoor ? <div>
             <span className="app-gpr-start-stamp__k">Weather</span>
-            <span className="app-gpr-start-stamp__v">{weatherBits || ps.weatherError || "Not recorded"}</span>
-          </div>
+            <span className="app-gpr-start-stamp__v">{weatherBits || ps.weatherError || "Optional · not recorded"}</span>
+          </div> : null}
         </div>
       ) : (
         <p className="app-gpr-start-card__hint">Create the job, then tap Start here when you are on site — not from the office.</p>
       )}
+
+      <div className="app-gpr-start-block">
+        <div className="app-gpr-start-block__label">Survey setting</div>
+        <label className="app-gpr-start-select">
+          Where is the scan performed?
+          <select value={ps.surveySetting || "unspecified"} onChange={(e) => patch({ surveySetting: e.target.value })}>
+            <option value="unspecified">Select setting</option>
+            <option value="indoor">Indoors</option>
+            <option value="outdoor">Outdoors</option>
+            <option value="mixed">Mixed indoor and outdoor</option>
+          </select>
+        </label>
+        {(indoor || ps.surveySetting === "mixed") ? (
+          <label className="app-gpr-start-select">
+            Is there another building level below the scanned slab?
+            <select value={ps.levelBelow || "unknown"} onChange={(e) => patch({ levelBelow: e.target.value })}>
+              <option value="unknown">Not confirmed</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </label>
+        ) : null}
+        {(indoor || ps.surveySetting === "mixed") ? (
+          <p className="app-gpr-start-block__hint">Use building plans or site knowledge for the level below. A GPR response alone does not confirm another floor.</p>
+        ) : null}
+      </div>
 
       <div className="app-gpr-start-block">
         <div className="app-gpr-start-block__label">Survey day(s)</div>
@@ -200,17 +228,18 @@ export default function GprPreSurveyCard({
 
       <div className="app-gpr-start-block">
         <div className="app-gpr-start-block__label">General site photographs</div>
-        <p className="app-gpr-start-block__hint">Overview shots of the scan area, not radargrams. These print in the report.</p>
+        <p className="app-gpr-start-block__hint">Overview shots of the scan area, not radargrams. Up to 10 print on each A4 page.</p>
         <label className="app-gpr-start-photo-btn" onPointerDown={() => onBeforePickPhoto?.()}>
-          + Add photo
+          + Add photos
           <input
             type="file"
             accept="image/*,.heic,.heif"
+            multiple
             hidden
             onChange={(e) => {
-              const file = e.target.files?.[0];
+              const files = [...(e.target.files || [])];
               e.target.value = "";
-              if (file) onAddPhoto?.(file);
+              if (files.length) onAddPhoto?.(files);
             }}
           />
         </label>
@@ -219,6 +248,7 @@ export default function GprPreSurveyCard({
             {ps.photos.map((ph) => (
               <div key={ph.id} className="app-gpr-start-photo">
                 {ph.dataUrl ? <img src={ph.dataUrl} alt="" /> : null}
+                {ph.dataUrl ? <button type="button" className="app-gpr-annotate-btn" onClick={() => onAnnotatePhoto?.(ph)}>✎ Annotate image</button> : null}
                 <input
                   value={ph.caption || ""}
                   placeholder="Caption"

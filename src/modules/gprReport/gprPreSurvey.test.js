@@ -30,6 +30,8 @@ describe("gprPreSurvey", () => {
     expect(n.surveyDates).toEqual(["2026-09-18"]);
     expect(n.siteChecks.ramsBriefed).toBe(false);
     expect(n.photos).toEqual([]);
+    expect(n.surveySetting).toBe("unspecified");
+    expect(n.levelBelow).toBe("unknown");
   });
 
   it("toggles objective keys", () => {
@@ -75,6 +77,22 @@ describe("gprPreSurvey", () => {
     expect(line).toMatch(/east wing/);
   });
 
+  it("records an indoor level below as site context, without treating weather as evidence", () => {
+    const line = buildPreSurveyScopeLine({ surveySetting: "indoor", levelBelow: "yes" });
+    expect(line).toMatch(/another building level below.*yes/i);
+    expect(line).toMatch(/not inferred from GPR/i);
+
+    const html = buildGprPreSurveyPrintHtml({
+      surveySetting: "indoor",
+      levelBelow: "no",
+      weather: { description: "Rain", tempC: 10 },
+    });
+    expect(html).toContain("Another level below scanned slab");
+    expect(html).toContain("No");
+    expect(html).not.toContain("Weather at start");
+    expect(html).not.toContain("Rain");
+  });
+
   it("formats GPS for the report", () => {
     expect(formatPreSurveyCoord(51.5074, -0.1278, 6.2)).toBe("51.50740, -0.12780 (±6 m)");
     expect(formatPreSurveyCoord(null, null)).toBe("");
@@ -109,6 +127,17 @@ describe("gprPreSurvey", () => {
 
   it("returns empty print HTML when nothing was captured", () => {
     expect(buildGprPreSurveyPrintHtml(blankGprPreSurvey())).toBe("");
+  });
+
+  it("prints site photos ten to a page", () => {
+    const photos = Array.from({ length: 11 }, (_, i) => ({
+      dataUrl: `data:image/jpeg;base64,photo${i}`,
+      caption: `Shot ${i + 1}`,
+    }));
+    const html = buildGprPreSurveyPrintHtml(blankGprPreSurvey({ photos }));
+    expect(html.match(/gpr-site-photo-page/g)).toHaveLength(2);
+    expect(html).toContain("Shot 1");
+    expect(html).toContain("Shot 11");
   });
 });
 
@@ -155,5 +184,15 @@ describe("captureGprStartHere", () => {
     expect(capture.gpsSource).toBe("project_pin");
     expect(capture.lat).toBe(53.48);
     expect(capture.gpsError).toMatch(/denied/i);
+  });
+
+  it("skips weather lookup for an indoor concrete scan", async () => {
+    const report = blankGprReport({ preSurvey: blankGprPreSurvey({ surveySetting: "indoor", levelBelow: "yes" }) });
+    const capture = await captureGprStartHere({ report, project: { lat: 51.5, lng: -0.1 } });
+    expect(fetchWeatherSummary).not.toHaveBeenCalled();
+    expect(capture.weather.description).toBe("");
+    const next = applyGprStartHereCapture(report, capture);
+    expect(next.preSurvey.levelBelow).toBe("yes");
+    expect(next.environmental.description).toBe("");
   });
 });

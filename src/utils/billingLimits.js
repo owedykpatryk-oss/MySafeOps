@@ -2,10 +2,21 @@ import { getEffectivePlan } from "../lib/billingPlans";
 import { isBillingWriteBlocked, billingWriteBlockedMessage } from "./billingAccess";
 import { loadOrgScoped as load } from "./orgStorage";
 
-export function getOrgUsageCounts() {
+export function countBillableRows(rows, kind) {
+  return (Array.isArray(rows) ? rows : []).filter((row) =>
+    row && !row.deletedAt && (kind !== "projects" || row.closed !== true)).length;
+}
+
+export function getOrgUsageCounts({ orgId, workspace } = {}) {
+  const read = (baseKey) => {
+    if (orgId == null) return load(baseKey, []);
+    const suffix = workspace?.id && !workspace.is_primary ? `__country_${workspace.id}` : "";
+    try { return JSON.parse(localStorage.getItem(`${baseKey}_${orgId}${suffix}`) || "[]"); }
+    catch { return []; }
+  };
   return {
-    workers: load("mysafeops_workers", []).length,
-    projects: load("mysafeops_projects", []).length,
+    workers: countBillableRows(read("mysafeops_workers"), "workers"),
+    projects: countBillableRows(read("mysafeops_projects"), "projects"),
   };
 }
 

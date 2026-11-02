@@ -5,7 +5,7 @@ import { gprPenetrationRisk, gprAntennaAdvice } from "./gprReportHelpers.js";
 
 describe("gprReportEditorNav", () => {
   it("tracks tab progress", () => {
-    const r = blankGprReport({ ref: "GPR-1", surveyDate: "2026-01-01", surveyor: "A", siteAddress: "Site" });
+    const r = blankGprReport({ ref: "GPR-1", surveyDate: "2026-01-01", siteAddress: "Site" });
     expect(gprTabComplete(r, "setup")).toBe(true);
     expect(gprOverallTabProgress(r).done).toBeGreaterThan(0);
     expect(firstIncompleteGprTab(r)).toBeTruthy();

@@ -1,10 +1,12 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
+import { persistRegisterRows } from "../utils/registerPersistGuard";
 import { useState, useEffect, useRef, useMemo } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import {
   overlayDraftKey,
   seedOverlayForm,
   useOverlayFormDraft,
-  clearOverlayFormDraft,
+  submitOverlayForm,
 } from "../hooks/useOverlayFormDraft";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -121,15 +123,15 @@ function InspectionForm({ item, onSave, onClose, projects }) {
           </div>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl} htmlFor="inspection-name">Equipment / item name *</label>
-            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. 2-tonne chain block, 110V drill, MEWP Genie GS-1930" style={ss.inp}  id="inspection-name" />
+            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. 2-tonne chain block" style={ss.inp}  id="inspection-name" />
           </div>
           <div>
             <label style={ss.lbl} htmlFor="inspection-serial-no">Serial / asset number</label>
-            <input value={form.serialNo||""} onChange={e=>set("serialNo",e.target.value)} placeholder="Asset tag or serial no." style={ss.inp}  id="inspection-serial-no" />
+            <input value={form.serialNo||""} onChange={e=>set("serialNo",e.target.value)} placeholder="Asset / serial no." style={ss.inp}  id="inspection-serial-no" />
           </div>
           <div>
             <label style={ss.lbl} htmlFor="inspection-manufacturer">Manufacturer / model</label>
-            <input value={form.manufacturer||""} onChange={e=>set("manufacturer",e.target.value)} placeholder="e.g. Yale / 2T chainblock" style={ss.inp}  id="inspection-manufacturer" />
+            <input value={form.manufacturer||""} onChange={e=>set("manufacturer",e.target.value)} placeholder="e.g. Yale 2T" style={ss.inp}  id="inspection-manufacturer" />
           </div>
           {(form.type==="loler"||form.type==="mewp"||form.type==="lifting") && (
             <div>
@@ -139,13 +141,13 @@ function InspectionForm({ item, onSave, onClose, projects }) {
           )}
           <div>
             <label style={ss.lbl} htmlFor="inspection-location">{t("location")} / {t("project").toLowerCase()}</label>
-            <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="Where is item kept?" style={ss.inp}  id="inspection-location" />
+            <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="Storage location" style={ss.inp}  id="inspection-location" />
           </div>
           <div>
             <label style={ss.lbl} htmlFor="inspection-project-id">{t("project")}</label>
             <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="inspection-project-id">
               <option value="">— General / all projects —</option>
-              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map(p=><option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
             </select>
           </div>
           <div>
@@ -192,7 +194,7 @@ function InspectionForm({ item, onSave, onClose, projects }) {
 
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end", marginTop:16 }}>
           <button onClick={onClose} style={ss.btn}>{t("cancel")}</button>
-          <button disabled={!form.name.trim()} onClick={()=>{ clearOverlayFormDraft(draftKey); onSave(form); }} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
+          <button disabled={!form.name.trim()} onClick={()=>{ submitOverlayForm(draftKey, form, onSave); }} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
             {t("save")}
           </button>
         </div>
@@ -237,8 +239,11 @@ export default function InspectionTracker() {
   }, [filterType, filterResult, filterDue, search]);
 
   const saveItem = (item) => {
-    setItems(prev=>prev.find(x=>x.id===item.id)?prev.map(x=>x.id===item.id?item:x):[item,...prev]);
+    const next = items.some(x => x.id === item.id) ? items.map(x => x.id === item.id ? item : x) : [item, ...items];
+    if (!persistRegisterRows("inspection_records", next)) return false;
+    setItems(next);
     setModal(null);
+    return true;
   };
 
   const liveItems = liveOrgArrayRows(items);

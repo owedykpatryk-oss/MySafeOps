@@ -113,7 +113,7 @@ export function verifiedGprEvidence(report) {
   const manual = (report?.historicalEvidence || [])
     .map(normalizeGprEvidence)
     .filter((item) => item.verified && item.observedFact.trim() && /^https:\/\//i.test(item.sourceUrl));
-  const bgs = buildBgsEvidence(report);
+  const bgs = report?.includeGeology ? buildBgsEvidence(report) : null;
   return bgs ? [bgs, ...manual] : manual;
 }
 

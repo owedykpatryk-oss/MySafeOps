@@ -1,9 +1,10 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   PROJECT_PLAYBOOKS,
   getPlaybook,
   applyProjectPlaybook,
+  applyAndPersistProjectPlaybook,
   projectHasRams,
   docsForProject,
   buildMissingDocChecklist,
@@ -96,5 +97,19 @@ describe("projectPlaybooks", () => {
   it("docsForProject tolerates corrupted non-array rows", () => {
     expect(docsForProject("proj_1", [{ projectId: "proj_1", id: "a" }])).toHaveLength(1);
     expect(docsForProject("proj_1", { broken: true })).toEqual([]);
+  });
+
+  it("does not report a playbook as applied when RAMS persistence fails", () => {
+    localStorage.clear();
+    localStorage.setItem("mysafeops_orgId", "test-org");
+    const originalSetItem = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+      if (String(key).startsWith("rams_builder_docs_")) throw new DOMException("Full", "QuotaExceededError");
+      return originalSetItem.call(this, key, value);
+    });
+
+    expect(() => applyAndPersistProjectPlaybook(project, "utility_mapping")).toThrow(/RAMS draft could not be saved/);
+    expect(localStorage.getItem("rams_builder_docs_test-org")).toBeNull();
+    setItem.mockRestore();
   });
 });

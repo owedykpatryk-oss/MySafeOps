@@ -14,7 +14,7 @@ import {
   isBillingWriteBlocked,
   isTrialExpiredWithoutPaid,
 } from "../utils/billingAccess";
-import { refreshPlatformOwnerFromSupabase, setPlatformOwnerCached } from "../utils/superAdmin";
+import { isPlatformOwnerCached, refreshPlatformOwnerFromSupabase, setPlatformOwnerCached } from "../utils/superAdmin";
 import { runLocalRetentionJobs } from "../utils/dataRetention";
 const Ctx = createContext(null);
 
@@ -182,10 +182,7 @@ export function AppProvider({ children }) {
           setIsPlatformOwner(owner);
         })
         .catch(() => {
-          if (!cancelled) {
-            setPlatformOwnerCached(false);
-            setIsPlatformOwner(false);
-          }
+          if (!cancelled) setIsPlatformOwner(isPlatformOwnerCached());
         });
     };
 

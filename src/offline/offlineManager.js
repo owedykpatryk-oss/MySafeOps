@@ -1,8 +1,12 @@
 // MySafeOps — Offline Manager
 // Import and call initOfflineMode() once in your app's entry point (main.jsx / App.jsx)
 
+import { isNativeApp } from "../utils/appRuntime";
+
 // ─── Service Worker registration ─────────────────────────────────────────────
 export async function registerServiceWorker() {
+  // Native assets are updated with the installed package, not a PWA cache.
+  if (isNativeApp()) return null;
   if (!("serviceWorker" in navigator)) {
     console.warn("Service workers not supported in this browser.");
     return null;
@@ -73,6 +77,7 @@ export function initOnlineStatusWatcher(onOnline, onOffline) {
 
 // ─── Skip waiting — activate waiting SW, then reload on controllerchange ──────
 export async function activateNewServiceWorker() {
+  if (isNativeApp()) return;
   const reg = await navigator.serviceWorker?.getRegistration();
   const waiting = reg?.waiting;
   if (!waiting) {

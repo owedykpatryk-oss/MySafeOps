@@ -7,6 +7,9 @@
  * Legacy X-Upload-Token only when Supabase auth env is unset (local/dev).
  */
 
+import { readServerBillingLimits } from "../../../shared/billingPlanLimits.mjs";
+import { storageScope } from "../../../shared/storageScope.mjs";
+
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const KEY_RE = /^[\w./-]+$/;
 const ORG_KEY_RE = /\/org_[\w-]+\//;
@@ -128,22 +131,24 @@ function orgSlugFromStorageKey(key) {
   return m?.[1] ? m[1] : null;
 }
 
-async function verifyOrgSlugAccess(env, authHeader, orgSlug) {
+async function verifyOrgSlugAccess(env, authHeader, orgSlug, { write = false, dataKey = "main" } = {}) {
   const url = String(env.SUPABASE_URL || "").trim().replace(/\/$/, "");
   const anon = String(env.SUPABASE_ANON_KEY || "").trim();
   if (!url || !anon || !orgSlug || !authHeader) {
     return { ok: false, error: "Server misconfiguration" };
   }
-  if (orgSlug === "default") return { ok: true };
-
-  const res = await fetch(`${url}/rest/v1/rpc/user_can_access_org_slug`, {
+  const country = dataKey !== "main";
+  const rpc = country
+    ? write ? "user_can_write_org_country_kv" : "user_can_read_org_country_kv"
+    : write ? "user_can_write_org_slug" : "user_can_access_org_slug";
+  const res = await fetch(`${url}/rest/v1/rpc/${rpc}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       apikey: anon,
       Authorization: authHeader,
     },
-    body: JSON.stringify({ p_org_slug: orgSlug }),
+    body: JSON.stringify({ p_org_slug: orgSlug, ...(country ? { p_data_key: dataKey, ...(write ? { p_namespace: "documents" } : {}) } : {}) }),
   });
 
   if (res.status === 401 || res.status === 403) {
@@ -155,7 +160,7 @@ async function verifyOrgSlugAccess(env, authHeader, orgSlug) {
 
   const data = await res.json();
   const allowed = data === true || data === "true";
-  return allowed ? { ok: true } : { ok: false, error: "Forbidden: not a member of this organisation" };
+  return allowed ? { ok: true } : { ok: false, error: write ? "billing_write_blocked" : "Forbidden: not a member of this organisation" };
 }
 
 function clientIp(request) {
@@ -184,7 +189,7 @@ function corsHeaders(request, env) {
   if (allowed.length === 0) {
     return { ...base, "Access-Control-Allow-Origin": "null" };
   }
-  const allow = allowed.includes(origin) ? origin : null;
+  const allow = isOriginAllowed(request, env) ? origin : null;
   return {
     ...base,
     "Access-Control-Allow-Origin": allow || "null",
@@ -255,7 +260,7 @@ async function verifyObjectSignature(env, key, exp, sig) {
 
 function validateObjectKey(key) {
   const k = String(key || "").replace(/^\/+/, "").slice(0, 900);
-  if (!KEY_RE.test(k) || k.includes("..") || !ORG_KEY_RE.test(k)) return null;
+  if (!KEY_RE.test(k) || k.includes("..") || !ORG_KEY_RE.test(k) || !storageScope(k)) return null;
   if (!ALLOWED_UPLOAD_EXT.test(k)) return null;
   return k;
 }
@@ -304,6 +309,22 @@ export default {
       return streamObject(env, key, c, { disposition: "inline" });
     }
 
+    if (request.method === "GET" && url.pathname.endsWith("/usage")) {
+      if (!isOriginAllowed(request, env)) return json({ error: "Origin not allowed" }, 403, c);
+      const scope = storageScope(`files/org_${url.searchParams.get("org")}/${url.searchParams.get("country") ? `country_${url.searchParams.get("country")}` : "main"}/usage.txt`);
+      if (!scope || scope.orgSlug !== url.searchParams.get("org")) return json({ error: "Invalid scope" }, 400, c);
+      const bearer = parseBearer(request);
+      if (!bearer || !(await verifySupabaseJwt(env, bearer))) return json({ error: "Unauthorized" }, 401, c);
+      const access = await verifyOrgSlugAccess(env, `Bearer ${bearer}`, scope.orgSlug, { dataKey: scope.dataKey });
+      if (!access.ok) return json({ error: access.error }, 403, c);
+      try {
+        const stub = env.STORAGE_QUOTA.get(env.STORAGE_QUOTA.idFromName(scope.id));
+        return json(await stub.usage(scope.id), 200, { ...c, "Cache-Control": "no-store" });
+      } catch {
+        return json({ error: "storage_usage_unavailable" }, 503, c);
+      }
+    }
+
     if (request.method === "GET" && url.pathname.endsWith("/object")) {
       if (!isOriginAllowed(request, env)) {
         return json({ error: "Origin not allowed" }, 403, c);
@@ -325,7 +346,7 @@ export default {
 
       const orgSlug = orgSlugFromStorageKey(key);
       if (orgSlug) {
-        const access = await verifyOrgSlugAccess(env, `Bearer ${bearer}`, orgSlug);
+        const access = await verifyOrgSlugAccess(env, `Bearer ${bearer}`, orgSlug, { dataKey: storageScope(key).dataKey });
         if (!access.ok) return json({ error: access.error || "Forbidden" }, 403, c);
       }
       return streamObject(env, key, c, { disposition: "attachment" });
@@ -392,7 +413,7 @@ export default {
       key = `uploads/${crypto.randomUUID()}-${file.name || "blob"}`;
     }
     key = key.replace(/^\/+/, "").slice(0, 900);
-    if (!KEY_RE.test(key) || key.includes("..") || !ORG_KEY_RE.test(key)) {
+    if (!KEY_RE.test(key) || key.includes("..") || !ORG_KEY_RE.test(key) || !storageScope(key)) {
       return json({ error: "Invalid key" }, 400, c);
     }
     if (!ALLOWED_UPLOAD_EXT.test(key)) {
@@ -404,19 +425,24 @@ export default {
       if (!sessionUser || !bearer) {
         return json({ error: "Unauthorized — org uploads require sign-in" }, 401, c);
       }
-      const access = await verifyOrgSlugAccess(env, `Bearer ${bearer}`, orgSlug);
+      const access = await verifyOrgSlugAccess(env, `Bearer ${bearer}`, orgSlug, { write: true, dataKey: storageScope(key).dataKey });
       if (!access.ok) {
         return json({ error: access.error || "Forbidden" }, 403, c);
       }
     }
 
     const fileName = safeAttachmentFilename(key);
-    await env.BUCKET.put(key, file.stream(), {
-      httpMetadata: {
-        contentType: file.type || "application/octet-stream",
-        contentDisposition: `attachment; filename="${fileName}"`,
-      },
-    });
+    const scope = storageScope(key);
+    const billing = await readServerBillingLimits(env, `Bearer ${bearer}`, orgSlug, scope.dataKey);
+    if (!billing.ok) return json({ error: billing.error }, billing.error === "invalid_register_key" ? 400 : 503, c);
+    try {
+      const stub = env.STORAGE_QUOTA.get(env.STORAGE_QUOTA.idFromName(scope.id));
+      const result = await stub.upload({ key, size: file.size, limit: billing.limits.cloudBytes,
+        contentType: file.type || "application/octet-stream", contentDisposition: `attachment; filename="${fileName}"` }, file.stream());
+      if (!result.ok) return json(result, 403, c);
+    } catch {
+      return json({ error: "storage_upload_unavailable" }, 503, c);
+    }
 
     const exp = Math.floor(Date.now() / 1000) + SIGNED_TTL_SEC;
     const signed = await signObjectKey(env, key, exp);

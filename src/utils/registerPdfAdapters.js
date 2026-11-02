@@ -97,6 +97,7 @@ export function flattenObservationRow(row) {
 }
 
 function formatCoords(photo) {
+  if (photo?.latitude == null || photo?.longitude == null || photo.latitude === "" || photo.longitude === "") return "—";
   const lat = Number(photo?.latitude);
   const lng = Number(photo?.longitude);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "—";
@@ -158,6 +159,60 @@ function tryAddGeoPhotoImage(pdf, url, x, y, w, h) {
 
 /** @type {Record<string, { flatten?: (rows: object[]) => object[]; columns: { k: string; l: string }[]; detailExport?: boolean }>} */
 export const REGISTER_PDF_ADAPTERS = {
+  coshh: {
+    detailExport: true,
+    fields: ["name", "manufacturer", "productCode", "riskLevel", "hazardTypes", "quantity", "unit", "storageLocation", "storageNotes", "ppeRequired", "firstAid", "spillProcedure", "disposalMethod", "sdsUrl", "sdsReviewDate", "assessedBy", "assessedDate"],
+    columns: [{ k: "name", l: "Substance" }, { k: "hazardTypes", l: "Hazards" }, { k: "ppeRequired", l: "PPE" }, { k: "quantity", l: "Quantity" }, { k: "sdsUrl", l: "SDS" }],
+  },
+  ppe: {
+    detailExport: true,
+    fields: ["item", "workerName", "issuedDate", "conditionOk", "notes"],
+    columns: [{ k: "item", l: "PPE" }, { k: "workerName", l: "Worker" }, { k: "issuedDate", l: "Issued" }, { k: "conditionOk", l: "OK" }, { k: "notes", l: "Notes" }],
+  },
+  loto: {
+    detailExport: true,
+    fields: ["equipmentName", "equipmentTag", "equipmentId", "projectName", "phase", "status", "isolationPoints", "isolationPoint", "appliedBy", "appliedDate", "removedBy", "removedDate", "zeroEnergyVerified", "zeroEnergyMethod", "zeroEnergyVerifiedBy", "notes"],
+    columns: [{ k: "equipmentName", l: "Equipment" }, { k: "phase", l: "Phase" }, { k: "isolationPoints", l: "Isolation points" }, { k: "zeroEnergyMethod", l: "Verification method" }, { k: "zeroEnergyVerifiedBy", l: "Verified by" }],
+  },
+  "cip-signoff": {
+    detailExport: true,
+    fields: ["equipmentId", "workOrderRef", "projectName", "cipRunAt", "cipProgram", "cipTemperaturePeakC", "cipDurationMinutes", "swabResults", "visualInspectionPassed", "signedOffBy", "releasedToProductionAt"],
+    columns: [{ k: "equipmentId", l: "Equipment" }, { k: "cipProgram", l: "Program" }, { k: "swabResults", l: "ATP / swabs" }, { k: "signedOffBy", l: "Signed off by" }, { k: "releasedToProductionAt", l: "Released" }],
+  },
+  "gmp-deviations": {
+    detailExport: true,
+    fields: ["batchRef", "deviationType", "siteLabel", "projectName", "description", "immediateAction", "qualityNotifiedAt", "qualityContact", "capaRef", "closedAt"],
+    columns: [{ k: "batchRef", l: "Batch" }, { k: "deviationType", l: "Type" }, { k: "description", l: "Description" }, { k: "capaRef", l: "CAPA" }, { k: "closedAt", l: "Closed" }],
+  },
+  "high-care-access": {
+    detailExport: true,
+    fields: ["zoneName", "zoneClass", "projectName", "visitorName", "visitorCompany", "purpose", "entryTimestamp", "exitTimestamp", "toolsIn", "toolsOut", "toolReconciliationOk", "hygieneChecks", "escortedBy"],
+    columns: [{ k: "zoneName", l: "Zone" }, { k: "visitorName", l: "Visitor" }, { k: "zoneClass", l: "Class" }, { k: "toolsIn", l: "Tools in" }, { k: "toolsOut", l: "Tools out" }],
+  },
+  "allergen-changeovers": {
+    detailExport: true,
+    fields: ["label", "siteLabel", "projectName", "fromAllergen", "toAllergen", "startAt", "endAt", "extraPpeHint", "notes"],
+    columns: [{ k: "label", l: "Window" }, { k: "fromAllergen", l: "From" }, { k: "toAllergen", l: "To" }, { k: "startAt", l: "Start" }, { k: "endAt", l: "End" }],
+  },
+  signatures: {
+    detailExport: true,
+    fields: ["documentTitle", "signerName", "signerRole", "timestamp", "gps", "device"],
+    imageField: "dataUrl",
+    columns: [{ k: "documentTitle", l: "Document" }, { k: "signerName", l: "Signer" }, { k: "signerRole", l: "Role" }, { k: "timestamp", l: "Signed at" }],
+  },
+  induction: {
+    detailExport: true,
+    fields: ["name", "company", "role", "siteName", "timestamp", "gps"],
+    imageField: "sig",
+    columns: [{ k: "name", l: "Name" }, { k: "company", l: "Company" }, { k: "role", l: "Role" }, { k: "siteName", l: "Site" }, { k: "timestamp", l: "Signed at" }],
+  },
+  timesheets: {
+    flatten: (rows) => rows.map((row) => ({ ...row, hours: Object.values(row.days || {}).reduce((sum, value) => sum + (parseFloat(value) || 0), 0) })),
+    columns: [{ k: "workerName", l: "Worker" }, { k: "projectName", l: "Project" }, { k: "weekKey", l: "Week beginning" }, { k: "task", l: "Task" }, { k: "hours", l: "Hours" }, { k: "status", l: "Status" }],
+  },
+  snags: {
+    columns: [{ k: "ref", l: "Ref" }, { k: "title", l: "Title" }, { k: "projectName", l: "Project" }, { k: "assignedToName", l: "Assigned to" }, { k: "status", l: "Status" }, { k: "dueDate", l: "Due" }],
+  },
   "daily-briefing": {
     detailExport: true,
     flatten: (rows) => (rows || []).map(flattenDailyBriefingRow),
@@ -238,7 +293,94 @@ export function prepareRegisterExport(moduleId, rawRows, { summary = false } = {
   if (adapter?.detailExport && !summary) {
     return { mode: "detail", moduleId, rows: rawRows || [] };
   }
-  return { mode: "table", rows: rawRows || [], columns: null };
+  return { mode: "table", rows: rawRows || [], columns: adapter?.columns || null };
+}
+
+const fieldLabel = (key) => String(key).replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+
+/** Full values for evidence pages; internal IDs and raw image bytes are excluded. */
+export function formatRegisterDetailValue(value, key = "") {
+  if (value == null || value === "") return "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) return value.map((item, index) => typeof item === "object" ? `${index + 1}. ${formatRegisterDetailValue(item)}` : String(item)).join("\n") || "—";
+  if (typeof value === "object") return Object.entries(value).filter(([k]) => !["id", "deletedAt"].includes(k)).map(([k, v]) => `${fieldLabel(k)}: ${formatRegisterDetailValue(v, k)}`).join("\n") || "—";
+  const text = String(value);
+  if (text.startsWith("data:image/")) return "Image recorded";
+  const isTimestamp = typeof value === "number" && /(?:At|Timestamp|timestamp)$/.test(key);
+  if (isTimestamp || /^\d{4}-\d{2}-\d{2}(?:$|T)/.test(text)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return text.length === 10 && !isTimestamp
+      ? date.toLocaleDateString(getActiveDocumentLocale())
+      : date.toLocaleString(getActiveDocumentLocale());
+  }
+  return /^[a-z]+(?:_[a-z]+)+$/.test(text) ? fieldLabel(text) : text;
+}
+
+/** One record per page, continuing long fields before the footer. */
+export function renderRegisterRecordDetailPages(pdf, moduleId, rows, helpers) {
+  const adapter = REGISTER_PDF_ADAPTERS[moduleId];
+  const { drawPdfPageHeader, org, rgb, accentRgb, theme, label } = helpers;
+  const margin = PDF_PAGE.MARGIN;
+  const width = PDF_PAGE.W - margin * 2;
+  let y;
+  const startPage = (subtitle) => {
+    y = drawPdfPageHeader(pdf, { org, title: label, subtitle, rgb, accentRgb, theme });
+    y += 6;
+  };
+  const ensureSpace = (height) => {
+    if (y + height <= PDF_PAGE.CONTENT_BOTTOM) return;
+    pdf.addPage();
+    startPage("Continued");
+  };
+  if (!rows.length) {
+    startPage("No records");
+    setPdfFont(pdf, "normal");
+    pdf.setFontSize(9);
+    pdf.text("No records in this export.", margin, y);
+    return;
+  }
+  rows.forEach((row, index) => {
+    if (index) pdf.addPage();
+    startPage(row.name || row.item || row.equipmentName || row.equipmentId || row.batchRef || row.signerName || row.label || row.visitorName || `${index + 1} of ${rows.length}`);
+    adapter.fields.forEach((key) => {
+      if (row[key] == null || row[key] === "") return;
+      ensureSpace(15);
+      setPdfFont(pdf, "bold");
+      pdf.setFontSize(8);
+      pdf.setTextColor(...rgb);
+      pdf.text(fieldLabel(key), margin, y);
+      y += 5;
+      setPdfFont(pdf, "normal");
+      pdf.setFontSize(9);
+      pdf.setTextColor(30, 41, 59);
+      const lines = pdf.splitTextToSize(formatRegisterDetailValue(row[key], key), width - 4);
+      for (const line of lines) {
+        ensureSpace(5);
+        setPdfFont(pdf, "normal");
+        pdf.setFontSize(9);
+        pdf.setTextColor(30, 41, 59);
+        pdf.text(String(line), margin + 2, y);
+        y += 4.5;
+      }
+      y += 4;
+    });
+    const image = adapter.imageField && row[adapter.imageField];
+    if (typeof image === "string" && image.startsWith("data:image/")) {
+      ensureSpace(29);
+      setPdfFont(pdf, "bold");
+      pdf.setFontSize(8);
+      pdf.text("Signature", margin, y);
+      y += 4;
+      try {
+        const dimensions = pdf.getImageProperties(image);
+        const scale = Math.min(80 / dimensions.width, 20 / dimensions.height);
+        pdf.addImage(image, undefined, margin, y, dimensions.width * scale, dimensions.height * scale);
+      } catch {
+        pdf.text("Signature image could not be embedded.", margin, y + 5);
+      }
+      y += 25;
+    }
+  });
 }
 
 /**

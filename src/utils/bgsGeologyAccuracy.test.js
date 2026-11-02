@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeGeologyLayerProps, BGS_50K_DISCLAIMER, BGS_POSTCODE_ACCURACY_WARNING } from "../../shared/bgsGeologyFetch.mjs";
 import { interpretGeologyForSurvey, projectHasMapPin, interpretGeologyForGpr } from "./gprGroundConditions.js";
+import { bgsResponseMatchesPoint, isBgsGreatBritainPoint } from "./bgsGeologyClient.js";
 
 describe("bgsGeologyFetch helpers", () => {
   it("normalises WMS 50k property names", () => {
@@ -26,6 +27,13 @@ describe("bgsGeologyFetch helpers", () => {
 });
 
 describe("geology accuracy mapping", () => {
+  it("rejects coordinates outside BGS Great Britain coverage and mismatched responses", () => {
+    expect(isBgsGreatBritainPoint(55.8719, -4.4331)).toBe(true);
+    expect(isBgsGreatBritainPoint(40.7128, -74.006)).toBe(false);
+    expect(bgsResponseMatchesPoint({ lat: 55.8719, lng: -4.4331 }, 55.8719, -4.4331)).toBe(true);
+    expect(bgsResponseMatchesPoint({ lat: 51.5074, lng: -0.1278 }, 55.8719, -4.4331)).toBe(false);
+  });
+
   it("detects project map pin", () => {
     expect(projectHasMapPin({ lat: 51.5, lng: -0.12 })).toBe(true);
     expect(projectHasMapPin({ postcode: "SW1A 1AA" })).toBe(false);

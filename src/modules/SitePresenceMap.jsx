@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useState, useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -398,9 +399,7 @@ export default function SitePresenceMap() {
                    id="site-presence-map-project-id">
                     <option value="">— Not set —</option>
                     {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name || p.id}
-                      </option>
+                      <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
                     ))}
                   </select>
                   <label style={{ ...ss.lbl, fontSize: 11, marginTop: 10 }} htmlFor="site-presence-map-activity">Activity / task</label>

@@ -9,9 +9,12 @@
  * concurrency gate, and a shared pause when the Worker returns rate_limited.
  */
 
+import { getCachedActiveCountryWorkspace } from "../utils/countryWorkspaces";
+import { billingWritePause, rememberBillingWriteDenial, resetBillingWritePausesForTests } from "./d1BillingPause.js";
+
 const NS = (s) => String(s || "").trim();
 
-/** Deduplicate concurrent GETs for the same org/namespace/key (module hops). */
+/** Deduplicate GETs for the same org/namespace/key and authenticated session. */
 const d1GetInflight = new Map();
 
 /** Short TTL cache for successful GETs — remounts (Projects ↔ Geo-photos) reuse. */
@@ -86,18 +89,20 @@ function cacheKey(org, ns, dataKey) {
   return `${org}|${ns}|${dataKey}`;
 }
 
-function readGetCache(key) {
+function readGetCache(key, authorization) {
   const hit = d1GetCache.get(key);
   if (!hit) return null;
   if (Date.now() - hit.at > GET_CACHE_TTL_MS) {
     d1GetCache.delete(key);
     return null;
   }
+  if (hit.authorization !== authorization) return null;
   return hit.result;
 }
 
-function writeGetCache(key, result) {
-  if (result?.ok) d1GetCache.set(key, { at: Date.now(), result });
+function writeGetCache(key, result, authorization) {
+  // This is memory-only, like the request headers. Never persist it to device storage.
+  if (result?.ok) d1GetCache.set(key, { at: Date.now(), result, authorization });
 }
 
 function invalidateGetCache(org, ns, dataKey) {
@@ -167,11 +172,11 @@ export async function d1GetKv(supabase, orgSlug, namespace, key) {
   if (!org || org === "default") return { ok: false, error: "no_org_slug" };
 
   const inflightKey = cacheKey(org, ns, dataKey);
-  const cached = readGetCache(inflightKey);
+  const cached = readGetCache(inflightKey, h.Authorization);
   if (cached) return cached;
 
   const existing = d1GetInflight.get(inflightKey);
-  if (existing) return existing;
+  if (existing?.authorization === h.Authorization) return existing.pending;
 
   const q = new URLSearchParams({ namespace: ns, key: dataKey });
   const pending = (async () => {
@@ -198,14 +203,15 @@ export async function d1GetKv(supabase, orgSlug, namespace, key) {
         version: body.version,
         updated_at: body.updated_at,
       };
-      writeGetCache(inflightKey, okResult);
+      writeGetCache(inflightKey, okResult, h.Authorization);
       return okResult;
     });
   })().finally(() => {
-    d1GetInflight.delete(inflightKey);
+    // An old session finishing must not remove a newer session's in-flight request.
+    if (d1GetInflight.get(inflightKey)?.pending === pending) d1GetInflight.delete(inflightKey);
   });
 
-  d1GetInflight.set(inflightKey, pending);
+  d1GetInflight.set(inflightKey, { pending, authorization: h.Authorization });
   return pending;
 }
 
@@ -236,6 +242,8 @@ export async function d1PutKv(supabase, orgSlug, namespace, key, value, ifVersio
   await respectRateLimitPause();
   return withD1Slot(async () => {
     await respectRateLimitPause();
+    const paused = billingWritePause(base, org, dataKey, h.Authorization);
+    if (paused) return paused;
     let res;
     try {
       res = await fetch(`${base}/v1/kv`, {
@@ -255,7 +263,7 @@ export async function d1PutKv(supabase, orgSlug, namespace, key, value, ifVersio
       invalidateGetCache(org, ns, dataKey);
       return { ok: false, error: "version_conflict", ...body, ...d1Meta(res, body) };
     }
-    if (!res.ok) return errorFromResponse(res, body);
+    if (!res.ok) return rememberBillingWriteDenial(base, org, dataKey, h.Authorization, errorFromResponse(res, body));
     invalidateGetCache(org, ns, dataKey);
     return { ok: true, version: body.version, updated_at: body.updated_at };
   });
@@ -317,6 +325,8 @@ export async function d1DeleteKv(supabase, orgSlug, namespace, key) {
   await respectRateLimitPause();
   return withD1Slot(async () => {
     await respectRateLimitPause();
+    const paused = billingWritePause(base, org, dataKey, h.Authorization);
+    if (paused) return paused;
     const res = await fetch(`${base}/v1/kv?${q}`, {
       method: "DELETE",
       headers: {
@@ -325,7 +335,7 @@ export async function d1DeleteKv(supabase, orgSlug, namespace, key) {
       },
     });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) return errorFromResponse(res, body);
+    if (!res.ok) return rememberBillingWriteDenial(base, org, dataKey, h.Authorization, errorFromResponse(res, body));
     invalidateGetCache(org, ns, dataKey);
     return { ok: true, deleted: body.deleted };
   });
@@ -338,6 +348,9 @@ export async function d1DeleteKv(supabase, orgSlug, namespace, key) {
 export async function d1AppendServerAudit(supabase, orgSlug, row) {
   const base = baseUrl();
   if (!base) return { ok: false, error: "d1_not_configured" };
+  const workspace = getCachedActiveCountryWorkspace(orgSlug);
+  const countryKey = workspace?.id && !workspace.is_primary ? `country:${workspace.id}:main` : null;
+  const auditUrl = `${base}/v1/audit/append${countryKey ? `?${new URLSearchParams({ key: countryKey })}` : ""}`;
   const h = await authHeaders(supabase);
   if (h.error) return { ok: false, error: h.error };
   const org = NS(orgSlug);
@@ -359,8 +372,10 @@ export async function d1AppendServerAudit(supabase, orgSlug, row) {
   const maxAttempts = 5;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await respectRateLimitPause();
-    const res = await withD1Slot(() =>
-      fetch(`${base}/v1/audit/append`, {
+    const response = await withD1Slot(async () => {
+      const paused = billingWritePause(base, org, countryKey || "main", h.Authorization);
+      if (paused) return paused;
+      const res = await fetch(auditUrl, {
         method: "POST",
         headers: {
           ...h,
@@ -368,9 +383,18 @@ export async function d1AppendServerAudit(supabase, orgSlug, row) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
-      }),
-    );
-    const body = await res.json().catch(() => ({}));
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok)
+        rememberBillingWriteDenial(base, org, countryKey || "main", h.Authorization, {
+          ok: false,
+          error: body.error || `http_${res.status}`,
+          ...d1Meta(res, body),
+        });
+      return { res, body };
+    });
+    if (response.paused) return response;
+    const { res, body } = response;
     if (res.status === 503) return { ok: false, error: "audit_not_configured", ...d1Meta(res, body) };
     if (res.ok) return { ok: true, seq: body.seq };
     if (res.status === 429) {
@@ -438,6 +462,7 @@ export async function d1VerifyServerAuditChain(supabase, orgSlug) {
 
 /** Test helper — clears caches / queues between vitest cases. */
 export function __resetD1SyncClientForTests() {
+  resetBillingWritePausesForTests();
   d1GetInflight.clear();
   d1GetCache.clear();
   rateLimitedUntil = 0;

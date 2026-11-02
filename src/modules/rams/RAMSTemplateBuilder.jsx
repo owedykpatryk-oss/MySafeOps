@@ -1,6 +1,12 @@
+import { projectDisplayLabel } from "../../utils/projectDisplayLabel";
 import { useState, useEffect, useMemo, useRef, useDeferredValue } from "react";
+import { publicAppUrl } from "../../utils/publicAppUrl";
+import { commitRamsDocument, ramsDocumentStorageScope } from "./ramsDocumentSave";
+import { ramsDraftScope, readRamsDraft, listRamsDrafts, latestRamsDraft, writeRamsDraft, clearRamsDraft, hasLegacyRamsDraft, RAMS_DRAFT_SAVED_EVENT } from "./ramsBuilderDraft";
+import { useSupabaseAuth } from "../../context/SupabaseAuthContext";
 import { loadRamsHazardLibrary } from "./ramsHazardLibraryLoader.js";
-import { getRiskLevel } from "./ramsRiskLevel.js";
+import { getRiskLevel, RISK_AXIS, isValidRiskAssessment } from "./ramsRiskLevel.js";
+import { selectSurveyHazards } from "./ramsSurveyHazardSelection.js";
 import {
   listSiteContextOverlayOptions,
   getSiteContextOverlay,
@@ -57,7 +63,7 @@ import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../../utils/useRegisterListPaging";
 import { trackEvent } from "../../utils/telemetry";
 import { isFeatureEnabled } from "../../utils/featureFlags";
-import { duplicateRamsToProject, batchDuplicateRamsToProject } from "../../utils/ramsDocumentClone";
+import { buildRamsCloneForProject, duplicateRamsToProject, batchDuplicateRamsToProject } from "../../utils/ramsDocumentClone";
 import { pushRecycleBinItem } from "../../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../../utils/d1ArrayMerge";
 import { consumeWorkspaceNavTarget } from "../../utils/workspaceNavContext";
@@ -72,6 +78,7 @@ import { exportCsv } from "../../utils/exportCsv";
 import { geocodeAddressNominatim } from "../../utils/geocode";
 import { useToast } from "../../context/ToastContext";
 import { copyCapabilityLink } from "../../utils/copyCapabilityLink";
+import { isPublishedRamsShare, publishRamsShare, revokeRamsShare } from "../../utils/ramsCloudShare";
 import { orgHasFoodIndustrialPack, orgHasPharmaPack } from "../../utils/industrialSectors";
 import {
   COMPETENT_REVIEW_LABEL,
@@ -107,14 +114,10 @@ import { sanitizeRamsDocForOrg } from "../../utils/fessExclusive";
 import { computeFessRamsCompleteness } from "../../utils/fessRamsCompleteness";
 import { syncFessMsFromRams } from "../../utils/fessMsSync";
 import FessRamsCompletenessBadge from "../../components/FessRamsCompletenessBadge";
-import { genOpaqueToken } from "../../utils/opaqueToken";
 
 import { localDateISO, todayLocalISO } from "../../utils/localDate";
 import { useWorkspaceT } from "../../i18n/useWorkspaceT";
 // ─── storage ─────────────────────────────────────────────────────────────────
-const RAMS_DRAFT_KEY = "mysafeops_rams_builder_draft";
-const RAMS_DRAFT_SAVED_EVENT = "mysafeops-rams-draft-saved";
-const RAMS_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const RAMS_ORG_ACTIVITIES_KEY = "rams_org_activity_templates";
 const RAMS_HAZARD_PREFS_KEY = "rams_hazard_picker_prefs";
 const RAMS_HAZARD_PACKS_KEY = "rams_hazard_quick_packs";
@@ -148,7 +151,7 @@ const today = todayLocalISO;
 const fmtDate = formatOrgDate;
 const fmtDateTime = formatOrgDateTime;
 const riskScore = (risk) => Number(risk?.L || 0) * Number(risk?.S || 0);
-const RISK_AXIS = [2, 4, 6];
+
 const RAMS_STATUS_OPTIONS = ["draft", "internal_review", "approved", "issued"];
 
 function currentYearToken() {
@@ -229,6 +232,7 @@ function buildQaChecklist(form, rows, operativesCount) {
     { label: "Header complete (title, location, document no.)", ok: !!(form.title?.trim() && form.location?.trim() && form.documentNo?.trim()) },
     { label: "At least one risk row selected", ok: hasRows },
     { label: "Every risk row has control measures", ok: controlsCoverage },
+    { label: "All risk scores valid (L × S = RF)", ok: hasRows && rows.every((r) => isValidRiskAssessment(r.initialRisk) && isValidRiskAssessment(r.revisedRisk)) },
     { label: "No residual HIGH risks", ok: noHighResidual },
     { label: "Operatives assigned for briefing/sign-off", ok: operativesCount > 0 },
     {
@@ -913,6 +917,7 @@ const RAMS_FORM_DEFAULTS = {
 };
 
 const RL = {
+  unknown: { bg: "#F1F5F9", color: "#475569" },
   high:   { bg:"#FCEBEB", color:"#791F1F" },
   medium: { bg:"#FAEEDA", color:"#633806" },
   low:    { bg:"#EAF3DE", color:"#27500A" },
@@ -1006,7 +1011,7 @@ const SURVEYING_PACKS_RAW = [
     label: "Manhole entry & inspection",
     scope: "Confined-space manhole inspection with gas testing, rescue readiness, standby role, and entry controls.",
     method:
-      "1. Confirm confined-space permit and rescue plan.\n\n2. Conduct atmospheric pre-test and setup continuous monitor.\n\n3. Brief entrant and standby with emergency comms.\n\n4. Execute controlled entry and inspection tasks.\n\n5. Close permit and capture findings + atmosphere logs.",
+      "1. First confirm whether inspection can be completed from the surface without entry. If entry is necessary, approve the task-specific confined-space assessment, permit, isolation and rescue arrangements.\n\n2. Verify isolation against relevant inflows and energy sources; secure the chamber access. Check gas-monitor function, pre-test the atmosphere from a safe position and set continuous monitoring and alarm/withdrawal criteria.\n\n3. Brief entrant, standby and rescue personnel. Verify trained personnel, suitable rescue equipment, safe access and reliable communications are ready before entry; do not rely solely on emergency services.\n\n4. Enter and inspect only within the authorised scope. Maintain standby, atmosphere monitoring and communications; withdraw on alarm, failed controls or changed conditions and follow the rescue procedure without unplanned entry.\n\n5. Account for all personnel, reinstate covers, close the permit and record inspection findings, atmosphere logs and any handover restrictions.",
     hazardTokens: ["manhole", "chamber", "confined", "gas", "rescue", "atmosphere", "entry"],
   },
   {
@@ -1023,7 +1028,7 @@ const SURVEYING_PACKS_RAW = [
     scope:
       "Ground investigation by window sampling (tracked windowless sampler) and/or trial pits — service avoidance, pit stability, contamination pathways, sample chain of custody, and reinstatement.",
     method:
-      "1. Desk study, utility records, and CAT/Genny sweep; agree sample locations with client/engineer.\n\n2. Issue permit-to-dig / ground disturbance; mark exclusion zones and no-go lines.\n\n3. Window sampling: deploy tracked sampler with banksman; step/shore hole if depth exceeds safe angle; stop on refusal or service proximity.\n\n4. Trial pit option: machine strip to safe depth then hand-finish; log face, photograph strata, bag/label samples on site.\n\n5. Ground gas/VOC monitoring where desk study indicates; RPE and decon per contamination assessment.\n\n6. Complete chain-of-custody forms; backfill in layers, compact, reinstate surface; cap any residual openings.",
+      "1. Review the desk study, utility records, service detection and contamination/gas assessment; agree sample locations and the chosen sampling or trial-pit method with the competent lead.\n\n2. Issue permit-to-dig. Before work starts, plan the pit support or battering, safe access, exclusion zones and spoil/plant positions for the actual ground, water and adjacent loads; have the required precautions available.\n\n3. Complete rig pre-use checks and stable setup with a banksman. Carry out required pre-start gas checks and maintain monitoring during ground disturbance as specified by the assessment; stop on alarms, refusal or unexpected services.\n\n4. For window sampling, follow the rig procedure and guard openings. For trial pits, excavate using the agreed service-avoidance method and install support or battering as work proceeds. Log and sample from a safe position; no entry without a separate safe-entry assessment and inspected protection.\n\n5. Label and seal samples; complete chain-of-custody and contamination controls. Backfill, compact and reinstate; secure or cap remaining openings and record the handover.",
     hazardTokens: ["window sampling", "trial pit", "ground", "excavation", "plant", "buried", "sample", "hand dig", "contamination", "chain of custody"],
   },
   {
@@ -1032,7 +1037,7 @@ const SURVEYING_PACKS_RAW = [
     scope:
       "Ground investigation drilling — cable percussive, rotary open-hole, and coring — with rig exclusion, spoil handling, ground gas monitoring, undisturbed sampling, and secure borehole abandonment.",
     method:
-      "1. Verify borehole location against records, scans, and permit interfaces; brief rig crew on contamination/gas triggers.\n\n2. Establish rig exclusion (mast height); daily pre-use checks; banksman for vehicle movements.\n\n3. Drill to specification — shell & auger, rotary, or core barrel — with spoil containment and sample sealing at point of recovery.\n\n4. Install standpipe/piezometer if specified; otherwise grout/backfill and lockable surface cap per abandonment plan.\n\n5. Continuous or periodic gas monitoring at open holes; no leaning over uncapped boreholes.\n\n6. Issue borehole log, sample register, and as-built abandonment record.",
+      "1. Verify location against records, service detection and permit interfaces. Agree the drilling method, contamination assessment, gas monitoring plan and stop-work triggers with the competent lead.\n\n2. Establish rig and mast exclusion zones, stable setup and movement controls; complete pre-use checks. Check required gas-monitor function and arrange pre-start readings before opening or disturbing the ground.\n\n3. Drill to the specification with spoil containment and sample sealing at recovery. Maintain continuous or periodic gas monitoring as specified by the assessment while drilling and while holes remain open; stop and withdraw on alarm or unexpected conditions.\n\n4. Guard open boreholes; do not lean over uncapped openings. Install the specified standpipe/piezometer, or grout/backfill and fit surface protection in accordance with the abandonment plan.\n\n5. Complete reinstatement checks and issue the borehole log, sample register, monitoring records and as-built abandonment record.",
     hazardTokens: ["borehole", "drilling", "ground investigation", "spoil", "plant", "contamination", "utility", "rotary", "coring", "cable percussive"],
   },
   {
@@ -1104,7 +1109,7 @@ const SURVEYING_PACKS_RAW = [
     scope:
       "Trial pits excavated by mini excavator for strata logging — side stability, plant/person interface, hand-finish near services, and same-shift backfill.",
     method:
-      "1. Design pit dimensions and max depth with competent person; permit-to-dig issued.\n\n2. Machine strip with banksman; no persons in pit during excavation.\n\n3. Step, batter, or shore if depth requires; hand-dig final 300 mm near services.\n\n4. Log face, sample, and photograph before backfill.\n\n5. Backfill in layers; compact; secure overnight if not same-shift reinstatement.",
+      "1. Before excavation, agree pit dimensions, ground and water conditions, nearby structures, service avoidance and the required support or battering with a competent person. Have the equipment and precautions available; issue permit-to-dig.\n\n2. Establish barriers, plant/person separation and spoil/plant positions away from the edge as specified by the assessment. Verify the service detection and agreed safe exposure method; do not assume a fixed distance makes mechanical excavation safe.\n\n3. Excavate with a banksman; no persons in the pit during machine excavation. Install support or form the agreed battering as work proceeds. Stop if ground, water or service conditions differ from the plan.\n\n4. Log, sample and photograph from a safe position. Permit entry only where separately assessed, with safe access, inspected support and relevant atmosphere/rescue controls; do not enter an unsupported pit.\n\n5. Backfill in layers, compact and reinstate. Protect any excavation left open and arrange competent inspections before work resumes and after events affecting stability.",
     hazardTokens: ["trial pit", "machine excavated", "mini excavator", "logging", "excavation", "shoring"],
   },
   {
@@ -1538,13 +1543,7 @@ function findSurveyPackByKey(packKey) {
 }
 
 function findHazardsForSurveyPack(pack, hazardLibrary) {
-  if (!pack || !Array.isArray(hazardLibrary)) return [];
-  const toks = (pack.hazardTokens || []).map((t) => String(t).toLowerCase());
-  const matched = hazardLibrary.filter((h) => {
-    const hay = `${h.id} ${h.category} ${h.activity} ${h.hazard}`.toLowerCase();
-    return toks.some((t) => hay.includes(t));
-  });
-  return matched.slice(0, 14);
+  return selectSurveyHazards(pack, hazardLibrary);
 }
 
 const SURVEY_PACK_QUICK_PREFIX = {
@@ -1895,7 +1894,7 @@ function RiskBadge({ rf }) {
 }
 
 // ─── Step 1 — Document info ──────────────────────────────────────────────────
-function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }) {
+function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied, draftScope, draftDocumentId }) {
   const { t, tf } = useWorkspaceT();
   const ramsLabel = getRamsShortLabel(getOrgMarketId());
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -1905,12 +1904,11 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
   useEffect(() => {
     const tick = () => {
       try {
-        const raw = sessionStorage.getItem(RAMS_DRAFT_KEY);
-        if (!raw) {
+        const d = readRamsDraft(draftScope, draftDocumentId);
+        if (!d) {
           setDraftSavedAtLabel("");
           return;
         }
-        const d = JSON.parse(raw);
         if (d.savedAt) setDraftSavedAtLabel(formatOrgDateTime(d.savedAt));
         else setDraftSavedAtLabel("");
       } catch {
@@ -1920,7 +1918,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
     tick();
     window.addEventListener(RAMS_DRAFT_SAVED_EVENT, tick);
     return () => window.removeEventListener(RAMS_DRAFT_SAVED_EVENT, tick);
-  }, []);
+  }, [draftScope, draftDocumentId]);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [projectGeoLoading, setProjectGeoLoading] = useState(false);
@@ -2285,7 +2283,7 @@ function StepInfo({ form, setForm, projects, workers, onNext, onWeatherApplied }
               if (project) applyProjectGeocodeAndWeather(project);
             }} style={ss.inp}>
               <option value="">— Select project —</option>
-              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map(p=><option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
             </select>
             {smartFields && autofillUndo && (
               <button
@@ -3758,15 +3756,15 @@ function HazardPicker({
             <div>
               <label style={ss.lbl}>Initial L / S</label>
               <div style={{ display:"flex", gap:6 }}>
-                <select value={orgDraft.initialL} onChange={(e)=>setOrgDraft((d)=>({ ...d, initialL:Number(e.target.value) }))} style={ss.inp}>{[2,4,6].map(v=><option key={`iL_${v}`} value={v}>{v}</option>)}</select>
-                <select value={orgDraft.initialS} onChange={(e)=>setOrgDraft((d)=>({ ...d, initialS:Number(e.target.value) }))} style={ss.inp}>{[2,4,6].map(v=><option key={`iS_${v}`} value={v}>{v}</option>)}</select>
+                <select value={orgDraft.initialL} onChange={(e)=>setOrgDraft((d)=>({ ...d, initialL:Number(e.target.value) }))} style={ss.inp}>{RISK_AXIS.map(v=><option key={`iL_${v}`} value={v}>{v}</option>)}</select>
+                <select value={orgDraft.initialS} onChange={(e)=>setOrgDraft((d)=>({ ...d, initialS:Number(e.target.value) }))} style={ss.inp}>{RISK_AXIS.map(v=><option key={`iS_${v}`} value={v}>{v}</option>)}</select>
               </div>
             </div>
             <div>
               <label style={ss.lbl}>Residual L / S</label>
               <div style={{ display:"flex", gap:6 }}>
-                <select value={orgDraft.revisedL} onChange={(e)=>setOrgDraft((d)=>({ ...d, revisedL:Number(e.target.value) }))} style={ss.inp}>{[2,4,6].map(v=><option key={`rL_${v}`} value={v}>{v}</option>)}</select>
-                <select value={orgDraft.revisedS} onChange={(e)=>setOrgDraft((d)=>({ ...d, revisedS:Number(e.target.value) }))} style={ss.inp}>{[2,4,6].map(v=><option key={`rS_${v}`} value={v}>{v}</option>)}</select>
+                <select value={orgDraft.revisedL} onChange={(e)=>setOrgDraft((d)=>({ ...d, revisedL:Number(e.target.value) }))} style={ss.inp}>{RISK_AXIS.map(v=><option key={`rL_${v}`} value={v}>{v}</option>)}</select>
+                <select value={orgDraft.revisedS} onChange={(e)=>setOrgDraft((d)=>({ ...d, revisedS:Number(e.target.value) }))} style={ss.inp}>{RISK_AXIS.map(v=><option key={`rS_${v}`} value={v}>{v}</option>)}</select>
               </div>
             </div>
             <div style={{ gridColumn:"1/-1", display:"flex", justifyContent:"flex-end", gap:8 }}>
@@ -4215,9 +4213,9 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
                         {[["L",t("likelihood"),"initialRisk"],["S",t("severity"),"initialRisk"]].map(([k,hint,obj])=>(
                           <div key={k}>
-                            <label style={{ ...ss.lbl, marginBottom:2 }} htmlFor="rams-template-k-hint">{k} <span style={{ fontWeight:400 }}>({hint})</span></label>
-                            <select value={r[obj][k]} onChange={e=>updateRow(r.id,obj,{...r[obj],[k]:parseInt(e.target.value),RF:parseInt(e.target.value)*(k==="L"?r[obj].S:r[obj].L)})} style={{ ...ss.inp, width:"auto" }} id="rams-template-k-hint">
-                              {[2,4,6].map(v=><option key={v} value={v}>{v}</option>)}
+                            <label style={{ ...ss.lbl, marginBottom:2 }} htmlFor={`rams-risk-${r.id}-${obj}-${k}`}>{k} <span style={{ fontWeight:400 }}>({hint})</span></label>
+                            <select value={r[obj][k]} onChange={e=>updateRow(r.id,obj,{...r[obj],[k]:parseInt(e.target.value),RF:parseInt(e.target.value)*(k==="L"?r[obj].S:r[obj].L)})} style={{ ...ss.inp, width:"auto" }} id={`rams-risk-${r.id}-${obj}-${k}`}>
+                              {RISK_AXIS.map(v=><option key={v} value={v}>{v}</option>)}
                             </select>
                           </div>
                         ))}
@@ -4229,9 +4227,9 @@ function HazardEditor({ rows, setRows, onNext, onBack }) {
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:8 }}>
                         {[["L","Likelihood","revisedRisk"],["S","Severity","revisedRisk"]].map(([k,_hint,obj])=>(
                           <div key={k}>
-                            <label style={{ ...ss.lbl, marginBottom:2 }} htmlFor="rams-template-k">{k}</label>
-                            <select value={r[obj][k]} onChange={e=>updateRow(r.id,obj,{...r[obj],[k]:parseInt(e.target.value),RF:parseInt(e.target.value)*(k==="L"?r[obj].S:r[obj].L)})} style={{ ...ss.inp, width:"auto" }} id="rams-template-k">
-                              {[2,4,6].map(v=><option key={v} value={v}>{v}</option>)}
+                            <label style={{ ...ss.lbl, marginBottom:2 }} htmlFor={`rams-risk-${r.id}-${obj}-${k}`}>{k}</label>
+                            <select value={r[obj][k]} onChange={e=>updateRow(r.id,obj,{...r[obj],[k]:parseInt(e.target.value),RF:parseInt(e.target.value)*(k==="L"?r[obj].S:r[obj].L)})} style={{ ...ss.inp, width:"auto" }} id={`rams-risk-${r.id}-${obj}-${k}`}>
+                              {RISK_AXIS.map(v=><option key={v} value={v}>{v}</option>)}
                             </select>
                           </div>
                         ))}
@@ -4339,8 +4337,8 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
   const quickQrSrc = (text, size = 126) =>
     `https://quickchart.io/qr?size=${size}&margin=1&text=${encodeURIComponent(String(text || ""))}`;
   const liveShareUrl =
-    typeof window !== "undefined" && String(form.shareToken || "").trim()
-      ? `${window.location.origin}${window.location.pathname}?ramsShare=${encodeURIComponent(form.shareToken)}`
+    typeof window !== "undefined" && isPublishedRamsShare(form)
+      ? publicAppUrl(`/app?ramsShare=${encodeURIComponent(form.shareToken)}`)
       : "";
   const emergencyQuickUrl =
     safeHttpUrl(form.hospitalDirectionsUrl) ||
@@ -5140,7 +5138,7 @@ function PreviewSave({ form, setForm, rows, workers, projects, editingDoc, onSav
             <div style={{ fontSize:11, fontWeight:600, color:"var(--color-text-secondary)", marginBottom:8 }}>
               Residual risk matrix heatmap (L × S)
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"64px repeat(3, minmax(0, 1fr))", gap:4, alignItems:"center" }}>
+            <div style={{ display:"grid", gridTemplateColumns:`64px repeat(${RISK_AXIS.length}, minmax(0, 1fr))`, gap:4, alignItems:"center" }}>
               <div />
               {RISK_AXIS.map((s) => (
                 <div key={`hx-s-${s}`} style={{ fontSize:10, color:"var(--color-text-secondary)", textAlign:"center" }}>S{s}</div>
@@ -5606,6 +5604,7 @@ function SavedList({
   onExportCompliance,
   onToggleFavorite,
   onCopyShareLink,
+  onRevokeShare,
   onImportJson,
 }) {
   const { t, tf } = useWorkspaceT();
@@ -5881,7 +5880,7 @@ function SavedList({
                   />
                 </label>
               ) : null}
-              <div style={{ flex:1, minWidth:0 }}>
+              <div className="app-rams-doc-row__details">
                 <div className="app-rams-doc-row__title">
                   {doc.isFavorite ? "★ " : ""}{doc.title}
                 </div>
@@ -5925,7 +5924,7 @@ function SavedList({
                   </div>
                 )}
               </div>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:6, flexShrink:0, justifyContent:"flex-end", maxWidth: 420 }}>
+              <div className="app-rams-doc-row__actions">
                 <span className={`app-rams-doc-row__status${statusMod}`}>
                   {(doc.documentStatus || doc.status || "draft").replace(/_/g, " ")}
                 </span>
@@ -5974,7 +5973,8 @@ function SavedList({
                 <button type="button" onClick={()=>onExportCompliance(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Export compliance/audit snapshot CSV">
                   {t("compliance")}
                 </button>
-                <button type="button" onClick={()=>onCopyShareLink(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Read-only link, this browser only">{t("share")}</button>
+                <button type="button" onClick={()=>onCopyShareLink(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Publish a read-only link for other devices (14 days)">{t("share")}</button>
+                {doc.sharePublishedAt ? <button type="button" onClick={()=>onRevokeShare(doc)} style={{ ...ss.btn, padding:"4px 10px", fontSize:12 }} title="Revoke this shared RAMS link">Revoke link</button> : null}
                 <button type="button" onClick={()=>onEdit(doc)} style={{ ...ss.btnP, padding:"4px 10px", fontSize:12 }}>{t("edit")}</button>
                 <button type="button" onClick={()=>onDelete(doc.id)} style={{ ...ss.btn, padding:"4px 8px", fontSize:12, color:"#A32D2D", borderColor:"#F09595" }}>×</button>
               </div>
@@ -6108,6 +6108,37 @@ export default function RAMSTemplateBuilder() {
   const [orgRamsStarterKey, setOrgRamsStarterKey] = useState(() => getOrgRamsStarterKey());
 
   const builderBaselineRef = useRef("");
+  const builderStorageScopeRef = useRef(null);
+  const auth = useSupabaseAuth();
+  const draftOwnerRef = useRef(null);
+  draftOwnerRef.current = { userId: auth.user?.id, localOnly: !auth.supabase };
+  const currentDraftScope = ramsDraftScope({ ...draftOwnerRef.current, storageScope: ramsDocumentStorageScope() });
+  const builderDraftRef = useRef(null);
+  const flushDraftRef = useRef(null);
+  const [draftWriteFailed, setDraftWriteFailed] = useState(false);
+  const [recoveryDrafts, setRecoveryDrafts] = useState([]);
+  const [selectedRecoveryId, setSelectedRecoveryId] = useState("");
+
+  useEffect(() => {
+    if (view === "list") setRecoveryDrafts(listRamsDrafts(currentDraftScope));
+  }, [view, currentDraftScope]);
+
+  useEffect(() => {
+    if (!builderDraftRef.current || builderDraftRef.current.scope === currentDraftScope) return;
+    // Keep the last form under its original owner, never under the incoming account/workspace.
+    if (flushDraftRef.current?.() === false) {
+      pushToast({ type: "error", title: "Recovery draft not saved", message: "The account or workspace changed while device storage was unavailable. The latest form changes could not be saved; any earlier recovery copy has been kept." });
+    }
+    builderDraftRef.current = null;
+    builderStorageScopeRef.current = null;
+    setView("list");
+    setForm({});
+    setEditedRows([]);
+    setSelectedHazards([]);
+    setEditingDoc(null);
+  }, [currentDraftScope, pushToast]);
+
+  useEffect(() => () => { flushDraftRef.current?.(); }, []);
   const hazardLibRef = useRef(null);
   const [hazardLibReady, setHazardLibReady] = useState(false);
 
@@ -6185,28 +6216,26 @@ export default function RAMSTemplateBuilder() {
   }, [view, builderDirty]);
 
   useEffect(() => {
-    if (view !== "builder") return undefined;
-    const t = setTimeout(() => {
-      try {
-        sessionStorage.setItem(
-          RAMS_DRAFT_KEY,
-          JSON.stringify({
-            step,
-            form,
-            editedRows,
-            selectedHazards,
-            savedAt: Date.now(),
-          })
-        );
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new CustomEvent(RAMS_DRAFT_SAVED_EVENT));
-        }
-      } catch (e) {
-        /* quota or private mode */
-      }
-    }, 1200);
-    return () => clearTimeout(t);
-  }, [view, step, form, editedRows, selectedHazards]);
+    if (view !== "builder" || !builderDraftRef.current) { flushDraftRef.current = null; return undefined; }
+    const draft = builderDraftRef.current;
+    const flush = () => {
+      if (builderDraftRef.current !== draft) return true;
+      const ok = writeRamsDraft(draft.scope, draft.documentId, { step, form, editedRows, selectedHazards, editingDocument: editingDoc });
+      setDraftWriteFailed(!ok);
+      if (ok) window.dispatchEvent(new CustomEvent(RAMS_DRAFT_SAVED_EVENT));
+      return ok;
+    };
+    flushDraftRef.current = flush;
+    const onHidden = () => { if (document.visibilityState === "hidden") flush(); };
+    const timer = setTimeout(flush, 1200);
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onHidden);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onHidden);
+    };
+  }, [view, step, form, editedRows, selectedHazards, editingDoc]);
 
   useEffect(() => {
     const t = setTimeout(() => save(RAMS_ORG_ACTIVITIES_KEY, orgActivities), 600);
@@ -6221,7 +6250,32 @@ export default function RAMSTemplateBuilder() {
     return () => clearTimeout(t);
   }, [hazardPacks]);
 
+  const beginDraft = (documentId) => {
+    const scope = ramsDraftScope({ ...draftOwnerRef.current, storageScope: ramsDocumentStorageScope() });
+    if (!scope) {
+      pushToast({ type: "warn", title: "Sign in to edit RAMS", message: "Your account is not ready. Sign in before opening a document." });
+      return false;
+    }
+    builderDraftRef.current = { scope, documentId };
+    builderStorageScopeRef.current = ramsDocumentStorageScope();
+    setDraftWriteFailed(false);
+    return true;
+  };
+
+  const restoreDraft = (draft) => {
+    const fi = { ...RAMS_FORM_DEFAULTS, ...draft.form };
+    builderDraftRef.current = { scope: draft.scope, documentId: draft.documentId };
+    setForm(fi);
+    setEditedRows(draft.editedRows);
+    setSelectedHazards(draft.selectedHazards);
+    setStep(draft.step);
+    setEditingDoc(draft.editingDocument);
+    builderBaselineRef.current = snapshotBuilderState(draft.step, fi, draft.editedRows);
+    setView("builder");
+  };
+
   const startNew = (opts = {}) => {
+    if (!beginDraft(genId())) return;
     let formInit = {
       ...RAMS_FORM_DEFAULTS,
       date: today(),
@@ -6271,46 +6325,13 @@ export default function RAMSTemplateBuilder() {
     }
 
     if (!usedAi) {
-      try {
-        const rawDraft = sessionStorage.getItem(RAMS_DRAFT_KEY);
-        if (rawDraft) {
-          const d = JSON.parse(rawDraft);
-          const age = Date.now() - (d.savedAt || 0);
-          if (
-            d &&
-            typeof d.step === "number" &&
-            age >= 0 &&
-            age < RAMS_DRAFT_MAX_AGE_MS
-          ) {
-            const when = d.savedAt ? new Date(d.savedAt).toLocaleString() : "recently";
-            if (window.confirm(`Resume unsaved RAMS draft from ${when}?`)) {
-              const fi = {
-                ...RAMS_FORM_DEFAULTS,
-                ...(d.form || {}),
-                date: (d.form && d.form.date) || today(),
-                issueDate: (d.form && d.form.issueDate) || today(),
-                documentStatus: (d.form && d.form.documentStatus) || "draft",
-                documentNo: (d.form && d.form.documentNo) || generateRamsDocNo(),
-              };
-              const er = Array.isArray(d.editedRows) ? d.editedRows : [];
-              const sh = Array.isArray(d.selectedHazards) ? d.selectedHazards : [];
-              const st = Math.min(4, Math.max(1, Number(d.step) || 1));
-              setForm(fi);
-              setEditedRows(er);
-              setSelectedHazards(sh);
-              setStep(st);
-              setEditingDoc(null);
-              builderBaselineRef.current = snapshotBuilderState(st, fi, er);
-              setView("builder");
-              return;
-            }
-            sessionStorage.removeItem(RAMS_DRAFT_KEY);
-          } else if (rawDraft) {
-            sessionStorage.removeItem(RAMS_DRAFT_KEY);
-          }
-        }
-      } catch (e) {
-        console.warn(e);
+      const draft = latestRamsDraft(builderDraftRef.current.scope);
+      if (draft && window.confirm(`Resume unsaved RAMS draft "${draft.form.title || "Untitled"}" from ${new Date(draft.savedAt).toLocaleString()}? Cancel starts a new document and keeps that draft.`)) {
+        restoreDraft(draft);
+        return;
+      }
+      if (hasLegacyRamsDraft()) {
+        pushToast({ type: "warn", title: "Older RAMS draft preserved", message: "An older draft has no account or workspace information. It has been kept on this device for recovery and has not been opened in this workspace." });
       }
     }
 
@@ -6350,6 +6371,15 @@ export default function RAMSTemplateBuilder() {
   };
 
   const startEdit = (doc) => {
+    if (!beginDraft(doc.id)) return;
+    const draft = readRamsDraft(builderDraftRef.current.scope, doc.id);
+    if (draft) {
+      if (window.confirm(`Resume unsaved changes to "${draft.form.title || doc.title || "RAMS"}"? Cancel discards this recovery draft and opens the saved document.`)) {
+        restoreDraft(draft);
+        return;
+      }
+      clearRamsDraft(draft.scope, draft.documentId);
+    }
     const { rows: docRows, ...docRest } = doc;
     const mergedForm = {
       ...RAMS_FORM_DEFAULTS,
@@ -6462,6 +6492,8 @@ export default function RAMSTemplateBuilder() {
 
   const goToList = () => {
     if (builderDirty && !window.confirm(getLeaveRamsBuilderConfirm(orgMarketId))) return;
+    if (flushDraftRef.current?.() === false) return;
+    builderDraftRef.current = null;
     setView("list");
   };
 
@@ -7050,6 +7082,18 @@ export default function RAMSTemplateBuilder() {
   };
 
   const handleSave = () => {
+    const activeDraft = builderDraftRef.current;
+    const scope = ramsDraftScope({ ...draftOwnerRef.current, storageScope: ramsDocumentStorageScope() });
+    if (!activeDraft || activeDraft.scope !== scope) {
+      pushToast({ type: "error", title: "RAMS not saved", message: "Your account or workspace changed. Reopen the document in its original workspace before saving." });
+      return;
+    }
+    const status = String(form.documentStatus || form.status || "draft");
+    const invalidRows = editedRows.filter((r) => !isValidRiskAssessment(r.initialRisk) || !isValidRiskAssessment(r.revisedRisk));
+    if (["approved", "issued"].includes(status) && invalidRows.length) {
+      window.alert(`Cannot ${status === "issued" ? "issue" : "approve"} this RAMS: ${invalidRows.length} row(s) have invalid risk scores. Check L and S (1–6) and RF = L × S. Save as draft to review them.`);
+      return;
+    }
     const highResidualRows = editedRows.filter((r) => getRiskLevel(r.revisedRisk) === "high").length;
     if (highResidualRows > 0) {
       if (
@@ -7059,11 +7103,6 @@ export default function RAMSTemplateBuilder() {
       ) {
         return;
       }
-    }
-    try {
-      sessionStorage.removeItem(RAMS_DRAFT_KEY);
-    } catch (e) {
-      /* ignore */
     }
     const contentHash = computeRamsFingerprint(form, editedRows);
     const resolvedStatus = String(form.documentStatus || form.status || "draft");
@@ -7181,7 +7220,6 @@ export default function RAMSTemplateBuilder() {
         revision: nextRevision,
         note: "Document moved to ISSUED status.",
       });
-      setCelebrateRamsIssue(true);
     }
     const actor = getCachedAuthorshipActor();
     const docBase = stampDocumentAuthorship(
@@ -7192,7 +7230,7 @@ export default function RAMSTemplateBuilder() {
         revision: nextRevision,
         revisionSummary: nextRevisionSummary,
         signatureEvents: nextSignatureEvents,
-        id: editingDoc?.id || genId(),
+        id: editingDoc?.id || activeDraft.documentId,
         rows: editedRows,
         status: resolvedStatus,
         isFavorite: !!editingDoc?.isFavorite,
@@ -7244,6 +7282,29 @@ export default function RAMSTemplateBuilder() {
     } else {
       docBase.versionHistory = [];
     }
+    const doc = requiresCompetentReviewForRamsStatus(resolvedStatus)
+      ? stampCompetentReview(docBase, { by: String(form.approvedBy || form.leadEngineer || "").trim() })
+      : docBase;
+    const savedDoc = sanitizeRamsDocForOrg(doc, getOrgId());
+    const committed = commitRamsDocument({
+      document: savedDoc,
+      editingDocument: editingDoc,
+      expectedScope: builderStorageScopeRef.current,
+    });
+    if (!committed.ok) {
+      const message = committed.reason === "workspace_changed"
+        ? "The workspace changed while this form was open. Your form is still open; this document has not been saved to the new workspace."
+        : committed.reason === "document_changed"
+          ? "This RAMS changed or was removed while you were editing. Your form is still open and the stored version has not been overwritten."
+          : "The RAMS could not be saved on this device. Check available storage or workspace access, then retry. Your form is still open. Any existing recovery draft has been kept.";
+      pushToast({ type: "error", title: "RAMS not saved", message });
+      return;
+    }
+    setRamsDocs(committed.documents);
+    builderDraftRef.current = null;
+    clearRamsDraft(activeDraft.scope, activeDraft.documentId);
+    if (resolvedStatus === "issued" && previousStatus !== "issued") setCelebrateRamsIssue(true);
+
     const usedTemplateIds = Array.from(
       new Set(
         (editedRows || [])
@@ -7265,17 +7326,14 @@ export default function RAMSTemplateBuilder() {
         };
       });
     }
-    const doc = requiresCompetentReviewForRamsStatus(resolvedStatus)
-      ? stampCompetentReview(docBase, { by: String(form.approvedBy || form.leadEngineer || "").trim() })
-      : docBase;
-    const savedDoc = sanitizeRamsDocForOrg(doc, getOrgId());
-    setRamsDocs(prev => editingDoc
-      ? prev.map(d=>d.id===savedDoc.id?savedDoc:d)
-      : [savedDoc,...prev]
-    );
     if (isFessOrg() && savedDoc.projectId) {
       const project = (projects || []).find((p) => p.id === savedDoc.projectId);
-      const msResult = syncFessMsFromRams(savedDoc, { createIfMissing: true, project });
+      let msResult;
+      try {
+        msResult = syncFessMsFromRams(savedDoc, { createIfMissing: true, project });
+      } catch {
+        msResult = { ok: false, reason: "storage_failed" };
+      }
       if (msResult.ok) {
         pushToast({
           type: "info",
@@ -7284,13 +7342,28 @@ export default function RAMSTemplateBuilder() {
             ? "5-page MS draft linked to this RAMS from method statement text."
             : "Linked method statement updated from RAMS scope and steps.",
         });
+      } else if (msResult.reason === "storage_failed") {
+        pushToast({
+          type: "warn",
+          title: "RAMS saved; method statement not saved",
+          message: "The RAMS is saved on this device, but its linked method statement could not be updated. Check storage or workspace access, then retry the method statement update.",
+        });
       }
     }
     setView("list");
   };
 
-  const deleteDoc = (id) => {
+  const deleteDoc = async (id) => {
     if (!confirm("Delete this RAMS?")) return;
+    const sharedDoc = ramsDocs.find((d) => d.id === id);
+    if (sharedDoc?.sharePublishedAt) {
+      try {
+        await revokeRamsShare(auth.supabase, sharedDoc);
+      } catch (error) {
+        pushToast({ type: "error", message: error?.message || "Could not revoke the share link." });
+        return;
+      }
+    }
     setRamsDocs((prev) => {
       const victim = prev.find((d) => d.id === id);
       if (victim) {
@@ -7410,25 +7483,26 @@ export default function RAMSTemplateBuilder() {
   };
 
   const duplicateDoc = (doc) => {
-    const { shareToken: _st, contentHash: _ch, id: _oid, rows: srcRows, ...rest } = doc;
-    const rows = JSON.parse(JSON.stringify(srcRows || []));
     const newDoc = {
       ...RAMS_FORM_DEFAULTS,
-      ...rest,
-      id: genId(),
+      ...buildRamsCloneForProject(doc, doc.projectId, [
+        ...projects,
+        { id: doc.projectId || "", name: doc.projectName || "" },
+      ]),
       title: `${doc.title || "RAMS"} (copy)`,
       documentNo: generateRamsDocNo(),
-      issueDate: today(),
-      rows,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      shareToken: undefined,
-      contentHash: undefined,
-      status: "draft",
       isFavorite: false,
     };
-    newDoc.contentHash = computeRamsFingerprint(newDoc, rows);
-    setRamsDocs((prev) => [newDoc, ...prev]);
+    newDoc.contentHash = computeRamsFingerprint(newDoc, newDoc.rows);
+    const committed = commitRamsDocument({ document: newDoc, expectedScope: ramsDocumentStorageScope() });
+    if (!committed.ok) {
+      pushToast({
+        type: "error", title: "RAMS copy not saved",
+        message: "The copy could not be saved on this device. Check available storage or workspace access, then retry.",
+      });
+      return;
+    }
+    setRamsDocs(committed.documents);
     pushToast({
       type: "success",
       title: "Duplicated as draft",
@@ -7447,6 +7521,7 @@ export default function RAMSTemplateBuilder() {
     if (!targetId?.trim()) return;
     try {
       const copy = duplicateRamsToProject(doc, targetId.trim(), projects);
+      setRamsDocs(load("rams_builder_docs", []));
       pushToast({ type: "success", title: "Copied to project", message: copy.title?.trim() || "Draft RAMS created on the selected project." });
     } catch (e) {
       pushToast({ type: "warn", title: "Copy failed", message: e?.message || "Could not copy." });
@@ -7466,6 +7541,7 @@ export default function RAMSTemplateBuilder() {
     if (!targetId?.trim()) return;
     try {
       const copies = batchDuplicateRamsToProject(docs, targetId.trim(), projects);
+      setRamsDocs(load("rams_builder_docs", []));
       pushToast({
         type: "success",
         title: "Copied to project",
@@ -7611,21 +7687,29 @@ export default function RAMSTemplateBuilder() {
     alert(`Imported: ${doc.title}`);
   };
 
-  const genShareToken = () => genOpaqueToken("r");
-
   const copyShareLink = async (doc) => {
-    let token = doc.shareToken;
-    if (!token) {
-      token = genShareToken();
-      setRamsDocs((prev) =>
-        prev.map((d) =>
-          d.id === doc.id ? { ...d, shareToken: token, updatedAt: new Date().toISOString() } : d
-        )
-      );
+    try {
+      const { token, publishedAt, expiresAt, shareSourceUpdatedAt } = await publishRamsShare(auth.supabase, doc, getOrgId());
+      setRamsDocs((prev) => prev.map((d) =>
+        d.id === doc.id ? { ...d, shareToken: token, sharePublishedAt: publishedAt, shareExpiresAt: expiresAt, shareSourceUpdatedAt } : d
+      ));
+      const url = publicAppUrl(`/app?ramsShare=${encodeURIComponent(token)}`);
+      await copyCapabilityLink(url, { pushToast, cloudPublished: true });
+    } catch (error) {
+      pushToast({ type: "error", message: error?.message || "Could not publish the RAMS link." });
     }
-    const base = `${window.location.origin}${window.location.pathname}`;
-    const url = `${base}?ramsShare=${encodeURIComponent(token)}`;
-    await copyCapabilityLink(url, { pushToast, localOnly: true });
+  };
+
+  const revokeShareLink = async (doc) => {
+    try {
+      await revokeRamsShare(auth.supabase, doc);
+      setRamsDocs((prev) => prev.map((d) => d.id === doc.id
+        ? { ...d, shareToken: undefined, sharePublishedAt: undefined, shareExpiresAt: undefined, shareSourceUpdatedAt: undefined }
+        : d));
+      pushToast({ type: "success", message: "RAMS link revoked." });
+    } catch (error) {
+      pushToast({ type: "error", message: error?.message || "Could not revoke the RAMS link." });
+    }
   };
 
   const STEPS = ["Document info","Select hazards","Review & edit","Preview & save"];
@@ -7645,6 +7729,29 @@ export default function RAMSTemplateBuilder() {
           lead={t("ramsBuilderLead")}
           suppressRegisterPdf
         />
+        {recoveryDrafts.some((draft) => draft.scope === currentDraftScope) ? (
+          <div style={{ ...ss.card, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <label htmlFor="rams-recovery-draft">Unsaved drafts on this tab</label>
+            <select
+              id="rams-recovery-draft"
+              style={{ ...ss.inp, flex: "1 1 220px", minWidth: 0 }}
+              value={recoveryDrafts.some((draft) => draft.documentId === selectedRecoveryId) ? selectedRecoveryId : recoveryDrafts[0]?.documentId || ""}
+              onChange={(event) => setSelectedRecoveryId(event.target.value)}
+            >
+              {recoveryDrafts.filter((draft) => draft.scope === currentDraftScope).map((draft) => (
+                <option key={draft.documentId} value={draft.documentId}>
+                  {draft.form.title || "Untitled RAMS"} · {formatOrgDateTime(draft.savedAt)}
+                </option>
+              ))}
+            </select>
+            <button type="button" style={ss.btn} onClick={() => {
+              const selected = recoveryDrafts.find((draft) => draft.documentId === selectedRecoveryId) || recoveryDrafts[0];
+              const scope = ramsDraftScope({ ...draftOwnerRef.current, storageScope: ramsDocumentStorageScope() });
+              const draft = selected && readRamsDraft(scope, selected.documentId);
+              if (draft && beginDraft(draft.documentId)) restoreDraft(draft);
+            }}>Resume draft</button>
+          </div>
+        ) : null}
         <SavedList
           ramsDocs={ramsDocs}
           workers={workers}
@@ -7664,6 +7771,7 @@ export default function RAMSTemplateBuilder() {
           onExportCompliance={exportComplianceSnapshot}
           onToggleFavorite={toggleFavoriteDoc}
           onCopyShareLink={copyShareLink}
+          onRevokeShare={revokeShareLink}
           onImportJson={importRamsJson}
         />
       </div>
@@ -7792,9 +7900,16 @@ export default function RAMSTemplateBuilder() {
       </div>
 
       {/* steps */}
+      {draftWriteFailed ? (
+        <div role="alert" style={{ ...ss.card, color: "#991b1b", marginBottom: 12 }}>
+          Recovery draft could not be saved on this device. Keep this form open and free up storage before leaving or reloading.
+        </div>
+      ) : null}
       <div className="app-rams-step-body">
         {step===1 && (
           <StepInfo
+            draftScope={builderDraftRef.current?.scope}
+            draftDocumentId={builderDraftRef.current?.documentId}
             form={form}
             setForm={setForm}
             projects={projects}

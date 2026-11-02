@@ -39,6 +39,10 @@ async function checkFunction(fnName) {
     const body = await res.json().catch(() => null);
     const liveReady = body?.liveReady === true;
     const testReady = body?.testReady === true;
+    if (typeof body?.activeReady === "boolean") {
+      return { fnName, deployed: true, activeMode: body.activeMode, activeReady: body.activeReady,
+        liveReady, testReady, rawStatus: res.status, pendingFailures: body.pendingFailures ?? null };
+    }
     if (body?.configured && typeof body.configured === "object") {
       const liveKeys = [
         "stripeSecretKey",
@@ -97,6 +101,13 @@ async function main() {
       continue;
     }
 
+    if (typeof result.activeReady === "boolean") {
+      const ready = result.activeReady && !(result.pendingFailures > 0);
+      if (!ready) hasIssues = true;
+      console.log(`- ${result.fnName}: ${result.activeMode || "unknown"} mode ${ready ? "ready" : "not ready"}${result.pendingFailures > 0 ? `; pending failures=${result.pendingFailures}` : ""}`);
+      continue;
+    }
+
     if (result.configured === false || result.valid === false) {
       hasIssues = true;
       console.log(`- ${result.fnName}: deployed, but live billing misconfigured`);
@@ -116,14 +127,14 @@ async function main() {
         console.log("    - run: npm run stripe:retry-webhooks");
         continue;
       }
-      const testNote = result.testReady ? "live + test QA ready" : "live ready (test QA: npm run stripe:setup-test)";
+      const testNote = result.testReady ? "live + test configuration present (not an end-to-end payment check)" : "live configuration present (test QA: npm run stripe:setup-test)";
       console.log(`- ${result.fnName}: ${testNote}`);
       if (result.fnName === "stripe-webhook" && result.lastProcessedAt) {
         console.log(`    - lastProcessedAt: ${result.lastProcessedAt}`);
       }
       if (result.fnName === "stripe-checkout" && result.marketBilling) {
         const mb = result.marketBilling;
-        console.log(`    - marketBilling: uk=${mb.uk ? "ok" : "missing"} au=${mb.au ? "ok" : "missing"} pl=${mb.pl ? "ok" : "missing"}`);
+        console.log(`    - marketBilling: ${["uk", "au", "pl", "de", "at", "ch"].map(market => `${market}=${mb[market] ? "ok" : "missing"}`).join(" ")}`);
       }
       continue;
     }
@@ -140,8 +151,38 @@ async function main() {
     printStripePriceGuide();
     process.exit(1);
   }
-  console.log("Billing doctor passed.");
+  console.log("Billing configuration probes passed. Payment delivery and customer access are NOT verified by these public probes.");
+  console.log("Run node scripts/billing-doctor.mjs --stripe to also check the locally configured Stripe account.");
+  if (process.argv.includes("--stripe")) await checkStripeAccount();
   printStripePriceGuide();
+}
+
+async function checkStripeAccount() {
+  const { default: Stripe } = await import("stripe");
+  const key = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!/^(sk|rk)_live_/.test(key || "")) throw new Error("A live Stripe API key is required for --stripe");
+  const stripe = new Stripe(key, { timeout: 15000, maxNetworkRetries: 1 });
+  const endpoint = `${baseUrl}/functions/v1/stripe-webhook`;
+  const webhooks = await stripe.webhookEndpoints.list({ limit: 100 });
+  const hook = webhooks.data.find(row => row.url === endpoint && row.status === "enabled" && row.livemode);
+  const required = ["checkout.session.completed", "checkout.session.async_payment_succeeded", "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted", "invoice.paid", "invoice.payment_failed"];
+  if (!hook || !required.every(event => hook.enabled_events.includes("*") || hook.enabled_events.includes(event))) {
+    throw new Error("MySafeOps live webhook is missing, disabled, or missing required events on the local Stripe account");
+  }
+  const portals = await stripe.billingPortal.configurations.list({ active: true, limit: 100 });
+  if (!portals.data.some(row => row.metadata?.application === "mysafeops")) throw new Error("MySafeOps billing portal is missing");
+  for (const suffix of ["", "_AUD", "_PLN", "_EUR", "_CHF"]) {
+    const currency = ({ "": "gbp", _AUD: "aud", _PLN: "pln", _EUR: "eur", _CHF: "chf" })[suffix];
+    for (const plan of ["STARTER", "TEAM", "BUSINESS", "ENTERPRISE"]) {
+      const id = process.env[`STRIPE_PRICE_${plan}${suffix}`];
+      if (!id) throw new Error(`Missing ${plan} price for ${currency}`);
+      const price = await stripe.prices.retrieve(id);
+      if (!price.active || !price.livemode || price.currency !== currency || price.recurring?.interval !== "month" || price.recurring.interval_count !== 1) {
+        throw new Error(`Invalid ${plan} price for ${currency}`);
+      }
+    }
+  }
+  console.log("Stripe account checks passed (webhook registration, portal and 20 active monthly prices). Complete a test purchase to verify delivery.");
 }
 
 function printStripePriceGuide() {
@@ -153,24 +194,24 @@ function printStripePriceGuide() {
   );
 
   console.log("\nStripe GBP monthly (billingPlans.js / seed script):");
-  console.log("  Solo (starter)     £19  → STRIPE_PRICE_STARTER");
-  console.log("  Team              £109  → STRIPE_PRICE_TEAM");
-  console.log("  Business          £319  → STRIPE_PRICE_BUSINESS");
-  console.log("  Enterprise        £649  → STRIPE_PRICE_ENTERPRISE");
+  console.log("  Solo (starter)     £39  → STRIPE_PRICE_STARTER");
+  console.log("  Team              £159  → STRIPE_PRICE_TEAM");
+  console.log("  Business          £349  → STRIPE_PRICE_BUSINESS");
+  console.log("  Enterprise        £699  → STRIPE_PRICE_ENTERPRISE");
   console.log("\nStripe AUD monthly (ex GST):");
-  console.log("  Solo (starter)    A$59  → STRIPE_PRICE_STARTER_AUD");
-  console.log("  Team             A$249  → STRIPE_PRICE_TEAM_AUD");
-  console.log("  Business         A$719  → STRIPE_PRICE_BUSINESS_AUD");
-  console.log("  Enterprise     A$1429  → STRIPE_PRICE_ENTERPRISE_AUD");
+  console.log("  Solo (starter)   A$119  → STRIPE_PRICE_STARTER_AUD");
+  console.log("  Team             A$359  → STRIPE_PRICE_TEAM_AUD");
+  console.log("  Business         A$789  → STRIPE_PRICE_BUSINESS_AUD");
+  console.log("  Enterprise     A$1539  → STRIPE_PRICE_ENTERPRISE_AUD");
   console.log(`  Local .env.local: ${audOk ? "all four AUD ids set" : "AUD ids incomplete"}`);
   console.log("\nStripe PLN monthly (net):");
-  console.log("  Solo (starter)     79 zł → STRIPE_PRICE_STARTER_PLN");
-  console.log("  Team              439 zł → STRIPE_PRICE_TEAM_PLN");
-  console.log("  Business         1249 zł → STRIPE_PRICE_BUSINESS_PLN");
-  console.log("  Enterprise       2469 zł → STRIPE_PRICE_ENTERPRISE_PLN");
+  console.log("  Solo (starter)    159 zł → STRIPE_PRICE_STARTER_PLN");
+  console.log("  Team              639 zł → STRIPE_PRICE_TEAM_PLN");
+  console.log("  Business         1369 zł → STRIPE_PRICE_BUSINESS_PLN");
+  console.log("  Enterprise       2659 zł → STRIPE_PRICE_ENTERPRISE_PLN");
   console.log(`  Local .env.local: ${plnOk ? "all four PLN ids set" : "PLN ids incomplete"}`);
   console.log("  Seed: npm run stripe:seed-prices  |  Sync secrets: npm run stripe:sync-secrets");
-  console.log("  QA test mode: npm run stripe:setup-test  (STRIPE_SECRET_KEY_TEST in .env.local)");
+  console.log("  QA test mode: npm run stripe:setup-test  (STRIPE_SECRET_KEY_TEST in .env.local or `stripe login`)");
   console.log("  Secrets live in Supabase Edge only (not Vercel).\n");
 }
 

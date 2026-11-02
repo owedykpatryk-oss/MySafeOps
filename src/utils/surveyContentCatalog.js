@@ -558,7 +558,7 @@ export const SURVEY_CATALOG = {
     scope:
       "Ground investigation by window sampling (tracked windowless sampler) and/or trial pits — service avoidance, pit stability, contamination pathways, sample chain of custody, and reinstatement.",
     ramsMethod:
-      "1. Desk study, utility records, and CAT/Genny sweep; agree sample locations with client/engineer.\n\n2. Issue permit-to-dig / ground disturbance; mark exclusion zones and no-go lines.\n\n3. Window sampling: deploy tracked sampler with banksman; step/shore hole if depth exceeds safe angle.\n\n4. Trial pit option: machine strip to safe depth then hand-finish; log face, photograph strata, bag/label samples on site.\n\n5. Complete chain-of-custody forms; backfill in layers, compact, reinstate surface.",
+      "1. Review the desk study, utility records, service detection and contamination/gas assessment; agree sample locations and the chosen sampling or trial-pit method with the competent lead.\n\n2. Issue permit-to-dig. Before work starts, plan the pit support or battering, safe access, exclusion zones and spoil/plant positions for the actual ground, water and adjacent loads; have the required precautions available.\n\n3. Complete rig pre-use checks and stable setup with a banksman. Carry out required pre-start gas checks and maintain monitoring during ground disturbance as specified by the assessment; stop on alarms, refusal or unexpected services.\n\n4. For window sampling, follow the rig procedure and guard openings. For trial pits, excavate using the agreed service-avoidance method and install support or battering as work proceeds. Log and sample from a safe position; no entry without a separate safe-entry assessment and inspected protection.\n\n5. Label and seal samples; complete chain-of-custody and contamination controls. Backfill, compact and reinstate; secure or cap remaining openings and record the handover.",
     hazardTokens: ["window sampling", "trial pit", "ground", "excavation", "plant", "buried", "sample", "contamination"],
     playbookOnly: true,
   },
@@ -597,6 +597,7 @@ export function getPlaybookSurveyPack(key) {
   const coreMethod = entry.ramsMethod || entry.methodology || "";
   const meta = getSurveyPackMeta(key);
   return {
+    key,
     label: entry.label || key,
     scope: entry.ramsScope || entry.scope || "",
     method: buildSurveyRamsMethod(coreMethod),

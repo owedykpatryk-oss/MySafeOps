@@ -1,4 +1,6 @@
 import { requestD1OutboxManualRetry } from "../lib/d1OutboxRetryEvent.js";
+import { isBillingWriteBlocked } from "../utils/billingAccess.js";
+import { openWorkspaceSettings } from "../utils/workspaceNavContext.js";
 
 /**
  * Cloud D1 sync status strip: hydration vs IndexedDB upload queue (useD1OrgArraySync).
@@ -22,16 +24,19 @@ export function D1ModuleSyncBanner({
   manualRetryLabel = "Retry now",
 }) {
   if (!d1Hydrating && !d1OutboxPending) return null;
-  const h =
-    hydrateMessage ??
-    (scopeLabel ? `Syncing ${scopeLabel} with cloud…` : "Syncing with cloud…");
+  const h = hydrateMessage ?? (scopeLabel ? `Syncing ${scopeLabel} with cloud…` : "Syncing with cloud…");
   const q =
     queueMessage ??
     (scopeLabel
       ? `${scopeLabel}: upload queued — will retry when you're online.`
       : "Upload queued — will retry when you're online.");
-  const text = d1Hydrating ? h : q;
-  const showRetry = showManualRetry && !d1Hydrating && d1OutboxPending;
+  const billingPaused = !d1Hydrating && d1OutboxPending && isBillingWriteBlocked();
+  const text = d1Hydrating
+    ? h
+    : billingPaused
+      ? "Cloud upload paused — review this country’s subscription in Settings → Billing. Changes remain on this device."
+      : q;
+  const showRetry = showManualRetry && !d1Hydrating && d1OutboxPending && !billingPaused;
 
   return (
     <div
@@ -39,7 +44,13 @@ export function D1ModuleSyncBanner({
       aria-live="polite"
       aria-busy={d1Hydrating}
       className="app-panel-surface"
-      style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, color: "var(--color-text-secondary)" }}
+      style={{
+        padding: "8px 12px",
+        borderRadius: 8,
+        marginBottom: 10,
+        fontSize: 12,
+        color: "var(--color-text-secondary)",
+      }}
     >
       <div
         style={{
@@ -51,6 +62,11 @@ export function D1ModuleSyncBanner({
         }}
       >
         <span>{text}</span>
+        {billingPaused && (
+          <button type="button" onClick={() => openWorkspaceSettings({ tab: "billing" })}>
+            Open Billing
+          </button>
+        )}
         {showRetry ? (
           <button
             type="button"

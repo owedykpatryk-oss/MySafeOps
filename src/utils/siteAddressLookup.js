@@ -27,6 +27,17 @@ export function resolveSitePostcodeInputForMarket(postcode, marketId, ...extraTe
   return resolveUkPostcodeInput(postcode, ...extraText);
 }
 
+/**
+ * Ordered lookup candidates: the dedicated field first, then a different
+ * postcode embedded in the address/site text. This recovers common cases where
+ * an old or mistyped postcode is left in the dedicated field.
+ */
+export function resolveSitePostcodeCandidatesForMarket(postcode, marketId, ...extraText) {
+  const primary = resolveSitePostcodeInputForMarket(postcode, marketId, ...extraText);
+  const embedded = resolveSitePostcodeInputForMarket("", marketId, ...extraText);
+  return [...new Set([primary, embedded].filter(Boolean))];
+}
+
 /** @param {string} postcode @param {import("../config/markets").MarketId} [marketId] */
 export async function lookupSitePostcode(postcode, marketId = getOrgMarketId()) {
   if (marketId === "au") return lookupAuPostcode(postcode);

@@ -94,4 +94,4 @@ export function pickBestGeologyFeature(features, lng, lat) {
 }
 
 export const BGS_625K_DISCLAIMER =
-  "BGS 1:625,000 digital geology is a regional overview only (Open Government Licence). It is not a site investigation, trial-pit soil log or geotechnical design description — local made ground, fill thickness and moisture often differ from the map.";
+  `BGS 1:625,000 digital geology is a regional overview only (Open Government Licence). It is not a site investigation, trial-pit soil log or geotechnical design description — local made ground, fill thickness and moisture often differ from the map. Contains British Geological Survey materials © UKRI ${new Date().getFullYear()}.`;

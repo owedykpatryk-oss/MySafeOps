@@ -16,6 +16,7 @@ import { exportCsv } from "../utils/exportCsv";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 import { todayLocalISO } from "../utils/localDate";
+import { daysUntilRegisterDue } from "../utils/registerRecordStatus";
 const ACTIONS_KEY = "incident_actions_v1";
 const INCIDENTS_KEY = "mysafeops_incidents";
 const INSPECTIONS_KEY = "inspection_records";
@@ -43,10 +44,7 @@ const PRIORITY = [
 const REMINDER_LEAD_DAYS = 2;
 
 function daysToDue(dueDate) {
-  if (!dueDate) return null;
-  const now = new Date();
-  const due = new Date(`${dueDate}T23:59:59`);
-  return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return daysUntilRegisterDue(dueDate);
 }
 
 function ActionForm({ item, incidents, onSave, onClose }) {
@@ -79,7 +77,7 @@ function ActionForm({ item, incidents, onSave, onClose }) {
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 620 }}>
         <h2 style={{ marginTop: 0, fontSize: 18, fontWeight: 600 }}>{item ? "Edit incident action" : "New incident action"}</h2>
         <label style={ss.lbl} htmlFor="incident-action-title">Action title *</label>
-        <input style={ss.inp} value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Install physical barrier at loading bay edge"  id="incident-action-title" />
+        <input style={ss.inp} value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Install a barrier"  id="incident-action-title" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginTop: 10 }}>
           <div>
             <label style={ss.lbl} htmlFor="incident-action-owner">Owner *</label>
@@ -472,8 +470,8 @@ export default function IncidentActionTracker() {
       </div>
 
       <div className="app-panel-surface" style={{ padding: 12, borderRadius: 10 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
-          <input style={ss.inp} placeholder="Search title/action/incident…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 8, marginBottom: 10 }}>
+          <input style={ss.inp} placeholder="Search actions" aria-label="Search title, action or incident" value={search} onChange={(e) => setSearch(e.target.value)} />
           <select style={ss.inp} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">All statuses</option>
             {STATUS.map((x) => (

@@ -33,7 +33,7 @@ A survey company owner does not care about allergen changeover registers. A food
 |---|---|
 | **Company** | 3–30 person utility survey / GPR / topographic survey firm |
 | **Job titles** | Owner, Managing Director, Survey Manager, Operations Manager |
-| **Buys** | Business £249, occasionally Team £99 |
+| **Buys** | Business £349, occasionally Team £159 |
 
 **What they actually care about**
 
@@ -65,7 +65,7 @@ Their deliverable *is* the product. Every hour spent formatting a PAS 128 report
 |---|---|
 | **Company** | 5–50 people. M&E, mechanical install, fabrication, fit-out |
 | **Job titles** | Owner, Director, Contracts Manager |
-| **Buys** | Team £99 or Business £249, on their own card |
+| **Buys** | Team £159 or Business £349, on their own card |
 
 **What they actually care about**
 
@@ -97,7 +97,7 @@ They carry the compliance risk personally and have no full-time H&S person. They
 |---|---|
 | **Company** | Contractor working inside food factories, dairies, breweries, pharma plants |
 | **Job titles** | Contracts Manager, Operations Manager, Site Manager |
-| **Buys** | Business £249 |
+| **Buys** | Business £349 |
 
 **What they actually care about**
 
@@ -126,7 +126,7 @@ Working in a live food plant has rules no construction app understands. Hygiene 
 |---|---|
 | **Company** | 50–500 people, principal contractor or large subcontractor |
 | **Job titles** | H&S Manager, HSEQ Manager, SHEQ Advisor, Compliance Manager |
-| **Buys** | Business £249 or Enterprise £499 |
+| **Buys** | Business £349 or Enterprise £699 |
 
 **What they actually care about**
 
@@ -179,8 +179,8 @@ Getting off site on time. They have been given bad software before and they will
 
 | Persona | Fit | Buys | Best channel | Content job |
 |---|---|---|---|---|
-| Survey company owner | Highest | £249 | LinkedIn | Leads |
-| Small contractor owner | High | £99–£249 | LinkedIn | Leads, volume |
-| Food/pharma ops manager | High | £249 | LinkedIn | Leads, niche authority |
-| H&S manager | Medium | £249–£499 | LinkedIn | Credibility |
+| Survey company owner | Highest | £349 | LinkedIn | Leads |
+| Small contractor owner | High | £159–£349 | LinkedIn | Leads, volume |
+| Food/pharma ops manager | High | £349 | LinkedIn | Leads, niche authority |
+| H&S manager | Medium | £349–£699 | LinkedIn | Credibility |
 | Field surveyor/engineer | User | — | Instagram | Reach, shares |

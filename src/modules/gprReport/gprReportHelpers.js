@@ -15,15 +15,44 @@ import { buildStaticMapUrl } from "../../utils/staticMapUrl.js";
 import { isUtilityMappingOrg } from "../../utils/utilityMappingOrg";
 import { formatUtilityMappingTypedRef, nextUtilityMappingJobNumber, utilityMappingJobYearYY } from "../../utils/utilityMappingDocRefs";
 import { matchUtilityMappingClientCode } from "../../utils/utilityMappingClients";
+import { normalizeGprEvidence, sanitizeEvidenceAssessments, verifiedGprEvidence } from "./gprEvidence.js";
+
+function normalizeAcquisitionScreenshots(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((shot) => shot && typeof shot === "object" && String(shot.dataUrl || "").startsWith("data:image/"))
+    .slice(0, 6)
+    .map((shot, index) => ({
+      id: String(shot.id || `acq_shot_${index}`).slice(0, 80),
+      dataUrl: String(shot.dataUrl || ""),
+      caption: String(shot.caption || "").slice(0, 160),
+    }));
+}
 
 export function normalizeGprReport(raw) {
   const base = blankGprReport();
   if (!raw || typeof raw !== "object") return base;
-  return {
+  const report = {
     ...base,
     ...raw,
+    includeGeology: typeof raw.includeGeology === "boolean"
+      ? raw.includeGeology
+      : Boolean(raw.groundConditions?.fetchedAt || raw.groundConditions?.narrative),
+    includeHistoricalEvidence: typeof raw.includeHistoricalEvidence === "boolean"
+      ? raw.includeHistoricalEvidence
+      : Boolean(raw.historicalEvidence?.length),
+    visualTheme: { ...base.visualTheme, ...(raw.visualTheme || {}) },
+    coverBranding: {
+      ...base.coverBranding,
+      ...(raw.coverBranding || {}),
+      mode: ["own", "client", "both"].includes(raw.coverBranding?.mode) ? raw.coverBranding.mode : "own",
+    },
     equipment: Array.isArray(raw.equipment) && raw.equipment.length ? raw.equipment : base.equipment,
-    acquisition: { ...base.acquisition, ...(raw.acquisition || {}) },
+    acquisition: {
+      ...base.acquisition,
+      ...(raw.acquisition || {}),
+      screenshots: normalizeAcquisitionScreenshots(raw.acquisition?.screenshots),
+    },
     velocityModel: { ...base.velocityModel, ...(raw.velocityModel || {}) },
     groundConditions: {
       ...base.groundConditions,
@@ -40,6 +69,16 @@ export function normalizeGprReport(raw) {
       },
     },
     environmental: { ...base.environmental, ...(raw.environmental || {}) },
+    historicalEvidence: Array.isArray(raw.historicalEvidence)
+      ? raw.historicalEvidence.map(normalizeGprEvidence)
+      : [],
+    evidenceReview: {
+      ...base.evidenceReview,
+      ...(raw.evidenceReview || {}),
+      model: String(raw.evidenceReview?.model || "").slice(0, 80),
+      policy: "verified-evidence-only",
+      assessments: [],
+    },
     processing: { ...base.processing, ...(raw.processing || {}), filters: Array.isArray(raw.processing?.filters) ? raw.processing.filters : base.processing.filters },
     qaChecklist: { ...base.qaChecklist, ...(raw.qaChecklist || {}) },
     sections: { ...base.sections, ...(raw.sections || {}) },
@@ -55,6 +94,11 @@ export function normalizeGprReport(raw) {
     signOff: { ...base.signOff, ...(raw.signOff || {}) },
     gprCadImport: raw.gprCadImport && typeof raw.gprCadImport === "object" ? raw.gprCadImport : null,
   };
+  report.evidenceReview.assessments = sanitizeEvidenceAssessments(
+    raw.evidenceReview?.assessments,
+    verifiedGprEvidence(report).map((item) => item.id),
+  );
+  return report;
 }
 
 export function nextGprRef(reports = [], seed = {}) {
@@ -113,11 +157,9 @@ export function gprStaticMapUrl(lat, lng) {
 const QUALITY_LABELS = [
   { key: "ref", label: "Report ref" },
   { key: "surveyDate", label: "Survey date" },
-  { key: "surveyor", label: "Surveyor" },
   { key: "equipment", label: "Equipment" },
   { key: "acquisition", label: "Acquisition" },
   { key: "ground", label: "BGS ground data" },
-  { key: "environment", label: "Weather / environment" },
   { key: "methodology", label: "Methodology" },
   { key: "findings", label: "Findings" },
   { key: "limitations", label: "Limitations" },
@@ -129,11 +171,9 @@ export function gprReportQuality(report) {
   const passed = {
     ref: Boolean(r.ref),
     surveyDate: Boolean(r.surveyDate),
-    surveyor: Boolean(r.surveyor),
     equipment: Boolean(r.equipment?.[0]?.manufacturer || r.equipment?.[0]?.model),
     acquisition: Boolean(r.acquisition?.scanMode),
-    ground: Boolean(r.groundConditions?.narrative || r.groundConditions?.fetchedAt),
-    environment: Boolean(r.environmental?.description || r.environmental?.fetchedAt),
+    ...(r.includeGeology ? { ground: Boolean(r.groundConditions?.narrative || r.groundConditions?.fetchedAt) } : {}),
     methodology: Boolean(r.sections?.methodology?.trim()),
     findings: Boolean(r.sections?.findings?.trim() || r.anomalies?.length),
     limitations: Boolean(r.sections?.limitations?.trim() || r.limitationKeys?.length),
@@ -141,7 +181,7 @@ export function gprReportQuality(report) {
   };
   const keys = Object.keys(passed);
   const score = Math.round((keys.filter((k) => passed[k]).length / keys.length) * 100);
-  const missing = QUALITY_LABELS.filter((q) => !passed[q.key]).map((q) => q.label);
+  const missing = QUALITY_LABELS.filter((q) => q.key in passed && !passed[q.key]).map((q) => q.label);
   return { score, missing, passed, checks: keys.length };
 }
 
@@ -235,13 +275,13 @@ export function gprAntennaAdvice(report) {
 }
 
 export function summarizeGprReportList(reports = []) {
-  const list = reports.map(normalizeGprReport);
+  const list = reports.filter((report) => report?.id && !report.deletedAt).map(normalizeGprReport);
   const finals = list.filter((r) => r.status === "final").length;
   const drafts = list.length - finals;
   const scores = list.map((r) => gprReportQuality(r).score);
   const avgComplete = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
   const needsWork = list.filter((r) => gprReportQuality(r).score < 70 && r.status !== "final").length;
-  const withGeology = list.filter((r) => r.groundConditions?.fetchedAt).length;
+  const withGeology = list.filter((r) => r.includeGeology && r.groundConditions?.fetchedAt).length;
   return { total: list.length, finals, drafts, avgComplete, needsWork, withGeology };
 }
 
@@ -262,7 +302,7 @@ export function enrichGprListRow(report, project) {
     mapThumb: gprStaticMapUrl(project?.lat, project?.lng),
     radargramThumb: r.radargrams?.find((rg) => rg.dataUrl)?.dataUrl || null,
     freqLabel: freq ? `${freq} MHz` : null,
-    penLabel: r.groundConditions?.expectedPenetrationM ? `~${r.groundConditions.expectedPenetrationM} m` : null,
+    penLabel: r.includeGeology && r.groundConditions?.expectedPenetrationM ? `~${r.groundConditions.expectedPenetrationM} m` : null,
     anomalyCount: r.anomalies?.length || 0,
     evidenceLabel: parts.length ? parts.join(" · ") : null,
     preSurveyStarted: isGprPreSurveyStarted(r.preSurvey),

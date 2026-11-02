@@ -3,6 +3,13 @@
 import { dataUrlToBlob } from "./dataUrlBlob.js";
 
 const EARTH_RADIUS_M = 6371000;
+export function hasGeoPhotoCoordinates(photo) {
+  const lat = photo?.latitude;
+  const lng = photo?.longitude;
+  return lat != null && lng != null && String(lat).trim() !== "" && String(lng).trim() !== ""
+    && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
+    && Math.abs(Number(lat)) <= 90 && Math.abs(Number(lng)) <= 180;
+}
 /** Visible length of a view-direction arrow on site-scale maps. */
 export const DIRECTION_LENGTH_M = 25;
 
@@ -124,18 +131,22 @@ function decodeViaHtmlImage(file, maxWidth, quality) {
     };
 
     img.onload = () => {
-      const jpeg = drawSourceToJpeg(
-        img,
-        img.naturalWidth || img.width,
-        img.naturalHeight || img.height,
-        maxWidth,
-        quality
-      );
-      if (jpeg && jpeg.startsWith("data:image/jpeg")) {
-        finish(resolve, jpeg);
-        return;
+      try {
+        const jpeg = drawSourceToJpeg(
+          img,
+          img.naturalWidth || img.width,
+          img.naturalHeight || img.height,
+          maxWidth,
+          quality
+        );
+        if (jpeg && jpeg.startsWith("data:image/jpeg")) {
+          finish(resolve, jpeg);
+          return;
+        }
+        finish(reject, new Error(photoReadErrorMessage(file)));
+      } catch {
+        finish(reject, new Error(photoReadErrorMessage(file)));
       }
-      finish(reject, new Error(photoReadErrorMessage(file)));
     };
     img.onerror = () => finish(reject, new Error(photoReadErrorMessage(file)));
     img.src = objectUrl;

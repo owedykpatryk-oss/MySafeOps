@@ -129,7 +129,7 @@ export function seedFessClientSiteProjects() {
   const key = "mysafeops_projects";
   const existing = load(key, []);
   const list = Array.isArray(existing) ? [...existing] : [];
-  const byName = new Set(list.map((p) => String(p.name || "").trim().toLowerCase()));
+  const byName = new Set(list.filter((p) => p && !p.deletedAt).map((p) => String(p.name || "").trim().toLowerCase()));
   const createdNames = [];
   const now = new Date().toISOString();
 
@@ -156,7 +156,9 @@ export function seedFessClientSiteProjects() {
   }
 
   if (createdNames.length) {
-    save(key, list);
+    if (save(key, list) !== true) {
+      return { created: 0, total: existing.length, names: [], error: "storage_failed" };
+    }
   }
   return { created: createdNames.length, total: list.length, names: createdNames };
 }
@@ -198,8 +200,8 @@ export function ensureFessSiteProject(siteTemplateId) {
   const existing = load(key, []);
   const list = Array.isArray(existing) ? [...existing] : [];
   const found =
-    list.find((p) => p.fessSiteTemplateId === tmpl.id) ||
-    list.find((p) => String(p.name || "").trim().toLowerCase() === tmpl.name.toLowerCase());
+    list.find((p) => !p.deletedAt && p.fessSiteTemplateId === tmpl.id) ||
+    list.find((p) => !p.deletedAt && String(p.name || "").trim().toLowerCase() === tmpl.name.toLowerCase());
   if (found) return found;
 
   const now = new Date().toISOString();
@@ -220,6 +222,6 @@ export function ensureFessSiteProject(siteTemplateId) {
     updatedAt: now,
   };
   list.unshift(project);
-  save(key, list);
+  if (save(key, list) !== true) return null;
   return project;
 }

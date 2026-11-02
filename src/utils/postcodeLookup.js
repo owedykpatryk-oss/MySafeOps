@@ -3,6 +3,8 @@
  * https://postcodes.io/
  */
 
+import { appApiUrl } from "./appApiUrl";
+
 const UPSTREAM = "https://api.postcodes.io/postcodes";
 const UK_POSTCODE_IN_TEXT =
   /[A-Z]{1,2}\d{1,2}[A-Z]?(?:\s*|\s*-\s*)\d[A-Z]{2}/i;
@@ -71,8 +73,15 @@ async function fetchPostcodeJson(url) {
     cache: "no-store",
     credentials: "same-origin",
   });
-  if (!res.ok) return null;
   const json = await readPostcodeJson(res);
+  // A JSON 404 from the proxy means the postcode itself is unknown/retired.
+  // Do not retry the legacy route with the same value and duplicate the error.
+  if (!res.ok) {
+    if (res.status === 404 && (json?.error === "Postcode not found" || json?.terminated)) {
+      return { postcodeNotFound: true };
+    }
+    return null;
+  }
   return json?.result ? json : null;
 }
 
@@ -94,15 +103,17 @@ export async function lookupUkPostcode(postcode) {
   if (!pc) return null;
 
   const compact = pc.replace(/\s/g, "");
-  const proxyUrl = `/api/postcode?code=${encodeURIComponent(compact)}`;
-  const legacyProxyUrl = `/api/postcode/${encodeURIComponent(compact)}`;
+  const proxyUrl = appApiUrl(`/api/postcode?code=${encodeURIComponent(compact)}`);
+  const legacyProxyUrl = appApiUrl(`/api/postcode/${encodeURIComponent(compact)}`);
   const directUrl = `${UPSTREAM}/${encodeURIComponent(compact)}`;
 
   const fromProxy = await fetchPostcodeJson(proxyUrl).catch(() => null);
   if (fromProxy?.result) return mapPostcodeResult(fromProxy.result, pc);
+  if (fromProxy?.postcodeNotFound) return null;
 
   const fromLegacyProxy = await fetchPostcodeJson(legacyProxyUrl).catch(() => null);
   if (fromLegacyProxy?.result) return mapPostcodeResult(fromLegacyProxy.result, pc);
+  if (fromLegacyProxy?.postcodeNotFound) return null;
 
   if (import.meta.env.PROD) return null;
 
@@ -113,4 +124,15 @@ export async function lookupUkPostcode(postcode) {
   if (fromBulk?.result) return mapPostcodeResult(fromBulk.result, pc);
 
   return null;
+}
+
+/** Nearest UK postcode for a WGS84 point (postcodes.io via /api/postcode). */
+export async function reverseUkPostcode(lat, lng) {
+  const la = Number(lat);
+  const lo = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
+  const url = appApiUrl(`/api/postcode?lat=${encodeURIComponent(la)}&lng=${encodeURIComponent(lo)}`);
+  const json = await fetchPostcodeJson(url).catch(() => null);
+  if (!json?.result) return null;
+  return mapPostcodeResult(json.result, json.result.postcode);
 }

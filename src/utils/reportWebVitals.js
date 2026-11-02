@@ -1,10 +1,14 @@
 import { onCLS, onFCP, onINP, onLCP, onTTFB } from "web-vitals";
 import { getSentry } from "./sentryClient.js";
+import { appApiUrl } from "./appApiUrl";
 
 function vitalsEndpoint() {
   const u = String(import.meta.env.VITE_WEB_VITALS_URL || "").trim();
   if (u) return u;
-  if (import.meta.env.PROD) return "/api/web-vitals";
+  if (import.meta.env.PROD) {
+    try { return appApiUrl("/api/web-vitals"); }
+    catch { return ""; }
+  }
   return "";
 }
 

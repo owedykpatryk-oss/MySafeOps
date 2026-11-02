@@ -1,10 +1,12 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
+import { persistRegisterRows } from "../utils/registerPersistGuard";
 import { useState, useEffect, useRef } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import {
   overlayDraftKey,
   seedOverlayForm,
   useOverlayFormDraft,
-  clearOverlayFormDraft,
+  submitOverlayForm,
 } from "../hooks/useOverlayFormDraft";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
@@ -358,21 +360,25 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
             <input type="time" value={form.time} onChange={(e) => set("time", e.target.value)} style={ss.inp}  id="daily-briefing-time" />
           </div>
           <div>
-            <label style={ss.lbl} htmlFor="daily-briefing-location">Location / site *</label>
+            <label style={ss.lbl} htmlFor="daily-briefing-location">{t("locationSite")}</label>
             <input
               value={form.location}
               onChange={(e) => set("location", e.target.value)}
-              placeholder="e.g. 2SFG Scunthorpe — FP1 area"
+              placeholder={t("briefingLocationPlaceholder")}
+              aria-describedby="daily-briefing-location-hint"
               style={ss.inp}
              id="daily-briefing-location" />
+            <p id="daily-briefing-location-hint" style={{ margin: "6px 0 0", fontSize: 12, lineHeight: 1.5, color: "var(--color-text-secondary)", overflowWrap: "anywhere" }}>
+              {t("briefingLocationHint")}
+            </p>
           </div>
           <div>
             <label style={ss.lbl} htmlFor="daily-briefing-project-id">{t("project")}</label>
-            <select value={form.projectId} onChange={(e) => set("projectId", e.target.value)} style={ss.inp} id="daily-briefing-project-id">
-              <option value="">— Select project —</option>
+            <select value={form.projectId ?? ""} onChange={(e) => set("projectId", e.target.value)} style={ss.inp} id="daily-briefing-project-id">
+              <option value="">{t("selectProject")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
+                  {projectDisplayLabel(p)}
                 </option>
               ))}
             </select>
@@ -398,7 +404,7 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
                   <input
                     value={form.conductedBy}
                     onChange={(e) => set("conductedBy", e.target.value)}
-                    placeholder="Name and role of person conducting the briefing"
+                    placeholder="Name and role"
                     style={ss.inp}
                   />
                 )}
@@ -407,7 +413,7 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
               <input
                 value={form.conductedBy}
                 onChange={(e) => set("conductedBy", e.target.value)}
-                placeholder="Name and role — add workers in Workers module to pick from a list"
+                placeholder="Name and role"
                 style={ss.inp}
               />
             )}
@@ -504,13 +510,13 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
           {BRIEF_TOPICS.map((t) => (
             <label
               key={t}
-              style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", fontSize: 13 }}
+              style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13 }}
             >
               <input
                 type="checkbox"
                 checked={form.topics.includes(t)}
                 onChange={() => toggleTopic(t)}
-                style={{ marginTop: 2, accentColor: "#0d9488", width: 15, height: 15, flexShrink: 0 }}
+                style={{ margin: 0, accentColor: "#0d9488", width: 15, height: 15, flexShrink: 0 }}
               />
               <span style={{ lineHeight: 1.5, color: "var(--color-text-primary)" }}>{t}</span>
             </label>
@@ -661,7 +667,7 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addGuestAttendee())}
-              placeholder="Guest or subcontractor name"
+              placeholder="Guest name"
               style={{ ...ss.inp, flex: "1 1 200px", minWidth: 0 }}
             />
             <button
@@ -691,7 +697,7 @@ function BriefingForm({ onSave, onClose, workers, projects, initial = null }) {
           <button onClick={onClose} style={ss.btn}>
             {t("cancel")}
           </button>
-          <button disabled={!valid} onClick={() => { clearOverlayFormDraft(draftKey); onSave(form); }} style={{ ...ss.btnO, opacity: valid ? 1 : 0.4 }}>
+          <button disabled={!valid} onClick={() => { submitOverlayForm(draftKey, form, onSave); }} style={{ ...ss.btnO, opacity: valid ? 1 : 0.4 }}>
             Save briefing record
           </button>
         </div>
@@ -904,7 +910,7 @@ function printBriefing(brief) {
         docSubtitle: `${brief.location} · ${fmtDate(brief.date)}`,
         docBadge: "SITE BRIEFING",
       },
-      metaFields: { recordNote: `${(brief.attendees || []).filter((a) => a.present).length} attendees signed` },
+      metaFields: { recordNote: `${(brief.attendees || []).filter((a) => a.present).length} attendees · ${(brief.attendees || []).filter((a) => a.present && a.sig).length} signed` },
       footerExtra: fmtDateTime(brief.createdAt),
       bodyHtml,
     })
@@ -974,9 +980,12 @@ export default function DailyBriefing() {
 
   const saveBriefing = (form) => {
     const stamped = stampDocumentAuthorship({ ...form, id: genId() }, { isCreate: true });
-    setBriefings((prev) => [stamped, ...prev]);
+    const next = [stamped, ...briefings];
+    if (!persistRegisterRows("daily_briefings", next)) return false;
+    setBriefings(next);
     setShowForm(false);
     setFormInitial(null);
+    return true;
   };
 
   const deleteBriefing = (id) => {
@@ -1075,12 +1084,13 @@ export default function DailyBriefing() {
         }
         filters={
           liveBriefings.length > 0 ? (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%", minWidth: 0 }}>
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search location or conductor…"
-                style={{ ...ss.inp, flex: 1, width: "auto", minWidth: 140 }}
+                placeholder={t("briefingSearchPlaceholder")}
+                aria-label={t("briefingSearchPlaceholder")}
+                style={{ ...ss.inp, flex: "1 1 280px", width: "auto", minWidth: "min(280px, 100%)", maxWidth: "100%" }}
               />
               <input
                 type="date"
@@ -1092,12 +1102,12 @@ export default function DailyBriefing() {
                 <select
                   value={filterProject}
                   onChange={(e) => setFilterProject(e.target.value)}
-                  style={{ ...ss.inp, width: "auto", minWidth: 140 }}
+                  style={{ ...ss.inp, width: "auto", minWidth: 140, maxWidth: "100%" }}
                 >
                   <option value="">All projects</option>
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name || p.id}
+                      {projectDisplayLabel(p)}
                     </option>
                   ))}
                 </select>

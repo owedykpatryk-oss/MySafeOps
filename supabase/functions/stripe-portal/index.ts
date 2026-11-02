@@ -1,16 +1,18 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+import { createClient } from "npm:@supabase/supabase-js@2.49.1";
+import Stripe from "npm:stripe@14.21.0";
 import {
   hasLiveStripeConfig,
   hasTestStripeConfig,
   isValidSiteUrl,
   stripeDiagnostics,
+  resolveStripeMode,
 } from "../_shared/stripeConfig.ts";
 import { getBillingAdminUser, publicStripeHealthBody } from "../_shared/stripeHealthGet.ts";
 import { enforceEdgeRateLimits, enforceUserAndOrgEdgeRateLimits } from "../_shared/edgeRateLimit.ts";
 import { corsHeadersForRequest } from "../_shared/corsHeaders.ts";
 import { resolveBillingMembership } from "../_shared/resolveBillingMembership.ts";
 import { resolveWorkspaceStripeCustomerId } from "../_shared/stripeWebhookMapping.ts";
+import { cancellationPortalFlow } from "../_shared/stripePortalFlow.ts";
 
 Deno.serve(async (req) => {
   const requestId = req.headers.get("x-request-id") || crypto.randomUUID();
@@ -25,6 +27,7 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
     const live = stripeDiagnostics("live");
     const test = stripeDiagnostics("test");
+    const activeMode = supabaseUrl && serviceKey ? await resolveStripeMode(createClient(supabaseUrl, serviceKey)).catch(() => null) : null;
     const diagnostics = {
       function: "stripe-portal",
       deployed: true,
@@ -39,22 +42,25 @@ Deno.serve(async (req) => {
       },
       valid: {
         stripeSecretKeyFormat: live.validMap.secretKeyFormat,
-        siteUrlFormat: !siteUrl || isValidSiteUrl(siteUrl),
+        siteUrlFormat: isValidSiteUrl(siteUrl),
       },
       requestId,
     };
-    const liveReady = hasLiveStripeConfig();
+    const serverReady = Boolean(supabaseUrl && serviceKey) && isValidSiteUrl(siteUrl);
+    const liveReady = serverReady && hasLiveStripeConfig();
+    const testReady = serverReady && hasTestStripeConfig();
     const allValid = Object.values(diagnostics.valid).every(Boolean);
+    const activeReady = activeMode !== null && (activeMode === "test" ? testReady : liveReady && allValid);
     const admin = await getBillingAdminUser(req, supabaseUrl, serviceKey);
     if (!admin) {
-      const publicBody = publicStripeHealthBody("stripe-portal", liveReady && allValid, hasTestStripeConfig(), requestId);
+      const publicBody = { ...publicStripeHealthBody("stripe-portal", liveReady && allValid, testReady, requestId), activeMode, activeReady };
       return new Response(JSON.stringify(publicBody), {
-        status: liveReady && allValid ? 200 : 503,
+        status: activeReady ? 200 : 503,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
       });
     }
-    return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady: hasTestStripeConfig() }), {
-      status: liveReady && allValid ? 200 : 503,
+    return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady, activeMode, activeReady }), {
+      status: activeReady ? 200 : 503,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });
   }
@@ -67,7 +73,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const siteUrl = (Deno.env.get("SITE_URL") ?? "http://localhost:5173").replace(/\/$/, "");
+    const siteUrl = (Deno.env.get("SITE_URL") ?? "").trim().replace(/\/$/, "");
     if (!isValidSiteUrl(siteUrl)) {
       return new Response(JSON.stringify({ error: "SITE_URL invalid. Expected absolute http(s) URL." }), {
         status: 500,
@@ -109,7 +115,10 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const testMode = Boolean(body?.testMode);
+    if (body.action && !["manage", "cancel"].includes(body.action)) {
+      return new Response(JSON.stringify({ error: "Unsupported billing action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const testMode = (await resolveStripeMode(supabase, body?.testMode)) === "test";
     const orgSlug = typeof body?.orgSlug === "string" ? body.orgSlug : null;
     const workspaceId = typeof body?.workspaceId === "string" ? body.workspaceId.trim() : "";
     const stripeMode = testMode ? "test" : "live";
@@ -159,6 +168,7 @@ Deno.serve(async (req) => {
 
     let workspaceIsPrimary = true;
     let workspaceCustomerId: string | null = null;
+    let workspaceSubscriptionId: string | null = null;
     if (workspaceId) {
       const { data: workspace, error: workspaceErr } = await supabase
         .from("org_country_workspaces")
@@ -175,19 +185,21 @@ Deno.serve(async (req) => {
       workspaceIsPrimary = Boolean(workspace.is_primary);
       // Each country bills its own Stripe customer, so the portal must open that
       // country's customer — not the organisation-wide one.
-      const { data: workspaceBilling } = await supabase
+      const { data: workspaceBilling, error: workspaceBillingError } = await supabase
         .from("org_country_workspace_subscriptions")
-        .select("stripe_customer_id")
+        .select("stripe_customer_id, stripe_subscription_id")
         .eq("workspace_id", workspace.id)
         .eq("stripe_mode", stripeMode)
         .maybeSingle();
+      if (workspaceBillingError) throw new Error("Could not read country billing. Please try again.");
       workspaceCustomerId = (workspaceBilling?.stripe_customer_id as string | null) ?? null;
+      workspaceSubscriptionId = (workspaceBilling?.stripe_subscription_id as string | null) ?? null;
     }
 
     const customerColumn = testMode ? "stripe_test_customer_id" : "stripe_customer_id";
     const { data: org, error: orgErr } = await supabase
       .from("organizations")
-      .select(`id, ${customerColumn}`)
+      .select("id, stripe_customer_id, stripe_test_customer_id")
       .eq("id", mem.org_id)
       .single();
 
@@ -209,9 +221,26 @@ Deno.serve(async (req) => {
 
     const stripe = new Stripe(secretKey, { apiVersion: "2023-10-16" });
 
+    const configurationKey = testMode ? "STRIPE_PORTAL_CONFIGURATION_TEST" : "STRIPE_PORTAL_CONFIGURATION";
+    let configuration = Deno.env.get(configurationKey)?.trim();
+    if (!configuration) {
+      // The Stripe account may serve several applications. Never accidentally open
+      // another application's portal configuration or product-switching catalogue.
+      for await (const candidate of stripe.billingPortal.configurations.list({ active: true, limit: 100 })) {
+        if (candidate.metadata?.application === "mysafeops") { configuration = candidate.id; break; }
+      }
+    }
+    if (!configuration) throw new Error("MySafeOps billing portal is not configured. Please contact support.");
+
+    const returnUrl = `${siteUrl}/app?settingsTab=billing${workspaceId ? `&billingWorkspace=${workspaceId}` : ""}${testMode ? "&stripeMode=test" : ""}`;
+    const flow = body.action === "cancel" ? await cancellationPortalFlow(stripe, {
+      subscriptionId: workspaceSubscriptionId, customerId, workspaceId, configuration, returnUrl,
+    }) : undefined;
     const session = await stripe.billingPortal.sessions.create({
+      configuration,
       customer: customerId,
-      return_url: `${siteUrl}/app?settingsTab=billing${workspaceId ? `&billingWorkspace=${workspaceId}` : ""}${testMode ? "&stripeMode=test" : ""}`,
+      return_url: returnUrl,
+      ...(flow ? { flow_data: flow } : {}),
     });
 
     return new Response(JSON.stringify({ url: session.url, requestId, stripeMode }), {

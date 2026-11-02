@@ -8,9 +8,9 @@ import { siteContextBadgeLabel } from "./ramsPlaybookEnrichment.js";
 
 describe("RAMS / survey preview smoke", () => {
   it("getRiskLevel tolerates missing risk objects", () => {
-    expect(getRiskLevel(undefined)).toBe("low");
-    expect(getRiskLevel(null)).toBe("low");
-    expect(getRiskLevel({})).toBe("low");
+    expect(getRiskLevel(undefined)).toBe("unknown");
+    expect(getRiskLevel(null)).toBe("unknown");
+    expect(getRiskLevel({})).toBe("unknown");
     expect(getRiskLevel({ RF: 12 })).toBe("medium");
     expect(getRiskLevel({ RF: 24 })).toBe("high");
   });

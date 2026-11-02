@@ -13,10 +13,20 @@ export function ToastProvider({ children }) {
   }, []);
 
   const pushToast = useCallback(
-    ({ type = "info", title = "", message = "", durationMs = 3500 }) => {
+    (notification, legacyType = "info") => {
+      const { type = "info", title = "", message = "", durationMs = 4500 } =
+        typeof notification === "string" ? { message: notification, type: legacyType } : notification ?? {};
+      if (!title && !message) return null;
+      const key = `${type}|${title}|${message}`;
+      const now = Date.now();
       const id = ++seq;
-      setItems((prev) => [...prev, { id, type, title, message }]);
-      if (durationMs > 0) {
+      setItems((prev) => {
+        const duplicate = prev.find((item) => item.key === key && now - item.shownAt < 8000);
+        if (duplicate) return prev;
+        const next = [...prev, { id, type, title, message, key, shownAt: now }];
+        return next.slice(-3);
+      });
+      if (durationMs > 0 && id) {
         window.setTimeout(() => dismissToast(id), durationMs);
       }
       return id;

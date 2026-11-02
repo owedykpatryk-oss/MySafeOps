@@ -2,8 +2,6 @@ import {
   getBillingEntitlements,
   getTrialExtensionCount,
   getTrialStatus,
-  ORG_PAST_DUE_SINCE_KEY,
-  readScopedBilling,
 } from "./billingState";
 import { isPlatformOwnerCached } from "./superAdmin";
 
@@ -14,25 +12,24 @@ export const TRIAL_EXTENSION_REMINDER_DAYS = 5;
 /** Days a past_due subscription remains writable while Stripe retries collection. */
 export const PAST_DUE_WRITE_GRACE_DAYS = 7;
 
-export function isPaidSubscriptionActive(billing) {
+export function isPaidSubscriptionActive(billing, now = Date.now()) {
   const b = billing ?? getBillingEntitlements();
   return (
     (b.subscriptionStatus === "active" || b.subscriptionStatus === "trialing") && Boolean(b.paidPlanId)
+    && (!b.cancelAtPeriodEnd || now < new Date(b.currentPeriodEnd).getTime())
   );
 }
 
 /** Active paid, or past_due still inside the write grace window (plan retained). */
 export function isPaidSubscriptionWritable(billing, now = Date.now()) {
   const b = billing ?? getBillingEntitlements();
-  if (isPaidSubscriptionActive(b)) return true;
+  if (b.cancelAtPeriodEnd && !(now < new Date(b.currentPeriodEnd).getTime())) return false;
+  if (isPaidSubscriptionActive(b, now)) return true;
   if (String(b.subscriptionStatus || "").toLowerCase() !== "past_due" || !b.paidPlanId) return false;
-  const sinceRaw = b.pastDueSince || readScopedBilling(ORG_PAST_DUE_SINCE_KEY);
-  if (!sinceRaw) {
-    // Unknown start — treat as still in grace (banner still shown).
-    return true;
-  }
+  const sinceRaw = b.pastDueSince;
+  if (!sinceRaw) return false;
   const since = new Date(sinceRaw).getTime();
-  if (!Number.isFinite(since)) return true;
+  if (!Number.isFinite(since)) return false;
   const graceMs = PAST_DUE_WRITE_GRACE_DAYS * 24 * 60 * 60 * 1000;
   return now - since < graceMs;
 }
@@ -49,7 +46,7 @@ export function pastDueBillingMessage(status) {
   if (s === "unpaid") {
     return "Payment failed and the subscription is unpaid. Open Billing to pay outstanding invoices and restore full access.";
   }
-  return "There is an outstanding invoice on this organisation. Open Billing to pay now and avoid service disruption.";
+  return "There is an outstanding invoice for this country. Editing is available for up to 7 days after the first failed payment, then becomes read-only. Open Billing to pay and restore access.";
 }
 
 function resolvePlatformOwner(options = {}) {
@@ -61,6 +58,8 @@ function resolvePlatformOwner(options = {}) {
 export function isTrialExpiredWithoutPaid(options = {}) {
   if (resolvePlatformOwner(options)) return false;
   if (isPaidSubscriptionWritable(options.billing)) return false;
+  const status = (options.billing ?? getBillingEntitlements()).subscriptionStatus;
+  if (status && status !== "none") return true;
   const ts = options.trialStatus ?? getTrialStatus();
   if (!ts) return false;
   return !ts.isActive;
@@ -71,18 +70,18 @@ export function isBillingWriteBlocked(options = {}) {
   const billing = options.billing ?? getBillingEntitlements();
   const status = String(billing?.subscriptionStatus || "").toLowerCase();
   const isPlatformOwner = resolvePlatformOwner(options);
-  // Hard-block unpaid/canceled even if plan id is still cached.
-  if (status === "unpaid" || status === "canceled") {
-    if (isPlatformOwner) return false;
-    const ts = options.trialStatus ?? getTrialStatus();
-    if (ts && !ts.isActive) return true;
-    if (!ts && billing?.paidPlanId) return true;
-  }
+  if (isPlatformOwner || isPaidSubscriptionWritable(billing)) return false;
+  // A subscription that is no longer writable cannot fall back to an old trial.
+  if (status && status !== "none") return true;
   return isTrialExpiredWithoutPaid({ ...options, isPlatformOwner });
 }
 
 export function canExtendOrgTrial(options = {}) {
   if (resolvePlatformOwner(options)) return false;
+  const ts = options.trialStatus ?? getTrialStatus();
+  if (ts?.countryWorkspaceRequiresSubscription) return false;
+  const billing = options.billing ?? getBillingEntitlements();
+  if (billing.subscriptionStatus && billing.subscriptionStatus !== "none") return false;
   if (isPaidSubscriptionActive(options.billing) || isPaidSubscriptionWritable(options.billing)) return false;
   const count = options.trialExtensionCount ?? getTrialExtensionCount();
   return count < MAX_TRIAL_EXTENSIONS;
@@ -97,6 +96,8 @@ export function shouldShowTrialExtensionOffer(options = {}) {
 }
 
 export function billingWriteBlockedMessage() {
+  if (getTrialStatus()?.countryWorkspaceRequiresSubscription) return "This country workspace requires its own active subscription. Open Settings → Billing to create or edit records. Existing records remain available to view and export.";
+  if (isSubscriptionPastDueOrUnpaid()) return "Editing is paused because payment is overdue. Open Settings → Billing to resolve the payment and restore access. Existing records remain available to view and export.";
   return "Your evaluation trial has ended. Subscribe in Settings → Billing to create or edit site records (RAMS, permits, workers, projects). You can still view, export, and change organisation settings (branding, sectors, automation).";
 }
 

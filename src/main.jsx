@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 // reference works without changes).
 import "./index.css";
 import App from "./App.jsx";
+import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import { AppProvider } from "./context/AppContext";
 import { SupabaseAuthProvider } from "./context/SupabaseAuthContext";
 import { ToastProvider } from "./context/ToastContext";
@@ -32,6 +33,7 @@ function bootstrap() {
 
   createRoot(document.getElementById("root")).render(
     <StrictMode>
+      <RouteErrorBoundary>
       <AppProvider>
         <SupabaseAuthProvider>
           <ToastProvider>
@@ -39,6 +41,7 @@ function bootstrap() {
           </ToastProvider>
         </SupabaseAuthProvider>
       </AppProvider>
+      </RouteErrorBoundary>
     </StrictMode>
   );
 

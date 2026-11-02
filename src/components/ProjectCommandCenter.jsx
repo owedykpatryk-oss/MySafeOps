@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { memo, useEffect, useMemo, useState } from "react";
 import ProjectSitePreviewMap from "./ProjectSitePreviewMap";
 import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
@@ -161,9 +162,7 @@ function ProjectCommandCenter({
           aria-label="Select project"
         >
           {active.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name || "Untitled"}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
       </div>

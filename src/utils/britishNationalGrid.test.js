@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   gridReferenceFromEastingNorthing,
   osgb36ToEastingNorthing,
+  parseBritishNationalGrid,
+  britishNationalGridToWgs84,
+  normaliseWhat3Words,
   wgs84ToBritishNationalGrid,
 } from "./britishNationalGrid.js";
 
@@ -49,6 +52,20 @@ describe("britishNationalGrid", () => {
     expect(gridReferenceFromEastingNorthing(530262, 179553)).toBe("TQ 30262 79553");
     expect(gridReferenceFromEastingNorthing(530262, 179553, 4)).toBe("TQ 3026 7955");
     expect(gridReferenceFromEastingNorthing(651409, 313177)).toBe("TG 51409 13177");
+  });
+
+  it("reads a grid reference or easting/northing back to GPS", () => {
+    const parsed = parseBritishNationalGrid("TQ 30262 79553");
+    expect(parsed).toEqual({ easting: 530262, northing: 179553 });
+    expect(parseBritishNationalGrid("TG 51409 13177").easting).toBe(651409);
+    const back = britishNationalGridToWgs84(OS_EXAMPLE.easting, OS_EXAMPLE.northing);
+    const metres = Math.hypot(
+      (back.lat - OS_EXAMPLE.wgs84Lat) * 111320,
+      (back.lng - OS_EXAMPLE.wgs84Lng) * 111320 * Math.cos((OS_EXAMPLE.wgs84Lat * Math.PI) / 180)
+    );
+    expect(metres).toBeLessThan(8);
+    expect(normaliseWhat3Words("https://w3w.co/filled.count.soap")).toBe("filled.count.soap");
+    expect(normaliseWhat3Words("not words")).toBe("");
   });
 
   it("returns nothing outside Great Britain or for bad input", () => {

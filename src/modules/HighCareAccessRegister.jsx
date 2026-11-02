@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useState } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
@@ -16,17 +17,11 @@ import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { exportCsv } from "../utils/exportCsv";
+import { highCareToolsMatch } from "../utils/registerRecordStatus";
 
 const KEY = "high_care_access_register";
 const genId = () => `hca_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
 const ss = ms;
-
-function parseTools(s) {
-  return String(s || "")
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
 
 function Form({ item, projects, onSave, onClose }) {
   const { t } = useWorkspaceT();
@@ -58,9 +53,7 @@ function Form({ item, projects, onSave, onClose }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const setHy = (k, v) => setForm((f) => ({ ...f, hygieneChecks: { ...f.hygieneChecks, [k]: v } }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
-  const inList = parseTools(form.toolsIn);
-  const outList = parseTools(form.toolsOut);
-  const toolOk = inList.length === outList.length && inList.every((t, i) => t === outList[i]);
+  const toolOk = highCareToolsMatch(form);
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -77,9 +70,7 @@ function Form({ item, projects, onSave, onClose }) {
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="high-care-access-project-id">
           <option value="">—</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-visitor-name">Visitor / engineer name</label>
@@ -109,9 +100,9 @@ function Form({ item, projects, onSave, onClose }) {
         <label style={ss.lbl} htmlFor="high-care-access-tools-in">Tools brought in</label>
         <input style={ss.inp} value={form.toolsIn} onChange={(e) => set("toolsIn", e.target.value)} placeholder="torx T20, shifter"  id="high-care-access-tools-in" />
         <label style={{ ...ss.lbl, marginTop: 8 }} htmlFor="high-care-access-tools-out">Tools taken out</label>
-        <input style={ss.inp} value={form.toolsOut} onChange={(e) => set("toolsOut", e.target.value)} placeholder="must match in count and order for auto-check"  id="high-care-access-tools-out" />
+        <input style={ss.inp} value={form.toolsOut} onChange={(e) => set("toolsOut", e.target.value)} placeholder="List every tool taken out"  id="high-care-access-tools-out" />
         <div style={{ fontSize: 12, marginTop: 6, color: toolOk ? "#166534" : "#A32D2D", fontWeight: 600 }}>
-          {toolOk ? "Tool list matches (count + order)." : "Mismatch — verify before sign-out."}
+          {toolOk ? "Tool inventory matches." : "Mismatch — verify before sign-out."}
         </div>
 
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="high-care-access-exit-timestamp">Exit time (leave blank if still on site)</label>

@@ -12,6 +12,7 @@ import { getConstructionSetupStatus, isConstructionPackActive } from "../utils/c
 import { getGeospatialSetupStatus, isGeospatialPackActive } from "../utils/geospatialOnboarding";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { getOrgLocale } from "../utils/orgLocale";
+import { daysUntilRegisterDue } from "../utils/registerRecordStatus";
 import { getRamsShortLabel, getRegistersLabel } from "../utils/marketLabels";
 import { getAppUiCopy } from "../data/appUiCopy";
 import { isSoloWorkspace } from "../utils/soloWorkspace";
@@ -26,7 +27,7 @@ import { safeImageSrc } from "../utils/htmlEscape.js";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
 import { openWorkspaceSettings, openWorkspaceView, openWorkspaceMoreSection, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { getTrialExtensionCount } from "../utils/orgMembership";
-import { canExtendOrgTrial, shouldShowTrialExtensionOffer, TRIAL_EXTENSION_DAYS } from "../utils/billingAccess";
+import { canExtendOrgTrial, shouldShowTrialExtensionOffer, TRIAL_EXTENSION_DAYS, isPaidSubscriptionWritable, isBillingWriteBlocked, billingWriteBlockedMessage } from "../utils/billingAccess";
 import { getPlanDisplayPriceLabel } from "../lib/billingPlans";
 import HseRegistersCard from "./HseRegistersCard";
 import {
@@ -60,7 +61,7 @@ const fmtDateTime = (iso) => {
   if (!iso) return "—";
   return new Date(iso).toLocaleString(getOrgLocale(), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 };
-const daysUntil = (iso) => { if (!iso) return null; return Math.ceil((new Date(iso)-new Date())/(1000*60*60*24)); };
+const daysUntil = daysUntilRegisterDue;
 const permitEndIso = (permit) => permit?.endDateTime || permit?.expiryDate || "";
 
 /** ISO date (YYYY-MM-DD) of the Monday-start week for `date`. */
@@ -74,6 +75,11 @@ const getWeekLabel = (date) => {
 
 const INCIDENT_PERIOD_WEEKS = [4, 8, 12];
 const ONBOARDING_DISMISS_KEY = "mysafeops_onboarding_dismissed";
+
+function loadDashboardRecords(key) {
+  const rows = load(key, []);
+  return Array.isArray(rows) ? rows.filter((row) => row && !row.deletedAt) : [];
+}
 
 const PDF_PHASE_LABEL = {
   init: "Preparing export…",
@@ -284,7 +290,7 @@ function DashboardMetricTile({ label, value, sub, viewId: _viewId, tone, onOpen 
 
 export default function AnalyticsDashboard() {
   const { t } = useWorkspaceT();
-  const { role, caps, trialStatus, billing, orgId } = useApp();
+  const { role, caps, trialStatus, billing, orgId, isPlatformOwner } = useApp();
   const { supabase } = useSupabaseAuth();
   const branding = useOrgBranding();
   const heroBadge =
@@ -339,21 +345,21 @@ export default function AnalyticsDashboard() {
   }, []);
 
   // pull all data from localStorage (re-read after org switch, tab focus, or cloud sync)
-  const workers = useMemo(() => load("mysafeops_workers", []), [dataRefreshTick]);
-  const projects = useMemo(() => load("mysafeops_projects", []), [dataRefreshTick]);
-  const rams = useMemo(() => load("rams_builder_docs", []), [dataRefreshTick]);
-  const incidents = useMemo(() => load("mysafeops_incidents", []), [dataRefreshTick]);
-  const permits = useMemo(() => load("permits_v2", []), [dataRefreshTick]);
-  const snags = useMemo(() => load("snags", []), [dataRefreshTick]);
-  const tsEntries = useMemo(() => load("mysafeops_timesheets", []), [dataRefreshTick]);
-  const inductions = useMemo(() => load("induction_entries", []), [dataRefreshTick]);
-  const trainingRecords = useMemo(() => load("training_matrix", []), [dataRefreshTick]);
-  const hotWork = useMemo(() => load("hot_work_register", []), [dataRefreshTick]);
-  const surveyReports = useMemo(() => load("survey_reports", []), [dataRefreshTick]);
-  const gprReports = useMemo(() => load("gpr_reports", []), [dataRefreshTick]);
-  const methodStatements = useMemo(() => load("method_statements", []), [dataRefreshTick]);
-  const geoPhotos = useMemo(() => load("geo_photos", []), [dataRefreshTick]);
-  const allergenWindows = useMemo(() => load("allergen_changeover_windows", []), [dataRefreshTick]);
+  const workers = useMemo(() => loadDashboardRecords("mysafeops_workers"), [dataRefreshTick]);
+  const projects = useMemo(() => loadDashboardRecords("mysafeops_projects"), [dataRefreshTick]);
+  const rams = useMemo(() => loadDashboardRecords("rams_builder_docs"), [dataRefreshTick]);
+  const incidents = useMemo(() => loadDashboardRecords("mysafeops_incidents"), [dataRefreshTick]);
+  const permits = useMemo(() => loadDashboardRecords("permits_v2"), [dataRefreshTick]);
+  const snags = useMemo(() => loadDashboardRecords("snags"), [dataRefreshTick]);
+  const tsEntries = useMemo(() => loadDashboardRecords("mysafeops_timesheets"), [dataRefreshTick]);
+  const inductions = useMemo(() => loadDashboardRecords("induction_entries"), [dataRefreshTick]);
+  const trainingRecords = useMemo(() => loadDashboardRecords("training_matrix"), [dataRefreshTick]);
+  const hotWork = useMemo(() => loadDashboardRecords("hot_work_register"), [dataRefreshTick]);
+  const surveyReports = useMemo(() => loadDashboardRecords("survey_reports"), [dataRefreshTick]);
+  const gprReports = useMemo(() => loadDashboardRecords("gpr_reports"), [dataRefreshTick]);
+  const methodStatements = useMemo(() => loadDashboardRecords("method_statements"), [dataRefreshTick]);
+  const geoPhotos = useMemo(() => loadDashboardRecords("geo_photos"), [dataRefreshTick]);
+  const allergenWindows = useMemo(() => loadDashboardRecords("allergen_changeover_windows"), [dataRefreshTick]);
   const activeAllergens = useMemo(() => activeAllergenWindows(allergenWindows), [allergenWindows]);
   const foodPharmaSetup = useMemo(() => getFoodPharmaSetupStatus(), [dataRefreshTick, orgId]);
   const fessSetup = useMemo(() => getFessSetupStatus(), [dataRefreshTick, orgId]);
@@ -373,7 +379,7 @@ export default function AnalyticsDashboard() {
     const now = new Date();
 
     const expiredCerts = workers.flatMap((w) =>
-      (w.certifications || []).filter((c) => c.expiryDate && new Date(c.expiryDate) < now)
+      (w.certifications || []).filter((c) => c.expiryDate && (daysUntilRegisterDue(c.expiryDate, now) ?? Infinity) < 0)
     );
     if (expiredCerts.length) {
       score -= Math.min(20, expiredCerts.length * 4);
@@ -386,7 +392,7 @@ export default function AnalyticsDashboard() {
       issues.push(`${unsignedRams.length} unsigned ${ramsShortLabel}`);
     }
 
-    const overdueSnags = snags.filter((s) => s.dueDate && s.status === "open" && new Date(s.dueDate) < now);
+    const overdueSnags = snags.filter((s) => s.status === "open" && (daysUntilRegisterDue(s.dueDate, now) ?? Infinity) < 0);
     if (overdueSnags.length) {
       score -= Math.min(15, overdueSnags.length * 3);
       issues.push(`${overdueSnags.length} overdue snag${overdueSnags.length > 1 ? "s" : ""}`);
@@ -549,7 +555,7 @@ export default function AnalyticsDashboard() {
       });
     }
     const expiredCerts = workers.reduce(
-      (n, w) => n + (w.certifications || []).filter((c) => c.expiryDate && new Date(c.expiryDate) < t).length,
+      (n, w) => n + (w.certifications || []).filter((c) => c.expiryDate && (daysUntilRegisterDue(c.expiryDate, t) ?? Infinity) < 0).length,
       0
     );
     if (expiredCerts > 0) {
@@ -560,7 +566,7 @@ export default function AnalyticsDashboard() {
         viewId: "people",
       });
     }
-    const overdueSnags = snags.filter((s) => s.dueDate && s.status === "open" && new Date(s.dueDate) < t).length;
+    const overdueSnags = snags.filter((s) => s.status === "open" && (daysUntilRegisterDue(s.dueDate, t) ?? Infinity) < 0).length;
     if (overdueSnags > 0) {
       items.push({
         key: "snags-overdue",
@@ -808,7 +814,9 @@ export default function AnalyticsDashboard() {
 
   const dashboardReminders = useMemo(() => {
     const items = [];
-    if (trialStatus?.isActive) {
+    const paidWritable = isPlatformOwner || isPaidSubscriptionWritable(billing);
+    const writeBlocked = isBillingWriteBlocked({ trialStatus, billing, isPlatformOwner });
+    if (!paidWritable && !writeBlocked && trialStatus?.isActive) {
       const d = trialStatus.remainingDays;
       const ext = shouldShowTrialExtensionOffer({
         trialStatus,
@@ -827,14 +835,14 @@ export default function AnalyticsDashboard() {
         cta: ext ? "Extend or subscribe" : "Open billing",
         onCta: () => openWorkspaceSettings({ tab: "billing" }),
       });
-    } else if (trialStatus && !trialStatus.isActive) {
-      const ext = canExtendOrgTrial({ billing, trialExtensionCount: getTrialExtensionCount() });
+    } else if (writeBlocked) {
+      const ext = canExtendOrgTrial({ trialStatus, billing, isPlatformOwner, trialExtensionCount: getTrialExtensionCount() });
       items.push({
         key: "trial-ended",
         tone: "warn",
         text: ext
           ? "Evaluation ended — read-only until you subscribe or use your one-time extension."
-          : "Evaluation ended — read-only until you subscribe. Export data anytime from Backup.",
+          : billingWriteBlockedMessage(),
         cta: ext ? "Extend or subscribe" : "Export backup",
         onCta: () => (ext ? openWorkspaceSettings({ tab: "billing" }) : openWorkspaceView({ viewId: "backup" })),
       });
@@ -885,7 +893,7 @@ export default function AnalyticsDashboard() {
       });
     }
     return items;
-  }, [trialStatus, billing]);
+  }, [trialStatus, billing, isPlatformOwner, marketId]);
 
   useEffect(() => {
     try {
@@ -935,25 +943,24 @@ export default function AnalyticsDashboard() {
   };
 
   const dashboardLead = useMemo(() => {
-    const dataNote =
-      " Metrics read from this browser for your current organisation — after cloud sync, switch tab or use Refresh metrics if numbers look stale.";
+    const dataNote = " Based on this organisation’s records on your device.";
     if (role === "admin") {
       return (
         <>
-          <strong>Admin view</strong> — compliance, expiries, and onboarding in one place. Delegate via Settings → Invites.{dataNote}
+          Compliance, expiries and your team’s next actions in one place.{dataNote}
         </>
       );
     }
     if (role === "supervisor") {
       return (
         <>
-          <strong>Supervisor view</strong> — prioritise <strong>Action needed</strong>, permits, {ramsShortLabel} sign-off, and snags.{dataNote}
+          Permits, {ramsShortLabel} sign-off and snags that need your attention.{dataNote}
         </>
       );
     }
     return (
       <>
-        <strong>Field view</strong> — jump to Permits, {ramsShortLabel}, or Timesheets; use the shortcuts below.{dataNote}
+          Your permits, {ramsShortLabel} and timesheets, ready for today.{dataNote}
       </>
     );
   }, [role, ramsShortLabel]);
@@ -1202,17 +1209,20 @@ export default function AnalyticsDashboard() {
       ) : null}
       <div ref={dashboardPdfRef}>
       <PageHero
+        suppressRegisterPdf
         badgeText={heroBadge}
         title={t("dashboard")}
         lead={dashboardLead}
         right={
+          <details className="app-dashboard-tools" data-no-dashboard-pdf>
+          <summary>Export & customise</summary>
           <div className="app-dashboard-hero-tools" aria-busy={pdfExporting !== null} aria-live="polite">
             <div className="app-dashboard-hero-org">
               <div className="app-dashboard-hero-org__logo">
                 {safeImageSrc(org.logo) ? (
                   <img src={safeImageSrc(org.logo)} alt={`${orgName} logo`} />
                 ) : (
-                  <span className="app-dashboard-hero-org__logo-fallback">LOGO</span>
+                  <span className="app-dashboard-hero-org__logo-fallback">{heroBadge}</span>
                 )}
               </div>
               <div className="app-dashboard-hero-org__meta">
@@ -1323,7 +1333,7 @@ export default function AnalyticsDashboard() {
                 textAlign: "right",
               }}
             >
-              PDF: cover + KPI (searchable) + action lines + dashboard image. Filename includes date and time. Draft skips font wait and uses a smaller KPI cap for speed.
+              Export a dated report with key figures and actions. Choose Draft for speed, Email for sharing or Print for higher quality. Refresh metrics after cloud sync if figures look out of date.
             </p>
             {pdfExportNotice?.type === "ok" ? (
               <div
@@ -1410,6 +1420,7 @@ export default function AnalyticsDashboard() {
               </div>
             ) : null}
           </div>
+          </details>
         }
       />
 
@@ -1542,11 +1553,15 @@ export default function AnalyticsDashboard() {
         snagsInProgress={snagStats.in_progress}
         expiringCerts={expiringCerts.filter((c) => c.days !== null && c.days <= 15).length}
         todaySignIns={todayInductions}
+        hasSiteRecords={projects.some((project) => project && !project.deletedAt && !project.closed)}
         urgentItems={actionNeededItems.slice(0, 3).map((it) => ({
           key: it.key,
           text: it.text,
           viewId: it.viewId,
-          severity: it.severity === "urgent" ? "danger" : it.severity === "warn" ? "warning" : "info",
+          severity: ["urgent", "high"].includes(it.severity) ? "danger" : ["warn", "med"].includes(it.severity) ? "warning" : "info",
+          onOpen: () => it.openMore
+            ? openWorkspaceMoreSection({ registerFilter: it.registerFilter || "attention" })
+            : it.viewId && openWorkspaceView({ viewId: it.viewId }),
         }))}
       />
       </div>
@@ -1557,7 +1572,7 @@ export default function AnalyticsDashboard() {
         <div
           className={`app-dashboard-action-strip${actionNeededItems.every((i) => i.severity === "calm") ? " app-dashboard-action-strip--calm" : ""}`}
         >
-          <div className="app-section-label app-dashboard-action-strip__title">Action needed</div>
+          <div className="app-section-label app-dashboard-action-strip__title">{actionNeededItems.every((item) => item.severity === "calm") ? "Setup suggestions" : "Action needed"}</div>
           <ul className="app-dashboard-action-strip__list" aria-live="polite">
             {actionNeededItems.map((item) => (
               <li key={item.key} className="app-dashboard-action-strip__item">

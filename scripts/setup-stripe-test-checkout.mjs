@@ -16,6 +16,7 @@ import { execFileSync, execSync } from "node:child_process";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const envLocal = resolve(root, ".env.local");
+const supabaseBin = process.platform === "win32" ? "supabase.exe" : "supabase";
 
 const flags = new Set(process.argv.slice(2));
 const runVercel = flags.has("--vercel") || flags.has("--all");
@@ -72,12 +73,12 @@ async function main() {
 
     const ref = projectRefFromUrl(process.env.VITE_SUPABASE_URL) || "burgpzankkqvpcmdkhro";
     try {
-      execSync(`npx supabase link --project-ref ${ref} --yes`, {
+      execFileSync(supabaseBin, ["link", "--project-ref", ref, "--yes"], {
         cwd: root,
         stdio: "pipe",
         encoding: "utf8",
       });
-      execSync("npx supabase db push --yes", {
+      execFileSync(supabaseBin, ["db", "push", "--yes"], {
         cwd: root,
         stdio: "inherit",
         encoding: "utf8",
@@ -88,7 +89,7 @@ async function main() {
     }
 
     try {
-      execSync("npx supabase functions deploy stripe-checkout stripe-portal stripe-webhook --project-ref " + ref, {
+      execFileSync(supabaseBin, ["functions", "deploy", "stripe-checkout", "stripe-portal", "stripe-webhook", "--project-ref", ref], {
         cwd: root,
         stdio: "inherit",
         encoding: "utf8",

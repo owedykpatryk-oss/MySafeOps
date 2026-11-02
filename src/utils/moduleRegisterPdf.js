@@ -6,7 +6,8 @@ import { getModuleTilePresentation } from "./moduleTileIntelligence";
 import { getActiveDocumentLocale } from "./countryWorkspaces";
 import { documentText } from "./documentCountryPack";
 import { MORE_SECTIONS, getMoreTabsForSection } from "../navigation/appModules";
-import { prepareRegisterExport, renderDailyBriefingDetailPages, renderGeoPhotoDetailPages } from "./registerPdfAdapters";
+import { prepareRegisterExport, renderDailyBriefingDetailPages, renderGeoPhotoDetailPages, renderRegisterRecordDetailPages, formatRegisterDetailValue } from "./registerPdfAdapters";
+import { resolveGeoPhotoPdfDataUrl } from "./geoPhotoMedia";
 import {
   PDF_PAGE,
   hexToRgb,
@@ -79,7 +80,8 @@ function humanizeKey(key) {
     .trim();
 }
 
-function formatCell(value) {
+function formatCell(value, key) {
+  if (typeof value === "number" && /(?:At|Timestamp|timestamp)$/.test(key || "")) return formatRegisterDetailValue(value, key);
   if (value == null || value === "") return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value)) {
@@ -98,7 +100,19 @@ function formatCell(value) {
       return s.slice(0, 24);
     }
   }
-  return s.length > 160 ? `${s.slice(0, 159).trimEnd()}…` : s;
+  const display = /^[a-z]+(?:_[a-z]+)+$/.test(s) ? humanizeKey(s) : s;
+  return display.length > 160 ? `${display.slice(0, 159).trimEnd()}…` : display;
+}
+
+export function resolveRegisterReferences(rows, workers = [], projects = [], documents = []) {
+  const nameOf = (list, id) => list.find((item) => item.id === id && !item.deletedAt)?.name;
+  return rows.map((row) => ({
+    ...row,
+    projectName: row.projectName || nameOf(projects, row.projectId) || (row.projectId ? "Unknown project" : ""),
+    workerName: row.workerName || nameOf(workers, row.workerId) || (row.workerId ? "Unknown worker" : ""),
+    assignedToName: row.assignedToName || nameOf(workers, row.assignedTo) || (row.assignedTo ? "Unknown assignee" : ""),
+    documentTitle: row.documentTitle || documents.find((doc) => doc.id === row.docId)?.title || (row.docId ? "Unknown document" : ""),
+  }));
 }
 
 /** @param {Record<string, unknown>[]} rows */
@@ -127,8 +141,8 @@ function loadRegisterRows(moduleId) {
   if (!cfg) return { rows: [], cfg: null };
   if (cfg.overview || !cfg.key) return { rows: [], cfg: { ...cfg, overview: true } };
   const raw = loadOrgScoped(cfg.key, []);
-  const rows = Array.isArray(raw) ? raw : [];
-  return { rows, cfg };
+  const rows = Array.isArray(raw) ? raw.filter((row) => row && !row.deletedAt) : [];
+  return { rows: resolveRegisterReferences(rows, loadOrgScoped("mysafeops_workers", []), loadOrgScoped("mysafeops_projects", []), loadOrgScoped("sig_docs", [])), cfg };
 }
 
 function pdfBrandingContext(org) {
@@ -288,7 +302,7 @@ function renderRegisterTable(pdf, { rows, columns, sectionTitle, org, rgb, accen
   drawTableHeaderRow();
 
   rows.forEach((row, idx) => {
-    const cells = columns.map((col) => formatCell(row?.[col.k]));
+    const cells = columns.map((col) => formatCell(row?.[col.k], col.k));
     const lineSets = cells.map((text) => pdf.splitTextToSize(text, colW - 3));
     const rowH = Math.max(6, ...lineSets.map((ls) => ls.length * 3.6)) + 2;
     ensureSpace(rowH + 2);
@@ -441,7 +455,9 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
   if (!cfg) {
     return { ok: false, error: "no_pdf_config" };
   }
-  const rows = Array.isArray(opts.rowsOverride) ? opts.rowsOverride : storedRows;
+  const rows = Array.isArray(opts.rowsOverride)
+    ? resolveRegisterReferences(opts.rowsOverride.filter((row) => row && !row.deletedAt), loadOrgScoped("mysafeops_workers", []), loadOrgScoped("mysafeops_projects", []), loadOrgScoped("sig_docs", []))
+    : storedRows;
   const org = getOrgSettings();
   const { theme, rgb, accentRgb } = pdfBrandingContext(org);
   const label = opts.label || humanizeKey(moduleId);
@@ -487,7 +503,11 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
       label,
     });
   } else if (prepared.mode === "detail" && moduleId === "geo-photos") {
-    renderGeoPhotoDetailPages(pdf, prepared.rows, {
+    const imageRows = [];
+    for (const photo of prepared.rows) {
+      imageRows.push({ ...photo, photoDataUrl: await resolveGeoPhotoPdfDataUrl(photo) || "" });
+    }
+    renderGeoPhotoDetailPages(pdf, imageRows, {
       drawPdfPageHeader: (doc, meta) => drawPdfPageHeader(doc, { ...meta, accentRgb, docRef }),
       renderRegisterTable,
       org,
@@ -496,6 +516,8 @@ export async function exportModuleRegisterPdf(moduleId, opts = {}) {
       theme,
       label,
     });
+  } else if (prepared.mode === "detail") {
+    renderRegisterRecordDetailPages(pdf, moduleId, prepared.rows, { drawPdfPageHeader, org, rgb, accentRgb, theme, label });
   } else {
     const tableRows = prepared.mode === "table" ? prepared.rows : rows;
     const columns =

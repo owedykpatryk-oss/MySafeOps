@@ -271,7 +271,7 @@ export default function HelpAbout() {
           <p>Choose a task and follow the steps. Every guide uses plain UK English and opens the right place in MySafeOps.</p>
           <label className="help-search">
             <Search size={20} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search: survey, GPR, CAD, RAMS, permit, geo-photos…" aria-label="Search help" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search help" aria-label="Search help" />
             {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear help search"><X size={16} /></button> : <kbd>?</kbd>}
           </label>
           <div className="help-hero__promises">

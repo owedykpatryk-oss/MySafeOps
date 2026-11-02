@@ -1,4 +1,5 @@
 import { memo, useMemo } from "react";
+import "../../styles/report-editor-nav.css";
 import {
   SURVEY_EDITOR_GROUPS,
   SURVEY_EDITOR_TABS,
@@ -24,17 +25,20 @@ function SurveyEditorStepNav({ tab, report, onTabChange }) {
   }, [report]);
 
   return (
-    <div className="app-survey-editor-nav">
-      <div className="app-survey-editor-nav__groups" role="tablist" aria-label="Report sections">
-        {SURVEY_EDITOR_GROUPS.map((g) => {
+    <nav className="app-survey-editor-nav" aria-label="Survey report sections">
+      <div className="app-report-nav-heading">
+        <span><strong>Report sections</strong> · Select a section to edit</span>
+        <span>Section {SURVEY_EDITOR_GROUPS.findIndex((g) => g.id === activeGroup) + 1} of {SURVEY_EDITOR_GROUPS.length}</span>
+      </div>
+      <div className="app-survey-editor-nav__groups">
+        {SURVEY_EDITOR_GROUPS.map((g, index) => {
           const prog = completion.groups[g.id];
           const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
           return (
             <button
               key={g.id}
               type="button"
-              role="tab"
-              aria-selected={activeGroup === g.id}
+              aria-current={activeGroup === g.id ? "step" : undefined}
               className={`app-survey-editor-nav__group${activeGroup === g.id ? " app-survey-editor-nav__group--active" : ""}${prog.complete ? " app-survey-editor-nav__group--done" : ""}`}
               onClick={() => {
                 const first = SURVEY_EDITOR_TABS.find((t) => t.group === g.id);
@@ -43,7 +47,7 @@ function SurveyEditorStepNav({ tab, report, onTabChange }) {
             >
               <span className="app-survey-editor-nav__group-top">
                 <span className="app-survey-editor-nav__group-label">
-                  {prog.complete ? <span className="app-survey-editor-nav__check" aria-hidden>✓</span> : null}
+                  <span className="app-report-nav-number" aria-hidden="true">{index + 1}</span>
                   {g.label}
                 </span>
                 <span
@@ -68,6 +72,7 @@ function SurveyEditorStepNav({ tab, report, onTabChange }) {
             <button
               key={t.id}
               type="button"
+              aria-current={tab === t.id ? "page" : undefined}
               className={`app-survey-editor-nav__tab${tab === t.id ? " app-survey-editor-nav__tab--active" : ""}${done ? " app-survey-editor-nav__tab--done" : ""}`}
               onClick={() => onTabChange(t.id)}
             >
@@ -78,7 +83,7 @@ function SurveyEditorStepNav({ tab, report, onTabChange }) {
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }
 

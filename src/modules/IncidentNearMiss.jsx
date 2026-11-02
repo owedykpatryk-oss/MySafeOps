@@ -1,3 +1,5 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
+import { persistRegisterRows } from "../utils/registerPersistGuard";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import {
@@ -5,6 +7,7 @@ import {
   seedOverlayForm,
   useOverlayFormDraft,
   clearOverlayFormDraft,
+  submitOverlayForm,
   writeOverlayFormDraft,
   readOverlayFormDraft,
 } from "../hooks/useOverlayFormDraft";
@@ -14,7 +17,8 @@ import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useApp } from "../context/AppContext";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
-import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey } from "../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, orgScopedKey, ORG_CHANGED_EVENT } from "../utils/orgStorage";
+import { COUNTRY_WORKSPACE_CHANGED_EVENT } from "../utils/countryWorkspaces";
 import PageHero from "../components/PageHero";
 import EmptyState from "../components/EmptyState";
 import RegisterModuleShell from "../components/RegisterModuleShell";
@@ -177,10 +181,14 @@ function QuickIncidentCapture({ projects, onCreate }) {
       });
     const t = window.setTimeout(flush, 400);
     window.addEventListener("pagehide", flush);
+    window.addEventListener(ORG_CHANGED_EVENT, flush);
+    window.addEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, flush);
     document.addEventListener("visibilitychange", flush);
     return () => {
       window.clearTimeout(t);
       window.removeEventListener("pagehide", flush);
+      window.removeEventListener(ORG_CHANGED_EVENT, flush);
+      window.removeEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, flush);
       document.removeEventListener("visibilitychange", flush);
     };
   }, [draftKey, type, location, projectId, reportedBy, quickNote, flags, photos, gps]);
@@ -217,7 +225,8 @@ function QuickIncidentCapture({ projects, onCreate }) {
   };
 
   const submit = () => {
-    onCreate({
+    writeOverlayFormDraft(draftKey, { type, location, projectId, reportedBy, quickNote, flags, photos, gps });
+    const saved = onCreate({
       id: genId(),
       type,
       occurredAt: new Date().toISOString().slice(0, 16),
@@ -240,6 +249,7 @@ function QuickIncidentCapture({ projects, onCreate }) {
       createdAt: new Date().toISOString(),
       quickCapture: true,
     });
+    if (saved === false) return;
     clearOverlayFormDraft(draftKey);
     setLocation("");
     setProjectId("");
@@ -266,9 +276,7 @@ function QuickIncidentCapture({ projects, onCreate }) {
         <select style={ss.inp} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
           <option value="">Project (optional)</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
         <input style={ss.inp} value={reportedBy} onChange={(e) => setReportedBy(e.target.value)} placeholder="Reported by" />
@@ -409,9 +417,7 @@ function IncidentForm({ item, projects, onSave, onClose }) {
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="incident-near-miss-project-id">
           <option value="">—</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="incident-near-miss-description">Description</label>
@@ -522,12 +528,11 @@ function IncidentForm({ item, projects, onSave, onClose }) {
             type="button"
             style={ss.btnP}
             onClick={() => {
-              clearOverlayFormDraft(draftKey);
-              onSave({
+              submitOverlayForm(draftKey, {
                 ...form,
                 description: String(form.description || "").trim() || buildQuickSummary(form.quickFlags || [], form.quickSummary || ""),
                 projectName: pm[form.projectId] || "",
-              });
+              }, onSave);
             }}
           >
             {t("save")}
@@ -619,21 +624,16 @@ export default function IncidentNearMiss() {
   };
 
   const persist = (f, isNew) => {
-    setItems((p) => {
-      const i = p.findIndex((x) => x.id === f.id);
-      if (i >= 0) {
-        const n = [...p];
-        n[i] = f;
-        return n;
-      }
-      return [f, ...p];
-    });
+    const next = items.some(x => x.id === f.id) ? items.map(x => x.id === f.id ? f : x) : [f, ...items];
+    if (!persistRegisterRows(INCIDENTS_KEY, next)) return false;
+    setItems(next);
     pushAudit({
       action: isNew ? "incident_create" : "incident_update",
       entity: "incident",
       detail: `${f.type} ${f.id}`,
     });
     setModal(null);
+    return true;
   };
 
   const escalateNearMissToIncident = (row) => {

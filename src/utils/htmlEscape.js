@@ -149,7 +149,17 @@ export function buildPrintPreviewSrcDoc(html) {
 export function openPrintWindow() {
   const openFn = globalThis.window?.open?.bind(globalThis.window) || globalThis.open?.bind(globalThis);
   if (typeof openFn !== "function") return null;
-  return openFn("", "_blank", "noopener,noreferrer");
+  // noopener makes window.open return null even when the popup opens.
+  // Keep the writable handle, then sever opener before any content is written.
+  const win = openFn("", "_blank");
+  if (!win) return null;
+  try {
+    win.opener = null;
+    return win;
+  } catch {
+    win.close?.();
+    return null;
+  }
 }
 
 /** Same event ToastProvider listens for (`OPS_TOAST_EVENT_NAME`). */

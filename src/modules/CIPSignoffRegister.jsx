@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useState } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
@@ -15,6 +16,7 @@ import RegisterListPagingFooter from "../components/RegisterListPagingFooter";
 import { buildRegisterModuleStats } from "../utils/registerModuleStatsBuilder";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { cipPassedSwabCount } from "../utils/registerRecordStatus";
 
 const KEY = "cip_signoff_register";
 const genId = () => `cip_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
@@ -33,7 +35,7 @@ function Form({ item, projects, onSave, onClose }) {
         cipProgram: "",
         cipTemperaturePeakC: "",
         cipDurationMinutes: "",
-        swabResults: [{ location: "", atpRlu: "", pass: true }],
+        swabResults: [{ location: "", atpRlu: "", pass: false }],
         visualInspectionPassed: false,
         signedOffBy: "",
         releasedToProductionAt: null,
@@ -43,7 +45,7 @@ function Form({ item, projects, onSave, onClose }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const pm = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
-  const addSwab = () => set("swabResults", [...(form.swabResults || []), { location: "", atpRlu: "", pass: true }]);
+  const addSwab = () => set("swabResults", [...(form.swabResults || []), { location: "", atpRlu: "", pass: false }]);
   const patchSwab = (idx, patch) => {
     const next = [...(form.swabResults || [])];
     next[idx] = { ...next[idx], ...patch };
@@ -62,9 +64,7 @@ function Form({ item, projects, onSave, onClose }) {
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="cip-signoff-project-id">
           <option value="">—</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="cip-signoff-cip-program">CIP program</label>
@@ -83,15 +83,15 @@ function Form({ item, projects, onSave, onClose }) {
         {(form.swabResults || []).map((s, idx) => (
           <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 80px auto", gap: 6, marginTop: 8, alignItems: "end" }}>
             <div>
-              <label style={ss.lbl} htmlFor={`cip-signoff-location-${s.id}`}>{t("location")}</label>
-              <input style={ss.inp} value={s.location} onChange={(e) => patchSwab(idx, { location: e.target.value })}  id={`cip-signoff-location-${s.id}`} />
+              <label style={ss.lbl} htmlFor={`cip-signoff-location-${idx}`}>{t("location")}</label>
+              <input style={ss.inp} value={s.location} onChange={(e) => patchSwab(idx, { location: e.target.value })}  id={`cip-signoff-location-${idx}`} />
             </div>
             <div>
-              <label style={ss.lbl} htmlFor={`cip-signoff-atp-rlu-${s.id}`}>ATP RLU</label>
-              <input style={ss.inp} value={s.atpRlu} onChange={(e) => patchSwab(idx, { atpRlu: e.target.value })}  id={`cip-signoff-atp-rlu-${s.id}`} />
+              <label style={ss.lbl} htmlFor={`cip-signoff-atp-rlu-${idx}`}>ATP RLU</label>
+              <input style={ss.inp} value={s.atpRlu} onChange={(e) => patchSwab(idx, { atpRlu: e.target.value })}  id={`cip-signoff-atp-rlu-${idx}`} />
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, paddingBottom: 8 }}>
-              <input type="checkbox" checked={!!s.pass} onChange={(e) => patchSwab(idx, { pass: e.target.checked })} />
+              <input type="checkbox" checked={s.pass === true} onChange={(e) => patchSwab(idx, { pass: e.target.checked })} />
               Pass
             </label>
           </div>
@@ -205,7 +205,7 @@ export default function CIPSignoffRegister() {
             <div key={r.id} style={{ ...ss.card }}>
               <strong>{r.equipmentId || "Equipment"}</strong>
               <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                {r.cipProgram} · {r.signedOffBy || "—"} · {(r.swabResults || []).filter((x) => x.pass).length}/{(r.swabResults || []).length} swabs pass
+                {r.cipProgram} · {r.signedOffBy || "—"} · {cipPassedSwabCount(r)}/{(r.swabResults || []).length} swabs pass
               </div>
               <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
                 <button type="button" style={ss.btn} onClick={() => setModal({ type: "form", data: r })}>

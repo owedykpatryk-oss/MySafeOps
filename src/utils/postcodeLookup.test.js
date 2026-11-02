@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   extractUkPostcode,
   lookupUkPostcode,
+  reverseUkPostcode,
   normaliseUkPostcodeInput,
   resolveUkPostcodeInput,
 } from "./postcodeLookup.js";
@@ -99,5 +100,47 @@ describe("lookupUkPostcode", () => {
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(String(fetch.mock.calls[2][0])).toContain("api.postcodes.io");
     expect(result?.postcode).toBe("KT22 7SH");
+  });
+
+  it("does not duplicate requests when the proxy confirms a postcode is not found", async () => {
+    mockFetch(async () => ({
+      ok: false,
+      status: 404,
+      headers: { get: () => "application/json" },
+      text: async () =>
+        JSON.stringify({
+          status: 404,
+          error: "Postcode not found",
+          terminated: { postcode: "PA3 2SW", year_terminated: 2014, month_terminated: 9 },
+        }),
+    }));
+
+    await expect(lookupUkPostcode("PA3 2SW")).resolves.toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("reverseUkPostcode", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reads the nearest postcode from the lat/lng proxy", async () => {
+    mockFetch(async (url) => {
+      expect(String(url)).toContain("/api/postcode?lat=51.5&lng=-0.1");
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        text: async () =>
+          JSON.stringify({
+            result: { postcode: "SW1A 1AA", latitude: 51.501, longitude: -0.141, admin_district: "Westminster" },
+          }),
+      };
+    });
+    await expect(reverseUkPostcode(51.5, -0.1)).resolves.toMatchObject({
+      postcode: "SW1A 1AA",
+      adminDistrict: "Westminster",
+    });
   });
 });

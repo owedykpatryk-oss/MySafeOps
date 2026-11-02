@@ -106,4 +106,45 @@ describe("d1SyncClient", () => {
     expect(cached.version).toBe(3);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("does not serve one session's cached data to another session", async () => {
+    const otherSession = { auth: { getSession: async () => ({ data: { session: { access_token: "other-test-session" } } }) } };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ value: [{ id: "private" }], version: 1 }) })
+      .mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({ error: "forbidden" }) });
+    vi.stubGlobal("fetch", fetchMock);
+    await d1GetKv(supabase, "acme-corp", "permits_v2", "main");
+    const result = await d1GetKv(otherSession, "acme-corp", "permits_v2", "main");
+    expect(result).toMatchObject({ ok: false, error: "forbidden" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("separates in-flight sessions and keeps the newer session's request deduplicated", async () => {
+    const otherSession = { auth: { getSession: async () => ({ data: { session: { access_token: "other-test-session" } } }) } };
+    let finishFirst;
+    let finishSecond;
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { finishSecond = resolve; }));
+    vi.stubGlobal("fetch", fetchMock);
+    const first = d1GetKv(supabase, "acme-corp", "permits_v2", "main");
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const second = d1GetKv(otherSession, "acme-corp", "permits_v2", "main");
+    const firstResponse = { ok: true, json: async () => ({ value: [{ id: "first" }], version: 1 }) };
+    const secondResponse = { ok: false, status: 403, json: async () => ({ error: "forbidden" }) };
+    try {
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2), { timeout: 200 });
+      finishFirst(firstResponse);
+      await first;
+      const duplicate = d1GetKv(otherSession, "acme-corp", "permits_v2", "main");
+      finishSecond(secondResponse);
+      expect(await second).toMatchObject({ ok: false, error: "forbidden" });
+      expect(await duplicate).toEqual(await second);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      finishFirst?.(firstResponse);
+      finishSecond?.(secondResponse);
+      await Promise.allSettled([first, second]);
+    }
+  });
 });

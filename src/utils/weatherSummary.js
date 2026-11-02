@@ -4,9 +4,14 @@
 
 import { getMarket, resolveMarketId } from "../config/markets";
 import { getOrgMarketId } from "./orgMarket.js";
-import { lookupSitePostcode, resolveSitePostcodeInput } from "./siteAddressLookup.js";
+import {
+  lookupSitePostcode,
+  resolveSitePostcodeCandidatesForMarket,
+  resolveSitePostcodeInput,
+} from "./siteAddressLookup.js";
 
 import { todayLocalISO } from "./localDate";
+import { appApiUrl } from "./appApiUrl";
 const WEATHER_PROXY_PATH = "/api/weather";
 
 function openWeatherDescription(code = "", fallback = "") {
@@ -41,7 +46,7 @@ function isWeatherProxyPreferred() {
 function resolveWeatherProxyUrl(lat, lng, postcode) {
   const base = String(import.meta.env.VITE_WEATHER_PROXY_URL || WEATHER_PROXY_PATH).trim();
   const path = base.startsWith("/") ? base : `/${base}`;
-  const u = new URL(path, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+  const u = new URL(appApiUrl(path), typeof window !== "undefined" ? window.location.origin : "http://localhost");
   if (postcode) {
     u.searchParams.set("postcode", String(postcode).replace(/\s/g, ""));
   } else {
@@ -84,18 +89,19 @@ function resolveWeatherMarketId(explicit) {
  * Resolve lat/lng from explicit coords or site postcode (UK or AU).
  * @returns {Promise<{ lat: number, lng: number, postcode?: string } | null>}
  */
-export async function resolveSiteCoordinates(lat, lng, postcodeHint, marketId) {
+export async function resolveSiteCoordinates(lat, lng, postcodeHint, marketId, ...extraAddressText) {
   const market = resolveWeatherMarketId(marketId);
   const la = parseFloat(String(lat ?? "").trim(), 10);
   const lo = parseFloat(String(lng ?? "").trim(), 10);
   if (Number.isFinite(la) && Number.isFinite(lo)) {
     return { lat: la, lng: lo };
   }
-  const pc = resolveSitePostcodeInput(postcodeHint);
-  if (!pc) return null;
-  const hit = await lookupSitePostcode(pc, market);
-  if (!hit) return null;
-  return { lat: hit.lat, lng: hit.lng, postcode: hit.postcode };
+  const candidates = resolveSitePostcodeCandidatesForMarket(postcodeHint, market, ...extraAddressText);
+  for (const pc of candidates) {
+    const hit = await lookupSitePostcode(pc, market);
+    if (hit) return { lat: hit.lat, lng: hit.lng, postcode: hit.postcode };
+  }
+  return null;
 }
 
 /** @deprecated Dev-only — production must use OPENWEATHER_API_KEY on the server. */

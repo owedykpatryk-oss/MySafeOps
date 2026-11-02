@@ -12,6 +12,7 @@ import {
 import { clearAuthorshipUserCache, setAuthorshipUserCache } from "../utils/documentAuthorship.js";
 
 const Ctx = createContext(null);
+const SESSION_BOOTSTRAP_TIMEOUT_MS = 10_000;
 
 /** Detect recovery from URL before / during PKCE exchange (hash or query). */
 function urlLooksLikePasswordRecovery() {
@@ -37,6 +38,12 @@ export function SupabaseAuthProvider({ children }) {
     }
 
     let cancelled = false;
+    let authEventReceived = false;
+    const bootstrapTimeout = window.setTimeout(() => {
+      if (cancelled || authEventReceived) return;
+      setLoading(false);
+      trackAuthError("session_bootstrap_timeout", new Error("Session lookup timed out"));
+    }, SESSION_BOOTSTRAP_TIMEOUT_MS);
 
     if (urlLooksLikePasswordRecovery() || isPasswordRecoveryPending()) {
       markPasswordRecoveryPending();
@@ -45,23 +52,25 @@ export function SupabaseAuthProvider({ children }) {
     supabase.auth
       .getSession()
       .then(({ data: { session: s } }) => {
-        if (!cancelled) {
+        window.clearTimeout(bootstrapTimeout);
+        if (!cancelled && !authEventReceived) {
           setSession(s);
           setLoading(false);
           trackAuthEvent("session_bootstrap_success", { hasSession: Boolean(s) });
-        }
-        if (s?.user && isPasswordRecoveryPending()) {
-          redirectToResetPasswordIfNeeded();
-          return;
-        }
-        if (s?.user) {
-          ensureUserOrgContext(supabase).catch((error) => {
-            trackAuthError("org_context_sync_failed", error, { source: "getSession" });
-          });
+          if (s?.user && isPasswordRecoveryPending()) {
+            redirectToResetPasswordIfNeeded();
+            return;
+          }
+          if (s?.user) {
+            ensureUserOrgContext(supabase, s.user.id).catch((error) => {
+              trackAuthError("org_context_sync_failed", error, { source: "getSession" });
+            });
+          }
         }
       })
       .catch((error) => {
-        if (!cancelled) {
+        window.clearTimeout(bootstrapTimeout);
+        if (!cancelled && !authEventReceived) {
           setSession(null);
           setLoading(false);
           trackAuthError("session_bootstrap_failed", error);
@@ -71,8 +80,12 @@ export function SupabaseAuthProvider({ children }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, s) => {
+      if (cancelled) return;
+      window.clearTimeout(bootstrapTimeout);
+      authEventReceived = true;
       trackAuthEvent("auth_state_change", { event, hasSession: Boolean(s) });
       setSession(s);
+      setLoading(false);
       if (event === "PASSWORD_RECOVERY") {
         markPasswordRecoveryPending();
         redirectToResetPasswordIfNeeded();
@@ -82,8 +95,8 @@ export function SupabaseAuthProvider({ children }) {
         redirectToResetPasswordIfNeeded();
         return;
       }
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-        ensureUserOrgContext(supabase).catch((error) => {
+      if (s?.user && (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED")) {
+        ensureUserOrgContext(supabase, s.user.id).catch((error) => {
           trackAuthError("org_context_sync_failed", error, { source: "onAuthStateChange", event });
         });
       }
@@ -91,6 +104,7 @@ export function SupabaseAuthProvider({ children }) {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(bootstrapTimeout);
       subscription.unsubscribe();
     };
   }, []);

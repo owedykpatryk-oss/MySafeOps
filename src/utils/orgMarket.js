@@ -44,10 +44,11 @@ export function setOrgMarketId(marketId, orgId = getOrgId()) {
  * On first cloud sign-in, copy market from auth metadata / landing preference into org settings.
  * @param {import("@supabase/supabase-js").SupabaseClient | null | undefined} supabase
  */
-export async function syncOrgMarketFromAuth(supabase) {
+export async function syncOrgMarketFromAuth(supabase, { assertCurrent } = {}) {
   const orgId = getOrgId();
   const settings = loadOrgSettingsRaw(orgId);
   if (isValidMarketId(settings.market)) {
+    if (assertCurrent) await assertCurrent();
     setStoredMarketId(settings.market);
     return settings.market;
   }
@@ -64,6 +65,7 @@ export async function syncOrgMarketFromAuth(supabase) {
   }
 
   const market = resolveMarketId(fromMeta ?? getStoredMarketId() ?? "uk");
+  if (assertCurrent) await assertCurrent();
   setOrgMarketId(market, orgId);
   return market;
 }

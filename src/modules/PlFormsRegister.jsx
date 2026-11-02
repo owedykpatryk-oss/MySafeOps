@@ -416,14 +416,14 @@ export default function PlFormsRegister() {
                         type="button"
                         style={ss.btn}
                         onClick={() => {
-                          if (!window.confirm("Usunąć druk?")) return;
-                          softDeleteToRecycleBin({
+                          if (!softDeleteToRecycleBin({
+                            confirmMessage: "Usunąć druk?",
                             moduleId: "pl-druki",
                             moduleLabel: "Druki BHP",
-                            itemId: r.id,
+                            sourceKey: STORAGE_KEY,
                             itemLabel: r.formLabel,
                             payload: r,
-                          });
+                          })) return;
                           persist(replaceWithTombstone(items, r.id));
                           pushAudit({ action: "pl_form_delete", entity: "pl-druki", detail: r.formLabel });
                         }}

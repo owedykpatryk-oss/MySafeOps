@@ -16,7 +16,10 @@ const jsonChecks = [
 async function checkJson(c) {
   const url = `${base}${c.path}`;
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const res = await fetch(url, {
+      headers: { Accept: "application/json", Origin: base },
+      signal: AbortSignal.timeout(15000),
+    });
     const json = await res.json().catch(() => null);
     const ok = res.ok && c.expect(json);
     console.log(`${ok ? "✓" : "✗"} ${c.name} ${res.status}${ok ? "" : ` — ${url}`}`);

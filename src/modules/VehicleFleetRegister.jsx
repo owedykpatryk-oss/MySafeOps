@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useMemo, useState } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
@@ -96,9 +97,7 @@ function Form({ item, projects, workers, onSave, onClose }) {
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="vehicle-fleet-project-id">
           <option value="">—</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="vehicle-fleet-assigned-worker-id">Assigned driver / operative</label>

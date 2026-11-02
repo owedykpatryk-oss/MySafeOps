@@ -53,8 +53,8 @@ export const FOOD_PHARMA_SETUP_STEPS = [
     hint: "Add sealants, lubricants, cleaning chemicals used on food sites.",
     viewId: "coshh",
     autoCheck: () => {
-      const items = load("coshh_register", []);
-      return items.length > 0 && items.some((i) => String(i.sdsUrl || "").trim());
+      const items = load("coshh_items", []);
+      return items.some((i) => !i.deletedAt && String(i.sdsUrl || "").trim());
     },
   },
   {

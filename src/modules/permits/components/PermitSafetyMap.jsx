@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../../../utils/projectDisplayLabel";
 import { useMemo, useState } from "react";
 import { planDisplaySrc } from "../permitPlanOverlayRegistry";
 import { permitsForPlan, simopsPairsForPlan } from "../permitPlanLivePins";
@@ -84,9 +85,7 @@ export default function PermitSafetyMap({
           >
             <option value="">All projects</option>
             {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
+              <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
             ))}
           </select>
           <select
@@ -96,9 +95,7 @@ export default function PermitSafetyMap({
           >
             <option value="">Select plan</option>
             {plansForProject.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
+              <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
             ))}
           </select>
         </div>

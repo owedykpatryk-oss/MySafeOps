@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react";
+import { countryOperationalStorageKey, ORG_CHANGED_EVENT } from "../utils/orgStorage";
+import { COUNTRY_WORKSPACE_CHANGED_EVENT } from "../utils/countryWorkspaces";
 
 /**
  * Persist overlay editor state across iOS camera / PWA remounts.
  */
 
 export function overlayDraftKey(moduleId, recordId) {
-  return `mso_overlay_draft_${String(moduleId || "form")}_${String(recordId || "new")}`;
+  return countryOperationalStorageKey(`mso_overlay_draft_v2_${String(moduleId || "form")}_${String(recordId || "new")}`);
 }
 
 export function clearOverlayFormDraft(key) {
@@ -15,6 +17,14 @@ export function clearOverlayFormDraft(key) {
   } catch {
     /* private mode */
   }
+}
+
+/** Save callbacks are synchronous and return false when persistence fails. */
+export function submitOverlayForm(key, form, onSave) {
+  writeOverlayFormDraft(key, form);
+  if (onSave(form) === false) return false;
+  clearOverlayFormDraft(key);
+  return true;
 }
 
 export function writeOverlayFormDraft(key, data) {
@@ -85,10 +95,14 @@ export function useOverlayFormDraft(key, form, setForm) {
     const flush = () => writeOverlayFormDraft(key, form);
     const t = window.setTimeout(flush, 400);
     window.addEventListener("pagehide", flush);
+    window.addEventListener(ORG_CHANGED_EVENT, flush);
+    window.addEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, flush);
     document.addEventListener("visibilitychange", flush);
     return () => {
       window.clearTimeout(t);
       window.removeEventListener("pagehide", flush);
+      window.removeEventListener(ORG_CHANGED_EVENT, flush);
+      window.removeEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, flush);
       document.removeEventListener("visibilitychange", flush);
     };
   }, [key, form]);

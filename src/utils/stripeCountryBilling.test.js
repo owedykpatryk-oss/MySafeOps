@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   resolveStripeConfig,
   stripeMarketReady,
+  planFromPriceId,
+  hasLiveStripeConfig,
 } from "../../supabase/functions/_shared/stripeConfig.ts";
 import {
   isCustomerOrgBindingMismatch,
@@ -55,6 +57,23 @@ describe("country Stripe billing", () => {
     values.STRIPE_PRICE_ENTERPRISE_EUR = "price_eur_enterprise";
     expect(stripeMarketReady("live", "at")).toBe(true);
     expect(resolveStripeConfig("live", "at")?.prices.starter).toBe("price_eur_starter");
+    expect(planFromPriceId("price_eur_starter", "at", "live")).toEqual({ plan: "starter", mode: "live", market: "at" });
+    expect(planFromPriceId("price_eur_starter", "de", "live")?.market).toBe("de");
+    expect(planFromPriceId("price_eur_starter", "ch", "live")).toBeNull();
+  });
+
+  it("rejects unknown markets and test credentials in live readiness", () => {
+    expect(resolveStripeConfig("live", "invalid")).toBeNull();
+    values.STRIPE_SECRET_KEY = "sk_test_fixture";
+    expect(hasLiveStripeConfig()).toBe(false);
+    expect(resolveStripeConfig("live", "uk")).toBeNull();
+  });
+
+  it("does not map a test price into a live subscription", () => {
+    values.STRIPE_SECRET_KEY_TEST = "sk_test_fixture";
+    values.STRIPE_PRICE_STARTER_TEST = "price_test_starter";
+    expect(planFromPriceId("price_test_starter", "uk", "live")).toBeNull();
+    expect(planFromPriceId("price_test_starter", "uk", "test")?.plan).toBe("starter");
   });
 
   it("never falls back from a Swiss workspace to DE/AT EUR prices", () => {

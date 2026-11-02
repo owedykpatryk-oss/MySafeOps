@@ -1,7 +1,19 @@
 /** @vitest-environment jsdom */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 describe("orgMembership billing/trial org-scoping (shared-device isolation)", () => {
+  it("extends the requested organisation and does not write the result into a newly selected one", async () => {
+    localStorage.setItem("mysafeops_orgId", "org-a");
+    const { extendOrgTrial } = await import("./orgMembership.js");
+    const rpc = vi.fn(async () => {
+      localStorage.setItem("mysafeops_orgId", "org-b");
+      return { data: [{ org_slug: "org-a", trial_ends_at: "2027-01-01", trial_extension_count: 1 }] };
+    });
+    await extendOrgTrial({ rpc });
+    expect(rpc).toHaveBeenCalledWith("extend_org_trial", { p_org_slug: "org-a" });
+    expect(localStorage.getItem("mysafeops_trial_ends_at_org-a")).toBe("2027-01-01");
+    expect(localStorage.getItem("mysafeops_trial_ends_at_org-b")).toBeNull();
+  });
   beforeEach(() => {
     localStorage.clear();
   });
@@ -54,6 +66,16 @@ describe("orgMembership billing/trial org-scoping (shared-device isolation)", ()
     persistOrgRow({ trial_ends_at: new Date(Date.now() + 86400000).toISOString() });
     expect(localStorage.getItem("mysafeops_trial_ends_at")).not.toBeNull();
     expect(getTrialStatus()?.isActive).toBe(true);
+  });
+
+  it("does not inherit legacy global trial or paid billing into a real organisation", async () => {
+    localStorage.setItem("mysafeops_trial_ends_at", "2099-01-01T00:00:00.000Z");
+    localStorage.setItem("mysafeops_billing_plan", "enterprise");
+    localStorage.setItem("mysafeops_subscription_status", "active");
+    localStorage.setItem("mysafeops_orgId", "new-company");
+    const { getTrialStatus, getBillingEntitlements } = await import("./billingState.js");
+    expect(getTrialStatus()).toBeNull();
+    expect(getBillingEntitlements()).toMatchObject({ paidPlanId: null, subscriptionStatus: "none" });
   });
 
   it("does not overwrite a secondary country's billing with organisation billing", async () => {

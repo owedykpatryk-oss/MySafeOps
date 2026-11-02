@@ -2,12 +2,13 @@
  * Auto stats cards for RegisterModuleShell from live register rows.
  */
 import { itemNeedsAttention } from "./moduleRegisterStats";
+import { daysUntilRegisterDue } from "./registerRecordStatus";
 
 import { localMonthISO } from "./localDate";
 const monthPrefix = localMonthISO;
 
-function countAttention(items) {
-  return (items || []).filter((i) => itemNeedsAttention(i)).length;
+function countAttention(items, moduleId) {
+  return (items || []).filter((i) => itemNeedsAttention(i, moduleId)).length;
 }
 
 function stat(label, value, tone = "neutral") {
@@ -16,7 +17,7 @@ function stat(label, value, tone = "neutral") {
 
 /** @param {string} moduleId @param {object[]} items */
 export function buildRegisterModuleStats(moduleId, items = []) {
-  const list = Array.isArray(items) ? items : [];
+  const list = Array.isArray(items) ? items.filter((item) => item && !item.deletedAt) : [];
   const n = list.length;
   if (!n) return [];
 
@@ -92,7 +93,7 @@ export function buildRegisterModuleStats(moduleId, items = []) {
       return [
         stat("Actions", n),
         stat("Open", list.filter((i) => !/closed|done|complete/i.test(String(i.status || ""))).length, "warn"),
-        stat("Overdue", countAttention(list), countAttention(list) ? "warn" : "good"),
+        stat("Overdue", list.filter((i) => !["closed", "done", "complete", "completed", "resolved"].includes(i.status) && daysUntilRegisterDue(i.dueDate) < 0).length, "warn"),
       ];
     case "hot-work":
       return [
@@ -104,7 +105,7 @@ export function buildRegisterModuleStats(moduleId, items = []) {
       return [
         stat("Observations", n),
         stat("Open", list.filter((i) => !/closed|resolved/i.test(String(i.status || ""))).length, "warn"),
-        stat("Positive", list.filter((i) => /positive|good/i.test(String(i.type || ""))).length, "good"),
+        stat("Positive", list.filter((i) => /positive|good/i.test(String(i.polarity || i.type || ""))).length, "good"),
       ];
     case "lone-working":
       return [
@@ -164,10 +165,12 @@ export function buildRegisterModuleStats(moduleId, items = []) {
         stat("Applicable", list.filter((i) => i.applicable).length, "good"),
         stat("Review due", list.filter((i) => i.nextReview && new Date(i.nextReview) <= new Date()).length, "warn"),
       ];
+    case "gmp-deviations":
+      return [stat("Records", n), stat("Open", list.filter((i) => !i.closedAt).length, "warn"), stat("Closed", list.filter((i) => !!i.closedAt).length, "good")];
     default:
       return [
         stat("Records", n),
-        stat("Need attention", countAttention(list), countAttention(list) ? "warn" : "good"),
+        stat("Need attention", countAttention(list, moduleId), countAttention(list, moduleId) ? "warn" : "good"),
       ];
   }
 }

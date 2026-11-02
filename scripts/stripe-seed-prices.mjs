@@ -16,16 +16,18 @@ import { fileURLToPath } from "node:url";
 import Stripe from "stripe";
 import { AU_PLAN_AMOUNT_CENTS, stripeEnvKeyForAuPlan } from "../src/config/auPricing.js";
 import { PL_PLAN_AMOUNT_GROSZE, stripeEnvKeyForPlPlan } from "../src/config/plPricing.js";
+import { DE_PLAN_AMOUNT_CENTS, stripeEnvKeyForDePlan } from "../src/config/dePricing.js";
+import { CH_PLAN_AMOUNT_CENTS, stripeEnvKeyForChPlan } from "../src/config/chPricing.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 config({ path: resolve(__dirname, "../.env.local") });
 config({ path: resolve(__dirname, "../.env") });
 
 const PLANS = [
-  { planId: "starter", productName: "MySafeOps — Solo", gbpPence: 1900, audCents: AU_PLAN_AMOUNT_CENTS.starter, plnGrosze: PL_PLAN_AMOUNT_GROSZE.starter },
-  { planId: "team", productName: "MySafeOps — Team", gbpPence: 10900, audCents: AU_PLAN_AMOUNT_CENTS.team, plnGrosze: PL_PLAN_AMOUNT_GROSZE.team },
-  { planId: "business", productName: "MySafeOps — Business", gbpPence: 31900, audCents: AU_PLAN_AMOUNT_CENTS.business, plnGrosze: PL_PLAN_AMOUNT_GROSZE.business },
-  { planId: "enterprise", productName: "MySafeOps — Enterprise", gbpPence: 64900, audCents: AU_PLAN_AMOUNT_CENTS.enterprise, plnGrosze: PL_PLAN_AMOUNT_GROSZE.enterprise },
+  { planId: "starter", productName: "MySafeOps — Solo", gbpPence: 3900, audCents: AU_PLAN_AMOUNT_CENTS.starter, plnGrosze: PL_PLAN_AMOUNT_GROSZE.starter, eurCents: DE_PLAN_AMOUNT_CENTS.starter, chfCents: CH_PLAN_AMOUNT_CENTS.starter },
+  { planId: "team", productName: "MySafeOps — Team", gbpPence: 15900, audCents: AU_PLAN_AMOUNT_CENTS.team, plnGrosze: PL_PLAN_AMOUNT_GROSZE.team, eurCents: DE_PLAN_AMOUNT_CENTS.team, chfCents: CH_PLAN_AMOUNT_CENTS.team },
+  { planId: "business", productName: "MySafeOps — Business", gbpPence: 34900, audCents: AU_PLAN_AMOUNT_CENTS.business, plnGrosze: PL_PLAN_AMOUNT_GROSZE.business, eurCents: DE_PLAN_AMOUNT_CENTS.business, chfCents: CH_PLAN_AMOUNT_CENTS.business },
+  { planId: "enterprise", productName: "MySafeOps — Enterprise", gbpPence: 69900, audCents: AU_PLAN_AMOUNT_CENTS.enterprise, plnGrosze: PL_PLAN_AMOUNT_GROSZE.enterprise, eurCents: DE_PLAN_AMOUNT_CENTS.enterprise, chfCents: CH_PLAN_AMOUNT_CENTS.enterprise },
 ];
 
 const GBP_ENV = {
@@ -94,7 +96,9 @@ async function seedPlan(plan) {
   const gbpPriceId = await getOrCreatePrice(product, plan.planId, "gbp", plan.gbpPence);
   const audPriceId = await getOrCreatePrice(product, plan.planId, "aud", plan.audCents);
   const plnPriceId = await getOrCreatePrice(product, plan.planId, "pln", plan.plnGrosze);
-  return { planId: plan.planId, gbpPriceId, audPriceId, plnPriceId, productId: product.id };
+  const eurPriceId = await getOrCreatePrice(product, plan.planId, "eur", plan.eurCents);
+  const chfPriceId = await getOrCreatePrice(product, plan.planId, "chf", plan.chfCents);
+  return { planId: plan.planId, gbpPriceId, audPriceId, plnPriceId, eurPriceId, chfPriceId, productId: product.id };
 }
 
 async function main() {
@@ -121,7 +125,17 @@ async function main() {
     console.log(`${stripeEnvKeyForPlPlan(r.planId)}=${r.plnPriceId}`);
   }
 
-  console.log("\nAlso append AUD/PLN ids to .env.local, then: npm run stripe:sync-secrets");
+  console.log("\n--- EUR (DE/AT) — Supabase Edge Function secrets ---\n");
+  for (const r of rows) {
+    console.log(`${stripeEnvKeyForDePlan(r.planId)}=${r.eurPriceId}`);
+  }
+
+  console.log("\n--- CHF — Supabase Edge Function secrets ---\n");
+  for (const r of rows) {
+    console.log(`${stripeEnvKeyForChPlan(r.planId)}=${r.chfPriceId}`);
+  }
+
+  console.log("\nAlso append AUD/PLN/EUR/CHF ids to .env.local, then: npm run stripe:sync-secrets");
   console.log("Done.");
 }
 

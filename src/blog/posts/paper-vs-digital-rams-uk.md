@@ -135,7 +135,7 @@ Three realistic UK contractor sizes with current (April 2026) costs. These aren'
 
 **Digital options:**
 - The Site Book flat rate: £360/year
-- MySafeOps (smallest tier): £228/year (£19/month Solo)
+- MySafeOps (smallest tier): £468/year (£39/month Solo)
 - RapidRAMS pay-per-document (10/month): £1,800/year
 - SafetyCulture free (up to 10 users): £0
 

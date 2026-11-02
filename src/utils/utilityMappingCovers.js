@@ -94,9 +94,15 @@ export function renderUtilityMappingHeroCover(opts = {}) {
         .join("")}</div>`
     : "";
   const clientCode = String(opts.clientCode || "").trim().toUpperCase();
-  const clientLogoHtml = opts.clientLogoSrc
+  const brandMode = opts.brandMode === "client" || opts.brandMode === "both" || opts.brandMode === "own"
+    ? opts.brandMode
+    : (opts.clientLogoSrc ? "both" : "own");
+  const clientLogoHtml = brandMode === "both" && opts.clientLogoSrc
     ? `<div class="um-hero-cover__client"><img src="${escapeAttr(opts.clientLogoSrc)}" alt="${escapeHtml(opts.clientName || clientCode || "Client")}"/></div>`
     : "";
+  const brandLogo = brandMode === "client" ? (opts.clientLogoSrc || "") : logoSrc;
+  const brandName = brandMode === "client" ? (opts.clientName || "Client") : orgName;
+  const brandSub = brandMode === "client" ? "Client cover" : "u-map.co.uk · IS GROUP";
   const qrHtml = opts.qrSrc
     ? `<div class="um-hero-cover__qr"><img src="${escapeAttr(opts.qrSrc)}" alt="QR code"/><div>${escapeHtml(opts.qrLabel || "Scan to verify")}</div></div>`
     : "";
@@ -109,10 +115,10 @@ export function renderUtilityMappingHeroCover(opts = {}) {
   ${clientLogoHtml}
   <div class="um-hero-cover__top">
     <div class="um-hero-cover__brand">
-      <img src="${escapeAttr(logoSrc)}" alt="${escapeAttr(orgName)}" class="um-hero-cover__logo"/>
+      ${brandLogo ? `<img src="${escapeAttr(brandLogo)}" alt="${escapeAttr(brandName)}" class="um-hero-cover__logo"/>` : ""}
       <div>
-        <div class="um-hero-cover__org">${escapeHtml(orgName)}</div>
-        <div class="um-hero-cover__org-sub">u-map.co.uk · IS GROUP</div>
+        <div class="um-hero-cover__org">${escapeHtml(brandName)}</div>
+        <div class="um-hero-cover__org-sub">${escapeHtml(brandSub)}</div>
       </div>
     </div>
     <div class="um-hero-cover__chips">
@@ -121,12 +127,13 @@ export function renderUtilityMappingHeroCover(opts = {}) {
     </div>
   </div>
   <div class="um-hero-cover__bottom">
-    ${umWordmarkHtml(accent)}
+    ${brandMode === "client" ? "" : umWordmarkHtml(accent)}
     <div class="um-hero-cover__accent-bar" aria-hidden="true"></div>
     <h1 class="um-hero-cover__title">${escapeHtml(title)}</h1>
     ${subtitle ? `<p class="um-hero-cover__sub">${escapeHtml(subtitle)}</p>` : ""}
     ${kitHtml}
     ${opts.meta?.length ? `<div class="um-hero-cover__meta">${metaCells(opts.meta)}</div>` : ""}
+    ${opts.sitePhotoSrc ? `<img src="${escapeAttr(opts.sitePhotoSrc)}" alt="Site photograph" style="display:block;max-height:42mm;max-width:78mm;object-fit:contain;margin-top:8px;background:#fff"/>` : ""}
     ${opts.footerNote ? `<div class="um-hero-cover__note">${escapeHtml(opts.footerNote)}</div>` : ""}
     ${qrHtml}
   </div>
@@ -686,17 +693,18 @@ export function utilityMappingCoverSystemCss() {
  * @param {string} [logoSrc]
  * @param {string} [rightLabel]
  */
-export function renderUtilityMappingPageHeader(logoSrc, rightLabel = "") {
+export function renderUtilityMappingPageHeader(logoSrc, rightLabel = "", options = {}) {
   if (!isUtilityMappingPrintTheme()) return "";
-  const logo = logoSrc || UM_LOGO_URL;
+  const logo = logoSrc || (options.allowEmpty ? "" : UM_LOGO_URL);
   const accent = UTILITY_MAPPING_BRAND.accentColor;
   const lh = UM_LETTERHEAD_URL;
+  const alt = options.alt || "Utility Mapping";
   return `<div class="um-page-header">
   <div class="um-page-header__lh" style="background-image:url('${escapeAttr(lh)}')" aria-hidden="true"></div>
-  ${umWordmarkHtml(accent)}
+  ${options.hideWordmark ? "" : umWordmarkHtml(accent)}
   <div class="um-page-header__right">
     ${rightLabel ? `<span style="font-size:8pt;color:#64748b">${escapeHtml(rightLabel)}</span>` : ""}
-    <img class="um-page-header__logo" src="${escapeAttr(logo)}" alt="Utility Mapping"/>
+    ${logo ? `<img class="um-page-header__logo" src="${escapeAttr(logo)}" alt="${escapeAttr(alt)}"/>` : ""}
   </div>
 </div>`;
 }

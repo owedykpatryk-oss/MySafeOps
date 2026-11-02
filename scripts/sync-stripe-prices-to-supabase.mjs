@@ -16,10 +16,10 @@ config({ path: resolve(__dirname, "../.env.local") });
 config({ path: resolve(__dirname, "../.env") });
 
 const DEFAULTS = {
-  STRIPE_PRICE_STARTER: "price_1TK4hc6vtl4fJGcOl1WJZjqr",
-  STRIPE_PRICE_TEAM: "price_1TmvuN6vtl4fJGcOHRojXyLd",
-  STRIPE_PRICE_BUSINESS: "price_1TmvuN6vtl4fJGcOxhyOK8Z8",
-  STRIPE_PRICE_ENTERPRISE: "price_1TmvuN6vtl4fJGcOh6mSwEuA",
+  STRIPE_PRICE_STARTER: "price_1UJZI56vtl4fJGcO3VPbrfiP",
+  STRIPE_PRICE_TEAM: "price_1UJZI76vtl4fJGcOORku6aP8",
+  STRIPE_PRICE_BUSINESS: "price_1UJZIA6vtl4fJGcO0n02VWDR",
+  STRIPE_PRICE_ENTERPRISE: "price_1UJZID6vtl4fJGcOGqCcR9xR",
 };
 
 function pick(key) {
@@ -40,6 +40,16 @@ const plnStarter = pick("STRIPE_PRICE_STARTER_PLN");
 const plnTeam = pick("STRIPE_PRICE_TEAM_PLN");
 const plnBusiness = pick("STRIPE_PRICE_BUSINESS_PLN");
 const plnEnterprise = pick("STRIPE_PRICE_ENTERPRISE_PLN");
+
+const eurStarter = pick("STRIPE_PRICE_STARTER_EUR");
+const eurTeam = pick("STRIPE_PRICE_TEAM_EUR");
+const eurBusiness = pick("STRIPE_PRICE_BUSINESS_EUR");
+const eurEnterprise = pick("STRIPE_PRICE_ENTERPRISE_EUR");
+
+const chfStarter = pick("STRIPE_PRICE_STARTER_CHF");
+const chfTeam = pick("STRIPE_PRICE_TEAM_CHF");
+const chfBusiness = pick("STRIPE_PRICE_BUSINESS_CHF");
+const chfEnterprise = pick("STRIPE_PRICE_ENTERPRISE_CHF");
 
 if (![starter, team, business, enterprise].every((v) => v.startsWith("price_"))) {
   console.error("Missing valid STRIPE_PRICE_* GBP ids. Run npm run stripe:seed-prices first, or set env vars.");
@@ -73,6 +83,24 @@ if ([plnStarter, plnTeam, plnBusiness, plnEnterprise].every((v) => v.startsWith(
   console.warn("Some STRIPE_PRICE_*_PLN ids missing — run stripe:seed-prices and set all four PLN ids.");
 } else {
   console.warn("No STRIPE_PRICE_*_PLN ids in env — skipping PLN.");
+}
+
+if ([eurStarter, eurTeam, eurBusiness, eurEnterprise].every((v) => v.startsWith("price_"))) {
+  secretPairs.STRIPE_PRICE_STARTER_EUR = eurStarter;
+  secretPairs.STRIPE_PRICE_TEAM_EUR = eurTeam;
+  secretPairs.STRIPE_PRICE_BUSINESS_EUR = eurBusiness;
+  secretPairs.STRIPE_PRICE_ENTERPRISE_EUR = eurEnterprise;
+} else if ([eurStarter, eurTeam, eurBusiness, eurEnterprise].some((v) => v)) {
+  console.warn("Some STRIPE_PRICE_*_EUR ids missing — run stripe:seed-prices and set all four EUR ids.");
+}
+
+if ([chfStarter, chfTeam, chfBusiness, chfEnterprise].every((v) => v.startsWith("price_"))) {
+  secretPairs.STRIPE_PRICE_STARTER_CHF = chfStarter;
+  secretPairs.STRIPE_PRICE_TEAM_CHF = chfTeam;
+  secretPairs.STRIPE_PRICE_BUSINESS_CHF = chfBusiness;
+  secretPairs.STRIPE_PRICE_ENTERPRISE_CHF = chfEnterprise;
+} else if ([chfStarter, chfTeam, chfBusiness, chfEnterprise].some((v) => v)) {
+  console.warn("Some STRIPE_PRICE_*_CHF ids missing — run stripe:seed-prices and set all four CHF ids.");
 }
 
 console.log("Syncing Stripe price ids to Supabase Edge secrets…\n");

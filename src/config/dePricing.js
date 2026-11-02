@@ -7,18 +7,18 @@
 
 /** Monthly amounts in cents (EUR × 100). */
 export const DE_PLAN_AMOUNT_CENTS = {
-  starter: 2200,
-  team: 12900,
-  business: 35900,
-  enterprise: 74900,
+  starter: 4500,
+  team: 18900,
+  business: 38900,
+  enterprise: 80900,
 };
 
 /** Human-readable monthly labels (net). */
 export const DE_PLAN_PRICE_LABELS = {
-  starter: "22 €",
-  team: "129 €",
-  business: "359 €",
-  enterprise: "749 €",
+  starter: "45 €",
+  team: "189 €",
+  business: "389 €",
+  enterprise: "809 €",
   trial: "0 €",
 };
 

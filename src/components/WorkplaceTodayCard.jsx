@@ -1,11 +1,5 @@
 import { openWorkspaceSettings, openWorkspaceView } from "../utils/workspaceNavContext";
 
-const todayLabel = new Date().toLocaleDateString("en-GB", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-});
-
 /**
  * “Today at a glance” — urgent counts + one-tap jumps (any org / site).
  */
@@ -17,9 +11,15 @@ export default function WorkplaceTodayCard({
   expiringCerts = 0,
   todaySignIns = 0,
   urgentItems = [],
+  hasSiteRecords = true,
 }) {
+  const todayLabel = new Date().toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
   const hasUrgent =
-    permitsNeedAttention > 0 || expiringCerts > 0 || openSnags > 0 || (urgentItems && urgentItems.length > 0);
+    permitsNeedAttention > 0 || expiringCerts > 0 || openSnags > 0 || urgentItems.some((item) => item.severity !== "info");
 
   return (
     <section className={`app-workplace-today${hasUrgent ? " app-workplace-today--alert" : ""}`} aria-labelledby="workplace-today-heading">
@@ -38,7 +38,7 @@ export default function WorkplaceTodayCard({
           </span>
         ) : (
           <span className="app-workplace-today__badge app-workplace-today__badge--ok" role="status">
-            All clear
+            {hasSiteRecords ? "All clear" : "Getting started"}
           </span>
         )}
       </div>
@@ -51,7 +51,7 @@ export default function WorkplaceTodayCard({
             <span className="app-workplace-today__metric-hint">{permitsNeedAttention} need review</span>
           ) : null}
         </button>
-        <button type="button" className="app-workplace-today__metric" onClick={() => openWorkspaceView({ viewId: "projects" })}>
+        <button type="button" className="app-workplace-today__metric" onClick={() => openWorkspaceView({ viewId: "people" })}>
           <span className="app-workplace-today__metric-value">{expiringCerts}</span>
           <span className="app-workplace-today__metric-label">Certs expiring ≤15d</span>
         </button>
@@ -75,7 +75,7 @@ export default function WorkplaceTodayCard({
               <button
                 type="button"
                 className={`app-workplace-today__alert app-workplace-today__alert--${item.severity || "info"}`}
-                onClick={() => item.viewId && openWorkspaceView({ viewId: item.viewId })}
+                onClick={() => item.onOpen ? item.onOpen() : item.viewId && openWorkspaceView({ viewId: item.viewId })}
               >
                 {item.text}
               </button>

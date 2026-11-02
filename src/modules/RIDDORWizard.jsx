@@ -1,4 +1,6 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useState, useEffect } from "react";
+import { validateRequiredFields, persistRegisterRows } from "../utils/registerPersistGuard";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { getOrgSettings } from "../utils/orgSettingsStorage";
@@ -143,6 +145,26 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
 
   const [form, setForm] = useState(report?{...report}:blank);
   const [step, setStep] = useState(0);
+  const [validationError, setValidationError] = useState("");
+  const validateDetails = () => {
+    const check = validateRequiredFields(form,
+      ["incidentDate", "location", "workBeingDone", "incidentDescription"],
+      { incidentDate: "Date of incident", location: "Location", workBeingDone: "Work being done", incidentDescription: "Incident description" });
+    setValidationError(check.ok ? "" : check.message);
+    if (!check.ok) setStep(1);
+    return check.ok;
+  };
+  const persist = () => {
+    if (!validateDetails()) return;
+    onSave({ ...form, location: form.location.trim(), workBeingDone: form.workBeingDone.trim(),
+      incidentDescription: form.incidentDescription.trim(), status: form.reportedToHSE ? "reported" : "pending" });
+  };
+  useEffect(() => {
+    if (!validationError || step !== 1) return;
+    const field = ["riddor-incident-date", "riddor-location", "riddor-work-being-done", "riddor-incident-description"]
+      .map(id => document.getElementById(id)).find(input => input && !input.value.trim());
+    field?.focus();
+  }, [validationError, step]);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const def = getIncidentTypeDef(content, form.riddorType);
   const isSeriousInjuryType = form.riddorType === "specified" || form.riddorType === "serious_injury";
@@ -175,6 +197,7 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
           ))}
         </div>
 
+        {validationError && <p id="required-details-error" role="alert" style={{ color: "#b91c1c" }}>{validationError}</p>}
         {/* step 0 — incident type */}
         {step===0 && (
           <div>
@@ -205,7 +228,7 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
             <div>
               <label style={ss.lbl} htmlFor="riddor-incident-date">Date of incident *</label>
-              <input type="date" value={form.incidentDate} onChange={e=>set("incidentDate",e.target.value)} style={ss.inp}  id="riddor-incident-date" />
+              <input type="date" value={form.incidentDate} onChange={e=>set("incidentDate",e.target.value)} style={ss.inp}  required aria-describedby={validationError ? "required-details-error" : undefined} id="riddor-incident-date" />
             </div>
             <div>
               <label style={ss.lbl} htmlFor="riddor-incident-time">Time of incident</label>
@@ -213,7 +236,7 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
             </div>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl} htmlFor="riddor-location">Exact location where incident occurred *</label>
-              <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="e.g. Boiler room, Level 2, 2SFG Scunthorpe" style={ss.inp}  id="riddor-location" />
+              <input value={form.location||""} onChange={e=>set("location",e.target.value)} placeholder="e.g. Level 2 boiler room" style={ss.inp}  required aria-describedby={validationError ? "required-details-error" : undefined} id="riddor-location" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl} htmlFor="riddor-site-address">Site address</label>
@@ -223,7 +246,7 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
               <label style={ss.lbl} htmlFor="riddor-project-id">{t("project")}</label>
               <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="riddor-project-id">
                 <option value="">— Select —</option>
-                {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                {projects.map(p=><option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
               </select>
             </div>
             {isSeriousInjuryType && (
@@ -246,11 +269,11 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
             )}
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl} htmlFor="riddor-work-being-done">What work was being done at time of incident? *</label>
-              <textarea value={form.workBeingDone||""} onChange={e=>set("workBeingDone",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:50 }} placeholder="Describe the activity taking place at the time of the incident…"  id="riddor-work-being-done" />
+              <textarea value={form.workBeingDone||""} onChange={e=>set("workBeingDone",e.target.value)} rows={2} style={{ ...ss.ta, minHeight:50 }} placeholder="Describe the activity taking place at the time of the incident…"  required aria-describedby={validationError ? "required-details-error" : undefined} id="riddor-work-being-done" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl} htmlFor="riddor-incident-description">Description of what happened *</label>
-              <textarea value={form.incidentDescription||""} onChange={e=>set("incidentDescription",e.target.value)} rows={3} style={{ ...ss.ta, minHeight:70 }} placeholder="Provide a full description of how the incident occurred…"  id="riddor-incident-description" />
+              <textarea value={form.incidentDescription||""} onChange={e=>set("incidentDescription",e.target.value)} rows={3} style={{ ...ss.ta, minHeight:70 }} placeholder="Provide a full description of how the incident occurred…"  required aria-describedby={validationError ? "required-details-error" : undefined} id="riddor-incident-description" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl} htmlFor="riddor-cause-of-incident">Cause / contributing factors</label>
@@ -413,8 +436,8 @@ function RIDDORForm({ report, onSave, onClose, content, marketId }) {
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             {step>0 && <button onClick={()=>setStep(s=>s-1)} style={ss.btn}>← Back</button>}
             {step<STEPS.length-1
-              ? <button onClick={()=>setStep(s=>s+1)} style={ss.btnP}>Next →</button>
-              : <button onClick={()=>onSave({...form,status:form.reportedToHSE?"reported":"pending"})} style={ss.btnP}>{content.saveLabel}</button>
+              ? <button onClick={()=>{ if (step !== 1 || validateDetails()) setStep(s=>s+1); }} style={ss.btnP}>Next →</button>
+              : <button onClick={persist} style={ss.btnP}>{content.saveLabel}</button>
             }
           </div>
         </div>
@@ -436,8 +459,11 @@ export default function RIDDORRegister() {
   const liveReports = liveOrgArrayRows(reports);
 
   const saveReport = (r) => {
-    setReports(prev=>prev.find(x=>x.id===r.id)?prev.map(x=>x.id===r.id?r:x):[r,...prev]);
+    const next = reports.some(x => x.id === r.id) ? reports.map(x => x.id === r.id ? r : x) : [r, ...reports];
+    if (!persistRegisterRows("riddor_reports", next)) return false;
+    setReports(next);
     setModal(null);
+    return true;
   };
 
   const getDeadlineStatus = (r) => {

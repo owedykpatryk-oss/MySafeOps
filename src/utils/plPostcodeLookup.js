@@ -2,6 +2,8 @@
  * Polish postcode lookup (XX-XXX) via server proxy → Nominatim.
  */
 
+import { appApiUrl } from "./appApiUrl";
+
 const PROXY_PATH = "/api/pl-postcode";
 
 /** @param {string} raw */
@@ -28,7 +30,7 @@ export function resolvePlPostcodeInput(postcode, ...extraText) {
 export async function lookupPlPostcode(postcode) {
   const pc = normalizePlPostcode(postcode);
   if (!pc) return null;
-  const proxyUrl = `${PROXY_PATH}?code=${encodeURIComponent(pc)}`;
+  const proxyUrl = appApiUrl(`${PROXY_PATH}?code=${encodeURIComponent(pc)}`);
   const res = await fetch(proxyUrl);
   if (!res.ok) return null;
   const row = await res.json();

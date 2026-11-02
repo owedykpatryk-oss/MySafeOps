@@ -1,28 +1,58 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { isR2StorageConfigured, uploadFileToR2Storage, pickR2ViewUrl } from "../lib/r2Storage";
+import { isR2StorageConfigured, uploadFileToR2Storage, pickR2ViewUrl, fetchR2ObjectBlob } from "../lib/r2Storage";
 import { pushAudit } from "../utils/auditLog";
 import { ms } from "../utils/moduleStyles";
 import { safeHttpUrl } from "../utils/safeUrl";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { syncOrgSlugIfNeeded } from "../utils/orgMembership";
-import { getOrgId, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import { getOrgId, loadOrgScoped, saveOrgScoped, countryOperationalStorageKey, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import PageHero from "../components/PageHero";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
 import { compressImageFile, isHeicLikeFile, jpegFileFromDataUrl } from "../utils/geoPhotoUtils";
 
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { isD1Configured } from "../lib/d1SyncClient";
+import { replaceWithTombstone } from "../utils/d1ArrayMerge";
+import { COUNTRY_WORKSPACE_CHANGED_EVENT } from "../utils/countryWorkspaces";
+
 const DOC_META_KEY = "mysafeops_doc_library";
 const R2_UPLOADS_KEY = "mysafeops_r2_uploads";
 
-const loadR2Uploads = () => {
-  const list = loadOrgScoped(R2_UPLOADS_KEY, []);
-  return Array.isArray(list) ? list : [];
-};
+function normaliseUploads(list) {
+  if (!Array.isArray(list)) return [];
+  return list.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const key = typeof row.key === "string" ? row.key : "";
+    const id = typeof row.id === "string" && row.id ? row.id : key;
+    if (!id || (!key && !row.deletedAt)) return [];
+    return [{ ...row, id, key, name: typeof row.name === "string" && row.name ? row.name : key.split("/").pop() || "" }];
+  });
+}
+const loadR2Uploads = () => normaliseUploads(loadOrgScoped(R2_UPLOADS_KEY, []));
 const saveR2Uploads = (list) => saveOrgScoped(R2_UPLOADS_KEY, list);
 
-const loadMeta = () => loadOrgScoped(DOC_META_KEY, {});
+const loadMeta = () => {
+  const meta = loadOrgScoped(DOC_META_KEY, {});
+  return meta && typeof meta === "object" && !Array.isArray(meta) ? meta : {};
+};
 const saveMeta = (m) => saveOrgScoped(DOC_META_KEY, m);
+
+function readPendingEntries(scope) {
+  try {
+    const rows = JSON.parse(sessionStorage.getItem(`${scope}:pending`));
+    const saved = new Set(loadR2Uploads().map((row) => row.id));
+    return normaliseUploads(rows).filter((row) => !row.deletedAt && !saved.has(row.id));
+  } catch { return []; }
+}
+
+function persistPendingEntries(scope, rows) {
+  try {
+    if (rows.length) sessionStorage.setItem(`${scope}:pending`, JSON.stringify(rows));
+    else sessionStorage.removeItem(`${scope}:pending`);
+  } catch { /* The visible recovery list still permits retrying on this page. */ }
+}
 
 const ss = ms;
 const FILE_LIST_PAGE = 120;
@@ -53,19 +83,41 @@ export default function DocumentLibrary() {
   const [files, setFiles] = useState([]);
   const [meta, setMeta] = useState(loadMeta);
   const [pickError, setPickError] = useState(null);
+  const [pendingMeta, setPendingMeta] = useState(false);
   const [selectedPath, setSelectedPath] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [r2Uploads, setR2Uploads] = useState(loadR2Uploads);
   const [r2Busy, setR2Busy] = useState(false);
   const [r2Msg, setR2Msg] = useState("");
   const r2InputRef = useRef(null);
+  const uploadBusyRef = useRef(false);
+  const workspaceRequestRef = useRef(0);
+  const previewRequestRef = useRef(0);
+  const folderRequestRef = useRef(0);
+  const cloudRequestRef = useRef(0);
+  const [cloudFile, setCloudFile] = useState(null);
+  const [openingKey, setOpeningKey] = useState("");
+  const [openError, setOpenError] = useState("");
+  const pendingEntriesRef = useRef(new Map());
+  const [pendingEntries, setPendingEntries] = useState(() => readPendingEntries(countryOperationalStorageKey(R2_UPLOADS_KEY)));
+  const downloadDialogRef = useRef(null);
   const r2Enabled = isR2StorageConfigured();
   const fileListPg = useRegisterListPaging(FILE_LIST_PAGE);
   const r2ListPg = useRegisterListPaging(R2_LIST_PAGE);
 
-  useEffect(() => {
-    fileListPg.reset();
-  }, [dirName]);
+  const setUploadsFromSync = useCallback((value) => setR2Uploads((previous) => normaliseUploads(typeof value === "function" ? value(previous) : value)), []);
+  const { d1Hydrating, d1OutboxPending } = useD1OrgArraySync({
+    storageKey: R2_UPLOADS_KEY,
+    namespace: R2_UPLOADS_KEY,
+    value: r2Uploads,
+    setValue: setUploadsFromSync,
+    load: loadR2Uploads,
+    save: (_key, rows) => saveR2Uploads(normaliseUploads(rows)),
+  });
+  const visibleUploads = r2Uploads.filter((row) => !row.deletedAt);
+
+  const resetFileList = fileListPg.reset;
+  useEffect(() => { resetFileList(); }, [dirName, resetFileList]);
 
   useEffect(() => {
     return () => {
@@ -73,42 +125,110 @@ export default function DocumentLibrary() {
     };
   }, [previewUrl]);
 
+  useEffect(() => {
+    const resetWorkspace = () => {
+      workspaceRequestRef.current += 1;
+      folderRequestRef.current += 1;
+      previewRequestRef.current += 1;
+      cloudRequestRef.current += 1;
+      const interrupted = uploadBusyRef.current;
+      uploadBusyRef.current = false;
+      setR2Busy(false);
+      setR2Msg(interrupted ? "Workspace changed. Choose your files again for this workspace." : "");
+      setR2Uploads(loadR2Uploads());
+      const nextMeta = loadMeta();
+      setMeta(nextMeta);
+      setDirName(nextMeta.dirName || "");
+      setFiles([]);
+      setSelectedPath(null);
+      setPreviewUrl(null);
+      setCloudFile(null);
+      setOpeningKey("");
+      setOpenError("");
+      setPickError(null);
+      setPendingMeta(false);
+      const scope = countryOperationalStorageKey(R2_UPLOADS_KEY);
+      setPendingEntries(pendingEntriesRef.current.get(scope) || readPendingEntries(scope));
+    };
+    window.addEventListener(ORG_CHANGED_EVENT, resetWorkspace);
+    window.addEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, resetWorkspace);
+    return () => {
+      workspaceRequestRef.current += 1;
+      window.removeEventListener(ORG_CHANGED_EVENT, resetWorkspace);
+      window.removeEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, resetWorkspace);
+    };
+  }, []);
+
+  useEffect(() => () => { if (cloudFile?.url) URL.revokeObjectURL(cloudFile.url); }, [cloudFile]);
+
+  useEffect(() => {
+    if (!cloudFile) return;
+    const previousFocus = document.activeElement;
+    downloadDialogRef.current?.querySelector("a")?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") { cloudRequestRef.current += 1; setCloudFile(null); }
+      if (event.key === "Tab") {
+        const controls = downloadDialogRef.current?.querySelectorAll("a, button");
+        const first = controls?.[0];
+        const last = controls?.[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("keydown", onKeyDown); if (previousFocus?.isConnected) previousFocus.focus(); };
+  }, [cloudFile]);
+
   const pickFolder = useCallback(async () => {
+    const requestId = ++folderRequestRef.current;
+    const workspace = workspaceRequestRef.current;
+    const scope = countryOperationalStorageKey(DOC_META_KEY);
+    const current = () => requestId === folderRequestRef.current && workspace === workspaceRequestRef.current && scope === countryOperationalStorageKey(DOC_META_KEY);
     setPickError(null);
     try {
       const handle = await window.showDirectoryPicker({ mode: "read" });
-      setDirName(handle.name);
+      if (!current()) return;
       const list = await readDirRecursive(handle);
-      setFiles(list);
+      if (!current()) return;
       const m = { ...loadMeta(), dirName: handle.name, pickedAt: new Date().toISOString() };
-      saveMeta(m);
+      const saved = saveMeta(m);
+      setPendingMeta(!saved);
+      if (!saved) setPickError("Folder details could not be saved. Keep this page open and retry saving details.");
+      previewRequestRef.current += 1;
+      setDirName(handle.name);
+      setFiles(list);
       setMeta(m);
       setSelectedPath(null);
+      setPreviewUrl(null);
     } catch (e) {
-      if (e?.name !== "AbortError") setPickError(e?.message || "Could not open folder");
+      if (current() && e?.name !== "AbortError") setPickError(e?.message || "Could not open folder");
     }
   }, []);
 
-  const setNote = (path, note) => {
-    const notes = { ...(meta.notes || {}), [path]: note };
-    const m = { ...meta, notes };
-    saveMeta(m);
+  const updateMetaDraft = (m) => {
     setMeta(m);
+    const saved = saveMeta(m);
+    setPendingMeta(!saved);
+    setPickError(saved ? null : "Your edits could not be saved. They are still here; keep this page open and retry saving details.");
   };
 
-  const setTags = (path, tagsStr) => {
-    const tags = { ...(meta.tags || {}), [path]: tagsStr };
-    const m = { ...meta, tags };
-    saveMeta(m);
-    setMeta(m);
-  };
+  const setNote = (path, note) => updateMetaDraft({ ...meta, notes: { ...(meta.notes || {}), [path]: note } });
+  const setTags = (path, tags) => updateMetaDraft({ ...meta, tags: { ...(meta.tags || {}), [path]: tags } });
 
   const onR2Files = async (e) => {
-    const fl = e.target.files;
+    // FileList is live: clearing the input also clears its files on Safari/Chromium.
+    const fl = Array.from(e.target.files || []);
     e.target.value = "";
-    if (!fl?.length || !r2Enabled) return;
+    if (!fl.length || !r2Enabled || uploadBusyRef.current) return;
+    const workspace = workspaceRequestRef.current;
+    const scope = countryOperationalStorageKey(R2_UPLOADS_KEY);
+    const current = () => workspace === workspaceRequestRef.current && scope === countryOperationalStorageKey(R2_UPLOADS_KEY);
+    uploadBusyRef.current = true;
     setR2Msg("");
     setR2Busy(true);
+    let uploadedCount = 0;
+    let linkedCount = 0;
+    const failures = [];
     let orgIdForPath = getOrgId();
     if (isSupabaseConfigured() && supabase) {
       try {
@@ -119,10 +239,12 @@ export default function DocumentLibrary() {
     }
     try {
       for (let i = 0; i < fl.length; i++) {
+        if (!current()) return;
         const file = fl[i];
+        try {
         const heic = isHeicLikeFile(file) || /\.hei[cf]$/i.test(file.name || "");
         if (!heic && !R2_ALLOWED_EXT.test(file.name || "")) {
-          setR2Msg(`Skipped ${file.name || "file"} â€” type not allowed.`);
+          failures.push(`${file.name || "file"}: type not allowed`);
           continue;
         }
         let toUpload = file;
@@ -130,7 +252,10 @@ export default function DocumentLibrary() {
           const dataUrl = await compressImageFile(file);
           toUpload = jpegFileFromDataUrl(dataUrl, file.name);
         }
+        if (!current()) return;
         const result = await uploadFileToR2Storage(toUpload, { orgId: orgIdForPath, subPath: "documents" });
+        if (!current()) return;
+        uploadedCount += 1;
         const row = {
           id: `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}`,
           name: toUpload.name || file.name,
@@ -140,116 +265,150 @@ export default function DocumentLibrary() {
           signedUrl: result.signedUrl || null,
           signedExpiresAt: result.signedExpiresAt || null,
           uploadedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         };
-        setR2Uploads((prev) => {
-          const next = [row, ...prev];
-          saveR2Uploads(next);
-          return next;
-        });
+        const next = [row, ...loadR2Uploads()];
+        if (!saveR2Uploads(next)) {
+          const waiting = [...(pendingEntriesRef.current.get(scope) || readPendingEntries(scope)), row];
+          pendingEntriesRef.current.set(scope, waiting);
+          persistPendingEntries(scope, waiting);
+          setPendingEntries(waiting);
+          throw new Error("File uploaded, but its library entry could not be saved. Use Retry saving entries below.");
+        }
+        setR2Uploads(next);
         pushAudit({ action: "r2_upload", entity: "document", detail: result.key });
+        linkedCount += 1;
+        } catch (err) {
+          failures.push(`${file.name || "file"}: ${err?.message || "Upload failed"}`);
+        }
       }
-      setR2Msg(`${fl.length} file(s) uploaded to cloud storage.`);
+      if (!current()) return;
+      setR2Msg(`${uploadedCount} file(s) uploaded to cloud storage.${linkedCount < uploadedCount ? ` ${linkedCount} added to the library; ${uploadedCount - linkedCount} waiting for library save.` : ""}${failures.length ? ` ${failures.join("; ")}.` : ""}`);
     } catch (err) {
-      setR2Msg(err.message || "Upload failed");
+      if (current()) setR2Msg(err.message || "Upload failed");
     } finally {
-      setR2Busy(false);
+      if (current()) { uploadBusyRef.current = false; setR2Busy(false); }
     }
+  };
+
+  const retryLibraryEntries = () => {
+    const scope = countryOperationalStorageKey(R2_UPLOADS_KEY);
+    const waiting = pendingEntriesRef.current.get(scope) || readPendingEntries(scope);
+    const ids = new Set(waiting.map((row) => row.id));
+    const next = [...waiting, ...loadR2Uploads().filter((row) => !ids.has(row.id))];
+    if (!saveR2Uploads(next)) { setR2Msg("Library entries still could not be saved. Keep this page open and try again after checking device storage."); return; }
+    pendingEntriesRef.current.set(scope, []);
+    persistPendingEntries(scope, []);
+    setPendingEntries([]);
+    setR2Uploads(next);
+    for (const row of waiting) pushAudit({ action: "r2_upload", entity: "document", detail: row.key });
+    setR2Msg(`${waiting.length} uploaded file(s) added to the library. No files were uploaded again.`);
   };
 
   const removeR2Row = (id) => {
     if (!confirm("Remove this entry from the list? The file may still exist in cloud storage.")) return;
-    setR2Uploads((prev) => {
-      const next = prev.filter((x) => x.id !== id);
-      saveR2Uploads(next);
-      return next;
-    });
+    const next = replaceWithTombstone(loadR2Uploads(), id);
+    if (!saveR2Uploads(next)) { setR2Msg("The entry could not be removed. Check available device storage and try again."); return; }
+    setR2Uploads(next);
+  };
+
+  const openCloudFile = async (entry) => {
+    previewRequestRef.current += 1;
+    const requestId = ++cloudRequestRef.current;
+    const workspace = workspaceRequestRef.current;
+    const scope = countryOperationalStorageKey(R2_UPLOADS_KEY);
+    const current = () => requestId === cloudRequestRef.current && workspace === workspaceRequestRef.current && scope === countryOperationalStorageKey(R2_UPLOADS_KEY);
+    setOpenError("");
+    setCloudFile(null);
+    setOpeningKey(entry.key);
+    try {
+      const blob = await fetchR2ObjectBlob(entry.key);
+      if (!current()) return;
+      if (!blob?.size) throw new Error("The downloaded file is empty. Please try again.");
+      setCloudFile({ name: entry.name, url: URL.createObjectURL(blob) });
+    } catch (error) {
+      if (current()) setOpenError(`${entry.name}: ${error?.message || "Could not open file. Try again."}`);
+    } finally { if (current()) setOpeningKey(""); }
   };
 
   const openPreview = async (entry) => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    cloudRequestRef.current += 1;
+    setCloudFile(null);
+    setOpeningKey("");
+    const requestId = ++previewRequestRef.current;
+    const workspace = workspaceRequestRef.current;
+    const scope = countryOperationalStorageKey(DOC_META_KEY);
     setPreviewUrl(null);
+    setPickError(null);
     setSelectedPath(entry.path);
-    const file = await entry.handle.getFile();
-    const type = file.type || "";
-    const lower = entry.name.toLowerCase();
-    if (type.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/i.test(lower)) {
-      setPreviewUrl(URL.createObjectURL(file));
-      return;
+    try {
+      const file = await entry.handle.getFile();
+      if (requestId !== previewRequestRef.current || workspace !== workspaceRequestRef.current || scope !== countryOperationalStorageKey(DOC_META_KEY)) return;
+      const type = file.type || "";
+      const lower = entry.name.toLowerCase();
+      if (type.startsWith("image/") || /\.(png|jpe?g|gif|webp|pdf)$/i.test(lower) || type === "application/pdf") {
+        setPreviewUrl(URL.createObjectURL(file));
+        return;
+      }
+      setCloudFile({ name: entry.name, url: URL.createObjectURL(file) });
+    } catch (error) {
+      if (requestId === previewRequestRef.current && workspace === workspaceRequestRef.current) setPickError(error?.message || "Could not open file. Choose the folder again.");
     }
-    if (type === "application/pdf" || lower.endsWith(".pdf")) {
-      setPreviewUrl(URL.createObjectURL(file));
-      return;
-    }
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(file);
-    a.download = entry.name;
-    a.click();
-    URL.revokeObjectURL(a.href);
   };
 
-  if (!supported) {
-    return (
-      <div style={{ fontFamily: "DM Sans,system-ui,sans-serif", padding: "1.25rem 0", fontSize: 14, maxWidth: 900, margin: "0 auto" }}>
-        <PageHero
-          badgeText="DOC"
-          title="Document library"
-          lead="The local folder view needs the File System Access API (Chrome or Edge 86+). Cloud upload may still work below."
-        />
-        <div style={ss.card}>
-          <p style={{ margin: 0 }}>The local folder view needs the File System Access API (Chrome or Edge 86+). It is not available in this browser.</p>
-        </div>
-        {r2Enabled && (
-          <div style={{ ...ss.card, marginTop: 16 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Cloud upload</div>
-            <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>You can still upload files to cloud storage from this browser.</p>
-            <input ref={r2InputRef} type="file" multiple accept={R2_ACCEPT} style={{ display: "none" }} onChange={onR2Files} />
-            <button type="button" style={ss.btnP} disabled={r2Busy} onClick={() => r2InputRef.current?.click()}>
-              {r2Busy ? "Uploadingâ€¦" : "Upload to cloud"}
-            </button>
-            {r2Msg && <p style={{ marginTop: 10, fontSize: 13 }}>{r2Msg}</p>}
-            {r2Uploads.length > 0 && (
-              <div style={{ marginTop: 14, maxHeight: 240, overflow: "auto" }}>
-                {r2ListPg.visible(r2Uploads).map((u) => (
-                  <div
-                    key={u.id}
-                    style={{
-                      fontSize: 12,
-                      padding: "8px 0",
-                      borderBottom: "0.5px solid #e5e5e5",
-                      contentVisibility: "auto",
-                      containIntrinsicSize: "0 72px",
-                    }}
-                  >
-                    <strong>{u.name}</strong>
-                    <div style={{ wordBreak: "break-all", color: "var(--color-text-secondary)" }}>{u.key}</div>
-                    {(() => {
-                      const view = safeHttpUrl(pickR2ViewUrl(u) || "");
-                      return view ? (
-                        <a href={view} target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488" }}>
-                          Open link
-                        </a>
-                      ) : u.publicUrl || u.signedUrl ? (
-                        <span style={{ color: "var(--color-text-secondary)", fontSize: 11 }}>Invalid link URL</span>
-                      ) : null;
-                    })()}
-                    <button type="button" style={{ ...ss.btn, fontSize: 12, marginTop: 6 }} onClick={() => removeR2Row(u.id)}>
-                      Remove from list
-                    </button>
-                  </div>
-                ))}
-                {r2ListPg.hasMore(r2Uploads) ? (
-                  <div style={{ marginTop: 10, textAlign: "center" }}>
-                    <button type="button" style={ss.btn} onClick={r2ListPg.showMore}>
-                      Show more uploads ({r2ListPg.remaining(r2Uploads)} remaining)
-                    </button>
-                  </div>
-                ) : null}
+  const cloudPanel = (
+    <>
+      {r2Enabled ? <div style={{ ...ss.card, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Cloud documents ({visibleUploads.length})</div>
+        <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 10px" }}>Upload documents from your phone or computer. Files stay linked to this workspace.</p>
+        <input ref={r2InputRef} type="file" multiple accept={R2_ACCEPT} style={{ display: "none" }} onChange={onR2Files} />
+        <button type="button" style={{ ...ss.btnP, minHeight: 44 }} disabled={r2Busy} onClick={() => r2InputRef.current?.click()}>
+          {r2Busy ? "Uploading…" : "Upload to cloud"}
+        </button>
+        {r2Msg ? <p role="status" style={{ marginTop: 10, fontSize: 13 }}>{r2Msg}</p> : null}
+        {pendingEntries.length ? <div role="alert" style={{ marginTop: 12 }}>
+          <p>{pendingEntries.length} uploaded file(s) need their library entries saved. Keep this page open until they are saved.</p>
+          <button type="button" style={{ ...ss.btn, minHeight: 44 }} disabled={r2Busy} onClick={retryLibraryEntries}>Retry saving entries</button>
+        </div> : null}
+        {openError ? <p role="alert">{openError}</p> : null}
+        {isD1Configured() && d1Hydrating ? <p role="status">Loading the shared document library…</p> : null}
+        {isD1Configured() && d1OutboxPending ? <p role="status">Library changes are saved on this device and waiting to sync.</p> : null}
+        {!visibleUploads.length ? <p style={{ fontSize: 13 }}>No cloud documents yet. Upload a PDF, photo or site document to get started.</p> : null}
+        <div style={{ marginTop: 14, maxHeight: 320, overflow: "auto" }}>
+          {r2ListPg.visible(visibleUploads).map((entry) => {
+            const view = safeHttpUrl(pickR2ViewUrl(entry) || "");
+            return <div key={entry.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--color-border-tertiary,#e5e5e5)", overflowWrap: "anywhere" }}>
+              <strong>{entry.name}</strong>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+                <button type="button" style={{ ...ss.btn, minHeight: 44 }} disabled={openingKey === entry.key} onClick={() => openCloudFile(entry)}>
+                  {openingKey === entry.key ? "Opening…" : "Open file"}
+                </button>
+                {view ? <a href={view} target="_blank" rel="noopener noreferrer" style={{ ...ss.btn, minHeight: 44, display: "inline-flex", alignItems: "center" }}>Open link</a> : null}
+                <button type="button" style={{ ...ss.btn, minHeight: 44 }} onClick={() => removeR2Row(entry.id)}>Remove from list</button>
               </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
+            </div>;
+          })}
+          {r2ListPg.hasMore(visibleUploads) ? <button type="button" style={{ ...ss.btn, minHeight: 44 }} onClick={r2ListPg.showMore}>Show more uploads ({r2ListPg.remaining(visibleUploads)} remaining)</button> : null}
+        </div>
+      </div> : <p>Cloud storage is not configured for this workspace.</p>}
+      {cloudFile ? <div ref={downloadDialogRef} role="dialog" aria-modal="true" aria-labelledby="document-file-title" style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.5)", display: "grid", placeItems: "center", padding: 16 }}>
+        <div style={{ ...ss.card, maxWidth: 480, width: "100%", overflowWrap: "anywhere" }}>
+          <h2 id="document-file-title">{cloudFile.name}</h2>
+          <p>Your file is ready. Download it to open or share it on this device.</p>
+          <a href={cloudFile.url} download={cloudFile.name} style={{ ...ss.btnP, minHeight: 44, display: "inline-flex", alignItems: "center" }}>Download file</a>
+          <button type="button" style={{ ...ss.btn, minHeight: 44, marginLeft: 8 }} onClick={() => { cloudRequestRef.current += 1; setCloudFile(null); }}>Close</button>
+        </div>
+      </div> : null}
+    </>
+  );
+
+  if (!supported) {
+    return <div style={{ padding: "1.25rem 0", maxWidth: 900, margin: "0 auto" }}>
+      <PageHero badgeText="DOC" title="Document library" lead="Keep your site documents together and download them when needed." />
+      {cloudPanel}
+      <p style={{ color: "var(--color-text-secondary)", fontSize: 13 }}>Folder browsing is unavailable on this device. Use cloud upload to add documents.</p>
+    </div>;
   }
 
   return (
@@ -264,65 +423,9 @@ export default function DocumentLibrary() {
           </button>
         }
       />
-      {r2Enabled && (
-        <div style={{ ...ss.card, marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Cloud upload</div>
-          <p style={{ fontSize: 12, color: "var(--color-text-secondary)", margin: "0 0 10px", lineHeight: 1.5 }}>
-            Upload file copies to your organisation&apos;s cloud storage. Files stay linked here after upload.
-          </p>
-          <input ref={r2InputRef} type="file" multiple accept={R2_ACCEPT} style={{ display: "none" }} onChange={onR2Files} />
-          <button type="button" style={ss.btnP} disabled={r2Busy} onClick={() => r2InputRef.current?.click()}>
-            {r2Busy ? "Uploadingâ€¦" : "Upload to cloud"}
-          </button>
-          {r2Msg && <p style={{ marginTop: 10, fontSize: 13 }}>{r2Msg}</p>}
-          {r2Uploads.length > 0 && (
-            <div style={{ marginTop: 14, maxHeight: 200, overflow: "auto" }}>
-              {r2ListPg.visible(r2Uploads).map((u) => (
-                <div
-                  key={u.id}
-                  style={{
-                    fontSize: 12,
-                    padding: "8px 0",
-                    borderBottom: "0.5px solid var(--color-border-tertiary,#e5e5e5)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    flexWrap: "wrap",
-                    contentVisibility: "auto",
-                    containIntrinsicSize: "0 56px",
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 500 }}>{u.name}</div>
-                    <div style={{ color: "var(--color-text-secondary)", wordBreak: "break-all" }}>{u.key}</div>
-                    {(() => {
-                      const view = safeHttpUrl(pickR2ViewUrl(u) || "");
-                      return view ? (
-                        <a href={view} target="_blank" rel="noopener noreferrer" style={{ color: "#0d9488", fontSize: 12 }}>
-                          Open link
-                        </a>
-                      ) : u.publicUrl || u.signedUrl ? (
-                        <span style={{ color: "var(--color-text-secondary)", fontSize: 11 }}>Invalid link URL</span>
-                      ) : null;
-                    })()}
-                  </div>
-                  <button type="button" style={{ ...ss.btn, fontSize: 12 }} onClick={() => removeR2Row(u.id)}>
-                    {t("delete")}
-                  </button>
-                </div>
-              ))}
-              {r2ListPg.hasMore(r2Uploads) ? (
-                <div style={{ marginTop: 10, textAlign: "center" }}>
-                  <button type="button" style={ss.btn} onClick={r2ListPg.showMore}>
-                    Show more uploads ({r2ListPg.remaining(r2Uploads)} remaining)
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          )}
-        </div>
-      )}
-      {pickError && <p style={{ color: "#b91c1c", marginBottom: 12 }}>{pickError}</p>}
+      {cloudPanel}
+      {pickError && <p role="alert" style={{ color: "#b91c1c", marginBottom: 12 }}>{pickError}</p>}
+      {pendingMeta ? <button type="button" style={{ ...ss.btn, marginBottom: 12 }} onClick={() => updateMetaDraft(meta)}>Retry saving details</button> : null}
       {dirName && (
         <div style={{ ...ss.card, marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>Current folder</div>

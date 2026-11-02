@@ -38,22 +38,22 @@ describe("marketLabels", () => {
 
 describe("billingPlans regional display", () => {
   it("shows AUD labels for au market", () => {
-    expect(getPlanDisplayPriceLabel("starter", "au")).toBe("A$59");
-    expect(getPlanDisplayPriceLabel("team", "au")).toBe("A$249");
+    expect(getPlanDisplayPriceLabel("starter", "au")).toBe("A$119");
+    expect(getPlanDisplayPriceLabel("team", "au")).toBe("A$359");
   });
 
   it("shows PLN labels for pl market", () => {
-    expect(getPlanDisplayPriceLabel("starter", "pl")).toBe("79 zł");
-    expect(getPlanDisplayPriceLabel("team", "pl")).toBe("439 zł");
+    expect(getPlanDisplayPriceLabel("starter", "pl")).toBe("159 zł");
+    expect(getPlanDisplayPriceLabel("team", "pl")).toBe("639 zł");
   });
 
   it("shows EUR labels for de market", () => {
-    expect(getPlanDisplayPriceLabel("starter", "de")).toBe("22 €");
-    expect(getPlanDisplayPriceLabel("team", "de")).toBe("129 €");
+    expect(getPlanDisplayPriceLabel("starter", "de")).toBe("45 €");
+    expect(getPlanDisplayPriceLabel("team", "de")).toBe("189 €");
   });
 
   it("shows EUR labels for at market", () => {
-    expect(getPlanDisplayPriceLabel("starter", "at")).toBe("22 €");
-    expect(getPlanDisplayPriceLabel("team", "at")).toBe("129 €");
+    expect(getPlanDisplayPriceLabel("starter", "at")).toBe("45 €");
+    expect(getPlanDisplayPriceLabel("team", "at")).toBe("189 €");
   });
 });

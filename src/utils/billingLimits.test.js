@@ -1,9 +1,35 @@
 /** @vitest-environment jsdom */
-import { describe, expect, it } from "vitest";
-import { checkBillingLimit, billingLimitMessage } from "./billingLimits";
+import { beforeEach, describe, expect, it } from "vitest";
+import { checkBillingLimit, billingLimitMessage, getOrgUsageCounts } from "./billingLimits";
 import { getEffectivePlanId } from "../lib/billingPlans";
 
 describe("billingLimits", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("ignores tombstones and closed projects but enforces the exact live worker cap", () => {
+    localStorage.setItem("mysafeops_workers_default", JSON.stringify([
+      ...Array.from({ length: 4 }, (_, i) => ({ id: `w${i}` })),
+      { id: "deleted", deletedAt: "2026-10-05" }, null,
+    ]));
+    localStorage.setItem("mysafeops_projects_default", JSON.stringify([{ id: "live" }, { id: "closed", closed: true }, { id: "deleted", deletedAt: "2026-10-05" }]));
+    const opts = { billing: { paidPlanId: "starter", subscriptionStatus: "active" }, trialStatus: null, isPlatformOwner: false };
+    expect(getOrgUsageCounts()).toEqual({ workers: 4, projects: 1 });
+    expect(checkBillingLimit("workers", opts).ok).toBe(true);
+    localStorage.setItem("mysafeops_workers_default", JSON.stringify(Array.from({ length: 5 }, (_, i) => ({ id: `w${i}` }))));
+    expect(checkBillingLimit("workers", opts)).toMatchObject({ ok: false, count: 5, limit: 5 });
+  });
+
+  it("reads the selected country's usage without leaking other organisations or countries", () => {
+    localStorage.setItem("mysafeops_workers_acme", JSON.stringify([{ id: "uk" }]));
+    localStorage.setItem("mysafeops_workers_acme__country_pl", JSON.stringify([{ id: "pl1" }, { id: "pl2" }]));
+    localStorage.setItem("mysafeops_workers_other__country_pl", JSON.stringify([{ id: "other" }]));
+    expect(getOrgUsageCounts({ orgId: "acme", workspace: { id: "pl", is_primary: false } }).workers).toBe(2);
+    expect(getOrgUsageCounts({ orgId: "acme", workspace: { id: "uk", is_primary: true } }).workers).toBe(1);
+  });
+
+  it("keeps platform owner unlimited even when the trial ended", () => {
+    expect(checkBillingLimit("workers", { trialStatus: { isActive: false }, billing: {}, isPlatformOwner: true }).ok).toBe(true);
+  });
   it("blocks when at worker cap on local workspace plan", () => {
     const result = checkBillingLimit("workers", {
       trialStatus: null,

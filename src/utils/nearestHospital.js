@@ -2,6 +2,8 @@
  * Nearest hospital via OpenStreetMap Overpass (proxied) with Nominatim fallback.
  */
 
+import { appApiUrl } from "./appApiUrl";
+
 const OVERPASS_PROXY_URL = "/api/overpass";
 const SEARCH_RADIUS_M = 25000;
 
@@ -115,7 +117,7 @@ function candidatesFromOverpass(json) {
 }
 
 async function fetchViaOverpass(lat, lng) {
-  const res = await fetch(OVERPASS_PROXY_URL, {
+  const res = await fetch(appApiUrl(OVERPASS_PROXY_URL), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

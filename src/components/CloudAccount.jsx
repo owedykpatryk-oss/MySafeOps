@@ -11,6 +11,7 @@ import PageHero from "./PageHero";
 import InlineAlert from "./InlineAlert";
 import { useApp } from "../context/AppContext";
 import { ensureUserOrgContext } from "../utils/orgMembership";
+import { isBillingWriteBlocked, isPaidSubscriptionWritable, billingWriteBlockedMessage } from "../utils/billingAccess";
 import { getRequiresMfaStep } from "../lib/mfaAal";
 import { showAdminLoginHints } from "../lib/showAdminLoginHints";
 import MfaLoginChallenge from "./MfaLoginChallenge";
@@ -231,7 +232,7 @@ function CloudTotpMfaPanel({ client }) {
 export default function CloudAccount() {
   const navigate = useNavigate();
   const { supabase: client, user, loading, ready } = useSupabaseAuth();
-  const { trialStatus, orgId, caps } = useApp();
+  const { trialStatus, billing, isPlatformOwner, orgId, caps } = useApp();
   const [deleteConfirmSlug, setDeleteConfirmSlug] = useState("");
   const [deletionStatus, setDeletionStatus] = useState(null);
   const [deletionBusy, setDeletionBusy] = useState(false);
@@ -644,7 +645,7 @@ export default function CloudAccount() {
               supportEmail={SUPPORT_EMAIL}
               onSuccess={async () => {
                 setMfaForSession(false);
-                await ensureUserOrgContext(client);
+                await ensureUserOrgContext(client, user.id);
               }}
             />
           ) : null}
@@ -670,12 +671,16 @@ export default function CloudAccount() {
           <p style={{ fontSize: 13, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
             Signed in as <strong>{user.email}</strong>
           </p>
-          {trialStatus && (
+          {(trialStatus || billing?.paidPlanId) && (
             <p style={{ fontSize: 12, margin: "0 0 12px", color: "var(--color-text-secondary)" }}>
-              Organisation: <strong>{orgId}</strong> · Trial{" "}
-              {trialStatus.isActive
-                ? `active (${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left · full access)`
-                : "ended — read-only until you subscribe (export still available)"}
+              Organisation: <strong>{orgId}</strong> · {" "}
+              {isBillingWriteBlocked({ trialStatus, billing, isPlatformOwner })
+                ? billingWriteBlockedMessage()
+                : isPaidSubscriptionWritable(billing)
+                  ? billing?.subscriptionStatus === "past_due" ? "Payment overdue — access retained during the payment grace period." : "Subscription active — full access."
+                  : trialStatus?.isActive
+                    ? `Trial active (${trialStatus.remainingDays} day${trialStatus.remainingDays === 1 ? "" : "s"} left · full access)`
+                    : "Full access."}
             </p>
           )}
           <button type="button" style={ss.btn} onClick={signOut} disabled={busy}>

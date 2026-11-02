@@ -42,7 +42,11 @@ import { ms } from "../utils/moduleStyles";
 import InlineAlert from "./InlineAlert";
 import PageHero from "./PageHero";
 import CountryWorkspaceBilling from "./CountryWorkspaceBilling";
-import { countryOperationalStorageKey } from "../utils/orgStorage";
+import { getOrgUsageCounts } from "../utils/billingLimits";
+import { useBillingUsageRevision } from "../hooks/useBillingUsageRevision";
+import { getCachedActiveCountryWorkspace } from "../utils/countryWorkspaces";
+import { billingStripeMode, billingStripeReady } from "../utils/stripeBillingMode";
+import { fetchR2StorageUsage } from "../lib/r2Storage";
 
 const ss = ms;
 const SUPPORT_EMAIL = getSupportEmail();
@@ -70,15 +74,6 @@ function isTransientInvokeFailure(msg) {
   );
 }
 
-function readArrayCount(storageKey) {
-  try {
-    const value = JSON.parse(localStorage.getItem(storageKey) || "[]");
-    return Array.isArray(value) ? value.length : 0;
-  } catch {
-    return 0;
-  }
-}
-
 function estimateWorkspaceStorageBytes(orgId, workspace) {
   const suffix = workspace?.id && !workspace.is_primary ? `__country_${workspace.id}` : `_${orgId}`;
   let total = 0;
@@ -100,19 +95,21 @@ function formatDateTime(value) {
 
 export default function BillingLimits({ checkoutReturn = null }) {
   const { orgId, trialStatus, billing, role, isPlatformOwner: platformOwner } = useApp();
+  const usageRevision = useBillingUsageRevision();
   const { pushToast } = useToast();
   const isPlatformOwner = Boolean(platformOwner);
   const showDevHints = showAdminLoginHints() || isPlatformOwner;
   const orgMarketId = getOrgMarketId(orgId);
+  const [stripeFnDiagnostics, setStripeFnDiagnostics] = useState({});
   // Stripe checkout/portal return URLs carry the mode back. Country entitlements must be
   // read from the same mode, or a test subscription looks unpaid against live billing rows.
   const activeStripeMode = useMemo(() => {
     try {
-      return new URLSearchParams(window.location.search).get("stripeMode") === "test" ? "test" : "live";
+      return billingStripeMode(stripeFnDiagnostics["stripe-checkout"], new URLSearchParams(window.location.search).get("stripeMode"));
     } catch {
-      return "live";
+      return billingStripeMode(stripeFnDiagnostics["stripe-checkout"]);
     }
-  }, []);
+  }, [stripeFnDiagnostics]);
   const [selectedWorkspace, setSelectedWorkspace] = useState(null);
   const activeMarketId = selectedWorkspace?.market_id || orgMarketId;
   const workspaceBilling = selectedWorkspace
@@ -128,7 +125,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
       : { paidPlanId: null, subscriptionStatus: "none" }
     : billing;
   const workspaceTrialStatus = selectedWorkspace && !selectedWorkspace.is_primary
-    ? { ...trialStatus, isActive: false, isExpired: true, remainingDays: 0 }
+    ? { ...trialStatus, isActive: false, isExpired: true, remainingDays: 0, countryWorkspaceRequiresSubscription: true }
     : trialStatus;
   const plan = getEffectivePlan(workspaceTrialStatus, workspaceBilling, { isPlatformOwner });
   const planPriceLabel = getPlanDisplayPriceLabel(plan.id, activeMarketId) || plan.priceLabel;
@@ -138,10 +135,21 @@ export default function BillingLimits({ checkoutReturn = null }) {
   /** unknown | checking | ready | missing | misconfigured | probe_failed */
   const [stripeFnStatus, setStripeFnStatus] = useState("unknown");
   const [stripeFnHealth, setStripeFnHealth] = useState({});
-  const [stripeFnDiagnostics, setStripeFnDiagnostics] = useState({});
   const [lastHealthCheckAt, setLastHealthCheckAt] = useState(null);
   const [lastActionRequestId, setLastActionRequestId] = useState(null);
   const [extendLoading, setExtendLoading] = useState(false);
+  const [cloudStorage, setCloudStorage] = useState(null);
+  const storageWorkspace = selectedWorkspace || getCachedActiveCountryWorkspace(orgId);
+  const storageWorkspaceId = storageWorkspace?.id;
+  const storageWorkspacePrimary = storageWorkspace?.is_primary;
+  useEffect(() => {
+    let current = true;
+    setCloudStorage(null);
+    fetchR2StorageUsage(orgId, { id: storageWorkspaceId, is_primary: storageWorkspacePrimary })
+      .then((bytes) => { if (current) setCloudStorage(bytes); })
+      .catch(() => { if (current) setCloudStorage(null); });
+    return () => { current = false; };
+  }, [orgId, storageWorkspaceId, storageWorkspacePrimary, usageRevision]);
 
   const handleCountryWorkspaceChange = useCallback((workspace) => {
     setSelectedWorkspace(workspace);
@@ -159,17 +167,24 @@ export default function BillingLimits({ checkoutReturn = null }) {
     stripeTestReady &&
     isAdmin &&
     cloudOk &&
-    import.meta.env.DEV &&
-    (showDevHints || import.meta.env.VITE_STRIPE_ALLOW_TEST_CHECKOUT === "true");
+    (activeStripeMode === "test" ||
+      (import.meta.env.DEV && (showDevHints || import.meta.env.VITE_STRIPE_ALLOW_TEST_CHECKOUT === "true")));
 
   useEffect(() => {
     if (checkoutReturn !== "success" || !supabase) return;
     let cancelled = false;
+    // Webhook delivery may finish after the browser returns from Checkout.
+    let attempts = 0;
+    const refreshTimer = window.setInterval(() => {
+      window.dispatchEvent(new CustomEvent("mysafeops-billing-refresh"));
+      if (++attempts >= 10) window.clearInterval(refreshTimer);
+    }, 2000);
     (async () => {
       try {
         await refreshOrgFromSupabase(supabase);
         if (!cancelled) {
-          pushToast({ type: "success", message: "Billing synced from Stripe." });
+          window.dispatchEvent(new CustomEvent("mysafeops-billing-refresh"));
+          pushToast({ type: "success", message: "Checkout completed. Subscription access updates after payment confirmation." });
         }
       } catch (e) {
         if (!cancelled) {
@@ -179,6 +194,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
     })();
     return () => {
       cancelled = true;
+      window.clearInterval(refreshTimer);
     };
   }, [checkoutReturn, pushToast]);
 
@@ -225,8 +241,8 @@ export default function BillingLimits({ checkoutReturn = null }) {
               );
               if (res.status === 404) return [fn, "missing"];
               const data = await res.json().catch(() => null);
-              if (data?.liveReady === false || res.status === 503) return [fn, "misconfigured", data];
-              if (data?.liveReady === true) return [fn, "ready", data];
+              if (billingStripeReady(data) === false || res.status === 503) return [fn, "misconfigured", data];
+              if (billingStripeReady(data) === true) return [fn, "ready", data];
               if (data?.configured && typeof data.configured === "object") {
                 const liveKeys = [
                   "stripeSecretKey",
@@ -285,22 +301,18 @@ export default function BillingLimits({ checkoutReturn = null }) {
     };
   }, [cloudOk, isAdmin]);
 
-  const usage = useMemo(() => {
-    const workers = readArrayCount(countryOperationalStorageKey("mysafeops_workers"));
-    const projects = readArrayCount(countryOperationalStorageKey("mysafeops_projects"));
-    const cloudBytesEstimate = estimateWorkspaceStorageBytes(orgId, selectedWorkspace);
+  const usage = (() => {
+    const workspace = selectedWorkspace || getCachedActiveCountryWorkspace();
+    const { workers, projects } = getOrgUsageCounts({ orgId, workspace });
+    const cloudBytesEstimate = estimateWorkspaceStorageBytes(orgId, workspace);
     return { workers, projects, cloudBytesEstimate };
-  }, [orgId, selectedWorkspace]);
+  })();
 
   const limits = plan.limits;
   const workersPct =
     limits.workers > 0 ? Math.min(100, Math.round((usage.workers / limits.workers) * 100)) : 0;
   const projectsPct =
     limits.projects > 0 ? Math.min(100, Math.round((usage.projects / limits.projects) * 100)) : 0;
-  const storagePct =
-    limits.cloudBytes > 0
-      ? Math.min(100, Math.round((usage.cloudBytesEstimate / limits.cloudBytes) * 100))
-      : 0;
 
   const invokeStripeFunctionWithRecovery = async (fnName, body = {}) => {
     const invokeOnce = () =>
@@ -328,7 +340,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
     return invokeOnce();
   };
 
-  const startCheckout = async (planId, { testMode = false } = {}) => {
+  const startCheckout = async (planId, { testMode = activeStripeMode === "test" } = {}) => {
     setActionError(null);
     if (!supabase) {
       setActionError("Sign in with cloud account to manage subscriptions.");
@@ -342,7 +354,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
       setActionError("Select a country workspace before starting checkout.");
       return;
     }
-    if (!testMode && stripeFnStatus === "missing") {
+    if (stripeFnStatus === "missing") {
       const msg = showDevHints
         ? "Stripe Edge Functions are not deployed on this Supabase project (missing stripe-checkout)."
         : "Online subscriptions are not set up on this site yet. Contact support to upgrade.";
@@ -350,7 +362,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
       pushToast({ type: "error", message: msg });
       return;
     }
-    if (!testMode && stripeFnStatus === "misconfigured") {
+    if (stripeFnStatus === "misconfigured") {
       const msg = showDevHints
         ? "stripe-checkout is deployed but not configured. Add STRIPE_SECRET_KEY, STRIPE_PRICE_* and SITE_URL in Supabase Edge Function secrets."
         : "Billing is temporarily unavailable. Contact support if this persists.";
@@ -395,7 +407,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
     }
   };
 
-  const openPortal = async ({ testMode = false } = {}) => {
+  const openPortal = async ({ testMode = activeStripeMode === "test", action = "manage" } = {}) => {
     setActionError(null);
     if (!supabase) {
       setActionError("Sign in with cloud account to manage subscriptions.");
@@ -428,6 +440,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
         testMode,
         orgSlug: orgId,
         workspaceId: selectedWorkspace?.id || undefined,
+        action,
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -462,6 +475,10 @@ export default function BillingLimits({ checkoutReturn = null }) {
     (workspaceBilling?.subscriptionStatus === "active" || workspaceBilling?.subscriptionStatus === "trialing") &&
     workspaceBilling?.paidPlanId;
   const pastDueOrUnpaid = isSubscriptionPastDueOrUnpaid(workspaceBilling);
+  const hasSubscription = ["active", "trialing", "past_due", "unpaid", "paused", "incomplete"].includes(workspaceBilling?.subscriptionStatus);
+  const periodEnd = new Date(workspaceBilling?.currentPeriodEnd || "");
+  const periodEndLabel = Number.isFinite(periodEnd.getTime())
+    ? periodEnd.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : null;
   const trialExtensionCount = getTrialExtensionCount();
   const expiredReadOnly = isTrialExpiredWithoutPaid({ trialStatus: workspaceTrialStatus, billing: workspaceBilling, isPlatformOwner });
   const canExtend = Boolean(selectedWorkspace?.is_primary) && canExtendOrgTrial({ billing: workspaceBilling, isPlatformOwner, trialExtensionCount });
@@ -627,6 +644,15 @@ export default function BillingLimits({ checkoutReturn = null }) {
             : ""}
           {paidActive || pastDueOrUnpaid ? ` · Stripe: ${workspaceBilling.subscriptionStatus}` : ""}
         </p>
+        {hasSubscription && (
+          <p role="status" style={{ margin: "0 0 10px", fontSize: 13 }}>
+            {workspaceBilling.cancelAtPeriodEnd
+              ? `Cancellation scheduled${periodEndLabel ? ` for ${periodEndLabel}` : ""}. Your subscription will not renew. Editing continues until the paid period ends, provided payments are up to date. Existing records remain available to view and export afterwards.`
+              : paidActive
+                ? `Renews automatically every month${periodEndLabel ? `. Next renewal: ${periodEndLabel}` : ""}. Cancel before renewal to stop future charges.`
+                : "Manage your existing subscription below to resolve payment or cancel future renewals."}
+          </p>
+        )}
         {pastDueOrUnpaid ? (
           <InlineAlert
             type="error"
@@ -649,14 +675,14 @@ export default function BillingLimits({ checkoutReturn = null }) {
         {activeMarketId === "ch" && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>{CH_PRICING_FOOTNOTE}</p>
         )}
-        {!workspaceTrialStatus?.isActive && !paidActive && workspaceTrialStatus && (
+        {!workspaceTrialStatus?.isActive && !paidActive && !hasSubscription && workspaceTrialStatus && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>
             {expiredReadOnly
               ? "Evaluation ended — read-only mode. View and export existing records, or subscribe to resume editing."
               : "Choose a plan for this country workspace."}
           </p>
         )}
-        {workspaceTrialStatus?.isActive && !paidActive && (
+        {workspaceTrialStatus?.isActive && !paidActive && !hasSubscription && (
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)" }}>
             Full module access during evaluation. One free +{TRIAL_EXTENSION_DAYS}-day extension per organisation if you need more site time.
           </p>
@@ -675,7 +701,7 @@ export default function BillingLimits({ checkoutReturn = null }) {
         )}
         {isAdmin && cloudOk && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
-            {paidActive ? (
+            {hasSubscription ? (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-secondary)" }}>
                   Plan changes
@@ -683,14 +709,23 @@ export default function BillingLimits({ checkoutReturn = null }) {
                 <button
                   type="button"
                   disabled={!stripePortalEnabled || portalLoading || Boolean(checkoutLoading)}
-                  onClick={() => openPortal({ testMode: activeStripeMode === "test" && allowTestCheckout })}
+                  onClick={() => openPortal()}
                   style={{ ...ss.btnP, fontSize: 13, alignSelf: "flex-start", opacity: stripePortalEnabled ? 1 : 0.6 }}
                 >
-                  {portalLoading ? "Opening…" : "Change plan"}
+                  {portalLoading ? "Opening…" : paidActive ? "Manage billing / change plan" : "Resolve payment / manage billing"}
                 </button>
+                {!workspaceBilling.cancelAtPeriodEnd && (
+                  <button type="button"
+                    disabled={!stripePortalEnabled || portalLoading || Boolean(checkoutLoading)}
+                    onClick={() => openPortal({ action: "cancel" })}
+                    style={{ ...ss.btn, fontSize: 13, alignSelf: "flex-start" }}>
+                    Cancel subscription
+                  </button>
+                )}
                 <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.45 }}>
-                  Switch or cancel plans in the Stripe Customer Portal (enable plan-switching in the portal
-                  configuration).
+                  {workspaceBilling.cancelAtPeriodEnd
+                    ? "Open Manage billing to review the cancellation or resume your subscription before it ends."
+                    : "Cancellation opens a confirmation page in Stripe and takes effect at the end of your current paid period."}
                 </p>
               </>
             ) : (
@@ -743,7 +778,12 @@ export default function BillingLimits({ checkoutReturn = null }) {
                 </button>
               </>
             )}
-            {allowTestCheckout && !paidActive && (
+            {activeStripeMode === "test" && stripeTestReady && (
+              <p role="status" style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>
+                Stripe Test Mode — no real payments. Use a Stripe test card: 4242 4242 4242 4242.
+              </p>
+            )}
+            {allowTestCheckout && activeStripeMode !== "test" && !paidActive && (
               <div
                 style={{
                   marginTop: 4,
@@ -856,21 +896,12 @@ export default function BillingLimits({ checkoutReturn = null }) {
 
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-              <span>Estimated cloud backup size</span>
+              <span>Local backup estimate</span>
               <span>
-                {formatBytes(usage.cloudBytesEstimate)} / {formatStorageLimit(limits.cloudBytes)}
+                {formatBytes(usage.cloudBytesEstimate)}
               </span>
             </div>
-            <div style={{ height: 8, background: "#e2e8f0", borderRadius: 999 }}>
-              <div
-                style={{
-                  height: "100%",
-                  width: `${storagePct}%`,
-                  background: storagePct >= 90 ? "#ef4444" : "#0d9488",
-                  borderRadius: 999,
-                }}
-              />
-            </div>
+            <div style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>Cloud files: {cloudStorage == null ? "usage unavailable" : formatBytes(cloudStorage)} / {formatStorageLimit(limits.cloudBytes)}. Includes retained files in the recycle bin.</div>
           </div>
         </div>
       </div>

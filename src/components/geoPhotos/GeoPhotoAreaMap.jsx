@@ -2,6 +2,7 @@ import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { formatAreaSqm, normaliseAreaPoints, polygonAreaSqm, MAX_AREA_VERTICES } from "../../utils/geoPhotoArea";
+import { hasGeoPhotoCoordinates } from "../../utils/geoPhotoUtils";
 
 /** Grab handle for a traced corner: big enough for a gloved thumb, small enough to see past. */
 function vertexIcon(color) {
@@ -61,7 +62,8 @@ function GeoPhotoAreaMap({
 
     const lat = Number(latitude);
     const lng = Number(longitude);
-    map.setView(Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : [51.5074, -0.1278], Number.isFinite(lat) ? 19 : 6);
+    const located = hasGeoPhotoCoordinates({ latitude, longitude });
+    map.setView(located ? [lat, lng] : [51.5074, -0.1278], located ? 19 : 6);
 
     mapRef.current = map;
     layerRef.current = L.layerGroup().addTo(map);
@@ -96,7 +98,7 @@ function GeoPhotoAreaMap({
 
     const lat = Number(latitude);
     const lng = Number(longitude);
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    if (hasGeoPhotoCoordinates({ latitude, longitude })) {
       // The camera position, so the extent can be read against where the photo was taken from.
       L.circleMarker([lat, lng], {
         radius: 5,

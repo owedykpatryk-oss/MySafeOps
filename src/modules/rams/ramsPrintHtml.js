@@ -1,7 +1,10 @@
+import { publicAppUrl } from "../../utils/publicAppUrl";
+import { isPublishedRamsShare } from "../../utils/ramsCloudShare";
+
 /**
  * Shared RAMS → print HTML + fingerprint (used by builder and public share view).
  */
-import { getRiskLevel } from "./ramsRiskLevel.js";
+import { getRiskLevel, RISK_AXIS, isValidRiskAssessment } from "./ramsRiskLevel.js";
 import { normalizePrintSections, RAMS_SECTION_IDS, documentContentHash } from "./ramsSectionConfig";
 import { loadOrgSettingsRaw } from "../../utils/orgSettingsStorage";
 import {
@@ -35,6 +38,7 @@ import { documentStatusLabel, documentText, getDocumentCountryPack } from "../..
 export { wrapRamsPrintDocument } from "./ramsPrintDocument.js";
 
 const RL = {
+  unknown: { bg: "#F1F5F9", color: "#475569" },
   high: { bg: "#FCEBEB", color: "#791F1F" },
   medium: { bg: "#FAEEDA", color: "#633806" },
   low: { bg: "#EAF3DE", color: "#27500A" },
@@ -50,7 +54,7 @@ function riskScore(risk) {
   return l * s;
 }
 
-const RISK_AXIS = [2, 4, 6];
+
 
 function buildRiskMatrixCounts(rows, key = "revisedRisk") {
   const map = {};
@@ -82,6 +86,7 @@ function buildQaChecklist(form, rows, operatives) {
     { label: "Header complete (title, location, document no.)", ok: !!(form.title && form.location && form.documentNo) },
     { label: "At least one risk row selected", ok: hasRows },
     { label: "Every risk row has control measures", ok: controlsCoverage },
+    { label: "All risk scores valid (L × S = RF)", ok: hasRows && list.every((r) => isValidRiskAssessment(r.initialRisk) && isValidRiskAssessment(r.revisedRisk)) },
     { label: "No residual HIGH risks", ok: noHighResidual },
     { label: "Operatives assigned for briefing/sign-off", ok: (operatives || []).length > 0 },
     {
@@ -430,8 +435,8 @@ function loadOrgPrintSettings() {
 
 function buildRamsShareUrl(form) {
   const token = String(form?.shareToken || "").trim();
-  if (!token || typeof window === "undefined") return "";
-  return `${window.location.origin}${window.location.pathname}?ramsShare=${encodeURIComponent(token)}`;
+  if (!isPublishedRamsShare(form) || typeof window === "undefined") return "";
+  return publicAppUrl(`/app?ramsShare=${encodeURIComponent(token)}`);
 }
 
 function buildQrSrc(text, size = 126) {
@@ -1388,7 +1393,6 @@ export function buildRamsPrintBodyHTML(form, rows, operatives, projectMap, print
   ${signatureEvidenceBlock}
   <h2 style="font-size:13px;margin:18px 0 8px">10. ${escHtml(tx("Document integrity"))}</h2>
   <p style="font-size:10px;color:#888;margin-top:20px">${escHtml(tx("Generated"))} MySafeOps · ${escHtml(tx("Revision"))} ${escHtml(form.revision || "1A")} · ${escHtml(tx("Review due"))}: ${escHtml(fmtDate(form.reviewDate) || "—")} · A4</p>
-  <p style="font-size:10px;color:#64748b;margin:0 0 8px">${escHtml(orgTheme.complianceLine)}</p>
   ${integrityBlock}
   </div>
   `;

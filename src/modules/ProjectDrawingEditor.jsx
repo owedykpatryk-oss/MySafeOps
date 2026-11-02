@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { ms } from "../utils/moduleStyles";
@@ -380,6 +381,7 @@ export default function ProjectDrawingEditor() {
     return b === "satellite" ? "satellite" : "streets";
   });
   const mapCanvasRef = useRef(null);
+  const planUploadInputRef = useRef(null);
   const mapClickOverrideRef = useRef(null);
   const highlightEscapeRouteIdRef = useRef("");
   const escapeRoutePointIndexRef = useRef(-1);
@@ -2561,9 +2563,7 @@ export default function ProjectDrawingEditor() {
              id="project-drawing-project">
               <option value="">Select project</option>
               {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
+                <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
               ))}
             </select>
           </div>
@@ -2572,9 +2572,7 @@ export default function ProjectDrawingEditor() {
             <select value={planId} onChange={(e) => setPlanId(e.target.value)} style={ss.inp} id="project-drawing-plan-overlay">
               <option value="">No plan selected</option>
               {plansForCurrentProject.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
+                <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
               ))}
             </select>
           </div>
@@ -2636,6 +2634,8 @@ export default function ProjectDrawingEditor() {
               selectedPlanId={planId}
               onSelectPlanId={setPlanId}
               onPlansChanged={refreshProjectPlans}
+              uploadInputRef={planUploadInputRef}
+              onPlanUploaded={() => setWorkSurface("plan")}
             />
           </div>
         ) : null}
@@ -2660,10 +2660,10 @@ export default function ProjectDrawingEditor() {
               type="button"
               role="tab"
               aria-selected={workSurface === "plan"}
-              disabled={!canUsePlanSurface}
-              style={{ ...pdeUi.toolBtn(workSurface === "plan"), opacity: canUsePlanSurface ? 1 : 0.5 }}
-              onClick={() => canUsePlanSurface && setWorkSurface("plan")}
-              title={!canUsePlanSurface ? "Upload a plan below (PDF or JPG)" : "Work on PDF or image overlay"}
+              disabled={!projectId}
+              style={{ ...pdeUi.toolBtn(workSurface === "plan"), opacity: projectId ? 1 : 0.5 }}
+              onClick={() => canUsePlanSurface ? setWorkSurface("plan") : planUploadInputRef.current?.click()}
+              title={!projectId ? "Select a project first" : !canUsePlanSurface ? "Upload a plan (PDF or JPG)" : "Work on PDF or image overlay"}
             >
               Plan (PDF / image)
             </button>

@@ -8,6 +8,7 @@ import {
   findHazardsForSiteContext,
   mergeUniqueStrings,
 } from "./ramsSiteContextOverlays.js";
+import { selectSurveyHazards } from "./ramsSurveyHazardSelection.js";
 
 /**
  * Match hazard library rows by token substring (same idea as RAMSTemplateBuilder).
@@ -16,14 +17,7 @@ import {
  * @param {number} [limit]
  */
 export function findHazardsForSurveyPackTokens(pack, hazardLibrary, limit = 12) {
-  if (!pack || !Array.isArray(hazardLibrary)) return [];
-  const toks = (pack.hazardTokens || []).map((t) => String(t).toLowerCase()).filter(Boolean);
-  if (!toks.length) return [];
-  const matched = hazardLibrary.filter((h) => {
-    const hay = `${h.id} ${h.category} ${h.activity} ${h.hazard}`.toLowerCase();
-    return toks.some((t) => hay.includes(t));
-  });
-  return matched.slice(0, limit);
+  return selectSurveyHazards(pack, hazardLibrary, limit);
 }
 
 /**
@@ -109,7 +103,7 @@ export function enrichRamsDraftFromPlaybookPack(draft, playbook, pack, hazardLib
   }
 
   if ((!next.rows || next.rows.length === 0) && Array.isArray(hazardLibrary) && hazardLibrary.length && typeof genId === "function") {
-    const fromPack = findHazardsForSurveyPackTokens(pack, hazardLibrary, 10);
+    const fromPack = findHazardsForSurveyPackTokens({ ...pack, key: packKey }, hazardLibrary, 10);
     const fromSite = overlay ? findHazardsForSiteContext(overlay, hazardLibrary, 8) : [];
     const seen = new Set();
     const merged = [];
@@ -117,7 +111,6 @@ export function enrichRamsDraftFromPlaybookPack(draft, playbook, pack, hazardLib
       if (!h?.id || seen.has(h.id)) continue;
       seen.add(h.id);
       merged.push(h);
-      if (merged.length >= 14) break;
     }
     if (merged.length) next.rows = merged.map((h) => hazardToRamsRow(h, genId));
   }

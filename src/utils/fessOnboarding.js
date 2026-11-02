@@ -259,6 +259,7 @@ export function runFessSetupAction(stepId) {
     }
     case "client_sites": {
       const result = seedFessClientSiteProjects();
+      if (result.error) return { ok: false, message: "FESS client site projects could not be saved on this device. Check storage or workspace access and retry." };
       const contacts = seedFessSiteContacts();
       const ghp = seedFessGhpRegister();
       const loto = seedFessLotoRegister();
@@ -335,7 +336,8 @@ export function runFessSetupAction(stepId) {
       };
     }
     case "site_briefing": {
-      seedFessClientSiteProjects();
+      const sites = seedFessClientSiteProjects();
+      if (sites.error) return { ok: false, message: "FESS client site projects could not be saved on this device. Check storage or workspace access and retry." };
       const templates = ["fess_site_2sfg_scunthorpe", "fess_site_cranswick_lazenby", "fess_site_quorn"];
       let created = 0;
       for (const id of templates) {

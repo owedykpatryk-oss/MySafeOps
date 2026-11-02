@@ -39,10 +39,10 @@ W aplikacji i tabeli porównawczej używane są **te** etykiety i limity (GB = p
 | Plan (id) | Nazwa w UI | Cena | Okres | Workers | Projekty | „Chmura” (limit bajtów) |
 |-----------|------------|------|--------|---------|----------|------------------------|
 | `free` | Free | £0 | forever | 3 | 10 | 500 MB |
-| `starter` | Solo | **£19** | miesiąc | 5 | 100 | 2 GB |
-| `team` | Team | **£99** | miesiąc | 20 | 500 | 10 GB |
-| `business` | Business | **£249** | miesiąc | 75 | 2,500 | 50 GB |
-| `enterprise` | Enterprise | **£499** | miesiąc | 200 | 10,000 | 200 GB |
+| `starter` | Solo | **£39** | miesiąc | 5 | 100 | 2 GB |
+| `team` | Team | **£159** | miesiąc | 20 | 500 | 10 GB |
+| `business` | Business | **£349** | miesiąc | 75 | 2,500 | 50 GB |
+| `enterprise` | Enterprise | **£699** | miesiąc | 200 | 10,000 | 200 GB |
 | `enterprise_plus` | Enterprise Plus | Contact us | custom | bez limitu (w praktyce) | bez limitu | bez limitu |
 | `trial` | Trial | £0 | 14 dni | 200 | 50 | 10 GB |
 

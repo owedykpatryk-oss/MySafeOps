@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "npm:@supabase/supabase-js@2.49.1";
 
 /** Org admin/owner only — used to gate detailed Stripe diagnostics on GET. */
 export async function getBillingAdminUser(req: Request, supabaseUrl: string, serviceKey: string) {
@@ -15,6 +15,8 @@ export async function getBillingAdminUser(req: Request, supabaseUrl: string, ser
     .from("org_memberships")
     .select("role")
     .eq("user_id", user.id)
+    .in("role", ["admin", "owner"])
+    .limit(1)
     .maybeSingle();
   const role = String(mem?.role || "").toLowerCase();
   if (role !== "admin" && role !== "owner") return null;

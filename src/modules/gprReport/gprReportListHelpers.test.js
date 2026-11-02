@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { blankGprReport } from "./gprReportConstants.js";
 import { filterGprReports, groupGprReportsByProject, suggestDeliverableFlags } from "./gprReportListHelpers.js";
+import { summarizeGprReportList } from "./gprReportHelpers.js";
 
 describe("gprReportListHelpers", () => {
   const reports = [
@@ -26,5 +27,14 @@ describe("gprReportListHelpers", () => {
     );
     expect(flags.radargram_figures).toBe(true);
     expect(flags.plan_layout_cad).toBe(true);
+  });
+
+  it("does not count deleted sync tombstones in list statistics", () => {
+    const summary = summarizeGprReportList([
+      ...reports,
+      { id: "deleted", deletedAt: "2026-09-24T12:00:00.000Z", updatedAt: "2026-09-24T12:00:00.000Z" },
+    ]);
+    expect(summary.total).toBe(2);
+    expect(summary.finals).toBe(1);
   });
 });

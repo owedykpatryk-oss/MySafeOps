@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { BarChart2, FileCheck, ClipboardList, Users, Building2, Menu, Pin, Shield, Trash2, FileDown, EyeOff, Sparkles, Zap, Factory, Camera } from "lucide-react";
 
 import OfflineStatusBanner from "../offline/OfflineStatusBanner";
+import SyncRecoveryNotice from "../offline/SyncRecoveryNotice";
 import D1WriteForbiddenBanner from "../components/D1WriteForbiddenBanner";
 import IndustrialSectorBanners from "../components/IndustrialSectorBanners";
 import TrialBillingBanner from "../components/TrialBillingBanner";
@@ -78,7 +79,8 @@ import MoreSectionSpotlight from "../components/MoreSectionSpotlight";
 import MorePanelCommandCentre from "../components/MorePanelCommandCentre";
 import ModuleTileSparkline from "../components/ModuleTileSparkline";
 import { useToast } from "../context/ToastContext";
-import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT, STORAGE_QUOTA_EVENT } from "../utils/orgStorage";
+import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT, STORAGE_QUOTA_EVENT, countryOperationalStorageKey } from "../utils/orgStorage";
+import { COUNTRY_WORKSPACE_CHANGED_EVENT } from "../utils/countryWorkspaces";
 import { BILLING_WRITE_BLOCKED_EVENT, billingWriteBlockedMessage } from "../utils/billingAccess";
 import {
   BOTTOM_NAV_SHORTCUT_UPDATED_EVENT,
@@ -189,11 +191,6 @@ const MoreModuleTile = memo(function MoreModuleTile({
             <span className={`app-more-tile__smart app-more-tile__smart--${presentation.smartTone || "info"}`}>
               <Sparkles size={11} strokeWidth={2.2} aria-hidden />
               {smartLine}
-              {presentation.smartAction ? (
-                <button type="button" className="app-more-tile__smart-cta" onClick={runSmartAction}>
-                  {presentation.smartAction.label} →
-                </button>
-              ) : null}
             </span>
           ) : null}
           {!compactMode && stat?.sparkline ? (
@@ -210,6 +207,11 @@ const MoreModuleTile = memo(function MoreModuleTile({
         )}
       </button>
       <div className="app-more-tile__toolbar">
+        {presentation.smartAction ? (
+          <button type="button" className="app-more-tile__smart-cta" onClick={runSmartAction}>
+            {presentation.smartAction.label} →
+          </button>
+        ) : null}
         {prebuild ? (
           <button
             type="button"
@@ -336,7 +338,7 @@ function getInitialLayoutState() {
   const defaultView = resolveDefaultWorkspaceView();
   if (viewParam && WORKSPACE_LAYOUT_VIEW_IDS.has(viewParam) && viewParam !== "settings") {
     if (!isModuleVisible(viewParam)) {
-      return { navTab: defaultView, view: defaultView, settingsInitialTab: "cloud", checkoutReturn: null };
+      return { navTab: defaultView, view: defaultView, settingsInitialTab: "cloud", checkoutReturn: null, unavailableView: viewParam };
     }
     const nav = resolvePrimaryNavForView(viewParam);
     const permitId = qs.get("permitId");
@@ -344,6 +346,9 @@ function getInitialLayoutState() {
       setWorkspaceNavTarget({ viewId: "permits", permitId: String(permitId) });
     }
     return { navTab: nav, view: viewParam, settingsInitialTab: "cloud", checkoutReturn: null };
+  }
+  if (viewParam) {
+    return { navTab: defaultView, view: defaultView, settingsInitialTab: "cloud", checkoutReturn: null, unavailableView: viewParam };
   }
   try {
     const last = sessionStorage.getItem(LAST_VIEW_STORAGE_KEY);
@@ -394,6 +399,16 @@ function buildNavTabs(marketId = getOrgMarketId(), mode = "default") {
 export default function MainAppLayout() {
   const { caps, role, isPlatformOwner } = useApp();
   const { pushToast } = useToast();
+  const [workspaceScope, setWorkspaceScope] = useState(() => countryOperationalStorageKey("workspace"));
+  useEffect(() => {
+    const updateScope = () => setWorkspaceScope(countryOperationalStorageKey("workspace"));
+    window.addEventListener(ORG_CHANGED_EVENT, updateScope);
+    window.addEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, updateScope);
+    return () => {
+      window.removeEventListener(ORG_CHANGED_EVENT, updateScope);
+      window.removeEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, updateScope);
+    };
+  }, []);
   const orgBranding = useOrgBranding();
   const isSuperadmin = Boolean(isPlatformOwner);
   const canViewManagement = role === "admin" || isSuperadmin;
@@ -520,6 +535,8 @@ export default function MainAppLayout() {
   // centre stayed pinned under Help, Settings and anything opened from More.
   const [moreOpen, setMoreOpen] = useState(false);
   const [view, setView] = useState(layoutSeed.view);
+  const [unavailableView, setUnavailableView] = useState(layoutSeed.unavailableView || null);
+  const [searchNavigationRevision, setSearchNavigationRevision] = useState(0);
   const [settingsInitialTab, setSettingsInitialTab] = useState(layoutSeed.settingsInitialTab);
   const [billingCheckoutReturn, setBillingCheckoutReturn] = useState(layoutSeed.checkoutReturn);
   const [moreFilter, setMoreFilter] = useState("");
@@ -621,8 +638,12 @@ export default function MainAppLayout() {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
-        if (next.get("view") === view) return prev;
         next.set("view", view);
+        if (view !== "settings") {
+          next.delete("settingsTab");
+          next.delete("checkout");
+        }
+        if (next.toString() === prev.toString()) return prev;
         return next;
       },
       { replace: true }
@@ -668,9 +689,10 @@ export default function MainAppLayout() {
       setSettingsInitialTab("billing");
       setBillingCheckoutReturn(checkout);
       const next = new URLSearchParams(searchParams);
-      next.delete("settingsTab");
-      next.delete("checkout");
-      setSearchParams(next, { replace: true });
+      next.set("view", "settings");
+      // Auth/organisation initialization can remount the layout. Keep the billing
+      // destination and checkout return until the user leaves Settings.
+      if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
       return;
     }
     if (settingsTab && WORKSPACE_SETTINGS_TAB_IDS.has(settingsTab)) {
@@ -679,8 +701,8 @@ export default function MainAppLayout() {
       setSettingsInitialTab(settingsTab);
       setBillingCheckoutReturn(null);
       const next = new URLSearchParams(searchParams);
-      next.delete("settingsTab");
-      setSearchParams(next, { replace: true });
+      next.set("view", "settings");
+      if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
     }
   }, [searchParams, setSearchParams]);
 
@@ -753,6 +775,7 @@ export default function MainAppLayout() {
     const {
       viewId,
       permitId,
+      workerId,
       projectId,
       action,
       ramsId,
@@ -766,6 +789,7 @@ export default function MainAppLayout() {
     if (!primaryNavIdSet.has(viewId) && !allowedModuleIds.has(viewId)) return;
     const target = { viewId };
     if (permitId) target.permitId = permitId;
+    if (workerId) target.workerId = workerId;
     if (projectId) target.projectId = projectId;
     if (action) target.action = action;
     if (ramsId) target.ramsId = ramsId;
@@ -776,6 +800,7 @@ export default function MainAppLayout() {
     if (planId) target.planId = planId;
     setWorkspaceNavTarget(target);
     startTransition(() => {
+      if (Object.keys(target).some((key) => key !== "viewId")) setSearchNavigationRevision((revision) => revision + 1);
       if (primaryNavIdSet.has(viewId)) {
         setNavTab(viewId);
         setView(viewId);
@@ -975,6 +1000,7 @@ export default function MainAppLayout() {
         Skip to main content
       </a>
       <OfflineStatusBanner />
+      <SyncRecoveryNotice />
       <D1WriteForbiddenBanner />
       <div style={{ padding: "0 12px", maxWidth: 1200, margin: "0 auto" }}>
         <PastDueBillingBanner />
@@ -987,10 +1013,7 @@ export default function MainAppLayout() {
       <WorkspaceAppBar
         view={view}
         navTab={navTab}
-        onGoDashboard={() => {
-          setNavTab("dashboard");
-          setView("dashboard");
-        }}
+        onGoDashboard={() => goMainTab("dashboard")}
         onOpenHelp={openHelpModule}
         onOpenSettings={() => selectMoreModule("settings")}
         onOpenSearch={() => setSearchOpen(true)}
@@ -1015,14 +1038,24 @@ export default function MainAppLayout() {
         </Suspense>
       )}
       <main id="main-content" tabIndex={-1} className="app-workspace-main">
+        {unavailableView ? (
+          <div className="app-unavailable-view" role="alert">
+            <div>
+              <strong>This module is unavailable</strong>
+              <p>The link points to “{unavailableView}”, which is unknown or hidden in this workspace. Search for the module you need.</p>
+            </div>
+            <button type="button" onClick={() => { setUnavailableView(null); setSearchOpen(true); }}>Search modules</button>
+            <button type="button" onClick={() => setUnavailableView(null)}>Dismiss</button>
+          </div>
+        ) : null}
         <div className="app-module-shell">
           {view === "settings" ? (
-            <SettingsView initialTab={settingsInitialTab} checkoutReturn={billingCheckoutReturn} />
+            <SettingsView key={workspaceScope} initialTab={settingsInitialTab} checkoutReturn={billingCheckoutReturn} />
           ) : (
             <RouteErrorBoundary>
               <RegisterPdfExportProvider viewId={view}>
                 <Suspense fallback={<ViewFallback />}>
-                  <MainComponent />
+                  <MainComponent key={`${workspaceScope}:${searchNavigationRevision}`} />
                 </Suspense>
               </RegisterPdfExportProvider>
             </RouteErrorBoundary>
@@ -1244,12 +1277,13 @@ export default function MainAppLayout() {
               onMouseEnter={() => t.id !== "more" && prefetchView(t.id)}
               onFocus={() => t.id !== "more" && prefetchView(t.id)}
               style={{
-                flex: 1,
+                flex: "1 1 0",
+                minWidth: 0,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 gap: 3,
-                padding: "8px 6px",
+                padding: "8px 2px",
                 border: "none",
                 background: "transparent",
                 cursor: "pointer",

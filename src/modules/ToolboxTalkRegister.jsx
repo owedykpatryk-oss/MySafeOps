@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useState } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
@@ -80,16 +81,14 @@ function Form({ item, projects, workers, onSave, onClose }) {
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>{item ? "Edit toolbox talk" : "Toolbox talk record"}</h2>
         <label style={ss.lbl} htmlFor="toolbox-talk-topic">Topic</label>
-        <input style={ss.inp} value={form.topic} onChange={(e) => set("topic", e.target.value)} placeholder="e.g. Working at height, manual handling"  id="toolbox-talk-topic" />
+        <input style={ss.inp} value={form.topic} onChange={(e) => set("topic", e.target.value)} placeholder="e.g. Working at height"  id="toolbox-talk-topic" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="toolbox-talk-talk-date">Date delivered</label>
         <input type="date" style={ss.inp} value={form.talkDate} onChange={(e) => set("talkDate", e.target.value)}  id="toolbox-talk-talk-date" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="toolbox-talk-project-id">{t("project")}</label>
         <select style={ss.inp} value={form.projectId} onChange={(e) => set("projectId", e.target.value)} id="toolbox-talk-project-id">
           <option value="">—</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }}>Presenter</label>

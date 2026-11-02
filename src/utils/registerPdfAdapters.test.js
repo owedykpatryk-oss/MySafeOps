@@ -6,11 +6,41 @@ import {
   prepareRegisterExport,
   renderDailyBriefingDetailPages,
   renderGeoPhotoDetailPages,
+  renderRegisterRecordDetailPages,
+  formatRegisterDetailValue,
 } from "./registerPdfAdapters";
 import { jsPDF } from "jspdf";
 import { PDF_PAGE } from "./pdfBranding";
 
 describe("registerPdfAdapters", () => {
+  it("does not export missing coordinates as 0,0", () => {
+    expect(flattenGeoPhotoRow({ latitude: null, longitude: null }).coordinates).toBe("—");
+    expect(flattenGeoPhotoRow({ latitude: 0, longitude: 0 }).coordinates).toBe("0.00000, 0.00000");
+  });
+
+  it("formats epoch times and nested evidence without raw IDs or truncation", () => {
+    expect(formatRegisterDetailValue(1791194400000, "closedAt")).not.toContain("1791194400000");
+    expect(formatRegisterDetailValue("high_care")).toBe("High care");
+    const text = formatRegisterDetailValue([{ id: "internal", location: "Swab A", atpRlu: 420, pass: false }]);
+    expect(text).toContain("420");
+    expect(text).toContain("Pass: No");
+    expect(text).not.toContain("internal");
+  });
+
+  it("embeds induction signatures and keeps long evidence inside the page boundary", () => {
+    const pdf = new jsPDF({ unit: "mm", format: "a4" });
+    pdf.setFont = vi.fn();
+    pdf.addImage = vi.fn();
+    pdf.getImageProperties = vi.fn(() => ({ width: 600, height: 180 }));
+    const text = vi.spyOn(pdf, "text");
+    renderRegisterRecordDetailPages(pdf, "induction", [{ name: "Worker", company: "Full company details. ".repeat(700), sig: "data:image/png;base64,abc" }], {
+      drawPdfPageHeader: () => 64, org: {}, rgb: [15, 23, 42], accentRgb: [0, 150, 140], theme: "executive", label: "Induction",
+    });
+    expect(pdf.addImage).toHaveBeenCalledOnce();
+    expect(pdf.getNumberOfPages()).toBeGreaterThan(1);
+    expect(text.mock.calls.some(([value]) => String(value).includes("base64"))).toBe(false);
+    expect(Math.max(...text.mock.calls.map(([, , y]) => y).filter(Number.isFinite))).toBeLessThanOrEqual(PDF_PAGE.CONTENT_BOTTOM);
+  });
   it("flattens riddor rows with human-readable type", () => {
     const row = flattenRiddorRow({ riddorType: "over7day", incidentDate: "2026-01-15", status: "draft" });
     expect(row.type).toContain("Over-7-day");

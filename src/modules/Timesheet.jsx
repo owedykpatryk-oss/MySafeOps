@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useState, useEffect, useMemo } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
@@ -455,7 +456,7 @@ function EntryModal({ entry, weekStartMonday, workers, projects, onSave, onDelet
             <label style={labelStyle}>{t("project")}</label>
             <select value={form.projectId} onChange={e=>set("projectId",e.target.value)} style={inputStyle}>
               <option value="">{t("selectProject")}</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map(p => <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
             </select>
           </div>
         </div>
@@ -1049,7 +1050,7 @@ export default function Timesheet() {
         </select>
         <select value={filterProject} onChange={e=>setFilterProject(e.target.value)} style={{ ...inputStyle, width:"auto" }}>
           <option value="">{t("allProjectsFilter")}</option>
-          {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          {projects.map(p=><option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
         </select>
         <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...inputStyle, width:"auto" }}>
           <option value="">{t("allStatuses")}</option>

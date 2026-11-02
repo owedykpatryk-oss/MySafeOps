@@ -3,6 +3,7 @@
  */
 import { geoPhotoPreset, geoPhotoPresetLabel } from "./geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
+import { hasGeoPhotoCoordinates } from "./geoPhotoUtils";
 import {
   GEO_PHOTO_GI_TYPES,
   resolvedGiDepth,
@@ -52,7 +53,7 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
 export function findRecentDuplicateGeoPhoto(photos, candidate, { radiusM = 10, windowMs = 5 * 60 * 1000 } = {}) {
   const lat = Number(candidate?.latitude);
   const lng = Number(candidate?.longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (!hasGeoPhotoCoordinates(candidate)) return null;
   const at = Date.parse(candidate?.timestampUtc || "") || Date.now();
 
   for (const photo of Array.isArray(photos) ? photos : []) {
@@ -60,7 +61,7 @@ export function findRecentDuplicateGeoPhoto(photos, candidate, { radiusM = 10, w
     if (candidate?.type && photo.type !== candidate.type) continue;
     const pLat = Number(photo.latitude);
     const pLng = Number(photo.longitude);
-    if (!Number.isFinite(pLat) || !Number.isFinite(pLng)) continue;
+    if (!hasGeoPhotoCoordinates(photo)) continue;
     const age = Math.abs(at - (Date.parse(photo.timestampUtc || photo.createdAt || "") || 0));
     if (age > windowMs) continue;
     const distance = haversineMeters(lat, lng, pLat, pLng);
@@ -75,7 +76,7 @@ export function findRecentDuplicateGeoPhoto(photos, candidate, { radiusM = 10, w
 export function findNearestProject(latitude, longitude, projects, maxDistanceM = 3000) {
   const lat = Number(latitude);
   const lng = Number(longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (!hasGeoPhotoCoordinates({ latitude, longitude })) return null;
 
   let best = null;
   let bestDist = Infinity;
@@ -84,7 +85,7 @@ export function findNearestProject(latitude, longitude, projects, maxDistanceM =
     if (p?.closed) return;
     const plat = Number(p.lat);
     const plng = Number(p.lng);
-    if (!Number.isFinite(plat) || !Number.isFinite(plng)) return;
+    if (!hasGeoPhotoCoordinates({ latitude: p.lat, longitude: p.lng })) return;
     const d = haversineMeters(lat, lng, plat, plng);
     if (d < bestDist) {
       bestDist = d;
@@ -127,7 +128,7 @@ export function geoPhotoCaption(photo) {
   if (observations) parts.push(observations);
   const lat = Number(photo.latitude);
   const lng = Number(photo.longitude);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+  if (hasGeoPhotoCoordinates(photo)) {
     parts.push(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
   }
   if (photo.bearing != null && !Number.isNaN(Number(photo.bearing))) {
@@ -170,7 +171,7 @@ export function buildGeoPhotosFindingsBlock(geoPhotoList) {
     const depth = resolvedGiDepth(p);
     const giBits = [loc, depth].filter(Boolean).join(", ");
     const coords =
-      Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude))
+      hasGeoPhotoCoordinates(p)
         ? ` (${Number(p.latitude).toFixed(5)}, ${Number(p.longitude).toFixed(5)}` +
           (p.bearing != null ? `, ${Math.round(Number(p.bearing))}°` : "") +
           ")"
@@ -353,7 +354,7 @@ function extentFeature(photo) {
 
 export function exportGeoPhotosGeoJson(photos, name = "geo-photos") {
   const features = (photos || [])
-    .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)))
+    .filter((p) => hasGeoPhotoCoordinates(p))
     .map((p) => {
       const grid = wgs84ToBritishNationalGrid(p.latitude, p.longitude);
       const elevation = Number(p.altitudeMeters);
@@ -545,7 +546,7 @@ export function geoPhotoToUtilityRow(photo, opts = {}) {
   const depth = resolvedGiDepth(photo) || firstDepthAnswer(answers) || parseDepthFromNotes(photo.notes);
   const loc = resolvedGiLocationId(photo);
   const coords =
-    Number.isFinite(Number(photo.latitude)) && Number.isFinite(Number(photo.longitude))
+    hasGeoPhotoCoordinates(photo)
       ? `${Number(photo.latitude).toFixed(5)}, ${Number(photo.longitude).toFixed(5)}`
       : "";
 
@@ -619,7 +620,7 @@ export function geoPhotoToGiLocationRow(photo) {
     resolvedGiLocationId(photo) ||
     `${defaults.locationIdPrefix || "GI"}-${String(photo.id || "").slice(-4).toUpperCase()}`;
   const coords =
-    Number.isFinite(Number(photo.latitude)) && Number.isFinite(Number(photo.longitude))
+    hasGeoPhotoCoordinates(photo)
       ? `${Number(photo.latitude).toFixed(5)}, ${Number(photo.longitude).toFixed(5)}`
       : "";
 
@@ -689,7 +690,7 @@ export function geoPhotoExtentSchedule(photos) {
  */
 export function geoPhotosStaticMapUrl(photos, { width = 520, height = 260, maxMarkers = 25 } = {}) {
   const pts = (photos || [])
-    .filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)));
+    .filter((p) => hasGeoPhotoCoordinates(p));
   const capped = pts.slice(0, maxMarkers);
   if (!capped.length) return "";
   if (capped.length > 1) return geoPhotoSitePlanUrl(capped, { width, height, maxMarkers });
@@ -700,7 +701,7 @@ export function geoPhotosStaticMapUrl(photos, { width = 520, height = 260, maxMa
 
 export function geoPhotosStaticMapCaption(photos, maxMarkers = 25) {
   const withCoords = (photos || []).filter(
-    (p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude))
+    (p) => hasGeoPhotoCoordinates(p)
   );
   const notes = [];
   if (withCoords.length > maxMarkers) {

@@ -68,7 +68,7 @@ Supporting pain the code clearly targets:
 Ranked by how well the product actually fits them:
 
 **1. Owner / director of a 5–50 person specialist contractor (UK).**
-Signs off the £99–£249/mo themselves, feels the compliance risk personally, has no full-time H&S manager. The 14-day trial and self-serve Stripe checkout are built for exactly this buyer.
+Signs off the £159–£349/mo themselves, feels the compliance risk personally, has no full-time H&S manager. The 14-day trial and self-serve Stripe checkout are built for exactly this buyer.
 
 **2. Utility survey / GPR company owner.**
 PAS 128 reporting, GPR deliverables and CAD export are their *product*, not their admin. This is the buyer for whom MySafeOps replaces a revenue-generating workflow, not just overhead — which makes it the highest-value and stickiest segment.
@@ -79,7 +79,7 @@ The hygiene module set (allergen changeover, CIP sign-off, GMP deviations, glass
 **4. H&S manager at a principal contractor.**
 Cares about CDM, F10, RIDDOR, subcontractor competency. Real buyer, but the most crowded segment competitively.
 
-Pricing (verified, `scripts/stripe-seed-prices.mjs`): **Solo £19 · Team £99 · Business £249 · Enterprise £499** per month GBP, with AUD and PLN price tiers alongside — this is an independently built product priced for SMEs, not enterprise.
+Pricing (verified, `scripts/stripe-seed-prices.mjs`): **Solo £39 · Team £159 · Business £349 · Enterprise £699** per month GBP, with EUR, CHF, AUD and PLN price tiers alongside — this is an independently built product priced for SMEs, not enterprise.
 
 ---
 

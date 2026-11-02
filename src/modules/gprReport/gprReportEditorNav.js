@@ -12,7 +12,7 @@ export function gprTabComplete(report, tabId) {
   const r = report || {};
   switch (tabId) {
     case "setup":
-      return Boolean(r.ref && r.surveyDate && r.surveyor && (r.projectId || r.siteAddress));
+      return Boolean(r.ref && r.surveyDate && (r.projectId || r.siteAddress || r.postcode));
     case "equipment":
       return Boolean(
         (r.equipment?.[0]?.manufacturer || r.equipment?.[0]?.model) &&
@@ -20,7 +20,7 @@ export function gprTabComplete(report, tabId) {
           (r.velocityModel?.measuredVelocityCmNs || r.velocityModel?.assumedVelocityCmNs)
       );
     case "ground":
-      return Boolean(r.groundConditions?.fetchedAt || r.groundConditions?.narrative) &&
+      return (!r.includeGeology || Boolean(r.groundConditions?.fetchedAt || r.groundConditions?.narrative)) &&
         Boolean(r.environmental?.fetchedAt || r.environmental?.description);
     case "findings":
       return Boolean(

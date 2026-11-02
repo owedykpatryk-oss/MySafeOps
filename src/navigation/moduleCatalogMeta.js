@@ -41,6 +41,16 @@ export function getModuleIcon(moduleId) {
  * @type {Record<string, { key: string; columns?: { k: string; l: string }[] }>}
  */
 export const MODULE_PDF_REGISTRY = {
+  people: {
+    key: "mysafeops_workers",
+    columns: [
+      { k: "name", l: "Name" },
+      { k: "role", l: "Role" },
+      { k: "company", l: "Company" },
+      { k: "email", l: "Email" },
+      { k: "phone", l: "Phone" },
+    ],
+  },
   snags: {
     key: "snags",
     columns: [

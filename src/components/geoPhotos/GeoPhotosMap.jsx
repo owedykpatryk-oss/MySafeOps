@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { bearingArrowHead, bearingToEnd } from "../../utils/geoPhotoUtils";
+import { bearingArrowHead, bearingToEnd, hasGeoPhotoCoordinates } from "../../utils/geoPhotoUtils";
 import { geoPhotoPreset } from "../../utils/geoPhotoPresets";
 import { formatGeoPhotoArea, geoPhotoAreaOf } from "../../utils/geoPhotoArea";
 
@@ -52,7 +52,7 @@ function GeoPhotosMap({ photos = [], height = 320, satellite = false, onPhotoCli
 
     layer.clearLayers();
 
-    const valid = photos.filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)));
+    const valid = photos.filter(hasGeoPhotoCoordinates);
     if (valid.length === 0) {
       map.setView([51.5074, -0.1278], 6);
       return;

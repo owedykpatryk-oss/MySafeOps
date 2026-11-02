@@ -111,6 +111,10 @@ function ramsDocumentCss(themeOrPrimary = "#0C447C") {
       align-items:center;
       z-index:9998;
     }
+    .rams-page-layout{width:100%;border-collapse:collapse;border:0}
+    .rams-page-layout>tbody>tr>td,.rams-page-layout>tfoot>tr>td{padding:0;border:0;vertical-align:top}
+    .rams-page-layout>tfoot{display:table-footer-group}
+    .rams-page-layout .page-footer{position:static}
     /* The footer deliberately carries no page number. CSS page counters only resolve
        inside @page margin boxes, which Chrome does not implement for HTML content, so
        the previous counter printed "Page 0" on every page of every RAMS pack. A wrong
@@ -120,7 +124,7 @@ function ramsDocumentCss(themeOrPrimary = "#0C447C") {
     .header-table,.cover-page,.pack-site-summary{break-inside:avoid-page;page-break-inside:avoid}
     @media print{
       body{padding:0}
-      .rams-content{padding-bottom:6mm}
+      .rams-content{padding-bottom:0}
       .cover-page{min-height:248mm;page-break-after:always}
       .cover-page,.cover-page div[style*="linear-gradient"]{-webkit-print-color-adjust:exact;print-color-adjust:exact}
       .pack-rams{page-break-after:always}
@@ -137,7 +141,7 @@ export function wrapRamsPrintDocument(pageTitle, bodyInner, extraHeadCss = "", f
     ? `<div style="font-size:9px;color:#94a3b8;margin-top:2px;max-width:72vw">${escHtml(theme.complianceLine)}</div>`
     : "";
   return `<!DOCTYPE html><html lang="${getActiveDocumentLocale()}"><head><meta charset="utf-8"/><title>${escHtml(pageTitle)}</title>
-  <style>${ramsDocumentCss(themeOrPrimary)}${extraHeadCss || ""}</style></head><body>${bodyInner}
-  <div class="page-footer"><span>${escHtml(footerMeta)}${complianceHtml}</span><span style="display:inline-flex;align-items:center;gap:5px">${renderMySafeOpsMarkSvg(16)}</span></div>
+  <style>${ramsDocumentCss(themeOrPrimary)}${extraHeadCss || ""}</style></head><body>
+  <table class="rams-page-layout"><tfoot><tr><td><div class="page-footer"><span>${escHtml(footerMeta)}${complianceHtml}</span><span style="display:inline-flex;align-items:center;gap:5px">${renderMySafeOpsMarkSvg(16)}</span></div></td></tr></tfoot><tbody><tr><td>${bodyInner}</td></tr></tbody></table>
   </body></html>`;
 }

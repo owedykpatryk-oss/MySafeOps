@@ -1,4 +1,6 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useState, useEffect } from "react";
+import { publicAppUrl } from "../utils/publicAppUrl";
 import { useApp } from "../context/AppContext";
 import { useToast } from "../context/ToastContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
@@ -16,6 +18,7 @@ import { canUseFessExclusiveFeatures } from "../utils/fessExclusive";
 import { FESS_BRAND, getFessBrandLogoSrc } from "../utils/fessBranding";
 import { loadOrgSettingsRaw } from "../utils/orgSettingsStorage";
 import PageHero from "./PageHero";
+import { commitRamsDocument, ramsDocumentStorageScope } from "../modules/rams/ramsDocumentSave";
 
 import { todayLocalISO } from "../utils/localDate";
 const genRowId = () => `portal_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -69,27 +72,40 @@ function PortalView({ token, portals, cloudBundle }) {
       return;
     }
     const signDate = todayLocalISO();
-    const next = ramsDocs.map((r) =>
-      r.id === ramsId
+    const current = ramsDocs.find((r) => r.id === ramsId);
+    if (!current) {
+      window.alert("This RAMS document is no longer available. Refresh the portal and retry.");
+      return;
+    }
+    const nextDoc = {
+      ...current,
+      clientApproval: {
+        by,
+        at: new Date().toISOString(),
+        notes: String(approveForm.notes || "").trim(),
+        portalToken: token,
+      },
+      ...(canUseFessExclusiveFeatures()
         ? {
-            ...r,
-            clientApproval: {
-              by,
-              at: new Date().toISOString(),
-              notes: String(approveForm.notes || "").trim(),
-              portalToken: token,
-            },
-            ...(canUseFessExclusiveFeatures()
-              ? {
-                  permitControllerName: String(r.permitControllerName || by).trim() || by,
-                  permitControllerSignDate: r.permitControllerSignDate || signDate,
-                }
-              : {}),
+            permitControllerName: String(current.permitControllerName || by).trim() || by,
+            permitControllerSignDate: current.permitControllerSignDate || signDate,
           }
-        : r
-    );
-    setRamsDocs(next);
-    save("rams_builder_docs", next);
+        : {}),
+    };
+    const committed = commitRamsDocument({
+      document: nextDoc,
+      editingDocument: current,
+      expectedScope: ramsDocumentStorageScope(),
+    });
+    if (!committed.ok) {
+      window.alert(
+        committed.reason === "document_changed"
+          ? "This RAMS document changed in the workspace. Refresh the portal and retry."
+          : "The RAMS approval could not be saved on this device. Check storage or workspace access and retry."
+      );
+      return;
+    }
+    setRamsDocs(committed.documents);
     setApprovingId(null);
     setApproveForm({ by: "", notes: "" });
   };
@@ -467,7 +483,7 @@ export default function ClientPortal() {
               <label style={ss.lbl}>Scope (project)</label>
               <select value={newPortal.projectId} onChange={e=>setNewPortal(n=>({...n,projectId:e.target.value}))} style={ss.inp}>
                 <option value="">All projects</option>
-                {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                {projects.map(p=><option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
               </select>
             </div>
             <div>
@@ -507,7 +523,7 @@ export default function ClientPortal() {
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           {portals.map(p=>{
-            const portalUrl = `${window.location.origin}${window.location.pathname}?portal=${p.token}`;
+            const portalUrl = publicAppUrl(`/app?portal=${encodeURIComponent(p.token)}`);
             const expired = p.expiresAt && new Date(p.expiresAt)<new Date();
             return (
               <div key={p.id} style={{ ...ss.card }}>

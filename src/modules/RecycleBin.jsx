@@ -10,7 +10,8 @@ import {
   deleteRecycleBinEntry,
   purgeExpiredRecycleBinEntries,
 } from "../utils/recycleBin";
-import { ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
+import { ORG_CHANGED_EVENT, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
+import { COUNTRY_WORKSPACE_CHANGED_EVENT } from "../utils/countryWorkspaces";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
 
 const RECYCLE_LIST_PAGE = 50;
@@ -37,6 +38,7 @@ function remainingDays(expiresAt) {
 export default function RecycleBin() {
   const { t } = useWorkspaceT();
   const [items, setItems] = useState(() => listRecycleBinEntries());
+  const [feedback, setFeedback] = useState(null);
   const listPg = useRegisterListPaging(RECYCLE_LIST_PAGE);
 
   const refresh = () => setItems(listRecycleBinEntries());
@@ -47,9 +49,16 @@ export default function RecycleBin() {
   };
 
   useEffect(() => {
+    const onScopeChange = () => { setFeedback(null); refresh(); };
     refresh();
     window.addEventListener(ORG_DATA_CHANGED_EVENT, refresh);
-    return () => window.removeEventListener(ORG_DATA_CHANGED_EVENT, refresh);
+    window.addEventListener(ORG_CHANGED_EVENT, onScopeChange);
+    window.addEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, onScopeChange);
+    return () => {
+      window.removeEventListener(ORG_DATA_CHANGED_EVENT, refresh);
+      window.removeEventListener(ORG_CHANGED_EVENT, onScopeChange);
+      window.removeEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, onScopeChange);
+    };
   }, []);
 
   const moduleStats = useMemo(() => {
@@ -62,23 +71,31 @@ export default function RecycleBin() {
   }, [items]);
 
   const onRestore = (entryId) => {
+    const entry = items.find(item => item.id === entryId);
     const res = restoreRecycleBinEntry(entryId);
     if (!res.ok) {
-      alert(res.reason || "Could not restore this item.");
+      setFeedback({ error: true, message: res.reason || "Could not restore this item." });
+    } else {
+      const message = `Restored “${entry?.itemLabel || "record"}”. Find it in ${entry?.moduleLabel || "its original module"}.`;
+      setFeedback({ error: Boolean(res.warning), message: res.warning ? `${message} ${res.warning}` : message });
     }
     refresh();
   };
 
   const onDeleteNow = (entryId) => {
     if (!confirm("Delete permanently now? This cannot be undone.")) return;
-    deleteRecycleBinEntry(entryId);
+    if (!deleteRecycleBinEntry(entryId)) {
+      setFeedback({ error: true, message: "The Recycle Bin entry could not be deleted on this device. Check storage or workspace access and retry." });
+    } else {
+      setFeedback({ error: false, message: "The recovery copy was permanently deleted." });
+    }
     refresh();
   };
 
   const onPurgeExpired = () => {
     const removed = purgeExpiredRecycleBinEntries();
     refresh();
-    alert(removed > 0 ? `Removed ${removed} expired item(s).` : "No expired items to remove.");
+    setFeedback({ error: false, message: removed > 0 ? `Removed ${removed} expired item(s).` : "No expired items to remove." });
   };
 
   return (
@@ -99,6 +116,12 @@ export default function RecycleBin() {
         }
       />
 
+      {feedback && (
+        <div role={feedback.error ? "alert" : "status"} style={{ ...ss.card, marginBottom: 14, borderColor: feedback.error ? "#f59e0b" : "#14b8a6", display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ overflowWrap: "anywhere" }}>{feedback.message}</span>
+          <button type="button" style={ss.btn} aria-label="Dismiss notification" onClick={() => setFeedback(null)}>×</button>
+        </div>
+      )}
       <div className="app-surface-card" style={{ ...ss.card, marginBottom: 14 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <span style={ss.chip}>Items: {items.length}</span>

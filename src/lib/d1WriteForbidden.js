@@ -9,12 +9,16 @@ export function isForbiddenD1Write(error) {
   return (
     e.includes("forbidden") ||
     e === "http_403" ||
+    e.includes("billing_limit_reached") ||
     e.includes("billing_write_blocked")
   );
 }
 
 function messageForNamespace(namespace, error) {
   const err = String(error || "").toLowerCase();
+  if (err.includes("billing_limit_reached")) {
+    return "Cloud sync is paused because this workspace has reached its plan limit. Changes remain on this device. Remove unused records or upgrade in Settings → Billing, then retry sync.";
+  }
   if (err.includes("billing_write_blocked")) {
     return "Cloud sync is paused because your evaluation trial has ended or payment is required. Changes stay on this device until you subscribe in Settings → Billing.";
   }

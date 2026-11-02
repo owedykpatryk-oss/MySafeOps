@@ -343,14 +343,14 @@ export default function PlInstructionsRegister() {
                         type="button"
                         style={ss.btn}
                         onClick={() => {
-                          if (!window.confirm("Usunąć instrukcję?")) return;
-                          softDeleteToRecycleBin({
+                          if (!softDeleteToRecycleBin({
+                            confirmMessage: "Usunąć instrukcję?",
                             moduleId: "pl-instrukcje",
                             moduleLabel: "Instrukcje stanowiskowe",
-                            itemId: r.id,
+                            sourceKey: STORAGE_KEY,
                             itemLabel: r.tytul,
                             payload: r,
-                          });
+                          })) return;
                           persist(replaceWithTombstone(items, r.id));
                           pushAudit({ action: "pl_instrukcja_delete", entity: "pl-instrukcje", detail: r.tytul });
                         }}

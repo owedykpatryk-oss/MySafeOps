@@ -2,6 +2,7 @@
  * FESS Group — site-level quick actions (pack, portal link, briefing).
  */
 import { loadOrgScoped as load } from "./orgStorage";
+import { publicAppUrl } from "./publicAppUrl";
 import { canUseFessExclusiveFeatures } from "./fessExclusive";
 import { ensureFessSiteProject } from "./fessClientSites";
 import { findProjectForFessSite } from "./fessClientHub";
@@ -16,7 +17,7 @@ import { seedFessSiteBriefing } from "./fessBriefingRecord";
  */
 export function buildFessPortalUrl(portal) {
   if (!portal?.token || typeof window === "undefined") return "";
-  return `${window.location.origin}${window.location.pathname}?portal=${portal.token}`;
+  return publicAppUrl(`/app?portal=${encodeURIComponent(portal.token)}`);
 }
 
 /**

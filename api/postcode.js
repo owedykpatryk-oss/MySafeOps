@@ -53,6 +53,32 @@ export default async function handler(req, res) {
     return;
   }
 
+  const latQuery = req.query?.lat;
+  const lngQuery = req.query?.lng ?? req.query?.lon;
+  if (latQuery != null || lngQuery != null) {
+    const lat = Number(latQuery);
+    const lng = Number(lngQuery);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < 49 || lat > 61.1 || lng < -8.7 || lng > 2.2) {
+      return sendJson(res, 400, { error: "Invalid coordinates" });
+    }
+    try {
+      const upstream = await fetch(
+        `${UPSTREAM}?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&limit=1&radius=2000`,
+        { headers: { Accept: "application/json" } }
+      );
+      const text = await upstream.text();
+      const parsed = parseBoundedJson(text, MAX_UPSTREAM_BYTES);
+      if (parsed.error) return sendJson(res, 502, { error: "Postcode lookup unavailable" });
+      const nearest = Array.isArray(parsed.value?.result) ? parsed.value.result[0] : null;
+      if (!nearest?.postcode) return sendJson(res, 404, { error: "Postcode not found" });
+      res.writeHead(200, API_JSON_HEADERS);
+      res.end(JSON.stringify(slimPostcodePayload({ status: 200, result: nearest })));
+      return;
+    } catch {
+      return sendJson(res, 502, { error: "Postcode lookup unavailable" });
+    }
+  }
+
   const raw = String(req.query?.code || req.query?.postcode || "").trim();
   const compact = normaliseUkPostcodeCompact(raw);
   if (!compact || !isValidUkPostcodeCompact(compact)) {

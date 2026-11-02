@@ -40,7 +40,7 @@ test.describe("Landing page", () => {
     await expect(page.getByRole("heading", { name: /Safety operations for Australian site teams/i })).toBeVisible({ timeout: 20000 });
     await expect(page.getByText(/construction & civil/i)).toBeVisible();
     await page.locator("#pricing").scrollIntoViewIfNeeded();
-    await expect(page.getByText("A$59")).toBeVisible();
+    await expect(page.getByText("A$119")).toBeVisible();
     await expect(page.getByRole("contentinfo").getByRole("link", { name: /🇬🇧 United Kingdom/i })).toBeVisible();
   });
 
@@ -49,7 +49,7 @@ test.describe("Landing page", () => {
     await expect(page.getByRole("heading", { name: /Operacje BHP dla ekip/i })).toBeVisible({ timeout: 20000 });
     await expect(page.getByText(/Polskie ekipy budowlane/i)).toBeVisible();
     await page.locator("#pricing").scrollIntoViewIfNeeded();
-    await expect(page.getByText("79 zł")).toBeVisible();
+    await expect(page.getByText("159 zł")).toBeVisible();
     await expect(page.getByRole("contentinfo").getByRole("link", { name: /🇬🇧 United Kingdom/i })).toBeVisible();
     await page.locator("#faq").scrollIntoViewIfNeeded();
     await expect(page.getByRole("heading", { name: /Najczęstsze pytania/i })).toBeVisible();
@@ -60,7 +60,7 @@ test.describe("Landing page", () => {
     await expect(page.getByRole("heading", { name: /Arbeitsschutz für Teams/i })).toBeVisible({ timeout: 20000 });
     await expect(page.getByText(/Deutsche Bauteams/i)).toBeVisible();
     await page.locator("#pricing").scrollIntoViewIfNeeded();
-    await expect(page.getByText("22 €")).toBeVisible();
+    await expect(page.getByText("45 €")).toBeVisible();
     await expect(page.getByRole("contentinfo").getByRole("link", { name: /🇬🇧 United Kingdom/i })).toBeVisible();
     await page.locator("#faq").scrollIntoViewIfNeeded();
     await expect(page.getByRole("heading", { name: /Häufige Fragen/i })).toBeVisible();

@@ -39,7 +39,7 @@ export async function resolveBrandingLogoUrl(settings) {
  * Pull shared org branding from Supabase when cloud is newer than local cache.
  * @returns {Promise<boolean>} true when local settings were updated
  */
-export async function syncOrgBrandingFromCloud(supabase, orgSlug) {
+export async function syncOrgBrandingFromCloud(supabase, orgSlug, { assertCurrent } = {}) {
   if (!supabase || !orgSlug || orgSlug === "default") return false;
 
   const {
@@ -68,6 +68,7 @@ export async function syncOrgBrandingFromCloud(supabase, orgSlug) {
     ...merged,
     customFields: existing.customFields?.length ? existing.customFields : merged.customFields || [],
   };
+  if (assertCurrent) await assertCurrent();
   saveOrgSettingsRaw(merged, orgSlug, row.updated_at || new Date().toISOString());
   mergeCustomProfilesFromCloudSettings(row.settings);
   return true;

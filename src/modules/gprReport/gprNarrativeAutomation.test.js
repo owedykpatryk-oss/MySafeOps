@@ -40,6 +40,7 @@ describe("GPR narrative automation", () => {
 
   it("builds detailed acquisition and geology-aware text", () => {
     const report = blankGprReport({
+      includeGeology: true,
       siteAddress: "Airport corridor",
       acquisition: { scanMode: "route", lineSpacingM: "0.25", traceSpacingM: "0.05", coveragePercent: "96", depthRangeM: "2.5" },
       equipment: [{ manufacturer: "IDS", model: "Stream DP", antennaFrequencyMhz: 600, channels: 19 }],
@@ -54,6 +55,7 @@ describe("GPR narrative automation", () => {
 
   it("notes a readable signal that stops short of the indicative penetration", () => {
     const report = blankGprReport({
+      includeGeology: true,
       groundConditions: { expectedPenetrationM: 2.5 },
       scanPanels: [{ readableDepthM: "0.9" }],
     });

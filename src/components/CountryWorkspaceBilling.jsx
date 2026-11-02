@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CreditCard, Globe2, Plus } from "lucide-react";
 import { useToast } from "../context/ToastContext";
 import {
@@ -15,11 +15,15 @@ import {
 import "../styles/country-workspaces.css";
 
 function billingStatus(workspace) {
+  if (workspace?.billing_unavailable) return { label: "Billing status unavailable", tone: "warn" };
   const status = String(workspace?.billing?.subscription_status || "none");
   if (status === "active" || status === "trialing") return { label: status === "trialing" ? "Trialing" : "Active", tone: "ok" };
   if (status === "past_due" || status === "unpaid") return { label: "Payment required", tone: "danger" };
   if (status === "incomplete") return { label: "Checkout incomplete", tone: "warn" };
   if (status === "canceled") return { label: "Cancelled", tone: "muted" };
+  if (status === "none" && workspace?.is_primary && new Date(workspace.evaluation_trial_ends_at).getTime() > Date.now()) {
+    return { label: "Evaluation active", tone: "ok", evaluation: true };
+  }
   return { label: "Subscription required", tone: "muted" };
 }
 
@@ -28,7 +32,7 @@ export default function CountryWorkspaceBilling({
   orgSlug,
   initialMarketId = "uk",
   isAdmin = false,
-  stripeMode = "live",
+  stripeMode = null,
   onWorkspaceChange,
 }) {
   const { pushToast } = useToast();
@@ -38,8 +42,10 @@ export default function CountryWorkspaceBilling({
   const [addingMarket, setAddingMarket] = useState(null);
   const [savingLocale, setSavingLocale] = useState(false);
   const [error, setError] = useState(null);
+  const loadRevision = useRef(0);
 
   const reload = useCallback(async () => {
+    const revision = ++loadRevision.current;
     if (!supabase) {
       setWorkspaces([]);
       setLoading(false);
@@ -52,20 +58,30 @@ export default function CountryWorkspaceBilling({
         await ensureLegacyCountryWorkspace(supabase, initialMarketId, orgSlug);
       }
       const rows = await loadCountryWorkspaces(supabase, orgSlug, { stripeMode });
+      if (revision !== loadRevision.current) return;
       const active = pickActiveCountryWorkspace(rows, orgSlug);
       setWorkspaces(rows);
       setActiveId(active?.id || null);
       onWorkspaceChange?.(active || null, rows);
     } catch (cause) {
+      if (revision !== loadRevision.current) return;
       const message = cause?.message || "Could not load country workspaces.";
       setError(message);
     } finally {
-      setLoading(false);
+      if (revision === loadRevision.current) setLoading(false);
     }
   }, [initialMarketId, isAdmin, onWorkspaceChange, orgSlug, stripeMode, supabase]);
 
   useEffect(() => {
     void reload();
+    const onRefresh = () => void reload();
+    window.addEventListener("mysafeops-billing-refresh", onRefresh);
+    window.addEventListener("focus", onRefresh);
+    return () => {
+      loadRevision.current += 1;
+      window.removeEventListener("mysafeops-billing-refresh", onRefresh);
+      window.removeEventListener("focus", onRefresh);
+    };
   }, [reload]);
 
   const missingMarkets = useMemo(
@@ -73,6 +89,7 @@ export default function CountryWorkspaceBilling({
     [workspaces],
   );
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeId) || null;
+  const activeStatus = billingStatus(activeWorkspace);
 
   const chooseWorkspace = async (workspace, { revealPlans = false } = {}) => {
     const switchesCountry = workspace.id !== activeId;
@@ -178,7 +195,18 @@ export default function CountryWorkspaceBilling({
         })}
       </div>
 
-      {isAdmin && activeWorkspace && !workspaceHasPaidAccess(activeWorkspace) ? (
+      {activeWorkspace && activeStatus.evaluation ? (
+        <p className="country-workspace-billing__language-note">
+          Evaluation access ends{" "}
+          <time dateTime={activeWorkspace.evaluation_trial_ends_at}>
+            {new Date(activeWorkspace.evaluation_trial_ends_at).toLocaleString("en-GB", {
+              day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+            })} UTC
+          </time>.
+        </p>
+      ) : null}
+
+      {isAdmin && activeWorkspace && !activeWorkspace.billing_unavailable && !activeStatus.evaluation && !workspaceHasPaidAccess(activeWorkspace) ? (
         <div className="country-workspace-billing__cta">
           <span>{activeWorkspace.display_name} has no active subscription. Each country is paid for separately.</span>
           <button type="button" onClick={() => void chooseWorkspace(activeWorkspace, { revealPlans: true })}>
@@ -224,6 +252,9 @@ export default function CountryWorkspaceBilling({
               <option value="en-GB">English (United Kingdom)</option>
               <option value="pl-PL">Polski (Polska)</option>
               <option value="en-AU">English (Australia)</option>
+              <option value="de-DE">Deutsch (Deutschland)</option>
+              <option value="de-AT">Deutsch (Österreich)</option>
+              <option value="de-CH">Deutsch (Schweiz)</option>
             </select>
           </label>
         </div>

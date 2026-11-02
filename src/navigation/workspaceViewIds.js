@@ -83,6 +83,7 @@ export const WORKSPACE_VIEW_IDS = [
   "monthly-report",
   "survey-report",
   "gpr-report",
+  "drone-operations",
   "waste",
   "templates",
   "ai-rams",

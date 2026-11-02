@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { publicAppUrl } from "../utils/publicAppUrl";
 import { useApp } from "../context/AppContext";
 import { useToast } from "../context/ToastContext";
 import { copyCapabilityLink } from "../utils/copyCapabilityLink";
@@ -202,7 +203,7 @@ export default function SubcontractorPortal() {
       )}
       <h3 style={{ fontSize: 14 }}>Links</h3>
       {portals.map((p) => {
-        const url = `${window.location.origin}${window.location.pathname}?subcontractor=${p.token}`;
+        const url = publicAppUrl(`/app?subcontractor=${encodeURIComponent(p.token)}`);
         return (
           <div key={p.id} style={{ ...ss.card, marginBottom: 8 }}>
             <div style={{ fontSize: 12, wordBreak: "break-all", marginBottom: 8 }}>{url}</div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { publicAppUrl } from "../utils/publicAppUrl";
 import { useApp } from "../context/AppContext";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { useToast } from "../context/ToastContext";
@@ -248,7 +249,7 @@ export default function InviteUsers() {
         p_expires_at: expiresAt,
       });
       if (error) throw error;
-      const url = `${window.location.origin}/accept-invite?invite=${encodeURIComponent(token)}`;
+      const url = publicAppUrl(`/accept-invite?invite=${encodeURIComponent(token)}`);
       setLastInviteLink(url);
       setLastInviteEmail(clean);
       setEmail("");
@@ -373,7 +374,7 @@ export default function InviteUsers() {
     const raw = String(linkOrToken || "").trim();
     const url = raw.startsWith("http")
       ? raw
-      : `${window.location.origin}/accept-invite?invite=${encodeURIComponent(raw)}`;
+      : publicAppUrl(`/accept-invite?invite=${encodeURIComponent(raw)}`);
     try {
       await navigator.clipboard.writeText(url);
       setStatus({ type: "success", text: "Invite link copied." });

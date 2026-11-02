@@ -7,6 +7,7 @@ import { MORE_SECTIONS, MORE_TABS } from "../navigation/appModules";
 import { todayIsoDate } from "./projectDashboard";
 
 import { localDateISO } from "./localDate";
+import { daysUntilRegisterDue, highCareToolsMatch } from "./registerRecordStatus";
 export const HSE_SECTION_TITLE = "Health, safety & environment";
 export const SITE_SECTION_TITLE = "Site operations";
 
@@ -66,17 +67,17 @@ const DATE_KEYS = [
   "nextInspection",
   "deadline",
   "certExpiry",
-  "reviewDate",
   "validUntil",
-  "inspectedAt",
-  "testDate",
-  "assessedDate",
-  "inspectionDate",
   "motDue",
   "insuranceExpiry",
   "nextServiceDue",
   "taxDue",
-  "signedOffAt",
+  "nextInspectionDate",
+  "nextDue",
+  "nextReviewDate",
+  "nextReview",
+  "nextCheckDue",
+  "calibrationDue",
 ];
 
 const ATTENTION_STATUSES = new Set(["open", "pending", "overdue", "expired", "draft", "action_required", "reported"]);
@@ -95,14 +96,29 @@ function itemTimestamp(item) {
   return 0;
 }
 
-export function itemNeedsAttention(item) {
+export function itemNeedsAttention(item, moduleId) {
   if (!item || typeof item !== "object") return false;
   const st = String(item.status || "").toLowerCase();
+  if (moduleId === "incident-actions") {
+    if (["closed", "done", "completed", "complete", "resolved"].includes(st)) return false;
+    return st === "blocked" || daysUntilRegisterDue(item.dueDate) < 0;
+  }
+  if (moduleId === "gmp-deviations") return !item.closedAt;
+  if (moduleId === "ghp-register") return item.breakageReported === true;
+  if (moduleId === "cip-signoff") {
+    const swabs = item.swabResults || [];
+    return !swabs.length || swabs.some((swab) => swab.pass !== true) || item.visualInspectionPassed !== true || !item.signedOffBy?.trim() || !item.releasedToProductionAt;
+  }
+  if (moduleId === "high-care-access") {
+    return Object.values(item.hygieneChecks || {}).some((checked) => checked !== true) || !Object.keys(item.hygieneChecks || {}).length || (!!item.exitTimestamp && !highCareToolsMatch(item));
+  }
+  if (["closed", "done", "completed", "complete", "resolved"].includes(st)) return false;
+  if (item.result === "fail" || item.result === "failed" || item.satisfactory === false || item.conditionOk === false) return true;
   if (ATTENTION_STATUSES.has(st)) return true;
   if (st.includes("overdue") || st.includes("expir")) return true;
   for (const k of DATE_KEYS) {
-    const d = parseDate(item[k]);
-    if (d && d < new Date()) return true;
+    const days = daysUntilRegisterDue(item[k]);
+    if (days != null && days < 0) return true;
   }
   return false;
 }
@@ -186,7 +202,7 @@ export function getModuleRegisterStat(moduleId) {
   }
 
   const data = loadOrgScoped(cfg.key, []);
-  const items = Array.isArray(data) ? data : [];
+  const items = Array.isArray(data) ? data.filter((item) => item && !item.deletedAt) : [];
   if (items.length === 0) {
     return { moduleId, count: 0, attentionCount: 0, status: "empty", lastUpdated: null, sparkline: null };
   }
@@ -199,7 +215,7 @@ export function getModuleRegisterStat(moduleId) {
   }
 
   items.forEach((item) => {
-    if (!custom && itemNeedsAttention(item)) attentionCount += 1;
+    if (!custom && itemNeedsAttention(item, moduleId)) attentionCount += 1;
     lastTs = Math.max(lastTs, itemTimestamp(item));
   });
 

@@ -62,8 +62,8 @@ export default function OfflineStatusBanner() {
 
   const offlineDetail =
     queueCount > 0
-      ? "Edits are saved on this device. Cloud upload will retry when you reconnect."
-      : "Edits are saved on this device. Cloud sync runs when online (if your org uses D1 backup).";
+      ? "Some changes are waiting on this device for cloud upload. Reconnect to retry."
+      : "Locally saved work may remain available. Cloud features need a connection.";
 
   if (isOnline && !updateAvailable && !synced && queueCount === 0) return null;
 
@@ -88,7 +88,7 @@ export default function OfflineStatusBanner() {
             <path d="M2 14L8 2l6 12H2z" />
           </svg>
           <span style={{ fontWeight: 500 }}>You are offline</span>
-          <span>— MySafeOps keeps working on this device. {offlineDetail}</span>
+          <span>— {offlineDetail}</span>
           {queueCount > 0 && (
             <span
               style={{
@@ -125,7 +125,7 @@ export default function OfflineStatusBanner() {
             <circle cx={8} cy={8} r={6} />
             <path d="M5 8l2 2 4-4" strokeLinecap="round" />
           </svg>
-          Back online — data synchronised successfully.
+          Back online — pending cloud uploads synchronised.
         </div>
       )}
 

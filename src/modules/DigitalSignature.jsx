@@ -4,6 +4,9 @@ import { ms } from "../utils/moduleStyles";
 import { loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
 import PageHero from "../components/PageHero";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { replaceWithTombstone } from "../utils/d1ArrayMerge";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
 
 const loadJSON = (k, fallback = []) => loadOrgScoped(k, fallback);
 const saveJSON = (k, v) => saveOrgScoped(k, v);
@@ -138,19 +141,33 @@ function SignatureBlock({ signer, docId, signatures, onSign, onClear }) {
   const { t } = useWorkspaceT();
   const [signing, setSigning] = useState(false);
   const [gpsStatus, setGpsStatus] = useState("idle");
+  const capturePending = useRef(false);
+  const [saveError, setSaveError] = useState("");
   const existing = signatures.find(s => s.signerId === signer.id && s.docId === docId);
 
   const handleCapture = async (dataUrl) => {
+    if (capturePending.current) return;
+    capturePending.current = true;
+    setSaveError("");
+    try {
     setGpsStatus("fetching");
     const gps = await getGPS();
     setGpsStatus(gps ? "ok" : "denied");
-    onSign({
+    const saved = onSign({
       id:genId(), docId, signerId:signer.id,
       signerName:signer.name, signerRole:signer.role || "Operative",
       dataUrl, timestamp:new Date().toISOString(), gps,
       device: navigator.userAgent.split("(")[1]?.split(")")[0] || "Unknown",
     });
+    if (saved === false) {
+      setSaveError("Signature could not be saved. Try again — your drawing is still here.");
+      return;
+    }
     setSigning(false); setGpsStatus("idle");
+    } finally {
+      capturePending.current = false;
+      setGpsStatus("idle");
+    }
   };
 
   const initials = (n) => (n||"?").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
@@ -192,25 +209,46 @@ function SignatureBlock({ signer, docId, signatures, onSign, onClear }) {
         <div style={{ marginTop:10 }}>
           {gpsStatus==="fetching" && <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:8 }}>Getting GPS location…</div>}
           <SignatureCanvas onCapture={handleCapture} label={`${signer.name || "Sign"} — draw signature below`} />
+          {saveError && <p role="alert" style={{ fontSize: 12, color: "#A32D2D" }}>{saveError}</p>}
         </div>
       )}
     </div>
   );
 }
 
-export function SignaturePanel({ docId, docTitle, docType="RAMS", signers=[], onClose }) {
-  const [signatures, setSignatures] = useState(() => loadJSON("signatures", []));
+export function SignaturePanel(props) {
+  return props.signatureRows !== undefined
+    ? <SignaturePanelContent {...props} />
+    : <SyncedSignaturePanel {...props} />;
+}
+
+function SyncedSignaturePanel(props) {
+  const [rows, setRows] = useState(() => loadJSON("signatures", []));
+  const sync = useD1OrgArraySync({ storageKey: "signatures", namespace: "signatures", value: rows, setValue: setRows, load: loadJSON, save: saveJSON });
+  return <SignaturePanelContent {...props} signatureRows={rows} syncStatus={sync} onSignaturesChange={(next) => { setRows(next); props.onSignaturesChange?.(next); }} />;
+}
+
+function SignaturePanelContent({ docId, docTitle, docType="RAMS", signers=[], onClose, onSignaturesChange, signatureRows, syncStatus }) {
+  const [localSignatures, setSignatures] = useState(() => loadJSON("signatures", []));
+  const signatures = signatureRows || localSignatures;
   const [tab, setTab] = useState("sign");
 
-  useEffect(() => { saveJSON("signatures", signatures); }, [signatures]);
+  const updateSignatures = (update) => {
+    const next = update(signatures);
+    if (!saveJSON("signatures", next)) return false;
+    setSignatures(next);
+    onSignaturesChange?.(next);
+    return true;
+  };
 
-  const docSigs = signatures.filter(s => s.docId === docId);
+  const docSigs = signatures.filter(s => s.docId === docId && !s.deletedAt);
   const signedIds = new Set(docSigs.map(s => s.signerId));
   const allSigned = signers.length > 0 && signers.every(s => signedIds.has(s.id));
 
   return (
     <ModuleOverlay onClose={onClose}>
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:600 }}>
+        {syncStatus && <D1ModuleSyncBanner d1Hydrating={syncStatus.d1Hydrating} d1OutboxPending={syncStatus.d1OutboxPending} />}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
           <div>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
@@ -239,8 +277,8 @@ export function SignaturePanel({ docId, docTitle, docType="RAMS", signers=[], on
             {signers.length===0 && <div style={{ textAlign:"center", padding:"2rem 0", color:"var(--color-text-secondary)", fontSize:13 }}>No signers assigned.</div>}
             {signers.map(s=>(
               <SignatureBlock key={s.id} signer={s} docId={docId} signatures={signatures}
-                onSign={(sig)=>setSignatures(prev=>[...prev,sig])}
-                onClear={(id)=>setSignatures(prev=>prev.filter(s=>s.id!==id))}
+                onSign={(sig)=>updateSignatures(prev=>[...prev,sig])}
+                onClear={(id)=>updateSignatures(prev=>replaceWithTombstone(prev, id))}
               />
             ))}
             {allSigned && (
@@ -285,6 +323,11 @@ export default function SignatureManager() {
   const [customSignerName, setCustomSignerName] = useState("");
   const [customSignerRole, setCustomSignerRole] = useState("");
   const [allSigs, setAllSigs] = useState(()=>loadJSON("signatures",[]));
+  const docsSync = useD1OrgArraySync({ storageKey: "sig_docs", namespace: "sig_docs", value: docs, setValue: setDocs, load: loadJSON, save: saveJSON });
+  const sigsSync = useD1OrgArraySync({ storageKey: "signatures", namespace: "signatures", value: allSigs, setValue: setAllSigs, load: loadJSON, save: saveJSON });
+  const syncBanner = <D1ModuleSyncBanner d1Hydrating={docsSync.d1Hydrating || sigsSync.d1Hydrating} d1OutboxPending={docsSync.d1OutboxPending || sigsSync.d1OutboxPending} />;
+  const liveDocs = docs.filter((doc) => !doc.deletedAt);
+  const liveSigs = allSigs.filter((sig) => !sig.deletedAt);
 
   const refreshWorkers = useCallback(() => {
     setWorkers(loadJSON("mysafeops_workers", []));
@@ -293,8 +336,6 @@ export default function SignatureManager() {
   useEffect(() => { refreshWorkers(); }, [refreshWorkers]);
   useEffect(() => { if (showNew) refreshWorkers(); }, [showNew, refreshWorkers]);
 
-  useEffect(()=>{ saveJSON("sig_docs",docs); },[docs]);
-  useEffect(()=>{ saveJSON("signatures",allSigs); },[allSigs]);
 
   const docTypes = ["RAMS","Method Statement","Permit","Toolbox Talk","Induction","Inspection","Other"];
 
@@ -326,25 +367,28 @@ export default function SignatureManager() {
   };
 
   const deleteDoc = (id) => {
-    setDocs(prev=>prev.filter(d=>d.id!==id));
-    setAllSigs(prev=>prev.filter(s=>s.docId!==id));
+    setDocs(prev=>replaceWithTombstone(prev, id));
+    const next = loadJSON("signatures", []).map((sig) => sig.docId === id ? { id: sig.id, deletedAt: new Date().toISOString() } : sig);
+    if (saveJSON("signatures", next)) setAllSigs(next);
     if (activeDoc?.id===id) setActiveDoc(null);
   };
 
-  const sigCount = (docId) => allSigs.filter(s=>s.docId===docId).length;
+  const sigCount = (docId) => liveSigs.filter(s=>s.docId===docId).length;
 
   if (activeDoc) {
     const signers = resolveDocSigners(activeDoc, workers);
     return (
       <div style={{ fontFamily:"DM Sans, system-ui, sans-serif", padding:"1rem 0" }}>
+        {syncBanner}
         <button onClick={()=>setActiveDoc(null)} style={{ ...ss.btn, marginBottom:16, fontSize:12 }}>← Back</button>
-        <SignaturePanel docId={activeDoc.id} docTitle={activeDoc.title} docType={activeDoc.type} signers={signers} onClose={()=>setActiveDoc(null)} />
+        <SignaturePanel docId={activeDoc.id} docTitle={activeDoc.title} docType={activeDoc.type} signers={signers} signatureRows={allSigs} onSignaturesChange={setAllSigs} onClose={()=>setActiveDoc(null)} />
       </div>
     );
   }
 
   return (
     <div style={{ fontFamily:"DM Sans, system-ui, sans-serif", padding:"1.25rem 0", fontSize:14 }}>
+      {syncBanner}
       <PageHero
         badgeText="SIG"
         title="Digital signatures"
@@ -461,7 +505,7 @@ export default function SignatureManager() {
         </div>
       )}
 
-      {docs.length===0 && !showNew && (
+      {liveDocs.length===0 && !showNew && (
         <div style={{ textAlign:"center", padding:"3rem 1rem", border:"0.5px dashed var(--color-border-tertiary,#e5e5e5)", borderRadius:12 }}>
           <p style={{ color:"var(--color-text-secondary)", fontSize:13, marginBottom:12 }}>No documents awaiting signatures yet.</p>
           <button onClick={()=>setShowNew(true)} style={ss.btnPrimary}>{t("addRecord")}</button>
@@ -469,7 +513,7 @@ export default function SignatureManager() {
       )}
 
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-        {docs.map(doc=>{
+        {liveDocs.map(doc=>{
           const signers = resolveDocSigners(doc, workers);
           const signed = sigCount(doc.id);
           const total = signers.length;

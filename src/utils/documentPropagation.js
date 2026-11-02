@@ -8,6 +8,9 @@ import { pickRamsForProject } from "../modules/surveyReport/surveyReportSmart";
 import { mergeRamsWithSurveyReport } from "../modules/surveyReport/surveyRamsSync";
 import { surveyTypeLabel } from "../modules/surveyReport/surveyReportHelpers";
 import { getSurveyPackMeta } from "./surveyContentCatalog";
+import { buildRamsCloneForProject } from "./ramsDocumentClone";
+import { commitRamsDocument, ramsDocumentStorageScope } from "../modules/rams/ramsDocumentSave";
+import { getCachedAuthorshipActor } from "./documentAuthorship";
 
 import { todayLocalISO } from "./localDate";
 export { duplicateRamsToProject, batchDuplicateRamsToProject } from "./ramsDocumentClone";
@@ -49,6 +52,7 @@ export function appendSurveySummaryToRams(ramsDoc, report) {
 
   const appendices = Array.isArray(ramsDoc.surveyAppendices) ? [...ramsDoc.surveyAppendices] : [];
   const existingIdx = appendices.findIndex((a) => a.surveyId === report.id);
+  const previousAppendix = appendices[existingIdx];
   const block = buildSurveyAppendixText(report);
   const entry = {
     surveyId: report.id,
@@ -65,9 +69,11 @@ export function appendSurveySummaryToRams(ramsDoc, report) {
   const stamp = todayLocalISO();
   const marker = `--- Survey appendix (${stamp}: ${report.ref || report.id}) ---`;
   let handoverNotes = String(ramsDoc.handoverNotes || "").trim();
-  const refToken = report.ref || report.id;
-  const sectionRe = new RegExp(`--- Survey appendix \\([^)]*${refToken.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^)]*\\) ---[\\s\\S]*?(?=\\n--- Survey appendix|$)`, "i");
-  if (sectionRe.test(handoverNotes)) {
+  if (previousAppendix?.summary) {
+    const escape = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Replace only the text we generated previously, retaining notes added by the user.
+    const oldRef = previousAppendix.ref || previousAppendix.surveyId;
+    const sectionRe = new RegExp(`(?:^|\\n)--- Survey appendix \\([^\\n]*: ${escape(oldRef)}\\) ---\\n${escape(previousAppendix.summary)}(?=\\n|$)`);
     handoverNotes = handoverNotes.replace(sectionRe, "").trim();
   }
   handoverNotes = handoverNotes ? `${handoverNotes}\n\n${marker}\n${block}` : `${marker}\n${block}`;
@@ -85,62 +91,86 @@ export function appendSurveySummaryToRams(ramsDoc, report) {
 }
 
 export function resolveRamsForSurvey(report, ramsDocs = []) {
-  const linked = (ramsDocs || []).find((d) => d.id === report?.linkedRamsId);
-  if (linked) return linked;
-  return pickRamsForProject(ramsDocs, report?.projectId);
+  const live = (ramsDocs || []).filter((doc) => doc?.id && !doc.deletedAt);
+  if (report?.linkedRamsId) {
+    return live.find((doc) => doc.id === report.linkedRamsId &&
+      (!report.projectId || !doc.projectId || doc.projectId === report.projectId)) || null;
+  }
+  return pickRamsForProject(live, report?.projectId);
+}
+
+const PROPAGATION_ERRORS = {
+  no_rams: "No matching RAMS on this project — create or link a current RAMS draft first.",
+  rams_locked: "This RAMS is approved, issued or signed. Create and link an unsigned draft before applying survey changes.",
+  document_changed: "This RAMS changed or was removed. Reload it and review the current version before retrying.",
+  workspace_changed: "The workspace changed. Reopen the survey in its original workspace before retrying.",
+  storage_failed: "The RAMS changes could not be saved on this device. Check storage or workspace access and retry.",
+  invalid_survey: "A current survey report is required before updating RAMS.",
+};
+
+function propagationError(code) {
+  return Object.assign(new Error(PROPAGATION_ERRORS[code] || "Could not update RAMS."), { code });
+}
+
+function hasRamsApprovalEvidence(doc) {
+  const locked = ["approved", "issued", "signed", "archived", "superseded"];
+  return [doc.status, doc.documentStatus].some((status) => locked.includes(String(status || "").toLowerCase()))
+    || Boolean(doc.signed || doc.signedAt || doc.clientApproval?.at || (doc.approvedBy && doc.approvalDate))
+    || Object.values(doc.operativeSignatures || {}).some(Boolean)
+    || (doc.signatureEvents || []).some((event) => ["approval_signed", "issue_released", "operative_ink_sign"].includes(event?.action));
+}
+
+/** Guard each write; localStorage comparison is not an atomic cross-tab transaction. */
+function persistSurveyRamsChange(report, ramsDocs, transform, expectedScope = ramsDocumentStorageScope()) {
+  if (expectedScope !== ramsDocumentStorageScope()) throw propagationError("workspace_changed");
+  if (!report?.id || report.deletedAt) throw propagationError("invalid_survey");
+  const rams = resolveRamsForSurvey(report, ramsDocs);
+  if (!rams) throw propagationError("no_rams");
+  if (hasRamsApprovalEvidence(rams)) throw propagationError("rams_locked");
+  const actor = getCachedAuthorshipActor();
+  const next = {
+    ...transform(rams), contentHash: undefined,
+    updatedBy: actor?.name, updatedByEmail: actor?.email, updatedById: actor?.id,
+  };
+  const committed = commitRamsDocument({ document: next, editingDocument: rams, expectedScope });
+  if (!committed.ok) throw propagationError(committed.reason);
+  return next;
 }
 
 /** Push survey pack metadata onto linked (or project) RAMS. */
 export function persistRamsSyncFromSurvey(report, ramsDocs) {
-  const rams = resolveRamsForSurvey(report, ramsDocs);
-  if (!rams) throw new Error("No RAMS on this project — create or link RAMS first.");
   if (!report?.surveyType) throw new Error("Select a survey type before pushing to RAMS.");
-  const next = mergeRamsWithSurveyReport(rams, report);
-  const list = load(PROJECT_DOC_KEYS.rams, []);
-  const idx = list.findIndex((d) => d.id === next.id);
-  const updated = idx >= 0 ? list.map((d, i) => (i === idx ? next : d)) : [next, ...list];
-  save(PROJECT_DOC_KEYS.rams, updated);
-  return next;
+  return persistSurveyRamsChange(report, ramsDocs, (rams) => mergeRamsWithSurveyReport(rams, report));
 }
 
 /** Persist survey appendix onto linked (or project) RAMS. */
-export function persistSurveyAppendixToRams(report, ramsDocs) {
-  const rams = resolveRamsForSurvey(report, ramsDocs);
-  if (!rams) throw new Error("No RAMS on this project — create or link RAMS first.");
-  const { rams: next, appended } = appendSurveySummaryToRams(rams, report);
-  if (!appended) throw new Error("Could not append survey summary.");
-  const list = load(PROJECT_DOC_KEYS.rams, []);
-  const idx = list.findIndex((d) => d.id === next.id);
-  const updated = idx >= 0 ? list.map((d, i) => (i === idx ? next : d)) : [next, ...list];
-  save(PROJECT_DOC_KEYS.rams, updated);
-  return next;
+export function persistSurveyAppendixToRams(report, ramsDocs, expectedScope = ramsDocumentStorageScope()) {
+  return persistSurveyRamsChange(report, ramsDocs, (rams) => {
+    const { rams: next, appended } = appendSurveySummaryToRams(rams, report);
+    if (!appended) throw propagationError("invalid_survey");
+    return next;
+  }, expectedScope);
 }
 
 /** Batch append final surveys that have a RAMS target. */
 export function batchAppendFinalSurveysToRams(reports = [], ramsDocs = []) {
-  const finals = (reports || []).filter((r) => r.status === "final");
+  const finals = (reports || []).filter((r) => r.status === "final" && !r.deletedAt);
+  const expectedScope = ramsDocumentStorageScope();
   let ramsList = [...(ramsDocs || [])];
   const results = [];
 
   for (const report of finals) {
     try {
-      const rams = resolveRamsForSurvey(report, ramsList);
-      if (!rams) {
-        results.push({ reportId: report.id, ok: false, reason: "no_rams" });
-        continue;
-      }
-      const { rams: next } = appendSurveySummaryToRams(rams, report);
-      ramsList = ramsList.some((d) => d.id === next.id)
-        ? ramsList.map((d) => (d.id === next.id ? next : d))
-        : [next, ...ramsList];
+      const next = persistSurveyAppendixToRams(report, ramsList, expectedScope);
+      // Advance only our own target snapshot; do not hide concurrent changes to other targets.
+      ramsList = ramsList.map((doc) => doc.id === next.id ? next : doc);
       results.push({ reportId: report.id, ok: true, ramsId: next.id });
     } catch (e) {
-      results.push({ reportId: report.id, ok: false, reason: e?.message || "failed" });
+      results.push({ reportId: report.id, ok: false, reason: e?.code || "failed", message: e?.message || "Could not update RAMS." });
     }
   }
 
-  if (results.some((r) => r.ok)) save(PROJECT_DOC_KEYS.rams, ramsList);
-  return { results, ramsList };
+  return { results, ramsList: expectedScope === ramsDocumentStorageScope() ? load(PROJECT_DOC_KEYS.rams, []) : ramsList };
 }
 
 export function batchAssignSurveysToProject(reportIds = [], projectId, reports = []) {
@@ -166,103 +196,127 @@ export function cloneProjectDocuments(sourceProjectId, targetProjectId, options 
   } = options;
 
   const summary = { rams: 0, surveys: 0, permits: 0, methodStatements: 0, geoPhotos: 0 };
+  const projects = load("mysafeops_projects", []);
+  const targetProject = projects.find((project) => project.id === dst && !project.deletedAt);
+  const clonedRamsIds = new Map();
+  const savedLabels = { rams: "RAMS", surveys: "surveys", permits: "permits", methodStatements: "method statements", geoPhotos: "geo-photos" };
+  const persistClones = (key, clones, existing, label) => {
+    if (!clones.length) return false;
+    if (save(key, [...clones, ...existing]) !== true) {
+      const saved = Object.entries(summary)
+        .filter(([, count]) => count > 0)
+        .map(([kind, count]) => `${count} ${savedLabels[kind] || kind}`);
+      const partial = saved.length ? ` Already saved: ${saved.join(", ")}. Review the target project before retrying to avoid duplicate copies.` : " Check storage or workspace access and retry.";
+      const error = new Error(`The ${label} copies could not be saved on this device.${partial}`);
+      error.partialSummary = { ...summary };
+      throw error;
+    }
+    return true;
+  };
 
   if (includeRams) {
     const rams = load(PROJECT_DOC_KEYS.rams, []);
     const clones = rams
-      .filter((d) => d.projectId === src)
+      .filter((d) => d.projectId === src && !d.deletedAt)
       .map((d) => {
-        const { id: _id, ...rest } = d;
-        return {
-          ...rest,
-          id: genId("rams"),
-          projectId: dst,
-          title: `${d.title || "RAMS"} (copy)`,
-          status: "draft",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          clonedFromProjectId: src,
-        };
+        const clone = { ...buildRamsCloneForProject(d, dst, projects), title: `${d.title || "RAMS"} (copy)` };
+        clonedRamsIds.set(d.id, clone.id);
+        return clone;
       });
-    if (clones.length) {
-      save(PROJECT_DOC_KEYS.rams, [...clones, ...rams]);
-      summary.rams = clones.length;
-    }
+    if (persistClones(PROJECT_DOC_KEYS.rams, clones, rams, "RAMS")) summary.rams = clones.length;
   }
 
   if (includeSurveys) {
     const surveys = load(PROJECT_DOC_KEYS.surveys, []);
     const clones = surveys
-      .filter((d) => d.projectId === src)
+      .filter((d) => d.projectId === src && !d.deletedAt)
       .map((d) => {
         const { id: _id, ref: _ref, ...rest } = d;
         return {
           ...rest,
           id: genId("survey"),
           projectId: dst,
+          projectName: targetProject?.name || "",
+          linkedRamsId: clonedRamsIds.get(d.linkedRamsId) || "",
+          linkedGprReportId: "",
+          hseRefs: { ...(d.hseRefs || {}), linkedPermitId: "" },
           ref: `${d.ref || "SR"}-CPY`,
           title: `${d.title || "Survey"} (copy)`,
           status: "draft",
+          signed: false,
+          signedAt: null,
+          signedBy: "",
+          signatureEvents: [],
+          clientApproval: null,
+          signatures: { surveyorName: "", surveyorSignedDate: "", clientName: "", clientAcceptedDate: "" },
+          finalisedAt: null,
+          parentReportId: "",
+          parentRevision: "",
+          deletedAt: undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           clonedFromProjectId: src,
         };
       });
-    if (clones.length) {
-      save(PROJECT_DOC_KEYS.surveys, [...clones, ...surveys]);
-      summary.surveys = clones.length;
-    }
+    if (persistClones(PROJECT_DOC_KEYS.surveys, clones, surveys, "survey")) summary.surveys = clones.length;
   }
 
   if (includePermits) {
     const permits = load(PROJECT_DOC_KEYS.permits, []);
     const clones = permits
-      .filter((d) => d.projectId === src)
+      .filter((d) => d.projectId === src && !d.deletedAt)
       .map((d) => {
         const { id: _id, ...rest } = d;
         return {
           ...rest,
           id: genId("ptw"),
           projectId: dst,
+          linkedRamsId: clonedRamsIds.get(d.linkedRamsId) || "",
+          location: targetProject?.address || targetProject?.site || "",
           status: "draft",
+          signatures: [],
+          workflow: { state: "draft", history: [] },
+          deletedAt: undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           clonedFromProjectId: src,
         };
       });
-    if (clones.length) {
-      save(PROJECT_DOC_KEYS.permits, [...clones, ...permits]);
-      summary.permits = clones.length;
-    }
+    if (persistClones(PROJECT_DOC_KEYS.permits, clones, permits, "permit")) summary.permits = clones.length;
   }
 
   if (includeMethodStatements) {
     const ms = load(PROJECT_DOC_KEYS.methodStatements, []);
     const clones = ms
-      .filter((d) => d.projectId === src)
+      .filter((d) => d.projectId === src && !d.deletedAt)
       .map((d) => {
         const { id: _id, ...rest } = d;
         return {
           ...rest,
           id: genId("ms"),
           projectId: dst,
+          relatedRamsId: clonedRamsIds.get(d.relatedRamsId) || "",
+          location: targetProject?.address || targetProject?.site || "",
           title: `${d.title || "Method"} (copy)`,
           status: "draft",
+          signatures: [],
+          operativeSignatures: {},
+          approvedBy: "",
+          permitControllerSignDate: "",
+          revision: "1A",
+          deletedAt: undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           clonedFromProjectId: src,
         };
       });
-    if (clones.length) {
-      save(PROJECT_DOC_KEYS.methodStatements, [...clones, ...ms]);
-      summary.methodStatements = clones.length;
-    }
+    if (persistClones(PROJECT_DOC_KEYS.methodStatements, clones, ms, "method statement")) summary.methodStatements = clones.length;
   }
 
   if (includeGeoPhotos) {
     const photos = load(PROJECT_DOC_KEYS.geoPhotos, []);
     const clones = photos
-      .filter((p) => p.projectId === src)
+      .filter((p) => p.projectId === src && !p.deletedAt)
       .map((p) => {
         const { id: _id, ...rest } = p;
         return {
@@ -272,12 +326,10 @@ export function cloneProjectDocuments(sourceProjectId, targetProjectId, options 
           clonedFromProjectId: src,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
+          deletedAt: undefined,
         };
       });
-    if (clones.length) {
-      save(PROJECT_DOC_KEYS.geoPhotos, [...clones, ...photos]);
-      summary.geoPhotos = clones.length;
-    }
+    if (persistClones(PROJECT_DOC_KEYS.geoPhotos, clones, photos, "geo-photo")) summary.geoPhotos = clones.length;
   }
 
   return summary;

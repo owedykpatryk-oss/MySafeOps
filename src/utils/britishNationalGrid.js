@@ -178,3 +178,118 @@ export function wgs84ToBritishNationalGrid(latDeg, lngDeg) {
     gridRef,
   };
 }
+
+const HELMERT_OSGB36_TO_WGS84 = {
+  tx: 446.448,
+  ty: -125.157,
+  tz: 542.06,
+  scalePpm: -20.4894,
+  rxSec: 0.1502,
+  rySec: 0.247,
+  rzSec: 0.8421,
+};
+
+function meridionalArc(lat, lat0, b, f0, n) {
+  const dLat = lat - lat0;
+  const sLat = lat + lat0;
+  return (
+    b *
+    f0 *
+    ((1 + n + (5 / 4) * n ** 2 + (5 / 4) * n ** 3) * dLat -
+      (3 * n + 3 * n ** 2 + (21 / 8) * n ** 3) * Math.sin(dLat) * Math.cos(sLat) +
+      ((15 / 8) * n ** 2 + (15 / 8) * n ** 3) * Math.sin(2 * dLat) * Math.cos(2 * sLat) -
+      (35 / 24) * n ** 3 * Math.sin(3 * dLat) * Math.cos(3 * sLat))
+  );
+}
+
+/** National Grid easting/northing → OSGB36 latitude and longitude in degrees. */
+export function eastingNorthingToOsgb36(easting, northing) {
+  const E = Number(easting);
+  const N = Number(northing);
+  if (!Number.isFinite(E) || !Number.isFinite(N)) return null;
+  const { a, b } = AIRY_1830;
+  const { scale: f0, originLat: lat0, originLng: lng0, originEasting: e0, originNorthing: n0 } = GRID;
+  const eSq = (a * a - b * b) / (a * a);
+  const n = (a - b) / (a + b);
+  let phi = (N - n0) / (a * f0) + lat0;
+  for (let i = 0; i < 12; i += 1) {
+    const m = meridionalArc(phi, lat0, b, f0, n);
+    phi += (N - n0 - m) / (a * f0);
+  }
+  const sinLat = Math.sin(phi);
+  const cosLat = Math.cos(phi);
+  const tanLat = Math.tan(phi);
+  const tan2 = tanLat * tanLat;
+  const nu = a * f0 * (1 - eSq * sinLat * sinLat) ** -0.5;
+  const rho = a * f0 * (1 - eSq) * (1 - eSq * sinLat * sinLat) ** -1.5;
+  const etaSq = nu / rho - 1;
+  const dE = E - e0;
+  const vii = tanLat / (2 * rho * nu);
+  const viii = (tanLat / (24 * rho * nu ** 3)) * (5 + 3 * tan2 + etaSq - 9 * tan2 * etaSq);
+  const ix = (tanLat / (720 * rho * nu ** 5)) * (61 + 90 * tan2 + 45 * tan2 * tan2);
+  const x = 1 / (cosLat * nu);
+  const xi = (1 / (cosLat * 6 * nu ** 3)) * (nu / rho + 2 * tan2);
+  const xii = (1 / (cosLat * 120 * nu ** 5)) * (5 + 28 * tan2 + 24 * tan2 * tan2);
+  const xiia = (1 / (cosLat * 5040 * nu ** 7)) * (61 + 662 * tan2 + 1320 * tan2 * tan2 + 720 * tan2 ** 3);
+  const lat = phi - vii * dE ** 2 + viii * dE ** 4 - ix * dE ** 6;
+  const lng = lng0 + x * dE - xi * dE ** 3 + xii * dE ** 5 - xiia * dE ** 7;
+  return { lat: (lat * 180) / Math.PI, lng: (lng * 180) / Math.PI };
+}
+
+/**
+ * National Grid → WGS84. Helmert only, about ±5 m against OSTN15.
+ * @returns {{ lat: number, lng: number } | null}
+ */
+export function britishNationalGridToWgs84(easting, northing) {
+  const osgb = eastingNorthingToOsgb36(easting, northing);
+  if (!osgb) return null;
+  const cartesian = geodeticToCartesian((osgb.lat * Math.PI) / 180, (osgb.lng * Math.PI) / 180, 0, AIRY_1830);
+  const shifted = helmert(cartesian, HELMERT_OSGB36_TO_WGS84);
+  const { latRad, lngRad } = cartesianToGeodetic(shifted, WGS84);
+  const lat = (latRad * 180) / Math.PI;
+  const lng = (lngRad * 180) / Math.PI;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+/** "TQ 30262 79553", "530262 179553" or "E 651409 N 313177". */
+export function parseBritishNationalGrid(text) {
+  const raw = String(text || "").trim().toUpperCase().replace(/\//g, " ");
+  const letters = raw.match(/^([A-HJ-Z]{2})\s*(\d{2,10})\s*(\d{2,10})$/);
+  if (letters) {
+    const eDigits = letters[2];
+    const nDigits = letters[3];
+    if (eDigits.length !== nDigits.length || eDigits.length > 5) return null;
+    const pair = letters[1];
+    let square = null;
+    for (let e100 = 0; e100 < 7 && !square; e100 += 1) {
+      for (let n100 = 0; n100 < 13; n100 += 1) {
+        const ref = gridReferenceFromEastingNorthing(e100 * 100000 + 1, n100 * 100000 + 1, 1);
+        if (ref.startsWith(pair)) {
+          square = { e100, n100 };
+          break;
+        }
+      }
+    }
+    if (!square) return null;
+    const scale = 10 ** (5 - eDigits.length);
+    return {
+      easting: square.e100 * 100000 + Number(eDigits) * scale,
+      northing: square.n100 * 100000 + Number(nDigits) * scale,
+    };
+  }
+  const nums = raw.replace(/[EN]/g, " ").match(/\d+(?:\.\d+)?/g);
+  if (!nums || nums.length < 2) return null;
+  const easting = Number(nums[0]);
+  const northing = Number(nums[1]);
+  if (easting < 0 || easting >= 700000 || northing < 0 || northing >= 1300000) return null;
+  return { easting, northing };
+}
+
+/** ///filled.count.soap or a what3words.com / w3w.co link. */
+export function normaliseWhat3Words(raw) {
+  let text = String(raw || "").trim().toLowerCase();
+  text = text.replace(/^https?:\/\/(?:www\.)?(?:what3words\.com|w3w\.co)\//, "");
+  text = text.replace(/^\/+/, "").split(/[?#]/)[0];
+  return /^[a-z]{3,}\.[a-z]{3,}\.[a-z]{3,}$/.test(text) ? text : "";
+}

@@ -3,7 +3,7 @@
  */
 import { geoPhotoPreset } from "./geoPhotoPresets";
 import { geoPhotoDisplayUrl } from "./geoPhotoMedia";
-import { bearingArrowHead, bearingToEnd, isCoarseGpsAccuracy, normalizeBearing } from "./geoPhotoUtils";
+import { bearingArrowHead, bearingToEnd, hasGeoPhotoCoordinates, isCoarseGpsAccuracy, normalizeBearing } from "./geoPhotoUtils";
 import { wgs84ToBritishNationalGrid } from "./britishNationalGrid";
 import { escapeXml } from "./xmlEscape";
 import { CAPTURE_PHASE_OPTIONS, resolvedGiDepth, resolvedGiLocationId } from "./geoPhotoFields";
@@ -30,7 +30,7 @@ export function latLngToSiteMetres(lat, lng, originLat, originLng) {
 }
 
 export function exportOriginForPhotos(photos, fallback = { lat: 51.5, lng: -0.1 }) {
-  const pts = (photos || []).filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)));
+  const pts = (photos || []).filter(hasGeoPhotoCoordinates);
   if (!pts.length) return { ...fallback };
   const lat = pts.reduce((s, p) => s + Number(p.latitude), 0) / pts.length;
   const lng = pts.reduce((s, p) => s + Number(p.longitude), 0) / pts.length;
@@ -60,7 +60,7 @@ export function bearingToCadRotation(bearingDeg) {
 /** Split photos into GPS-tagged vs missing coordinates. */
 export function filterGeoPhotosWithCoords(photos) {
   const list = photos || [];
-  const withCoords = list.filter((p) => Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)));
+  const withCoords = list.filter(hasGeoPhotoCoordinates);
   const withIds = new Set(withCoords.map((p) => p.id));
   const withoutCoords = list.filter((p) => !withIds.has(p.id));
   return { withCoords, withoutCoords, total: list.length };
@@ -502,7 +502,7 @@ export function buildZipStore(files) {
 export async function buildGeoPhotosKmzBlob(photos, opts = {}) {
   const kml = buildGeoPhotosKml(photos, { ...opts, groundOverlays: opts.groundOverlays !== false });
   const files = [{ name: "doc.kml", data: new TextEncoder().encode(kml) }];
-  const withCoords = (photos || []).filter((p) => Number.isFinite(Number(p.latitude)));
+  const withCoords = (photos || []).filter(hasGeoPhotoCoordinates);
 
   for (const p of withCoords) {
     const bytes = await photoImageBytes(p);
@@ -551,7 +551,13 @@ export function buildGeoPhotosDxf(photos, opts = {}) {
   const origin = opts.origin || exportOriginForPhotos(photos);
   const arrowLenM = opts.arrowLengthM ?? 8;
   const blockScale = opts.blockScale ?? 1;
-  const { withCoords } = filterGeoPhotosWithCoords(photos);
+  // Plan coordinates are percentages, not WGS84 latitudes; 90–100 is valid.
+  const withCoords = opts.coordinateMode === "plan_percent"
+    ? (Array.isArray(photos) ? photos : []).filter((p) =>
+        p && p.latitude != null && p.longitude != null &&
+        p.latitude !== "" && p.longitude !== "" &&
+        Number.isFinite(Number(p.latitude)) && Number.isFinite(Number(p.longitude)))
+    : filterGeoPhotosWithCoords(photos).withCoords;
 
   const layers = new Set(["GEO_PHOTOS", "GEO_VIEW_ARROWS", "GEO_EXTENTS", "GEO_LABELS", "_GEOREF"]);
   withCoords.forEach((p) => {

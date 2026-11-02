@@ -8,18 +8,18 @@
 
 /** Monthly amounts in cents (CHF × 100). Slightly above EUR nominal — CH SaaS market norm. */
 export const CH_PLAN_AMOUNT_CENTS = {
-  starter: 2500,
-  team: 13900,
-  business: 39900,
-  enterprise: 82900,
+  starter: 4900,
+  team: 19900,
+  business: 43900,
+  enterprise: 89900,
 };
 
 /** Human-readable monthly labels (net). */
 export const CH_PLAN_PRICE_LABELS = {
-  starter: "25 CHF",
-  team: "139 CHF",
-  business: "399 CHF",
-  enterprise: "829 CHF",
+  starter: "49 CHF",
+  team: "199 CHF",
+  business: "439 CHF",
+  enterprise: "899 CHF",
   trial: "0 CHF",
 };
 

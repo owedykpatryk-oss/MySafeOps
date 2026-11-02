@@ -12,13 +12,20 @@ import {
 } from "../utils/countryWorkspaces";
 import { getOrgMarketId } from "../utils/orgMarket";
 import { persistOrgRow } from "../utils/orgMembership";
+import { getOrgId } from "../utils/orgId";
+import { ORG_TRIAL_ENDS_AT_KEY, removeScopedBilling, writeScopedBilling } from "../utils/billingState";
 
 function persistWorkspaceEntitlement(workspace) {
   const billing = workspace?.billing;
-  // Entitlements could not be read. Keeping the cached organisation values is safe for the
-  // primary country (they are re-synced by `ensure_my_org`), but a secondary country has no
-  // legacy entitlement to fall back on, so it stays locked until billing is readable again.
+  // Keep the last primary entitlement during a transient read failure. The backend
+  // still checks every write. Secondary countries stay locked until billing is readable.
   if (workspace?.billing_unavailable && workspace?.is_primary) return;
+  if (workspace?.is_primary && Object.hasOwn(workspace, "evaluation_trial_ends_at")) {
+    // Refresh administrative extensions (and revocations) alongside country billing.
+    // This runs only after the load's organisation/revision guards have passed.
+    if (workspace.evaluation_trial_ends_at) writeScopedBilling(ORG_TRIAL_ENDS_AT_KEY, workspace.evaluation_trial_ends_at);
+    else removeScopedBilling(ORG_TRIAL_ENDS_AT_KEY);
+  }
   persistOrgRow({
     billing_plan: billing?.billing_plan || null,
     subscription_status: billing?.subscription_status || "none",
@@ -35,12 +42,15 @@ export default function CountryWorkspaceSwitcher({ supabase }) {
   const [active, setActive] = useState(null);
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
+  const loadRevision = useRef(0);
 
   const load = useCallback(async () => {
     if (!supabase || !orgId || orgId === "default") return;
+    const revision = ++loadRevision.current;
     try {
       if (role === "admin") await ensureLegacyCountryWorkspace(supabase, getOrgMarketId(orgId), orgId);
       const rows = await loadCountryWorkspaces(supabase, orgId);
+      if (revision !== loadRevision.current || getOrgId() !== orgId) return;
       const selected = pickActiveCountryWorkspace(rows, orgId);
       setWorkspaces(rows);
       setActive(selected);
@@ -49,6 +59,7 @@ export default function CountryWorkspaceSwitcher({ supabase }) {
         persistWorkspaceEntitlement(selected);
       }
     } catch {
+      if (revision !== loadRevision.current || getOrgId() !== orgId) return;
       setWorkspaces([]);
       setActive(null);
     }
@@ -58,7 +69,14 @@ export default function CountryWorkspaceSwitcher({ supabase }) {
     void load();
     const onChanged = () => void load();
     window.addEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, onChanged);
-    return () => window.removeEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, onChanged);
+    window.addEventListener("mysafeops-billing-refresh", onChanged);
+    window.addEventListener("focus", onChanged);
+    return () => {
+      loadRevision.current += 1;
+      window.removeEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, onChanged);
+      window.removeEventListener("mysafeops-billing-refresh", onChanged);
+      window.removeEventListener("focus", onChanged);
+    };
   }, [load]);
 
   useEffect(() => {

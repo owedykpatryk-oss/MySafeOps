@@ -21,12 +21,15 @@ export default function ProjectSitePlanPanel({
   selectedPlanId = "",
   onSelectPlanId,
   onPlansChanged,
+  uploadInputRef,
+  onPlanUploaded,
   compact = false,
 }) {
   const [plans, setPlans] = useState(() => listProjectPlans());
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const planInputRef = useRef(null);
+  const localPlanInputRef = useRef(null);
+  const planInputRef = uploadInputRef || localPlanInputRef;
 
   const plansForProject = useMemo(
     () => (projectId ? plans.filter((p) => p.projectId === projectId) : []),
@@ -42,7 +45,7 @@ export default function ProjectSitePlanPanel({
 
   const persistPlans = useCallback(
     (next) => {
-      saveProjectPlans(next);
+      if (!saveProjectPlans(next)) throw new Error("Plan could not be saved. Check available device storage and retry.");
       setPlans(next);
       onPlansChanged?.();
     },
@@ -52,7 +55,11 @@ export default function ProjectSitePlanPanel({
   const updatePlan = useCallback(
     (planId, updater) => {
       const next = updateProjectPlan(plans, planId, updater);
-      persistPlans(next);
+      try {
+        persistPlans(next);
+      } catch (error) {
+        setMsg(error?.message || "Plan changes could not be saved.");
+      }
     },
     [plans, persistPlans]
   );
@@ -79,6 +86,7 @@ export default function ProjectSitePlanPanel({
       const next = [rec, ...plans].slice(0, 120);
       persistPlans(next);
       onSelectPlanId?.(rec.id);
+      onPlanUploaded?.(rec);
       setMsg(
         rasterDataUrl || !String(raw.mimeType).toLowerCase().includes("pdf")
           ? "Plan uploaded — click on the drawing to mark routes and zones."

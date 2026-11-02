@@ -22,6 +22,21 @@ describe("GPR evidence register", () => {
     expect(evidence.observedFact).toContain("Sedimentary bedrock");
   });
 
+  it("does not pass saved BGS data to the historical review when geology is off", () => {
+    const report = {
+      includeGeology: false,
+      groundConditions: {
+        fetchedAt: "2026-09-25T08:00:00Z",
+        locationVerified: true,
+        queryLat: 55.864,
+        queryLng: -4.433,
+        bedrock: { lexDescription: "Sedimentary bedrock" },
+      },
+    };
+    expect(buildGprEvidenceReviewPayload(report).evidence).toEqual([]);
+    expect(buildGprEvidenceReviewPayload({ ...report, includeGeology: true }).evidence).toHaveLength(1);
+  });
+
   it("excludes unverified and uncited historical claims from the AI payload", () => {
     const payload = buildGprEvidenceReviewPayload({
       historicalEvidence: [

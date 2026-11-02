@@ -2,6 +2,7 @@
  * Smart automation for GPR reports — geology API, weather, limitation suggestions, prebuilt narratives.
  */
 import { fetchWeatherForDate, resolveSiteCoordinates } from "../../utils/weatherSummary";
+import { appApiUrl } from "../../utils/appApiUrl";
 import { mapWeatherSnapshotToFields } from "../../utils/weatherFieldMap";
 import {
   buildGprWeatherImpactNarrative,
@@ -17,7 +18,10 @@ import {
 } from "./gprReportHelpers";
 import { blankGprReport, GPR_LIMITATION_RULES, ANOMALY_QUICK_TEMPLATES, blankGprAnomaly } from "./gprReportConstants";
 import { applyIndustryGprTemplate } from "./gprReportTemplateContext";
-import { buildPreSurveyScopeLine } from "./gprPreSurvey";
+import { applyGprNarrativeAutomation } from "./gprNarrativeAutomation.js";
+import { gprSitePoint } from "./gprHistoricImagery.js";
+import { mergeWaterImpact } from "./gprWaterProximity.js";
+import { buildPreSurveyScopeLine, isIndoorGprSurvey } from "./gprPreSurvey";
 import {
   buildGprLineLengthNarrative,
   buildGprLineLengthSummary,
@@ -29,13 +33,17 @@ import { inheritSiteContextOntoDoc } from "../../utils/inheritSiteContext";
 
 import { todayLocalISO } from "../../utils/localDate";
 export async function fetchGeologyIntoReport(report, project) {
-  const hasPin = projectHasMapPin(project);
+  const reportPin = Number.isFinite(Number(report?.siteLat)) && Number.isFinite(Number(report?.siteLng)) && !(Number(report.siteLat) === 0 && Number(report.siteLng) === 0);
+  const hasPin = projectHasMapPin(project) || reportPin;
   const coords = await resolveSiteCoordinates(
-    project?.lat ?? project?.siteLat,
-    project?.lng ?? project?.siteLng,
-    project?.postcode || report?.siteAddress,
+    report?.siteLat || project?.lat || project?.siteLat,
+    report?.siteLng || project?.lng || project?.siteLng,
+    report?.postcode || project?.postcode,
+    undefined,
+    report?.siteAddress,
+    project?.address,
   );
-  if (!coords) throw new Error("Set a project map pin (lat/lng) or UK postcode for geology lookup");
+  if (!coords) throw new Error("Type a UK postcode or lat/lng on Setup, or link a project with a map pin");
 
   const bgs = await fetchGeologyAtPoint(coords.lat, coords.lng);
   const antennaMhz = primaryAntennaMhz(report);
@@ -55,6 +63,8 @@ export async function fetchGeologyIntoReport(report, project) {
       ...interpreted,
       accuracyWarning: hasPin ? "" : BGS_POSTCODE_ACCURACY_WARNING,
       coordSource: hasPin ? "project map pin" : "postcode / geocode",
+      lookupPostcode: coords.postcode || "",
+      locationVerified: true,
       siteObservations: {
         ...prevObs,
         madeGround: madeFromMap ? true : Boolean(prevObs.madeGround),
@@ -66,9 +76,11 @@ export async function fetchGeologyIntoReport(report, project) {
 
 export async function fetchEnvironmentalIntoReport(report, project) {
   const coords = await resolveSiteCoordinates(
-    project?.lat ?? project?.siteLat,
-    project?.lng ?? project?.siteLng,
-    project?.postcode || report?.siteAddress,
+    report?.siteLat || project?.lat || project?.siteLat,
+    report?.siteLng || project?.lng || project?.siteLng,
+    report?.postcode || project?.postcode || report?.siteAddress,
+    undefined,
+    report?.siteAddress,
   );
   if (!coords) throw new Error("Could not resolve coordinates for weather");
 
@@ -104,10 +116,38 @@ export async function fetchEnvironmentalIntoReport(report, project) {
   };
 }
 
+export async function fetchWaterIntoReport(report, project) {
+  const point = gprSitePoint(report, project);
+  if (!point) throw new Error("Set a survey or project coordinate before checking nearby water");
+  const response = await fetch(appApiUrl("/api/gpr-water"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(point),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Water check failed");
+  const environmental = { ...(report.environmental || {}) };
+  environmental.moistureImpactOnGpr = mergeWaterImpact(
+    environmental.moistureImpactOnGpr,
+    payload,
+    payload.retrievedAt
+  );
+  environmental.waterProximity = {
+    source: "OpenStreetMap",
+    sourceUrl: payload.sourceUrl || "https://www.openstreetmap.org/copyright",
+    retrievedAt: payload.retrievedAt || "",
+    fresh: payload.fresh || null,
+    salt: payload.salt || null,
+  };
+  return { ...report, environmental };
+}
+
 /** Rule-based limitation keys from ground, weather and acquisition. */
 export function suggestGprLimitationKeys(report) {
   const keys = new Set(report?.limitationKeys || []);
-  const gc = report?.groundConditions || {};
+  const gc = report?.includeGeology
+    ? report?.groundConditions || {}
+    : { siteObservations: report?.groundConditions?.siteObservations || {} };
   const env = report?.environmental || {};
   const obs = gc.siteObservations || {};
 
@@ -116,12 +156,10 @@ export function suggestGprLimitationKeys(report) {
   }
   if (gc.materialClass === "made_ground" || obs.madeGround) keys.add("made_ground");
   if (obs.reinforcement === "present" || obs.reinforcement === "extensive") keys.add("reinforcement_clutter");
-  if (
-    env.rainDuringSurvey === "light" ||
-    env.rainDuringSurvey === "heavy" ||
-    obs.moisture === "wet" ||
-    obs.moisture === "waterlogged"
-  ) {
+  const wetSurface = obs.moisture === "wet" || obs.moisture === "waterlogged";
+  if (isIndoorGprSurvey(report)) {
+    if (wetSurface) keys.add("surface_moisture");
+  } else if (env.rainDuringSurvey === "light" || env.rainDuringSurvey === "heavy" || wetSurface) {
     keys.add("weather_moisture");
   }
   keys.add("frequency_resolution");
@@ -169,7 +207,7 @@ export function buildExecutiveSummaryDraft(report) {
   const eq = report.equipment?.[0] || {};
   const freq = eq.antennaFrequencyMhz || 400;
   const nAnomalies = report.anomalies?.length || 0;
-  const pen = report.groundConditions?.expectedPenetrationM;
+  const pen = report.includeGeology ? report.groundConditions?.expectedPenetrationM : null;
 
   return [
     `GPR survey at ${site} on ${date}.`,
@@ -187,10 +225,10 @@ export function buildRecommendationsDraft(report) {
     "Treat all GPR anomalies as indicative until verified by hand dig, vacuum excavation or secondary detection.",
     "Maintain safe dig practices and permit-to-dig controls regardless of GPR coverage.",
   ];
-  if (report.groundConditions?.materialClass === "clay_silt") {
+  if (report.includeGeology && report.groundConditions?.materialClass === "clay_silt") {
     lines.push("Consider supplementary EML/CAT in clay-rich zones where GPR penetration was limited.");
   }
-  if (report.groundConditions?.materialClass === "made_ground") {
+  if (report.includeGeology && report.groundConditions?.materialClass === "made_ground") {
     lines.push("Prioritise verification in made-ground areas where velocity model uncertainty is elevated.");
   }
   return lines.join("\n");
@@ -230,19 +268,19 @@ export function applyGprSmartNarratives(report) {
     sections.scope = sections.scope?.trim() ? `${objectiveLine}\n\n${sections.scope}` : objectiveLine;
   }
 
-  if (r.groundConditions?.narrative && !sections.scope?.includes("BGS")) {
+  if (r.includeGeology && r.groundConditions?.narrative && !sections.scope?.includes("BGS")) {
     sections.scope =
       (sections.scope ? `${sections.scope}\n\n` : "") +
       "Ground context (BGS 1:625k):\n" +
       r.groundConditions.narrative;
   }
 
-  return {
+  return applyGprNarrativeAutomation({
     ...r,
     sections,
     limitationKeys,
     limitationsText: r.limitationsText || autoLimitations,
-  };
+  });
 }
 
 /** One-click prebuilt pack: industry template + BGS + weather + rule-based narratives. */
@@ -254,14 +292,21 @@ export async function applyPrebuiltGprPack(report, project) {
 export async function runGprSmartFill(report, project) {
   let r = normalizeGprReportLocal(report);
   try {
-    r = await fetchGeologyIntoReport(r, project);
+    if (r.includeGeology) r = await fetchGeologyIntoReport(r, project);
   } catch {
     /* geology optional if coords missing */
   }
+  if (!isIndoorGprSurvey(r)) {
+    try {
+      r = await fetchEnvironmentalIntoReport(r, project);
+    } catch {
+      /* weather optional */
+    }
+  }
   try {
-    r = await fetchEnvironmentalIntoReport(r, project);
+    r = await fetchWaterIntoReport(r, project);
   } catch {
-    /* weather optional */
+    /* water desk-check optional */
   }
   r = applyGprSmartNarratives(r);
   r.smartFillAt = new Date().toISOString();
@@ -294,26 +339,26 @@ export function gprSmartTips(report, project, linkedSurveyReport = null) {
   if (!report?.preSurvey?.startedAt) {
     tips.push({
       level: "info",
-      text: "On site? Tap Start here on Setup to stamp GPS, live weather, surface and what you are looking for into the PDF.",
+      text: "On site? Record the survey setting, then tap Start here to stamp GPS and pre-survey context into the PDF.",
     });
   }
-  if (!projectHasMapPin(project) && !project?.postcode && !report?.siteAddress) {
-    tips.push({ level: "warn", text: "Link a project with a map pin (preferred) or postcode to enable BGS DigMap 50k geology." });
-  } else if (!projectHasMapPin(project) && (project?.postcode || report?.siteAddress)) {
+  if (report?.includeGeology && !projectHasMapPin(project) && !(Number(report?.siteLat) && Number(report?.siteLng)) && !report?.postcode && !project?.postcode && !report?.siteAddress) {
+    tips.push({ level: "warn", text: "Type a site address and postcode on Setup, or link a project, so BGS geology can run." });
+  } else if (report?.includeGeology && !projectHasMapPin(project) && !(Number(report?.siteLat) && Number(report?.siteLng)) && (report?.postcode || project?.postcode || report?.siteAddress)) {
     tips.push({
       level: "warn",
-      text: "No project map pin — BGS will use a postcode/address centroid (less accurate). Set lat/lng on the project.",
+      text: "No map pin yet — BGS will use the postcode centroid. Look up the postcode on Setup or type lat/lng.",
     });
   }
-  if (!report.groundConditions?.fetchedAt) {
+  if (report.includeGeology && !report.groundConditions?.fetchedAt) {
     tips.push({ level: "info", text: "Fetch BGS geology (50k + boreholes) to auto-estimate penetration and limitations." });
-  } else if (report.groundConditions?.resolution === "625k") {
+  } else if (report.includeGeology && report.groundConditions?.resolution === "625k") {
     tips.push({ level: "info", text: "Geology used 625k fallback — 50k was unavailable for this point." });
   }
-  if (!report.environmental?.fetchedAt) {
-    tips.push({ level: "info", text: "Fetch weather for survey date — moisture impact text is generated automatically." });
+  if (!isIndoorGprSurvey(report) && !report.environmental?.fetchedAt) {
+    tips.push({ level: "info", text: "Optional: fetch weather for the survey date when outdoor conditions affect the scan." });
   }
-  const pen = report.groundConditions?.expectedPenetrationM;
+  const pen = report.includeGeology ? report.groundConditions?.expectedPenetrationM : null;
   const target = Number(report.acquisition?.depthRangeM);
   if (pen && Number.isFinite(target) && target > pen * 1.05) {
     tips.push({
@@ -399,7 +444,7 @@ export function importFromSurveyReport(gprReport, surveyReport) {
   if (surveyReport.sections?.methodology && !next.sections.methodology) {
     next.sections = { ...next.sections, methodology: surveyReport.sections.methodology };
   }
-  if (surveyReport.weather && !next.environmental?.fetchedAt) {
+  if (!isIndoorGprSurvey(next) && surveyReport.weather && !next.environmental?.fetchedAt) {
     next.environmental = {
       ...next.environmental,
       description: surveyReport.weather.conditionsNarrative || next.environmental.description,

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, X } from "lucide-react";
 import { buildWorkspaceSearchHits } from "../utils/workspaceSearch";
 import { getPinnedModuleIds } from "../utils/pinnedModules";
 import { getRecentModuleIds } from "../utils/recentModules";
 import { getModuleIcon, preloadModuleIcons } from "../navigation/moduleCatalogMeta";
 
-const MODULE_HIT_KINDS = new Set(["Module", "Pinned", "Recent"]);
+const MODULE_HIT_KINDS = new Set(["Open", "Module", "Pinned", "Recent"]);
 
 /**
  * Modal command palette: jump to screens and surface matching records (local data).
@@ -13,25 +13,46 @@ const MODULE_HIT_KINDS = new Set(["Module", "Pinned", "Recent"]);
 export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allowSuperadmin = false }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
+  const dialogRef = useRef(null);
+  const resultRefs = useRef([]);
   const [active, setActive] = useState(0);
   const [iconGen, setIconGen] = useState(0);
+  const [visibleViewport, setVisibleViewport] = useState(null);
+
+  useEffect(() => {
+    if (!open || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+    const update = () => setVisibleViewport({ height: viewport.height, top: viewport.offsetTop });
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+    };
+  }, [open]);
 
   const hits = useMemo(() => {
+    if (!open) return [];
     const rows = buildWorkspaceSearchHits(query, {
       pinnedModuleIds: getPinnedModuleIds(),
       recentModuleIds: getRecentModuleIds(),
     });
     if (allowSuperadmin) return rows;
     return rows.filter((h) => h.viewId !== "superadmin");
-  }, [query, allowSuperadmin]);
+  }, [query, allowSuperadmin, open]);
 
   useEffect(() => {
     if (!open) return;
     setQuery("");
     setActive(0);
+    const previousFocus = document.activeElement;
     const t = requestAnimationFrame(() => inputRef.current?.focus());
     preloadModuleIcons().then(() => setIconGen((g) => g + 1));
-    return () => cancelAnimationFrame(t);
+    return () => {
+      cancelAnimationFrame(t);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
   }, [open]);
 
   useEffect(() => {
@@ -39,11 +60,27 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
   }, [query]);
 
   useEffect(() => {
+    if (open) resultRefs.current[active]?.scrollIntoView?.({ block: "nearest" });
+  }, [active, open]);
+
+  useEffect(() => {
     if (!open) return;
     const onDoc = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
+      }
+      if (e.key === "Tab") {
+        const elements = Array.from(dialogRef.current?.querySelectorAll("input, button") || []).filter((el) => !el.disabled);
+        const first = elements[0];
+        const last = elements.at(-1);
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
       }
     };
     document.addEventListener("keydown", onDoc);
@@ -53,7 +90,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
   if (!open) return null;
 
   const go = (h) => {
-    onNavigate({ viewId: h.viewId, permitId: h.permitId });
+    onNavigate(h);
     onClose();
   };
 
@@ -78,12 +115,16 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
       className="app-search-overlay"
       style={{
         position: "fixed",
-        inset: 0,
+        inset: visibleViewport ? undefined : 0,
+        top: visibleViewport ? visibleViewport.top : undefined,
+        left: visibleViewport ? 0 : undefined,
+        right: visibleViewport ? 0 : undefined,
+        height: visibleViewport ? visibleViewport.height : undefined,
         zIndex: "var(--z-palette, 70)",
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
-        padding: "12vh 1rem 2rem",
+        padding: visibleViewport?.height < 500 ? "8px 1rem" : "min(12vh, 72px) 1rem 1rem",
         boxSizing: "border-box",
       }}
       onMouseDown={(e) => {
@@ -91,37 +132,46 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
       }}
     >
       <div
+        ref={dialogRef}
         className="app-panel-surface app-search-dialog"
         style={{
           width: "100%",
           maxWidth: 520,
           borderRadius: "var(--radius-md, 14px)",
           overflow: "hidden",
+          maxHeight: "100%",
+          display: "flex",
+          flexDirection: "column",
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--color-border-tertiary,#e2e8f0)", background: "var(--color-background-secondary,#f8fafc)" }}>
+        <div style={{ padding: "14px 16px", flexShrink: 0, borderBottom: "1px solid var(--color-border-tertiary,#e2e8f0)", background: "var(--color-background-secondary,#f8fafc)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <input
             ref={inputRef}
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search… (empty list shows pinned + recent modules)"
+            placeholder="Find a project, document or module…"
             aria-label="Search workspace"
             autoComplete="off"
             style={{
               width: "100%",
+              minWidth: 0,
               boxSizing: "border-box",
               padding: "12px 16px",
-              fontSize: 15,
+              fontSize: 16,
               borderRadius: "var(--radius-sm, 10px)",
               border: "1px solid var(--color-border-secondary,#cbd5e1)",
               fontFamily: "DM Sans, system-ui, sans-serif",
-              outline: "none",
               background: "var(--color-background-primary)",
             }}
           />
+          <button type="button" onClick={onClose} aria-label="Close search" className="app-search-close">
+            <X size={20} aria-hidden="true" />
+          </button>
+          </div>
           <div style={{ fontSize: 11, color: "var(--color-text-secondary)", marginTop: 8, lineHeight: 1.4 }}>
             <kbd
               style={{
@@ -149,7 +199,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
             open · Esc close
           </div>
         </div>
-        <div style={{ maxHeight: "min(50vh, 360px)", overflowY: "auto" }}>
+        <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
           {hits.length === 0 ? (
             <div style={{ padding: "2rem 1rem", textAlign: "center", fontSize: 13, color: "var(--color-text-secondary)" }}>
               {query.trim().length === 0
@@ -164,6 +214,7 @@ export default function WorkspaceSearchPalette({ open, onClose, onNavigate, allo
               return (
                 <button
                   key={`${h.key}-${iconGen}`}
+                  ref={(node) => { resultRefs.current[i] = node; }}
                   type="button"
                   onClick={() => go(h)}
                   onMouseEnter={() => setActive(i)}

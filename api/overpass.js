@@ -24,7 +24,7 @@ function clampRadiusM(raw) {
   return Math.max(500, Math.min(50_000, Math.round(n)));
 }
 
-async function fetchOverpass(query) {
+export async function fetchOverpass(query) {
   const body = `data=${encodeURIComponent(query)}`;
   let lastError = "overpass_upstream_unreachable";
 

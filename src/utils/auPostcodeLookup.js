@@ -2,6 +2,8 @@
  * Australian postcode lookup (4-digit) via server proxy → Nominatim.
  */
 
+import { appApiUrl } from "./appApiUrl";
+
 const AU_POSTCODE_IN_TEXT = /\b(\d{4})\b/;
 
 /** @param {string} raw */
@@ -50,7 +52,7 @@ export async function lookupAuPostcode(postcode) {
   const pc = normaliseAuPostcodeInput(postcode);
   if (!pc) return null;
 
-  const proxyUrl = `/api/au-postcode?code=${encodeURIComponent(pc)}`;
+  const proxyUrl = appApiUrl(`/api/au-postcode?code=${encodeURIComponent(pc)}`);
   try {
     const res = await fetch(proxyUrl, {
       headers: { Accept: "application/json" },

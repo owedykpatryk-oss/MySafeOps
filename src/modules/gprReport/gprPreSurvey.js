@@ -36,6 +36,13 @@ export const GPR_PRE_SURVEY_CHECKS = [
   { key: "siteContactPresent", label: "Client / site contact on site" },
 ];
 
+const SURVEY_SETTINGS = new Set(["unspecified", "indoor", "outdoor", "mixed"]);
+const LEVEL_BELOW_OPTIONS = new Set(["unknown", "yes", "no"]);
+
+export function isIndoorGprSurvey(report) {
+  return report?.preSurvey?.surveySetting === "indoor";
+}
+
 export function blankGprSitePhoto(overrides = {}) {
   return {
     id: `psp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
@@ -65,6 +72,8 @@ export function blankGprPreSurvey(overrides = {}) {
       text: "",
     },
     weatherError: "",
+    surveySetting: "unspecified",
+    levelBelow: "unknown",
     surveyDates: [],
     surfaceKeys: [],
     moisture: "dry",
@@ -97,6 +106,8 @@ export function normalizeGprPreSurvey(raw) {
     surfaceKeys,
     objectives,
     photos,
+    surveySetting: SURVEY_SETTINGS.has(raw.surveySetting) ? raw.surveySetting : base.surveySetting,
+    levelBelow: LEVEL_BELOW_OPTIONS.has(raw.levelBelow) ? raw.levelBelow : base.levelBelow,
     moisture: raw.moisture || base.moisture,
   };
 }
@@ -131,10 +142,17 @@ export function moistureLabel(key) {
 export function buildPreSurveyScopeLine(ps) {
   const n = normalizeGprPreSurvey(ps);
   const labels = objectiveLabels(n.objectives);
-  if (!labels.length && !String(n.objectiveNotes || "").trim()) return "";
-  const head = labels.length ? `Survey objectives: ${labels.join("; ")}.` : "Survey objectives recorded.";
   const note = String(n.objectiveNotes || "").trim();
-  return note ? `${head} ${note}` : head;
+  const parts = [];
+  if (labels.length) parts.push(`Survey objectives: ${labels.join("; ")}.`);
+  if (note) parts.push(note);
+  if (n.surveySetting !== "unspecified") {
+    parts.push(`Survey setting: ${{ indoor: "indoors", outdoor: "outdoors", mixed: "mixed indoor and outdoor" }[n.surveySetting]}.`);
+  }
+  if ((n.surveySetting === "indoor" || n.surveySetting === "mixed") && n.levelBelow !== "unknown") {
+    parts.push(`Site context records another building level below the scanned slab: ${n.levelBelow}. This is not inferred from GPR data.`);
+  }
+  return parts.join(" ");
 }
 
 function parseProjectPin(project) {
@@ -145,7 +163,7 @@ function parseProjectPin(project) {
 }
 
 /**
- * Stamp GPS + live weather at the moment of the tap.
+ * Stamp GPS and, for non-indoor work, optional live weather at the moment of the tap.
  * Does not wipe photos, objectives or site checks already entered.
  */
 export async function captureGprStartHere({ project, report } = {}) {
@@ -185,20 +203,22 @@ export async function captureGprStartHere({ project, report } = {}) {
 
   let weather = blankGprPreSurvey().weather;
   let weatherError = "";
-  try {
-    const snap = await fetchWeatherSummary(lat, lng, {
-      postcode: project?.postcode || report?.siteAddress,
-    });
-    weather = {
-      description: snap.description || "",
-      tempC: snap.tempC ?? null,
-      windMph: snap.windMph ?? null,
-      fetchedAt: snap.fetchedAt || startedAt,
-      source: snap.source || "",
-      text: snap.text || "",
-    };
-  } catch (e) {
-    weatherError = e?.message || "Weather lookup failed";
+  if (!isIndoorGprSurvey(report)) {
+    try {
+      const snap = await fetchWeatherSummary(lat, lng, {
+        postcode: project?.postcode || report?.siteAddress,
+      });
+      weather = {
+        description: snap.description || "",
+        tempC: snap.tempC ?? null,
+        windMph: snap.windMph ?? null,
+        fetchedAt: snap.fetchedAt || startedAt,
+        source: snap.source || "",
+        text: snap.text || "",
+      };
+    } catch (e) {
+      weatherError = e?.message || "Weather lookup failed";
+    }
   }
 
   const prev = normalizeGprPreSurvey(report?.preSurvey);
@@ -237,7 +257,7 @@ export function applyGprStartHereCapture(report, capture = {}) {
 
   const w = next.weather;
   let environmental = report?.environmental || {};
-  if (w.description || w.fetchedAt) {
+  if (!isIndoorGprSurvey(report) && (w.description || w.fetchedAt)) {
     const mapped = mapWeatherSnapshotToFields({
       description: w.description,
       tempC: w.tempC,
@@ -303,6 +323,8 @@ export function buildGprPreSurveyPrintHtml(ps) {
   const started = isGprPreSurveyStarted(n);
   const hasNotes = Boolean(
     n.objectives.length ||
+      n.surveySetting !== "unspecified" ||
+      n.levelBelow !== "unknown" ||
       n.surfaceKeys.length ||
       n.photos.length ||
       String(n.notes || "").trim() ||
@@ -323,20 +345,37 @@ export function buildGprPreSurveyPrintHtml(ps) {
   const checksDone = GPR_PRE_SURVEY_CHECKS.filter((c) => n.siteChecks[c.key]).map((c) => c.label);
   const checksOpen = GPR_PRE_SURVEY_CHECKS.filter((c) => !n.siteChecks[c.key]).map((c) => c.label);
 
-  const photos = (n.photos || [])
-    .filter((p) => p.dataUrl)
-    .map(
-      (p) =>
-        `<figure class="gpr-radargram-fig"><img src="${esc(p.dataUrl)}" alt="${esc(p.caption || "Site photo")}" style="max-width:100%;border-radius:6px"/><figcaption>${esc(p.caption || "General site photo")}${p.capturedAt ? ` · ${esc(formatOrgDateTime(p.capturedAt))}` : ""}</figcaption></figure>`
-    )
-    .join("");
+  const photos = (n.photos || []).filter((p) => p.dataUrl);
+  const photoPages = [];
+  for (let i = 0; i < photos.length; i += 10) {
+    const slice = photos.slice(i, i + 10);
+    photoPages.push(
+      `<div class="gpr-site-photo-page">${slice
+        .map(
+          (p) =>
+            `<figure><img src="${esc(p.dataUrl)}" alt="${esc(p.caption || "Site photo")}"/><figcaption>${esc(p.caption || "Site photo")}${p.capturedAt ? ` · ${esc(formatOrgDateTime(p.capturedAt))}` : ""}</figcaption></figure>`
+        )
+        .join("")}</div>`
+    );
+  }
+  const photoHtml = photoPages.length
+    ? `<p><strong>Site photographs</strong> <span style="color:#64748b;font-size:8pt">Up to 10 per page.</span></p>${photoPages.join("")}`
+    : started
+      ? `<p><em>No general site photographs attached.</em></p>`
+      : "";
 
   const meta = [
     ["Started", n.startedAt ? formatOrgDateTime(n.startedAt) : "—"],
     ["Started by", n.startedBy || "—"],
     ["GPS", coord || n.gpsError || "—"],
     ["Position source", preSurveyGpsSourceLabel(n.gpsSource) || "—"],
-    ["Weather at start", weatherBits.join(", ") || n.weatherError || "—"],
+    ...(n.surveySetting !== "unspecified" ? [["Survey setting", { indoor: "Indoors", outdoor: "Outdoors", mixed: "Mixed indoor and outdoor" }[n.surveySetting]]] : []),
+    ...(n.surveySetting === "indoor" || n.surveySetting === "mixed"
+      ? [["Another level below scanned slab", { yes: "Yes", no: "No", unknown: "Not confirmed" }[n.levelBelow]]]
+      : []),
+    ...(n.surveySetting !== "indoor" && weatherBits.length
+      ? [["Weather at start (optional)", weatherBits.join(", ")]]
+      : []),
     ["Survey day(s)", dates],
     ["Surface / substrate", surfaceLabels(n.surfaceKeys).join("; ") || "—"],
     ["Ground moisture", moistureLabel(n.moisture)],
@@ -344,7 +383,7 @@ export function buildGprPreSurveyPrintHtml(ps) {
   ];
 
   return [
-    `<p>Field start snapshot taken when the surveyor tapped <strong>Start here</strong>. GPS and weather are stamped at that moment, not typed later from memory.</p>`,
+    `<p>Field start snapshot taken when the surveyor tapped <strong>Start here</strong>. GPS was recorded at that moment${n.surveySetting === "indoor" ? "." : "; optional weather was captured where available."}</p>`,
     `<div class="gpr-meta-grid">${meta
       .map(
         ([k, v]) =>
@@ -352,6 +391,9 @@ export function buildGprPreSurveyPrintHtml(ps) {
       )
       .join("")}</div>`,
     n.objectiveNotes ? `<p><strong>Objective notes:</strong> ${esc(n.objectiveNotes)}</p>` : "",
+    n.surveySetting === "indoor" || n.surveySetting === "mixed"
+      ? `<p><em>The presence or absence of another building level below is site context, not a conclusion from GPR data. Confirm against building plans or direct observation.</em></p>`
+      : "",
     checksDone.length
       ? `<p><strong>Pre-survey checks completed:</strong> ${esc(checksDone.join("; "))}.</p>`
       : "",
@@ -359,11 +401,7 @@ export function buildGprPreSurveyPrintHtml(ps) {
       ? `<p><em>Not ticked: ${esc(checksOpen.join("; "))}.</em></p>`
       : "",
     n.notes ? `<p><strong>Field notes:</strong> ${esc(n.notes)}</p>` : "",
-    photos
-      ? `<p><strong>General site photographs</strong></p>${photos}`
-      : started
-        ? `<p><em>No general site photographs attached.</em></p>`
-        : "",
+    photoHtml,
   ].join("");
 }
 

@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../../utils/projectDisplayLabel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ms } from "../../utils/moduleStyles";
 import GeoPhotoDirectionMap from "./GeoPhotoDirectionMap";
@@ -14,6 +15,7 @@ import {
   isCoarseGpsAccuracy,
   newGeoPhotoId,
   normalizeBearing,
+  photoReadErrorMessage,
   readPhotoExifLocation,
   requestCompassPermission,
   requestDeviceLocation,
@@ -25,50 +27,20 @@ import { uploadGeoPhotoToR2 } from "../../utils/geoPhotoMedia";
 import { findNearestProject, findRecentDuplicateGeoPhoto } from "../../utils/geoPhotoIntegrations";
 import { normaliseGeoPhotoDetails } from "../../utils/geoPhotoTypeFields";
 import { normaliseGeoPhotoArea } from "../../utils/geoPhotoArea";
+import { geoPhotoLocationErrorMessage, geoPhotoLocationStatus } from "../../utils/geoPhotoLocationStatus.js";
 import {
   isGiGeoPhotoType,
   buildStructuredGeoPhotoNotes,
   CAPTURE_PHASE_OPTIONS,
 } from "../../utils/geoPhotoFields";
 import { useToast } from "../../context/ToastContext";
+import { countryOperationalStorageKey, ORG_CHANGED_EVENT } from "../../utils/orgStorage";
+import { COUNTRY_WORKSPACE_CHANGED_EVENT } from "../../utils/countryWorkspaces";
+
+import { CAPTURE_DRAFT_KEY, readSessionCaptureDraft, readCaptureDraft, writeCaptureDraft, clearCaptureDraft } from "../../utils/geoPhotoCaptureDraft";
 
 const LAST_PRESET_KEY = "mysafeops_geo_photo_last_preset";
-/** Survives PWA backgrounding / camera app round-trip when React state is wiped. */
-const CAPTURE_DRAFT_KEY = "mysafeops_geo_photo_capture_draft";
 const STEPS = ["photo", "location", "details"];
-
-function readCaptureDraft() {
-  try {
-    const raw = sessionStorage.getItem(CAPTURE_DRAFT_KEY);
-    if (!raw) return null;
-    const draft = JSON.parse(raw);
-    if (typeof draft?.photoDataUrl !== "string" || !draft.photoDataUrl.startsWith("data:image")) {
-      return null;
-    }
-    return draft;
-  } catch {
-    return null;
-  }
-}
-
-function writeCaptureDraft(draft) {
-  try {
-    if (typeof draft?.photoDataUrl !== "string" || !draft.photoDataUrl.startsWith("data:image")) {
-      return;
-    }
-    sessionStorage.setItem(CAPTURE_DRAFT_KEY, JSON.stringify(draft));
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
-function clearCaptureDraft() {
-  try {
-    sessionStorage.removeItem(CAPTURE_DRAFT_KEY);
-  } catch {
-    /* ignore */
-  }
-}
 
 function stepClass(current, index, stepIdx) {
   if (current === STEPS[index]) return "geo-photo-capture__step geo-photo-capture__step--active";
@@ -90,9 +62,13 @@ export default function GeoPhotoCaptureModal({
   const { pushToast } = useToast();
   const [step, setStep] = useState("photo");
   const [photoDataUrl, setPhotoDataUrl] = useState("");
+  const [photoScope, setPhotoScope] = useState("");
   const [photoName, setPhotoName] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [draftWarning, setDraftWarning] = useState("");
+  const savedPhotosRef = useRef(photos);
+  savedPhotosRef.current = photos;
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
   const [gpsAccuracyMeters, setGpsAccuracyMeters] = useState(null);
@@ -135,6 +111,11 @@ export default function GeoPhotoCaptureModal({
   const compassCleanupRef = useRef(null);
   const wasOpenRef = useRef(false);
   const savingRef = useRef(false);
+  const photoRequestRef = useRef(0);
+  const locationRequestRef = useRef(0);
+  const captureScopeRef = useRef(countryOperationalStorageKey(CAPTURE_DRAFT_KEY));
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   // One id per capture, so a double tap or a restored draft updates the same row
   // instead of creating a second copy of the same photo.
   const captureIdRef = useRef(newGeoPhotoId());
@@ -147,8 +128,11 @@ export default function GeoPhotoCaptureModal({
   const showGiFields = isGiGeoPhotoType(type);
 
   const reset = useCallback(() => {
+    photoRequestRef.current += 1;
+    locationRequestRef.current += 1;
     setStep("photo");
     setPhotoDataUrl("");
+    setPhotoScope("");
     setPhotoName("");
     setPhotoBusy(false);
     setPhotoError("");
@@ -157,6 +141,7 @@ export default function GeoPhotoCaptureModal({
     setGpsAccuracyMeters(null);
     setAltitudeMeters(null);
     setGpsError("");
+    setGpsBusy(false);
     setGpsWaiting(false);
     setLocationSource("");
     setExifLocation(null);
@@ -195,12 +180,25 @@ export default function GeoPhotoCaptureModal({
 
   useEffect(() => {
     const wasOpen = wasOpenRef.current;
+    if (!open && wasOpen) {
+      photoRequestRef.current += 1;
+      locationRequestRef.current += 1;
+    }
     if (open && !wasOpen) {
-      const draft = readCaptureDraft();
-      if (draft?.photoDataUrl) {
+      setDraftWarning("");
+      captureScopeRef.current = countryOperationalStorageKey(CAPTURE_DRAFT_KEY);
+      const scope = captureScopeRef.current;
+      const applyDraft = (draft) => {
+        if (!draft?.photoDataUrl) return;
+        if (savedPhotosRef.current.some((photo) => photo?.id === draft.captureId && !photo.deletedAt)) {
+          reset();
+          void clearCaptureDraft(scope);
+          return;
+        }
         captureIdRef.current = draft.captureId || newGeoPhotoId();
-        setStep(draft.step || "location");
+        setStep(STEPS.includes(draft.step) ? draft.step : "location");
         setPhotoDataUrl(draft.photoDataUrl);
+        setPhotoScope(captureScopeRef.current);
         setPhotoName(draft.photoName || "");
         setPhotoBusy(false);
         setPhotoError("");
@@ -209,6 +207,7 @@ export default function GeoPhotoCaptureModal({
         setGpsAccuracyMeters(draft.gpsAccuracyMeters ?? null);
         setAltitudeMeters(draft.altitudeMeters ?? null);
         setGpsError(draft.gpsError || "");
+        setGpsBusy(false);
         setGpsWaiting(false);
         setLocationSource(draft.locationSource || "");
         setExifLocation(draft.exifLocation ?? null);
@@ -231,12 +230,36 @@ export default function GeoPhotoCaptureModal({
         setQuickAddress("");
         setQuickError("");
         setSaveError("");
-      } else {
+      };
+      const draft = readSessionCaptureDraft(scope);
+      if (draft) applyDraft(draft);
+      else {
         reset();
+        const requestId = photoRequestRef.current;
+        void readCaptureDraft(scope).then((stored) => {
+          if (wasOpenRef.current && photoRequestRef.current === requestId &&
+              countryOperationalStorageKey(CAPTURE_DRAFT_KEY) === scope) applyDraft(stored);
+        });
       }
     }
     wasOpenRef.current = open;
-  }, [open, reset]);
+  }, [open, reset, initialProjectId]);
+
+  useEffect(() => {
+    const closeForWorkspaceChange = () => {
+      photoRequestRef.current += 1;
+      locationRequestRef.current += 1;
+      onCloseRef.current?.();
+    };
+    window.addEventListener(ORG_CHANGED_EVENT, closeForWorkspaceChange);
+    window.addEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, closeForWorkspaceChange);
+    return () => {
+      photoRequestRef.current += 1;
+      locationRequestRef.current += 1;
+      window.removeEventListener(ORG_CHANGED_EVENT, closeForWorkspaceChange);
+      window.removeEventListener(COUNTRY_WORKSPACE_CHANGED_EVENT, closeForWorkspaceChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (!open || step !== "location") {
@@ -249,6 +272,27 @@ export default function GeoPhotoCaptureModal({
     return () => {
       compassCleanupRef.current?.();
       compassCleanupRef.current = null;
+    };
+  }, [open, step]);
+
+  useEffect(() => {
+    const handleCameraCancel = () => {
+      setPhotoError(
+        "The camera was closed. If it will not open, allow camera or photo access for your browser in device settings, or choose an existing photo."
+      );
+    };
+    const handleLibraryCancel = () => {
+      setPhotoError(
+        "The photo picker was closed. If access is blocked, allow photo access for your browser in device settings, then try again."
+      );
+    };
+    const cameraInput = cameraRef.current;
+    const libraryInput = libraryRef.current;
+    cameraInput?.addEventListener("cancel", handleCameraCancel);
+    libraryInput?.addEventListener("cancel", handleLibraryCancel);
+    return () => {
+      cameraInput?.removeEventListener("cancel", handleCameraCancel);
+      libraryInput?.removeEventListener("cancel", handleLibraryCancel);
     };
   }, [open, step]);
 
@@ -267,8 +311,10 @@ export default function GeoPhotoCaptureModal({
   }, [open, initialProjectId]);
 
   useEffect(() => {
-    if (!open || !photoDataUrl) return;
-    writeCaptureDraft({
+    if (!open || !photoDataUrl || photoScope !== captureScopeRef.current) return;
+    const scope = captureScopeRef.current;
+    let cancelled = false;
+    void writeCaptureDraft({
       captureId: captureIdRef.current,
       step,
       photoDataUrl,
@@ -294,11 +340,17 @@ export default function GeoPhotoCaptureModal({
       projectId,
       capturedBy,
       autoProjectHint,
+    }, scope).then((saved) => {
+      if (!cancelled && wasOpenRef.current && captureScopeRef.current === scope) {
+        setDraftWarning(saved ? "" : "Browser restart recovery is unavailable. Keep this window open until the photo is saved.");
+      }
     });
+    return () => { cancelled = true; };
   }, [
     open,
     step,
     photoDataUrl,
+    photoScope,
     photoName,
     latitude,
     longitude,
@@ -332,10 +384,14 @@ export default function GeoPhotoCaptureModal({
   };
 
   const acquireGps = async () => {
+    const requestId = ++locationRequestRef.current;
+    const scope = captureScopeRef.current;
+    const isCurrent = () => requestId === locationRequestRef.current && wasOpenRef.current && scope === countryOperationalStorageKey(CAPTURE_DRAFT_KEY);
     setGpsBusy(true);
     setGpsError("");
     try {
       const pos = await requestDeviceLocation();
+      if (!isCurrent()) return;
       setLatitude(pos.latitude);
       setLongitude(pos.longitude);
       setGpsAccuracyMeters(pos.accuracy ?? null);
@@ -343,14 +399,14 @@ export default function GeoPhotoCaptureModal({
       setLocationSource("device_gps");
       autoSelectNearestProject(pos.latitude, pos.longitude);
     } catch (e) {
-      setGpsError(e.message || "Could not get GPS");
+      if (!isCurrent()) return;
+      setGpsError(geoPhotoLocationErrorMessage(e));
       if (exifLocation) {
         setLatitude(exifLocation.latitude);
         setLongitude(exifLocation.longitude);
         setGpsAccuracyMeters(null);
         setAltitudeMeters(exifLocation.altitude ?? null);
         setLocationSource("photo_exif");
-        setGpsError("Using the location saved in the photo (GPS unavailable).");
         autoSelectNearestProject(exifLocation.latitude, exifLocation.longitude);
         return;
       }
@@ -360,19 +416,22 @@ export default function GeoPhotoCaptureModal({
         setLongitude(Number(proj.lng));
         setGpsAccuracyMeters(null);
         setLocationSource("project_site");
-        setGpsError("Using project site coordinates (GPS unavailable).");
       }
     } finally {
-      setGpsBusy(false);
+      if (isCurrent()) setGpsBusy(false);
     }
   };
 
   const waitForBetterGps = async () => {
+    const requestId = ++locationRequestRef.current;
+    const scope = captureScopeRef.current;
+    const isCurrent = () => requestId === locationRequestRef.current && wasOpenRef.current && scope === countryOperationalStorageKey(CAPTURE_DRAFT_KEY);
     setGpsWaiting(true);
     setGpsError("");
     try {
       const fix = await watchBetterLocation({
         onUpdate: (f) => {
+          if (!isCurrent()) return;
           setLatitude(f.latitude);
           setLongitude(f.longitude);
           setGpsAccuracyMeters(f.accuracy ?? null);
@@ -380,19 +439,24 @@ export default function GeoPhotoCaptureModal({
           setLocationSource("device_gps");
         },
       });
+      if (!isCurrent()) return;
       autoSelectNearestProject(fix.latitude, fix.longitude);
       if (isCoarseGpsAccuracy(fix.accuracy)) {
         setGpsError(`Best fix was ±${Math.round(fix.accuracy)} m — move into the open or drop the pin by hand.`);
       }
     } catch (e) {
-      setGpsError(e.message || "Could not improve the GPS fix");
+      if (!isCurrent()) return;
+      setGpsError(geoPhotoLocationErrorMessage(e));
     } finally {
-      setGpsWaiting(false);
+      if (isCurrent()) setGpsWaiting(false);
     }
   };
 
   const useExifLocation = () => {
     if (!exifLocation) return;
+    locationRequestRef.current += 1;
+    setGpsBusy(false);
+    setGpsWaiting(false);
     setLatitude(exifLocation.latitude);
     setLongitude(exifLocation.longitude);
     setGpsAccuracyMeters(null);
@@ -411,12 +475,18 @@ export default function GeoPhotoCaptureModal({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    const requestId = ++photoRequestRef.current;
+    locationRequestRef.current += 1;
+    const scope = captureScopeRef.current;
+    const isCurrent = () => requestId === photoRequestRef.current && wasOpenRef.current && scope === countryOperationalStorageKey(CAPTURE_DRAFT_KEY);
     setPhotoBusy(true);
     setPhotoError("");
     try {
       // EXIF must come from the original file — compression re-encodes and drops metadata.
       const [dataUrl, exif] = await Promise.all([compressImageFile(file), readPhotoExifLocation(file)]);
+      if (!isCurrent()) return;
       setPhotoDataUrl(dataUrl);
+      setPhotoScope(scope);
       setPhotoName(file.name);
       setExifLocation(exif);
       writeCaptureDraft({
@@ -443,12 +513,12 @@ export default function GeoPhotoCaptureModal({
         projectId,
         capturedBy,
         autoProjectHint,
-      });
+      }, scope);
       setStep("location");
     } catch {
-      setPhotoError("Could not read photo");
+      if (isCurrent()) setPhotoError(photoReadErrorMessage(file));
     } finally {
-      setPhotoBusy(false);
+      if (isCurrent()) setPhotoBusy(false);
     }
   };
 
@@ -530,6 +600,8 @@ export default function GeoPhotoCaptureModal({
     setSaving(true);
     try {
       await persistRow(row, takeAnother);
+    } catch (err) {
+      setSaveError(err?.message || "Photo could not be saved. Your draft is still here — try again.");
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -537,6 +609,7 @@ export default function GeoPhotoCaptureModal({
   };
 
   const persistRow = async (row, takeAnother) => {
+    const scope = captureScopeRef.current;
     if (row.photoDataUrl) {
       try {
         const uploaded = await uploadGeoPhotoToR2(row.photoDataUrl, { projectId, photoId: row.id });
@@ -545,7 +618,7 @@ export default function GeoPhotoCaptureModal({
           row.photoPublicUrl = uploaded.photoPublicUrl || null;
           row.photoSignedUrl = uploaded.photoSignedUrl || null;
           row.photoSignedExpiresAt = uploaded.photoSignedExpiresAt || null;
-          if (uploaded.photoStorageKey) {
+          if (uploaded.photoStorageKey && uploaded.photoOfflineCached) {
             row.photoDataUrl = "";
           }
         }
@@ -556,6 +629,9 @@ export default function GeoPhotoCaptureModal({
         });
       }
     }
+    if (scope !== countryOperationalStorageKey(CAPTURE_DRAFT_KEY) || !wasOpenRef.current || row.id !== captureIdRef.current) {
+      throw new Error("Workspace changed during upload. The photo draft remains in the original workspace.");
+    }
     try {
       localStorage.setItem(LAST_PRESET_KEY, type);
     } catch {
@@ -564,11 +640,12 @@ export default function GeoPhotoCaptureModal({
     const saved = await onSave(row, { takeAnother });
     if (saved === false) {
       // Keep the draft (and the photo) so a blocked save never loses field work.
-      setSaveError("This photo needs a project. Pick one below or create a quick project.");
+      setSaveError("Photo could not be saved. Check the selected project and available storage, then try again. Your draft is still here.");
       setStep("details");
       return;
     }
-    clearCaptureDraft();
+    await clearCaptureDraft(scope);
+    if (scope !== countryOperationalStorageKey(CAPTURE_DRAFT_KEY) || !wasOpenRef.current || row.id !== captureIdRef.current) return;
     captureIdRef.current = newGeoPhotoId();
     if (takeAnother) {
       setStep("photo");
@@ -590,6 +667,7 @@ export default function GeoPhotoCaptureModal({
   if (!open) return null;
 
   const stepIdx = STEPS.indexOf(step);
+  const locationStatus = geoPhotoLocationStatus(locationSource, gpsAccuracyMeters);
 
   return (
     <div
@@ -610,7 +688,6 @@ export default function GeoPhotoCaptureModal({
           <button
             type="button"
             onClick={() => {
-              clearCaptureDraft();
               onClose();
             }}
             style={{ ...ms.btn, padding: "10px 14px", minHeight: 44, touchAction: "manipulation" }}
@@ -619,6 +696,11 @@ export default function GeoPhotoCaptureModal({
           </button>
         </div>
 
+        {draftWarning ? <p role="alert">{draftWarning}</p> : null}
+        {photoDataUrl ? <button type="button" style={{ ...ms.btn, minHeight: 44 }} disabled={saving}
+          onClick={() => { void clearCaptureDraft(captureScopeRef.current); reset(); }}>
+          Discard draft
+        </button> : null}
         <div className="geo-photo-capture__steps" aria-hidden>
           {STEPS.map((s, i) => (
             <span key={s} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -672,7 +754,11 @@ export default function GeoPhotoCaptureModal({
               onChange={onPickPhoto}
             />
             {photoError ? (
-              <p className="geo-photo-capture__hint geo-photo-capture__hint--warn">{photoError}</p>
+              <p className="geo-photo-capture__hint geo-photo-capture__hint--warn" role="alert">{photoError}</p>
+            ) : !photoDataUrl ? (
+              <p className="geo-photo-capture__hint">
+                If camera access is blocked, allow camera or photo access for your browser in device settings, or choose a photo from your library.
+              </p>
             ) : null}
             {photoDataUrl ? (
               <div className="geo-photo-capture__actions">
@@ -702,6 +788,9 @@ export default function GeoPhotoCaptureModal({
                 height={200}
                 interactive
                 onLocationChange={(lat, lng) => {
+                  locationRequestRef.current += 1;
+                  setGpsBusy(false);
+                  setGpsWaiting(false);
                   setLatitude(lat);
                   setLongitude(lng);
                   setGpsAccuracyMeters(null);
@@ -714,18 +803,18 @@ export default function GeoPhotoCaptureModal({
             <p className="geo-photo-capture__hint">
               Tap the map to drop a pin if GPS is off. Compass arrow shows photo direction.
             </p>
-            <p className="geo-photo-capture__hint">
+            <p
+              className={`geo-photo-capture__hint${locationStatus.tone === "warn" ? " geo-photo-capture__hint--warn" : locationStatus.tone === "ok" ? " geo-photo-capture__hint--ok" : ""}`}
+              aria-live="polite"
+            >
+              <strong>{locationStatus.label}</strong>
               {latitude != null && longitude != null ? (
                 <>
+                  <br />
                   {latitude.toFixed(6)}, {longitude.toFixed(6)}
-                  {gpsAccuracyMeters != null ? ` · ±${Math.round(gpsAccuracyMeters)} m` : ""}
-                  {locationSource === "photo_exif" ? " · from photo metadata" : ""}
-                  {locationSource === "project_site" ? " · project site" : ""}
                   {nationalGrid ? ` · ${nationalGrid.gridRef}` : ""}
                 </>
-              ) : (
-                "Waiting for GPS…"
-              )}
+              ) : null}
             </p>
             {isCoarseGpsAccuracy(gpsAccuracyMeters) ? (
               <p className="geo-photo-capture__hint geo-photo-capture__hint--warn">
@@ -733,7 +822,7 @@ export default function GeoPhotoCaptureModal({
                 for a better fix, or tap the map to place the pin yourself.
               </p>
             ) : null}
-            {gpsError ? <p className="geo-photo-capture__hint geo-photo-capture__hint--warn">{gpsError}</p> : null}
+            {gpsError ? <p className="geo-photo-capture__hint geo-photo-capture__hint--warn" role="alert">{gpsError}</p> : null}
             <div className="geo-photo-capture__actions">
               <button type="button" style={ms.btn} onClick={acquireGps} disabled={gpsBusy || gpsWaiting}>
                 {gpsBusy ? "Getting GPS…" : "Refresh GPS"}
@@ -755,11 +844,29 @@ export default function GeoPhotoCaptureModal({
                 type="button"
                 style={ms.btnP}
                 disabled={latitude == null || longitude == null}
-                onClick={() => setStep("details")}
+                onClick={() => {
+                  locationRequestRef.current += 1;
+                  setGpsBusy(false);
+                  setGpsWaiting(false);
+                  setStep("details");
+                }}
               >
                 Next — details
               </button>
+              {latitude == null || longitude == null ? (
+                <button type="button" style={ms.btn} onClick={() => {
+                  locationRequestRef.current += 1;
+                  setGpsBusy(false);
+                  setGpsWaiting(false);
+                  setStep("details");
+                }}>
+                  Continue without GPS
+                </button>
+              ) : null}
             </div>
+            {latitude == null || longitude == null ? (
+              <p className="geo-photo-capture__hint">You can save the photo without GPS. It will be marked as unlocated and excluded from map exports until you add a position.</p>
+            ) : null}
 
             <div className="geo-photo-capture__panel">
               <div className="geo-photo-capture__panel-title">Camera direction</div>
@@ -838,9 +945,7 @@ export default function GeoPhotoCaptureModal({
               >
                 <option value="">— No project —</option>
                 {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name || "Untitled"}
-                  </option>
+                  <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
                 ))}
               </select>
             </label>

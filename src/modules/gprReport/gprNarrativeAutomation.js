@@ -130,6 +130,7 @@ export function readableSignalDepthM(report = {}) {
 }
 
 export function shallowSignalLimitation(report = {}) {
+  if (!report.includeGeology) return "";
   const expected = Number(report?.groundConditions?.expectedPenetrationM);
   const readable = readableSignalDepthM(report);
   if (!Number.isFinite(expected) || expected <= 0 || readable == null) return "";
@@ -173,7 +174,7 @@ function processingSummary(report) {
 export function buildGprNarrativePack(report = {}) {
   const acquisition = report.acquisition || {};
   const velocity = report.velocityModel || {};
-  const ground = report.groundConditions || {};
+  const ground = report.includeGeology ? report.groundConditions || {} : {};
   const observations = ground.siteObservations || {};
   const environmental = report.environmental || {};
   const equipment = report.equipment?.[0] || {};
@@ -214,7 +215,7 @@ export function buildGprNarrativePack(report = {}) {
       ? ""
       : "No radargram or scan panel was attached, so the interpreted responses cannot be reviewed from imagery in this issue alone.",
     shallowSignalLimitation(report),
-    ground.scale
+    !report.includeGeology ? "" : ground.scale
       ? `BGS mapping at ${ground.scale} is a desk-study context layer and must not be treated as a site-specific ground investigation.`
       : "No mapped geology scale was recorded; ground interpretation should be supported by site observations or investigation data.",
     "Positions and depths should be verified using appropriate complementary detection and safe intrusive methods before excavation or structural intervention.",
@@ -230,7 +231,9 @@ export function buildGprNarrativePack(report = {}) {
       `${equipmentLabel(report)} with a ${frequency} MHz centre frequency was used in ${scanMode.toLowerCase()} mode at ${site}.`,
       scopeExtent ? `Recorded acquisition: ${scopeExtent}.` : "Detailed acquisition spacings and coverage were not fully recorded at export time.",
       `${anomalySummary(report)}. Refer to the Findings schedule for individual responses. Supporting evidence: ${evidenceSummary(report)}.`,
-      groundLines || "BGS ground enrichment was not available at export time, so penetration should be judged from field signal quality and calibration targets.",
+      report.includeGeology
+        ? groundLines || "BGS ground enrichment was not available at export time, so penetration should be judged from field signal quality and calibration targets."
+        : "Penetration should be judged from field signal quality and calibration targets.",
       report.status === "final"
         ? "The issue is marked FINAL; users must still apply the limitations and safe-dig controls stated in this report."
         : "This issue remains DRAFT and is not approved for operational reliance.",
@@ -270,7 +273,11 @@ export function buildGprNarrativePack(report = {}) {
       ground.attenuationClass === "high" || ground.attenuationClass === "very_high"
         ? "Where attenuation is high, consider lower-frequency GPR and complementary EML or intrusive verification; do not infer clearance below the effective signal depth."
         : "Where signal quality or coverage is incomplete, re-scan using adjusted acquisition settings or a complementary technique.",
-      environmental.moistureImpactOnGpr ? sentence(environmental.moistureImpactOnGpr) : "Record weather, moisture and surface coupling for any repeat survey so differences in penetration can be explained.",
+      report.preSurvey?.surveySetting === "indoor"
+        ? "Record slab condition, moisture and antenna coupling for any repeat indoor survey so differences in penetration can be explained."
+        : environmental.moistureImpactOnGpr
+          ? sentence(environmental.moistureImpactOnGpr)
+          : "Record surface moisture and coupling for any repeat survey; weather is relevant where conditions can affect the scanned surface.",
     ].join("\n\n"),
     deliverablesNotes: `Evidence packaged with this issue: ${evidenceSummary(report)}. Deliverable availability is also recorded in the checklist above.`,
   };

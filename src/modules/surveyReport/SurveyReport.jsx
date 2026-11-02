@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../../utils/projectDisplayLabel";
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { isAnthropicConfigured, checkAnthropicProxyReady } from "../../utils/anthropicClient";
 import { useD1OrgArraySync } from "../../hooks/useD1OrgArraySync";
@@ -1697,9 +1698,7 @@ function ReportEditor({
                 <select style={ss.inp} value={form.projectId} onChange={(e) => onProjectChange(e.target.value)} id="survey-report-project-id">
                   <option value="">— Select —</option>
                   {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
+                    <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
                   ))}
                 </select>
               </div>
@@ -3529,19 +3528,20 @@ export default function SurveyReport() {
   }, []);
 
   const batchAppendToRams = useCallback(() => {
-    const { results } = batchAppendFinalSurveysToRams(reports, ramsDocs);
+    const { results } = batchAppendFinalSurveysToRams(reports, load("rams_builder_docs", []));
     const ok = results.filter((r) => r.ok).length;
-    const skipped = results.filter((r) => !r.ok).length;
+    const failures = results.filter((r) => !r.ok);
+    const reasons = [...new Set(failures.map((r) => r.message || r.reason))].slice(0, 3).join(" ");
     if (!ok) {
-      pushToast({ type: "warn", title: "Nothing appended", message: "No final reports could be appended — each needs a RAMS on its project." });
+      pushToast({ type: "warn", title: "Nothing appended", message: reasons || "No current final surveys are available to append." });
       return;
     }
     pushToast({
-      type: "success",
-      title: "Appended to RAMS",
-      message: `Appended ${ok} survey summary(ies) to RAMS.${skipped ? ` ${skipped} skipped (no RAMS).` : ""}`,
+      type: failures.length ? "warn" : "success",
+      title: failures.length ? "Partially appended to RAMS" : "Appended to RAMS",
+      message: `Saved ${ok} survey summary(ies) to RAMS on this device.${failures.length ? ` ${failures.length} not appended. ${reasons}` : ""}`,
     });
-  }, [reports, ramsDocs, pushToast]);
+  }, [reports, pushToast]);
 
   const batchAssignSelectedToProject = useCallback(() => {
     const ids = [...selectedReportIds];
@@ -3826,9 +3826,7 @@ export default function SurveyReport() {
         >
           <option value="">All projects</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name || "Untitled"}
-            </option>
+            <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
           ))}
         </select>
         {listSummary.needsWork > 0 && (

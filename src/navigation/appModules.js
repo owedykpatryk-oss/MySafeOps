@@ -102,6 +102,7 @@ export const MORE_TABS = [
   { id: "monthly-report", label: "Monthly report" },
   { id: "survey-report", label: "Survey report" },
   { id: "gpr-report", label: "GPR report" },
+  { id: "drone-operations", label: "Drone Operations" },
   { id: "waste", label: "Waste register" },
   { id: "templates", label: "Templates" },
   { id: "client-portal", label: "Client portal" },
@@ -220,7 +221,7 @@ export const MORE_SECTIONS = [
   },
   {
     title: "Insights & reports",
-    ids: ["analytics", "monthly-report", "survey-report", "gpr-report", "templates"],
+    ids: ["analytics", "monthly-report", "survey-report", "gpr-report", "drone-operations", "templates"],
   },
   {
     title: "Data & app",

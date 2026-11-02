@@ -6,6 +6,7 @@
  */
 
 import { supabase } from "./supabase.js";
+import { getCachedActiveCountryWorkspace } from "../utils/countryWorkspaces";
 
 export function isR2StorageConfigured() {
   return Boolean(String(import.meta.env.VITE_STORAGE_API_URL || "").trim());
@@ -73,7 +74,7 @@ async function buildAuthHeaders({ forceRefresh = false } = {}) {
  * @param {{ orgId: string, subPath?: string }} opts
  * @returns {Promise<{ key: string; size: number; publicUrl: string | null; signedUrl: string | null; signedExpiresAt: number | null }>}
  */
-export async function uploadFileToR2Storage(file, { orgId, subPath = "documents" }) {
+export async function uploadFileToR2Storage(file, { orgId, subPath = "documents", workspace = getCachedActiveCountryWorkspace(orgId) }) {
   const base = getStorageApiBase();
   if (!base) throw new Error("Cloud storage is not configured (set VITE_STORAGE_API_URL).");
 
@@ -83,7 +84,8 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
   }
 
   const safeName = (file.name || "file").replace(/[^\w.-]+/g, "_").slice(0, 180);
-  const key = `${subPath.replace(/^\/+|\/+$/g, "")}/org_${orgId}/${Date.now()}_${safeName}`;
+  const scope = workspace?.id && !workspace.is_primary ? `country_${workspace.id}` : "main";
+  const key = `files/org_${orgId}/${scope}/${subPath.replace(/^\/+|\/+$/g, "")}/${crypto.randomUUID()}_${safeName}`;
 
   const makeForm = () => {
     const fd = new FormData();
@@ -106,7 +108,7 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
 
   let res = await postUpload(auth.headers);
   // Stale JWT after PWA camera / backgrounding — refresh once and retry.
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
     auth = await buildAuthHeaders({ forceRefresh: true });
     if (auth.ok) {
       res = await postUpload(auth.headers);
@@ -115,6 +117,8 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
 
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (json.error === "billing_write_blocked") throw new Error("This country workspace needs an active subscription. Open Settings → Billing to restore uploads.");
+    if (json.error === "storage_limit_reached") throw new Error("Cloud storage limit reached for this country workspace. Upgrade the plan in Settings → Billing.");
     if (res.status === 401 || res.status === 403) {
       throw new Error("Cloud upload not authorised — sign in again, then retry.");
     }
@@ -138,6 +142,26 @@ export async function uploadFileToR2Storage(file, { orgId, subPath = "documents"
     signedUrl,
     signedExpiresAt,
   };
+}
+
+/** Actual stored file bytes, including older uploads and files retained in the recycle bin. */
+export async function fetchR2StorageUsage(orgId, workspace = getCachedActiveCountryWorkspace(orgId)) {
+  const base = getStorageApiBase();
+  if (!base) return null;
+  let auth = await buildAuthHeaders();
+  if (!auth.ok) throw new Error("Sign in to check cloud storage.");
+  const query = new URLSearchParams({ org: orgId });
+  if (workspace?.id && !workspace.is_primary) query.set("country", workspace.id);
+  const read = () => fetch(`${base}/usage?${query}`, { headers: auth.headers });
+  let res = await read();
+  if (res.status === 401) {
+    auth = await buildAuthHeaders({ forceRefresh: true });
+    if (auth.ok) res = await read();
+  }
+  if (!res.ok) throw new Error("Cloud storage usage is temporarily unavailable.");
+  const result = await res.json();
+  if (!Number.isSafeInteger(result.bytes) || result.bytes < 0) throw new Error("Invalid cloud storage usage.");
+  return result.bytes;
 }
 
 /**

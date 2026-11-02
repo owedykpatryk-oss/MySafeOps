@@ -1,11 +1,13 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+import { BillingCheckoutConflict, BillingConfigurationError, requireBillingWebhook, reusableCheckout } from "../_shared/stripeCheckoutSession.ts";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.49.1";
+import Stripe from "npm:stripe@14.21.0";
 import {
   hasLiveStripeConfig,
   hasTestStripeConfig,
   isValidSiteUrl,
   priceForPlan,
   resolveStripeConfig,
+  resolveStripeMode,
   stripeDiagnostics,
   stripeMarketReady,
   type StripePricePlanId,
@@ -29,18 +31,19 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
     const live = stripeDiagnostics("live");
     const test = stripeDiagnostics("test");
+    const activeMode = supabaseUrl && serviceKey ? await resolveStripeMode(createClient(supabaseUrl, serviceKey)).catch(() => null) : null;
     const diagnostics = {
       function: "stripe-checkout",
       deployed: true,
       stripeLive: live,
       stripeTest: test,
       marketBilling: {
-        uk: stripeMarketReady("live", "uk"),
-        au: stripeMarketReady("live", "au"),
-        pl: stripeMarketReady("live", "pl"),
-        de: stripeMarketReady("live", "de"),
-        at: stripeMarketReady("live", "at"),
-        ch: stripeMarketReady("live", "ch"),
+        uk: stripeMarketReady(activeMode ?? "test", "uk"),
+        au: stripeMarketReady(activeMode ?? "test", "au"),
+        pl: stripeMarketReady(activeMode ?? "test", "pl"),
+        de: stripeMarketReady(activeMode ?? "test", "de"),
+        at: stripeMarketReady(activeMode ?? "test", "at"),
+        ch: stripeMarketReady(activeMode ?? "test", "ch"),
       },
       configured: {
         stripeSecretKey: hasLiveStripeConfig(),
@@ -58,23 +61,25 @@ Deno.serve(async (req) => {
         stripePriceTeamFormat: live.validMap.priceTeamFormat,
         stripePriceBusinessFormat: live.validMap.priceBusinessFormat,
         stripePriceEnterpriseFormat: live.validMap.priceEnterpriseFormat,
-        siteUrlFormat: !siteUrl || isValidSiteUrl(siteUrl),
+        siteUrlFormat: isValidSiteUrl(siteUrl),
       },
       requestId,
     };
-    const liveReady = hasLiveStripeConfig() && Object.values(diagnostics.marketBilling).some(Boolean);
-    const testReady = hasTestStripeConfig() && (["uk", "pl", "au", "de", "at", "ch"] as const).some((market) => stripeMarketReady("test", market));
+    const serverReady = Boolean(supabaseUrl && serviceKey) && isValidSiteUrl(siteUrl);
+    const liveReady = serverReady && hasLiveStripeConfig() && (["uk", "pl", "au", "de", "at", "ch"] as const).some((market) => stripeMarketReady("live", market));
+    const testReady = serverReady && hasTestStripeConfig() && (["uk", "pl", "au", "de", "at", "ch"] as const).some((market) => stripeMarketReady("test", market));
     const allValid = Object.values(diagnostics.valid).every(Boolean);
+    const activeReady = activeMode !== null && (activeMode === "test" ? testReady : liveReady && allValid);
     const admin = await getBillingAdminUser(req, supabaseUrl, serviceKey);
     if (!admin) {
-      const publicBody = publicStripeHealthBody("stripe-checkout", liveReady && allValid, testReady, requestId);
+      const publicBody = { ...publicStripeHealthBody("stripe-checkout", liveReady && allValid, testReady, requestId), activeMode, activeReady };
       return new Response(JSON.stringify(publicBody), {
-        status: liveReady && allValid ? 200 : 503,
+        status: activeReady ? 200 : 503,
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
       });
     }
-    return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady }), {
-      status: liveReady && allValid ? 200 : 503,
+    return new Response(JSON.stringify({ ...diagnostics, liveReady, testReady, activeMode, activeReady }), {
+      status: activeReady ? 200 : 503,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });
   }
@@ -86,8 +91,9 @@ Deno.serve(async (req) => {
     });
   }
 
+  let checkoutLock: { client: SupabaseClient; token: string } | null = null;
   try {
-    const siteUrl = (Deno.env.get("SITE_URL") ?? "http://localhost:5173").replace(/\/$/, "");
+    const siteUrl = (Deno.env.get("SITE_URL") ?? "").trim().replace(/\/$/, "");
     if (!isValidSiteUrl(siteUrl)) {
       return new Response(JSON.stringify({ error: "SITE_URL invalid. Expected absolute http(s) URL." }), {
         status: 500,
@@ -130,7 +136,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const planId = body?.planId as StripePricePlanId | undefined;
-    const testMode = Boolean(body?.testMode);
+    const testMode = (await resolveStripeMode(supabase, body?.testMode)) === "test";
     const workspaceId = typeof body?.workspaceId === "string" ? body.workspaceId.trim() : "";
     const orgSlug = typeof body?.orgSlug === "string" ? body.orgSlug : null;
     if (!planId || !["starter", "team", "business", "enterprise"].includes(planId)) {
@@ -211,12 +217,24 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: existingWorkspaceBilling } = await supabase
+    const { data: lockToken, error: lockErr } = await supabase.rpc("acquire_billing_checkout_lock", {
+      p_workspace_id: workspace.id, p_stripe_mode: stripeMode,
+    });
+    if (lockErr) throw new Error("Could not reserve checkout. Please try again.");
+    if (!lockToken) {
+      return new Response(JSON.stringify({ error: "Checkout is already being prepared for this country. Please try again shortly." }), {
+        status: 409, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+      });
+    }
+    checkoutLock = { client: supabase, token: lockToken };
+
+    const { data: existingWorkspaceBilling, error: billingReadErr } = await supabase
       .from("org_country_workspace_subscriptions")
       .select("stripe_subscription_id, subscription_status, stripe_customer_id")
       .eq("workspace_id", workspace.id)
       .eq("stripe_mode", stripeMode)
       .maybeSingle();
+    if (billingReadErr) throw new Error("Could not read the current subscription. Please try again.");
     if (
       existingWorkspaceBilling?.stripe_subscription_id &&
       ["active", "trialing", "past_due", "unpaid", "incomplete", "paused"].includes(
@@ -244,9 +262,15 @@ Deno.serve(async (req) => {
 
     const orgId = org.id;
     const stripe = new Stripe(stripeConfig.secretKey, { apiVersion: "2023-10-16" });
+    await requireBillingWebhook(stripe, `${supabaseUrl.replace(/\/$/, "")}/functions/v1/stripe-webhook`, !testMode, stripeConfig.webhookSecret);
     const customerColumn = testMode ? "stripe_test_customer_id" : "stripe_customer_id";
     const currency =
       market === "pl" ? "PLN" : market === "au" ? "AUD" : market === "de" || market === "at" ? "EUR" : market === "ch" ? "CHF" : "GBP";
+    const price = await stripe.prices.retrieve(priceId);
+    if (!price.active || price.currency !== currency.toLowerCase() || price.livemode !== !testMode ||
+        price.recurring?.interval !== "month" || price.recurring.interval_count !== 1) {
+      throw new Error("This country's price is unavailable or incorrectly configured. Please contact support.");
+    }
 
     // Stripe locks a customer to the currency of its first subscription, so every country
     // workspace bills its own customer. Only the primary workspace inherits the existing
@@ -267,7 +291,7 @@ Deno.serve(async (req) => {
           currency,
           stripe_mode: stripeConfig.mode,
         },
-      });
+      }, { idempotencyKey: `mysafeops-customer:${workspace.id}:${stripeMode}` });
       customerId = customer.id;
       // The organisation column stays the primary country's binding only; a secondary
       // country must never repoint it, or the webhook would reject its subscription.
@@ -284,6 +308,13 @@ Deno.serve(async (req) => {
           });
         }
       }
+    }
+
+    const pending = await reusableCheckout(stripe, customerId, workspace.id, planId, priceId);
+    if (pending) {
+      return new Response(JSON.stringify({ url: pending.url, requestId, stripeMode, workspaceId: workspace.id, priceMarket: market }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
+      });
     }
 
     const { error: billingSeedErr } = await supabase
@@ -317,9 +348,9 @@ Deno.serve(async (req) => {
       success_url: `${siteUrl}/app?checkout=success&settingsTab=billing&billingWorkspace=${workspace.id}${testMode ? "&stripeMode=test" : ""}`,
       cancel_url: `${siteUrl}/app?checkout=canceled&settingsTab=billing&billingWorkspace=${workspace.id}${testMode ? "&stripeMode=test" : ""}`,
       client_reference_id: workspace.id,
-      metadata: { org_id: orgId, workspace_id: workspace.id, plan_id: planId, stripe_mode: stripeConfig.mode, market },
+      metadata: { org_id: orgId, workspace_id: workspace.id, plan_id: planId, price_id: priceId, stripe_mode: stripeConfig.mode, market },
       subscription_data: {
-        metadata: { org_id: orgId, workspace_id: workspace.id, plan_id: planId, stripe_mode: stripeConfig.mode, market },
+        metadata: { org_id: orgId, workspace_id: workspace.id, plan_id: planId, price_id: priceId, stripe_mode: stripeConfig.mode, market },
       },
       ...(automaticTax
         ? {
@@ -331,7 +362,7 @@ Deno.serve(async (req) => {
             tax_id_collection: { enabled: true },
           }
         : {}),
-    });
+    }, { idempotencyKey: `mysafeops-checkout:${workspace.id}:${stripeMode}:${lockToken}` });
 
     return new Response(JSON.stringify({ url: session.url, requestId, stripeMode: stripeConfig.mode, workspaceId: workspace.id, priceMarket: market }), {
       status: 200,
@@ -340,8 +371,13 @@ Deno.serve(async (req) => {
   } catch (e) {
     console.error("stripe-checkout failed", { requestId, error: e instanceof Error ? e.message : String(e) });
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Checkout failed" }), {
-      status: 500,
+      status: e instanceof BillingCheckoutConflict ? 409 : e instanceof BillingConfigurationError ? 503 : 500,
       headers: { ...corsHeaders, "Content-Type": "application/json", "X-Request-Id": requestId },
     });
+  } finally {
+    if (checkoutLock) {
+      const { error } = await checkoutLock.client.from("billing_checkout_locks").delete().eq("token", checkoutLock.token);
+      if (error) console.error("Could not release checkout lock", { requestId, code: error.code });
+    }
   }
 });

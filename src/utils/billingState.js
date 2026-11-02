@@ -18,7 +18,9 @@ export function readScopedBilling(baseKey, slug = getOrgId()) {
   try {
     const scoped = localStorage.getItem(scopedBillingKey(baseKey, slug));
     if (scoped != null) return scoped;
-    return localStorage.getItem(baseKey);
+    // Legacy billing belongs to the local/default workspace only.
+    // Never grant another organisation a previous user's cached subscription.
+    return !slug || slug === "default" ? localStorage.getItem(baseKey) : null;
   } catch {
     return null;
   }
@@ -47,20 +49,19 @@ export function getTrialExtensionCount() {
 }
 
 export function getTrialStatus(now = Date.now()) {
-  const raw = readScopedBilling(ORG_TRIAL_ENDS_AT_KEY);
-  if (!raw) return null;
-  const endsAt = new Date(raw).getTime();
-  if (!Number.isFinite(endsAt)) return null;
-  const remainingMs = endsAt - now;
   const activeWorkspace = getCachedActiveCountryWorkspace();
+  const raw = readScopedBilling(ORG_TRIAL_ENDS_AT_KEY);
   if (activeWorkspace && !activeWorkspace.is_primary) {
     return {
-      endsAtIso: new Date(endsAt).toISOString(),
+      endsAtIso: null,
       isActive: false,
       remainingDays: 0,
       countryWorkspaceRequiresSubscription: true,
     };
   }
+  const endsAt = raw ? new Date(raw).getTime() : NaN;
+  if (!Number.isFinite(endsAt)) return activeWorkspace ? { endsAtIso: null, isActive: false, remainingDays: 0 } : null;
+  const remainingMs = endsAt - now;
   const remainingDays = Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
   return {
     endsAtIso: new Date(endsAt).toISOString(),

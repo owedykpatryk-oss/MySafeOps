@@ -3,14 +3,11 @@
  */
 
 import { suggestGprLimitationKeys, syncProcessingNarrative } from "./gprReportSmart.js";
-import { GPR_QA_ITEMS } from "./gprReportConstants.js";
 
 export const GPR_AUTOFIX_ACTIONS = [
   { id: "limitations_suggest", label: "Suggest limitations from ground/weather", tab: "narrative", anchor: "limitations" },
   { id: "velocity_default", label: "Set assumed velocity 10 cm/ns", tab: "equipment", anchor: "velocity" },
-  { id: "coverage_default", label: "Set coverage 100% (edit if less)", tab: "equipment", anchor: "acquisition" },
   { id: "processing_narrative", label: "Sync processing narrative", tab: "narrative", anchor: "processing" },
-  { id: "qa_core_ticks", label: "Tick core QA items", tab: "qa", anchor: "qa" },
 ];
 
 /**
@@ -39,36 +36,12 @@ export function applyGprAutofix(fixId, report) {
     };
   }
 
-  if (fixId === "coverage_default") {
-    const acq = report.acquisition || {};
-    if (String(acq.coveragePercent || "").trim()) return null;
-    return {
-      ...report,
-      acquisition: { ...acq, coveragePercent: "100" },
-      updatedAt: now,
-    };
-  }
-
   if (fixId === "processing_narrative") {
     if (!(report.processing?.stepsApplied || []).length && !(report.processing?.filters || []).some((f) => f.applied)) {
       return null;
     }
     if (String(report.sections?.dataProcessing || "").trim()) return null;
     return { ...syncProcessingNarrative(report), updatedAt: now };
-  }
-
-  if (fixId === "qa_core_ticks") {
-    const core = ["calibrationRecorded", "gridCoverageComplete", "processingLogged"];
-    const qa = { ...(report.qaChecklist || {}) };
-    let changed = false;
-    for (const key of core) {
-      if (GPR_QA_ITEMS.some((i) => i.key === key) && !qa[key]) {
-        qa[key] = true;
-        changed = true;
-      }
-    }
-    if (!changed) return null;
-    return { ...report, qaChecklist: qa, updatedAt: now };
   }
 
   return null;
@@ -80,12 +53,9 @@ export function suggestGprAutofixes(report) {
   if (!(report?.limitationKeys || []).length) out.push("limitations_suggest");
   const vm = report?.velocityModel || {};
   if (!vm.measuredVelocityCmNs && !vm.assumedVelocityCmNs) out.push("velocity_default");
-  if (!String(report?.acquisition?.coveragePercent || "").trim()) out.push("coverage_default");
   const hasSteps =
     (report?.processing?.stepsApplied || []).length > 0 ||
     (report?.processing?.filters || []).some((f) => f.applied);
   if (hasSteps && !String(report?.sections?.dataProcessing || "").trim()) out.push("processing_narrative");
-  const qa = report?.qaChecklist || {};
-  if (!qa.gridCoverageComplete || !qa.calibrationRecorded || !qa.processingLogged) out.push("qa_core_ticks");
   return out;
 }

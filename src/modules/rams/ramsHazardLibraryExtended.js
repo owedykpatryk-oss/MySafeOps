@@ -1105,7 +1105,7 @@ const EXTENDED_LIBRARY = [
   },
 
   {
-    id: "dem_004",
+    id: "dem_005",
     category: "Demolition & Strip-out",
     activity: "Structural demolition and progressive collapse control",
     hazard: "Unplanned collapse; falling debris; dust and vibration affecting neighbours",

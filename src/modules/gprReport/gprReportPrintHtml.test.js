@@ -11,6 +11,16 @@ describe("gprReportPrintHtml", () => {
     saveOrgSettingsRaw({});
   });
 
+  it("omits stale outdoor weather from an indoor concrete scan report", () => {
+    const html = buildGprReportHtml(blankGprReport({
+      preSurvey: { surveySetting: "indoor", levelBelow: "yes" },
+      environmental: { description: "Rain", moistureImpactOnGpr: "Wet outdoor ground" },
+    }));
+    expect(html).toContain("Another level below scanned slab");
+    expect(html).not.toContain("Environmental conditions &amp; GPR impact");
+    expect(html).not.toContain("Wet outdoor ground");
+  });
+
   it("places up to three finding photos side by side under the anomaly text", () => {
     const html = buildGprReportHtml(blankGprReport({
       anomalies: [
@@ -49,6 +59,12 @@ describe("gprReportPrintHtml", () => {
     expect(html).not.toContain("data:image/png;base64,not-a-photo");
   });
 
+  it("prints numbered image pins with their manually entered notes", () => {
+    const html = buildGprReportHtml(blankGprReport({ anomalies: [{ ref: "A7", interpretation: "Possible crossing", figures: [{ role: "gpr", dataUrl: "data:image/png;base64,aaaa", annotations: [{ type: "pin", number: 1, text: "Response near wall <check>" }] }] }] }));
+    expect(html).toContain("Pin <b>1</b>: Response near wall &lt;check&gt;");
+    expect(html).toContain("Possible crossing");
+  });
+
   it("builds a full HTML document without throwing (regression: radargramsBlock was undefined)", () => {
     const report = blankGprReport({ title: "Test GPR report", ref: "GPR-TEST-1" });
     const html = buildGprReportHtml(report, {});
@@ -83,6 +99,23 @@ describe("gprReportPrintHtml", () => {
     expect(html).toContain("/assets/gpr/equipment/ids-stream-dp.jpg");
     expect(html).toContain("30 channels: 19 VV + 11 HH");
     expect(html).toContain("Official product information");
+  });
+
+  it("renders both GP8100 product views and the SFCW frequency range", () => {
+    const report = blankGprReport({
+      equipment: [{
+        presetKey: "proceq_gp8100",
+        manufacturer: "Proceq",
+        model: "GP8100",
+        antennaFrequencyMhz: 2200,
+        channels: 6,
+      }],
+    });
+    const html = buildGprReportHtml(report, {});
+    expect(html).toContain("/assets/gpr/equipment/proceq-gp8100-official-front.png");
+    expect(html).toContain("/assets/gpr/equipment/proceq-gp8100-official-side.png");
+    expect(html).toContain("400–4000 MHz sweep");
+    expect(html).toContain("25 cm effective scan width");
   });
 
   it("falls back to a placeholder when no radargrams are attached", () => {
@@ -144,6 +177,7 @@ describe("gprReportPrintHtml", () => {
 
   it("adds a detailed acquisition schedule and depth feasibility warning", () => {
     const html = buildGprReportHtml(blankGprReport({
+      includeGeology: true,
       acquisition: { scanMode: "route", lineSpacingM: "0.25", traceSpacingM: "0.05", depthRangeM: "3", timeWindowNs: "65", coveragePercent: "92" },
       equipment: [{ manufacturer: "IDS", model: "Stream DP", antennaFrequencyMhz: 600, channels: 19 }],
       groundConditions: { expectedPenetrationM: 1.2, dielectricRange: [8, 20], siteObservations: {} },
@@ -327,6 +361,7 @@ describe("gprReportPrintHtml", () => {
 
   it("prints only verified historic facts and drops invented AI wording", () => {
     const html = buildGprReportHtml(blankGprReport({
+      includeHistoricalEvidence: true,
       historicalEvidence: [
         {
           id: "map-1",
@@ -367,10 +402,28 @@ describe("gprReportPrintHtml", () => {
 
   it("states that no former-land-use claim is included when nothing is verified", () => {
     const html = buildGprReportHtml(blankGprReport({
+      includeHistoricalEvidence: true,
       historicalEvidence: [{ id: "x", verified: false, observedFact: "Old castle foundations everywhere." }],
     }), {});
     expect(html).toContain("No verified historic evidence");
     expect(html).not.toContain("Old castle foundations");
+  });
+
+  it("omits optional geology and historic evidence without deleting saved data", () => {
+    const report = blankGprReport({
+      includeGeology: false,
+      includeHistoricalEvidence: false,
+      groundConditions: { fetchedAt: "2026-01-01", narrative: "Mapped clay beneath the site." },
+      historicalEvidence: [{ id: "map-1", verified: true, observedFact: "A former building is shown." }],
+    });
+    const html = buildGprReportHtml(report);
+    expect(html).not.toContain('id="ground"');
+    expect(html).not.toContain('id="history"');
+    expect(html).not.toContain("Mapped clay beneath the site.");
+    expect(html).not.toContain("BGS-informed indicative penetration");
+    expect(html).not.toContain("A former building is shown.");
+    expect(report.groundConditions.narrative).toBe("Mapped clay beneath the site.");
+    expect(report.historicalEvidence).toHaveLength(1);
   });
 
   it("prints the client logo alone or beside the organisation logo", () => {

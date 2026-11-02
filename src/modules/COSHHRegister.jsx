@@ -1,10 +1,14 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
+import { persistRegisterRows } from "../utils/registerPersistGuard";
+import { softDeleteToRecycleBin } from "../utils/recycleBin";
+import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { useState, useEffect, useMemo } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import {
   overlayDraftKey,
   seedOverlayForm,
   useOverlayFormDraft,
-  clearOverlayFormDraft,
+  submitOverlayForm,
 } from "../hooks/useOverlayFormDraft";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
@@ -91,11 +95,11 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10, marginBottom:12 }}>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl} htmlFor="coshh-name">Substance / product name *</label>
-            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. WD-40 Multi-Use Lubricant" style={ss.inp}  id="coshh-name" />
+            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. WD-40 lubricant" style={ss.inp}  id="coshh-name" />
           </div>
           <div>
             <label style={ss.lbl} htmlFor="coshh-manufacturer">Manufacturer</label>
-            <input value={form.manufacturer} onChange={e=>set("manufacturer",e.target.value)} placeholder="e.g. WD-40 Company" style={ss.inp}  id="coshh-manufacturer" />
+            <input value={form.manufacturer} onChange={e=>set("manufacturer",e.target.value)} placeholder="e.g. WD-40" style={ss.inp}  id="coshh-manufacturer" />
           </div>
           <div>
             <label style={ss.lbl} htmlFor="coshh-product-code">Product / UN code</label>
@@ -105,7 +109,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
             <label style={ss.lbl} htmlFor="coshh-project-id">{t("project")}</label>
             <select value={form.projectId} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="coshh-project-id">
               <option value="">— All projects —</option>
-              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              {projects.map(p=><option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
             </select>
           </div>
           <div>
@@ -148,7 +152,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
           </div>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl} htmlFor="coshh-storage-notes">Storage conditions / notes</label>
-            <input value={form.storageNotes} onChange={e=>set("storageNotes",e.target.value)} placeholder="e.g. Keep away from heat sources, store upright" style={ss.inp}  id="coshh-storage-notes" />
+            <input value={form.storageNotes} onChange={e=>set("storageNotes",e.target.value)} placeholder="Storage requirements" style={ss.inp}  id="coshh-storage-notes" />
           </div>
         </div>
 
@@ -170,7 +174,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
         </div>
         <div style={{ marginBottom:16 }}>
           <label style={ss.lbl} htmlFor="coshh-disposal-method">Disposal method</label>
-          <input value={form.disposalMethod} onChange={e=>set("disposalMethod",e.target.value)} placeholder="e.g. Dispose as hazardous waste via licensed contractor" style={ss.inp}  id="coshh-disposal-method" />
+          <input value={form.disposalMethod} onChange={e=>set("disposalMethod",e.target.value)} placeholder="Disposal arrangements" style={ss.inp}  id="coshh-disposal-method" />
         </div>
 
         {/* SDS */}
@@ -190,7 +194,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
           </div>
           <div style={{ gridColumn:"1/-1" }}>
             <label style={ss.lbl} htmlFor="coshh-assessed-by">Assessed by</label>
-            <input value={form.assessedBy} onChange={e=>set("assessedBy",e.target.value)} placeholder="Name / role of person who conducted assessment" style={ss.inp}  id="coshh-assessed-by" />
+            <input value={form.assessedBy} onChange={e=>set("assessedBy",e.target.value)} placeholder="Name and role" style={ss.inp}  id="coshh-assessed-by" />
           </div>
         </div>
 
@@ -201,7 +205,7 @@ function SubstanceForm({ item, projects, onSave, onClose }) {
 
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"flex-end" }}>
           <button onClick={onClose} style={ss.btn}>{t("cancel")}</button>
-          <button disabled={!form.name.trim()} onClick={()=>{ clearOverlayFormDraft(draftKey); onSave(form); }} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
+          <button disabled={!form.name.trim()} onClick={()=>{ submitOverlayForm(draftKey, form, onSave); }} style={{ ...ss.btnP, opacity:form.name.trim()?1:0.4 }}>
             {t("save")}
           </button>
         </div>
@@ -325,26 +329,35 @@ export default function COSHHRegister() {
   }, [filterRisk, filterProject, filterHazard, search]);
 
   const saveItem = (item) => {
-    setItems(prev => prev.find(i=>i.id===item.id) ? prev.map(i=>i.id===item.id?item:i) : [item,...prev]);
+    const next = items.some(i => i.id === item.id) ? items.map(i => i.id === item.id ? item : i) : [item, ...items];
+    if (!persistRegisterRows("coshh_items", next)) return false;
+    setItems(next);
     setModal(null);
+    return true;
   };
-  const deleteItem = (id) => { if(confirm("Remove this substance?")) setItems(prev=>prev.filter(i=>i.id!==id)); };
+  const deleteItem = (id) => {
+    const victim = items.find(item => item.id === id && !item.deletedAt);
+    if (!victim || !softDeleteToRecycleBin({ moduleId: "coshh", moduleLabel: "COSHH", itemType: "substance",
+      itemLabel: victim.name || victim.id, sourceKey: "coshh_items", payload: victim })) return;
+    setItems(prev => replaceWithTombstone(prev, id));
+  };
+  const liveItems = useMemo(() => liveOrgArrayRows(items), [items]);
 
   const filtered = useMemo(
     () =>
-      items.filter((i) => {
+      liveItems.filter((i) => {
         if (filterRisk && i.riskLevel !== filterRisk) return false;
         if (filterProject && i.projectId !== filterProject) return false;
         if (filterHazard && !i.hazardTypes?.includes(filterHazard)) return false;
-        if (search && !i.name.toLowerCase().includes(search.toLowerCase()) && !i.manufacturer?.toLowerCase().includes(search.toLowerCase())) return false;
+        if (search && !i.name?.toLowerCase().includes(search.toLowerCase()) && !i.manufacturer?.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       }),
-    [items, filterRisk, filterProject, filterHazard, search]
+    [liveItems, filterRisk, filterProject, filterHazard, search]
   );
 
   const exportCSV = () => {
     const rows=[["Name","Manufacturer","Product code","Risk","Hazard types","Quantity","Unit","Storage","PPE required","SDS link","Assessed by","Assessed date"]];
-    items.forEach(i=>rows.push([i.name,i.manufacturer||"",i.productCode||"",i.riskLevel,i.hazardTypes?.join("; ")||"",i.quantity||"",i.unit||"",i.storageLocation||"",i.ppeRequired?.join("; ")||"",i.sdsUrl||"",i.assessedBy||"",fmtDate(i.assessedDate)]));
+    liveItems.forEach(i=>rows.push([i.name,i.manufacturer||"",i.productCode||"",i.riskLevel,i.hazardTypes?.join("; ")||"",i.quantity||"",i.unit||"",i.storageLocation||"",i.ppeRequired?.join("; ")||"",i.sdsUrl||"",i.assessedBy||"",fmtDate(i.assessedDate)]));
     const csv=rows.map(r=>r.map(c=>`"${c}"`).join(",")).join("\n");
     const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download=`coshh_register_${todayLocalISO()}.csv`; a.click();
   };
@@ -378,7 +391,7 @@ export default function COSHHRegister() {
                 Print forms pack
               </button>
             )}
-            {items.length > 0 && (
+            {liveItems.length > 0 && (
               <button type="button" onClick={exportCSV} style={ss.btn}>
                 {t("exportCsv")}
               </button>
@@ -392,9 +405,9 @@ export default function COSHHRegister() {
 
       <RegisterModuleShell
         moduleId="coshh"
-        smartContext={{ items }}
+        smartContext={{ items: liveItems }}
         pdfExportRows={filtered}
-        stats={buildRegisterModuleStats("coshh", items)}
+        stats={buildRegisterModuleStats("coshh", liveItems)}
         filters={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search substance…" style={{ ...ss.inp, width: "auto", flex: 1, minWidth: 140 }} />
@@ -414,7 +427,7 @@ export default function COSHHRegister() {
               <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} style={{ ...ss.inp, width: "auto" }}>
                 <option value="">All projects</option>
                 {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
                 ))}
               </select>
             )}
@@ -424,7 +437,7 @@ export default function COSHHRegister() {
           </div>
         }
       >
-        {items.length === 0 ? (
+        {liveItems.length === 0 ? (
           <EmptyState
             icon="🧪"
             title="No substances recorded yet"

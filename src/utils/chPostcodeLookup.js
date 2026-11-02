@@ -2,6 +2,8 @@
  * Swiss postcode lookup (4 digits) via server proxy → Nominatim.
  */
 
+import { appApiUrl } from "./appApiUrl";
+
 const PROXY_PATH = "/api/ch-postcode";
 
 /** @param {string} raw */
@@ -28,7 +30,7 @@ export function resolveChPostcodeInput(postcode, ...extraText) {
 export async function lookupChPostcode(postcode) {
   const pc = normalizeChPostcode(postcode);
   if (!pc) return null;
-  const proxyUrl = `${PROXY_PATH}?code=${encodeURIComponent(pc)}`;
+  const proxyUrl = appApiUrl(`${PROXY_PATH}?code=${encodeURIComponent(pc)}`);
   const res = await fetch(proxyUrl);
   if (!res.ok) return null;
   const row = await res.json();

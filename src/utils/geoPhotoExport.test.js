@@ -43,6 +43,12 @@ const samplePhotos = [
   },
 ];
 
+it("excludes missing and invalid coordinates from maps and CAD origins", () => {
+  const missing = [{ id: "null", latitude: null, longitude: null }, { id: "empty", latitude: "", longitude: "" }, { id: "invalid", latitude: 200, longitude: 0 }];
+  expect(filterGeoPhotosWithCoords(missing).withCoords).toHaveLength(0);
+  expect(exportOriginForPhotos(missing)).toEqual({ lat: 51.5, lng: -0.1 });
+});
+
 describe("geoPhotoExport", () => {
   it("builds KML with folders, look-at and view arrows", () => {
     const kml = buildGeoPhotosKml(samplePhotos, { name: "Test site" });
@@ -213,6 +219,12 @@ describe("geoPhotoExport", () => {
     expect(zip[0]).toBe(0x50);
     expect(zip[1]).toBe(0x4b);
     expect(zip.length).toBeGreaterThan(100);
+  });
+
+  it("keeps plan percentages above 90 in DXF exports", () => {
+    const dxf = buildGeoPhotosDxf([{ ...samplePhotos[0], latitude: 95, longitude: 50, notes: "Upper plan evidence" }], { coordinateMode: "plan_percent", origin: { lat: 0, lng: 0 } });
+    expect(dxf).toContain("0\nINSERT\n8\nGP_borehole_location");
+    expect(dxf).toContain("10\n50.0000\n20\n95.0000");
   });
 
   describe("prepareGeoPhotoExport", () => {

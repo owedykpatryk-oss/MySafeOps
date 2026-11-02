@@ -14,9 +14,17 @@ import {
   normalizeBearing,
   orientationAlphaToBearing,
   photoReadErrorMessage,
+  hasGeoPhotoCoordinates,
 } from "./geoPhotoUtils.js";
 
 describe("geoPhotoUtils", () => {
+  it("distinguishes missing GPS from a real zero coordinate", () => {
+    expect(hasGeoPhotoCoordinates({ latitude: null, longitude: null })).toBe(false);
+    expect(hasGeoPhotoCoordinates({ latitude: "", longitude: "" })).toBe(false);
+    expect(hasGeoPhotoCoordinates({ latitude: 51.5, longitude: null })).toBe(false);
+    expect(hasGeoPhotoCoordinates({ latitude: 91, longitude: 0 })).toBe(false);
+    expect(hasGeoPhotoCoordinates({ latitude: 0, longitude: 0 })).toBe(true);
+  });
   it("normalizes bearing to 0–359", () => {
     expect(normalizeBearing(370)).toBe(10);
     expect(normalizeBearing(-10)).toBe(350);

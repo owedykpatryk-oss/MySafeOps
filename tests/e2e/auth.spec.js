@@ -23,13 +23,20 @@ test.describe("Auth flows", () => {
   });
 
   test("signup shows confirmation instructions", async ({ page }) => {
-    // This creates a real account. Against a deployed environment that means junk users in
-    // the production auth table, and it cannot pass anyway because production enforces the
-    // captcha this test has no token for.
+    // Local Vite also uses the configured remote Supabase project. This UI test must
+    // never create a real account or send confirmation mail from a developer's setup.
     test.skip(
       Boolean(process.env.E2E_BASE_URL) && !process.env.E2E_ALLOW_REMOTE_SIGNUP,
       "Signup runs against a local server only. Set E2E_ALLOW_REMOTE_SIGNUP=1 to override.",
     );
+    await page.route("**/auth/v1/signup*", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        user: { id: "00000000-0000-4000-8000-000000000001", email: "signup-test@example.com", identities: [] },
+        session: null,
+      }),
+    }));
     const email = process.env.E2E_SIGNUP_EMAIL || uniqueEmail();
     const password = process.env.E2E_SIGNUP_PASSWORD || "MySafeOpsE2E!234";
 

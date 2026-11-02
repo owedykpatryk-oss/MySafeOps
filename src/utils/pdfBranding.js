@@ -154,7 +154,8 @@ export function summarizeRegisterStats(rows) {
   const list = Array.isArray(rows) ? rows : [];
   const byStatus = {};
   list.forEach((row) => {
-    const s = String(row?.status || row?.result || "record").toLowerCase();
+    const s = String(row?.status || row?.result || "").toLowerCase();
+    if (!s) return;
     byStatus[s] = (byStatus[s] || 0) + 1;
   });
   return { total: list.length, byStatus };

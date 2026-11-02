@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { ShieldCheck, Home, HelpCircle, Settings, Search, LogOut, MoreVertical } from "lucide-react";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { isSupabaseConfigured } from "../lib/supabase";
@@ -157,10 +156,10 @@ export default function WorkspaceAppBar({ view, navTab, onGoDashboard, onOpenHel
           ) : null}
 
           <div className="workspace-app-bar-actions--desktop">
-            <Link to="/app" className="app-bar-action" style={btn} aria-label="Go to dashboard">
+            <button type="button" onClick={onGoDashboard} className="app-bar-action" style={btn} aria-label="Go to dashboard">
               <Home size={16} aria-hidden />
               <span className="workspace-app-bar-btn-label">Dashboard</span>
-            </Link>
+            </button>
             <button type="button" className="app-bar-action" style={btn} onClick={onOpenHelp} aria-label="Open Help">
               <HelpCircle size={16} aria-hidden />
               <span className="workspace-app-bar-btn-label">Help</span>

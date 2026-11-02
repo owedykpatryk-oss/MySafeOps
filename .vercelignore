@@ -1,0 +1,21 @@
+# Local configuration, credentials and generated QA output must never be uploaded.
+.env
+.env.*
+.vercel
+node_modules
+dist
+output
+tmp
+test-results
+playwright-report
+.git
+.cursor
+.codex
+supabase/.temp
+
+# Local client documents and planning material are not application assets.
+DOCS
+marketing
+attachments
+build-output.txt
+lint-out.txt

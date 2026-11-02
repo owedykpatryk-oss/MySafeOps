@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { bearingArrowHead, bearingToEnd } from "../../utils/geoPhotoUtils";
+import { bearingArrowHead, bearingToEnd, hasGeoPhotoCoordinates } from "../../utils/geoPhotoUtils";
 import { normaliseAreaPoints } from "../../utils/geoPhotoArea";
 
 /**
@@ -66,7 +66,7 @@ function GeoPhotoDirectionMap({
 
     const lat = Number(latitude);
     const lng = Number(longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    if (!hasGeoPhotoCoordinates({ latitude, longitude })) {
       map.setView([51.5074, -0.1278], 6);
       return;
     }

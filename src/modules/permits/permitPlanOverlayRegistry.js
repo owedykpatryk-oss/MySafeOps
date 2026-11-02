@@ -17,7 +17,7 @@ export function listProjectPlans() {
 }
 
 export function saveProjectPlans(rows) {
-  save(PLANS_KEY, Array.isArray(rows) ? rows : []);
+  return save(PLANS_KEY, Array.isArray(rows) ? rows : []);
 }
 
 export function plansForProject(projectId, rows = listProjectPlans()) {

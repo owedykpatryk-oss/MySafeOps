@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { gprAntennaAdvice, gprPenetrationRisk } from "./gprReportHelpers";
+import { isIndoorGprSurvey } from "./gprPreSurvey";
 
 const ATTENUATION_COLOURS = {
   very_low: "#0d9488",
@@ -50,7 +51,7 @@ function GprInsightPanel({ report, onApplyAntenna, onRecalcGround }) {
             <strong>BGS geology</strong>
             {gc.fetchedAt ? (
               <span className="app-gpr-insight-badge app-gpr-insight-badge--ok">
-                {gc.resolution === "50k" ? "50k" : gc.resolution === "625k" ? "625k" : "Live"}
+                {gc.locationVerified ? "Point verified" : gc.resolution === "50k" ? "50k" : gc.resolution === "625k" ? "625k" : "Live"}
               </span>
             ) : null}
           </div>
@@ -63,6 +64,12 @@ function GprInsightPanel({ report, onApplyAntenna, onRecalcGround }) {
                 <p className="app-gpr-insight-card__line">
                   <em>Scale</em> {gc.scale}
                   {gc.coordSource ? ` · ${gc.coordSource}` : ""}
+                </p>
+              ) : null}
+              {gc.queryLat != null && gc.queryLng != null ? (
+                <p className="app-gpr-insight-card__line app-gpr-insight-card__coords">
+                  <em>Verified point</em> {Number(gc.queryLat).toFixed(5)}, {Number(gc.queryLng).toFixed(5)}
+                  {gc.lookupPostcode ? ` · ${gc.lookupPostcode}` : ""}
                 </p>
               ) : null}
               {gc.artificial?.lexDescription ? (
@@ -149,12 +156,12 @@ function GprInsightPanel({ report, onApplyAntenna, onRecalcGround }) {
           ) : null}
         </div>
 
-        <div className="app-gpr-insight-card app-gpr-insight-card--wx">
+        {!isIndoorGprSurvey(report) ? <div className="app-gpr-insight-card app-gpr-insight-card--wx">
           <div className="app-gpr-insight-card__head">
             <span className="app-gpr-insight-card__icon" aria-hidden>
               ☁
             </span>
-            <strong>Weather → GPR</strong>
+            <strong>Weather → GPR (optional)</strong>
           </div>
           {env.description ? (
             <>
@@ -172,9 +179,9 @@ function GprInsightPanel({ report, onApplyAntenna, onRecalcGround }) {
               ) : null}
             </>
           ) : (
-            <p className="app-gpr-insight-card__empty">Fetch weather for survey date</p>
+            <p className="app-gpr-insight-card__empty">Record when outdoor conditions matter</p>
           )}
-        </div>
+        </div> : null}
       </div>
     </div>
   );

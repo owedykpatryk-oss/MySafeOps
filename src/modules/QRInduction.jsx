@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { publicAppUrl } from "../utils/publicAppUrl";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { ms } from "../utils/moduleStyles";
-import { loadOrgScoped as load, saveOrgScoped as save, getOrgId } from "../utils/orgStorage";
+import { loadOrgScoped as load, saveOrgScoped as save, getOrgId, ORG_CHANGED_EVENT } from "../utils/orgStorage";
 import { useToast } from "../context/ToastContext";
 import { copyCapabilityLink } from "../utils/copyCapabilityLink";
 import PageHero from "../components/PageHero";
 import { useWorkspaceT } from "../i18n/useWorkspaceT";
+import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
+import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
+import { buildInductionLink } from "../utils/inductionLink";
+import { replaceWithTombstone } from "../utils/d1ArrayMerge";
 
 import { todayLocalISO } from "../utils/localDate";
 // ─── storage ─────────────────────────────────────────────────────────────────
@@ -94,10 +99,16 @@ function InductionForm({ site, checklist, onComplete, onBack: _onBack }) {
   const [checked, setChecked] = useState({});
   const [, setSig] = useState(null);
   const [gps, setGps] = useState(null);
+  const signingRef = useRef(false);
+  const [saveError, setSaveError] = useState("");
 
   const allChecked = checklist.length===0 || checklist.every((_,i)=>checked[i]);
 
   const handleSign = async (dataUrl) => {
+    if (signingRef.current) return;
+    signingRef.current = true;
+    setSaveError("");
+    try {
     let g = null;
     if (navigator.geolocation) {
       g = await new Promise(res => navigator.geolocation.getCurrentPosition(
@@ -106,8 +117,17 @@ function InductionForm({ site, checklist, onComplete, onBack: _onBack }) {
       ));
     }
     setGps(g); setSig(dataUrl);
-    onComplete({ id:genId(), name:name.trim(), company:company.trim(), role:role.trim(), sig:dataUrl, gps:g, timestamp:new Date().toISOString(), siteId:site.id, siteName:site.name });
+    const saved = await onComplete({ id:genId(), name:name.trim(), company:company.trim(), role:role.trim(), sig:dataUrl, gps:g, timestamp:new Date().toISOString(), siteId:site.id, siteName:site.name });
+    if (saved === false) {
+      setSaveError("Induction could not be saved. Your signature is still here — try again.");
+      return;
+    }
     setStep(3);
+    } catch (err) {
+      setSaveError(err?.message || "Induction could not be saved. Try again.");
+    } finally {
+      signingRef.current = false;
+    }
   };
 
   if (step===3) return (
@@ -203,6 +223,7 @@ function InductionForm({ site, checklist, onComplete, onBack: _onBack }) {
             I, <strong>{name}</strong>, confirm I have read and understood the site induction for <strong>{site.name}</strong>.
           </p>
           <SigCanvas onCapture={handleSign} />
+          {saveError && <p role="alert" style={{ color: "#A32D2D", fontSize: 13 }}>{saveError}</p>}
           <button onClick={()=>setStep(1)} style={{ ...ss.btn, marginTop:10 }}>← Back</button>
         </div>
       )}
@@ -212,6 +233,7 @@ function InductionForm({ site, checklist, onComplete, onBack: _onBack }) {
 
 // ─── Site manager — create sites with QR codes ───────────────────────────────
 function SiteManager({ sites, onSave, onClose }) {
+  const [saveError, setSaveError] = useState("");
   const { t } = useWorkspaceT();
   const [list, setList] = useState(sites.map(s=>({...s, checklist:s.checklist||[]})));
   const [editing, setEditing] = useState(null);
@@ -233,16 +255,17 @@ function SiteManager({ sites, onSave, onClose }) {
     setEditing(s.id);
   };
 
-  const updateSite = (id, field, val) => setList(l=>l.map(s=>s.id===id?{...s,[field]:val}:s));
-  const removeSite = (id) => { setList(l=>l.filter(s=>s.id!==id)); if(editing===id) setEditing(null); };
+  const updateSite = (id, field, val) => setList(l=>l.map(s=>s.id===id?{...s,[field]:val,updatedAt:new Date().toISOString()}:s));
+  const removeSite = (id) => { setList(l=>replaceWithTombstone(l,id)); if(editing===id) setEditing(null); };
   const addCheckItem = (id) => {
     if (!newItem.trim()) return;
-    setList(l=>l.map(s=>s.id===id?{...s,checklist:[...s.checklist,newItem.trim()]}:s));
+    setList(l=>l.map(s=>s.id===id?{...s,checklist:[...s.checklist,newItem.trim()],updatedAt:new Date().toISOString()}:s));
     setNewItem("");
   };
-  const removeCheckItem = (siteId, i) => setList(l=>l.map(s=>s.id===siteId?{...s,checklist:s.checklist.filter((_,j)=>j!==i)}:s));
+  const removeCheckItem = (siteId, i) => setList(l=>l.map(s=>s.id===siteId?{...s,checklist:s.checklist.filter((_,j)=>j!==i),updatedAt:new Date().toISOString()}:s));
 
-  const ed = list.find(s=>s.id===editing);
+  const liveSites = list.filter(s => !s.deletedAt);
+  const ed = liveSites.find(s=>s.id===editing);
 
   return (
     <ModuleOverlay onClose={onClose}>
@@ -252,10 +275,11 @@ function SiteManager({ sites, onSave, onClose }) {
           <button onClick={onClose} style={{ ...ss.btn, padding:"4px 8px" }}>×</button>
         </div>
 
+        {saveError && <p role="alert" style={{ color: "#A32D2D", fontSize: 13 }}>{saveError}</p>}
         {!ed ? (
           <>
-            {list.length===0 && <p style={{ fontSize:13, color:"var(--color-text-secondary)", textAlign:"center", padding:"1rem 0" }}>No sites yet.</p>}
-            {list.map(s=>(
+            {liveSites.length===0 && <p style={{ fontSize:13, color:"var(--color-text-secondary)", textAlign:"center", padding:"1rem 0" }}>No sites yet.</p>}
+            {liveSites.map(s=>(
               <div key={s.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"0.5px solid var(--color-border-tertiary,#e5e5e5)" }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontWeight:500, fontSize:13 }}>{s.name}</div>
@@ -267,7 +291,7 @@ function SiteManager({ sites, onSave, onClose }) {
             ))}
             <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"flex-end" }}>
               <button onClick={addSite} style={ss.btn}>{t("addRecord")}</button>
-              <button onClick={()=>onSave(list)} style={ss.btnP}>{t("save")}</button>
+              <button onClick={()=>{ if (onSave(list) === false) setSaveError("Sites could not be saved. Your changes are still here — try again."); }} style={ss.btnP}>{t("save")}</button>
             </div>
           </>
         ) : (
@@ -310,7 +334,7 @@ function SiteManager({ sites, onSave, onClose }) {
 // ─── QR display modal ────────────────────────────────────────────────────────
 function QRModal({ site, baseUrl, onClose }) {
   const { pushToast } = useToast();
-  const url = `${baseUrl}?site=${site.id}&org=${getOrgId()}`;
+  const url = buildInductionLink(baseUrl, site.id, getOrgId());
   return (
     <ModuleOverlay onClose={onClose}>
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth:360, textAlign:"center" }}>
@@ -370,7 +394,7 @@ function SiteRegister({ entries, sites }) {
       </div>
 
       <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name or company…" style={{ ...ss.inp, width:"auto", flex:1, minWidth:140 }} />
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name or company" aria-label="Search name or company" style={{ ...ss.inp, width:"auto", flex:"1 1 260px", minWidth:"min(260px, 100%)", maxWidth:"100%" }} />
         <select value={filterSite} onChange={e=>setFilterSite(e.target.value)} style={{ ...ss.inp, width:"auto" }}>
           <option value="">All sites</option>
           {sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
@@ -431,29 +455,43 @@ function SiteRegister({ entries, sites }) {
 export default function QRInduction() {
   const { t } = useWorkspaceT();
   const [tab, setTab] = useState("register"); // register | qr | preview
-  const [sites, setSites] = useState(()=>load("induction_sites",[]));
-  const [entries, setEntries] = useState(()=>load("induction_entries",[]));
+  const [siteRows, setSites] = useState(()=>load("induction_sites",[]));
+  const sites = siteRows.filter((s) => !s.deletedAt);
+  const [entryRows, setEntries] = useState(()=>load("induction_entries",[]));
+  const entries = entryRows.filter((e) => !e.deletedAt);
   const [modal, setModal] = useState(null); // null | {type:'manage'} | {type:'qr', site} | {type:'form', site}
   const [selectedSite, setSelectedSite] = useState(null);
 
-  useEffect(()=>{ save("induction_sites",sites); },[sites]);
-  useEffect(()=>{ save("induction_entries",entries); },[entries]);
+  const sitesSync = useD1OrgArraySync({ storageKey: "induction_sites", namespace: "induction_sites", value: siteRows, setValue: setSites, load, save });
+  const entriesSync = useD1OrgArraySync({ storageKey: "induction_entries", namespace: "induction_entries", value: entryRows, setValue: setEntries, load, save });
+  const openedQrSite = useRef(null);
+  const requestedQrOrg = new URLSearchParams(window.location.search).get("org");
+  const qrOrgMismatch = Boolean(requestedQrOrg && requestedQrOrg !== getOrgId());
+
+  useEffect(() => {
+    const reset = () => { setModal(null); setSelectedSite(null); openedQrSite.current = null; };
+    window.addEventListener(ORG_CHANGED_EVENT, reset);
+    return () => window.removeEventListener(ORG_CHANGED_EVENT, reset);
+  }, []);
 
   // read URL params (simulating QR scan)
   useEffect(()=>{
     const params = new URLSearchParams(window.location.search);
     const siteId = params.get("site");
-    if (siteId) {
-      const site = sites.find(s=>s.id===siteId);
-      if (site) { setModal({ type:"form", site }); setTab("preview"); }
+    if (!qrOrgMismatch && siteId && openedQrSite.current !== siteId) {
+      const site = siteRows.find(s=>s.id===siteId && !s.deletedAt);
+      if (site) { openedQrSite.current = siteId; setModal({ type:"form", site }); setTab("preview"); }
     }
-  },[]);
+  },[siteRows, qrOrgMismatch]);
 
-  const baseUrl = window.location.origin + window.location.pathname;
+  const baseUrl = publicAppUrl();
 
   const handleComplete = (record) => {
-    setEntries(prev=>[...prev,record]);
+    const next = [...entryRows, record];
+    if (!save("induction_entries", next)) return false;
+    setEntries(next);
     setTimeout(()=>setModal(null), 4000);
+    return true;
   };
 
   const exportCSV = () => {
@@ -466,7 +504,9 @@ export default function QRInduction() {
   return (
     <div style={{ fontFamily:"DM Sans,system-ui,sans-serif", padding:"1.25rem 0", fontSize:14, color:"var(--color-text-primary)" }}>
       {/* modals */}
-      {modal?.type==="manage" && <SiteManager sites={sites} onSave={s=>{ setSites(s); setModal(null); }} onClose={()=>setModal(null)} />}
+      {qrOrgMismatch && <p role="alert" style={{ color: "#A32D2D" }}>This QR code belongs to a different organisation. Sign in to that organisation before completing its induction.</p>}
+      <D1ModuleSyncBanner d1Hydrating={sitesSync.d1Hydrating || entriesSync.d1Hydrating} d1OutboxPending={sitesSync.d1OutboxPending || entriesSync.d1OutboxPending} />
+      {modal?.type==="manage" && <SiteManager sites={siteRows} onSave={s=>{ if (!save("induction_sites", s)) return false; setSites(s); setModal(null); return true; }} onClose={()=>setModal(null)} />}
       {modal?.type==="qr" && <QRModal site={modal.site} baseUrl={baseUrl} onClose={()=>setModal(null)} />}
       {modal?.type==="form" && <InductionForm site={modal.site} checklist={modal.site.checklist||[]} onComplete={handleComplete} onBack={()=>setModal(null)} />}
 
@@ -515,7 +555,7 @@ export default function QRInduction() {
                 return (
                   <div key={s.id} style={{ ...ss.card, textAlign:"center" }}>
                     <div style={{ display:"flex", justifyContent:"center", marginBottom:12 }}>
-                      <QRCode value={`${baseUrl}?site=${s.id}&org=${getOrgId()}`} size={140} />
+                      <QRCode value={buildInductionLink(baseUrl, s.id, getOrgId())} size={140} />
                     </div>
                     <div style={{ fontWeight:500, fontSize:14, marginBottom:4 }}>{s.name}</div>
                     {s.address && <div style={{ fontSize:12, color:"var(--color-text-secondary)", marginBottom:8 }}>{s.address}</div>}
@@ -558,7 +598,14 @@ export default function QRInduction() {
                   <InductionForm
                     site={selectedSite}
                     checklist={selectedSite.checklist||[]}
-                    onComplete={(r)=>{ setEntries(prev=>[...prev,r]); setSelectedSite(null); setTab("register"); }}
+                    onComplete={(r)=>{
+                      const next = [...entryRows, r];
+                      if (!save("induction_entries", next)) return false;
+                      setEntries(next);
+                      setSelectedSite(null);
+                      setTab("register");
+                      return true;
+                    }}
                     onBack={()=>setSelectedSite(null)}
                   />
                 </div>

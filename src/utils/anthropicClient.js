@@ -6,6 +6,8 @@
  */
 
 import { supabase } from "../lib/supabase.js";
+import { appApiUrl } from "./appApiUrl";
+import { isNativeApp } from "./appRuntime";
 
 let warnedClientKeyInProd = false;
 let proxyReadyCache = null;
@@ -62,6 +64,7 @@ function resolveAnthropicMessagesUrl() {
   }
   if (proxy.startsWith("http://") || proxy.startsWith("https://")) return proxy.replace(/\/$/, "");
   const path = proxy.startsWith("/") ? proxy : `/${proxy}`;
+  if (isNativeApp()) return appApiUrl(path);
   if (typeof window !== "undefined" && window.location?.origin) {
     return `${window.location.origin}${path}`;
   }

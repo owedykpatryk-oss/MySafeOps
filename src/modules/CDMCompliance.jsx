@@ -1,4 +1,6 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useState, useEffect, useMemo } from "react";
+import { validateRequiredFields, persistRegisterRows } from "../utils/registerPersistGuard";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
@@ -73,6 +75,16 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
   };
   const [form, setForm] = useState(cdm?{...cdm}:blank);
   const [tab, setTab] = useState("project");
+  const [validationError, setValidationError] = useState("");
+  const persist = () => {
+    const check = validateRequiredFields(form, ["projectTitle"], { projectTitle: "Project title" });
+    if (!check.ok) { setValidationError(check.message); setTab("project"); return; }
+    setValidationError("");
+    onSave({ ...form, projectTitle: form.projectTitle.trim() });
+  };
+  useEffect(() => {
+    if (validationError && tab === "project") document.getElementById("cdm-compliance-project-title")?.focus();
+  }, [validationError, tab]);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const setNested = (parent,k,v) => setForm(f=>({...f,[parent]:{...f[parent],[k]:v}}));
 
@@ -126,6 +138,7 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
           ))}
         </div>
 
+        {validationError && <p id="required-details-error" role="alert" style={{ color: "#b91c1c" }}>{validationError}</p>}
         {/* PROJECT TAB */}
         {tab==="project" && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap:10 }}>
@@ -182,7 +195,7 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
             ) : null}
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl} htmlFor="cdm-compliance-project-title">Project title *</label>
-              <input value={form.projectTitle||""} onChange={e=>set("projectTitle",e.target.value)} placeholder="e.g. Kettle replacement — 2SFG Scunthorpe" style={ss.inp}  id="cdm-compliance-project-title" />
+              <input value={form.projectTitle||""} onChange={e=>set("projectTitle",e.target.value)} placeholder="Enter project title" style={ss.inp}  required aria-describedby={validationError ? "required-details-error" : undefined} id="cdm-compliance-project-title" />
             </div>
             <div style={{ gridColumn:"1/-1" }}>
               <label style={ss.lbl} htmlFor="cdm-compliance-site-address">Site address</label>
@@ -196,7 +209,7 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
               <label style={ss.lbl} htmlFor="cdm-compliance-project-id">Project (MySafeOps)</label>
               <select value={form.projectId||""} onChange={e=>set("projectId",e.target.value)} style={ss.inp} id="cdm-compliance-project-id">
                 <option value="">— Link to project —</option>
-                {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                {projects.map(p=><option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>)}
               </select>
             </div>
             <div>
@@ -221,7 +234,7 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
                 type="number"
                 value={form.calendarPhaseDays || ""}
                 onChange={(e) => set("calendarPhaseDays", e.target.value)}
-                placeholder="e.g. 35 — flag if &gt; 30 for review"
+                placeholder="e.g. 35"
                 style={ss.inp}
                id="cdm-compliance-calendar-phase-days" />
             </div>
@@ -363,7 +376,7 @@ function CDMForm({ cdm, onSave, onClose, pack, marketId }) {
             {tab!=="project"&&<button onClick={()=>setTab(tabs[tabs.findIndex(t=>t[0]===tab)-1][0])} style={ss.btn}>← Back</button>}
             {tab!=="preview"
               ?<button onClick={()=>setTab(tabs[tabs.findIndex(t=>t[0]===tab)+1][0])} style={ss.btnP}>Next →</button>
-              :<button onClick={()=>onSave(form)} style={ss.btnO}>Save {pack.packNoun}</button>
+              :<button onClick={persist} style={ss.btnO}>Save {pack.packNoun}</button>
             }
           </div>
         </div>
@@ -485,8 +498,11 @@ export default function CDMCompliance() {
   }, []);
 
   const savePack = (pack) => {
-    setPacks(prev => prev.find(p=>p.id===pack.id) ? prev.map(p=>p.id===pack.id?pack:p) : [pack,...prev]);
+    const next = packs.some(p => p.id === pack.id) ? packs.map(p => p.id === pack.id ? pack : p) : [pack, ...packs];
+    if (!persistRegisterRows("cdm_packs", next)) return false;
+    setPacks(next);
     setModal(null);
+    return true;
   };
 
   const livePacks = liveOrgArrayRows(packs);

@@ -75,7 +75,7 @@ function Form({ item, workers, onSave, onClose }) {
           ))}
         </select>
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="training-course-name">Course / qualification</label>
-        <input style={ss.inp} value={form.courseName} onChange={(e) => set("courseName", e.target.value)} placeholder="e.g. CSCS, IPAF, asbestos awareness"  id="training-course-name" />
+        <input style={ss.inp} value={form.courseName} onChange={(e) => set("courseName", e.target.value)} placeholder="e.g. IPAF training"  id="training-course-name" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="training-provider">Provider</label>
         <input style={ss.inp} value={form.provider} onChange={(e) => set("provider", e.target.value)}  id="training-provider" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))", gap: 10, marginTop: 10 }}>

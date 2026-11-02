@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../../../utils/projectDisplayLabel";
 import { useEffect, useRef, useState } from "react";
 import { clampPercent, planDisplaySrc } from "../permitPlanOverlayRegistry";
 import PermitDialogShell, { permitDialogStyles as ss } from "./PermitDialogShell";
@@ -136,9 +137,7 @@ export default function PermitIncidentReportDialog({ open, permit, projectPlans 
                 }}
               >
                 {plansForProject.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name || p.id}
-                  </option>
+                  <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
                 ))}
               </select>
               {markSrc ? (

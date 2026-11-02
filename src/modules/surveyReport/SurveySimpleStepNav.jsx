@@ -1,4 +1,5 @@
 import { memo, useMemo } from "react";
+import "../../styles/report-editor-nav.css";
 import { SURVEY_SIMPLE_STEPS, SURVEY_TAB_PLAIN_LABELS, simpleStepForTab } from "./surveySimpleEditorNav";
 import { surveyTabIsComplete } from "./surveyReportListUtils";
 
@@ -16,23 +17,26 @@ function SurveySimpleStepNav({ tab, report, onTabChange }) {
   }, [report]);
 
   return (
-    <div className="app-survey-editor-nav app-survey-editor-nav--simple">
-      <div className="app-survey-editor-nav__groups" role="tablist" aria-label="Survey steps">
-        {SURVEY_SIMPLE_STEPS.map((step) => {
+    <nav className="app-survey-editor-nav app-survey-editor-nav--simple" aria-label="Survey report sections">
+      <div className="app-report-nav-heading">
+        <span><strong>Report steps</strong> · Select a step to edit</span>
+        <span>Step {SURVEY_SIMPLE_STEPS.findIndex((s) => s.id === activeStep.id) + 1} of {SURVEY_SIMPLE_STEPS.length}</span>
+      </div>
+      <div className="app-survey-editor-nav__groups">
+        {SURVEY_SIMPLE_STEPS.map((step, index) => {
           const prog = stepProgress[step.id] || { done: 0, total: 1, complete: false };
           const pct = prog.total ? Math.round((prog.done / prog.total) * 100) : 0;
           return (
             <button
               key={step.id}
               type="button"
-              role="tab"
-              aria-selected={activeStep.id === step.id}
+              aria-current={activeStep.id === step.id ? "step" : undefined}
               className={`app-survey-editor-nav__group${activeStep.id === step.id ? " app-survey-editor-nav__group--active" : ""}${prog.complete ? " app-survey-editor-nav__group--done" : ""}`}
               onClick={() => onTabChange(step.tabs[0])}
             >
               <span className="app-survey-editor-nav__group-top">
                 <span className="app-survey-editor-nav__group-label">
-                  {prog.complete ? <span className="app-survey-editor-nav__check" aria-hidden>✓</span> : null}
+                  <span className="app-report-nav-number" aria-hidden="true">{index + 1}</span>
                   {step.label}
                 </span>
                 <span
@@ -52,15 +56,13 @@ function SurveySimpleStepNav({ tab, report, onTabChange }) {
       {activeStep.tabs.length > 1 ? (
         <div
           style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--color-border-tertiary, #e2e8f0)" }}
-          role="tablist"
           aria-label="Panels in this step"
         >
           {activeStep.tabs.map((t) => (
             <button
               key={t}
               type="button"
-              role="tab"
-              aria-selected={tab === t}
+              aria-current={tab === t ? "page" : undefined}
               onClick={() => onTabChange(t)}
               className="app-survey-simple-pill"
               style={{
@@ -75,7 +77,7 @@ function SurveySimpleStepNav({ tab, report, onTabChange }) {
           ))}
         </div>
       ) : null}
-    </div>
+    </nav>
   );
 }
 

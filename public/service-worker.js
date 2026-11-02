@@ -1,9 +1,12 @@
 // MySafeOps Service Worker — Offline Mode
 // Place this file at: /public/service-worker.js
 // Version — bump to force cache refresh
-const SW_VERSION = "mysafeops-v1.4.0";
+const SW_VERSION = "mysafeops-v1.4.5";
 const CACHE_NAME = `mysafeops-cache-${SW_VERSION}`;
 const OFFLINE_URL = "/offline.html";
+// The production build fills this list with every Vite chunk, including modules
+// that the user has not opened yet. Development keeps the list empty.
+const BUILD_ASSETS = /* BUILD_ASSETS */ [];
 
 function isCacheableResponse(res) {
   return res && res.ok && res.status >= 200 && res.status < 300;
@@ -19,7 +22,7 @@ function offlineFallbackResponse(status = 503) {
 }
 
 /** Clone synchronously — Response bodies can only be read once. */
-function scheduleCachePut(request, response) {
+function scheduleCachePut(event, request, response) {
   if (!isCacheableResponse(response)) return;
   let copy;
   try {
@@ -27,7 +30,7 @@ function scheduleCachePut(request, response) {
   } catch {
     return;
   }
-  void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {}));
 }
 
 async function fetchWithOptionalRetry(request) {
@@ -52,25 +55,33 @@ function shouldBypassSw(url) {
   );
 }
 
-// Vite build: hashed assets live under /assets/; precache only shell + manifest + icons
-const PRECACHE_ASSETS = [
-  "/",
+// The build injects hashed assets so a newly installed PWA can open lazy modules offline.
+const REQUIRED_ASSETS = [
   "/index.html",
   "/offline.html",
+  ...BUILD_ASSETS.filter((url) => /\.(?:js|css)$/.test(url)),
+];
+const OPTIONAL_ASSETS = [
+  "/",
   "/manifest.webmanifest",
   "/vite.svg",
   "/branding/fess-group-logo.png",
+  "/icons/icon-180.png",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/maskable-512.png",
+  ...BUILD_ASSETS.filter((url) => !/\.(?:js|css)$/.test(url)),
 ];
 
 // ─── Install: pre-cache shell assets ─────────────────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      // cache what we can, ignore failures for assets not yet built
-      return Promise.allSettled(
-        PRECACHE_ASSETS.map(url => cache.add(url).catch(() => null))
-      );
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Keep the previous worker if the offline shell cannot be cached.
+      await cache.addAll(REQUIRED_ASSETS);
+      // A missing optional image must not prevent the new shell from installing.
+      await Promise.allSettled(OPTIONAL_ASSETS.map((url) => cache.add(url)));
+    })
   );
 });
 
@@ -108,14 +119,17 @@ self.addEventListener("fetch", (event) => {
   // Navigation requests — network first, fallback to cached index, then offline page
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
+      // fetch(navigateRequest) throws in Chromium and the page then shows 503 Offline.
+      fetch(request.url, { credentials: "same-origin", redirect: "follow", cache: "reload" })
         .then((res) => {
-          scheduleCachePut(request, res);
+          if (res.status >= 500) throw new Error("Navigation temporarily unavailable");
+          scheduleCachePut(event, "/index.html", res);
           return res;
         })
         .catch(() =>
           caches.match("/index.html")
             .then((cached) => cached || caches.match(OFFLINE_URL))
+            .then((fallback) => fallback || caches.match("/"))
             .then((fallback) => fallback || offlineFallbackResponse())
         )
     );
@@ -133,7 +147,7 @@ self.addEventListener("fetch", (event) => {
         if (cached) return cached;
         const res = await fetchWithOptionalRetry(request);
         if (res) {
-          scheduleCachePut(request, res);
+          scheduleCachePut(event, request, res);
           return res;
         }
         return offlineFallbackResponse();
@@ -146,7 +160,7 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(request)
       .then((res) => {
-        scheduleCachePut(request, res);
+        scheduleCachePut(event, request, res);
         return res;
       })
       .catch(async () => {

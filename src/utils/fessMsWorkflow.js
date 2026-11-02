@@ -26,7 +26,7 @@ export function buildMsStepsFromRams(ramsDoc, genId) {
   return chunks.map((desc, i) => ({
     id: genId(),
     seq: i + 1,
-    title: `${desc.split(" ").slice(0, 5).join(" ")}…`,
+    title: desc.split(/[\n.!?](?:\s|$)/)[0] || desc,
     description: desc,
     responsible: "",
     duration: "",

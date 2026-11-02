@@ -87,6 +87,7 @@ export const CONSTRUCTION_SLIM_HIDDEN = [
 export function isModuleAllowedForMarket(moduleId, marketId) {
   const id = String(moduleId || "");
   if (!id) return false;
+  if (id === 'drone-operations') return marketId === 'uk' || marketId === 'au';
   if (UK_ONLY_MODULE_IDS.includes(id) && marketId !== "uk") return false;
   if (MULTI_REGION_MODULE_IDS.includes(id)) {
     return marketId === "au" || marketId === "pl" || marketId === "de" || marketId === "at" || marketId === "ch";

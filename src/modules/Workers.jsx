@@ -1,5 +1,5 @@
 import { safeHttpUrl } from "../utils/safeUrl";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import ModuleOverlay from "../components/ModuleOverlay";
 import { useRegisterListPaging } from "../utils/useRegisterListPaging";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
@@ -21,6 +21,7 @@ import { getOrgMarketId } from "../utils/orgMarket";
 import {
   geoLookupSuccessMsg,
   lookupSitePostcode,
+  resolveSitePostcodeCandidatesForMarket,
   resolveSitePostcodeInput,
   sitePostcodeExample,
 } from "../utils/siteAddressLookup";
@@ -45,7 +46,7 @@ import { collectComplianceDueItems } from "../utils/complianceDueCalendar";
 import { buildPeopleNextSteps } from "../utils/peopleNextSteps";
 import PeopleNextSteps from "../components/PeopleNextSteps";
 import ComplianceDuePanel from "../components/ComplianceDuePanel";
-import { pushRecycleBinItem } from "../utils/recycleBin";
+import { deleteRecycleBinEntry, pushRecycleBinItem, RECYCLE_RETENTION_DAYS } from "../utils/recycleBin";
 import { liveOrgArrayRows, replaceWithTombstone } from "../utils/d1ArrayMerge";
 import { openWorkspaceView, setWorkspaceNavTarget, consumeWorkspaceNavTarget } from "../utils/workspaceNavContext";
 import { getNearestHospital } from "../utils/nearestHospital";
@@ -303,7 +304,11 @@ export function WorkersModule({ mode = "all" }) {
   const { user } = useSupabaseAuth();
   const { pushToast } = useToast();
   const [workers, setWorkers] = useState(() => load(WORKERS_KEY, []));
+  const workersRef = useRef(workers);
+  workersRef.current = workers;
   const [projects, setProjects] = useState(() => load(PROJECTS_KEY, []));
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
   const [modal, setModal] = useState(null);
   const [hubProject, setHubProject] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -343,6 +348,11 @@ export function WorkersModule({ mode = "all" }) {
       (mode === "people" && t?.viewId === "people") ||
       (mode === "all" && t?.viewId === "workers");
     if (!viewOk) return;
+    if (t?.action === "editWorker" && t?.workerId && showPeople) {
+      const worker = load(WORKERS_KEY, []).find((row) => row && row.id === t.workerId && !row.deletedAt);
+      if (worker) setModal({ type: "worker", data: worker });
+      return;
+    }
     if (t?.action === "createProject" && showProjects) {
       setModal({ type: "project", data: null });
       return;
@@ -395,12 +405,16 @@ export function WorkersModule({ mode = "all" }) {
 
   const exportWorkersCsv = () => {
     const header = ["Name", "Role", "Phone", "Email", "Certs / notes", "Structured certifications"];
-    const rows = workers.map((w) => [w.name || "", w.role || "", w.phone || "", w.email || "", w.certs || "", certSummaryText(w)]);
+    const rows = workers.filter((w) => !w.deletedAt).map((w) => [w.name || "", w.role || "", w.phone || "", w.email || "", w.certs || "", certSummaryText(w)]);
     exportCsv(header, rows, `workers_${getOrgId()}.csv`);
   };
 
   const saveWorker = (form) => {
-    const isNew = !workers.some((w) => w.id === form.id);
+    if (!String(form.name || "").trim()) {
+      pushToast(`${t("name")}: ${t("requiredField")}`, "warn");
+      return false;
+    }
+    const isNew = !workers.some((w) => w.id === form.id && !w.deletedAt);
     if (isNew) {
       const gate = checkBillingLimit("workers", billingOpts);
       if (!gate.ok) {
@@ -408,15 +422,14 @@ export function WorkersModule({ mode = "all" }) {
         return;
       }
     }
-    setWorkers((prev) => {
-      const i = prev.findIndex((x) => x.id === form.id);
-      if (i >= 0) {
-        const next = [...prev];
-        next[i] = form;
-        return next;
-      }
-      return [form, ...prev];
-    });
+    const next = workers.some((w) => w.id === form.id)
+      ? workers.map((w) => w.id === form.id ? { ...form, updatedAt: new Date().toISOString() } : w)
+      : [{ ...form, updatedAt: new Date().toISOString() }, ...workers];
+    if (!save(WORKERS_KEY, next)) {
+      pushToast("Worker could not be saved. Your changes are still here — check available storage and retry.", "warn");
+      return false;
+    }
+    setWorkers(next);
     setModal(null);
   };
 
@@ -426,32 +439,41 @@ export function WorkersModule({ mode = "all" }) {
       message: t("removeWorkerMessage"),
       tone: "danger",
       onConfirm: () => {
-        setWorkers((prev) => {
-          const victim = prev.find((w) => w.id === id);
-          if (victim) {
-            pushRecycleBinItem({
-              moduleId: "workers",
-              moduleLabel: "Workers",
-              itemType: "worker",
-              itemLabel: victim.name || victim.id,
-              sourceKey: WORKERS_KEY,
-              payload: victim,
-            });
-          }
-          return replaceWithTombstone(prev, id);
+        const current = workersRef.current;
+        const victim = current.find((w) => w.id === id && !w.deletedAt);
+        if (!victim) { setConfirm(null); return; }
+        const archived = pushRecycleBinItem({
+          moduleId: "workers", moduleLabel: "Workers", itemType: "worker",
+          itemLabel: victim.name || victim.id, sourceKey: WORKERS_KEY, payload: victim,
         });
+        if (!archived) { pushToast(t("workerCouldNotRemove"), "warn"); return; }
+        const next = replaceWithTombstone(current, id);
+        if (!save(WORKERS_KEY, next)) {
+          deleteRecycleBinEntry(archived.id);
+          pushToast(t("workerCouldNotRemove"), "warn");
+          return;
+        }
+        workersRef.current = next;
+        setWorkers(next);
         setConfirm(null);
+        pushToast(tf("workerRemoved", { name: victim.name || victim.id, days: RECYCLE_RETENTION_DAYS }), "success");
       },
     });
   };
 
   const saveProject = (form, options = {}) => {
-    const isNew = !projects.some((p) => p.id === form.id);
-    if (isNew) {
+    const required = wizardStepBlockers(1, form);
+    if (required.length) {
+      pushToast(tf("completeBeforeContinuing", { items: required.join(", ") }), "warn");
+      return false;
+    }
+    const existing = projects.find((p) => p.id === form.id && !p.deletedAt);
+    const isNew = !existing;
+    if (form.closed !== true && (isNew || existing.closed === true)) {
       const gate = checkBillingLimit("projects", billingOpts);
       if (!gate.ok) {
         pushToast(billingLimitMessage(gate), "warn");
-        return;
+        return false;
       }
     }
 
@@ -477,17 +499,15 @@ export function WorkersModule({ mode = "all" }) {
     saved = sanitizeProjectForOrg(saved, getOrgId());
     const withTs = { ...saved, updatedAt: new Date().toISOString() };
 
-    setProjects((prev) => {
-      const i = prev.findIndex((x) => x.id === withTs.id);
-      const next = i >= 0 ? prev.map((row, idx) => (idx === i ? withTs : row)) : [withTs, ...prev];
-      const wrote = save(PROJECTS_KEY, next);
-      if (!wrote) {
-        pushToast(t("projectCouldNotSave"), "warn");
-      } else {
-        pushToast(isNew ? t("projectSaved") : t("projectUpdated"), "success");
-      }
-      return next;
-    });
+    const next = projects.some((p) => p.id === withTs.id)
+      ? projects.map((p) => p.id === withTs.id ? withTs : p)
+      : [withTs, ...projects];
+    if (!save(PROJECTS_KEY, next)) {
+      pushToast(t("projectCouldNotSave"), "warn");
+      return false;
+    }
+    setProjects(next);
+    pushToast(isNew ? t("projectSaved") : t("projectUpdated"), "success");
 
     if (saved.soloMode !== false && workers.length === 0) {
       const workerGate = checkBillingLimit("workers", billingOpts);
@@ -516,22 +536,37 @@ export function WorkersModule({ mode = "all" }) {
       message: t("removeProjectMessage"),
       tone: "danger",
       onConfirm: () => {
-        setProjects((prev) => {
-          const victim = prev.find((p) => p.id === id);
-          if (victim) {
-            pushRecycleBinItem({
-              moduleId: "workers",
-              moduleLabel: "Workers",
-              itemType: "project",
-              itemLabel: victim.name || victim.id,
-              sourceKey: PROJECTS_KEY,
-              payload: victim,
-            });
-          }
-          return replaceWithTombstone(prev, id);
+        // Confirm against the latest list, and keep storage side effects out of
+        // React's state updater (which can run twice in Strict Mode).
+        const current = projectsRef.current;
+        const victim = current.find((p) => p.id === id && !p.deletedAt);
+        if (!victim) {
+          setConfirm(null);
+          return;
+        }
+        const archived = pushRecycleBinItem({
+          moduleId: "workers",
+          moduleLabel: "Workers",
+          itemType: "project",
+          itemLabel: victim.name || victim.id,
+          sourceKey: PROJECTS_KEY,
+          payload: victim,
         });
+        if (!archived) {
+          pushToast(t("projectCouldNotRemove"), "warn");
+          return;
+        }
+        const next = replaceWithTombstone(current, id);
+        if (!save(PROJECTS_KEY, next)) {
+          deleteRecycleBinEntry(archived.id);
+          pushToast(t("projectCouldNotRemove"), "warn");
+          return;
+        }
+        projectsRef.current = next;
+        setProjects(next);
         setHubProject((p) => (p?.id === id ? null : p));
         setConfirm(null);
+        pushToast(tf("projectRemoved", { name: victim.name || victim.id, days: RECYCLE_RETENTION_DAYS }), "success");
       },
     });
   };
@@ -1144,6 +1179,9 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
   const { t, tf } = useWorkspaceT(orgMarketId);
   const certLibrary = getCertLibraryForMarket(orgMarketId);
   const [form, setForm] = useState(() => workerFormShape(item));
+  const [saveAttempt, setSaveAttempt] = useState(false);
+  const nameInput = useRef(null);
+  const nameMissing = !String(form.name || "").trim();
   const [certFilter, setCertFilter] = useState("");
   useEffect(() => {
     setForm(workerFormShape(item));
@@ -1179,6 +1217,11 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
   };
 
   const persist = () => {
+    if (nameMissing) {
+      setSaveAttempt(true);
+      nameInput.current?.focus();
+      return;
+    }
     const certs = [];
     if (form.certType?.trim() && form.certExpiry) {
       certs.push({ certType: form.certType.trim(), expiryDate: form.certExpiry });
@@ -1206,6 +1249,7 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
     const { certMatrix: _cm, certType: _ct, certExpiry: _ce, ...rest } = form;
     onSave({
       ...rest,
+      name: String(form.name).trim(),
       certifications: uniqueAll,
       projectIds: Array.isArray(form.projectIds) ? form.projectIds : [],
     });
@@ -1228,7 +1272,8 @@ function WorkerForm({ item, projects = [], onSave, onClose }) {
       <div className="app-module-overlay__panel" style={{ ...ss.card, maxWidth: 520 }}>
         <h2 style={{ marginTop: 0 }}>{item ? t("editWorker") : t("newWorker")}</h2>
         <label style={ss.lbl} htmlFor="workers-name">{t("name")}</label>
-        <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)}  id="workers-name" />
+        <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} id="workers-name" ref={nameInput} required placeholder={t("workerNamePlaceholder")} aria-invalid={saveAttempt && nameMissing} aria-describedby={saveAttempt && nameMissing ? "worker-name-error" : undefined} />
+        {saveAttempt && nameMissing && <div id="worker-name-error" role="alert" style={{ color: "#b91c1c", fontSize: 12 }}>{t("requiredField")}</div>}
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-role">{t("role")}</label>
         <input style={ss.inp} value={form.role} onChange={(e) => set("role", e.target.value)}  id="workers-role" />
         <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-phone">{t("phone")}</label>
@@ -1422,6 +1467,18 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   });
   const [draftRestored, setDraftRestored] = useState(Boolean(initialDraft?.form));
   const [celebrateReady, setCelebrateReady] = useState(false);
+  const [saveAttempt, setSaveAttempt] = useState(0);
+  const nameInput = useRef(null);
+  const siteInput = useRef(null);
+  const nameMissing = !String(form.name || "").trim();
+  const siteMissing = !String(form.site || "").trim();
+  useEffect(() => {
+    if (!saveAttempt || step !== 1) return;
+    if (nameMissing) nameInput.current?.focus();
+    else if (siteMissing) siteInput.current?.focus();
+    // Focus on a failed save, without moving focus while the user types.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveAttempt, step]);
   const totalSteps = 5;
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const soloMode = form.soloMode !== false;
@@ -1458,11 +1515,24 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   const ensureSiteCoordinates = async (draft = form, { preferPostcode = false } = {}) => {
     const lat = parseFloat(String(draft.lat ?? "").trim());
     const lng = parseFloat(String(draft.lng ?? "").trim());
-    const postcodeQuery = resolveSitePostcodeInput(draft.postcode, draft.address, draft.site);
+    const postcodeCandidates = resolveSitePostcodeCandidatesForMarket(
+      draft.postcode,
+      orgMarketId,
+      draft.address,
+      draft.site
+    );
+    const postcodeQuery = postcodeCandidates[0] || "";
+    const lookupPostcodeCandidates = async () => {
+      for (const candidate of postcodeCandidates) {
+        const match = await lookupSitePostcode(candidate, orgMarketId);
+        if (match) return match;
+      }
+      return null;
+    };
 
     // New / changed postcode must win over leftover draft coordinates.
     if (preferPostcode && postcodeQuery) {
-      const pc = await lookupSitePostcode(postcodeQuery, orgMarketId);
+      const pc = await lookupPostcodeCandidates();
       if (pc) {
         return {
           lat: pc.lat,
@@ -1481,7 +1551,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     }
 
     if (postcodeQuery) {
-      const pc = await lookupSitePostcode(postcodeQuery, orgMarketId);
+      const pc = await lookupPostcodeCandidates();
       if (pc) {
         return {
           lat: pc.lat,
@@ -1744,6 +1814,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     clearProjectWizardDraft();
     setForm(projectFormShape(null, { workers, user, orgSettings }));
     setStep(1);
+    setSaveAttempt(0);
     setDraftRestored(false);
     setGeoMsg("Draft discarded.");
   };
@@ -1782,6 +1853,11 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
   };
 
   const persist = (options = {}) => {
+    if (wizardStepBlockers(1, form).length) {
+      setSaveAttempt((attempt) => attempt + 1);
+      setStep(1);
+      return;
+    }
     const latRaw = String(form.lat ?? "").trim();
     const lngRaw = String(form.lng ?? "").trim();
     const lat = latRaw === "" ? undefined : Number(latRaw);
@@ -1795,6 +1871,8 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     const draftBase = form.soloMode !== false ? applySoloProjectRoles(form, form.soloLeadName || deriveUserDisplayName(user, orgSettings)) : form;
     const draft = {
       ...draftBase,
+      name: String(form.name).trim(),
+      site: String(form.site).trim(),
       industryStarter: safeStarter,
       riskRegister: normalizedRiskRegister,
       permitDefaults: {
@@ -1808,7 +1886,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
     const nextMissing = projectMissingItems(draft, { soloMode: draft.soloMode !== false });
     const nextHealth = projectHealthScore(draft, { soloMode: draft.soloMode !== false });
     const umSynced = isUtilityMappingOrg() ? syncUtilityMappingProjectJob(draft) : draft;
-    onSave({
+    const saved = onSave({
       ...umSynced,
       lat: lat !== undefined && !Number.isNaN(lat) ? lat : undefined,
       lng: lng !== undefined && !Number.isNaN(lng) ? lng : undefined,
@@ -1822,7 +1900,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
       ...options,
       applyPlaybook: !item?.id ? umSynced.playbookId : options.applyPlaybook,
     });
-    if (!item?.id) clearProjectWizardDraft();
+    if (saved !== false && !item?.id) clearProjectWizardDraft();
   };
 
   const geocode = async () => {
@@ -2059,9 +2137,11 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
             {step === 1 ? (
               <div className="project-wizard-section">
                 <label style={ss.lbl} htmlFor="workers-name-2">{t("projectName")}</label>
-                <input style={ss.inp} value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus  id="workers-name-2" />
+                <input style={ss.inp} value={form.name} placeholder={t("projectNamePlaceholder")} onChange={(e) => set("name", e.target.value)} autoFocus required ref={nameInput} aria-invalid={saveAttempt > 0 && nameMissing} aria-describedby={saveAttempt > 0 && nameMissing ? "project-name-error" : undefined} id="workers-name-2" />
+                {saveAttempt > 0 && nameMissing ? <p id="project-name-error" className="project-wizard-alert" role="alert">{t("projectName")}: {t("requiredField")}</p> : null}
                 <label style={{ ...ss.lbl, marginTop: 10 }} htmlFor="workers-site">{t("siteClient")}</label>
-                <input style={ss.inp} value={form.site} onChange={(e) => set("site", e.target.value)}  id="workers-site" />
+                <input style={ss.inp} value={form.site} placeholder={t("siteClientPlaceholder")} onChange={(e) => set("site", e.target.value)} required ref={siteInput} aria-invalid={saveAttempt > 0 && siteMissing} aria-describedby={saveAttempt > 0 && siteMissing ? "project-site-error" : undefined} id="workers-site" />
+                {saveAttempt > 0 && siteMissing ? <p id="project-site-error" className="project-wizard-alert" role="alert">{t("siteClient")}: {t("requiredField")}</p> : null}
                 {isUtilityMappingOrg() ? (
                   <>
                     <label style={{ ...ss.lbl, marginTop: 14 }} htmlFor="workers-um-job-number">{t("umJobNumber")}</label>
@@ -2549,7 +2629,7 @@ function ProjectForm({ item, workers = [], user, onSave, onClose }) {
               <span className="project-wizard-footer__draft-hint">{t("draftOnlyHint")}</span>
             ) : null}
             <button type="button" style={ss.btnO} onClick={() => persist({ openDrawingEditor: true })}>{t("saveAndDrawingEditor")}</button>
-            <button type="button" style={ss.btnP} onClick={persist}>{t("save")}</button>
+            <button type="button" style={ss.btnP} onClick={() => persist()}>{t("save")}</button>
           </div>
         </div>
       </div>

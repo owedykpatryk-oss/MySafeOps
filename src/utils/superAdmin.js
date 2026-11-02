@@ -29,15 +29,11 @@ export async function refreshPlatformOwnerFromSupabase(client = supabase) {
   }
   try {
     const { data, error } = await client.rpc("user_is_platform_owner");
-    if (error) {
-      platformOwnerFlag = false;
-      return false;
-    }
+    if (error) return platformOwnerFlag;
     platformOwnerFlag = data === true || data === "true";
     return platformOwnerFlag;
   } catch {
-    platformOwnerFlag = false;
-    return false;
+    return platformOwnerFlag;
   }
 }
 

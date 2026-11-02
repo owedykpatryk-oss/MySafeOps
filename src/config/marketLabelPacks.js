@@ -80,6 +80,7 @@ export const MARKET_LABEL_PACKS = {
     moduleLabels: {
       rams: "SWMS",
       "whs-plan": "WHS management plan",
+      "drone-operations": "Aerial Survey Operations",
       "notifiable-incidents": "Notifiable incidents",
       coshh: "Hazardous substances",
       legislation: "WHS legislation",

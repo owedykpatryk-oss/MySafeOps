@@ -7,18 +7,18 @@
 
 /** Monthly amounts in cents (AUD). */
 export const AU_PLAN_AMOUNT_CENTS = {
-  starter: 5900,
-  team: 24900,
-  business: 71900,
-  enterprise: 142900,
+  starter: 11900,
+  team: 35900,
+  business: 78900,
+  enterprise: 153900,
 };
 
 /** Human-readable monthly labels (ex GST). */
 export const AU_PLAN_PRICE_LABELS = {
-  starter: "A$59",
-  team: "A$249",
-  business: "A$719",
-  enterprise: "A$1429",
+  starter: "A$119",
+  team: "A$359",
+  business: "A$789",
+  enterprise: "A$1539",
   trial: "A$0",
 };
 

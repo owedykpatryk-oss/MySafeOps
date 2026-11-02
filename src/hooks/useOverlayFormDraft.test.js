@@ -7,10 +7,12 @@ import {
   clearOverlayFormDraft,
   mergeOverlayDraft,
   seedOverlayForm,
+  submitOverlayForm,
 } from "./useOverlayFormDraft.js";
 
 describe("overlay form draft", () => {
   beforeEach(() => {
+    localStorage.clear();
     sessionStorage.clear();
   });
 
@@ -36,5 +38,33 @@ describe("overlay form draft", () => {
     const seeded = seedOverlayForm({ title: "", location: "Yard" }, key);
     expect(seeded.title).toBe("Missing cover");
     expect(seeded.location).toBe("Yard");
+  });
+
+  it("isolates drafts between organisations and operational countries", () => {
+    localStorage.setItem("mysafeops_orgId", "company-a");
+    const a = overlayDraftKey("inspection", "new");
+    writeOverlayFormDraft(a, { name: "Company A equipment" });
+    localStorage.setItem("mysafeops_orgId", "company-b");
+    const b = overlayDraftKey("inspection", "new");
+    expect(readOverlayFormDraft(b)).toBeNull();
+    writeOverlayFormDraft(b, { name: "Company B equipment" });
+    localStorage.setItem("mysafeops_active_country_workspace_snapshot_company-b", JSON.stringify({ id: "au", is_primary: false }));
+    const au = overlayDraftKey("inspection", "new");
+    expect(readOverlayFormDraft(au)).toBeNull();
+    expect(new Set([a, b, au]).size).toBe(3);
+    expect(readOverlayFormDraft(a).name).toBe("Company A equipment");
+    expect(readOverlayFormDraft(b).name).toBe("Company B equipment");
+  });
+
+  it("does not assign an unscoped legacy draft to the current company", () => {
+    sessionStorage.setItem("mso_overlay_draft_inspection_new", JSON.stringify({ name: "Unknown company equipment" }));
+    expect(seedOverlayForm({ name: "" }, overlayDraftKey("inspection", "new"))).toEqual({ name: "" });
+    expect(sessionStorage.getItem("mso_overlay_draft_inspection_new")).not.toBeNull();
+  });
+
+  it("preserves the latest form before an unexpected save exception", () => {
+    const key = overlayDraftKey("inspection", "new");
+    expect(() => submitOverlayForm(key, { name: "Latest equipment" }, () => { throw new Error("Unexpected failure"); })).toThrow("Unexpected failure");
+    expect(readOverlayFormDraft(key)).toEqual({ name: "Latest equipment" });
   });
 });

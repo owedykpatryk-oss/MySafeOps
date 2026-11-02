@@ -16,6 +16,8 @@
  */
 
 import { isValidD1Namespace } from "../../../shared/d1NamespacePolicy.mjs";
+import { DRONE_NAMESPACES, validateDroneWrite } from "../../../shared/droneStorageGuard.mjs";
+import { readServerBillingLimits } from "../../../shared/billingPlanLimits.mjs";
 
 const GENESIS_HASH = "0".repeat(64);
 /** Audit action/entity — blocks injection of arbitrary strings into the hash chain. */
@@ -198,7 +200,7 @@ async function verifyOrgAccess(env, authHeader, orgSlug) {
 
 /**
  * Membership + subscription/trial write gate for mutating routes.
- * Falls back to membership-only when RPC is not deployed yet (404).
+ * Refuses writes when the billing RPC is not deployed yet (404).
  */
 async function verifyOrgCloudWrite(env, authHeader, orgSlug) {
   const url = (env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -221,7 +223,7 @@ async function verifyOrgCloudWrite(env, authHeader, orgSlug) {
   });
 
   if (res.status === 404) {
-    return verifyOrgAccess(env, authHeader, orgSlug);
+    return { ok: false, error: "billing_write_gate_missing" };
   }
   if (res.status === 401 || res.status === 403) {
     return { ok: false, error: "Unauthorized" };
@@ -319,7 +321,7 @@ async function verifyOrgKvDelete(env, authHeader, orgSlug, dataKey) {
   return { ok: true };
 }
 
-/** PUT /v1/kv — namespace-scoped write (RPC). Falls back to membership-only if RPC missing. */
+/** PUT /v1/kv — namespace-scoped write (RPC). Refuses writes if the role RPC is missing. */
 async function verifyOrgKvWrite(env, authHeader, orgSlug, namespace, dataKey) {
   const url = (env.SUPABASE_URL || "").replace(/\/+$/, "");
   const anon = env.SUPABASE_ANON_KEY || "";
@@ -346,7 +348,7 @@ async function verifyOrgKvWrite(env, authHeader, orgSlug, namespace, dataKey) {
   if (res.status === 404) {
     return dataKey.startsWith("country:")
       ? { ok: false, error: "country_workspace_gate_missing" }
-      : verifyOrgAccess(env, authHeader, orgSlug);
+      : { ok: false, error: "namespace_write_gate_missing" };
   }
   if (res.status === 401 || res.status === 403) {
     return { ok: false, error: "Unauthorized" };
@@ -472,7 +474,14 @@ async function handleKvPut(request, env, orgSlug, authHeader, c) {
   if (!isValidD1Namespace(namespace)) {
     return json({ error: "invalid_namespace" }, 400, c);
   }
-  const writeGate = await verifyOrgKvWrite(env, authHeader, orgSlug, namespace, dataKey);
+  // Secondary countries have independent paid subscriptions. Their country/role
+  // RPC below checks membership and billing; an expired primary plan must not override it.
+  if (!/^country:[0-9a-fA-F-]{36}:/.test(dataKey)) {
+    const billingGate = await verifyOrgCloudWrite(env, authHeader, orgSlug);
+    if (!billingGate.ok) return json({ error: billingGate.error }, billingGate.error === "Unauthorized" ? 401 : 403, c);
+  }
+  // Reuse the existing server-authoritative admin/supervisor policy for controlled drone records.
+  const writeGate = await verifyOrgKvWrite(env, authHeader, orgSlug, DRONE_NAMESPACES.has(namespace) ? "mysafeops_projects" : namespace, dataKey);
   if (!writeGate.ok) {
     const status = writeGate.error === "Unauthorized" ? 401 : writeGate.error === "invalid_namespace" ? 400 : 403;
     return json({ error: writeGate.error || "forbidden" }, status, c);
@@ -487,13 +496,14 @@ async function handleKvPut(request, env, orgSlug, authHeader, c) {
   }
 
   const valueJson = JSON.stringify(body.value);
+  if (typeof valueJson !== "string") return json({ error: "missing_value" }, 400, c);
   if (valueJson.length > 4_500_000) {
     return json({ error: "payload_too_large" }, 413, c);
   }
 
   const now = new Date().toISOString();
 
-  const existing = await env.DB.prepare(`SELECT version FROM org_sync_kv WHERE org_slug = ? AND namespace = ? AND data_key = ?`)
+  const existing = await env.DB.prepare(`SELECT version, value_json FROM org_sync_kv WHERE org_slug = ? AND namespace = ? AND data_key = ?`)
     .bind(orgSlug, namespace, dataKey)
     .first();
 
@@ -504,17 +514,57 @@ async function handleKvPut(request, env, orgSlug, authHeader, c) {
     }
   }
 
+  const cappedKind = namespace === "mysafeops_workers" ? "workers" : namespace === "mysafeops_projects" ? "projects" : null;
+  if (cappedKind) {
+    // Canonical lists prevent spreading people/projects across alternate keys to evade the cap.
+    if (dataKey !== "main" && !/^country:[0-9a-f-]{36}:main$/.test(dataKey)) return json({ error: "invalid_register_key" }, 400, c);
+    if (!Array.isArray(body.value) || body.value.some((row) => !row || typeof row !== "object" || !row.id)) return json({ error: "invalid_register_rows" }, 400, c);
+    const quota = await readServerBillingLimits(env, authHeader, orgSlug, dataKey);
+    if (!quota.ok) return json({ error: quota.error }, quota.error === "invalid_register_key" ? 400 : 503, c);
+    const count = (rows) => rows.filter((row) => row && !row.deletedAt && (cappedKind !== "projects" || row.closed !== true)).length;
+    let previousRows = [];
+    try { previousRows = JSON.parse(existing?.value_json || "[]"); } catch { /* legacy invalid data may be replaced */ }
+    const previousCount = count(Array.isArray(previousRows) ? previousRows : []);
+    const nextCount = count(body.value);
+    const limit = quota.limits[cappedKind];
+    // Keep edits/deletions possible after a downgrade; forbid any further increase.
+    if (nextCount > limit && nextCount > previousCount) return json({ error: "billing_limit_reached", kind: cappedKind, count: nextCount, limit }, 403, c);
+  }
+
   const nextVersion = existing ? existing.version + 1 : 1;
-  await env.DB.prepare(
+  if (DRONE_NAMESPACES.has(namespace)) {
+    if (dataKey !== "main" && !/^country:[0-9a-fA-F-]{36}:main$/.test(dataKey)) return json({ error: "invalid_register_key" }, 400, c);
+    let previous = [];
+    try { previous = JSON.parse(existing?.value_json || "[]"); } catch { return json({ error: "corrupt_drone_records" }, 409, c); }
+    const context = {};
+    if (namespace === "drone_missions" && Array.isArray(body.value) && body.value.some(row => row?.issues?.some(issue => !previous.find(old => old.id === row.id)?.issues?.some(old => old.id === issue.id)))) {
+      for (const [name, ns] of Object.entries({ projects: "mysafeops_projects", workers: "mysafeops_workers", assets: "plant_register", rams: "rams_builder_docs", manuals: "drone_manuals", library: "drone_library" })) {
+        const record = await env.DB.prepare("SELECT value_json FROM org_sync_kv WHERE org_slug = ? AND namespace = ? AND data_key = ?").bind(orgSlug, ns, dataKey).first();
+        try { context[name] = JSON.parse(record?.value_json || "[]"); } catch { return json({ error: "corrupt_linked_register" }, 409, c); }
+      }
+      context.profiles = context.library.filter(row => row.kind === "profile");
+      context.payloads = context.library.filter(row => row.kind === "payload");
+      context.templates = context.library.filter(row => row.kind === "template");
+      context.checklists = context.library.filter(row => row.kind === "checklist");
+    }
+    const error = validateDroneWrite(namespace, previous, body.value, actorSub, context);
+    if (error) return json({ error }, 409, c);
+  }
+  const result = existing ? await env.DB.prepare(
+    `UPDATE org_sync_kv SET value_json = ?, version = ?, updated_at = ?
+     WHERE org_slug = ? AND namespace = ? AND data_key = ? AND version = ?`
+  ).bind(valueJson, nextVersion, now, orgSlug, namespace, dataKey, existing.version).run() : await env.DB.prepare(
     `INSERT INTO org_sync_kv (org_slug, namespace, data_key, value_json, version, updated_at)
      VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(org_slug, namespace, data_key) DO UPDATE SET
-       value_json = excluded.value_json,
-       version = excluded.version,
-       updated_at = excluded.updated_at`
+     ON CONFLICT(org_slug, namespace, data_key) DO NOTHING`
   )
     .bind(orgSlug, namespace, dataKey, valueJson, nextVersion, now)
     .run();
+
+  if (result?.meta?.changes !== 1) {
+    const current = await env.DB.prepare(`SELECT version FROM org_sync_kv WHERE org_slug = ? AND namespace = ? AND data_key = ?`).bind(orgSlug, namespace, dataKey).first();
+    return json({ error: "version_conflict", expected: existing?.version || 0, current: current?.version || 0 }, 409, c);
+  }
 
   return json({ ok: true, version: nextVersion, updated_at: now }, 200, c);
 }
@@ -523,6 +573,7 @@ async function handleKvDelete(request, env, orgSlug, c) {
   const url = new URL(request.url);
   const namespace = (url.searchParams.get("namespace") || "").trim();
   const dataKey = (url.searchParams.get("key") || "").trim();
+  if (DRONE_NAMESPACES.has(namespace)) return json({ error: "controlled_drone_records_cannot_be_deleted" }, 403, c);
   if (!namespace || !dataKey) {
     return json({ error: "missing_namespace_or_key" }, 400, c);
   }
@@ -554,7 +605,9 @@ async function handleAuditAppend(request, env, orgSlug, authHeader, c) {
   }
   const detail = body.detail != null ? String(body.detail) : null;
   const clientRowId = body.client_row_id != null ? String(body.client_row_id) : null;
-  const extra = body.extra && typeof body.extra === "object" ? body.extra : null;
+  const scopeKey = new URL(request.url).searchParams.get("key") || "main";
+  const extra = { ...(body.extra && typeof body.extra === "object" ? body.extra : {}),
+    countryWorkspaceId: scopeKey === "main" ? null : scopeKey.split(":")[1] };
 
   const createdAt = new Date().toISOString();
   const actorSub = parseJwtSub(authHeader);
@@ -691,7 +744,12 @@ export default {
       const auth = request.headers.get("Authorization") || "";
       const orgSlug = (request.headers.get("X-Org-Slug") || "").trim();
       if (!orgSlug) return json({ error: "missing_org_slug" }, 400, c);
-      const gate = await verifyOrgCloudWrite(env, auth, orgSlug);
+      const dataKey = url.searchParams.get("key") || "main";
+      if (dataKey !== "main" && !/^country:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:main$/.test(dataKey)) {
+        return json({ error: "invalid_audit_scope" }, 400, c);
+      }
+      const gate = dataKey === "main" ? await verifyOrgCloudWrite(env, auth, orgSlug)
+        : await verifyOrgKvWrite(env, auth, orgSlug, "audit", dataKey);
       if (!gate.ok) {
         const status = gate.error === "Unauthorized" ? 401 : 403;
         return json({ error: gate.error || "forbidden" }, status, c);
@@ -745,20 +803,17 @@ export default {
       return handleKvGet(request, env, orgSlug, c, auth);
     }
     if (request.method === "PUT") {
-      const writeGate = await verifyOrgCloudWrite(env, auth, orgSlug);
-      if (!writeGate.ok) {
-        const status = writeGate.error === "Unauthorized" ? 401 : 403;
-        return json({ error: writeGate.error || "forbidden" }, status, c);
-      }
       return handleKvPut(request, env, orgSlug, auth, c);
     }
     if (request.method === "DELETE") {
-      const writeGate = await verifyOrgCloudWrite(env, auth, orgSlug);
-      if (!writeGate.ok) {
-        const status = writeGate.error === "Unauthorized" ? 401 : 403;
-        return json({ error: writeGate.error || "forbidden", request_id: requestId }, status, c);
-      }
       const dataKey = (new URL(request.url).searchParams.get("key") || "").trim();
+      if (!/^country:[0-9a-fA-F-]{36}:/.test(dataKey)) {
+        const writeGate = await verifyOrgCloudWrite(env, auth, orgSlug);
+        if (!writeGate.ok) {
+          const status = writeGate.error === "Unauthorized" ? 401 : 403;
+          return json({ error: writeGate.error || "forbidden", request_id: requestId }, status, c);
+        }
+      }
       const deleteGate = await verifyOrgKvDelete(env, auth, orgSlug, dataKey);
       if (!deleteGate.ok) {
         const status = deleteGate.error === "Unauthorized" ? 401 : 403;

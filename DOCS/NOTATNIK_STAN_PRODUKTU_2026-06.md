@@ -356,10 +356,10 @@ Wspólny wzorzec: lista + formularz, filtr, eksport **PDF rejestru A4** (gdzie w
 |------|------|---------|----------|--------|
 | Trial | £0 / 14 dni | 200 | 50 | 10 GB |
 | Free | £0 | 3 | 10 | 500 MB |
-| Solo (starter) | £19/mo | 5 | 100 | 2 GB |
-| Team | £99/mo | 20 | 500 | 10 GB |
-| Business | £249/mo | 75 | 2 500 | 50 GB |
-| Enterprise | £499/mo | 200 | 10 000 | 200 GB |
+| Solo (starter) | £39/mo | 5 | 100 | 2 GB |
+| Team | £159/mo | 20 | 500 | 10 GB |
+| Business | £349/mo | 75 | 2 500 | 50 GB |
+| Enterprise | £699/mo | 200 | 10 000 | 200 GB |
 | Enterprise Plus | kontakt | ∞ | ∞ | ∞ |
 
 **Stripe:** starter, team, business, enterprise.  

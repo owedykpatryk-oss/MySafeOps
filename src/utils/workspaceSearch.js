@@ -10,6 +10,11 @@ function normaliseQ(s) {
     .replace(/\s+/g, " ");
 }
 
+function loadSearchRecords(key) {
+  const rows = load(key, []);
+  return Array.isArray(rows) ? rows.filter((row) => row && !row.deletedAt) : [];
+}
+
 /** @typedef {{ key: string, kind: string, label: string, subtitle?: string, viewId: string, permitId?: string }} WorkspaceSearchHit */
 
 /**
@@ -116,7 +121,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     return hits;
   }
 
-  const workers = load("mysafeops_workers", []);
+  const workers = loadSearchRecords("mysafeops_workers");
   workers.forEach((w) => {
     const blob = [w.name, w.email, w.role].filter(Boolean).join(" ").toLowerCase();
     if (blob.includes(q)) {
@@ -126,11 +131,13 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
         label: w.name || "Unnamed",
         subtitle: w.email || w.role || "People",
         viewId: "people",
+        workerId: w.id,
+        action: "editWorker",
       });
     }
   });
 
-  const projects = load("mysafeops_projects", []);
+  const projects = loadSearchRecords("mysafeops_projects");
   projects.forEach((p) => {
     const blob = [p.name, p.address, p.site].filter(Boolean).join(" ").toLowerCase();
     if (blob.includes(q)) {
@@ -146,7 +153,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     }
   });
 
-  const rams = load("rams_builder_docs", []);
+  const rams = loadSearchRecords("rams_builder_docs");
   rams.forEach((r) => {
     const blob = [r.title, r.jobRef, r.location, r.leadEngineer].filter(Boolean).join(" ").toLowerCase();
     if (blob.includes(q)) {
@@ -163,7 +170,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     }
   });
 
-  const permits = load("permits_v2", []);
+  const permits = loadSearchRecords("permits_v2");
   permits.forEach((p) => {
     const typeLabel = (PERMIT_TYPES[p.type] || PERMIT_TYPES.general)?.label || "";
     const blob = [p.location, p.description, p.issuedTo, p.issuedBy, p.type, typeLabel, p.linkedRamsId, p.status, p.id]
@@ -182,7 +189,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     }
   });
 
-  const snags = load("snags", []);
+  const snags = loadSearchRecords("snags");
   snags.forEach((s) => {
     const blob = [s.title, s.description, s.siteName, s.location].filter(Boolean).join(" ").toLowerCase();
     if (blob.includes(q)) {
@@ -199,7 +206,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     }
   });
 
-  const surveys = load("survey_reports", []);
+  const surveys = loadSearchRecords("survey_reports");
   surveys.forEach((r) => {
     const blob = [r.title, r.ref, r.projectName, r.surveyor, r.siteAddress].filter(Boolean).join(" ").toLowerCase();
     if (blob.includes(q)) {
@@ -216,7 +223,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     }
   });
 
-  const geoPhotos = load("geo_photos", []);
+  const geoPhotos = loadSearchRecords("geo_photos");
   geoPhotos.forEach((g) => {
     const blob = [g.notes, g.type, g.projectName, g.capturedBy].filter(Boolean).join(" ").toLowerCase();
     if (blob.includes(q)) {
@@ -233,7 +240,7 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     }
   });
 
-  const kindOrder = { Open: 0, Worker: 1, Project: 2, RAMS: 3, Permit: 4, Snag: 5, Survey: 6, "Geo-photo": 7 };
+  const kindOrder = { Open: 0, Person: 1, Project: 2, RAMS: 3, Permit: 4, Snag: 5, Survey: 6, "Geo-photo": 7 };
   hits.sort((a, b) => {
     const pa = pinRecentPriority(a);
     const pb = pinRecentPriority(b);
@@ -243,5 +250,5 @@ export function buildWorkspaceSearchHits(rawQuery, options = {}) {
     return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
   });
 
-  return hits.slice(0, 80);
+  return hits.filter((hit) => isModuleVisible(hit.viewId, { hiddenModules })).slice(0, 80);
 }

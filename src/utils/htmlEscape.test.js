@@ -111,6 +111,17 @@ describe("sanitizePrintPreviewHtml", () => {
 });
 
 describe("openPrintWindowOrWarn", () => {
+  it("returns a writable popup handle and severs opener before writing", () => {
+    const popup = { opener: {}, document: {} };
+    const open = vi.fn((_url, _target, features) => features?.includes("noopener") ? null : popup);
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", { open, dispatchEvent });
+    try {
+      expect(openPrintWindowOrWarn()).toBe(popup);
+      expect(popup.opener).toBeNull();
+      expect(dispatchEvent).not.toHaveBeenCalled();
+    } finally { vi.unstubAllGlobals(); }
+  });
   it("dispatches an in-app toast when the print window cannot open", () => {
     const open = vi.fn(() => null);
     const dispatchEvent = vi.fn();

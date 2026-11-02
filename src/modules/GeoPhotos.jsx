@@ -1,3 +1,4 @@
+import { projectDisplayLabel } from "../utils/projectDisplayLabel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { useD1WorkersProjectsSync } from "../hooks/useD1WorkersProjectsSync";
@@ -669,7 +670,7 @@ export default function GeoPhotos() {
                   photoPublicUrl: uploaded.photoPublicUrl || null,
                   photoSignedUrl: uploaded.photoSignedUrl || null,
                   photoSignedExpiresAt: uploaded.photoSignedExpiresAt || null,
-                  photoDataUrl: "",
+                  photoDataUrl: uploaded.photoOfflineCached ? "" : p.photoDataUrl,
                   updatedAt: new Date().toISOString(),
                 }
               : p
@@ -724,13 +725,13 @@ export default function GeoPhotos() {
       if (enriched.includeInReport && enriched.projectId) {
         enriched.reportOrder = nextGeoPhotoReportOrder(safePhotos, enriched.projectId);
       }
-      setPhotos((prev) => {
-        const list = asPhotoArray(prev);
-        // Same capture saved twice (retry, restored draft) updates its row rather than adding a copy.
-        return list.some((p) => p?.id === enriched.id)
-          ? list.map((p) => (p?.id === enriched.id ? { ...p, ...enriched } : p))
-          : [enriched, ...list];
-      });
+      const list = asPhotoArray(photos);
+      // Confirm durable storage before the capture modal clears its draft.
+      const next = list.some((p) => p?.id === enriched.id)
+        ? list.map((p) => (p?.id === enriched.id ? { ...p, ...enriched } : p))
+        : [enriched, ...list];
+      if (!save("geo_photos", next)) return false;
+      setPhotos(next);
       if (enriched.linkedPermitId) {
         persistPermitEvidenceFromGeoPhoto(enriched, { load, save });
       }
@@ -739,18 +740,25 @@ export default function GeoPhotos() {
         detail: `${geoPhotoPresetLabel(enriched.type)} — ${enriched.projectName || "no project"}`,
         module: "geo-photos",
       });
+      pushToast({ type: "success", message: "Geo-photo saved successfully." });
       return true;
     },
-    [safePhotos, activeProjects]
+    [safePhotos, activeProjects, photos, pushToast]
   );
 
   const handleUpdate = (row) => {
-    setPhotos((prev) => asPhotoArray(prev).map((p) => (p.id === row.id ? row : p)));
+    const next = asPhotoArray(photos).map((p) => (p.id === row.id ? row : p));
+    if (!save("geo_photos", next)) {
+      pushToast({ type: "error", message: "Changes could not be saved. Check available device storage and retry." });
+      return false;
+    }
+    setPhotos(next);
     if (row.linkedPermitId) {
       persistPermitEvidenceFromGeoPhoto(row, { load, save });
     }
     setDetail(null);
     pushAudit({ action: "geo_photo_update", detail: row.id, module: "geo-photos" });
+    return true;
   };
 
   const handleResolveAction = useCallback((id, resolved) => {
@@ -915,9 +923,7 @@ export default function GeoPhotos() {
           <select value={filterProject} onChange={(e) => setFilterProject(e.target.value)} style={ms.inp}>
             <option value="">All projects</option>
             {activeProjects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name || "Untitled"}
-              </option>
+              <option key={p.id} value={p.id}>{projectDisplayLabel(p)}</option>
             ))}
           </select>
         </label>

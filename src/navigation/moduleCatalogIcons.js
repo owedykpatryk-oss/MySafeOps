@@ -122,6 +122,7 @@ export const MODULE_ICONS = {
   analytics: BarChart3,
   "monthly-report": Calendar,
   "survey-report": ClipboardList,
+  "drone-operations": ClipboardList,
   projects: Building2,
   people: Users,
   workers: Building2,

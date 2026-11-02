@@ -164,7 +164,9 @@ function styles(primary, accent, accentInk, accentSoft, primarySoft) {
     .gpr-data-table tr { page-break-inside: avoid; break-inside: avoid; }
     .gpr-data-table th { background: #f4f7fb; color: ${primary}; font-weight: 600; }
     .gpr-equipment-profile { display: grid; grid-template-columns: 38% 1fr; gap: 14px; margin: 0 0 14px; padding: 12px; border: 1px solid #99f6e4; border-radius: 8px; background: linear-gradient(135deg,#f0fdfa,#fff 55%,#eff6ff); page-break-inside: avoid; break-inside: avoid; }
-    .gpr-equipment-profile img { display: block; width: 100%; height: 150px; object-fit: contain; border-radius: 6px; background: #fff; }
+    .gpr-equipment-profile__images { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+    .gpr-equipment-profile img { display: block; width: 100%; height: 110px; object-fit: contain; border-radius: 6px; background: #fff; }
+    .gpr-equipment-profile img:only-child { grid-column: 1 / -1; height: 150px; }
     .gpr-equipment-profile h3 { margin: 0 0 6px; color: ${primary}; font-size: 14pt; line-height: 1.2; }
     .gpr-equipment-profile p { margin: 3px 0; font-size: 9pt; overflow-wrap: anywhere; }
     .gpr-equipment-profile ul { margin: 7px 0; padding-left: 18px; font-size: 8.5pt; columns: 2; column-gap: 18px; }
@@ -187,6 +189,9 @@ function styles(primary, accent, accentInk, accentSoft, primarySoft) {
     .gpr-finding-photos img { display: block; width: 100%; height: 52mm; object-fit: contain; object-position: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; }
     .gpr-finding-photos--3 img { height: 40mm; }
     .gpr-finding-photos figcaption { margin-top: 2px; color: #64748b; font-size: 7.5pt; text-align: center; }
+    .gpr-pin-notes { display: block; margin-top: 4px; text-align: left; }
+    .gpr-pin-note { display: block; margin: 2px 0; color: #334155; }
+    .gpr-pin-note b { display: inline-block; min-width: 14px; height: 14px; border-radius: 50%; background: #0f766e; color: #fff; text-align: center; line-height: 14px; }
     .gpr-radargram-fig figcaption { font-size: 9pt; color: #555; margin-top: 4px; }
     .gpr-site-photo-page { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 4mm; margin: 0 0 4mm; page-break-inside: avoid; break-inside: avoid; }
     .gpr-site-photo-page figure { margin: 0; min-width: 0; }
@@ -258,13 +263,15 @@ function equipmentBlock(equipment) {
             `${preset.channels} channel${preset.channels === 1 ? "" : "s"}`,
             preset.processingSoftware,
           ].filter(Boolean));
-      const image = preset.imageUrl
-        ? `<img src="${escapeAttr(preset.imageUrl)}" alt="${escapeAttr(`${preset.manufacturer} ${preset.model} product reference`)}"/>`
+      const images = preset.imageUrls?.length ? preset.imageUrls : preset.imageUrl ? [preset.imageUrl] : [];
+      const image = images.length
+        ? `<div class="gpr-equipment-profile__images">${images.map((url, index) => `<img src="${escapeAttr(url)}" alt="${escapeAttr(`${preset.manufacturer} ${preset.model} product view ${index + 1}`)}"/>`).join("")}</div>`
         : "";
+      const frequencyLabel = preset.frequencyRangeMhz ? `${preset.frequencyRangeMhz} MHz sweep` : `${preset.antennaFrequencyMhz} MHz`;
       const source = safeHttpUrl(preset.sourceUrl)
         ? `<a href="${escapeAttr(safeHttpUrl(preset.sourceUrl))}">Official product information</a>`
         : "";
-      return `<div class="gpr-equipment-profile">${image}<div><h3>${esc(preset.manufacturer)} ${esc(preset.model)}</h3><p><strong>${esc(preset.antennaFrequencyMhz)} MHz · ${esc(preset.channels)} channel${preset.channels === 1 ? "" : "s"}</strong></p><p>${esc(preset.configuration)}</p><ul>${facts.map((fact) => `<li>${esc(fact)}</li>`).join("")}</ul><p>${preset.processingSoftware ? `Processing: ${esc(preset.processingSoftware)}` : "Processing software recorded per mobilisation."}</p>${source}</div></div>`;
+      return `<div class="gpr-equipment-profile">${image}<div><h3>${esc(preset.manufacturer)} ${esc(preset.model)}</h3><p><strong>${esc(frequencyLabel)} · ${esc(preset.channels)} channel${preset.channels === 1 ? "" : "s"}</strong></p><p>${esc(preset.configuration)}</p><ul>${facts.map((fact) => `<li>${esc(fact)}</li>`).join("")}</ul><p>${preset.processingSoftware ? `Processing: ${esc(preset.processingSoftware)}` : "Processing software recorded per mobilisation."}</p>${source}</div></div>`;
     })
     .join("");
   const table = dataTable(
@@ -272,7 +279,7 @@ function equipmentBlock(equipment) {
     equipment.map((e) => [
       e.manufacturer,
       e.model,
-      e.antennaFrequencyMhz,
+      GPR_EQUIPMENT_PRESETS.find((item) => item.key === e.presetKey)?.frequencyRangeMhz || e.antennaFrequencyMhz,
       e.channels,
       e.serialNo,
       e.processingSoftware,
@@ -375,7 +382,9 @@ function anomalyFigureCards(anomalies) {
     const photos = count
       ? `<div class="gpr-finding-photos gpr-finding-photos--${count}">${figures.map((figure) => {
           const role = GPR_ANOMALY_FIGURE_ROLES.find((item) => item.key === figure.role)?.label || "Figure";
-          return `<figure><img src="${escapeAttr(figure.src)}" alt="${escapeAttr(role)}"/><figcaption>${esc(role)}</figcaption></figure>`;
+          const pins = (figure.annotations || []).filter((shape) => shape.type === "pin" && Number.isInteger(Number(shape.number)) && String(shape.text || "").trim());
+          const pinNotes = pins.map((shape) => `<span class="gpr-pin-note">Pin <b>${Number(shape.number)}</b>: ${esc(shape.text)}</span>`).join("");
+          return `<figure><img src="${escapeAttr(figure.src)}" alt="${escapeAttr(role)}"/><figcaption>${esc(role)}${pinNotes ? `<span class="gpr-pin-notes">${pinNotes}</span>` : ""}</figcaption></figure>`;
         }).join("")}</div>`
       : "";
     const correlation = anomaly.archiveCorrelation === "correlates" || anomaly.archiveCorrelation === "does_not_correlate"
@@ -479,11 +488,11 @@ function acquisitionParametersBlock(report, scanLabel) {
   const eq = report.equipment?.[0] || {};
   const expected = Number(report.groundConditions?.expectedPenetrationM);
   const target = Number(acq.depthRangeM);
-  const risk = Number.isFinite(expected) && Number.isFinite(target)
+  const risk = report.includeGeology && expected > 0 && Number.isFinite(target)
     ? target > expected
       ? `<div class="gpr-callout" style="border-left-color:#dc2626"><strong>Depth feasibility:</strong> Target depth ${esc(String(target))} m exceeds the BGS-informed indicative penetration of ~${esc(String(expected))} m. Confidence is expected to reduce with depth.</div>`
       : `<div class="gpr-callout"><strong>Depth feasibility:</strong> Target depth ${esc(String(target))} m is within the BGS-informed indicative penetration of ~${esc(String(expected))} m, subject to field signal quality.</div>`
-    : `<div class="gpr-callout" style="border-left-color:#f59e0b"><strong>Depth feasibility:</strong> Complete target depth and ground enrichment to compare the requested range with indicative penetration.</div>`;
+    : `<div class="gpr-callout" style="border-left-color:#f59e0b"><strong>Depth feasibility:</strong> Confirm achieved depth from field signal quality and calibration targets.</div>`;
 
   const parameterTable = dataTable(
     ["Parameter", "Recorded value", "Technical relevance"],
@@ -870,7 +879,7 @@ function historicalEvidenceBlock(report) {
  * @param {{ projectLat?: number, projectLng?: number, linkedSurveyReport?: object }} [extras]
  */
 export function buildGprReportHtml(report, extras = {}) {
-  const r = normalizeGprReport(applyGprNarrativeAutomation(report));
+  const r = normalizeGprReport(applyGprNarrativeAutomation(normalizeGprReport(report)));
   const org = getOrgSettings();
   const umTheme = isUtilityMappingPrintTheme();
   const organisationPrimary =
@@ -1013,9 +1022,11 @@ export function buildGprReportHtml(report, extras = {}) {
     "acq"
   );
   pushSection("Velocity model & calibration", `<p>${esc(buildVelocityNarrative(r.velocityModel))}</p>`, "vel");
-  pushSection("Ground conditions & geology", groundConditionsBlock(r.groundConditions), "ground");
-  pushSection("Historic evidence & previous land use", historicalEvidenceBlock(r), "history");
-  pushSection("Environmental conditions & GPR impact", environmentalBlock(r.environmental), "env");
+  if (r.includeGeology) pushSection("Ground conditions & geology", groundConditionsBlock(r.groundConditions), "ground");
+  if (r.includeHistoricalEvidence) pushSection("Historic evidence & previous land use", historicalEvidenceBlock(r), "history");
+  if (r.preSurvey?.surveySetting !== "indoor" && (r.environmental?.description || r.environmental?.moistureImpactOnGpr)) {
+    pushSection("Environmental conditions & GPR impact", environmentalBlock(r.environmental), "env");
+  }
   pushSection(
     "Data processing",
     processingFiltersBlock(r.processing?.filters) + nl2p(r.sections.dataProcessing || r.processing?.notes),
@@ -1096,7 +1107,7 @@ export function buildGprReportHtml(report, extras = {}) {
     umTheme ? renderUtilityMappingComplianceRibbon() : "",
     ...sections,
     `<div class="gpr-footer-note">
-      GPR interpretations are geophysical indications only. BGS geology via DigMap 50k (fallback 625k) and borehole index — desk study only, not SI.
+      GPR interpretations are geophysical indications only. ${r.includeGeology ? "BGS geology via DigMap 50k (fallback 625k) and borehole index — desk study only, not SI." : ""}
       ${r.smartFillAt ? `Smart fill: ${formatOrgDateTime(r.smartFillAt)}.` : ""}
       Generated by MySafeOps.
     </div>`,
