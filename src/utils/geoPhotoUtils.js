@@ -112,6 +112,9 @@ function drawSourceToJpeg(source, width, height, maxWidth, quality) {
 }
 
 function decodeViaHtmlImage(file, maxWidth, quality) {
+  if (typeof Image === "undefined" || typeof URL?.createObjectURL !== "function") {
+    return Promise.reject(new Error(photoReadErrorMessage(file)));
+  }
   return new Promise((resolve, reject) => {
     if (!file) {
       reject(new Error("No photo file"));

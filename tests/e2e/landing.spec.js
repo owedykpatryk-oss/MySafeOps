@@ -23,6 +23,10 @@ test.describe("Landing page", () => {
 
     await page.locator("#pricing").scrollIntoViewIfNeeded();
     await expect(page.getByRole("heading", { name: /Plans that stay transparent/i })).toBeVisible();
+    await expect(page.locator("#pricing").getByText("£19", { exact: true })).toBeVisible();
+    await expect(page.locator("#pricing").getByText("£109", { exact: true })).toBeVisible();
+    await expect(page.locator("#pricing").getByText("£319", { exact: true })).toBeVisible();
+    await expect(page.locator("#pricing").getByText("£649", { exact: true })).toBeVisible();
 
     await expect(page.getByRole("contentinfo")).toBeVisible();
   });

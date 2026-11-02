@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 jobs:
@@ -68,7 +70,9 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Install Playwright (Chromium)
         run: npx playwright install --with-deps chromium
-      - name: E2E marketing (blog + landing + security)
+      - name: E2E public invite pages
+        run: npx playwright test tests/e2e/public-pages.spec.js
+      - name: E2E marketing + public auth (no secrets)
         run: >
           npx playwright test
           tests/e2e/blog.spec.js
@@ -95,3 +99,13 @@ jobs:
         run: |
           npm run build 2>&1 | tee build-output.txt
           node scripts/check-vite-circular-chunks.mjs build-output.txt
+      - name: Build leaves tracked files unchanged
+        run: |
+          set -euo pipefail
+          changes="$(git status --porcelain | grep -vE '(^| )package-lock.json$' || true)"
+          if [ -n "$changes" ]; then
+            echo "Build modified tracked files:"
+            printf '%s\n' "$changes"
+            git --no-pager diff --
+            exit 1
+          fi

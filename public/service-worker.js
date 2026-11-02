@@ -58,6 +58,7 @@ function shouldBypassSw(url) {
 // The build injects hashed assets so a newly installed PWA can open lazy modules offline.
 const REQUIRED_ASSETS = [
   "/index.html",
+  "/app",
   "/offline.html",
   ...BUILD_ASSETS.filter((url) => /\.(?:js|css)$/.test(url)),
 ];
@@ -72,6 +73,26 @@ const OPTIONAL_ASSETS = [
   "/icons/maskable-512.png",
   ...BUILD_ASSETS.filter((url) => !/\.(?:js|css)$/.test(url)),
 ];
+
+function isAppShellRequest(_request, url) {
+  const p = url.pathname;
+  // Only the SPA (`/app?view=…`). Do not treat marketing/blog navigations as the shell —
+  // those must keep HTTP 401/404 instead of a cached index.html.
+  return p === "/app" || p.startsWith("/app/");
+}
+
+function isDocumentNavigation(request) {
+  return request.mode === "navigate" || request.destination === "document";
+}
+
+async function matchAppShell() {
+  const keys = ["/index.html", "/", "/app", OFFLINE_URL];
+  for (const key of keys) {
+    const hit = await caches.match(key);
+    if (hit) return hit;
+  }
+  return offlineFallbackResponse();
+}
 
 // ─── Install: pre-cache shell assets ─────────────────────────────────────────
 self.addEventListener("install", (event) => {
@@ -116,22 +137,40 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigation requests — network first, fallback to cached index, then offline page
-  if (request.mode === "navigate") {
+  // SPA shell (/app?view=…) — network first, then cached index.html (never a bare 503).
+  if (isAppShellRequest(request, url)) {
     event.respondWith(
-      // fetch(navigateRequest) throws in Chromium and the page then shows 503 Offline.
-      fetch(request.url, { credentials: "same-origin", redirect: "follow", cache: "reload" })
-        .then((res) => {
-          if (res.status >= 500) throw new Error("Navigation temporarily unavailable");
-          scheduleCachePut(event, "/index.html", res);
-          return res;
-        })
-        .catch(() =>
-          caches.match("/index.html")
-            .then((cached) => cached || caches.match(OFFLINE_URL))
-            .then((fallback) => fallback || caches.match("/"))
-            .then((fallback) => fallback || offlineFallbackResponse())
-        )
+      (async () => {
+        try {
+          const res = await fetch(request.url, { credentials: "same-origin", redirect: "follow", cache: "reload" });
+          if (res && res.ok) {
+            scheduleCachePut(event, "/index.html", res);
+            return res;
+          }
+          return matchAppShell();
+        } catch {
+          return matchAppShell();
+        }
+      })()
+    );
+    return;
+  }
+
+  // Other documents — keep HTTP 4xx/5xx; only fall back when the network fails.
+  if (isDocumentNavigation(request)) {
+    event.respondWith(
+      (async () => {
+        try {
+          const res = await fetchWithOptionalRetry(request);
+          if (res) {
+            scheduleCachePut(event, request, res);
+            return res;
+          }
+          return matchAppShell();
+        } catch {
+          return matchAppShell();
+        }
+      })()
     );
     return;
   }

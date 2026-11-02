@@ -81,6 +81,11 @@ export const AU_PERMIT_TYPE_OVERRIDES = {
       "Overhead hazards (power lines, structures) confirmed clear",
       "Weather / wind speed assessed and within limits",
     ],
+    extraFields: [
+      { key: "liftingEquipment", label: "Lifting equipment / crane ID", type: "text" },
+      { key: "swl", label: "SWL of equipment (tonnes)", type: "number" },
+      { key: "appointedPerson", label: "Competent person / lift supervisor", type: "text" },
+    ],
   },
   ground_disturbance: {
     checklist: [
@@ -93,6 +98,14 @@ export const AU_PERMIT_TYPE_OVERRIDES = {
       "Pre-work condition survey of adjacent structures photographed",
       "Groundwater monitoring in place if dewatering required",
       "Environmental controls for waterways / sensitive areas confirmed",
+    ],
+    extraFields: [
+      { key: "groundType", label: "Ground type / geology", type: "text" },
+      { key: "disturbanceMethod", label: "Method of disturbance", type: "text" },
+      { key: "maxDepth", label: "Maximum disturbance depth (m)", type: "number" },
+      { key: "dbydRef", label: "DBYD enquiry reference", type: "text" },
+      { key: "surveyDrawingRef", label: "Utility survey / drawing reference", type: "text" },
+      { key: "utilityStrikeContacts", label: "Utility strike emergency contacts", type: "text" },
     ],
   },
 };
@@ -117,24 +130,29 @@ export function mergePermitMarketOverrides(base, overrides) {
 
 const PL_PERMIT_TYPE_OVERRIDES = {
   hot_work: {
-    label: "Zezwolenie na prace niebezpieczne pożarowo",
-    description: "Spawanie, szlifowanie, cięcie, lutowanie — prace z otwartym ogniem lub iskrzeniem",
+    label: "Pozwolenie na prace gorące",
+    description: "Spawanie, szlifowanie, cięcie, lutowanie i inne prace powodujące powstawanie ciepła lub iskier",
     checklist: [
-      "Strefa oczyszczona z materiałów palnych w promieniu 10 m",
-      "2 × gaśnica 6 kg (ABC) i koc gaśniczy na stanowisku",
-      "Sprzęt do prac gorących sprawny — przegląd potwierdzony",
-      "Czujki i instalacja SSP wyłączone w strefie za zgodą osoby odpowiedzialnej",
-      "Tryskacze i głowice zabezpieczone, jeśli występują",
-      "Wyznaczona i przeszkolona osoba do zabezpieczenia (asekuracja pożarowa)",
-      "Kanały, kratki, otwory i przepusty zabezpieczone przed przedostaniem iskier",
-      "Uprawnienia spawalnicze wykonawcy sprawdzone",
-      "Czas obowiązywania zezwolenia ustalony — maksymalnie 8 godzin",
-      "Kontrola strefy po zakończeniu prac — po 1 h i ponownie po 8 h",
+      "Usunięto materiały palne w promieniu 10 metrów",
+      "2 × gaśnice 9 kg i koc gaśniczy na stanowisku",
+      "Sprzęt do prac gorących sprawdzony i sprawny",
+      "Sygnalizacja pożaru odizolowana w strefie prac (za zgodą nadzoru)",
+      "Głowice tryskaczy zabezpieczone tam, gdzie dotyczy",
+      "Wyznaczono i poinstruowano osobę na dyżurze pożarowym",
+      "Wszystkie wpusty, kanały i otwory uszczelnione przed iskrami",
+      "Stanowisko zwilżone tam, gdzie to uzasadnione",
+      "Uzgodniono czas trwania pozwolenia — maksymalnie 8 godzin",
+      "Uzgodniono inspekcję po pracy po minimum 1 godzinie",
+    ],
+    extraFields: [
+      { key: "equipment", label: "Sprzęt do użycia", type: "text" },
+      { key: "fireWatcher", label: "Osoba na dyżurze pożarowym", type: "text" },
+      { key: "postInspectionTime", label: "Czas inspekcji po pracy", type: "datetime-local" },
     ],
   },
   cold_work: {
-    label: "Zezwolenie na prace zimne",
-    description: "Prace utrzymaniowe bez źródeł ognia — wymagane odłączenie zasilania i LOTO",
+    label: "Pozwolenie na prace zimne",
+    description: "Prace utrzymaniowe bez prac gorących, z wymaganym odłączeniem energii i procedurą LOTO",
     checklist: [
       "Zidentyfikowane wszystkie źródła energii (elektryczna, pneumatyczna, hydrauliczna, grawitacja, ciśnienie)",
       "LOTO założone na wszystkich punktach odłączenia",
@@ -145,90 +163,109 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Urządzenia sąsiadujące odłączone lub potwierdzone jako niezależne",
       "Zabezpieczenie wycieków i odprowadzenia mediów przygotowane",
     ],
+    extraFields: [
+      { key: "equipmentTag", label: "Oznaczenie / nr urządzenia", type: "text" },
+      { key: "isolationPoints", label: "Liczba punktów odłączenia", type: "number" },
+      { key: "lotoKeyHolder", label: "Osoba z kluczem LOTO", type: "text" },
+    ],
   },
   electrical: {
-    label: "Zezwolenie na odłączenie i pracę przy instalacji elektrycznej",
-    description: "Odłączenie, LOTO i prace przy urządzeniach elektrycznych — wymagane uprawnienia SEP",
+    label: "Pozwolenie na odłączenie elektryczne",
+    description: "Bezpieczne odłączenie obwodów elektrycznych, LOTO, prace pod napięciem",
     checklist: [
-      "Punkt odłączenia zidentyfikowany na schemacie",
-      "Odłączenie wykonane przez osobę z ważnym świadectwem kwalifikacyjnym SEP (E)",
-      "Kłódka LOTO założona i tablica ostrzegawcza zawieszona",
-      "Wskaźnik napięcia sprawdzony na źródle pod napięciem przed pomiarem",
-      "Potwierdzony brak napięcia na wszystkich żyłach",
-      "Wskaźnik ponownie sprawdzony po pomiarze",
-      "Uziemienie robocze założone tam, gdzie wymagane",
-      "Polecenie pisemne wystawione, jeśli praca w warunkach szczególnego zagrożenia",
-      "Zezwolenie w posiadaniu osoby wykonującej pracę",
+      "Punkt izolacji zidentyfikowany",
+      "Izolacja przez osobę z uprawnieniami SEP",
+      "Kłódka LOTO i tabliczka",
+      "Potwierdzenie braku napięcia",
+      "Pozwolenie u osoby wykonującej pracę",
+    ],
+    extraFields: [
+      { key: "circuitRef", label: "Oznaczenie obwodu / rozdzielnicy", type: "text" },
+      { key: "lockoutRef", label: "Numer kłódki LOTO", type: "text" },
+      { key: "authorisedPerson", label: "Osoba uprawniona (odłączenie)", type: "text" },
     ],
   },
   work_at_height: {
-    label: "Zezwolenie na pracę na wysokości",
-    description: "Prace powyżej 1 m — rusztowania, podesty, drabiny, dachy i krawędzie",
+    label: "Pozwolenie na pracę na wysokości",
+    description: "Rusztowania, podesty, drabiny, dostęp linowy — prace z ryzykiem upadku",
     checklist: [
-      "Aktualne orzeczenie lekarskie o zdolności do pracy na wysokości (powyżej 3 m)",
-      "Rusztowanie odebrane protokolarnie — tabliczka z datą odbioru na miejscu",
-      "Podesty ruchome i żurawie — ważna decyzja UDT oraz uprawnienia operatora",
-      "Balustrady (poręcz 1,1 m, przechwyt, bortnica) na wszystkich krawędziach",
-      "Szelki i lonże skontrolowane przed użyciem; punkt kotwiczenia o znanej nośności",
-      "Strefa niebezpieczna pod robotami wygrodzona i oznakowana",
-      "Warunki atmosferyczne ocenione — brak prac przy wietrze powyżej 10 m/s, oblodzeniu i burzy",
-      "Plan ewakuacji z podestu / z zawieszenia w szelkach uzgodniony",
-      "Bezpośredni nadzór wyznaczony — praca szczególnie niebezpieczna",
+      "Sprawdzenie rusztowań / podestów — aktualna dopuszczalność",
+      "Uprawnienia UDT dla podestów i żurawi",
+      "Barierki na krawędziach",
+      "Szelki i linki — kontrola przed użyciem",
+      "Strefa pod robotami wyłączona",
+      "Warunki wiatrowe ocenione",
+    ],
+    extraFields: [
+      { key: "accessEquipment", label: "Sprzęt dostępu / nr", type: "text" },
+      { key: "maxHeight", label: "Maksymalna wysokość pracy (m)", type: "number" },
+      { key: "rescuePlan", label: "Numer planu ratowniczego", type: "text" },
     ],
   },
   confined_space: {
-    label: "Zezwolenie na wejście do przestrzeni zamkniętej",
-    description: "Studnie, zbiorniki, komory i kanały — pomiar atmosfery, asekuracja i ratownictwo",
+    label: "Pozwolenie na wejście do przestrzeni zamkniętej",
+    description: "Wejście do zbiorników, kanałów, pustek — przestrzeń o ograniczonej wymianie powietrza",
     checklist: [
-      "Ocena ryzyka dla przestrzeni zamkniętej zaktualizowana",
-      "Pomiar atmosfery wykonany: O₂ 19,5–23%, CO poniżej 20 ppm, H₂S poniżej 1 ppm, LEL poniżej 10%",
-      "Pomiar ciągły prowadzony przez cały czas przebywania w przestrzeni",
-      "Wentylacja mechaniczna uruchomiona i sprawdzona",
-      "Asekurujący przeszkolony i obecny na zewnątrz przez cały czas",
-      "Sprzęt ratowniczy (trójnóg, wciągarka, szelki) rozstawiony i gotowy",
-      "Plan ratunkowy omówiony — bez wchodzenia asekurującego do środka",
-      "Wszystkie media odcięte i zabezpieczone (LOTO) przed wejściem",
+      "Ocena ryzyka przestrzeni zamkniętej aktualna i sprawdzona",
+      "Pomiar atmosfery: O₂ (19,5–23,5%), gazy toksyczne w granicach, LEL (<10% przed wejściem)",
+      "Monitoring ciągły podczas przebywania w przestrzeni",
+      "Wentylacja mechaniczna potwierdzona i sprawna",
+      "Osoba asekurująca poinformowana i na stanowisku na zewnątrz",
+      "Sprzęt ratowniczy (trójnóg, wciągarka, szelki) przygotowany",
+      "Plan ewakuacji potwierdzony z osobą asekurującą",
+      "Wszystkie źródła energii odłączone (LOTO) przed wejściem",
       "Łączność między wchodzącym a asekurującym sprawdzona",
-      "Liczba osób i maksymalny czas przebywania ustalone i zapisane",
+      "Uzgodniono maksymalną liczbę osób i czas przebywania",
+    ],
+    extraFields: [
+      { key: "spaceDescription", label: "Opis / lokalizacja przestrzeni", type: "text" },
+      { key: "standByPerson", label: "Osoba asekurująca", type: "text" },
+      { key: "atmosphericReadings", label: "Wstępne pomiary atmosfery", type: "text" },
     ],
   },
   excavation: {
-    label: "Zezwolenie na roboty ziemne / wykop",
-    description: "Wykop lub naruszenie gruntu — mapa uzbrojenia terenu i zabezpieczenie ścian",
+    label: "Pozwolenie na wykop / prace ziemne",
+    description: "Wykop lub naruszenie gruntu — mapy uzbrojenia (CPD / geodeta)",
     checklist: [
-      "Mapa uzbrojenia terenu / uzgodnienia z gestorami sieci pozyskane przed rozpoczęciem",
-      "Trasowanie i lokalizacja sieci wykonane; wyniki dostępne na budowie",
-      "Przekopy kontrolne wykonane ręcznie w strefach niepewnych",
-      "Zabezpieczenie ścian wykopu (obudowa, szalunek lub skarpowanie) zgodne z projektem",
-      "Zejście do wykopu co najwyżej co 20 m; drabiny wystające 0,75 m ponad krawędź",
-      "Odkład urobku co najmniej 0,6 m od krawędzi wykopu",
-      "Strefa niebezpieczna wygrodzona i oznakowana; przejścia z balustradami",
-      "Bezpieczny dostęp i drogi ewakuacji z wykopu zapewnione",
-      "Praca w wykopie powyżej 1,5 m tylko pod bezpośrednim nadzorem",
-      "Kontrola wykopu po deszczu, mrozie i przed każdą zmianą",
-      "Kierownik budowy / koordynator BHP poinformowany przed rozpoczęciem",
-      "Postępowanie przy odkryciu niezinwentaryzowanej sieci omówione z brygadą",
+      "Zlecenie mapy uzbrojenia terenu (geodeta / CPD)",
+      "Wyniki zapisane na placu budowy przed rozpoczęciem wykopu",
+      "Ręczne wykopy w strefach niepewnych",
+      "Stabilizacja ścian wykopu / zabezpieczenie krawędzi",
+      "Strefa wyłączona nad wykopem",
+      "Koordynator BHP poinformowany przed startem",
+    ],
+    extraFields: [
+      { key: "catScanBy", label: "Lokalizacja uzbrojenia wykonana przez", type: "text" },
+      { key: "knownServices", label: "Znane uzbrojenie w rejonie", type: "text" },
+      { key: "excavationDepth", label: "Maksymalna głębokość wykopu (m)", type: "number" },
+      { key: "surveyDrawingRef", label: "Numer mapy uzbrojenia / rysunku", type: "text" },
+      { key: "utilityStrikeContacts", label: "Kontakty awaryjne przy uszkodzeniu uzbrojenia", type: "text" },
     ],
   },
   lifting: {
-    label: "Zezwolenie na prace transportowe i podnoszenie",
-    description: "Żurawie, podesty i zawiesia — plan pracy, UDT i wygrodzenie strefy",
+    label: "Pozwolenie na operacje podnoszenia",
+    description: "Żurawie, podesty, zawiesia — operacje podnoszenia zgodnie z wymaganiami UDT",
     checklist: [
-      "Plan pracy żurawia sporządzony przez osobę uprawnioną",
-      "Ważna decyzja zezwalająca UDT na eksploatację urządzenia",
-      "Operator z ważnymi uprawnieniami UDT na daną kategorię",
-      "Zawiesia z aktualnym przeglądem, dobrane do masy i kąta rozwarcia",
+      "Plan podnoszenia przygotowany przez osobę kompetentną",
+      "Urządzenie dźwigowe z aktualnym badaniem UDT",
+      "Operator z uprawnieniami UDT do danego urządzenia",
+      "Dobór zawiesi — typ, udźwig i kąt pracy",
       "Masa ładunku potwierdzona — nie przekracza DOR żadnego elementu",
-      "Strefa niebezpieczna pod ładunkiem i wokół pracy żurawia wygrodzona",
-      "Sygnalista / hakowy z uprawnieniami, ustalony system sygnałów",
-      "Podłoże sprawdzone — nośne, wypoziomowane, podpory na płytach",
-      "Brak kolizji z linią napowietrzną — zachowana odległość bezpieczna",
-      "Warunki wietrzne ocenione i mieszczące się w limicie producenta",
+      "Strefa wyłączona pod i wokół podnoszenia",
+      "Sygnalista na stanowisku z uzgodnionym systemem znaków",
+      "Warunki podłoża sprawdzone — stateczność, poziom, nośność",
+      "Przeszkody nad głową (linie, konstrukcje) potwierdzone jako wolne",
+      "Warunki wiatrowe ocenione i w dopuszczalnych granicach",
+    ],
+    extraFields: [
+      { key: "liftingEquipment", label: "Urządzenie dźwigowe / nr żurawia", type: "text" },
+      { key: "swl", label: "DOR urządzenia (tony)", type: "number" },
+      { key: "appointedPerson", label: "Osoba kompetentna nadzorująca podnoszenie", type: "text" },
     ],
   },
   line_break: {
-    label: "Zezwolenie na rozszczelnienie instalacji",
-    description: "Otwarcie rurociągu lub aparatu — media, ciśnienie i zabezpieczenie wycieku",
+    label: "Pozwolenie na rozszczelnienie instalacji",
+    description: "Otwieranie rurociągu, zbiornika lub instalacji pod ciśnieniem z cieczą, gazem lub chemikaliami",
     checklist: [
       "Instalacja odcięta, rozprężona i potwierdzona na ciśnieniu atmosferycznym",
       "Zawartość zidentyfikowana — karta charakterystyki przeanalizowana",
@@ -240,10 +277,15 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Pierwsze rozszczelnienie wykonywane powoli, z asekuracją",
       "Sorbenty i oczomyjka / natrysk dostępne w miejscu pracy",
     ],
+    extraFields: [
+      { key: "pipeContents", label: "Zawartość rurociągu", type: "text" },
+      { key: "workingPressure", label: "Ciśnienie robocze (bar)", type: "number" },
+      { key: "temperature", label: "Temperatura medium (°C)", type: "number" },
+    ],
   },
   roof_access: {
-    label: "Zezwolenie na wejście na dach",
-    description: "Prace na dachu — pokrycia kruche, świetliki i krawędzie",
+    label: "Pozwolenie na wejście na dach",
+    description: "Wejście na dach — płaski, spadzisty, kruchy lub inny",
     checklist: [
       "Przegląd stanu dachu wykonany przed wejściem",
       "Materiały kruche (świetliki, płyty faliste, eternit) zidentyfikowane i oznakowane",
@@ -256,10 +298,15 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Narzędzia i materiały nie pozostawiane przy krawędzi bez nadzoru",
       "Kontrola dachu po zakończeniu prac przed zamknięciem zezwolenia",
     ],
+    extraFields: [
+      { key: "roofType", label: "Rodzaj dachu (płaski/spadzisty/kruchy)", type: "text" },
+      { key: "accessMethod", label: "Sposób dostępu (drabina/rusztowanie/właz)", type: "text" },
+      { key: "maxPersons", label: "Maksymalna liczba osób na dachu", type: "number" },
+    ],
   },
   night_works: {
-    label: "Zezwolenie na prace nocne i poza godzinami",
-    description: "Prace w porze nocnej — oświetlenie, łączność i praca jednoosobowa",
+    label: "Pozwolenie na prace nocne",
+    description: "Prace poza normalnymi godzinami — noc, weekend, święto",
     checklist: [
       "Kierownik budowy / przedstawiciel inwestora zaakceptował prace poza godzinami",
       "Kontakt alarmowy do osoby odpowiedzialnej za obiekt potwierdzony",
@@ -271,9 +318,14 @@ const PL_PERMIT_TYPE_OVERRIDES = {
       "Ograniczenia hałasu w porze nocnej ustalone i zakomunikowane",
       "System meldowania wejścia i wyjścia z terenu wdrożony",
     ],
+    extraFields: [
+      { key: "siteContact", label: "Kontakt poza godzinami / telefon", type: "text" },
+      { key: "securityCode", label: "Ustalenia ochrony / alarmu", type: "text" },
+      { key: "loneworkingArrangement", label: "Interwał meldunku przy pracy samotnej", type: "text" },
+    ],
   },
   valve_isolation: {
-    label: "Zezwolenie na odcięcie armatury",
+    label: "Pozwolenie na odłączenie armatury",
     description: "Manipulacje zaworami — skutki przełączeń, potwierdzenie odcięcia",
     checklist: [
       "Schemat technologiczny (P&ID) przeanalizowany — armatura do przestawienia wskazana",
@@ -288,7 +340,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   visitor_access: {
-    label: "Zezwolenie na wejście gościa / podwykonawcy",
+    label: "Pozwolenie na dostęp gości",
     description: "Wejście osób spoza brygady — instruktaż, ŚOI i opieka na terenie",
     checklist: [
       "Tożsamość gościa potwierdzona i wpis do rejestru wejść",
@@ -303,7 +355,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   radiography: {
-    label: "Zezwolenie na prace radiograficzne",
+    label: "Pozwolenie na badania radiograficzne",
     description: "Badania izotopowe i RTG — strefa kontrolowana i ochrona radiologiczna",
     checklist: [
       "Inspektor ochrony radiologicznej zatwierdził prace na piśmie",
@@ -319,23 +371,29 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   ground_disturbance: {
-    label: "Zezwolenie na naruszenie gruntu",
-    description: "Naruszenie powierzchni gruntu — uzbrojenie, niewybuchy i zabytki",
+    label: "Pozwolenie na naruszenie gruntu",
+    description: "Pale, kotwy, słupy — naruszenie gruntu poza głębokością lokalizacji uzbrojenia",
     checklist: [
-      "Dokumentacja geotechniczna przeanalizowana — grunt, zanieczyszczenia, pustki, obiekty podziemne",
-      "Mapa uzbrojenia i uzgodnienia branżowe pozyskane; lokalizacja wykonana lokalizatorem",
-      "Zakres i metoda lokalizacji sieci zapisane w zezwoleniu",
-      "Nadzór archeologiczny lub konserwatorski uzgodniony tam, gdzie wymagany",
-      "Ryzyko niewybuchów ocenione — oczyszczenie saperskie, jeśli wymagane",
-      "Metoda robót zaakceptowana przez uprawnionego geotechnika",
-      "Monitoring drgań obiektów sąsiednich z ustalonymi progami alarmowymi",
-      "Inwentaryzacja stanu obiektów sąsiednich wykonana i udokumentowana zdjęciami",
-      "Monitoring wód gruntowych, jeśli prowadzone jest odwodnienie",
-      "Ochrona wód — brak robót przy cieku bez uzgodnienia z Wodami Polskimi",
+      "Raport geotechniczny sprawdzony — rodzaj gruntu, zanieczyszczenia, pustki",
+      "Zlecenie mapy uzbrojenia terenu (geodeta / CPD)",
+      "Lokalizacja uzbrojenia oznaczona na placu przed rozpoczęciem prac",
+      "Ocena archeologiczna / konserwatorska tam, gdzie wymagana",
+      "Metoda naruszenia gruntu zatwierdzona przez osobę kompetentną",
+      "Monitoring drgań sąsiednich konstrukcji tam, gdzie wymagany",
+      "Inwentaryzacja stanu sąsiednich obiektów ze zdjęciami",
+      "Monitoring wód gruntowych przy odwodnieniu",
+      "Zabezpieczenia środowiskowe przy ciekach / obszarach wrażliwych",
+    ],
+    extraFields: [
+      { key: "groundType", label: "Rodzaj gruntu / geologia", type: "text" },
+      { key: "disturbanceMethod", label: "Metoda naruszenia gruntu", type: "text" },
+      { key: "maxDepth", label: "Maksymalna głębokość naruszenia (m)", type: "number" },
+      { key: "surveyDrawingRef", label: "Numer mapy uzbrojenia / rysunku", type: "text" },
+      { key: "utilityStrikeContacts", label: "Kontakty awaryjne przy uszkodzeniu uzbrojenia", type: "text" },
     ],
   },
   line_clearance: {
-    label: "Zezwolenie na pracę przy linii produkcyjnej",
+    label: "Pozwolenie na pracę w pobliżu linii",
     description: "Prace przy otwartej linii — zatrzymanie produkcji i zabezpieczenie produktu",
     checklist: [
       "Zgoda kierownika produkcji — linia zatrzymana i opróżniona",
@@ -349,7 +407,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   rail_corridor_access: {
-    label: "Zezwolenie na wejście w obszar kolejowy",
+    label: "Pozwolenie na dostęp do obszaru kolejowego",
     description: "Prace w torze i przy torze — zamknięcie toru, autoryzacja i osłona",
     checklist: [
       "Zamknięcie toru lub regulamin tymczasowy prowadzenia ruchu potwierdzony na piśmie",
@@ -391,7 +449,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   marine_hydrographic: {
-    label: "Zezwolenie na pomiary hydrograficzne",
+    label: "Pozwolenie na pomiary hydrograficzne",
     description: "Pomiary z jednostki pływającej — bezpieczeństwo na wodzie i uzgodnienia",
     checklist: [
       "Ocena ryzyka prac na wodzie i procedura „człowiek za burtą” omówione",
@@ -405,7 +463,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   aerial_survey_coordination: {
-    label: "Zezwolenie na loty pomiarowe (BSP)",
+    label: "Pozwolenie na koordynację nalotu pomiarowego",
     description: "Drony i statki powietrzne — przestrzeń powietrzna, uprawnienia i strefa naziemna",
     checklist: [
       "Plan lotu i ocena ryzyka zatwierdzone przez kierownika prac",
@@ -419,7 +477,7 @@ const PL_PERMIT_TYPE_OVERRIDES = {
     ],
   },
   general: {
-    label: "Ogólne zezwolenie na pracę",
+    label: "Ogólne pozwolenie na pracę",
     description: "Prace nieobjęte odrębnym rodzajem zezwolenia",
     checklist: [
       "Zakres prac jasno określony i przekazany całej brygadzie",
@@ -544,7 +602,12 @@ function toChFreigabeLabels(types) {
   const out = {};
   for (const [typeId, def] of Object.entries(types)) {
     out[typeId] = def?.label
-      ? { ...def, label: def.label.replace(/^Erlaubnisschein\b/, "Freigabe").replace(/^Allgemeiner Erlaubnisschein$/, "Allgemeine Freigabe") }
+      ? {
+          ...def,
+          label: def.label
+            .replace(/^Erlaubnisschein\b/, "Freigabe")
+            .replace(/^Allgemeiner Erlaubnisschein$/, "Allgemeine Freigabe"),
+        }
       : def;
   }
   return out;

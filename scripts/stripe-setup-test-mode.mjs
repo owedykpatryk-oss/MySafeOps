@@ -48,10 +48,10 @@ function readStripeCliTestKey() {
 }
 
 const PLANS = [
-  { planId: "starter", productName: "MySafeOps — Solo", amountPence: 3900 },
-  { planId: "team", productName: "MySafeOps — Team", amountPence: 15900 },
-  { planId: "business", productName: "MySafeOps — Business", amountPence: 34900 },
-  { planId: "enterprise", productName: "MySafeOps — Enterprise", amountPence: 69900 },
+  { planId: "starter", productName: "MySafeOps — Solo", amountPence: 1900 },
+  { planId: "team", productName: "MySafeOps — Team", amountPence: 10900 },
+  { planId: "business", productName: "MySafeOps — Business", amountPence: 31900 },
+  { planId: "enterprise", productName: "MySafeOps — Enterprise", amountPence: 64900 },
 ];
 
 /**

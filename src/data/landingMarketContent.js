@@ -6,6 +6,7 @@ import { DE_PLAN_PRICE_LABELS } from "../config/dePricing";
 import { AT_PLAN_PRICE_LABELS } from "../config/atPricing";
 import { CH_PLAN_PRICE_LABELS } from "../config/chPricing";
 import { getMarketLabelPack } from "../config/marketLabelPacks";
+import { BILLING_PLANS } from "../lib/billingPlans";
 
 /** @typedef {{ price: string; suffix?: string; subtitle: string; tag: string; features: string[] }} LandingPricingTier */
 
@@ -72,10 +73,10 @@ export const LANDING_MARKET_CONTENT = {
     roiDefaultRate: 28,
     pricing: {
       trial: { price: "£0", subtitle: "14 days · all modules", tag: "👷 Try before you buy", features: ["Full module library during trial", "One free +14 day extension", "Then subscribe from Solo"] },
-      starter: { price: "£39", suffix: "/mo", subtitle: "5 workers · 100 projects · 2GB", tag: "👷 Freelancer / single site", features: ["Full module library", "Cloud backup (when configured)", "Email support"] },
-      team: { price: "£159", suffix: "/mo", subtitle: "20 workers · 500 projects · 10GB", tag: "👷 Small contractor", features: ["Full module library", "Invites & role management", "Priority support", "Multi-supervisor sites"] },
-      business: { price: "£349", suffix: "/mo", subtitle: "75 workers · 2,500 projects · 50GB", tag: "👷 Multi-site governance", features: ["Tamper-evident audit log", "Dedicated onboarding", "Higher operational headroom"] },
-      enterprise: { price: "£699", suffix: "/mo", subtitle: "200 workers · 10,000 projects · 200GB", tag: "👷 Group operations", features: ["Custom subdomain", "Group MI dashboard", "SLA & named support"] },
+      starter: { price: BILLING_PLANS.starter.priceLabel, suffix: "/mo", subtitle: "5 workers · 100 projects · 2GB", tag: "👷 Freelancer / single site", features: ["Full module library", "Cloud backup (when configured)", "Email support"] },
+      team: { price: BILLING_PLANS.team.priceLabel, suffix: "/mo", subtitle: "20 workers · 500 projects · 10GB", tag: "👷 Small contractor", features: ["Full module library", "Invites & role management", "Priority support", "Multi-supervisor sites"] },
+      business: { price: BILLING_PLANS.business.priceLabel, suffix: "/mo", subtitle: "75 workers · 2,500 projects · 50GB", tag: "👷 Multi-site governance", features: ["Tamper-evident audit log", "Dedicated onboarding", "Higher operational headroom"] },
+      enterprise: { price: BILLING_PLANS.enterprise.priceLabel, suffix: "/mo", subtitle: "200 workers · 10,000 projects · 200GB", tag: "👷 Group operations", features: ["Custom subdomain", "Group MI dashboard", "SLA & named support"] },
       enterprisePlus: { price: "Let's talk", subtitle: "150+ people · custom SLA", tag: "👷 Post-acquisition scale", features: ["Unlimited workers & projects", "Custom integrations", "Dedicated account manager"] },
     },
   },

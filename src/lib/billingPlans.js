@@ -94,7 +94,7 @@ export const BILLING_PLANS = {
   starter: {
     id: "starter",
     name: "Solo",
-    priceLabel: "£39",
+    priceLabel: "£19",
     interval: "month",
     limits: BILLING_PLAN_LIMITS.starter,
     includes: [
@@ -108,7 +108,7 @@ export const BILLING_PLANS = {
   team: {
     id: "team",
     name: "Team",
-    priceLabel: "£159",
+    priceLabel: "£109",
     interval: "month",
     limits: BILLING_PLAN_LIMITS.team,
     includes: [
@@ -122,7 +122,7 @@ export const BILLING_PLANS = {
   business: {
     id: "business",
     name: "Business",
-    priceLabel: "£349",
+    priceLabel: "£319",
     interval: "month",
     limits: BILLING_PLAN_LIMITS.business,
     includes: [
@@ -137,7 +137,7 @@ export const BILLING_PLANS = {
   enterprise: {
     id: "enterprise",
     name: "Enterprise",
-    priceLabel: "£699",
+    priceLabel: "£649",
     interval: "month",
     limits: BILLING_PLAN_LIMITS.enterprise,
     includes: [

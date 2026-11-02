@@ -70,7 +70,7 @@ Anything prefixed with `VITE_` is **embedded in the browser bundle**. Do not put
 3. For Google OAuth, configure Google provider in Supabase with a Google Cloud **Client ID** and **Client Secret**.
    - Keep these server-side only (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`) — never `VITE_*`.
 4. Run SQL migrations on your project:
-   - **Dashboard**: SQL Editor → paste and run [supabase/migrations/20260407120000_app_sync.sql](supabase/migrations/20260407120000_app_sync.sql), or  
+   - **Dashboard**: SQL Editor → paste and run [supabase/migrations/20260407120000_app_sync.sql](supabase/migrations/20260407120000_app_sync.sql), or
    - **CLI**: `supabase db push` (if the project is linked).
    - Also apply [supabase/migrations/20260408193000_org_membership_trial.sql](supabase/migrations/20260408193000_org_membership_trial.sql) for org isolation + automatic 14-day trial.
    - Also apply [supabase/migrations/20260408203000_org_invites.sql](supabase/migrations/20260408203000_org_invites.sql) and [supabase/migrations/20260408214500_invite_token_acceptance.sql](supabase/migrations/20260408214500_invite_token_acceptance.sql) for invite links and token-safe org joining.
@@ -78,21 +78,21 @@ Anything prefixed with `VITE_` is **embedded in the browser bundle**. Do not put
    - Apply [supabase/migrations/20260409140000_stripe_billing.sql](supabase/migrations/20260409140000_stripe_billing.sql) for Stripe customer/subscription columns on `organizations` and billing fields returned by `ensure_my_org`.
 5. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`.
 
-**Optional: automatic invite email (Edge Function)**  
+**Optional: automatic invite email (Edge Function)**
 Deploy `send-org-invite` from [`supabase/functions/send-org-invite/`](supabase/functions/send-org-invite/) (`supabase functions deploy send-org-invite`). Set secrets: `RESEND_API_KEY`, `SITE_URL` (your production origin, no trailing slash), optionally `INVITE_FROM_EMAIL` (e.g. `MySafeOps <notifications@yourdomain.com>`), and optionally `SUPPORT_CONTACT_EMAIL` (shown in invite footer; default `support@mysafeops.com`). Without `RESEND_API_KEY`, the function returns success with `skipped: true` and invites still work via the copied link.
 
-**Optional: Stripe subscriptions (Edge Functions)**  
+**Optional: Stripe subscriptions (Edge Functions)**
 **Payment mode:** checkout, the billing portal, operational permissions and server quotas share `public.billing_runtime_config.stripe_mode`, initially **test**, including on `www.mysafeops.com`. Only a server administrator can update this setting; the former Edge secret `STRIPE_MODE` no longer selects the mode. Test billing uses `STRIPE_SECRET_KEY_TEST`, the matching `STRIPE_PRICE_*_TEST` catalogue and `STRIPE_WEBHOOK_SECRET_TEST`. Run `npm run stripe:setup-test` to configure these when needed. Missing configuration blocks checkout; it never falls back to live credentials. A browser request cannot enable real charges. Enabling real payments requires setting the database policy to `live`; test subscriptions then cease to grant operational access. Public GET responses from `stripe-checkout` and `stripe-portal` report `activeMode` and `activeReady`; `liveReady` only reports whether live credentials are configured. Existing live subscriptions and their webhook processing remain separate from test subscriptions.
 
-1. **Products & prices:** either run `npm run stripe:seed-prices` (requires `STRIPE_SECRET_KEY` in `.env.local`; creates GBP monthly Solo £39 / Team £159 / Business £349 / Enterprise £699 and prints `STRIPE_PRICE_*` ids), or create four recurring prices manually in the [Stripe Dashboard](https://dashboard.stripe.com/).
-2. Deploy functions: `stripe-checkout`, `stripe-portal`, `stripe-webhook` from [`supabase/functions/`](supabase/functions/) (`supabase functions deploy stripe-checkout`, etc.).  
-3. Set **Supabase secrets** (Dashboard → Edge Functions → Secrets, or `supabase secrets set`):  
-   - `STRIPE_SECRET_KEY` — secret API key (`sk_...`)  
-   - `STRIPE_WEBHOOK_SECRET` — signing secret from the webhook endpoint (`whsec_...`)  
-   - `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_TEAM`, `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_ENTERPRISE` — the four Price ids (internal plan ids remain `starter` / `team` / `business` / `enterprise`)  
-   - `SITE_URL` — public app origin with no trailing slash (e.g. `https://your-domain.com`; local dev: `http://localhost:5173`)  
-4. In Stripe → Developers → Webhooks, add endpoint: `https://<project-ref>.supabase.co/functions/v1/stripe-webhook` and select events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Paste the webhook signing secret into `STRIPE_WEBHOOK_SECRET`.  
-5. Enable the [Stripe Customer Portal](https://dashboard.stripe.com/settings/billing/portal) for your account so **Manage billing** works.  
+1. **Products & prices:** live UK list prices are Solo £19 / Team £109 / Business £319 / Enterprise £649 per month (1900 / 10900 / 31900 / 64900 pence). Create those recurring GBP prices in the [Stripe Dashboard](https://dashboard.stripe.com/), or run `npm run stripe:seed-prices` only when you mean to call the Stripe API (test key in `.env.local` unless you intend to create live prices). The seed and test-mode scripts use those GBP monthly amounts; AUD and PLN amounts are unchanged. They create monthly prices only (no yearly prices) and print `STRIPE_PRICE_*` ids.
+2. Deploy functions: `stripe-checkout`, `stripe-portal`, `stripe-webhook` from [`supabase/functions/`](supabase/functions/) (`supabase functions deploy stripe-checkout`, etc.).
+3. Set **Supabase secrets** (Dashboard → Edge Functions → Secrets, or `supabase secrets set`):
+   - `STRIPE_SECRET_KEY` — secret API key (`sk_...`)
+   - `STRIPE_WEBHOOK_SECRET` — signing secret from the webhook endpoint (`whsec_...`)
+   - `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_TEAM`, `STRIPE_PRICE_BUSINESS`, `STRIPE_PRICE_ENTERPRISE` — the four Price ids (internal plan ids remain `starter` / `team` / `business` / `enterprise`). `npm run stripe:sync-secrets` copies these from the environment into Supabase Edge secrets. If any of the four is missing or does not start with `price_`, the script exits non-zero and lists the missing variables. It does not fall back to hardcoded price ids. Approved live GBP ids (hint only): Solo `price_1TK4hc6vtl4fJGcOl1WJZjqr`, Team `price_1U6wHK6vtl4fJGcO5xh5gP8v`, Business `price_1U6wHM6vtl4fJGcOPiUp7CPi`, Enterprise `price_1U6wHO6vtl4fJGcOfLDPeaT6`. `STRIPE_PRICE_*_AUD` and `STRIPE_PRICE_*_PLN` are synced only when all four ids for that currency are set. Test-mode `*_TEST` ids are not written by this script.
+   - `SITE_URL` — public app origin with no trailing slash (e.g. `https://your-domain.com`; local dev: `http://localhost:5173`)
+4. In Stripe → Developers → Webhooks, add endpoint: `https://<project-ref>.supabase.co/functions/v1/stripe-webhook` and select events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Paste the webhook signing secret into `STRIPE_WEBHOOK_SECRET`.
+5. Enable the [Stripe Customer Portal](https://dashboard.stripe.com/settings/billing/portal) for your account so **Manage billing** works.
 6. Run `npm run billing:doctor` to verify the Edge functions are deployed and configured from your current project URL (`VITE_SUPABASE_URL`).
 7. If webhook failures are pending, run `npm run stripe:retry-webhooks` to replay failed events from Stripe using `event_id`.
 Secrets stay on Supabase; nothing Stripe-sensitive is put in `VITE_*` env vars. After checkout, users return to `/app?checkout=success&settingsTab=billing` and the app refreshes entitlements from `ensure_my_org`.

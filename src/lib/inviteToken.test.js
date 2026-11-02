@@ -14,11 +14,27 @@ describe("inviteToken", () => {
     );
   });
 
+  it("omits the email query param for domain-restricted join links", () => {
+    expect(buildInviteLoginPath({ token: "barnes-worker-join-token" })).toBe(
+      "/login?invite=barnes-worker-join-token"
+    );
+    expect(buildInviteLoginPath({ token: "barnes-worker-join-token", email: "  " })).toBe(
+      "/login?invite=barnes-worker-join-token"
+    );
+  });
+
   it("stores invite capability only for the current browser session", () => {
     setPendingInviteToken("token-1", "Worker@Example.com");
     expect(peekPendingInvite()).toEqual({ token: "token-1", email: "worker@example.com" });
     expect(localStorage.getItem("mysafeops_pending_invite_token")).toBeNull();
     clearPendingInvite();
     expect(peekPendingInvite()).toBeNull();
+  });
+
+  it("clears a leftover invitee email when the next join link has none", () => {
+    setPendingInviteToken("barnes-admin-join-token", "admin@barnesfernandez.com");
+    setPendingInviteToken("barnes-worker-join-token");
+    expect(peekPendingInvite()).toEqual({ token: "barnes-worker-join-token", email: "" });
+    expect(sessionStorage.getItem("mysafeops_pending_invite_email")).toBeNull();
   });
 });

@@ -19,11 +19,33 @@ function escapeXml(s) {
     .replace(/'/g, "&apos;");
 }
 
-const lastBuild = new Date().toUTCString();
+const FALLBACK_PUBLISHED_ISO = "2026-04-16";
+
+/**
+ * Channel lastBuildDate has to be identical on every build. `new Date()`
+ * rewrites this tracked file and the production stamp becomes `<sha>-dirty`.
+ * Posts only carry `publishedIso` (YYYY-MM-DD); `updatedIso` is honoured if a
+ * post gains one later. Same noon-UTC instant as each item's pubDate.
+ * @param {Array<{ publishedIso?: string, updatedIso?: string }>} posts
+ */
+function channelLastBuildDate(posts) {
+  let newest = "";
+  for (const post of posts) {
+    for (const field of [post.updatedIso, post.publishedIso]) {
+      const day = String(field || "")
+        .trim()
+        .slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(day) && day > newest) newest = day;
+    }
+  }
+  return new Date(`${newest || FALLBACK_PUBLISHED_ISO}T12:00:00Z`).toUTCString();
+}
+
+const lastBuild = channelLastBuildDate(LANDING_BLOG_POSTS);
 
 const items = LANDING_BLOG_POSTS.map((p) => {
   const link = `${BLOG_BASE}/${p.slug}`;
-  const pub = p.publishedIso || "2026-04-16";
+  const pub = p.publishedIso || FALLBACK_PUBLISHED_ISO;
   const pubDate = new Date(`${pub}T12:00:00Z`).toUTCString();
   return `    <item>
       <title>${escapeXml(p.title)}</title>

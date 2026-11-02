@@ -24,10 +24,10 @@ config({ path: resolve(__dirname, "../.env.local") });
 config({ path: resolve(__dirname, "../.env") });
 
 const PLANS = [
-  { planId: "starter", productName: "MySafeOps — Solo", gbpPence: 3900, audCents: AU_PLAN_AMOUNT_CENTS.starter, plnGrosze: PL_PLAN_AMOUNT_GROSZE.starter, eurCents: DE_PLAN_AMOUNT_CENTS.starter, chfCents: CH_PLAN_AMOUNT_CENTS.starter },
-  { planId: "team", productName: "MySafeOps — Team", gbpPence: 15900, audCents: AU_PLAN_AMOUNT_CENTS.team, plnGrosze: PL_PLAN_AMOUNT_GROSZE.team, eurCents: DE_PLAN_AMOUNT_CENTS.team, chfCents: CH_PLAN_AMOUNT_CENTS.team },
-  { planId: "business", productName: "MySafeOps — Business", gbpPence: 34900, audCents: AU_PLAN_AMOUNT_CENTS.business, plnGrosze: PL_PLAN_AMOUNT_GROSZE.business, eurCents: DE_PLAN_AMOUNT_CENTS.business, chfCents: CH_PLAN_AMOUNT_CENTS.business },
-  { planId: "enterprise", productName: "MySafeOps — Enterprise", gbpPence: 69900, audCents: AU_PLAN_AMOUNT_CENTS.enterprise, plnGrosze: PL_PLAN_AMOUNT_GROSZE.enterprise, eurCents: DE_PLAN_AMOUNT_CENTS.enterprise, chfCents: CH_PLAN_AMOUNT_CENTS.enterprise },
+  { planId: "starter", productName: "MySafeOps — Solo", gbpPence: 1900, audCents: AU_PLAN_AMOUNT_CENTS.starter, plnGrosze: PL_PLAN_AMOUNT_GROSZE.starter, eurCents: DE_PLAN_AMOUNT_CENTS.starter, chfCents: CH_PLAN_AMOUNT_CENTS.starter },
+  { planId: "team", productName: "MySafeOps — Team", gbpPence: 10900, audCents: AU_PLAN_AMOUNT_CENTS.team, plnGrosze: PL_PLAN_AMOUNT_GROSZE.team, eurCents: DE_PLAN_AMOUNT_CENTS.team, chfCents: CH_PLAN_AMOUNT_CENTS.team },
+  { planId: "business", productName: "MySafeOps — Business", gbpPence: 31900, audCents: AU_PLAN_AMOUNT_CENTS.business, plnGrosze: PL_PLAN_AMOUNT_GROSZE.business, eurCents: DE_PLAN_AMOUNT_CENTS.business, chfCents: CH_PLAN_AMOUNT_CENTS.business },
+  { planId: "enterprise", productName: "MySafeOps — Enterprise", gbpPence: 64900, audCents: AU_PLAN_AMOUNT_CENTS.enterprise, plnGrosze: PL_PLAN_AMOUNT_GROSZE.enterprise, eurCents: DE_PLAN_AMOUNT_CENTS.enterprise, chfCents: CH_PLAN_AMOUNT_CENTS.enterprise },
 ];
 
 const GBP_ENV = {

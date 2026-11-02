@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bearingArrowHead,
   bearingToEnd,
+  compressImageFile,
   destinationPoint,
   DIRECTION_LENGTH_M,
   flipBearing180,
@@ -123,6 +124,11 @@ describe("geoPhotoUtils", () => {
     expect(isLikelyImageFile({ type: "application/octet-stream", name: "site.jpg" })).toBe(true);
     expect(isLikelyImageFile({ type: "application/pdf", name: "plan.pdf" })).toBe(false);
     expect(photoReadErrorMessage({ name: "IMG_1.HEIC" })).toMatch(/HEIC/);
+  });
+
+  it("rejects photo decode when no browser image decoder is available", async () => {
+    const file = new File(["not-an-image"], "site.jpg", { type: "image/jpeg" });
+    await expect(compressImageFile(file)).rejects.toThrow(/Could not read photo/);
   });
 
   it("wraps a JPEG data URL as an upload File", () => {

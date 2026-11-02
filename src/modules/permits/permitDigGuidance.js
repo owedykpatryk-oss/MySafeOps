@@ -1,6 +1,9 @@
+import { getOrgMarketId } from "../../utils/orgMarket";
+
 /**
  * UK safe-dig / PAS 128 guidance for excavation & ground disturbance permits.
  * Illustrative accuracy bands — site-specific survey report governs on site.
+ * Non-UK markets (PL CPD/geodeta, AU DBYD) must not inherit these labels on print.
  */
 
 export const DIG_PERMIT_TYPES = new Set(["excavation", "ground_disturbance"]);
@@ -108,6 +111,11 @@ export const DIG_EXTRA_FIELD_KEYS = [
 
 export function isDigPermitType(type) {
   return DIG_PERMIT_TYPES.has(String(type || "").trim());
+}
+
+/** PAS 128 / HSG47 wizard, quality gates and print graphics are UK-only. */
+export function isUkDigGuidanceMarket(marketId) {
+  return (marketId || getOrgMarketId()) === "uk";
 }
 
 export function pas128QualityMeta(qlId) {
@@ -275,8 +283,10 @@ export function buildPermitStatusDeepLink(permitId, origin = "") {
   return `${base}/app?view=permits&permitId=${encodeURIComponent(String(permitId || ""))}`;
 }
 
-export function renderDigGuidancePrintHtml(permit, { primaryColor = "#0d9488" } = {}) {
+export function renderDigGuidancePrintHtml(permit, { primaryColor = "#0d9488", marketId } = {}) {
   if (!isDigPermitType(permit?.type)) return "";
+  const market = marketId || getOrgMarketId();
+  if (market !== "uk") return "";
   const extra = permit?.extraFields || {};
   const ql = extra.pas128QualityLevel || "";
   const survey = extra.pas128SurveyType || "";

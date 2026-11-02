@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 /**
  * Push STRIPE_PRICE_* ids to Supabase Edge secrets.
- * Reads from env (dotenv .env.local) or pass ids as CLI args.
+ * Reads ids from the environment only (.env.local / .env). No hardcoded fallbacks.
  *
- * Run after: npm run stripe:seed-prices
- *   npm run stripe:sync-secrets
+ * Required (GBP / UK): STRIPE_PRICE_STARTER, STRIPE_PRICE_TEAM,
+ * STRIPE_PRICE_BUSINESS, STRIPE_PRICE_ENTERPRISE.
+ * Optional: STRIPE_PRICE_*_AUD and STRIPE_PRICE_*_PLN (synced only when all four
+ * ids for that currency are set). Test-mode *_TEST ids are not written here.
+ *
+ * Run: npm run stripe:sync-secrets
  */
 import { config } from "dotenv";
 import { resolve } from "node:path";
@@ -15,15 +19,23 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 config({ path: resolve(__dirname, "../.env.local") });
 config({ path: resolve(__dirname, "../.env") });
 
-const DEFAULTS = {
-  STRIPE_PRICE_STARTER: "price_1UJZI56vtl4fJGcO3VPbrfiP",
-  STRIPE_PRICE_TEAM: "price_1UJZI76vtl4fJGcOORku6aP8",
-  STRIPE_PRICE_BUSINESS: "price_1UJZIA6vtl4fJGcO0n02VWDR",
-  STRIPE_PRICE_ENTERPRISE: "price_1UJZID6vtl4fJGcOGqCcR9xR",
+const REQUIRED_GBP_PRICE_ENV = [
+  "STRIPE_PRICE_STARTER",
+  "STRIPE_PRICE_TEAM",
+  "STRIPE_PRICE_BUSINESS",
+  "STRIPE_PRICE_ENTERPRISE",
+];
+
+/** Approved live UK price ids. Printed only when required env vars are missing — never applied. */
+const LIVE_GBP_PRICE_HINTS = {
+  STRIPE_PRICE_STARTER: "price_1TK4hc6vtl4fJGcOl1WJZjqr",
+  STRIPE_PRICE_TEAM: "price_1U6wHK6vtl4fJGcO5xh5gP8v",
+  STRIPE_PRICE_BUSINESS: "price_1U6wHM6vtl4fJGcOPiUp7CPi",
+  STRIPE_PRICE_ENTERPRISE: "price_1U6wHO6vtl4fJGcOfLDPeaT6",
 };
 
 function pick(key) {
-  return (process.env[key] || DEFAULTS[key] || "").trim();
+  return (process.env[key] || "").trim();
 }
 
 const starter = pick("STRIPE_PRICE_STARTER");
@@ -51,8 +63,23 @@ const chfTeam = pick("STRIPE_PRICE_TEAM_CHF");
 const chfBusiness = pick("STRIPE_PRICE_BUSINESS_CHF");
 const chfEnterprise = pick("STRIPE_PRICE_ENTERPRISE_CHF");
 
-if (![starter, team, business, enterprise].every((v) => v.startsWith("price_"))) {
-  console.error("Missing valid STRIPE_PRICE_* GBP ids. Run npm run stripe:seed-prices first, or set env vars.");
+const gbpValues = {
+  STRIPE_PRICE_STARTER: starter,
+  STRIPE_PRICE_TEAM: team,
+  STRIPE_PRICE_BUSINESS: business,
+  STRIPE_PRICE_ENTERPRISE: enterprise,
+};
+const missingGbp = REQUIRED_GBP_PRICE_ENV.filter((key) => !gbpValues[key].startsWith("price_"));
+if (missingGbp.length) {
+  console.error(
+    [
+      `Missing required Stripe price env vars: ${missingGbp.join(", ")}.`,
+      "Each must be set and start with price_. This script does not fall back to hardcoded price ids.",
+      "Set them in .env.local (or the environment) and re-run npm run stripe:sync-secrets.",
+      "Expected live GBP ids (hint only — not applied):",
+      ...REQUIRED_GBP_PRICE_ENV.map((key) => `  ${key}=${LIVE_GBP_PRICE_HINTS[key]}`),
+    ].join("\n"),
+  );
   process.exit(1);
 }
 

@@ -12,6 +12,8 @@ export const UTILITY_MAPPING_ORG_SLUGS = new Set([
   "umap",
   "utility-mapping-group",
   "utility_mapping_group",
+  // Auto-provisioned first login for patryk@u-map.co.uk (ensure_my_org slug).
+  "patryk-44bdf196",
 ]);
 
 /** Lightweight tenant check — slug allowlist only (no website/name spoof). */

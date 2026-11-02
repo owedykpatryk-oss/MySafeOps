@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { viteDevE2eParity } from "./scripts/viteDevE2eParity.mjs";
 import { offlinePrecachePlugin } from "./scripts/offlinePrecache.mjs";
+import { injectBuildShaMeta, resolveBuildCommitSha } from "./scripts/productionBuildSha.mjs";
 import { fetchBgsGeologyAtPoint } from "./shared/bgsGeologyFetch.mjs";
 
 function supabaseDnsPrefetchOriginFromEnv(env) {
@@ -17,6 +18,7 @@ function supabaseDnsPrefetchOriginFromEnv(env) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const buildSha = resolveBuildCommitSha();
   const supabaseDnsOrigin = supabaseDnsPrefetchOriginFromEnv(env);
   const sentryAuthToken = String(env.SENTRY_AUTH_TOKEN || "").trim();
   const sentryOrg = String(env.SENTRY_ORG || "").trim();
@@ -715,10 +717,16 @@ export default defineConfig(({ mode }) => {
           );
         },
       },
+      {
+        name: "inject-build-sha",
+        transformIndexHtml(html) {
+          return injectBuildShaMeta(html, buildSha);
+        },
+      },
     ],
     test: {
       environment: "node",
-      include: ["src/**/*.test.{js,jsx}", "api/**/*.test.js"],
+      include: ["src/**/*.test.{js,jsx}", "api/**/*.test.js", "scripts/**/*.test.js"],
     },
     build: {
       target: "es2022",

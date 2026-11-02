@@ -22,7 +22,7 @@ it("installs when an optional asset is unavailable but requires the offline shel
   let installPromise;
   listeners.install({ waitUntil: (promise) => { installPromise = promise; } });
   await expect(installPromise).resolves.toBeUndefined();
-  expect(addAll).toHaveBeenCalledWith(["/index.html", "/offline.html", "/assets/app-123.css", "/assets/app-123.js"]);
+  expect(addAll).toHaveBeenCalledWith(["/index.html", "/app", "/offline.html", "/assets/app-123.css", "/assets/app-123.js"]);
   expect(add).toHaveBeenCalledWith("/vite.svg");
   expect(add).toHaveBeenCalledWith("/assets/logo-123.png");
 
