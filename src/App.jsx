@@ -67,6 +67,12 @@ export default function App() {
   }
 
   return (
+    <>
+    {import.meta.env.VITE_NATIVE_PREVIEW === "true" && (
+      <div role="note" style={{ padding: "8px 16px", background: "#fff3cd", color: "#513c00", textAlign: "center" }}>
+        Device preview — data stays on this device. Cloud login and sync are unavailable. Use test data only.
+      </div>
+    )}
     <BrowserRouter>
       <Suspense fallback={<ViewFallback />}>
         <Routes>
@@ -127,5 +133,6 @@ export default function App() {
         </Routes>
       </Suspense>
     </BrowserRouter>
+    </>
   );
 }

@@ -13,6 +13,7 @@ import { SupabaseAuthProvider } from "./context/SupabaseAuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import { bootSentryIfConfigured } from "./instrument.js";
 import { initClientOpsMonitor } from "./utils/clientOpsMonitor.js";
+import { prepareNativeStartup } from "./utils/nativeStartup.js";
 
 function scheduleDeferredInit() {
   const run = () => {
@@ -31,6 +32,7 @@ function scheduleDeferredInit() {
 }
 
 function bootstrap() {
+  prepareNativeStartup();
   initClientOpsMonitor();
   const stopWorkspaceEvents = installWorkspaceStorageEvents(flushSync);
   if (import.meta.hot) import.meta.hot.dispose(stopWorkspaceEvents);

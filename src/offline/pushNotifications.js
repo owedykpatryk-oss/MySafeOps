@@ -11,6 +11,12 @@ import { collectEquipmentInspectionDueItems } from "../utils/equipmentInspection
 import { collectVehicleDueItems } from "../utils/vehicleComplianceDue";
 
 import { todayLocalISO } from "../utils/localDate";
+import { isNativeApp } from "../utils/appRuntime";
+
+// Native push needs its own adapter; WebView API presence is not support.
+function supportsWebNotifications() {
+  return !isNativeApp() && typeof Notification !== "undefined" && Notification !== null;
+}
 const VAPID_PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "").trim();
 const NOTIF_PREFS_KEY = "mysafeops_notif_prefs";
 const LEGACY_NOTIF_PREFS_KEY = NOTIF_PREFS_KEY;
@@ -120,6 +126,7 @@ const SW_READY_TIMEOUT_MS = 8000;
  * Avoid hanging on `navigator.serviceWorker.ready` (it never resolves if no SW was ever registered).
  */
 async function waitForServiceWorkerRegistration(timeoutMs = SW_READY_TIMEOUT_MS) {
+  if (isNativeApp()) return null;
   if (!("serviceWorker" in navigator)) return null;
   try {
     const reg = await Promise.race([
@@ -162,7 +169,7 @@ async function removeSubscriptionFromCloud(endpoint) {
 
 // ─── Permission & subscription ───────────────────────────────────────────────
 export async function requestNotificationPermission() {
-  if (!("Notification" in window)) return "unsupported";
+  if (!supportsWebNotifications()) return "unsupported";
   if (Notification.permission === "granted") return "granted";
   if (Notification.permission === "denied") return "denied";
   const result = await Notification.requestPermission();
@@ -286,7 +293,7 @@ function urlBase64ToUint8Array(base64String) {
 // a push server is required.
 
 export function showLocalNotification(title, options = {}) {
-  if (Notification.permission !== "granted") return;
+  if (!supportsWebNotifications() || Notification.permission !== "granted") return;
 
   const defaults = {
     icon: "/icons/icon-192.png",
@@ -296,9 +303,9 @@ export function showLocalNotification(title, options = {}) {
   };
 
   if ("serviceWorker" in navigator) {
-    void waitForServiceWorkerRegistration(4000).then((reg) => {
+    void waitForServiceWorkerRegistration(4000).then(async (reg) => {
       try {
-        if (reg) reg.showNotification(title, { ...defaults, ...options });
+        if (reg) await reg.showNotification(title, { ...defaults, ...options });
         else new Notification(title, { ...defaults, ...options });
       } catch {
         try {
@@ -309,7 +316,7 @@ export function showLocalNotification(title, options = {}) {
       }
     });
   } else {
-    new Notification(title, { ...defaults, ...options });
+    try { new Notification(title, { ...defaults, ...options }); } catch { /* Unavailable on some mobile browsers. */ }
   }
 }
 
@@ -347,7 +354,7 @@ function markSeen(notifId) {
 }
 
 export function checkExpiryNotifications(opts = {}) {
-  if (Notification.permission !== "granted") return;
+  if (!supportsWebNotifications() || Notification.permission !== "granted") return;
   if (!opts.force && isWithinNotificationQuietHours()) return;
 
   const workers = loadJSON("mysafeops_workers", []);
@@ -677,8 +684,12 @@ let checkInterval = null;
 export function startNotificationScheduler(intervalMs = 60 * 60 * 1000) {
   checkExpiryNotifications(); // run immediately
   if (checkInterval) clearInterval(checkInterval);
-  checkInterval = setInterval(checkExpiryNotifications, intervalMs);
-  return () => clearInterval(checkInterval);
+  const interval = setInterval(checkExpiryNotifications, intervalMs);
+  checkInterval = interval;
+  return () => {
+    clearInterval(interval);
+    if (checkInterval === interval) checkInterval = null;
+  };
 }
 
 export function stopNotificationScheduler() {
@@ -690,7 +701,7 @@ export function runNotificationCheckNow() {
 }
 
 export function initNotificationRuntime() {
-  if (!("Notification" in window)) return () => {};
+  if (!supportsWebNotifications()) return () => {};
   if (Notification.permission !== "granted") return () => {};
   if (isNotificationTypeEnabled("master") === false) return () => {};
   return startNotificationScheduler(DEFAULT_SCHEDULER_INTERVAL_MS);
@@ -698,7 +709,7 @@ export function initNotificationRuntime() {
 
 // ─── Settings UI data ─────────────────────────────────────────────────────────
 export async function getNotificationStatus() {
-  const supported = "Notification" in window;
+  const supported = supportsWebNotifications();
   const permission = supported ? Notification.permission : "unsupported";
   const reg = await waitForServiceWorkerRegistration();
   const sub = reg ? await reg.pushManager?.getSubscription() : null;

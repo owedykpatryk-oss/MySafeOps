@@ -67,13 +67,20 @@
     "cursor:nightly": "node scripts/cursor-nightly.mjs --all",
     "cursor:push-secret": "node scripts/cursor-push-github-secret.mjs",
     "cursor:status": "node scripts/cursor-agent-status.mjs",
-    "prepare": "husky"
+    "prepare": "husky",
+    "native:build:preview": "node scripts/build-native-preview.mjs",
+    "native:sync": "cap sync",
+    "native:open:android": "cap open android",
+    "native:open:ios": "cap open ios"
   },
   "lint-staged": {
     "src/**/*.{js,jsx}": "eslint --fix --max-warnings 200",
     "scripts/**/*.{js,mjs}": "eslint --fix --max-warnings 200"
   },
   "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0",
     "@fontsource-variable/dm-sans": "^5.2.8",
     "@fontsource-variable/plus-jakarta-sans": "^5.2.8",
     "@sentry/react": "^9.47.1",
@@ -101,6 +108,7 @@
     "brace-expansion@2": "2.1.7"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.6.0",
     "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.59.1",
     "@sentry/vite-plugin": "^5.4.1",

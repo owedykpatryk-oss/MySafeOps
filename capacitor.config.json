@@ -1,0 +1,9 @@
+{
+  "appId": "com.mysafeops.app",
+  "appName": "MySafeOps Preview",
+  "webDir": "dist-native",
+  "loggingBehavior": "debug",
+  "server": { "hostname": "localhost", "androidScheme": "https", "iosScheme": "capacitor", "cleartext": false },
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "automatic" }
+}

@@ -2,6 +2,8 @@
 
 Plan wspólnego kodu, synchronizacji danych i aktualizacji na wszystkie platformy: [CROSS_PLATFORM_ARCHITECTURE_PLAN.md](CROSS_PLATFORM_ARCHITECTURE_PLAN.md).
 
+**Aktualizacja 2 listopada 2026:** dodano Capacitor 8.6.0, projekty Android/iOS i osobny build podglądu bez chmury. Aktualne instrukcje, ograniczenia i kolejność dalszych prac: [NATIVE_PREVIEW.md](NATIVE_PREVIEW.md). Poniższe wpisy październikowe są historyczne; stwierdzenia o braku projektów natywnych nie opisują już obecnego repozytorium.
+
 Stan przeglądu: 7 października 2026. Aplikacja jest obecnie web/PWA. W repozytorium nie znaleziono konfiguracji Capacitor ani projektów iOS/Android. Poprawki lokalne i testy przeglądarkowe nie potwierdzają gotowości produkcji lub wersji sklepowej. Opisy wcześniejszych rund QA poniżej zachowano jako historię.
 
 ### PWA i transport API — 8 października 2026

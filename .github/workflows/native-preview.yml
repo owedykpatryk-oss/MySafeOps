@@ -1,0 +1,34 @@
+name: Native Android Preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm run native:build:preview
+      - run: npx cap sync android
+      - name: Compile device-only debug APK
+        working-directory: android
+        run: bash gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mysafeops-android-preview-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
