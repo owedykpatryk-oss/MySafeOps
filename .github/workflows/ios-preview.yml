@@ -2,6 +2,11 @@ name: iPhone Upload and iOS Preview
 
 on:
   workflow_dispatch:
+    inputs:
+      native_only:
+        description: 'Only rerun native compilation and launch diagnostics'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +26,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Generate a synthetic HEIC with Apple's encoder
+        if: ${{ !inputs.native_only }}
         run: |
           mkdir -p tests/fixtures
           python3 - <<'PY'
@@ -34,8 +40,15 @@ jobs:
           PY
           sips -s format heic tests/fixtures/generated-iphone.png --out "$HEIC_FIXTURE_PATH"
       - run: npx playwright install chromium webkit
+        if: ${{ !inputs.native_only }}
       - name: iPhone photo and document regressions on Apple WebKit
+        if: ${{ !inputs.native_only }}
         run: npx playwright test --config playwright.mobile.config.js tests/e2e/register-mobile.spec.js --project=iphone-webkit --grep 'photo|HEIC|GPS|Documents|upload|signature'
+      - name: Home Screen PWA offline photo recovery
+        if: ${{ !inputs.native_only }}
+        run: |
+          node scripts/build-pwa-qa.mjs
+          npx playwright test --config playwright.pwa-iphone.config.js
       - run: npm run native:build:preview
       - run: npx cap sync ios
       - name: Compile iOS simulator application
@@ -46,16 +59,20 @@ jobs:
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl bootstatus "$DEVICE_ID" -b
           xcrun simctl install "$DEVICE_ID" output/ios-simulator/Build/Products/Debug-iphonesimulator/App.app
-          xcrun simctl launch "$DEVICE_ID" com.mysafeops.app
-          sleep 10
+          xcrun simctl launch --console-pty "$DEVICE_ID" com.mysafeops.app > ios-runtime.log 2>&1 &
+          sleep 45
           xcrun simctl spawn "$DEVICE_ID" launchctl list | grep com.mysafeops.app
           xcrun simctl io "$DEVICE_ID" screenshot ios-preview.png
+          xcrun simctl spawn "$DEVICE_ID" log show --last 3m --style compact --predicate 'process == "App" OR process == "com.apple.WebKit.WebContent"' > ios-system.log 2>&1
+          swift scripts/check-ios-screenshot.swift ios-preview.png
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: iphone-verification
           path: |
             ios-build.log
+            ios-runtime.log
+            ios-system.log
             ios-preview.png
             test-results/
             tests/fixtures/generated-iphone.heic

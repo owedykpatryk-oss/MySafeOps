@@ -22,3 +22,11 @@ The current native preview is still device-only. Native cloud authentication, ca
 Required physical-device acceptance: Safari and Home Screen PWA, then the signed native app; camera and iCloud Photos, existing HEIC/JPEG/PNG and a large portrait/panorama, PDF from Files, cancelled/denied permissions, background/return, network interruption during upload, expired session after camera, restart, storage full and switching organisations. Verify the uploaded object under the correct user/company/country from a second signed-in device. Confirm its bytes open and that the first device retains recovery data until acknowledgement.
 
 An untested device/OS combination or a missing native cloud integration is an open limitation, not a passed check.
+
+## Home Screen PWA follow-up
+
+The user confirmed they open the app from the Home Screen icon. An additional production-bundle test uses WebKit, the standalone flag and the real service worker: stop the origin server, capture/save a photo without GPS, reload while the server remains stopped, then restart the server and reload again. The evidence survives. The initial attempt used Playwright `setOffline`, which incorrectly blocks cached worker/blob responses in WebKit ([upstream issue 42775](https://github.com/microsoft/playwright/issues/42775)); stopping the origin avoids that test-tool defect. The standalone flag does not reproduce every iOS installation/lifecycle behaviour.
+
+Run with `node scripts/build-pwa-qa.mjs` followed by `npx playwright test --config playwright.pwa-iphone.config.js`. The Apple workflow also includes this check.
+
+The first Apple run passed all 16 photo/document cases, including genuine HEIC conversion, and compiled the iOS simulator app. Its first launch screenshot was blank, so successful compilation/process launch alone was not accepted as UI verification. The workflow now captures runtime logs and requires recognizable app text in the screenshot.
