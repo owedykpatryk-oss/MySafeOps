@@ -9,7 +9,7 @@ const nav = vi.hoisted(() => ({ open: vi.fn(), target: vi.fn() }));
 vi.mock("../context/SupabaseAuthContext", () => ({ useSupabaseAuth: () => ({ user: { id: state.user } }) }));
 vi.mock("../hooks/useD1OrgArraySync", () => ({ useD1OrgArraySync: () => ({}) }));
 vi.mock("../components/D1ModuleSyncBanner", () => ({ D1ModuleSyncBanner: () => null }));
-vi.mock("../utils/orgStorage", () => ({ loadOrgScoped: () => state.rows, saveOrgScoped: vi.fn(), countryOperationalStorageKey: key => `${key}:${state.scope}` }));
+vi.mock("../utils/orgStorage", () => ({ loadOrgScoped: () => state.rows, saveOrgScoped: vi.fn(), countryOperationalStorageKey: key => `${key}:${state.scope}`, ORG_DATA_CHANGED_EVENT: "org-data" }));
 vi.mock("../utils/hiddenModules", () => ({ isModuleVisible: id => !state.hidden.includes(id), HIDDEN_MODULES_UPDATED_EVENT: "visibility" }));
 vi.mock("../utils/workspaceNavContext", () => ({ openWorkspaceView: nav.open, setWorkspaceNavTarget: nav.target }));
 vi.mock("../utils/soloWorkspace", () => ({ projectMissingItems: () => ["Address"] }));
@@ -56,4 +56,32 @@ it("removes disabled modules immediately when visibility changes", async () => {
   state.hidden = ["survey-report", "gpr-report", "rams"];
   await act(async () => window.dispatchEvent(new Event("visibility")));
   expect(button("Survey report")).toBeUndefined(); expect(button("GPR report")).toBeUndefined(); expect(button("RAMS")).toBeUndefined();
+});
+
+it("refreshes sites changed in another tab", async () => {
+  await selectSite("a");
+  state.rows = [{ id: "b", name: "New site" }];
+  await act(async () => window.dispatchEvent(new StorageEvent("storage", { key: "mysafeops_projects:A", storageArea: localStorage })));
+  expect(host.querySelector("select").textContent).toContain("New site");
+  expect(button("Survey report").disabled).toBe(true);
+});
+
+it("refuses a removed project even before its storage event is delivered", async () => {
+  await selectSite("a"); state.rows = [];
+  await act(async () => button("Survey report").click());
+  expect(nav.open).not.toHaveBeenCalled();
+});
+
+it("refuses navigation after the workspace changed before React rerendered", async () => {
+  await selectSite("a"); state.scope = "B";
+  await act(async () => button("Survey report").click());
+  expect(nav.open).not.toHaveBeenCalled();
+});
+
+it("moves keyboard focus to the selected panel and remembers the section", async () => {
+  await act(async () => button("Documents").click());
+  expect(document.activeElement).toBe(host.querySelector("#field-panel"));
+  expect(host.querySelector("#field-panel").getAttribute("aria-label")).toBe("Documents");
+  await act(async () => root.render(<FieldHome key="return-visit" />));
+  expect(host.querySelector("#field-panel").getAttribute("aria-label")).toBe("Documents");
 });

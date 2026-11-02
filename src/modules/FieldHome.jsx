@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Building2, Camera, ClipboardCheck, FileText, MapPin, Plane, Radio, ShieldCheck } from "lucide-react";
 import { useD1OrgArraySync } from "../hooks/useD1OrgArraySync";
 import { D1ModuleSyncBanner } from "../components/D1ModuleSyncBanner";
-import { countryOperationalStorageKey, loadOrgScoped, saveOrgScoped } from "../utils/orgStorage";
+import { countryOperationalStorageKey, loadOrgScoped, saveOrgScoped, ORG_DATA_CHANGED_EVENT } from "../utils/orgStorage";
 import { useSupabaseAuth } from "../context/SupabaseAuthContext";
 import { projectMissingItems } from "../utils/soloWorkspace";
 import { isModuleVisible, HIDDEN_MODULES_UPDATED_EVENT } from "../utils/hiddenModules";
@@ -10,6 +10,7 @@ import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavC
 import "../styles/field-home.css";
 
 const PROJECTS_KEY = "mysafeops_projects";
+const SECTIONS = { today: "Today", site: "Site", capture: "Add", documents: "Documents" };
 const REPORTS = [
   { id: "survey-report", title: "Survey report", detail: "Record observations, measurements and site evidence.", icon: ClipboardCheck, action: "createReport" },
   { id: "gpr-report", title: "GPR report", detail: "Start a scan report with this site's details.", icon: Radio },
@@ -25,12 +26,18 @@ const DOCUMENTS = [
 /** A navigation surface over existing scoped registers; never creates a second copy of site data. */
 export default function FieldHome() {
   const { user } = useSupabaseAuth();
+  const projectsKey = countryOperationalStorageKey(PROJECTS_KEY);
   const selectionKey = `${countryOperationalStorageKey("field_site_selection")}:${user?.id || "local"}`;
   const [projects, setProjects] = useState(() => loadOrgScoped(PROJECTS_KEY, []));
   const [projectId, setProjectId] = useState(() => {
     try { return sessionStorage.getItem(selectionKey) || ""; } catch { return ""; }
   });
-  const [section, setSection] = useState("today");
+  const [section, setSection] = useState(() => {
+    try { const saved = sessionStorage.getItem(`${selectionKey}:section`); return Object.hasOwn(SECTIONS, saved) ? saved : "today"; } catch { return "today"; }
+  });
+  const [navigationNotice, setNavigationNotice] = useState("");
+  const panelRef = useRef(null);
+  const focusPanelAfterChange = useRef(false);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [, setVisibilityRevision] = useState(0);
   const sync = useD1OrgArraySync({ storageKey: PROJECTS_KEY, namespace: PROJECTS_KEY,
@@ -47,12 +54,55 @@ export default function FieldHome() {
       window.removeEventListener(HIDDEN_MODULES_UPDATED_EVENT, visibility);
     };
   }, []);
+  useEffect(() => {
+    const refresh = () => {
+      if (projectsKey !== countryOperationalStorageKey(PROJECTS_KEY)) return;
+      const latest = loadOrgScoped(PROJECTS_KEY, []);
+      setProjects((previous) => JSON.stringify(previous) === JSON.stringify(latest) ? previous : latest);
+    };
+    const storage = (event) => {
+      if (event.storageArea && event.storageArea !== localStorage) return;
+      if (event.key === null || event.key === projectsKey) refresh();
+    };
+    const changed = (event) => { if (event.detail?.baseKey === PROJECTS_KEY) refresh(); };
+    window.addEventListener("storage", storage);
+    window.addEventListener("focus", refresh);
+    window.addEventListener(ORG_DATA_CHANGED_EVENT, changed);
+    return () => {
+      window.removeEventListener("storage", storage);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener(ORG_DATA_CHANGED_EVENT, changed);
+    };
+  }, [projectsKey]);
+  const focusPanel = () => {
+    panelRef.current?.focus({ preventScroll: true });
+    panelRef.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
+  };
+  useEffect(() => {
+    if (!focusPanelAfterChange.current) return;
+    focusPanelAfterChange.current = false;
+    focusPanel();
+  }, [section]);
+  const changeSection = (id) => {
+    try { sessionStorage.setItem(`${selectionKey}:section`, id); } catch { /* Navigation works without session storage. */ }
+    if (id === section) focusPanel();
+    else { focusPanelAfterChange.current = true; setSection(id); }
+  };
   const sites = projects.filter((p) => p && !p.deletedAt);
   const project = sites.find((p) => p.id === projectId);
   const missing = project ? projectMissingItems(project) : [];
   const canProjects = isModuleVisible("projects");
   const open = (id, target = {}) => {
+    if (projectsKey !== countryOperationalStorageKey(PROJECTS_KEY)) return;
     if (!isModuleVisible(id)) return;
+    if (target.projectId) {
+      const latest = loadOrgScoped(PROJECTS_KEY, []);
+      if (!latest.some((p) => p?.id === target.projectId && !p.deletedAt)) {
+        setProjects(latest);
+        setNavigationNotice("This site is no longer available. Choose another site before continuing.");
+        return;
+      }
+    }
     // Overwrite any old one-shot target, including for register-level links.
     setWorkspaceNavTarget({ viewId: id, ...target });
     openWorkspaceView({ viewId: id });
@@ -70,14 +120,15 @@ export default function FieldHome() {
     <header className="field-home__hero">
       <span className="field-home__eyebrow">SITE WORKSPACE</span>
       <h2>Your day on site</h2>
-      <p>Choose your site. Capture evidence, open reports and find the documents you need.</p>
-      <span role="status" className="field-home__connection">{online ? "Internet connection available" : "Offline — using information on this device"}</span>
+      <p>Reports, photos and documents for your site.</p>
+      <span role="status" className="field-home__connection">{online ? "Online — check each report's upload status" : "Offline — using information on this device"}</span>
     </header>
     <D1ModuleSyncBanner {...sync} scopeLabel="Sites" />
     <div className="field-home__site-picker">
       <label htmlFor="field-site">Working site</label>
       <select id="field-site" value={project?.id || ""} onChange={(e) => {
         setProjectId(e.target.value);
+        setNavigationNotice("");
         try { sessionStorage.setItem(selectionKey, e.target.value); } catch { /* Selection still works in memory. */ }
       }}>
         <option value="">Choose a site</option>
@@ -86,10 +137,17 @@ export default function FieldHome() {
       {!sites.length && !sync.d1Hydrating && <p>No sites available on this device.{canProjects ? " Open Projects to add or sync a site." : " Ask your workspace administrator to set up your site."}</p>}
       {project && <p><MapPin size={16} aria-hidden="true" /> {[project.site, project.address, project.postcode].filter(Boolean).join(" · ") || "Site address has not been added."}</p>}
     </div>
+    {navigationNotice && <p role="alert" className="field-home__hint">{navigationNotice}</p>}
     <nav className="field-home__tabs" aria-label="Site workspace">
-      {[["today", "Today"], ["site", "Site"], ["capture", "Add"], ["documents", "Documents"]].map(([id, label]) =>
-        <button type="button" key={id} aria-current={section === id ? "page" : undefined} onClick={() => setSection(id)}>{label}</button>)}
+      <div className="field-home__active-site"><span>{project?.name || "Choose a working site"}</span><button type="button" aria-label="Choose another site" onClick={() => {
+        const select = document.getElementById("field-site");
+        select?.focus({ preventScroll: true });
+        select?.scrollIntoView?.({ block: "center", behavior: "auto" });
+      }}>Change</button></div>
+      {Object.entries(SECTIONS).map(([id, label]) =>
+        <button type="button" key={id} aria-current={section === id ? "page" : undefined} onClick={() => changeSection(id)}>{label}</button>)}
     </nav>
+    <div id="field-panel" ref={panelRef} className="field-home__panel" tabIndex={-1} role="region" aria-label={SECTIONS[section]}>
     {(section === "today" || section === "capture") && <section aria-labelledby="field-capture-title">
       <h3 id="field-capture-title">Capture work on site</h3>
       {!project && <p className="field-home__hint">Choose a site above to attach new reports and photos to the right project.</p>}
@@ -121,5 +179,6 @@ export default function FieldHome() {
       <div className="field-home__grid">{documentCards.map((item) => renderCard(item, () => open(item.id)))}</div>
       {!documentCards.length && <p>No document modules are enabled for this workspace.</p>}
     </section>}
+    </div>
   </div>;
 }

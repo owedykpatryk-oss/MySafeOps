@@ -268,7 +268,9 @@ function ScopedGprReport({ scope }) {
     const restored = readGprEditorSession(scope);
     return restored ? { isNew: Boolean(restored.isNew), data: restored.data } : null;
   });
-  const editorOpenRef = useRef(false);
+  const editorOpen = Boolean(modal);
+  const openReportId = modal?.data?.id;
+  const [pendingNavigation, setPendingNavigation] = useState(null);
   const [tab, setTab] = useState(() => readGprEditorSession(scope)?.tab || "setup");
   const [busy, setBusy] = useState("");
   const [search, setSearch] = useState("");
@@ -349,24 +351,46 @@ function ScopedGprReport({ scope }) {
   }, [scope]);
 
   useEffect(() => {
-    const t = peekWorkspaceNavTarget();
-    if (!t || t.viewId !== "gpr-report" || editorOpenRef.current) return;
+    if (scope !== getGprEditorScope()) return;
+    const t = pendingNavigation || peekWorkspaceNavTarget();
+    if (!t || t.viewId !== "gpr-report") return;
+    if (editorOpen) {
+      if (!pendingNavigation) {
+        // Keep deferred navigation inside this scoped component, never in the
+        // shared target slot where another organisation could consume it.
+        consumeWorkspaceNavTarget();
+        if ((t.reportId && t.reportId !== openReportId) || (!t.reportId && t.projectId)) setPendingNavigation(t);
+      }
+      return;
+    }
+    const finishNavigation = () => {
+      if (!pendingNavigation) consumeWorkspaceNavTarget();
+      setPendingNavigation(null);
+    };
     if (t.reportId) {
-      const found = reports.find((r) => r.id === t.reportId);
-      if (!found) return;
-      consumeWorkspaceNavTarget();
+      const found = load(STORAGE_KEY, []).find((r) => r.id === t.reportId && !r.deletedAt);
+      if (!found) {
+        if (!d1Hydrating) { finishNavigation(); pushToast({ type: "error", message: "The requested GPR report is no longer available in this workspace." }); }
+        return;
+      }
+      finishNavigation();
+      setTab("setup");
       setModal({ data: found, isNew: false });
       return;
     }
     if (t.projectId) {
-      const p = projects.find((x) => x.id === t.projectId);
-      if (!p) return;
-      consumeWorkspaceNavTarget();
+      const p = load("mysafeops_projects", []).find((x) => x.id === t.projectId && !x.deletedAt);
+      if (!p) {
+        if (!d1Hydrating) { finishNavigation(); pushToast({ type: "error", message: "The requested site is no longer available. Choose another site." }); }
+        return;
+      }
+      finishNavigation();
       const ref = nextGprRef(reports);
       const base = prefillGprFromProject(blankGprReport({ ref }), p);
+      setTab("setup");
       setModal({ data: base, isNew: true });
     }
-  }, [reports, projects]);
+  }, [reports, projects, editorOpen, openReportId, pendingNavigation, d1Hydrating, pushToast, scope]);
 
   const filtered = useMemo(
     () => filterGprReports(liveReports, { search, status: listStatus, projectId: listProject }),
@@ -424,7 +448,6 @@ function ScopedGprReport({ scope }) {
   const dirtyRef = useRef(Boolean(readGprEditorSession(scope)));
   formRef.current = form;
   modalRef.current = modal;
-  editorOpenRef.current = Boolean(modal);
 
   const markDirty = () => {
     dirtyRef.current = true;
@@ -2837,6 +2860,14 @@ function ScopedGprReport({ scope }) {
           className={`app-survey-report-editor app-gpr-report-editor${livePreviewOpen ? " app-survey-report-editor--split" : ""}`}
           style={gprThemeCssVariables(form, orgSettings)}
         >
+          {pendingNavigation && <div role="alert" className="app-gpr-navigation-notice">
+            <strong>A GPR draft is already open</strong>
+            <p>You are editing {form.title || form.ref || "an unfinished report"}. Your requested destination is {projects.find((p) => p.id === pendingNavigation.projectId)?.name || reports.find((r) => r.id === pendingNavigation.reportId)?.title || "another report"}. Save this draft before continuing, or keep editing it.</p>
+            <div>
+              <button type="button" style={ss.btnP} onClick={closeEditor}>Save draft and continue</button>
+              <button type="button" style={ss.btn} onClick={() => setPendingNavigation(null)}>Keep editing this draft</button>
+            </div>
+          </div>}
           <GprEditorHero
             form={form}
             project={project}

@@ -7,6 +7,10 @@ export function persistGprReports(scope, update) {
   if (scope !== getGprEditorScope()) return null;
   const current = loadOrgScoped("gpr_reports", []);
   const next = typeof update === "function" ? update(current) : update;
+  // An older open editor must not undo a deletion from another tab/device.
+  // Explicit recovery goes through the recycle bin, not the editor save path.
+  const deletedIds = new Set(current.filter(row => row.deletedAt).map(row => row.id));
+  if (next.some(row => deletedIds.has(row.id) && !row.deletedAt)) return null;
   return saveOrgScoped("gpr_reports", next) === true ? next : null;
 }
 

@@ -57,6 +57,14 @@ describe("GPR draft ownership", () => {
   });
 });
 describe("GPR durable persistence", () => {
+  it("does not resurrect a report deleted while its editor was open", () => {
+    const deleted = { ...report, deletedAt: "2026-11-02T12:00:00Z" };
+    saveOrgScoped("gpr_reports", [deleted]);
+    writeGprEditorSession({ data: { ...report, title: "Unsaved work" } });
+    expect(persistGprReports(getGprEditorScope(), rows => rows.map(row => row.id === report.id ? { ...report, title: "Late autosave" } : row))).toBeNull();
+    expect(loadOrgScoped("gpr_reports", [])).toEqual([deleted]);
+    expect(readGprEditorSession().data.title).toBe("Unsaved work");
+  });
   it("returns failure and preserves recovery when the register cannot be written", () => {
     const scope = getGprEditorScope();
     saveOrgScoped("gpr_reports", [report]);

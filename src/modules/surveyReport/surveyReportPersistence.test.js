@@ -7,6 +7,12 @@ import { loadOrgScoped, saveOrgScoped } from "../../utils/orgStorage";
 const report = { id: "survey", title: "Draft" };
 beforeEach(() => { localStorage.clear(); clearAuthorshipUserCache(); });
 afterEach(() => vi.restoreAllMocks());
+it("does not resurrect a report deleted in another tab", () => {
+  const deleted = { ...report, deletedAt: "2026-11-02T12:00:00Z" };
+  saveOrgScoped("survey_reports", [deleted]);
+  expect(persistSurveyReport(getSurveyPersistenceScope(), { ...report, title: "Late save" })).toBeNull();
+  expect(loadOrgScoped("survey_reports", [])).toEqual([deleted]);
+});
 it("rejects async completion after organisation, user or country changed", async () => {
   const scope = getSurveyPersistenceScope();
   await Promise.resolve();

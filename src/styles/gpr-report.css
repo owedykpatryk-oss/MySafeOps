@@ -1830,3 +1830,7 @@
 .app-gpr-annotator__foot span { flex: 1; }
 .app-gpr-annotator__foot .app-gpr-annotator__save { border-color: #0f766e; background: #0f766e; color: #fff; }
 @media (max-width: 600px) { .app-gpr-annotator__head span { display: none; } .app-gpr-annotator__tools { max-height: 170px; overflow: auto; } .app-gpr-annotator__image img { max-height: calc(100dvh - 340px); } }
+.app-gpr-navigation-notice { margin: 12px; padding: 16px; border: 1px solid #c78a27; border-radius: 12px; background: var(--color-background-primary, #fff); color: var(--color-text-primary); }
+.app-gpr-navigation-notice p { line-height: 1.5; margin: 8px 0 12px; }
+.app-gpr-navigation-notice > div { display: flex; flex-wrap: wrap; gap: 10px; }
+.app-gpr-navigation-notice button { min-height: 44px; }
