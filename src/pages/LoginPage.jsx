@@ -117,6 +117,7 @@ export default function LoginPage() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [acceptLegalTerms, setAcceptLegalTerms] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
   const [, setTick] = useState(0);
   const inviteToken = searchParams.get("invite") || "";
   const inviteEmail = (searchParams.get("email") || "").trim().toLowerCase();
@@ -605,17 +606,19 @@ export default function LoginPage() {
             <Sparkles size={13} aria-hidden />
             Site safety workspace
           </div>
-          <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>Welcome back to MySafeOps</h1>
+          <h1 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 600, color: navy }}>{creatingAccount ? "Create your MySafeOps account" : "Welcome back to MySafeOps"}</h1>
           {cloud ? (
             <>
               <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 16px", lineHeight: 1.55 }}>
-                Sign in to manage your site safety. Use your work email and password (or Google, if your organisation enabled it). Cloud backup is available from
-                Backup after you sign in.
+                {creatingAccount
+                  ? "Create an account with your work email and a strong password."
+                  : "Sign in to manage your site safety. Use your work email and password (or Google, if your organisation enabled it). Cloud backup is available from Backup after you sign in."}
               </p>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void signIn();
+                  if (creatingAccount) void signUp();
+                  else void signIn();
                 }}
                 noValidate
               >
@@ -675,7 +678,7 @@ export default function LoginPage() {
                 <input
                   id="login-password"
                   type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
+                  autoComplete={creatingAccount ? "new-password" : "current-password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyUp={(e) => setCapsLockOn(Boolean(e.getModifierState?.("CapsLock")))}
@@ -712,7 +715,7 @@ export default function LoginPage() {
                 Show password
               </label>
               {capsLockOn && <div style={{ marginTop: 6, fontSize: 12, color: "#b45309" }}>Caps Lock is on.</div>}
-              {password.length > 0 && (
+              {creatingAccount && password.length > 0 && (
                 <div
                   style={{
                     marginTop: 8,
@@ -738,7 +741,7 @@ export default function LoginPage() {
                   </div>
                 </div>
               )}
-              <label
+              {creatingAccount && <label
                 className="login-legal-checkbox"
                 style={{
                   display: "flex",
@@ -770,7 +773,7 @@ export default function LoginPage() {
                   </Link>
                   .
                 </span>
-              </label>
+              </label>}
               <input
                 type="text"
                 name="company"
@@ -812,23 +815,24 @@ export default function LoginPage() {
               )}
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8, marginTop: 14 }}>
                 <button
-                  type="submit"
+                  type={creatingAccount ? "button" : "submit"}
                   className="login-btn-primary"
                   style={{ ...ss.btnP, width: "100%" }}
-                  disabled={busy || lockout.isLocked || captchaBlocksSubmit}
+                  disabled={busy || (!creatingAccount && (lockout.isLocked || captchaBlocksSubmit))}
+                  onClick={creatingAccount ? () => { setCreatingAccount(false); setMsg(""); } : undefined}
                   title={
-                    turnstileConfigured && !captchaToken
+                    !creatingAccount && turnstileConfigured && !captchaToken
                       ? "Complete the security check before signing in"
                       : undefined
                   }
                 >
-                  Sign in
+                  {creatingAccount ? "Back to sign in" : "Sign in"}
                 </button>
                 <button
-                  type="button"
+                  type={creatingAccount ? "submit" : "button"}
                   style={{ ...ss.btn, width: "100%" }}
-                  disabled={busy || !acceptLegalTerms || signUpThrottle.isThrottled || captchaBlocksSubmit}
-                  onClick={signUp}
+                  disabled={busy || (creatingAccount && (!acceptLegalTerms || signUpThrottle.isThrottled || captchaBlocksSubmit))}
+                  onClick={creatingAccount ? undefined : () => { setCreatingAccount(true); setMsg(""); }}
                 >
                   Create account
                 </button>

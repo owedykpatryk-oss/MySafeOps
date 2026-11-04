@@ -398,7 +398,7 @@ export default function HelpAbout() {
           <section className="help-section" id="help-questions">
             <div className="help-section__head"><div><span className="help-section-kicker">Troubleshooting</span><h2>Common questions</h2><p>Short answers to the issues people hit most often.</p></div></div>
             <div className="help-faq-list">
-              {HELP_FAQ.map((item, index) => <details key={item.q} open={index === 0}><summary><span>{String(index + 1).padStart(2, "0")}</span>{item.q}<ChevronRight size={16} /></summary><p>{item.a}</p></details>)}
+              {HELP_FAQ.map((item, index) => <details key={item.q} name="help-faq" open={index === 0}><summary><span>{String(index + 1).padStart(2, "0")}</span>{item.q}<ChevronRight size={16} /></summary><p>{item.a}</p></details>)}
             </div>
             <details className="help-info-details"><summary>Plain-English glossary<ChevronRight size={15} /></summary><dl className="help-glossary">{GLOSSARY.map((entry) => <div key={entry.term}><dt>{entry.term}</dt><dd>{entry.def}</dd></div>)}</dl></details>
           </section>

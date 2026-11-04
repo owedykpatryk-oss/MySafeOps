@@ -102,7 +102,7 @@ export default function LandingFaqSection({ market }) {
         </div>
         <div className="landing-faq-list">
           {faq.map((item) => (
-            <details key={item.q} className="landing-faq-item fu">
+            <details key={item.q} name="landing-faq" className="landing-faq-item fu">
               <summary>{item.q}</summary>
               <p>{item.a}</p>
             </details>

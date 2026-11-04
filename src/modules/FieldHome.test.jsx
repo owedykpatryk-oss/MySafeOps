@@ -34,6 +34,13 @@ it("requires a live selected site and passes it to survey creation", async () =>
   expect(nav.open).toHaveBeenLastCalledWith({ viewId: "survey-report" });
 });
 
+it("opens project editing directly from the incomplete site profile prompt", async () => {
+  await selectSite("a");
+  await act(async () => button("Complete site profile").click());
+  expect(nav.target).toHaveBeenLastCalledWith({ viewId: "projects", projectId: "a", action: "editProject" });
+  expect(nav.open).toHaveBeenLastCalledWith({ viewId: "projects" });
+});
+
 it("passes the site to GPR and photo capture but clears stale targets for register links", async () => {
   await selectSite("a");
   await act(async () => button("GPR report").click());
