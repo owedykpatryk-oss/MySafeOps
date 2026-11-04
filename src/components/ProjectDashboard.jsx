@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ProjectSitePreviewMap from "./ProjectSitePreviewMap";
 import { parseProjectBoundaryRing } from "../utils/projectBoundary";
 import { openWorkspaceView, setWorkspaceNavTarget } from "../utils/workspaceNavContext";
@@ -119,6 +119,29 @@ export default function ProjectDashboard({
   onApplyPlaybook,
   onCloneDocuments,
 }) {
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneTargetId, setCloneTargetId] = useState("");
+  const [includeGeoPhotos, setIncludeGeoPhotos] = useState(false);
+  const overlayRef = useRef(null);
+  const cloneSelectRef = useRef(null);
+  const cloneTargets = (allProjects || []).filter((p) => p?.id && p.id !== project?.id && !p.closed && !p.deletedAt);
+
+  useEffect(() => {
+    if (embedded || !project) return undefined;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    overlayRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [embedded, project]);
+
+  useEffect(() => {
+    if (cloneOpen && cloneTargets.length) cloneSelectRef.current?.focus();
+  }, [cloneOpen, cloneTargets.length]);
+
   const dash = useMemo(() => collectProjectDashboard(project, workers), [project, workers]);
   const orgMarketId = getOrgMarketId();
   const hub = getProjectHubCopy(orgMarketId);
@@ -244,31 +267,25 @@ export default function ProjectDashboard({
     });
   };
 
-  const runCloneDocuments = () => {
-    if (!onCloneDocuments) return;
-    const targets = (allProjects || []).filter((p) => p.id !== project?.id && !p.closed);
-    if (!targets.length) {
-      window.alert("Add another active project to copy documents into.");
-      return;
-    }
-    const hint = targets
-      .slice(0, 8)
-      .map((p) => `${p.name} (${p.id})`)
-      .join("\n");
-    const targetId = window.prompt(
-      `Copy RAMS, surveys and method statements to which project?\n\n${hint}${targets.length > 8 ? "\n…" : ""}\n\nEnter target project ID:`
-    );
-    if (!targetId?.trim()) return;
-    const includeGeoPhotos = window.confirm(
-      "Also copy geo-photos linked to this project?\n\nOK = yes · Cancel = documents only"
-    );
-    onCloneDocuments(project, targetId.trim(), { includeGeoPhotos });
+  const runCloneDocuments = (event) => {
+    event.preventDefault();
+    if (!onCloneDocuments || !cloneTargets.some((p) => p.id === cloneTargetId)) return;
+    onCloneDocuments(project, cloneTargetId, { includeGeoPhotos });
+    setCloneOpen(false);
+    setCloneTargetId("");
+    setIncludeGeoPhotos(false);
   };
 
   if (!project) return null;
 
   const panel = (
     <div className={`app-project-dashboard${embedded ? " app-project-dashboard--embedded" : ""}`}>
+      <div className="app-project-dashboard__mobile-bar">
+        <span className="app-project-dashboard__mobile-title">{project.name || hub.untitled || "Untitled project"}</span>
+        <button type="button" className="app-project-dashboard__mobile-close" onClick={onClose} aria-label={embedded ? "Back to project list" : "Close site profile"}>
+          {embedded ? "Back" : "Close"}
+        </button>
+      </div>
       <header className="app-project-dashboard__header">
         <div className="app-project-dashboard__header-main">
           <p className="app-project-dashboard__eyebrow">{embedded ? hub.eyebrowHub || "Project hub" : hub.eyebrowDashboard || "Project dashboard"}</p>
@@ -350,7 +367,7 @@ export default function ProjectDashboard({
             Edit project
           </button>
           {onCloneDocuments ? (
-            <button type="button" className="app-project-dashboard__btn" onClick={runCloneDocuments}>
+            <button type="button" className="app-project-dashboard__btn" onClick={() => setCloneOpen((open) => !open)} aria-expanded={cloneOpen} aria-controls="project-clone-options">
               Clone docs to project
             </button>
           ) : null}
@@ -370,6 +387,29 @@ export default function ProjectDashboard({
           </button>
         </div>
       </header>
+
+      {cloneOpen && onCloneDocuments ? (
+        <form id="project-clone-options" className="app-project-dashboard__clone" onSubmit={runCloneDocuments}>
+          <h2>Copy project documents</h2>
+          {cloneTargets.length ? (
+            <>
+              <label htmlFor="project-clone-target">Destination project</label>
+              <select id="project-clone-target" ref={cloneSelectRef} value={cloneTargetId} onChange={(event) => setCloneTargetId(event.target.value)} required>
+                <option value="">Choose a project</option>
+                {cloneTargets.map((target) => <option key={target.id} value={target.id}>{target.name || "Untitled project"}</option>)}
+              </select>
+              <label className="app-project-dashboard__clone-check">
+                <input type="checkbox" checked={includeGeoPhotos} onChange={(event) => setIncludeGeoPhotos(event.target.checked)} />
+                Include site photos
+              </label>
+              <div className="app-project-dashboard__clone-actions">
+                <button type="submit" className="app-project-dashboard__btn app-project-dashboard__btn--accent">Copy documents</button>
+                <button type="button" className="app-project-dashboard__btn" onClick={() => setCloneOpen(false)}>Cancel</button>
+              </div>
+            </>
+          ) : <p>Add another active project before copying documents.</p>}
+        </form>
+      ) : null}
 
       <section className="app-project-dashboard__spotlight" aria-label="Site status">
         <div className="app-project-dashboard__spotlight-ring">
@@ -991,10 +1031,13 @@ export default function ProjectDashboard({
 
   return (
     <div
+      ref={overlayRef}
       className="app-project-dashboard-overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby="project-dashboard-title"
+      tabIndex={-1}
+      onKeyDown={(event) => { if (event.key === "Escape") onClose?.(); }}
     >
       {panel}
     </div>

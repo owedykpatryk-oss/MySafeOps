@@ -246,6 +246,7 @@ export default function CloudAccount() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [acceptLegalTerms, setAcceptLegalTerms] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
   const [honeypot, setHoneypot] = useState("");
   const [mfaForSession, setMfaForSession] = useState(false);
   const r2Enabled = isR2StorageConfigured();
@@ -761,8 +762,9 @@ export default function CloudAccount() {
       <PageHero
         badgeText="☁"
         title="Your cloud account"
-        lead={
-          r2Enabled
+        lead={creatingAccount
+          ? "Create an account with your work email and a strong password."
+          : r2Enabled
             ? "Sign in to turn on cloud backup from the Backup screen. Document uploads can use cloud storage when your organisation has it enabled."
             : "Sign in to turn on cloud backup from the Backup screen. Your administrator sets up email or Google sign-in for your team."
         }
@@ -791,7 +793,7 @@ export default function CloudAccount() {
       <label style={{ ...ss.lbl, marginTop: 10 }}>Password</label>
       <input
         type={showPassword ? "text" : "password"}
-        autoComplete="current-password"
+        autoComplete={creatingAccount ? "new-password" : "current-password"}
         style={ss.inp}
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -818,7 +820,7 @@ export default function CloudAccount() {
         Show password
       </label>
       {capsLockOn && <div style={{ marginTop: 6, fontSize: 12, color: "#b45309" }}>Caps Lock is on.</div>}
-      {password.length > 0 && (
+      {creatingAccount && password.length > 0 && (
         <div
           style={{
             marginTop: 8,
@@ -844,7 +846,7 @@ export default function CloudAccount() {
           </div>
         </div>
       )}
-      <label
+      {creatingAccount && <label
         style={{
           display: "flex",
           alignItems: "flex-start",
@@ -873,7 +875,7 @@ export default function CloudAccount() {
           </Link>
           .
         </span>
-      </label>
+      </label>}
       <input
         type="text"
         name="company"
@@ -917,17 +919,17 @@ export default function CloudAccount() {
         <button
           type="button"
           style={ss.btnP}
-          disabled={busy || lockout.isLocked || captchaBlocksSubmit}
+          disabled={busy || (!creatingAccount && (lockout.isLocked || captchaBlocksSubmit))}
           title={
-            turnstileConfigured && !captchaToken
+            !creatingAccount && turnstileConfigured && !captchaToken
               ? "Complete the security check before signing in"
               : undefined
           }
-          onClick={signIn}
+          onClick={creatingAccount ? () => { setCreatingAccount(false); setMsg(""); } : signIn}
         >
-          Sign in
+          {creatingAccount ? "Back to sign in" : "Sign in"}
         </button>
-        <button type="button" style={ss.btn} disabled={busy || !acceptLegalTerms || signUpThrottle.isThrottled || captchaBlocksSubmit} onClick={signUp}>
+        <button type="button" style={ss.btn} disabled={busy || (creatingAccount && (!acceptLegalTerms || signUpThrottle.isThrottled || captchaBlocksSubmit))} onClick={creatingAccount ? signUp : () => { setCreatingAccount(true); setMsg(""); }}>
           Create account
         </button>
       </div>

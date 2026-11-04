@@ -160,7 +160,7 @@ export default function FieldHome() {
     {section === "today" && project && missing.length > 0 && <section className="field-home__readiness" aria-labelledby="field-readiness-title">
       <h3 id="field-readiness-title">Complete the site profile</h3>
       <p>Missing details: {missing.join(", ")}. Confirm these with your site team.</p>
-      {canProjects && <button type="button" className="field-home__link" onClick={() => open("projects", { ...siteTarget, action: "viewProjectDashboard" })}>Review site details</button>}
+      {canProjects && <button type="button" className="field-home__link" onClick={() => open("projects", { ...siteTarget, action: "editProject" })}>Complete site profile</button>}
     </section>}
     {section === "site" && <section aria-labelledby="field-site-title">
       <h3 id="field-site-title">{project?.name || "Your site"}</h3>
