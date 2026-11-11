@@ -3,7 +3,7 @@ import { buildGprBlockers } from "./gprReportBlockers";
 import { GPR_AUTOFIX_ACTIONS, suggestGprAutofixes } from "./gprAutofix";
 import { preferCollapsedEditorChrome } from "../../utils/narrowUi";
 
-function GprBlockersPanel({ report, linkedSurveyReport, onGoToTab, onAutofix }) {
+function GprBlockersPanel({ report, linkedSurveyReport, onGoToTab, onAutofix, compact = false }) {
   const [open, setOpen] = useState(() => !preferCollapsedEditorChrome());
   const { blockers, score } = useMemo(
     () => buildGprBlockers(report, { linkedSurveyReport }),
@@ -19,6 +19,7 @@ function GprBlockersPanel({ report, linkedSurveyReport, onGoToTab, onAutofix }) 
   const hints = blockers.filter((b) => b.severity === "info");
 
   if (report?.status === "final" && blockers.length === 0) {
+    if (compact) return null;
     return (
       <div className="app-survey-blockers app-survey-blockers--ok" role="status">
         <strong>Final issue</strong> — GPR checks passed ({score}% complete).
@@ -27,6 +28,7 @@ function GprBlockersPanel({ report, linkedSurveyReport, onGoToTab, onAutofix }) 
   }
 
   if (blockers.length === 0 && autofixActions.length === 0) {
+    if (compact) return null;
     return (
       <div className="app-survey-blockers app-survey-blockers--ok" role="status">
         <strong>Looking good</strong> — {score}% complete. Review live preview before marking final.
