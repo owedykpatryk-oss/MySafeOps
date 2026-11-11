@@ -37,7 +37,8 @@
   background: #fff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   min-width: 0;
-  overflow: hidden;
+  /* Never clip field labels / equipment copy beside the live PDF dock */
+  overflow: visible;
 }
 
 .app-gpr-field {
@@ -55,22 +56,23 @@
 
 .app-gpr-equipment-profile {
   display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.4fr);
-  gap: 20px;
+  grid-template-columns: minmax(180px, 0.75fr) minmax(0, 1.4fr);
+  gap: 16px;
   margin: 4px 0 18px;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid #99f6e4;
   border-radius: 16px;
   background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 48%, #eff6ff 100%);
   box-shadow: 0 16px 36px rgba(15, 118, 110, 0.12);
-  overflow: hidden;
+  overflow: visible;
+  min-width: 0;
 }
 
 .app-gpr-equipment-profile__visual {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   min-width: 0;
-  min-height: 220px;
+  min-height: 160px;
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
@@ -81,8 +83,8 @@
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 180px;
-  max-height: 330px;
+  min-height: 140px;
+  max-height: 240px;
   object-fit: contain;
   object-position: center;
 }
@@ -145,7 +147,8 @@
   color: #0c4a6e;
   background: rgba(255, 255, 255, 0.9);
   font-size: 12px;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .app-gpr-equipment-profile__configuration {
@@ -198,19 +201,70 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 760px) {
+/* Stack early so split live-preview never crushes product copy */
+@media (max-width: 1100px) {
   .app-gpr-equipment-profile {
     grid-template-columns: 1fr;
     padding: 12px;
   }
 
   .app-gpr-equipment-profile__visual {
-    min-height: 180px;
+    min-height: 140px;
+  }
+
+  .app-gpr-equipment-profile__visual img {
+    min-height: 120px;
+    max-height: 180px;
   }
 
   .app-gpr-equipment-profile ul {
     grid-template-columns: 1fr;
   }
+}
+
+.app-survey-report-editor--split .app-gpr-equipment-profile {
+  grid-template-columns: 1fr;
+}
+
+.app-survey-report-editor--split .app-gpr-equipment-profile__visual img {
+  min-height: 110px;
+  max-height: 160px;
+}
+
+.app-survey-report-editor--split .app-gpr-equipment-profile ul {
+  grid-template-columns: 1fr;
+}
+
+.app-gpr-advanced-details {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.app-gpr-advanced-details > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f766e;
+  list-style: none;
+}
+
+.app-gpr-advanced-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-gpr-advanced-details > summary::before {
+  content: "▸ ";
+}
+
+.app-gpr-advanced-details[open] > summary::before {
+  content: "▾ ";
+}
+
+.app-gpr-advanced-details > summary + * {
+  margin-top: 12px;
 }
 
 .app-gpr-editor-form input,
@@ -242,12 +296,25 @@
   opacity: 1;
 }
 
+/* Match Survey: CSS grid so the PDF dock cannot overlap / crush the form */
 .app-survey-report-editor--split .app-gpr-report-editor__body {
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 16px;
+  align-items: start;
+}
+
+.app-survey-report-editor--split .app-gpr-report-editor__body > .app-survey-report-editor__form,
+.app-survey-report-editor--split .app-gpr-report-editor__body > .app-gpr-editor-form {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .app-survey-report-editor--split .app-survey-live-preview-dock {
-  flex: 0 0 min(420px, 42%);
+  flex: initial;
+  width: 100%;
+  max-width: 380px;
+  justify-self: stretch;
   position: sticky;
   top: 8px;
   max-height: calc(100vh - 120px);
@@ -258,11 +325,10 @@
 /* Align with Survey — stack preview under form on 11" tablet portrait */
 @media (max-width: 900px) {
   .app-survey-report-editor--split .app-gpr-report-editor__body {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
   .app-survey-report-editor--split .app-survey-live-preview-dock {
-    flex: 1 1 auto;
-    width: 100%;
+    max-width: none;
     position: static;
     max-height: none;
   }

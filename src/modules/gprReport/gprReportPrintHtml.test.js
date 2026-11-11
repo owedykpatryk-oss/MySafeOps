@@ -96,6 +96,8 @@ describe("gprReportPrintHtml", () => {
     });
     const html = buildGprReportHtml(report, {});
     expect(html).toContain("gpr-equipment-profile");
+    expect(html).toContain("gpr-equipment-profile__copy");
+    expect(html).toContain("overflow: visible");
     expect(html).toContain("/assets/gpr/equipment/ids-stream-dp.jpg");
     expect(html).toContain("30 channels: 19 VV + 11 HH");
     expect(html).toContain("Official product information");

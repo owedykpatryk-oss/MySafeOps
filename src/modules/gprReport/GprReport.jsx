@@ -24,6 +24,14 @@ import SurveyLivePreviewDock from "../surveyReport/SurveyLivePreviewDock";
 import GprEditorHero from "./GprEditorHero";
 import GprEquipmentProfileImages from "./GprEquipmentProfileImages";
 import GprEditorStepNav from "./GprEditorStepNav";
+import GprSimpleStepNav from "./GprSimpleStepNav";
+import {
+  adjacentGprSimpleStep,
+  getGprSimpleModePref,
+  GPR_SIMPLE_STEPS,
+  gprSimpleStepForTab,
+  setGprSimpleModePref,
+} from "./gprSimpleEditorNav";
 import GprInsightPanel from "./GprInsightPanel";
 import GprListStatsBar from "./GprListStatsBar";
 import GprListRow from "./GprListRow";
@@ -275,13 +283,8 @@ function ScopedGprReport({ scope }) {
   const [busy, setBusy] = useState("");
   const [search, setSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [livePreviewOpen, setLivePreviewOpen] = useState(() => {
-    try {
-      return typeof window !== "undefined" && window.matchMedia("(min-width: 1100px) and (pointer: fine)").matches;
-    } catch {
-      return false;
-    }
-  });
+  const [simpleMode, setSimpleMode] = useState(() => getGprSimpleModePref());
+  const [livePreviewOpen, setLivePreviewOpen] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return undefined;
     const mq = window.matchMedia("(min-width: 1100px) and (pointer: fine)");
@@ -295,6 +298,9 @@ function ScopedGprReport({ scope }) {
       else mq.removeListener(onChange);
     };
   }, []);
+  const activeSimpleStep = useMemo(() => gprSimpleStepForTab(tab), [tab]);
+  const prevSimpleStep = simpleMode ? adjacentGprSimpleStep(activeSimpleStep.id, "prev") : null;
+  const nextSimpleStep = simpleMode ? adjacentGprSimpleStep(activeSimpleStep.id, "next") : null;
   const [depthCalcNs, setDepthCalcNs] = useState("");
   const [lightboxRg, setLightboxRg] = useState(null);
   const [imageEdit, setImageEdit] = useState(null);
@@ -1455,6 +1461,54 @@ function ScopedGprReport({ scope }) {
   const renderEquipment = () => {
     const eq = form.equipment?.[0] || blankGprEquipment();
     const selectedPreset = GPR_EQUIPMENT_PRESETS.find((preset) => preset.key === eq.presetKey);
+    const equipmentDetailFields = (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
+        <Field label="Manufacturer">
+          <input
+            style={ss.input}
+            value={eq.manufacturer}
+            onChange={(e) => {
+              const equipment = [{ ...eq, manufacturer: e.target.value }];
+              patch({ equipment });
+            }}
+          />
+        </Field>
+        <Field label="Model">
+          <input
+            style={ss.input}
+            value={eq.model}
+            onChange={(e) => patch({ equipment: [{ ...eq, model: e.target.value }] })}
+          />
+        </Field>
+        <Field label="Antenna centre frequency (MHz)">
+          <input
+            type="number"
+            style={ss.input}
+            value={eq.antennaFrequencyMhz}
+            onChange={(e) => {
+              const mhz = Number(e.target.value) || "";
+              const equipment = [{ ...eq, antennaFrequencyMhz: mhz }];
+              patchReport((r) => recalcGroundPenetration({ ...r, equipment }));
+            }}
+          />
+        </Field>
+        <Field label="Channels">
+          <input
+            type="number"
+            style={ss.input}
+            value={eq.channels}
+            onChange={(e) => patch({ equipment: [{ ...eq, channels: Number(e.target.value) || 1 }] })}
+          />
+        </Field>
+        <Field label="Processing software">
+          <input
+            style={ss.input}
+            value={eq.processingSoftware}
+            onChange={(e) => patch({ equipment: [{ ...eq, processingSoftware: e.target.value }] })}
+          />
+        </Field>
+      </div>
+    );
     return (
       <>
         <div style={ss.sectionHead}>Equipment</div>
@@ -1469,59 +1523,21 @@ function ScopedGprReport({ scope }) {
           </select>
         </Field>
         <GprEquipmentProfileCard preset={selectedPreset} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
-          <Field label="Manufacturer">
-            <input
-              style={ss.input}
-              value={eq.manufacturer}
-              onChange={(e) => {
-                const equipment = [{ ...eq, manufacturer: e.target.value }];
-                patch({ equipment });
-              }}
-            />
-          </Field>
-          <Field label="Model">
-            <input
-              style={ss.input}
-              value={eq.model}
-              onChange={(e) => patch({ equipment: [{ ...eq, model: e.target.value }] })}
-            />
-          </Field>
-          <Field label="Antenna centre frequency (MHz)">
-            <input
-              type="number"
-              style={ss.input}
-              value={eq.antennaFrequencyMhz}
-              onChange={(e) => {
-                const mhz = Number(e.target.value) || "";
-                const equipment = [{ ...eq, antennaFrequencyMhz: mhz }];
-                patchReport((r) => recalcGroundPenetration({ ...r, equipment }));
-              }}
-            />
-          </Field>
-          <Field label="Channels">
-            <input
-              type="number"
-              style={ss.input}
-              value={eq.channels}
-              onChange={(e) => patch({ equipment: [{ ...eq, channels: Number(e.target.value) || 1 }] })}
-            />
-          </Field>
-          <Field label="Serial no.">
-            <input
-              style={ss.input}
-              value={eq.serialNo}
-              onChange={(e) => patch({ equipment: [{ ...eq, serialNo: e.target.value }] })}
-            />
-          </Field>
-          <Field label="Processing software">
-            <input
-              style={ss.input}
-              value={eq.processingSoftware}
-              onChange={(e) => patch({ equipment: [{ ...eq, processingSoftware: e.target.value }] })}
-            />
-          </Field>
-        </div>
+        <Field label="Serial no.">
+          <input
+            style={ss.input}
+            value={eq.serialNo}
+            onChange={(e) => patch({ equipment: [{ ...eq, serialNo: e.target.value }] })}
+          />
+        </Field>
+        {selectedPreset ? (
+          <details className="app-gpr-advanced-details">
+            <summary>Adjust technical details (optional)</summary>
+            {equipmentDetailFields}
+          </details>
+        ) : (
+          equipmentDetailFields
+        )}
         <Field label="Configuration notes">
           <textarea
             style={ss.ta}
@@ -1554,35 +1570,40 @@ function ScopedGprReport({ scope }) {
               onChange={(e) => patchNested("acquisition", { lineSpacingM: e.target.value })}
             />
           </Field>
-          <Field label="Trace spacing (m)">
-            <input
-              style={ss.input}
-              value={form.acquisition.traceSpacingM}
-              onChange={(e) => patchNested("acquisition", { traceSpacingM: e.target.value })}
-            />
-          </Field>
-          <Field label="Time window (ns)">
-            <input
-              style={ss.input}
-              value={form.acquisition.timeWindowNs}
-              onChange={(e) => patchNested("acquisition", { timeWindowNs: e.target.value })}
-            />
-          </Field>
-          <Field label="Target depth (m)">
-            <input
-              style={ss.input}
-              value={form.acquisition.depthRangeM}
-              onChange={(e) => patchNested("acquisition", { depthRangeM: e.target.value })}
-            />
-          </Field>
-          <Field label="Coverage (%)">
-            <input
-              style={ss.input}
-              value={form.acquisition.coveragePercent}
-              onChange={(e) => patchNested("acquisition", { coveragePercent: e.target.value })}
-            />
-          </Field>
         </div>
+        <details className="app-gpr-advanced-details">
+          <summary>More acquisition settings (optional)</summary>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
+            <Field label="Trace spacing (m)">
+              <input
+                style={ss.input}
+                value={form.acquisition.traceSpacingM}
+                onChange={(e) => patchNested("acquisition", { traceSpacingM: e.target.value })}
+              />
+            </Field>
+            <Field label="Time window (ns)">
+              <input
+                style={ss.input}
+                value={form.acquisition.timeWindowNs}
+                onChange={(e) => patchNested("acquisition", { timeWindowNs: e.target.value })}
+              />
+            </Field>
+            <Field label="Target depth (m)">
+              <input
+                style={ss.input}
+                value={form.acquisition.depthRangeM}
+                onChange={(e) => patchNested("acquisition", { depthRangeM: e.target.value })}
+              />
+            </Field>
+            <Field label="Coverage (%)">
+              <input
+                style={ss.input}
+                value={form.acquisition.coveragePercent}
+                onChange={(e) => patchNested("acquisition", { coveragePercent: e.target.value })}
+              />
+            </Field>
+          </div>
+        </details>
         <div
           tabIndex={0}
           onPaste={(e) => {
@@ -1671,13 +1692,6 @@ function ScopedGprReport({ scope }) {
               ))}
             </select>
           </Field>
-          <Field label="Measured velocity (cm/ns)">
-            <input
-              style={ss.input}
-              value={form.velocityModel.measuredVelocityCmNs}
-              onChange={(e) => patchNested("velocityModel", { measuredVelocityCmNs: e.target.value })}
-            />
-          </Field>
           <Field label="Assumed velocity (cm/ns)">
             <input
               style={ss.input}
@@ -1685,14 +1699,26 @@ function ScopedGprReport({ scope }) {
               onChange={(e) => patchNested("velocityModel", { assumedVelocityCmNs: e.target.value })}
             />
           </Field>
-          <Field label="Calibration target">
-            <input
-              style={ss.input}
-              value={form.velocityModel.calibrationTarget}
-              onChange={(e) => patchNested("velocityModel", { calibrationTarget: e.target.value })}
-            />
-          </Field>
         </div>
+        <details className="app-gpr-advanced-details">
+          <summary>Calibration details (optional)</summary>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
+            <Field label="Measured velocity (cm/ns)">
+              <input
+                style={ss.input}
+                value={form.velocityModel.measuredVelocityCmNs}
+                onChange={(e) => patchNested("velocityModel", { measuredVelocityCmNs: e.target.value })}
+              />
+            </Field>
+            <Field label="Calibration target">
+              <input
+                style={ss.input}
+                value={form.velocityModel.calibrationTarget}
+                onChange={(e) => patchNested("velocityModel", { calibrationTarget: e.target.value })}
+              />
+            </Field>
+          </div>
+        </details>
 
         <div style={ss.sectionHead}>Depth calculator</div>
         <div className="app-gpr-depth-calc">
@@ -2877,10 +2903,32 @@ function ScopedGprReport({ scope }) {
             onToggleLivePreview={setLivePreviewOpen}
             onMarkFinal={markFinal}
           />
-          <GprEditorStepNav tab={tab} report={form} onTabChange={setTab} tabs={TABS} />
-          {smartTips.length ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "0 16px 10px" }}>
+            <button
+              type="button"
+              style={{
+                ...ss.btn,
+                borderColor: simpleMode ? "#0d9488" : undefined,
+                background: simpleMode ? "#ccfbf1" : "#f1f5f9",
+                color: simpleMode ? "#115e59" : undefined,
+              }}
+              onClick={() => {
+                const next = !simpleMode;
+                setSimpleMode(next);
+                setGprSimpleModePref(next);
+              }}
+            >
+              {simpleMode ? "Simple mode" : "Full editor"}
+            </button>
+          </div>
+          {simpleMode ? (
+            <GprSimpleStepNav tab={tab} report={form} onTabChange={setTab} />
+          ) : (
+            <GprEditorStepNav tab={tab} report={form} onTabChange={setTab} tabs={TABS} />
+          )}
+          {!simpleMode && smartTips.length ? (
             <div className="app-gpr-smart-tips">
-              {smartTips.slice(0, 3).map((tip, i) => (
+              {smartTips.slice(0, 2).map((tip, i) => (
                 <div key={i} className={`app-gpr-smart-tip app-gpr-smart-tip--${tip.level}`}>
                   {tip.text}
                 </div>
@@ -2892,27 +2940,56 @@ function ScopedGprReport({ scope }) {
             linkedSurveyReport={linkedSurveyReport}
             onGoToTab={setTab}
             onAutofix={handleGprAutofix}
+            compact={simpleMode}
           />
-          <div className="app-gpr-guide">
-            <strong>Next</strong>
-            <span>Setup the ref, fetch BGS on Ground, add GPR and CAD photos on Findings, then apply the findings draft and open preview.</span>
-            <button type="button" onClick={() => setTab(gprTabComplete(form, "setup") ? (gprTabComplete(form, "ground") ? "findings" : "ground") : "setup")}>
-              {gprTabComplete(form, "setup") ? (gprTabComplete(form, "ground") ? "Open Findings" : "Open Ground") : "Open Setup"}
-            </button>
-          </div>
+          {!simpleMode ? (
+            <div className="app-gpr-guide">
+              <strong>Next</strong>
+              <span>Setup the ref, fetch BGS on Ground, add GPR and CAD photos on Findings, then apply the findings draft and open preview.</span>
+              <button type="button" onClick={() => setTab(gprTabComplete(form, "setup") ? (gprTabComplete(form, "ground") ? "findings" : "ground") : "setup")}>
+                {gprTabComplete(form, "setup") ? (gprTabComplete(form, "ground") ? "Open Findings" : "Open Ground") : "Open Setup"}
+              </button>
+            </div>
+          ) : null}
           <div className="app-survey-report-editor__body app-gpr-report-editor__body">
             <div className="app-survey-report-editor__form app-gpr-editor-form">
               {tabContent?.()}
               <div className="app-gpr-section-actions" aria-label="Move between report sections">
-                <button type="button" style={ss.btn} disabled={tab === TABS[0].id}
-                  onClick={() => setTab(TABS[Math.max(0, TABS.findIndex((t) => t.id === tab) - 1)].id)}>
-                  ← Previous section
-                </button>
-                <span>Section {TABS.findIndex((t) => t.id === tab) + 1} of {TABS.length}</span>
-                <button type="button" style={{ ...ss.btn, ...ss.btnP }} disabled={tab === TABS.at(-1).id}
-                  onClick={() => setTab(TABS[Math.min(TABS.length - 1, TABS.findIndex((t) => t.id === tab) + 1)].id)}>
-                  Next section →
-                </button>
+                {simpleMode ? (
+                  <>
+                    <button
+                      type="button"
+                      style={ss.btn}
+                      disabled={!prevSimpleStep}
+                      onClick={() => prevSimpleStep && setTab(prevSimpleStep.tabs[0])}
+                    >
+                      ← {prevSimpleStep ? prevSimpleStep.label : "Previous"}
+                    </button>
+                    <span>
+                      Step {GPR_SIMPLE_STEPS.findIndex((s) => s.id === activeSimpleStep.id) + 1} of {GPR_SIMPLE_STEPS.length}
+                    </span>
+                    <button
+                      type="button"
+                      style={{ ...ss.btn, ...ss.btnP }}
+                      disabled={!nextSimpleStep}
+                      onClick={() => nextSimpleStep && setTab(nextSimpleStep.tabs[0])}
+                    >
+                      {nextSimpleStep ? `${nextSimpleStep.label} →` : "Done"}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" style={ss.btn} disabled={tab === TABS[0].id}
+                      onClick={() => setTab(TABS[Math.max(0, TABS.findIndex((t) => t.id === tab) - 1)].id)}>
+                      ← Previous section
+                    </button>
+                    <span>Section {TABS.findIndex((t) => t.id === tab) + 1} of {TABS.length}</span>
+                    <button type="button" style={{ ...ss.btn, ...ss.btnP }} disabled={tab === TABS.at(-1).id}
+                      onClick={() => setTab(TABS[Math.min(TABS.length - 1, TABS.findIndex((t) => t.id === tab) + 1)].id)}>
+                      Next section →
+                    </button>
+                  </>
+                )}
               </div>
             </div>
             <SurveyLivePreviewDock
@@ -2925,12 +3002,16 @@ function ScopedGprReport({ scope }) {
             />
           </div>
           <div className="app-gpr-editor-footer app-gpr-editor-footer--shortcuts" title="Ctrl+S save · Alt+←/→ tabs · Ctrl+Shift+P preview">
-            <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={duplicateReport}>
-              Duplicate
-            </button>
-            <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={exportHtml}>
-              Export HTML
-            </button>
+            {!simpleMode ? (
+              <>
+                <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={duplicateReport}>
+                  Duplicate
+                </button>
+                <button type="button" style={{ ...ss.btn, background: "#f1f5f9" }} onClick={exportHtml}>
+                  Export HTML
+                </button>
+              </>
+            ) : null}
             <button type="button" style={{ ...ss.btn, background: "#dbeafe", color: "#1e40af" }} disabled={!!busy} onClick={exportWord}>
               {busy === "word" ? "Generating Word…" : "Download Word"}
             </button>

@@ -163,14 +163,18 @@ function styles(primary, accent, accentInk, accentSoft, primarySoft) {
     .gpr-data-table th, .gpr-data-table td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; overflow-wrap: anywhere; word-break: break-word; }
     .gpr-data-table tr { page-break-inside: avoid; break-inside: avoid; }
     .gpr-data-table th { background: #f4f7fb; color: ${primary}; font-weight: 600; }
-    .gpr-equipment-profile { display: grid; grid-template-columns: 38% 1fr; gap: 14px; margin: 0 0 14px; padding: 12px; border: 1px solid #99f6e4; border-radius: 8px; background: linear-gradient(135deg,#f0fdfa,#fff 55%,#eff6ff); page-break-inside: avoid; break-inside: avoid; }
-    .gpr-equipment-profile__images { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
-    .gpr-equipment-profile img { display: block; width: 100%; height: 110px; object-fit: contain; border-radius: 6px; background: #fff; }
-    .gpr-equipment-profile img:only-child { grid-column: 1 / -1; height: 150px; }
-    .gpr-equipment-profile h3 { margin: 0 0 6px; color: ${primary}; font-size: 14pt; line-height: 1.2; }
-    .gpr-equipment-profile p { margin: 3px 0; font-size: 9pt; overflow-wrap: anywhere; }
-    .gpr-equipment-profile ul { margin: 7px 0; padding-left: 18px; font-size: 8.5pt; columns: 2; column-gap: 18px; }
-    .gpr-equipment-profile a { color: ${primary}; font-size: 8pt; font-weight: 600; }
+    .gpr-equipment-profile { display: grid; grid-template-columns: minmax(0, 34%) minmax(0, 1fr); gap: 12px; margin: 0 0 14px; padding: 12px; border: 1px solid #99f6e4; border-radius: 8px; background: linear-gradient(135deg,#f0fdfa,#fff 55%,#eff6ff); overflow: visible; }
+    .gpr-equipment-profile__images { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; page-break-inside: avoid; break-inside: avoid; min-width: 0; }
+    .gpr-equipment-profile img { display: block; width: 100%; height: 96px; object-fit: contain; border-radius: 6px; background: #fff; }
+    .gpr-equipment-profile img:only-child { grid-column: 1 / -1; height: 130px; }
+    .gpr-equipment-profile__copy { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+    .gpr-equipment-profile h3 { margin: 0 0 6px; color: ${primary}; font-size: 13pt; line-height: 1.25; overflow-wrap: anywhere; }
+    .gpr-equipment-profile p { margin: 3px 0; font-size: 9pt; overflow-wrap: anywhere; word-break: break-word; }
+    .gpr-equipment-profile ul { margin: 7px 0; padding-left: 18px; font-size: 8.5pt; columns: 1; }
+    .gpr-equipment-profile a { color: ${primary}; font-size: 8pt; font-weight: 600; overflow-wrap: anywhere; }
+    @media (max-width: 640px) {
+      .gpr-equipment-profile { grid-template-columns: 1fr; }
+    }
     .gpr-callout { background: #f8fafc; border-left: 4px solid ${accent}; padding: 10px 12px; margin: 10px 0; font-size: 9.5pt; }
     .gpr-map { width: 100%; max-height: 220px; object-fit: cover; border-radius: 4px; margin: 10px 0; }
     .gpr-footer-note { font-size: 8pt; color: #666; margin-top: 24px; border-top: 1px solid #eee; padding-top: 8px; }
@@ -271,7 +275,7 @@ function equipmentBlock(equipment) {
       const source = safeHttpUrl(preset.sourceUrl)
         ? `<a href="${escapeAttr(safeHttpUrl(preset.sourceUrl))}">Official product information</a>`
         : "";
-      return `<div class="gpr-equipment-profile">${image}<div><h3>${esc(preset.manufacturer)} ${esc(preset.model)}</h3><p><strong>${esc(frequencyLabel)} · ${esc(preset.channels)} channel${preset.channels === 1 ? "" : "s"}</strong></p><p>${esc(preset.configuration)}</p><ul>${facts.map((fact) => `<li>${esc(fact)}</li>`).join("")}</ul><p>${preset.processingSoftware ? `Processing: ${esc(preset.processingSoftware)}` : "Processing software recorded per mobilisation."}</p>${source}</div></div>`;
+      return `<div class="gpr-equipment-profile">${image}<div class="gpr-equipment-profile__copy"><h3>${esc(preset.manufacturer)} ${esc(preset.model)}</h3><p><strong>${esc(frequencyLabel)} · ${esc(preset.channels)} channel${preset.channels === 1 ? "" : "s"}</strong></p><p>${esc(preset.configuration)}</p><ul>${facts.map((fact) => `<li>${esc(fact)}</li>`).join("")}</ul><p>${preset.processingSoftware ? `Processing: ${esc(preset.processingSoftware)}` : "Processing software recorded per mobilisation."}</p>${source}</div></div>`;
     })
     .join("");
   const table = dataTable(
